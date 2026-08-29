@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  emptySalesCatalogProductPageContent,
   getSalesCatalogReadiness,
   type ClientSalesCatalogItem,
   type SalesCatalogSalesDestination,
@@ -38,6 +39,7 @@ export function mapPlatformProductToClientSalesCatalogItem(
     offer: product.offer,
     fulfillment: product.fulfillment,
     shipping: product.shipping,
+    pageContent: emptySalesCatalogProductPageContent(),
     productOriginType: product.ownerType === "external_provider" ? "external_provider" : product.ownerType === "connectyhub" ? "connectyhub" : "client",
     commercialFlowType: resolvePlatformProductCommercialFlow(product),
     revenueOwnerType: product.revenueOwnerType,

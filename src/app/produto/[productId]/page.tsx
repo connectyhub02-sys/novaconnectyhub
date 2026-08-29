@@ -243,14 +243,21 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     organizationName: branding.displayName,
     productTitle: item.title,
   });
+  const fullDescription = item.pageContent.fullDescription ?? item.description;
   const descriptionPreview = createShortDescription(item.description);
-  const descriptionParagraphs = splitDescription(item.description);
+  const descriptionParagraphs = splitDescription(fullDescription);
+  const usageParagraphs = splitDescription(item.pageContent.usage ?? buildDefaultUsageInfo(item));
+  const shippingParagraphs = splitDescription(item.pageContent.shippingInfo ?? buildDefaultShippingInfo(item));
+  const faqParagraphs = splitDescription(item.pageContent.faq ?? buildDefaultFaqInfo(item));
+  const importantNotice = item.pageContent.importantNotice
+    ?? "Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.";
   const highlights = buildProductHighlights(item, descriptionPreview);
   const sku = item.skus.find((entry) => entry.status === "active")?.skuCode
     ?? item.platformProductCode
     ?? item.tag;
   const brand = findAttributeValue(item, "marca") ?? inferBrandFromTitle(item.title);
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
+  const quickDetails = buildProductQuickDetails(item, brand, application);
 
   return (
     <main className="storefront-public min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
@@ -346,17 +353,18 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
           <section className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
             <div className="grid grid-cols-2 border-b border-black/10 text-center text-xs font-semibold text-black/60 sm:grid-cols-4 sm:text-sm">
-              <span className="border-b-2 px-3 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descrição completa</span>
-              <span className="px-4 py-4">Modo de uso</span>
-              <span className="px-4 py-4">Informações de envio</span>
-              <span className="px-4 py-4">Perguntas frequentes</span>
+              <a href="#descricao-completa" className="border-b-2 px-3 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descrição completa</a>
+              <a href="#modo-de-uso" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Modo de uso</a>
+              <a href="#informacoes-de-envio" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Informações de envio</a>
+              <a href="#perguntas-frequentes" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Perguntas frequentes</a>
             </div>
 
             <div className="grid gap-5 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="space-y-4 text-sm leading-7 text-[color:var(--store-text-muted)]">
-                {descriptionParagraphs.map((paragraph, index) => (
-                  <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
-                ))}
+              <div className="space-y-7 text-sm leading-7 text-[color:var(--store-text-muted)]">
+                <ProductInfoBlock id="descricao-completa" paragraphs={descriptionParagraphs} title="Descrição completa" />
+                <ProductInfoBlock id="modo-de-uso" paragraphs={usageParagraphs} title="Modo de uso" />
+                <ProductInfoBlock id="informacoes-de-envio" paragraphs={shippingParagraphs} title="Informações de envio" />
+                <ProductInfoBlock id="perguntas-frequentes" paragraphs={faqParagraphs} title="Perguntas frequentes" />
                 {documents.length > 0 ? (
                   <div className="grid gap-3 pt-2 sm:grid-cols-2">
                     {documents.map((media) => (
@@ -383,7 +391,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                   <p className="text-sm font-semibold text-[color:var(--store-text)]">Importante</p>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-[color:var(--store-text-muted)]">
-                  Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.
+                  {importantNotice}
                 </p>
               </aside>
             </div>
@@ -393,11 +401,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             <section className="rounded-[20px] border border-black/10 bg-white p-5 shadow-lg shadow-black/5">
               <p className="text-sm font-semibold text-[color:var(--store-text)]">Detalhes rápidos</p>
               <div className="mt-4 grid gap-3 text-sm">
-                <DetailLine label="Categoria" value={item.category ?? "Produto"} />
-                <DetailLine label="Entrega" value={formatFulfillment(item.fulfillment.mode)} />
-                <DetailLine label="Disponibilidade" value={formatStockLabel(item)} />
-                {brand ? <DetailLine label="Marca" value={brand} /> : null}
-                {application ? <DetailLine label="Aplicacao" value={application} /> : null}
+                {quickDetails.map((detail) => (
+                  <DetailLine key={detail.id} label={detail.label} value={detail.value} />
+                ))}
               </div>
               <details className="mt-4">
                 <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-full bg-[#f0f0f0] px-4 py-3 text-xs font-bold text-black">
@@ -763,6 +769,29 @@ function Benefit({ icon, title, subtitle }: { icon: ReactNode; title: string; su
         <span className="block text-[11px] font-medium leading-4 text-[color:var(--store-text-muted)] sm:text-xs">{subtitle}</span>
       </span>
     </div>
+  );
+}
+
+function ProductInfoBlock({
+  id,
+  paragraphs,
+  title,
+}: {
+  id: string;
+  paragraphs: string[];
+  title: string;
+}) {
+  if (paragraphs.length === 0) return null;
+
+  return (
+    <section id={id} className="scroll-mt-24">
+      <h3 className="mb-3 text-sm font-semibold text-[color:var(--store-text)]">{title}</h3>
+      <div className="space-y-4">
+        {paragraphs.map((paragraph, index) => (
+          <p key={`${id}-${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1152,6 +1181,64 @@ function buildProductHighlights(item: ClientSalesCatalogItem, preview: string) {
   }
 
   return Array.from(unique);
+}
+
+function buildDefaultUsageInfo(item: ClientSalesCatalogItem) {
+  const instructions = [
+    item.fulfillment.accessInstructions,
+    item.fulfillment.deliveryInstructions,
+    item.offer.callToAction,
+  ].filter(Boolean).join(" ");
+
+  return instructions
+    || "Combine pelo WhatsApp oficial da loja antes de finalizar a compra. O atendimento confirma os dados do pedido, disponibilidade e orientacoes deste item.";
+}
+
+function buildDefaultShippingInfo(item: ClientSalesCatalogItem) {
+  const parts = [
+    item.shipping.notes,
+    item.fulfillment.deliveryInstructions,
+    item.shipping.profile === "free" ? "Frete gratis quando aplicavel." : null,
+    item.shipping.profile === "custom" ? "Frete combinado diretamente no atendimento." : null,
+  ].filter(Boolean);
+
+  return parts.join(" ") || "O pedido e acompanhado pela loja pelo WhatsApp. Dados de entrega, retirada ou acesso sao confirmados antes da finalizacao.";
+}
+
+function buildDefaultFaqInfo(item: ClientSalesCatalogItem) {
+  return [
+    `Este item esta ${formatStockLabel(item).toLowerCase()}? A disponibilidade e confirmada no momento do pedido.`,
+    `Como finalizar? Toque em comprar agora e siga o checkout seguro da loja.`,
+    `Preciso falar com alguem? O atendimento continua pelo WhatsApp oficial da loja.`,
+  ].join("\n");
+}
+
+function buildProductQuickDetails(
+  item: ClientSalesCatalogItem,
+  brand: string | null,
+  application: string | null,
+) {
+  const defaultDetails = [
+    { id: "category", label: "Categoria", value: item.category ?? "Produto" },
+    { id: "fulfillment", label: "Entrega", value: formatFulfillment(item.fulfillment.mode) },
+    { id: "availability", label: "Disponibilidade", value: formatStockLabel(item) },
+    brand ? { id: "brand", label: "Marca", value: brand } : null,
+    application ? { id: "application", label: "Aplicacao", value: application } : null,
+  ].filter((detail): detail is { id: string; label: string; value: string } => Boolean(detail));
+  const customDetails = item.pageContent.quickDetails.map((detail) => ({
+    id: `custom_${detail.id}`,
+    label: detail.label,
+    value: detail.value,
+  }));
+  const seenLabels = new Set<string>();
+  const details = [...defaultDetails, ...customDetails].filter((detail) => {
+    const label = normalizeText(detail.label);
+    if (seenLabels.has(label)) return false;
+    seenLabels.add(label);
+    return true;
+  });
+
+  return details.slice(0, 10);
 }
 
 function cleanHighlight(value: string | null | undefined) {

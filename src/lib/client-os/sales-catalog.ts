@@ -13,6 +13,7 @@ import {
   emptySalesCatalogProductFulfillment,
   emptySalesCatalogProductInventory,
   emptySalesCatalogProductOffer,
+  emptySalesCatalogProductPageContent,
   emptySalesCatalogProductShipping,
   createSalesCatalogTag,
   getSalesCatalogReadiness,
@@ -52,6 +53,7 @@ import {
   type SalesCatalogProductShipping,
   type SalesCatalogProductInventory,
   type SalesCatalogProductOffer,
+  type SalesCatalogProductPageContent,
   type SalesCatalogShippingProvider,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
@@ -724,6 +726,7 @@ function buildLegacyLinkButtonPromotion(
   const offer = emptySalesCatalogProductOffer();
   const fulfillment = emptySalesCatalogProductFulfillment();
   const shipping = emptySalesCatalogProductShipping();
+  const pageContent = emptySalesCatalogProductPageContent();
   const content = buildSalesCatalogContent({
     title,
     description,
@@ -736,6 +739,7 @@ function buildLegacyLinkButtonPromotion(
     offer,
     fulfillment,
     shipping,
+    pageContent,
     salesDestination: "external_site",
     productUrl,
     externalLinkButtonTag: linkTag,
@@ -754,6 +758,7 @@ function buildLegacyLinkButtonPromotion(
     offer,
     fulfillment,
     shipping,
+    page_content: pageContent,
     media,
     skus: [],
     source: "manual",
@@ -998,6 +1003,7 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     offer: readProductOffer(metadata.offer),
     fulfillment: readProductFulfillment(metadata.fulfillment),
     shipping: readProductShipping(metadata.shipping),
+    pageContent: readProductPageContent(metadata.page_content ?? metadata.pageContent),
     productOriginType: normalizeProductOriginType(readString(metadata.product_origin_type)),
     commercialFlowType: normalizeCommercialFlowType(readString(metadata.commercial_flow_type)),
     revenueOwnerType: normalizeRevenueOwnerType(readString(metadata.revenue_owner_type)),
@@ -1372,6 +1378,43 @@ function readProductFulfillment(value: unknown): SalesCatalogProductFulfillment 
     deliveryInstructions: readString(record.delivery_instructions) ?? readString(record.deliveryInstructions),
     accessInstructions: readString(record.access_instructions) ?? readString(record.accessInstructions),
   };
+}
+
+function readProductPageContent(value: unknown): SalesCatalogProductPageContent {
+  const fallback = emptySalesCatalogProductPageContent();
+  const record = readRecord(value);
+
+  if (!record) return fallback;
+
+  return {
+    fullDescription: readString(record.full_description) ?? readString(record.fullDescription),
+    usage: readString(record.usage),
+    shippingInfo: readString(record.shipping_info) ?? readString(record.shippingInfo),
+    faq: readString(record.faq),
+    importantNotice: readString(record.important_notice) ?? readString(record.importantNotice),
+    quickDetails: readProductQuickDetails(record.quick_details ?? record.quickDetails),
+  };
+}
+
+function readProductQuickDetails(value: unknown): SalesCatalogProductPageContent["quickDetails"] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const label = readString(record.label);
+      const detailValue = readString(record.value);
+      if (!label || !detailValue) return null;
+
+      return {
+        id: readString(record.id) ?? `detail_${index + 1}`,
+        label,
+        value: detailValue,
+      };
+    })
+    .filter((item): item is SalesCatalogProductPageContent["quickDetails"][number] => Boolean(item));
 }
 
 function readShippingRules(value: unknown): SalesCatalogShippingRule[] {

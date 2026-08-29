@@ -187,6 +187,21 @@ export type SalesCatalogProductShipping = {
   notes: string | null;
 };
 
+export type SalesCatalogProductQuickDetail = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+export type SalesCatalogProductPageContent = {
+  fullDescription: string | null;
+  usage: string | null;
+  shippingInfo: string | null;
+  faq: string | null;
+  importantNotice: string | null;
+  quickDetails: SalesCatalogProductQuickDetail[];
+};
+
 export type SalesCatalogSku = {
   id: string | null;
   companyId: string;
@@ -267,6 +282,7 @@ export type ClientSalesCatalogItem = {
   offer: SalesCatalogProductOffer;
   fulfillment: SalesCatalogProductFulfillment;
   shipping: SalesCatalogProductShipping;
+  pageContent: SalesCatalogProductPageContent;
   productOriginType: SalesCatalogProductOriginType;
   commercialFlowType: SalesCatalogCommercialFlowType;
   revenueOwnerType: SalesCatalogRevenueOwnerType;
@@ -797,6 +813,7 @@ export type SalesCatalogContentInput = {
   offer?: SalesCatalogProductOffer | null;
   fulfillment?: SalesCatalogProductFulfillment | null;
   shipping?: SalesCatalogProductShipping | null;
+  pageContent?: SalesCatalogProductPageContent | null;
   salesDestination?: SalesCatalogSalesDestination | null;
   productUrl?: string | null;
   externalLinkButtonTag?: string | null;
@@ -1009,6 +1026,17 @@ export function emptySalesCatalogProductShipping(): SalesCatalogProductShipping 
   };
 }
 
+export function emptySalesCatalogProductPageContent(): SalesCatalogProductPageContent {
+  return {
+    fullDescription: null,
+    usage: null,
+    shippingInfo: null,
+    faq: null,
+    importantNotice: null,
+    quickDetails: [],
+  };
+}
+
 export function createDefaultSalesCatalogSku(input: {
   companyId?: string;
   catalogItemId?: string | null;
@@ -1119,10 +1147,12 @@ export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
   const offer = input.offer ?? emptySalesCatalogProductOffer();
   const fulfillment = input.fulfillment ?? emptySalesCatalogProductFulfillment();
   const shipping = input.shipping ?? emptySalesCatalogProductShipping();
+  const pageContent = input.pageContent ?? emptySalesCatalogProductPageContent();
   const inventoryLines = buildInventoryLines(inventory);
   const offerLines = buildOfferLines(offer);
   const fulfillmentLines = buildFulfillmentLines(fulfillment);
   const shippingLines = buildShippingLines(shipping);
+  const pageContentLines = buildProductPageContentLines(pageContent);
 
   if (attributes.length > 0) {
     lines.push("Variacoes disponiveis:");
@@ -1160,6 +1190,11 @@ export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
     lines.push(...shippingLines);
   }
 
+  if (pageContentLines.length > 0) {
+    lines.push("Conteudo da pagina do produto:");
+    lines.push(...pageContentLines);
+  }
+
   return lines.filter(Boolean).join("\n");
 }
 
@@ -1188,6 +1223,7 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
   const offerLines = buildOfferLines(item.offer);
   const fulfillmentLines = buildFulfillmentLines(item.fulfillment);
   const shippingLines = buildShippingLines(item.shipping);
+  const pageContentLines = buildProductPageContentLines(item.pageContent);
 
   if (attributes.length > 0) {
     lines.push("Variacoes disponiveis:");
@@ -1221,6 +1257,11 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
   if (shippingLines.length > 0) {
     lines.push("Entrega e frete:");
     lines.push(...shippingLines);
+  }
+
+  if (pageContentLines.length > 0) {
+    lines.push("Conteudo da pagina do produto:");
+    lines.push(...pageContentLines);
   }
 
   return lines.filter(Boolean).join("\n");
@@ -1376,6 +1417,36 @@ function buildShippingLines(shipping: SalesCatalogProductShipping) {
 
   if (shipping.notes) {
     lines.push(`- Observacoes: ${shipping.notes}`);
+  }
+
+  return lines;
+}
+
+function buildProductPageContentLines(pageContent: SalesCatalogProductPageContent) {
+  const lines: string[] = [];
+
+  if (pageContent.fullDescription) {
+    lines.push(`- Descricao completa: ${pageContent.fullDescription}`);
+  }
+
+  if (pageContent.usage) {
+    lines.push(`- Modo de uso: ${pageContent.usage}`);
+  }
+
+  if (pageContent.shippingInfo) {
+    lines.push(`- Informacoes de envio: ${pageContent.shippingInfo}`);
+  }
+
+  if (pageContent.faq) {
+    lines.push(`- Perguntas frequentes: ${pageContent.faq}`);
+  }
+
+  if (pageContent.importantNotice) {
+    lines.push(`- Aviso importante: ${pageContent.importantNotice}`);
+  }
+
+  for (const detail of pageContent.quickDetails) {
+    lines.push(`- Detalhe rapido: ${detail.label}: ${detail.value}`);
   }
 
   return lines;

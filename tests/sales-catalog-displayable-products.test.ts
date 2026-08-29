@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emptySalesCatalogProductPageContent,
   isSalesCatalogCheckoutTrackingProduct,
   isSalesCatalogDisplayableProduct,
   type ClientSalesCatalogItem,
@@ -55,6 +56,7 @@ const baseItem: ClientSalesCatalogItem = {
     profile: "default",
     notes: null,
   },
+  pageContent: emptySalesCatalogProductPageContent(),
   productOriginType: "client",
   commercialFlowType: "client_direct",
   revenueOwnerType: "client",

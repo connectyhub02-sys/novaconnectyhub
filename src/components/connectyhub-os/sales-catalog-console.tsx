@@ -165,9 +165,14 @@ type SalesCatalogConsoleProps = {
 };
 
 type CatalogTab = "setup" | "storefront" | "shipping" | "products" | "checkout" | "orders" | "payments" | "whatsapp";
-type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
+type SalesCatalogProductFormTab = "essential" | "pricing" | "page" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 type CheckoutStageFilter = "all" | SalesCatalogCheckoutStage;
+type ProductPageQuickDetailDraft = {
+  id: string;
+  label: string;
+  value: string;
+};
 type SalesCatalogCheckoutRecord = {
   abandonedMinutes: number;
   amount: number;
@@ -440,8 +445,9 @@ const statusOptions: Array<{ value: SalesCatalogItemStatus; label: string }> = [
 
 const salesCatalogProductFormTabs: Array<{ id: SalesCatalogProductFormTab; label: string; icon: LucideIcon }> = [
   { id: "essential", label: "Essencial", icon: PackagePlus },
-  { id: "pricing", label: "Preco", icon: BadgePercent },
-  { id: "media", label: "Midia", icon: Upload },
+  { id: "pricing", label: "Preço", icon: BadgePercent },
+  { id: "page", label: "Página", icon: FileText },
+  { id: "media", label: "Mídia", icon: Upload },
   { id: "stock", label: "Estoque", icon: Tags },
   { id: "delivery", label: "Entrega", icon: Truck },
 ];
@@ -615,6 +621,12 @@ export function SalesCatalogConsole({
   const [productUrl, setProductUrl] = useState("");
   const [externalButtonLabel, setExternalButtonLabel] = useState("");
   const [description, setDescription] = useState("");
+  const [pageFullDescription, setPageFullDescription] = useState("");
+  const [pageUsage, setPageUsage] = useState("");
+  const [pageShippingInfo, setPageShippingInfo] = useState("");
+  const [pageFaq, setPageFaq] = useState("");
+  const [pageImportantNotice, setPageImportantNotice] = useState("");
+  const [pageQuickDetails, setPageQuickDetails] = useState<ProductPageQuickDetailDraft[]>([]);
   const [salePrice, setSalePrice] = useState("");
   const [saleStartsAt, setSaleStartsAt] = useState("");
   const [saleEndsAt, setSaleEndsAt] = useState("");
@@ -1596,6 +1608,12 @@ export function SalesCatalogConsole({
       formData.set("productUrl", productUrl);
       formData.set("externalButtonLabel", externalButtonLabel);
       formData.set("salePrice", salePrice);
+      formData.set("pageFullDescription", pageFullDescription);
+      formData.set("pageUsage", pageUsage);
+      formData.set("pageShippingInfo", pageShippingInfo);
+      formData.set("pageFaq", pageFaq);
+      formData.set("pageImportantNotice", pageImportantNotice);
+      formData.set("pageQuickDetails", JSON.stringify(pageQuickDetails));
       formData.set("saleStartsAt", saleStartsAt);
       formData.set("saleEndsAt", saleEndsAt);
       formData.set("couponCode", couponCode);
@@ -2468,6 +2486,16 @@ export function SalesCatalogConsole({
     setProductUrl(item.productUrl ?? "");
     setExternalButtonLabel(item.externalLinkButtonLabel ?? item.title);
     setDescription(item.description);
+    setPageFullDescription(item.pageContent.fullDescription ?? "");
+    setPageUsage(item.pageContent.usage ?? "");
+    setPageShippingInfo(item.pageContent.shippingInfo ?? "");
+    setPageFaq(item.pageContent.faq ?? "");
+    setPageImportantNotice(item.pageContent.importantNotice ?? "");
+    setPageQuickDetails(item.pageContent.quickDetails.map((detail) => ({
+      id: detail.id,
+      label: detail.label,
+      value: detail.value,
+    })));
     setSalePrice(item.offer.salePrice ?? "");
     setSaleStartsAt(item.offer.saleStartsAt ?? "");
     setSaleEndsAt(item.offer.saleEndsAt ?? "");
@@ -2529,6 +2557,12 @@ export function SalesCatalogConsole({
     setProductUrl("");
     setExternalButtonLabel("");
     setDescription("");
+    setPageFullDescription("");
+    setPageUsage("");
+    setPageShippingInfo("");
+    setPageFaq("");
+    setPageImportantNotice("");
+    setPageQuickDetails([]);
     setSalePrice("");
     setSaleStartsAt("");
     setSaleEndsAt("");
@@ -2557,6 +2591,31 @@ export function SalesCatalogConsole({
     setShippingNotes("");
     setFiles([]);
     setProductFormTab("essential");
+  }
+
+  function addPageQuickDetail() {
+    setPageQuickDetails((current) => {
+      if (current.length >= 8) return current;
+
+      return [
+        ...current,
+        {
+          id: `detail_${Date.now()}_${current.length + 1}`,
+          label: "",
+          value: "",
+        },
+      ];
+    });
+  }
+
+  function updatePageQuickDetail(id: string, patch: Partial<Omit<ProductPageQuickDetailDraft, "id">>) {
+    setPageQuickDetails((current) => current.map((detail) => (
+      detail.id === id ? { ...detail, ...patch } : detail
+    )));
+  }
+
+  function removePageQuickDetail(id: string) {
+    setPageQuickDetails((current) => current.filter((detail) => detail.id !== id));
   }
 
   function resetOrderForm() {
@@ -4517,6 +4576,129 @@ export function SalesCatalogConsole({
                   placeholder="Condicoes: nao cumulativo, valido enquanto houver estoque, pagamento via Pix"
                   style={{ borderColor: "var(--ch-border)" }}
                 />
+              </div>
+            </div>
+            ) : null}
+
+            {productFormTab === "page" ? (
+            <div className="grid gap-3">
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Conteúdo da página do produto</FieldLabel>
+                </div>
+                <p className="mb-3 text-[11px] leading-4 text-slate-500">
+                  Campos opcionais para enriquecer a página pública. Se ficar vazio, a loja usa os textos padrão do produto.
+                </p>
+                <div className="grid gap-3">
+                  <label className="block">
+                    <FieldLabel>Descrição completa</FieldLabel>
+                    <textarea
+                      value={pageFullDescription}
+                      onChange={(event) => setPageFullDescription(event.target.value.slice(0, 1800))}
+                      className="min-h-28 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      placeholder="Texto mais completo que aparece na aba Descrição completa. Se deixar vazio, usa a descrição comercial."
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <label className="block">
+                      <FieldLabel>Modo de uso</FieldLabel>
+                      <textarea
+                        value={pageUsage}
+                        onChange={(event) => setPageUsage(event.target.value.slice(0, 1800))}
+                        className="min-h-32 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                        placeholder="Ex.: como utilizar, preparo, cuidados, indicação de acompanhamento ou passo a passo."
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Informações de envio</FieldLabel>
+                      <textarea
+                        value={pageShippingInfo}
+                        onChange={(event) => setPageShippingInfo(event.target.value.slice(0, 1800))}
+                        className="min-h-32 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                        placeholder="Ex.: prazo, embalagem, rastreio, retirada, envio discreto ou combinação pelo WhatsApp."
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Perguntas frequentes</FieldLabel>
+                      <textarea
+                        value={pageFaq}
+                        onChange={(event) => setPageFaq(event.target.value.slice(0, 1800))}
+                        className="min-h-32 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                        placeholder="Ex.: perguntas e respostas comuns sobre o produto, compra, envio ou atendimento."
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <FieldLabel>Aviso importante</FieldLabel>
+                    <textarea
+                      value={pageImportantNotice}
+                      onChange={(event) => setPageImportantNotice(event.target.value.slice(0, 520))}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      placeholder="Ex.: Confira os dados antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja."
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-cyan-300" />
+                    <FieldLabel>Detalhes rápidos adicionais</FieldLabel>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addPageQuickDetail}
+                    disabled={pageQuickDetails.length >= 8}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Adicionar detalhe
+                  </button>
+                </div>
+
+                {pageQuickDetails.length > 0 ? (
+                  <div className="grid gap-2">
+                    {pageQuickDetails.map((detail) => (
+                      <div key={detail.id} className="grid gap-2 sm:grid-cols-[minmax(120px,0.42fr)_minmax(0,1fr)_40px]">
+                        <input
+                          value={detail.label}
+                          onChange={(event) => updatePageQuickDetail(detail.id, { label: event.target.value.slice(0, 42) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Rótulo"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <input
+                          value={detail.value}
+                          onChange={(event) => updatePageQuickDetail(detail.id, { value: event.target.value.slice(0, 90) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Valor exibido"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePageQuickDetail(detail.id)}
+                          className="grid h-10 place-items-center rounded-lg border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                          style={{ borderColor: "var(--ch-border)" }}
+                          title="Remover detalhe"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-lg border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                    Sem detalhes adicionais. Categoria, entrega e disponibilidade já aparecem automaticamente na página.
+                  </p>
+                )}
               </div>
             </div>
             ) : null}
@@ -7287,7 +7469,7 @@ function SalesProductFormTabs({
   tabs: Array<{ id: SalesCatalogProductFormTab; label: string; icon: LucideIcon }>;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5 rounded-xl border p-1.5 sm:grid-cols-5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+    <div className="grid grid-cols-2 gap-1.5 rounded-xl border p-1.5 sm:grid-cols-3 xl:grid-cols-6" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const active = activeTab === tab.id;

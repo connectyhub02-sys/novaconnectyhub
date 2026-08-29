@@ -51,6 +51,7 @@ import {
   type SalesCatalogProductFulfillment,
   type SalesCatalogProductInventory,
   type SalesCatalogProductOffer,
+  type SalesCatalogProductPageContent,
   type SalesCatalogProductShipping,
   type SalesCatalogOrderStatus,
   type SalesCatalogReservationPolicy,
@@ -101,6 +102,8 @@ const maxCatalogFileBytes = 250 * 1024 * 1024;
 const maxCatalogTotalBytes = 500 * 1024 * 1024;
 const maxCartCheckoutItemUnitPriceCents = 10_000_000_000;
 const maxDescriptionLength = 1800;
+const maxProductPageTextLength = 1800;
+const maxProductPageQuickDetails = 8;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -200,6 +203,7 @@ export async function POST(request: NextRequest) {
   const offer = readProductOfferPayload(formData);
   const fulfillment = readProductFulfillmentPayload(formData);
   const shipping = readProductShippingPayload(formData);
+  const pageContent = readProductPageContentPayload(formData);
   const skus = readProductSkusPayload(formData.get("skus"));
   const storeFeatured = readFormBoolean(formData.get("storeFeatured")) ?? false;
   const storeFeaturedRank = storeFeatured
@@ -397,6 +401,7 @@ export async function POST(request: NextRequest) {
       offer,
       fulfillment,
       shipping,
+      pageContent,
       salesDestination,
       productUrl,
       externalLinkButtonTag: trackedLink?.tag ?? null,
@@ -431,6 +436,7 @@ export async function POST(request: NextRequest) {
       offer: serializeProductOffer(offer),
       fulfillment: serializeProductFulfillment(fulfillment),
       shipping: serializeProductShipping(shipping),
+      page_content: serializeProductPageContent(pageContent),
       media: serializeSalesCatalogMedia(media),
       skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,
@@ -508,6 +514,7 @@ export async function POST(request: NextRequest) {
           offer,
           fulfillment,
           shipping,
+          pageContent,
           salesDestination,
           productUrl,
           externalLinkButtonTag: trackedLink?.tag ?? null,
@@ -2527,6 +2534,7 @@ async function persistSalesCatalogProductInventory(input: {
     offer: refreshedItem.offer,
     fulfillment: refreshedItem.fulfillment,
     shipping: refreshedItem.shipping,
+    pageContent: refreshedItem.pageContent,
   });
   const { error: updateError } = await input.client
     .from("intelligence_memory")
@@ -3218,6 +3226,7 @@ async function applySalesCatalogCategoryRenames(input: {
         offer: item.offer,
         fulfillment: item.fulfillment,
         shipping: item.shipping,
+        pageContent: item.pageContent,
         salesDestination: item.salesDestination,
         productUrl: item.productUrl,
         externalLinkButtonTag: item.externalLinkButtonTag,
@@ -3628,6 +3637,40 @@ function readProductShippingPayload(formData: FormData): SalesCatalogProductShip
   };
 }
 
+function readProductPageContentPayload(formData: FormData): SalesCatalogProductPageContent {
+  return {
+    fullDescription: normalizeOptionalText(readFormString(formData.get("pageFullDescription")), maxProductPageTextLength),
+    usage: normalizeOptionalText(readFormString(formData.get("pageUsage")), maxProductPageTextLength),
+    shippingInfo: normalizeOptionalText(readFormString(formData.get("pageShippingInfo")), maxProductPageTextLength),
+    faq: normalizeOptionalText(readFormString(formData.get("pageFaq")), maxProductPageTextLength),
+    importantNotice: normalizeOptionalText(readFormString(formData.get("pageImportantNotice")), 520),
+    quickDetails: readProductQuickDetailsPayload(formData.get("pageQuickDetails")),
+  };
+}
+
+function readProductQuickDetailsPayload(value: unknown): SalesCatalogProductPageContent["quickDetails"] {
+  const parsed = typeof value === "string" && value.trim() ? parseJson(value) : null;
+  const list = Array.isArray(parsed) ? parsed : [];
+
+  return list
+    .map((item, index) => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const label = normalizeOptionalText(readFormString(record.label), 42);
+      const detailValue = normalizeOptionalText(readFormString(record.value), 90);
+      if (!label || !detailValue) return null;
+
+      return {
+        id: normalizeOptionalText(readFormString(record.id), 48) ?? `detail_${index + 1}`,
+        label,
+        value: detailValue,
+      };
+    })
+    .filter((item): item is SalesCatalogProductPageContent["quickDetails"][number] => Boolean(item))
+    .slice(0, maxProductPageQuickDetails);
+}
+
 function readProductInventoryPayload(formData: FormData): SalesCatalogProductInventory {
   const fallback = emptySalesCatalogProductInventory();
 
@@ -3684,6 +3727,21 @@ function serializeProductShipping(shipping: SalesCatalogProductShipping) {
     },
     profile: shipping.profile,
     notes: shipping.notes,
+  };
+}
+
+function serializeProductPageContent(pageContent: SalesCatalogProductPageContent) {
+  return {
+    full_description: pageContent.fullDescription,
+    usage: pageContent.usage,
+    shipping_info: pageContent.shippingInfo,
+    faq: pageContent.faq,
+    important_notice: pageContent.importantNotice,
+    quick_details: pageContent.quickDetails.map((detail) => ({
+      id: detail.id,
+      label: detail.label,
+      value: detail.value,
+    })),
   };
 }
 
