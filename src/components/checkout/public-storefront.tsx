@@ -288,6 +288,17 @@ export function PublicStorefront({
     const selectedCategories = availableCategories.filter((item) => selectedCategoryKeys.has(normalizeCategorySelectionKey(item.label)));
     return selectedCategories.length > 0 ? selectedCategories : availableCategories;
   }, [categories, storefront.homeCategoryNames]);
+  const showHomeCategorySections = !normalizedSearch && !isCategorySelected;
+  const homeCategorySections = useMemo(() => {
+    if (!showHomeCategorySections) return [];
+
+    return homeCategories
+      .map((homeCategory) => ({
+        category: homeCategory,
+        products: sortedVisibleProducts.filter((product) => product.category === homeCategory.id),
+      }))
+      .filter((section) => section.products.length > 0);
+  }, [homeCategories, showHomeCategorySections, sortedVisibleProducts]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutReady = cart.length > 0
@@ -456,6 +467,16 @@ export function PublicStorefront({
                 viewAllHref={shopPath}
               />
             ) : null}
+
+            {homeCategorySections.map((section, index) => (
+              <ProductShowcaseSection
+                className="mt-12 border-t border-black/10 pt-12 sm:mt-16 sm:pt-16"
+                key={section.category.id}
+                products={section.products}
+                title={section.category.label}
+                viewAllHref={index === homeCategorySections.length - 1 ? shopPath : undefined}
+              />
+            ))}
 
             <StoreReviews branding={branding} />
           </section>
