@@ -91,10 +91,12 @@ export type PublicStorefrontProduct = {
   productUrl: string;
 };
 
-type CartLine = {
+export type PublicStorefrontCartLine = {
   product: PublicStorefrontProduct;
   quantity: number;
 };
+
+type CartLine = PublicStorefrontCartLine;
 
 type PublicStorefrontProps = {
   mode?: StorefrontMode;
@@ -1441,7 +1443,7 @@ function BrandLogo({ branding, compact = false }: { branding: PublicStorefrontBr
   );
 }
 
-function CartDrawer({
+export function CartDrawer({
   open,
   branding,
   cart,

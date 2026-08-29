@@ -21,6 +21,14 @@ type ProductPurchaseControlsProps = {
   className?: string;
 };
 
+export const connectyStoreCartOpenEvent = "connectyhub-store-cart-open";
+
+export type ConnectyStoreCartOpenEventDetail = {
+  organizationId: string;
+  productId: string;
+  quantity: number;
+};
+
 export function ProductCheckoutButton({
   productId,
   disabled = false,
@@ -178,7 +186,18 @@ function AddToCartButton({
     const storageKey = `connecty-store-cart:${organizationId}`;
     const nextCart = mergeCartLine(storageKey, productId, quantity);
     window.localStorage.setItem(storageKey, JSON.stringify(nextCart));
-    window.location.href = cartUrl;
+    const event = new CustomEvent<ConnectyStoreCartOpenEventDetail>(connectyStoreCartOpenEvent, {
+      cancelable: true,
+      detail: { organizationId, productId, quantity },
+    });
+    const shouldOpenCartPage = window.dispatchEvent(event);
+
+    if (shouldOpenCartPage) {
+      window.location.href = cartUrl;
+      return;
+    }
+
+    setBusy(false);
   }
 
   if (!organizationId || !cartUrl) {

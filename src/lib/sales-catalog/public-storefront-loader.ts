@@ -213,7 +213,7 @@ function buildStoreWhatsappHref(input: { organizationName: string; phoneNumber: 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
-async function loadStoreProducts(
+export async function loadStoreProducts(
   client: ReturnType<typeof createServiceClient>,
   input: {
     storeSlug: string;
@@ -243,7 +243,7 @@ async function loadStoreProducts(
   return items.map((item) => mapStorefrontProduct(item, input, item.storeFeatured));
 }
 
-function mapStorefrontProduct(
+export function mapStorefrontProduct(
   item: ClientSalesCatalogItem,
   input: {
     storeSlug: string;

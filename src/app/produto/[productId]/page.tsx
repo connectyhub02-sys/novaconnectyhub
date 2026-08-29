@@ -24,6 +24,7 @@ import {
   Truck,
 } from "lucide-react";
 import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
+import { ProductPageCartController } from "@/components/checkout/product-page-cart-controller";
 import { ProductMobileCheckoutBar, ProductPurchaseControls } from "@/components/checkout/sales-catalog-product-actions";
 import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
@@ -34,6 +35,7 @@ import {
   buildLeadAwareSalesCatalogStoreProductsUrl,
   buildLeadAwareSalesCatalogStoreUrl,
 } from "@/lib/sales-catalog/public-urls";
+import { loadStoreProducts, mapStorefrontProduct } from "@/lib/sales-catalog/public-storefront-loader";
 import {
   isSalesCatalogDisplayableProduct,
   resolveSalesCatalogStorefrontFontFamily,
@@ -168,7 +170,16 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const leadPhone = readSearchString(query.lead_phone);
   const conversationId = readSearchString(query.conversation_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
-  const [related, whatsapp, catalogSettings] = await Promise.all([
+  const storeSlug = organization.slug ?? organization.id;
+  const storefrontProductContext = {
+    storeSlug,
+    organizationId: organization.id,
+    leadId,
+    leadPhone,
+    conversationId,
+    trackingLinkId,
+  };
+  const [related, whatsapp, catalogSettings, storeProducts] = await Promise.all([
     loadRelatedProducts(client, item, row.organization_id),
     loadProductWhatsapp(client, {
       organizationId: row.organization_id,
@@ -176,6 +187,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
       item,
     }),
     getOrganizationSalesCatalogSettings(client, row.organization_id).catch(() => null),
+    loadStoreProducts(client, storefrontProductContext),
   ]);
   const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
   const canCheckout = item.salesDestination === "connectyhub_checkout"
@@ -212,7 +224,6 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     "--store-font-heading": storefront.headingFontFamily,
     "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
-  const storeSlug = organization.slug ?? organization.id;
   const storeUrl = buildLeadAwareSalesCatalogStoreUrl({
     storeSlug,
     organizationId: organization.id,
@@ -237,6 +248,10 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     conversationId,
     trackingLinkId,
   });
+  const currentCartProduct = mapStorefrontProduct(item, storefrontProductContext, item.storeFeatured);
+  const cartProducts = storeProducts.some((product) => product.id === currentCartProduct.id)
+    ? storeProducts
+    : [currentCartProduct, ...storeProducts];
   const whatsappReturn = buildProductWhatsappReturn({
     phoneNumber: whatsapp?.phone_number ?? null,
     displayName: whatsapp?.display_name ?? null,
@@ -472,6 +487,18 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         disabled={!canCheckout}
         organizationId={organization.id}
         productId={item.id}
+      />
+      <ProductPageCartController
+        branding={branding}
+        products={cartProducts}
+        storeSlug={storeSlug}
+        tracking={{
+          organizationId: organization.id,
+          leadId,
+          leadPhone,
+          conversationId,
+          trackingLinkId,
+        }}
       />
       <PublicStoreFooter
         branding={branding}
