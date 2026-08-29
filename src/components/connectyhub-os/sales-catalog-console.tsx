@@ -4224,7 +4224,32 @@ export function SalesCatalogConsole({
             onImport={importWhatsappCatalog}
             onToggleExportItem={toggleWhatsappExportItem}
           />
-          <Panel className="order-1 overflow-visible" id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
+          {editingItemId ? (
+            <div aria-hidden="true" className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm" />
+          ) : null}
+          <Panel
+            action={editingItemId ? (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-600 transition hover:bg-slate-900/5 hover:text-slate-950"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                <X className="h-3.5 w-3.5" />
+                Fechar
+              </button>
+            ) : undefined}
+            className={cn(
+              editingItemId
+                ? "fixed inset-x-3 top-3 z-50 mx-auto max-h-[calc(100vh-1.5rem)] max-w-5xl overflow-y-auto sm:inset-x-6 sm:top-6 sm:max-h-[calc(100vh-3rem)]"
+                : "order-1 overflow-visible",
+            )}
+            id="sales-catalog-tour-products"
+            title={editingItemId ? "Editar produto" : "Cadastrar produto manualmente"}
+            eyebrow={selectedCompany?.name ?? "empresa"}
+            tone="cyan"
+            compact
+          >
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
 
@@ -4993,7 +5018,7 @@ export function SalesCatalogConsole({
 
         <Panel className={activeTab === "products" ? "order-3 xl:col-span-2" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact>
           {visibleItems.length > 0 ? (
-            <div className="grid gap-3">
+            <div className="grid gap-3 xl:grid-cols-2">
               {visibleItems.map((item) => (
                 <CatalogItemCard
                   key={item.id}
