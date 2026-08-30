@@ -2953,7 +2953,7 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <AccordionSection id="sales-catalog-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
+              <AccordionSection id="sales-catalog-tour-categories" icon={Tags} title="Categorias" tone="green">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>Categorias</FieldLabel>
                   <button
@@ -3204,7 +3204,7 @@ export function SalesCatalogConsole({
                 </div>
               </AccordionSection>
 
-              <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet" defaultOpen>
+              <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet">
                 <div className="grid gap-3 lg:grid-cols-2">
                   <label className="block">
                     <FieldLabel>Pedido minimo</FieldLabel>
@@ -3996,7 +3996,7 @@ export function SalesCatalogConsole({
             </div>
 
             {selectedShippingRule ? (
-              <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2" defaultOpen>
+              <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <FieldLabel>Servicos e faixas</FieldLabel>
@@ -4324,7 +4324,7 @@ export function SalesCatalogConsole({
                 </label>
               </div>
 
-              <AccordionSection icon={MessageSquareText} title="Lead no WhatsApp" tone="cyan" defaultOpen>
+              <AccordionSection icon={MessageSquareText} title="Lead no WhatsApp" tone="cyan">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
                     value={orderCustomerName}

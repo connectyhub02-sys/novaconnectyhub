@@ -2086,7 +2086,7 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O botao abre o Google Maps quando houver link, coordenadas ou endereco completo." defaultOpen={companyLocationDrafts.length === 1 && !companyLocationDrafts[0]?.address}>
+              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O botao abre o Google Maps quando houver link, coordenadas ou endereco completo.">
                 <CompanyLocationsEditor
                   locations={companyLocationDrafts}
                   onAdd={addCompanyLocationDraft}
@@ -3843,7 +3843,6 @@ function GuidedPromptBuilder({
     <BehaviorSection
       title="Construtor guiado do prompt"
       description="Escolha o nicho e preencha campos simples. O sistema gera o prompt comercial completo mantendo as regras de botoes, checkout e catalogo."
-      defaultOpen
     >
       <div className="grid gap-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
@@ -5322,7 +5321,6 @@ function LeadQualificationEditor({
       <BehaviorSection
         title="Playbook comercial"
         description={`Define como o agente qualifica leads do produto ou servico deste ${entityLabel.toLowerCase()}.`}
-        defaultOpen
       >
         <div className="grid gap-3">
           <ToggleTile

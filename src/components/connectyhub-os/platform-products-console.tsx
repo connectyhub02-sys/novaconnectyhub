@@ -777,7 +777,7 @@ export function PlatformProductsConsole({
                       </div>
 
                       {setupFormTab === "base" ? (
-                      <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub" tone="cyan" defaultOpen>
+                      <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub" tone="cyan">
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
                           <Field label="Tipo de venda">
                             <select value={settingsDraft.businessType} onChange={(event) => applyBusinessTemplate(event.target.value as SalesCatalogBusinessType)} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -805,7 +805,7 @@ export function PlatformProductsConsole({
                       ) : null}
 
                       {setupFormTab === "categories" ? (
-                      <Block id="platform-products-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
+                      <Block id="platform-products-tour-categories" icon={Tags} title="Categorias" tone="green">
                         <div className="mb-3 flex justify-end">
                           <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -826,7 +826,7 @@ export function PlatformProductsConsole({
                       ) : null}
 
                       {setupFormTab === "variations" ? (
-                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet" defaultOpen>
+                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet">
                         <div className="mb-3 flex flex-wrap justify-end gap-2">
                           <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -878,7 +878,7 @@ export function PlatformProductsConsole({
 
                       {productFormTab === "essential" ? (
                         <>
-                      <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario" tone="cyan" defaultOpen>
+                      <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario" tone="cyan">
                         {draft.salesChannelType === "direct" ? (
                           <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
                             Venda direta ConnectyHub fica fora da importacao dos usuarios e sera vendida por checkout/campanha propria.
