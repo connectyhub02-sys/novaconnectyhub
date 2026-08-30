@@ -1775,6 +1775,7 @@ async function createSalesCatalogCartCheckout(input: {
   const customerEmail = normalizeOptionalText(readFormString(input.body?.customerEmail), 160);
   const leadId = normalizeUuid(readFormString(input.body?.leadId));
   const conversationId = normalizeUuid(readFormString(input.body?.conversationId));
+  const agentId = normalizeUuid(readFormString(input.body?.agentId ?? input.body?.agent_id));
   const customerDocument = normalizeOptionalText(readFormString(input.body?.customerDocument), 40);
   const destinationCep = normalizeSalesCatalogCep(readFormString(input.body?.destinationCep));
   const destinationAddress = normalizeOptionalText(readFormString(input.body?.destinationAddress), 300);
@@ -1984,6 +1985,7 @@ async function createSalesCatalogCartCheckout(input: {
         revenue_owner_type: orderRevenueOwnerType,
         commission_eligible: orderCommissionEligible,
         platform_product_marketplace: hasPlatformItems,
+        agent_id: agentId,
         lead_name: customerName,
         lead_phone: customerPhone,
       },
@@ -2041,6 +2043,8 @@ async function createSalesCatalogCartCheckout(input: {
   const leadAwareCheckoutUrl = appendLeadTrackingParams(paymentResult.trackingUrl ?? paymentResult.checkoutUrl, {
     leadId,
     leadPhone: customerPhone,
+    conversationId,
+    agentId,
   });
   const { data: refreshedOrder, error: refreshedOrderError } = await input.client
     .from("sales_catalog_orders")
@@ -2098,6 +2102,7 @@ async function createSalesCatalogCartCheckout(input: {
       })),
       lead_id: leadId,
       conversation_id: conversationId,
+      agent_id: agentId,
       lead_phone: customerPhone,
       created_by: input.userId,
     },

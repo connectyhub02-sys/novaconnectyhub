@@ -5,6 +5,7 @@ export type ConnectyPublicTrackingContext = {
   lead_id?: string | null;
   lead_phone?: string | null;
   conversation_id?: string | null;
+  agent_id?: string | null;
   order_id?: string | null;
   payment_session_id?: string | null;
   tracking_link_id?: string | null;
@@ -20,6 +21,7 @@ const contextKeys = [
   "lead_id",
   "lead_phone",
   "conversation_id",
+  "agent_id",
   "order_id",
   "payment_session_id",
   "tracking_link_id",
@@ -106,6 +108,7 @@ export function buildPublicTrackingApiBody(context: ConnectyPublicTrackingContex
     lead_id: context.lead_id,
     lead_phone: context.lead_phone,
     conversation_id: context.conversation_id,
+    agent_id: context.agent_id,
     order_id: context.order_id,
     payment_session_id: context.payment_session_id,
     tracking_link_id: context.tracking_link_id,
@@ -125,6 +128,7 @@ export function buildPublicTrackingMetadata(context: ConnectyPublicTrackingConte
     lead_id: context.lead_id,
     lead_phone: context.lead_phone,
     conversation_id: context.conversation_id,
+    agent_id: context.agent_id,
     order_id: context.order_id,
     payment_session_id: context.payment_session_id,
     tracking_link_id: context.tracking_link_id,

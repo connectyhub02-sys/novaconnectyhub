@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronDown, ExternalLink, Loader2, Send, Sparkles, X } from "lucide-react";
+import Image from "next/image";
+import { Bot, ChevronDown, ExternalLink, Loader2, Send, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
@@ -24,7 +25,10 @@ type CommerceAgentSession = {
   surface: "store" | "product" | "cart" | "checkout" | "unknown";
   checkoutQuietMode: boolean;
   dockLabel: string;
+  agentId: string | null;
   agentName: string;
+  agentAvatarUrl: string | null;
+  agentAvatarAlt: string | null;
   leadName: string | null;
   welcomeMessage: string | null;
   whisperMessage: string | null;
@@ -71,7 +75,7 @@ export function CommerceAgentDock() {
       return;
     }
 
-    const sessionKey = `${surface}:${pathname ?? ""}?${search}:${publicTracking.organization_id}:${publicTracking.lead_id ?? ""}:${publicTracking.conversation_id ?? ""}`;
+    const sessionKey = `${surface}:${pathname ?? ""}?${search}:${publicTracking.organization_id}:${publicTracking.lead_id ?? ""}:${publicTracking.conversation_id ?? ""}:${publicTracking.agent_id ?? ""}`;
     if (lastSessionKey.current === sessionKey) {
       return;
     }
@@ -149,7 +153,7 @@ export function CommerceAgentDock() {
 
   const isCheckout = session.surface === "checkout";
   const dockText = session.leadName
-    ? `${session.agentName} esta aqui, ${firstName(session.leadName)}`
+    ? `${firstName(session.leadName)}, ${session.agentName} esta contigo`
     : session.dockLabel;
 
   function openDock() {
@@ -244,9 +248,7 @@ export function CommerceAgentDock() {
       {whisperVisible && session.whisperMessage ? (
         <div className="mb-3 ml-auto max-w-[min(22rem,calc(100vw-1.5rem))] rounded-[8px] border border-cyan-200/70 bg-white/95 p-3 shadow-2xl shadow-cyan-950/15 backdrop-blur">
           <div className="flex items-start gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] bg-slate-950 text-cyan-200">
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-            </span>
+            <AgentAvatar session={session} size="sm" />
             <div className="min-w-0">
               <p className="text-xs font-semibold leading-5 text-slate-700">{session.whisperMessage}</p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -274,10 +276,7 @@ export function CommerceAgentDock() {
         <section className="mb-3 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-[8px] border border-cyan-200/70 bg-white shadow-2xl shadow-slate-950/20">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-950 px-3 py-3 text-white">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-cyan-300 text-slate-950">
-                <Bot className="h-4 w-4" aria-hidden="true" />
-                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
-              </span>
+              <AgentAvatar session={session} />
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-black">{session.agentName}</h2>
                 <p className="truncate text-[11px] font-semibold text-cyan-100">{surfaceLabel(session.surface)}</p>
@@ -388,16 +387,45 @@ export function CommerceAgentDock() {
         onClick={openDock}
         aria-label="Abrir agente da loja"
       >
-        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-[8px] bg-cyan-300 text-slate-950">
-          <Bot className="h-4 w-4" aria-hidden="true" />
-          <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
-        </span>
+        <AgentAvatar session={session} size="sm" />
         <span className="min-w-0">
           <span className="block truncate text-xs font-black">{dockText}</span>
           <span className="block truncate text-[10px] font-semibold text-cyan-100">{surfaceLabel(session.surface)}</span>
         </span>
       </button>
     </div>
+  );
+}
+
+function AgentAvatar({
+  session,
+  size = "md",
+}: {
+  session: Pick<CommerceAgentSession, "agentName" | "agentAvatarUrl" | "agentAvatarAlt">;
+  size?: "sm" | "md";
+}) {
+  const boxClass = size === "sm" ? "h-8 w-8" : "h-9 w-9";
+  const imageSize = size === "sm" ? "32px" : "36px";
+
+  return (
+    <span className={cn(
+      "relative grid shrink-0 place-items-center overflow-hidden rounded-[8px] bg-cyan-300 text-slate-950 ring-1 ring-cyan-200/70",
+      boxClass,
+    )}>
+      {session.agentAvatarUrl ? (
+        <Image
+          alt={session.agentAvatarAlt ?? session.agentName}
+          className="object-cover"
+          fill
+          sizes={imageSize}
+          src={session.agentAvatarUrl}
+          unoptimized
+        />
+      ) : (
+        <Bot className="h-4 w-4" aria-hidden="true" />
+      )}
+      <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
+    </span>
   );
 }
 

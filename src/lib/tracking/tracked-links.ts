@@ -47,6 +47,7 @@ export function appendLeadTrackingParams(
     leadId?: string | null;
     leadPhone?: string | null;
     conversationId?: string | null;
+    agentId?: string | null;
     orderId?: string | null;
     paymentSessionId?: string | null;
     trackingLinkId?: string | null;
@@ -78,6 +79,10 @@ export function appendLeadTrackingParams(
 
     if (input.conversationId) {
       url.searchParams.set("conversation_id", input.conversationId);
+    }
+
+    if (input.agentId) {
+      url.searchParams.set("agent_id", input.agentId);
     }
 
     if (input.orderId) {

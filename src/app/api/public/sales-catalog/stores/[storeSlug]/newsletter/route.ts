@@ -59,6 +59,7 @@ export async function POST(
   }
 
   const requestedLeadPhone = normalizePhone(readString(body.leadPhone));
+  const agentId = normalizeUuid(readString(body.agentId));
   const leadContext = await resolveLeadTrackingContext(client, {
     organizationId: organization.id,
     leadId: readString(body.leadId),
@@ -107,6 +108,7 @@ export async function POST(
       lead_phone: leadPhone,
       email,
       conversation_id: leadContext.conversationId,
+      agent_id: agentId,
       tracking_link_id: normalizeUuid(readString(body.trackingLinkId)),
       source: "sales_catalog_store_newsletter",
     },

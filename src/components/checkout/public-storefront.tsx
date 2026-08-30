@@ -73,6 +73,7 @@ export type PublicStorefrontTrackingParams = {
   leadName: string | null;
   leadPhone: string | null;
   conversationId: string | null;
+  agentId: string | null;
   trackingLinkId: string | null;
 };
 
@@ -523,6 +524,7 @@ export function PublicStorefront({
           leadId: tracking.leadId,
           leadPhone: tracking.leadPhone,
           conversationId: tracking.conversationId,
+          agentId: tracking.agentId,
           trackingLinkId: tracking.trackingLinkId,
           items: cart.map((line) => ({
             productId: line.product.id,

@@ -89,6 +89,7 @@ export async function POST(
 
   const leadId = normalizeUuid(readString(body.leadId));
   const conversationId = normalizeUuid(readString(body.conversationId));
+  const agentId = normalizeUuid(readString(body.agentId));
   const leadPhone = normalizePhone(readString(body.leadPhone));
   const trackingLinkId = normalizeUuid(readString(body.trackingLinkId));
   const quantity = normalizeQuantity(body.quantity);
@@ -105,6 +106,7 @@ export async function POST(
     lead?.id ?? leadId,
     conversationId,
     customerPhone,
+    agentId,
     trackingLinkId,
   ]);
   const existingCheckout = await findRecentPublicCheckoutSession({
@@ -157,6 +159,7 @@ export async function POST(
         created_from: "sales_catalog_public_product",
         catalog_item_id: item.id,
         catalog_item_tag: item.tag,
+        agent_id: agentId,
         tracking_link_id: trackingLinkId,
         lead_phone: customerPhone,
         product_page_checkout: true,
@@ -242,6 +245,7 @@ export async function POST(
     leadId: lead?.id ?? leadId,
     leadPhone: customerPhone,
     conversationId,
+    agentId,
     orderId,
     paymentSessionId: payment.session.id,
     trackingLinkId,
@@ -267,6 +271,7 @@ export async function POST(
       tracking_url: checkoutUrl,
       lead_id: lead?.id ?? leadId,
       conversation_id: conversationId,
+      agent_id: agentId,
       lead_phone: customerPhone,
       quantity,
       gateway_unavailable: payment.gatewayUnavailable === true,

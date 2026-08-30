@@ -61,6 +61,7 @@ export function ProductCheckoutButton({
           leadId: searchParams.get("lead_id"),
           leadPhone: searchParams.get("lead_phone"),
           conversationId: searchParams.get("conversation_id"),
+          agentId: searchParams.get("agent_id"),
           trackingLinkId: searchParams.get("tracking_link_id"),
           quantity,
         }),

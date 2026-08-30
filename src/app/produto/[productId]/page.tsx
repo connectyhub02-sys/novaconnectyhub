@@ -207,6 +207,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const requestedLeadId = readSearchString(query.lead_id);
   const requestedLeadPhone = readSearchString(query.lead_phone);
   const requestedConversationId = readSearchString(query.conversation_id);
+  const agentId = readSearchString(query.agent_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
   const storeSlug = organization.slug ?? organization.id;
   const leadContext = await loadPublicStorefrontLeadContext(client, {
@@ -225,6 +226,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     leadId,
     leadPhone,
     conversationId,
+    agentId,
     trackingLinkId,
   };
   const [related, whatsapp, catalogSettings, storeProducts] = await Promise.all([
@@ -232,6 +234,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     loadProductWhatsapp(client, {
       organizationId: row.organization_id,
       conversationId,
+      agentId,
       item,
     }),
     getOrganizationSalesCatalogSettings(client, row.organization_id).catch(() => null),
@@ -251,10 +254,14 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     leadId,
     leadPhone,
     conversationId,
+    agentId,
     trackingLinkId,
   });
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
+  const commerceAgentEnabledForProduct = Boolean(
+    catalogSettings?.commerceAgent.enabled && catalogSettings.commerceAgent.surfaces.includes("product"),
+  );
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
   const accentColor = getReadableAccentColor(primaryColor, storefront.textColor);
   const publicLayoutStyle = {
@@ -278,6 +285,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     leadId,
     leadPhone,
     conversationId,
+    agentId,
     trackingLinkId,
   });
   const storeProductsUrl = buildLeadAwareSalesCatalogStoreProductsUrl({
@@ -286,6 +294,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     leadId,
     leadPhone,
     conversationId,
+    agentId,
     trackingLinkId,
   });
   const storeCartUrl = buildLeadAwareSalesCatalogStoreCartUrl({
@@ -294,6 +303,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     leadId,
     leadPhone,
     conversationId,
+    agentId,
     trackingLinkId,
   });
   const currentCartProduct = mapStorefrontProduct(item, storefrontProductContext, item.storeFeatured);
@@ -515,6 +525,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                     leadId,
                     leadPhone,
                     conversationId,
+                    agentId,
                     trackingLinkId,
                   })}
                   variant="showcase"
@@ -525,7 +536,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         ) : null}
       </section>
 
-      {whatsappReturn ? (
+      {whatsappReturn && !commerceAgentEnabledForProduct ? (
         <a
           href={whatsappReturn.href}
           className="fixed bottom-20 right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-[#25D366] text-white shadow-2xl shadow-emerald-900/30 transition hover:bg-[#20bf5a] sm:bottom-7 sm:right-7"
@@ -554,6 +565,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           leadName,
           leadPhone,
           conversationId,
+          agentId,
           trackingLinkId,
         }}
       />
@@ -569,6 +581,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           leadId,
           leadPhone,
           conversationId,
+          agentId,
           trackingLinkId,
         }}
         whatsappHref={whatsappReturn?.href ?? null}
@@ -640,6 +653,7 @@ async function loadProductWhatsapp(
   input: {
     organizationId: string;
     conversationId: string | null;
+    agentId: string | null;
     item: ClientSalesCatalogItem;
   },
 ) {
@@ -660,6 +674,23 @@ async function loadProductWhatsapp(
 
     if (conversationWhatsappInstanceId && !candidateInstanceIds.includes(conversationWhatsappInstanceId)) {
       candidateInstanceIds.unshift(conversationWhatsappInstanceId);
+    }
+  }
+
+  if (input.agentId) {
+    const { data: agentInstance } = await client
+      .from("whatsapp_instances")
+      .select("id, phone_number, display_name, status")
+      .eq("organization_id", input.organizationId)
+      .eq("status", "connected")
+      .not("phone_number", "is", null)
+      .contains("metadata", { agent_id: input.agentId })
+      .order("connected_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle<ProductWhatsappRow>();
+
+    if (agentInstance) {
+      return agentInstance;
     }
   }
 
@@ -696,6 +727,7 @@ function buildProductPublicTrackingContext(input: {
   leadId: string | null;
   leadPhone: string | null;
   conversationId: string | null;
+  agentId: string | null;
   trackingLinkId: string | null;
 }): ConnectyPublicTrackingContext {
   const secret = process.env.TRACKING_PUBLIC_TOKEN_SECRET;
@@ -707,6 +739,7 @@ function buildProductPublicTrackingContext(input: {
     lead_id: input.leadId,
     lead_phone: input.leadPhone,
     conversation_id: input.conversationId,
+    agent_id: input.agentId,
     tracking_link_id: input.trackingLinkId,
     product_id: input.productId,
     catalog_item_id: input.productId,
@@ -991,6 +1024,7 @@ function PublicStoreFooter({
     leadId: string | null;
     leadPhone: string | null;
     conversationId: string | null;
+    agentId: string | null;
     trackingLinkId: string | null;
   };
   whatsappHref: string | null;

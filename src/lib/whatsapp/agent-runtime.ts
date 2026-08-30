@@ -3394,10 +3394,17 @@ function formatTemperatureLabel(value: LeadQualificationAnalysis["temperature"])
   return "frio";
 }
 
+type LeadAwareTrackingContext = {
+  lead: LeadRow | null;
+  conversationId?: string | null;
+  agent?: AgentRow | null;
+};
+
 function renderPromptVariables(prompt: string, input: {
   organization: OrganizationRow;
   agent: AgentRow;
   lead: LeadRow | null;
+  conversationId?: string | null;
   linkButtons?: RuntimeLinkButton[];
   salesCatalog?: RuntimeSalesCatalogItem[];
 }) {
@@ -3464,9 +3471,7 @@ function buildGlobalCheckoutConfirmationLines() {
 
 function buildLinkButtonLines(
   linkButtons: RuntimeLinkButton[],
-  input: {
-    lead: LeadRow | null;
-  },
+  input: LeadAwareTrackingContext,
 ) {
   if (linkButtons.length === 0) {
     return [];
@@ -3837,9 +3842,7 @@ function formatRuntimeDate(value: string) {
 function renderLinkButtonTags(
   text: string,
   linkButtons: RuntimeLinkButton[],
-  input: {
-    lead: LeadRow | null;
-  },
+  input: LeadAwareTrackingContext,
 ) {
   let rendered = text;
 
@@ -3853,9 +3856,7 @@ function renderLinkButtonTags(
 function replaceLooseLinkButtonTags(
   text: string,
   linkButtons: RuntimeLinkButton[],
-  input: {
-    lead: LeadRow | null;
-  },
+  input: LeadAwareTrackingContext,
 ) {
   linkButtonTagRegex.lastIndex = 0;
 
@@ -3877,13 +3878,13 @@ function replaceLooseLinkButtonTags(
 
 function buildLeadAwareTrackingUrl(
   link: RuntimeLinkButton,
-  input: {
-    lead: LeadRow | null;
-  },
+  input: LeadAwareTrackingContext,
 ) {
   return appendLeadTrackingParams(link.trackingUrl, {
     leadId: input.lead?.id,
     leadPhone: normalizePhone(input.lead?.phone_number),
+    conversationId: input.conversationId,
+    agentId: input.agent?.id,
   });
 }
 
@@ -5276,7 +5277,11 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
-  const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
+  const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, {
+    lead: context.lead,
+    conversationId: context.conversationId,
+    agent: context.agent,
+  });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
@@ -7436,6 +7441,8 @@ async function sendSalesCatalogPaymentLink(input: {
   const paymentUrl = appendLeadTrackingParams(input.payment.trackingUrl ?? input.payment.checkoutUrl, {
     leadId: input.context.lead?.id,
     leadPhone: normalizePhone(input.context.lead?.phone_number),
+    conversationId: input.context.conversationId,
+    agentId: input.context.agent.id,
   });
 
   try {
@@ -7531,6 +7538,7 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
       leadId: input.context.lead?.id ?? null,
       leadPhone: normalizePhone(input.context.lead?.phone_number),
       conversationId: input.context.conversationId,
+      agentId: input.context.agent.id,
     });
 
     return `${label}|${url}`;
@@ -8401,12 +8409,20 @@ function responseContainsLinkButtonReference(
     return false;
   }
 
-  if (context.behavior.interactiveMessages && collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead }).length > 0) {
+  if (context.behavior.interactiveMessages && collectInteractiveLinkMatches(text, context.linkButtons, {
+    lead: context.lead,
+    conversationId: context.conversationId,
+    agent: context.agent,
+  }).length > 0) {
     return true;
   }
 
   return context.linkButtons.some((link) => {
-    const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
+    const trackingUrl = buildLeadAwareTrackingUrl(link, {
+      lead: context.lead,
+      conversationId: context.conversationId,
+      agent: context.agent,
+    });
 
     return text.includes(trackingUrl) || text.includes(link.url) || text.includes(link.tag);
   });
@@ -8427,7 +8443,11 @@ function ensureLinkPromiseIsActionable(
     return text;
   }
 
-  if (collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead }).length > 0) {
+  if (collectInteractiveLinkMatches(text, context.linkButtons, {
+    lead: context.lead,
+    conversationId: context.conversationId,
+    agent: context.agent,
+  }).length > 0) {
     return text;
   }
 
@@ -8458,9 +8478,7 @@ function hasUnresolvedLinkPromise(text: string) {
 function collectInteractiveLinkMatches(
   text: string,
   linkButtons: RuntimeLinkButton[],
-  input: {
-    lead: LeadRow | null;
-  },
+  input: LeadAwareTrackingContext,
 ) {
   const normalizedText = normalizeSearch(text);
 
@@ -8608,7 +8626,11 @@ function buildInteractiveLinkMenu(
 
   let cleanedText = text;
   const choices: string[] = [];
-  const matches = collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead });
+  const matches = collectInteractiveLinkMatches(text, context.linkButtons, {
+    lead: context.lead,
+    conversationId: context.conversationId,
+    agent: context.agent,
+  });
   const hasExplicitTrackedLink = matches.some((match) => match.directIndex !== null);
 
   if (!context.behavior.interactiveMessages && !hasExplicitTrackedLink) {

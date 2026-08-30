@@ -26,6 +26,8 @@ type TrackingBody = {
   lead_id?: unknown;
   lead_phone?: unknown;
   conversation_id?: unknown;
+  agent_id?: unknown;
+  agentId?: unknown;
   order_id?: unknown;
   payment_session_id?: unknown;
   tracking_link_id?: unknown;
@@ -77,6 +79,10 @@ export async function POST(request: NextRequest) {
   const requestedLeadId = readString(body.lead_id) ?? readString(metadata.lead_id) ?? readString(publicTracking.lead_id);
   const requestedConversationId = readString(body.conversation_id) ?? readString(metadata.conversation_id) ?? readString(publicTracking.conversation_id);
   const requestedLeadPhone = readString(body.lead_phone) ?? readString(metadata.lead_phone) ?? readString(publicTracking.lead_phone);
+  const agentId = readString(body.agent_id)
+    ?? readString(body.agentId)
+    ?? readString(metadata.agent_id)
+    ?? readString(publicTracking.agent_id);
   const orderId = readString(body.order_id) ?? readString(metadata.order_id) ?? readString(publicTracking.order_id);
   const paymentSessionId = readString(body.payment_session_id) ?? readString(metadata.payment_session_id) ?? readString(publicTracking.payment_session_id);
   const trackingLinkId = readString(body.tracking_link_id) ?? readString(metadata.tracking_link_id) ?? readString(publicTracking.tracking_link_id);
@@ -137,6 +143,7 @@ export async function POST(request: NextRequest) {
       lead_id: leadContext.leadId,
       lead_phone: leadContext.leadPhone,
       conversation_id: leadContext.conversationId,
+      agent_id: agentId,
       order_id: orderId,
       payment_session_id: paymentSessionId,
       tracking_link_id: trackingLinkId,
@@ -174,6 +181,7 @@ export async function POST(request: NextRequest) {
       leadId: leadContext.leadId,
       leadPhone: leadContext.leadPhone,
       conversationId: leadContext.conversationId,
+      agentId,
       trackingLinkId,
       orderId,
       paymentSessionId,
@@ -402,6 +410,7 @@ async function syncCommerceTrackingContext(input: {
   leadId: string | null;
   leadPhone: string | null;
   conversationId: string | null;
+  agentId: string | null;
   trackingLinkId: string | null;
   orderId: string | null;
   paymentSessionId: string | null;
@@ -445,6 +454,7 @@ async function syncCommerceTrackingContext(input: {
         metadata: {
           latest_event_type: input.eventType,
           latest_page_path: pagePath,
+          agent_id: input.agentId,
           tracking_source: input.trackingSource,
         },
       })),
@@ -476,6 +486,7 @@ async function syncCommerceTrackingContext(input: {
       latest_event_type: input.eventType,
       product_id: input.productId,
       catalog_item_id: input.catalogItemId,
+      agent_id: input.agentId,
       tracking_source: input.trackingSource,
       commerce_context: readRecord(input.metadata.commerce_context),
       commerce_cart_snapshot: readRecord(input.metadata.commerce_cart_snapshot),

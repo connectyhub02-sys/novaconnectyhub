@@ -87,6 +87,7 @@ export async function loadPublicStorefrontPageData(input: {
   const leadId = readSearchString(query.lead_id);
   const leadPhone = readSearchString(query.lead_phone);
   const conversationId = readSearchString(query.conversation_id);
+  const agentId = readSearchString(query.agent_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
   const leadContext = await loadPublicStorefrontLeadContext(client, {
     organizationId: organization.id,
@@ -100,11 +101,12 @@ export async function loadPublicStorefrontPageData(input: {
     leadName: leadContext.leadName,
     leadPhone: leadContext.leadPhone ?? leadPhone,
     conversationId: leadContext.conversationId ?? conversationId,
+    agentId,
     trackingLinkId,
   };
   const [catalogSettings, whatsapp] = await Promise.all([
     getOrganizationSalesCatalogSettings(client, organization.id),
-    loadPublicStorefrontWhatsapp(client, organization.id),
+    loadPublicStorefrontWhatsapp(client, organization.id, agentId),
   ]);
   const products = await loadStoreProducts(client, {
     storeSlug: publicSlug,
@@ -112,6 +114,7 @@ export async function loadPublicStorefrontPageData(input: {
     leadId: tracking.leadId,
     leadPhone: tracking.leadPhone,
     conversationId: tracking.conversationId,
+    agentId: tracking.agentId,
     trackingLinkId,
   });
 
@@ -195,6 +198,7 @@ export function buildStorePublicTrackingContext(input: {
   leadId: string | null;
   leadPhone: string | null;
   conversationId: string | null;
+  agentId: string | null;
   trackingLinkId: string | null;
 }): ConnectyPublicTrackingContext {
   const secret = process.env.TRACKING_PUBLIC_TOKEN_SECRET;
@@ -206,6 +210,7 @@ export function buildStorePublicTrackingContext(input: {
     lead_id: input.leadId,
     lead_phone: input.leadPhone,
     conversation_id: input.conversationId,
+    agent_id: input.agentId,
     tracking_link_id: input.trackingLinkId,
     tracking_source: "sales_catalog_store",
   };
@@ -305,7 +310,25 @@ async function loadPublicStorefrontLeadByPhone(
 async function loadPublicStorefrontWhatsapp(
   client: ReturnType<typeof createServiceClient>,
   organizationId: string,
+  agentId: string | null,
 ) {
+  if (agentId) {
+    const { data } = await client
+      .from("whatsapp_instances")
+      .select("id, phone_number, display_name, status")
+      .eq("organization_id", organizationId)
+      .eq("status", "connected")
+      .not("phone_number", "is", null)
+      .contains("metadata", { agent_id: agentId })
+      .order("connected_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle<StorefrontWhatsappRow>();
+
+    if (data) {
+      return data;
+    }
+  }
+
   const { data } = await client
     .from("whatsapp_instances")
     .select("id, phone_number, display_name, status")
@@ -340,6 +363,7 @@ export async function loadStoreProducts(
     leadId: string | null;
     leadPhone: string | null;
     conversationId: string | null;
+    agentId: string | null;
     trackingLinkId: string | null;
   },
 ) {
@@ -370,6 +394,7 @@ export function mapStorefrontProduct(
     leadId: string | null;
     leadPhone: string | null;
     conversationId: string | null;
+    agentId: string | null;
     trackingLinkId: string | null;
   },
   isStoreFeatured: boolean,
@@ -407,6 +432,7 @@ export function mapStorefrontProduct(
       leadId: input.leadId,
       leadPhone: input.leadPhone,
       conversationId: input.conversationId,
+      agentId: input.agentId,
       trackingLinkId: input.trackingLinkId,
     }),
   };

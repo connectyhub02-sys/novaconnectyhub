@@ -24,6 +24,8 @@ type CommerceAgentBody = {
   lead_id?: unknown;
   lead_phone?: unknown;
   conversation_id?: unknown;
+  agent_id?: unknown;
+  agentId?: unknown;
   tracking_link_id?: unknown;
   order_id?: unknown;
   payment_session_id?: unknown;
@@ -65,6 +67,8 @@ type AgentRow = {
   id: string;
   name: string | null;
   persona_name: string | null;
+  avatar_url: string | null;
+  avatar_alt: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -109,7 +113,10 @@ export type CommerceAgentResolvedContext =
       productId: string | null;
       pagePath: string | null;
       pageUrl: string | null;
+      agentId: string | null;
       agentName: string;
+      agentAvatarUrl: string | null;
+      agentAvatarAlt: string | null;
       whatsappHref: string | null;
     };
 
@@ -120,7 +127,10 @@ export type CommerceAgentSessionPayload = {
   surface: SalesCatalogCommerceAgentSurface | "unknown";
   checkoutQuietMode: boolean;
   dockLabel: string;
+  agentId: string | null;
   agentName: string;
+  agentAvatarUrl: string | null;
+  agentAvatarAlt: string | null;
   leadName: string | null;
   welcomeMessage: string | null;
   whisperMessage: string | null;
@@ -176,10 +186,23 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   const leadName = lead
     ? resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata })
     : null;
-  const agent = await loadCommerceAgent(client, organization.id, settings.automationSettings.defaultAgentId);
+  const requestedAgentId = readUuid(body.agent_id) ?? readUuid(body.agentId);
+  let agent = await loadCommerceAgent(
+    client,
+    organization.id,
+    requestedAgentId ?? settings.automationSettings.defaultAgentId,
+  );
+
+  if (!agent && requestedAgentId) {
+    agent = await loadCommerceAgent(client, organization.id, settings.automationSettings.defaultAgentId);
+  }
+
+  const agentName = readString(agent?.persona_name) ?? readString(agent?.name) ?? "Agente ConnectyHub";
   const whatsappHref = await loadWhatsappHref(client, {
     organizationId: organization.id,
     organizationName: organization.name,
+    agentId: agent?.id ?? null,
+    agentName,
     leadName,
   });
   const context = {
@@ -202,7 +225,10 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     productId: readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
     pagePath: readString(body.page_path),
     pageUrl: readString(body.page_url),
-    agentName: readString(agent?.persona_name) ?? readString(agent?.name) ?? "Agente ConnectyHub",
+    agentId: agent?.id ?? null,
+    agentName,
+    agentAvatarUrl: readString(agent?.avatar_url),
+    agentAvatarAlt: readString(agent?.avatar_alt) ?? agentName,
     whatsappHref,
   } satisfies Extract<CommerceAgentResolvedContext, { ok: true }>;
 
@@ -227,7 +253,10 @@ export async function buildCommerceAgentSessionPayload(
     surface: context.surface,
     checkoutQuietMode: context.settings.commerceAgent.checkoutQuietMode,
     dockLabel: context.settings.commerceAgent.agentDockLabel ?? "Estou por aqui",
+    agentId: context.agentId,
     agentName: context.agentName,
+    agentAvatarUrl: context.agentAvatarUrl,
+    agentAvatarAlt: context.agentAvatarAlt,
     leadName: context.leadName,
     welcomeMessage,
     whisperMessage: buildWhisperMessage(context),
@@ -262,6 +291,8 @@ export async function persistCommerceAgentMessage(input: {
       surface: input.context.surface,
       content: input.content.slice(0, 4000),
       metadata: {
+        agent_id: input.context.agentId,
+        agent_name: input.context.agentName,
         page_path: input.context.pagePath,
         page_url: input.context.pageUrl,
       },
@@ -289,6 +320,7 @@ export async function recordCommerceAgentAction(input: {
     commerce_session_id: input.context.commerceSessionId,
     lead_id: input.context.leadId,
     conversation_id: input.context.conversationId,
+    created_by_agent_id: input.context.agentId,
     action_type: input.actionType,
     status: input.status,
     surface: input.context.surface,
@@ -300,6 +332,8 @@ export async function recordCommerceAgentAction(input: {
     reason: input.reason ?? null,
     applied_at: input.status === "applied" ? new Date().toISOString() : null,
     metadata: {
+      agent_id: input.context.agentId,
+      agent_name: input.context.agentName,
       page_path: input.context.pagePath,
       page_url: input.context.pageUrl,
     },
@@ -364,6 +398,8 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
     lead_phone: context.leadPhone,
     metadata: {
       source: "commerce_agent_session",
+      agent_id: context.agentId,
+      agent_name: context.agentName,
       product_id: context.productId,
     },
     last_seen_at: now,
@@ -414,6 +450,8 @@ async function upsertLeadWebIdentities(
       last_seen_at: now,
       metadata: {
         source: "commerce_agent",
+        agent_id: context.agentId,
+        agent_name: context.agentName,
         page_path: context.pagePath,
       },
     })),
@@ -495,7 +533,7 @@ async function loadLead(client: SupabaseClient, organizationId: string, leadId: 
 async function loadCommerceAgent(client: SupabaseClient, organizationId: string, agentId: string | null) {
   let query = client
     .from("agent_registry")
-    .select("id, name, persona_name, metadata")
+    .select("id, name, persona_name, avatar_url, avatar_alt, metadata")
     .eq("organization_id", organizationId)
     .neq("status", "archived");
 
@@ -510,27 +548,60 @@ async function loadWhatsappHref(
   input: {
     organizationId: string;
     organizationName: string;
+    agentId: string | null;
+    agentName: string;
     leadName: string | null;
   },
 ) {
-  const { data } = await client
-    .from("whatsapp_instances")
-    .select("phone_number")
-    .eq("organization_id", input.organizationId)
-    .eq("status", "connected")
-    .not("phone_number", "is", null)
-    .limit(1)
-    .maybeSingle<WhatsappRow>();
-  const phone = normalizePhone(data?.phone_number ?? null);
+  const instance = await loadAgentWhatsappInstance(client, input.organizationId, input.agentId)
+    ?? await loadFallbackWhatsappInstance(client, input.organizationId);
+  const phone = normalizePhone(instance?.phone_number ?? null);
 
   if (!phone) {
     return null;
   }
 
   const greeting = input.leadName ? `${firstName(input.leadName)}, ` : "";
-  const message = `${greeting}vim da loja ${input.organizationName} e quero continuar meu atendimento.`;
+  const message = `${greeting}vim da loja ${input.organizationName} e quero continuar meu atendimento com ${input.agentName}.`;
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+async function loadAgentWhatsappInstance(
+  client: SupabaseClient,
+  organizationId: string,
+  agentId: string | null,
+) {
+  if (!agentId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("phone_number")
+    .eq("organization_id", organizationId)
+    .eq("status", "connected")
+    .not("phone_number", "is", null)
+    .contains("metadata", { agent_id: agentId })
+    .order("connected_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle<WhatsappRow>();
+
+  return data ?? null;
+}
+
+async function loadFallbackWhatsappInstance(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("phone_number")
+    .eq("organization_id", organizationId)
+    .eq("status", "connected")
+    .not("phone_number", "is", null)
+    .order("connected_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle<WhatsappRow>();
+
+  return data ?? null;
 }
 
 async function resolveContextualOffer(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
@@ -626,38 +697,39 @@ function isOfferProduct(value: ReturnType<typeof mapOfferProduct>): value is Non
 
 function buildWelcomeMessage(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
+  const agentIntro = `sou ${context.agentName}. `;
 
   if (context.surface === "checkout") {
-    return `${name}estou aqui sem atrapalhar seu pagamento. Se pintar qualquer duvida, me chama.`;
+    return `${name}${agentIntro}fico por perto sem atrapalhar seu pagamento. Se pintar qualquer duvida, me chama.`;
   }
 
   if (context.surface === "product") {
-    return `${name}continuo te ajudando por aqui nesse produto.`;
+    return `${name}${agentIntro}continuei contigo por aqui nesse produto.`;
   }
 
   if (context.surface === "cart") {
-    return `${name}posso revisar seu pedido antes de finalizar.`;
+    return `${name}${agentIntro}posso revisar seu pedido antes de finalizar.`;
   }
 
-  return `${name}continuo por aqui para te ajudar a escolher.`;
+  return `${name}${agentIntro}continuei por aqui para te ajudar a escolher.`;
 }
 
 function buildWhisperMessage(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
 
   if (context.surface === "checkout") {
-    return `${name}estou aqui se precisar de ajuda para concluir.`;
+    return `${name}${context.agentName} esta aqui se precisar de ajuda para concluir.`;
   }
 
   if (context.surface === "product") {
-    return `${name}esse produto pode combinar com outras opcoes da loja.`;
+    return `${name}${context.agentName} continuou contigo nesse produto.`;
   }
 
   if (context.surface === "cart") {
-    return `${name}quer que eu revise seu pedido antes do checkout?`;
+    return `${name}${context.agentName} pode revisar seu pedido antes do checkout.`;
   }
 
-  return `${name}posso te ajudar a escolher sem sair da loja.`;
+  return `${name}${context.agentName} continuou contigo na loja.`;
 }
 
 function buildQuickActions(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {

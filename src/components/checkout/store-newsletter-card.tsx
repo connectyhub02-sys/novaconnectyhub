@@ -15,6 +15,7 @@ type StoreNewsletterTracking = {
   leadId: string | null;
   leadPhone: string | null;
   conversationId: string | null;
+  agentId: string | null;
   trackingLinkId: string | null;
 };
 
@@ -55,6 +56,7 @@ export function StoreNewsletterCard({
           leadPhone: tracking.leadPhone ?? phone,
           leadId: tracking.leadId,
           conversationId: tracking.conversationId,
+          agentId: tracking.agentId,
           trackingLinkId: tracking.trackingLinkId,
         }),
       });

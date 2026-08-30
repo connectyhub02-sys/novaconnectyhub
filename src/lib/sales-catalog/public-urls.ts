@@ -29,6 +29,7 @@ export function buildLeadAwareSalesCatalogProductUrl(input: {
   leadId?: string | null;
   leadPhone?: string | null;
   conversationId?: string | null;
+  agentId?: string | null;
   trackingLinkId?: string | null;
 }) {
   return appendLeadTrackingParams(buildSalesCatalogProductUrl(input.productId), {
@@ -36,6 +37,7 @@ export function buildLeadAwareSalesCatalogProductUrl(input: {
     leadId: input.leadId,
     leadPhone: input.leadPhone,
     conversationId: input.conversationId,
+    agentId: input.agentId,
     trackingLinkId: input.trackingLinkId,
     trackingSource: "sales_catalog_product",
   });
@@ -48,6 +50,7 @@ export function buildLeadAwareSalesCatalogStoreProductUrl(input: {
   leadId?: string | null;
   leadPhone?: string | null;
   conversationId?: string | null;
+  agentId?: string | null;
   trackingLinkId?: string | null;
 }) {
   return appendLeadTrackingParams(buildSalesCatalogStoreProductUrl(input), {
@@ -55,6 +58,7 @@ export function buildLeadAwareSalesCatalogStoreProductUrl(input: {
     leadId: input.leadId,
     leadPhone: input.leadPhone,
     conversationId: input.conversationId,
+    agentId: input.agentId,
     trackingLinkId: input.trackingLinkId,
     trackingSource: "sales_catalog_product",
   });
@@ -66,6 +70,7 @@ export function buildLeadAwareSalesCatalogStoreProductsUrl(input: {
   leadId?: string | null;
   leadPhone?: string | null;
   conversationId?: string | null;
+  agentId?: string | null;
   trackingLinkId?: string | null;
 }) {
   return appendLeadTrackingParams(buildSalesCatalogStoreProductsUrl(input.storeSlug), {
@@ -73,6 +78,7 @@ export function buildLeadAwareSalesCatalogStoreProductsUrl(input: {
     leadId: input.leadId,
     leadPhone: input.leadPhone,
     conversationId: input.conversationId,
+    agentId: input.agentId,
     trackingLinkId: input.trackingLinkId,
     trackingSource: "sales_catalog_store",
   });
@@ -84,6 +90,7 @@ export function buildLeadAwareSalesCatalogStoreCartUrl(input: {
   leadId?: string | null;
   leadPhone?: string | null;
   conversationId?: string | null;
+  agentId?: string | null;
   trackingLinkId?: string | null;
 }) {
   return appendLeadTrackingParams(buildSalesCatalogStoreCartUrl(input.storeSlug), {
@@ -91,6 +98,7 @@ export function buildLeadAwareSalesCatalogStoreCartUrl(input: {
     leadId: input.leadId,
     leadPhone: input.leadPhone,
     conversationId: input.conversationId,
+    agentId: input.agentId,
     trackingLinkId: input.trackingLinkId,
     trackingSource: "sales_catalog_store",
   });
@@ -102,6 +110,7 @@ export function buildLeadAwareSalesCatalogStoreUrl(input: {
   leadId?: string | null;
   leadPhone?: string | null;
   conversationId?: string | null;
+  agentId?: string | null;
   trackingLinkId?: string | null;
 }) {
   return appendLeadTrackingParams(buildSalesCatalogStoreUrl(input.storeSlug), {
@@ -109,6 +118,7 @@ export function buildLeadAwareSalesCatalogStoreUrl(input: {
     leadId: input.leadId,
     leadPhone: input.leadPhone,
     conversationId: input.conversationId,
+    agentId: input.agentId,
     trackingLinkId: input.trackingLinkId,
     trackingSource: "sales_catalog_store",
   });

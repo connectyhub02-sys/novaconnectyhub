@@ -137,6 +137,7 @@ export function ProductPageCartController({
           leadId: tracking.leadId,
           leadPhone: tracking.leadPhone,
           conversationId: tracking.conversationId,
+          agentId: tracking.agentId,
           trackingLinkId: tracking.trackingLinkId,
           items: cart.map((line) => ({
             productId: line.product.id,

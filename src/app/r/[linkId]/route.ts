@@ -44,6 +44,10 @@ export async function GET(
   const leadId = request.nextUrl.searchParams.get("lead_id") ?? readString(metadata.lead_id);
   const leadPhone = request.nextUrl.searchParams.get("lead_phone") ?? readString(metadata.lead_phone);
   const conversationId = request.nextUrl.searchParams.get("conversation_id") ?? readString(metadata.conversation_id);
+  const agentId = request.nextUrl.searchParams.get("agent_id")
+    ?? readString(metadata.agent_id)
+    ?? readString(metadata.whatsapp_agent_id)
+    ?? readString(metadata.producer_agent_id);
   const orderId = request.nextUrl.searchParams.get("order_id") ?? readString(metadata.order_id);
   const paymentSessionId = request.nextUrl.searchParams.get("payment_session_id") ?? readString(metadata.payment_session_id);
   const trackingToken = createPublicTrackingToken(link.organization_id);
@@ -58,6 +62,7 @@ export async function GET(
         leadId,
         leadPhone,
         conversationId,
+        agentId,
         orderId,
         paymentSessionId,
         trackingLinkId: link.id,
@@ -87,6 +92,7 @@ export async function GET(
         lead_id: leadId,
         lead_phone: leadPhone,
         conversation_id: conversationId,
+        agent_id: agentId,
         order_id: orderId,
         payment_session_id: paymentSessionId,
         tracking_link_id: link.id,
@@ -104,6 +110,7 @@ export async function GET(
           ...metadata,
           click_count: currentClicks + 1,
           last_clicked_at: new Date().toISOString(),
+          last_agent_id: agentId,
         },
       })
       .eq("id", link.id),
