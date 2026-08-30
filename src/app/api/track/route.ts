@@ -29,6 +29,8 @@ type TrackingBody = {
   order_id?: unknown;
   payment_session_id?: unknown;
   tracking_link_id?: unknown;
+  product_id?: unknown;
+  catalog_item_id?: unknown;
   tracking_source?: unknown;
   event_type?: unknown;
   referrer?: unknown;
@@ -78,6 +80,8 @@ export async function POST(request: NextRequest) {
   const orderId = readString(body.order_id) ?? readString(metadata.order_id) ?? readString(publicTracking.order_id);
   const paymentSessionId = readString(body.payment_session_id) ?? readString(metadata.payment_session_id) ?? readString(publicTracking.payment_session_id);
   const trackingLinkId = readString(body.tracking_link_id) ?? readString(metadata.tracking_link_id) ?? readString(publicTracking.tracking_link_id);
+  const productId = readString(body.product_id) ?? readString(metadata.product_id) ?? readString(publicTracking.product_id);
+  const catalogItemId = readString(body.catalog_item_id) ?? readString(metadata.catalog_item_id) ?? readString(publicTracking.catalog_item_id);
   const trackingSource = readString(body.tracking_source) ?? readString(metadata.tracking_source) ?? readString(publicTracking.tracking_source);
 
   try {
@@ -136,6 +140,8 @@ export async function POST(request: NextRequest) {
       order_id: orderId,
       payment_session_id: paymentSessionId,
       tracking_link_id: trackingLinkId,
+      product_id: productId,
+      catalog_item_id: catalogItemId,
       tracking_source: trackingSource,
       user_id: authUser?.id ?? null,
       user_email: authUser?.email ?? null,
@@ -158,6 +164,25 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ visitor_id: visitorId, error: error.message }, { status: 500 });
     }
+
+    await syncCommerceTrackingContext({
+      client,
+      organizationId: organizationAttribution.organizationId,
+      eventType,
+      visitorId,
+      sessionId,
+      leadId: leadContext.leadId,
+      leadPhone: leadContext.leadPhone,
+      conversationId: leadContext.conversationId,
+      trackingLinkId,
+      orderId,
+      paymentSessionId,
+      productId,
+      catalogItemId,
+      trackingSource,
+      referrer: readString(body.referrer),
+      metadata,
+    }).catch(() => undefined);
   } catch (error) {
     return NextResponse.json(
       {
@@ -308,6 +333,10 @@ function buildEventTitle(eventType: string, pagePath: string | null, sourceType:
     return "Lead clicou em link rastreado";
   }
 
+  if (eventType.startsWith("commerce.")) {
+    return `Lead na loja: ${formatCommerceEventLabel(eventType)}`;
+  }
+
   if (sourceType === "platform_user_activity") {
     return `Usuario no painel: ${eventType}`;
   }
@@ -322,6 +351,12 @@ function buildEventTitle(eventType: string, pagePath: string | null, sourceType:
 function buildEventSummary(eventType: string, metadata: JsonRecord, tracking: ReturnType<typeof extractTrackingData>) {
   const pagePath = readString(metadata.page_path);
   const location = [tracking.city, tracking.region, tracking.country].filter(Boolean).join(", ");
+  const commerceSurface = readString(metadata.commerce_surface);
+
+  if (eventType.startsWith("commerce.")) {
+    const label = formatCommerceEventLabel(eventType);
+    return `${label}${commerceSurface ? ` em ${commerceSurface}` : ""}${pagePath ? ` (${pagePath})` : ""}${location ? ` de ${location}` : ""}.`;
+  }
 
   if (pagePath) {
     return `${eventType} em ${pagePath}${location ? ` de ${location}` : ""}.`;
@@ -351,10 +386,191 @@ function buildTags(input: {
   if (input.eventType.includes("click")) tags.push("click_tracking");
   if (input.eventType.includes("form") || input.eventType.includes("signup") || input.eventType.includes("cadastro")) tags.push("conversion_tracking");
   if (input.eventType.includes("dashboard")) tags.push("dashboard_usage");
+  if (input.eventType.startsWith("commerce.") || input.eventType.includes("sales_catalog")) tags.push("commerce_tracking");
   if (input.hasLeadContext) tags.push("lead_tracking");
   if (input.sessionId) tags.push("session_tracking");
 
   return tags;
+}
+
+async function syncCommerceTrackingContext(input: {
+  client: ReturnType<typeof createServiceClient>;
+  organizationId: string | null;
+  eventType: string;
+  visitorId: string;
+  sessionId: string | null;
+  leadId: string | null;
+  leadPhone: string | null;
+  conversationId: string | null;
+  trackingLinkId: string | null;
+  orderId: string | null;
+  paymentSessionId: string | null;
+  productId: string | null;
+  catalogItemId: string | null;
+  trackingSource: string | null;
+  referrer: string | null;
+  metadata: JsonRecord;
+}) {
+  const organizationId = readUuid(input.organizationId);
+  const pagePath = readString(input.metadata.page_path);
+
+  if (!organizationId || !isCommerceActivity(input.eventType, pagePath)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const leadId = readUuid(input.leadId);
+  const conversationId = readUuid(input.conversationId);
+  const trackingLinkId = readUuid(input.trackingLinkId);
+  const orderId = readUuid(input.orderId);
+  const paymentSessionId = readUuid(input.paymentSessionId);
+  const currentUrl = readString(input.metadata.page_url);
+  const surface = normalizeCommerceSurface(readString(input.metadata.commerce_surface) ?? inferCommerceSurface(pagePath));
+  const identityRows = [
+    { identity_type: "visitor_cookie", identity_value: input.visitorId },
+    input.sessionId ? { identity_type: "session_cookie", identity_value: input.sessionId } : null,
+    trackingLinkId ? { identity_type: "tracking_link", identity_value: trackingLinkId } : null,
+  ].filter((row): row is { identity_type: string; identity_value: string } => Boolean(row?.identity_value));
+
+  if (identityRows.length > 0) {
+    await input.client.from("lead_web_identities").upsert(
+      identityRows.map((row) => ({
+        organization_id: organizationId,
+        lead_id: leadId,
+        conversation_id: conversationId,
+        identity_type: row.identity_type,
+        identity_value: row.identity_value,
+        confidence: leadId ? 0.95 : 0.65,
+        last_seen_at: now,
+        metadata: {
+          latest_event_type: input.eventType,
+          latest_page_path: pagePath,
+          tracking_source: input.trackingSource,
+        },
+      })),
+      { onConflict: "organization_id,identity_type,identity_value" },
+    );
+  }
+
+  const existingSession = await findCommerceSession(input.client, {
+    organizationId,
+    sessionId: input.sessionId,
+    visitorId: input.visitorId,
+  });
+  const sessionPayload = {
+    organization_id: organizationId,
+    lead_id: leadId,
+    conversation_id: conversationId,
+    visitor_cookie_id: input.visitorId,
+    session_cookie_id: input.sessionId,
+    tracking_link_id: trackingLinkId,
+    order_id: orderId,
+    payment_session_id: paymentSessionId,
+    status: "active",
+    current_url: currentUrl,
+    current_path: pagePath,
+    referrer: input.referrer,
+    last_surface: surface,
+    lead_phone: input.leadPhone,
+    metadata: {
+      latest_event_type: input.eventType,
+      product_id: input.productId,
+      catalog_item_id: input.catalogItemId,
+      tracking_source: input.trackingSource,
+      commerce_context: readRecord(input.metadata.commerce_context),
+      commerce_cart_snapshot: readRecord(input.metadata.commerce_cart_snapshot),
+    },
+    last_seen_at: now,
+  };
+
+  if (existingSession) {
+    await input.client
+      .from("commerce_sessions")
+      .update(sessionPayload)
+      .eq("id", existingSession.id);
+    return;
+  }
+
+  await input.client.from("commerce_sessions").insert({
+    ...sessionPayload,
+    landing_url: currentUrl,
+    first_seen_at: now,
+  });
+}
+
+async function findCommerceSession(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    sessionId: string | null;
+    visitorId: string;
+  },
+) {
+  if (input.sessionId) {
+    const { data } = await client
+      .from("commerce_sessions")
+      .select("id")
+      .eq("organization_id", input.organizationId)
+      .eq("session_cookie_id", input.sessionId)
+      .eq("status", "active")
+      .order("last_seen_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (data) return data;
+  }
+
+  const { data } = await client
+    .from("commerce_sessions")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("visitor_cookie_id", input.visitorId)
+    .eq("status", "active")
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  return data ?? null;
+}
+
+function isCommerceActivity(eventType: string, pagePath: string | null) {
+  return eventType.startsWith("commerce.")
+    || eventType.includes("sales_catalog")
+    || Boolean(inferCommerceSurface(pagePath));
+}
+
+function inferCommerceSurface(pagePath: string | null) {
+  const path = pagePath?.toLowerCase() ?? "";
+
+  if (path.startsWith("/checkout/")) return "checkout";
+  if (path.startsWith("/produto/") || path.includes("/produto/")) return "product";
+  if (path.startsWith("/loja/") && path.includes("/carrinho")) return "cart";
+  if (path.startsWith("/loja/")) return "store";
+  return null;
+}
+
+function normalizeCommerceSurface(value: string | null) {
+  if (value === "store" || value === "product" || value === "cart" || value === "checkout") return value;
+  return "unknown";
+}
+
+function formatCommerceEventLabel(eventType: string) {
+  const labels: Record<string, string> = {
+    "commerce.store_viewed": "loja visualizada",
+    "commerce.product_viewed": "produto visualizado",
+    "commerce.cart_viewed": "carrinho visualizado",
+    "commerce.checkout_viewed": "checkout visualizado",
+    "commerce.cart_item_added": "item adicionado ao carrinho",
+    "commerce.cart_item_removed": "item removido do carrinho",
+    "commerce.checkout_started": "checkout iniciado",
+    "commerce.checkout_idle": "checkout parado",
+    "commerce.page_idle": "pagina parada",
+    "commerce.order_bump_shown": "order bump exibido",
+    "commerce.order_bump_accepted": "order bump aceito",
+    "commerce.whatsapp_return_clicked": "retorno ao WhatsApp clicado",
+  };
+
+  return labels[eventType] ?? eventType.replace(/^commerce\./, "").replace(/_/g, " ");
 }
 
 function normalizeEventType(value: string) {

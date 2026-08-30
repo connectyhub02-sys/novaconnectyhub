@@ -48,6 +48,10 @@ import {
   type SalesCatalogPaymentMethodId,
   type SalesCatalogPaymentStatus,
   type SalesCatalogAutomationSettings,
+  type SalesCatalogCommerceAgentMode,
+  type SalesCatalogCommerceAgentSettings,
+  type SalesCatalogCommerceAgentSurface,
+  type SalesCatalogCommerceAgentVerticalPlaybook,
   type SalesCatalogProductFulfillment,
   type SalesCatalogProductInventory,
   type SalesCatalogProductOffer,
@@ -1047,6 +1051,7 @@ async function saveCatalogSettings(input: {
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
   const automationSettings = normalizeAutomationSettings(input.body?.automationSettings, commerceDefaults.automationSettings);
   const orderBumps = normalizeOrderBumps(input.body?.orderBumps, createDefaultSalesCatalogOrderBumps());
+  const commerceAgent = normalizeCommerceAgentSettings(input.body?.commerceAgent, commerceDefaults.commerceAgent);
   const enabledPayments = paymentMethods.filter((method) => method.enabled);
   const now = new Date().toISOString();
   const metadata = {
@@ -1063,6 +1068,7 @@ async function saveCatalogSettings(input: {
     message_templates: serializeMessageTemplates(messageTemplates),
     automation_settings: serializeAutomationSettings(automationSettings),
     order_bumps: serializeOrderBumps(orderBumps),
+    commerce_agent: serializeCommerceAgentSettings(commerceAgent),
     updated_by: input.userId,
     updated_from: "sales_catalog_setup",
   };
@@ -1085,6 +1091,9 @@ async function saveCatalogSettings(input: {
     leadDataPolicy.requiredFields.length ? `Dados do lead: ${leadDataPolicy.requiredFields.join(", ")}` : "",
     `Mensagem de resumo: ${messageTemplates.orderSummary}`,
     orderBumps.enabled && orderBumps.items.length ? `Order bumps: ${orderBumps.items.length} oferta(s)` : "Order bumps: inativo",
+    commerceAgent.enabled
+      ? `Agente na loja: ${formatCommerceAgentMode(commerceAgent.mode)} em ${commerceAgent.surfaces.join(", ")}`
+      : "Agente na loja: inativo",
   ].filter(Boolean).join("\n");
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
@@ -1156,6 +1165,7 @@ async function saveCatalogSettings(input: {
       payment_methods_count: enabledPayments.length,
       reservation_policy: orderPolicy.reservationPolicy,
       required_lead_fields: leadDataPolicy.requiredFields,
+      commerce_agent: serializeCommerceAgentSettings(commerceAgent),
       updated_by: input.userId,
     },
   });
@@ -3499,6 +3509,73 @@ function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSett
   };
 }
 
+function normalizeCommerceAgentSettings(
+  value: unknown,
+  fallback: SalesCatalogCommerceAgentSettings,
+): SalesCatalogCommerceAgentSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    enabled: readBoolean(record.enabled) ?? fallback.enabled,
+    mode: normalizeCommerceAgentMode(readFormString(record.mode), fallback.mode),
+    surfaces: normalizeCommerceAgentSurfaces(record.surfaces, fallback.surfaces),
+    verticalPlaybook: normalizeCommerceAgentVerticalPlaybook(
+      readFormString(record.verticalPlaybook ?? record.vertical_playbook),
+      fallback.verticalPlaybook,
+    ),
+    maxOffersPerSession: normalizeNullableInteger(record.maxOffersPerSession ?? record.max_offers_per_session, 0, 12)
+      ?? fallback.maxOffersPerSession,
+    allowAutoAddToCart: readBoolean(record.allowAutoAddToCart ?? record.allow_auto_add_to_cart)
+      ?? fallback.allowAutoAddToCart,
+    checkoutQuietMode: readBoolean(record.checkoutQuietMode ?? record.checkout_quiet_mode)
+      ?? fallback.checkoutQuietMode,
+    agentDockLabel: normalizeOptionalText(readFormString(record.agentDockLabel ?? record.agent_dock_label), 60)
+      ?? fallback.agentDockLabel,
+  };
+}
+
+function normalizeCommerceAgentMode(
+  value: string | null,
+  fallback: SalesCatalogCommerceAgentMode,
+): SalesCatalogCommerceAgentMode {
+  if (value === "observer" || value === "assistant" || value === "active_seller") return value;
+  return fallback;
+}
+
+function normalizeCommerceAgentSurfaces(
+  value: unknown,
+  fallback: SalesCatalogCommerceAgentSurface[],
+): SalesCatalogCommerceAgentSurface[] {
+  const source = Array.isArray(value) ? value : [];
+  const allowed = new Set<SalesCatalogCommerceAgentSurface>(["store", "product", "cart", "checkout"]);
+  const surfaces = source
+    .map((item) => readFormString(item))
+    .filter((item): item is SalesCatalogCommerceAgentSurface => allowed.has(item as SalesCatalogCommerceAgentSurface));
+
+  return surfaces.length > 0 ? Array.from(new Set(surfaces)) : [...fallback];
+}
+
+function normalizeCommerceAgentVerticalPlaybook(
+  value: string | null,
+  fallback: SalesCatalogCommerceAgentVerticalPlaybook,
+): SalesCatalogCommerceAgentVerticalPlaybook {
+  if (
+    value === "generic"
+    || value === "food"
+    || value === "fashion"
+    || value === "beauty"
+    || value === "real_estate"
+    || value === "services"
+    || value === "digital"
+    || value === "physical"
+  ) {
+    return value;
+  }
+
+  return fallback;
+}
+
 function normalizeLeadDataFields(value: unknown): SalesCatalogLeadDataField[] {
   const source = Array.isArray(value) ? value : [];
   const allowed = new Set(salesCatalogLeadDataFields.map((field) => field.value));
@@ -3601,6 +3678,25 @@ function serializeOrderBumps(settings: SalesCatalogOrderBumpSettings) {
       description: item.description,
     })),
   };
+}
+
+function serializeCommerceAgentSettings(settings: SalesCatalogCommerceAgentSettings) {
+  return {
+    enabled: settings.enabled,
+    mode: settings.mode,
+    surfaces: settings.surfaces,
+    vertical_playbook: settings.verticalPlaybook,
+    max_offers_per_session: settings.maxOffersPerSession,
+    allow_auto_add_to_cart: settings.allowAutoAddToCart,
+    checkout_quiet_mode: settings.checkoutQuietMode,
+    agent_dock_label: settings.agentDockLabel,
+  };
+}
+
+function formatCommerceAgentMode(mode: SalesCatalogCommerceAgentMode) {
+  if (mode === "observer") return "observador";
+  if (mode === "active_seller") return "vendedor ativo";
+  return "assistente";
 }
 
 function readItemAttributesPayload(value: unknown): SalesCatalogItemAttribute[] {

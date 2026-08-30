@@ -12,6 +12,7 @@ import {
   connectyStoreCartOpenEvent,
   type ConnectyStoreCartOpenEventDetail,
 } from "@/components/checkout/sales-catalog-product-actions";
+import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 
 type ProductPageCartControllerProps = {
   branding: PublicStorefrontBranding;
@@ -66,6 +67,11 @@ export function ProductPageCartController({
       setCart(readStoredCart());
       setCartLoaded(true);
       setCartOpen(true);
+      publishCommerceAgentEvent("cart_opened", {
+        source: "product_add_to_cart",
+        product_id: detail?.productId ?? null,
+        quantity: detail?.quantity ?? null,
+      });
     }
 
     window.addEventListener(connectyStoreCartOpenEvent, handleCartOpen);
@@ -78,13 +84,33 @@ export function ProductPageCartController({
     && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
 
   function updateQuantity(productId: string, quantity: number) {
+    const currentLine = cart.find((line) => line.product.id === productId);
+    const nextQuantity = clampQuantity(quantity);
+
     if (quantity <= 0) {
+      publishCommerceAgentEvent("cart_item_removed", {
+        product_id: productId,
+        product_title: currentLine?.product.title ?? null,
+        previous_quantity: currentLine?.quantity ?? null,
+        cart_lines: cart.length,
+      });
       setCart((current) => current.filter((line) => line.product.id !== productId));
       return;
     }
 
+    publishCommerceAgentEvent(
+      currentLine && nextQuantity > currentLine.quantity ? "cart_item_added" : "cart_item_quantity_changed",
+      {
+        product_id: productId,
+        product_title: currentLine?.product.title ?? null,
+        quantity: nextQuantity,
+        previous_quantity: currentLine?.quantity ?? null,
+        cart_lines: cart.length,
+      },
+    );
+
     setCart((current) => current.map((line) => (
-      line.product.id === productId ? { ...line, quantity: clampQuantity(quantity) } : line
+      line.product.id === productId ? { ...line, quantity: nextQuantity } : line
     )));
   }
 
@@ -93,6 +119,12 @@ export function ProductPageCartController({
 
     setBusy(true);
     setError(null);
+    publishCommerceAgentEvent("checkout_started", {
+      cart_lines: cart.length,
+      cart_item_count: cart.reduce((total, line) => total + line.quantity, 0),
+      cart_total_cents: totalCents,
+      product_ids: cart.map((line) => line.product.id),
+    });
 
     try {
       const response = await fetch(`/api/public/sales-catalog/stores/${encodeURIComponent(storeSlug)}/checkout`, {
@@ -122,9 +154,19 @@ export function ProductPageCartController({
         throw new Error(payload.error ?? "Não foi possível abrir o checkout.");
       }
 
+      publishCommerceAgentEvent("checkout_created", {
+        cart_lines: cart.length,
+        cart_total_cents: totalCents,
+        checkout_url: payload.checkoutUrl,
+      });
       window.localStorage.removeItem(storageKey);
       window.location.href = payload.trackingUrl ?? payload.checkoutUrl;
     } catch (err) {
+      publishCommerceAgentEvent("checkout_failed", {
+        cart_lines: cart.length,
+        cart_total_cents: totalCents,
+        reason: err instanceof Error ? err.message : "unknown_error",
+      });
       setError(err instanceof Error ? err.message : "Não foi possível abrir o checkout.");
     } finally {
       setBusy(false);

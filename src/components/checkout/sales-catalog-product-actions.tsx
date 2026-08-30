@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Minus, Plus, ShoppingBag } from "lucide-react";
+import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { cn } from "@/lib/utils";
 
 type ProductCheckoutButtonProps = {
@@ -45,6 +46,11 @@ export function ProductCheckoutButton({
 
     setBusy(true);
     setError(null);
+    publishCommerceAgentEvent("checkout_started", {
+      source: "product_buy_button",
+      product_id: productId,
+      quantity,
+    });
 
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -69,8 +75,20 @@ export function ProductCheckoutButton({
         throw new Error(payload.error ?? "Nao foi possivel abrir o checkout.");
       }
 
+      publishCommerceAgentEvent("checkout_created", {
+        source: "product_buy_button",
+        product_id: productId,
+        quantity,
+        checkout_url: payload.checkoutUrl,
+      });
       window.location.href = payload.trackingUrl ?? payload.checkoutUrl;
     } catch (err) {
+      publishCommerceAgentEvent("checkout_failed", {
+        source: "product_buy_button",
+        product_id: productId,
+        quantity,
+        reason: err instanceof Error ? err.message : "unknown_error",
+      });
       setError(err instanceof Error ? err.message : "Nao foi possivel abrir o checkout.");
     } finally {
       setBusy(false);
@@ -186,6 +204,12 @@ function AddToCartButton({
     const storageKey = `connecty-store-cart:${organizationId}`;
     const nextCart = mergeCartLine(storageKey, productId, quantity);
     window.localStorage.setItem(storageKey, JSON.stringify(nextCart));
+    publishCommerceAgentEvent("cart_item_added", {
+      source: "product_add_to_cart_button",
+      product_id: productId,
+      quantity,
+      cart_lines: nextCart.length,
+    });
     const event = new CustomEvent<ConnectyStoreCartOpenEventDetail>(connectyStoreCartOpenEvent, {
       cancelable: true,
       detail: { organizationId, productId, quantity },

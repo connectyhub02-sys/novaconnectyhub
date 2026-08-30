@@ -26,6 +26,17 @@ export type SalesCatalogProductOriginType = "client" | "connectyhub" | "external
 export type SalesCatalogCommercialFlowType = "client_direct" | "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
 export type SalesCatalogRevenueOwnerType = "client" | "connectyhub" | "split" | "external_provider";
 export type SalesCatalogCommissionPolicyType = "none" | "percentage" | "fixed" | "custom";
+export type SalesCatalogCommerceAgentMode = "observer" | "assistant" | "active_seller";
+export type SalesCatalogCommerceAgentSurface = "store" | "product" | "cart" | "checkout";
+export type SalesCatalogCommerceAgentVerticalPlaybook =
+  | "generic"
+  | "food"
+  | "fashion"
+  | "beauty"
+  | "real_estate"
+  | "services"
+  | "digital"
+  | "physical";
 export type SalesCatalogStorefrontFontPreset =
   | "system"
   | "inter"
@@ -135,6 +146,17 @@ export type SalesCatalogOrderBumpItem = {
 export type SalesCatalogOrderBumpSettings = {
   enabled: boolean;
   items: SalesCatalogOrderBumpItem[];
+};
+
+export type SalesCatalogCommerceAgentSettings = {
+  enabled: boolean;
+  mode: SalesCatalogCommerceAgentMode;
+  surfaces: SalesCatalogCommerceAgentSurface[];
+  verticalPlaybook: SalesCatalogCommerceAgentVerticalPlaybook;
+  maxOffersPerSession: number | null;
+  allowAutoAddToCart: boolean;
+  checkoutQuietMode: boolean;
+  agentDockLabel: string | null;
 };
 
 export type SalesCatalogProductInventory = {
@@ -658,6 +680,7 @@ export type ClientSalesCatalogSettings = {
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
   automationSettings: SalesCatalogAutomationSettings;
   orderBumps: SalesCatalogOrderBumpSettings;
+  commerceAgent: SalesCatalogCommerceAgentSettings;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -688,8 +711,41 @@ export type SalesCatalogStorefrontSettings = {
 
 export type SalesCatalogCommerceSettings = Pick<
   ClientSalesCatalogSettings,
-  "paymentMethods" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings"
+  "paymentMethods" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings" | "commerceAgent"
 >;
+
+export const salesCatalogCommerceAgentModeOptions: Array<{
+  value: SalesCatalogCommerceAgentMode;
+  label: string;
+}> = [
+  { value: "observer", label: "Observador" },
+  { value: "assistant", label: "Assistente" },
+  { value: "active_seller", label: "Vendedor ativo" },
+];
+
+export const salesCatalogCommerceAgentSurfaceOptions: Array<{
+  value: SalesCatalogCommerceAgentSurface;
+  label: string;
+}> = [
+  { value: "store", label: "Loja" },
+  { value: "product", label: "Produto" },
+  { value: "cart", label: "Carrinho" },
+  { value: "checkout", label: "Checkout" },
+];
+
+export const salesCatalogCommerceAgentVerticalPlaybookOptions: Array<{
+  value: SalesCatalogCommerceAgentVerticalPlaybook;
+  label: string;
+}> = [
+  { value: "generic", label: "Generico" },
+  { value: "food", label: "Alimentacao" },
+  { value: "fashion", label: "Moda" },
+  { value: "beauty", label: "Beleza" },
+  { value: "real_estate", label: "Imoveis" },
+  { value: "services", label: "Servicos" },
+  { value: "digital", label: "Digital" },
+  { value: "physical", label: "Produtos fisicos" },
+];
 
 export const salesCatalogPaymentMethodTemplates: SalesCatalogPaymentMethod[] = [
   {
@@ -786,6 +842,19 @@ export function createDefaultSalesCatalogOrderBumps(): SalesCatalogOrderBumpSett
   };
 }
 
+export function createDefaultSalesCatalogCommerceAgentSettings(): SalesCatalogCommerceAgentSettings {
+  return {
+    enabled: false,
+    mode: "assistant",
+    surfaces: ["store", "product", "cart", "checkout"],
+    verticalPlaybook: "generic",
+    maxOffersPerSession: 2,
+    allowAutoAddToCart: false,
+    checkoutQuietMode: true,
+    agentDockLabel: "Estou por aqui",
+  };
+}
+
 export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerceSettings {
   return {
     paymentMethods: salesCatalogPaymentMethodTemplates.map((method) => ({
@@ -798,6 +867,7 @@ export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerc
     leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
     messageTemplates: createDefaultSalesCatalogMessageTemplates(),
     automationSettings: createDefaultSalesCatalogAutomationSettings(),
+    commerceAgent: createDefaultSalesCatalogCommerceAgentSettings(),
   };
 }
 

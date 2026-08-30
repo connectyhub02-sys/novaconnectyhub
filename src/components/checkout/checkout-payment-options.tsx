@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import { BadgePercent, Check, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CheckoutPaymentFeedbackModal,
   type CheckoutPaymentFeedbackItem,
   type CheckoutPaymentFeedbackPayload,
 } from "./checkout-payment-feedback-modal";
 import { MercadoPagoCardBrick, type CardPaymentStatusChange } from "./mercado-pago-card-brick";
+import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { cn } from "@/lib/utils";
 
 type CheckoutPaymentOptionsProps = {
@@ -84,6 +85,17 @@ export function CheckoutPaymentOptions({
     [selectedOrderBumpIds],
   );
 
+  useEffect(() => {
+    if (orderBumps.length === 0) return;
+
+    publishCommerceAgentEvent("order_bump_shown", {
+      session_id: sessionId,
+      order_bump_count: orderBumps.length,
+      product_ids: orderBumps.map((item) => item.productId),
+      total_available_amount: roundMoney(orderBumps.reduce((sum, item) => sum + item.price, 0)),
+    });
+  }, [orderBumps, sessionId]);
+
   function handleCardPaymentStatusChange(result: CardPaymentStatusChange) {
     if (!result.approved && !result.rejected) return;
 
@@ -100,6 +112,17 @@ export function CheckoutPaymentOptions({
 
   function toggleOrderBump(productId: string) {
     setPixUpdateError(null);
+    const selected = !selectedOrderBumpIds.includes(productId);
+    const option = orderBumps.find((item) => item.productId === productId);
+
+    publishCommerceAgentEvent(selected ? "order_bump_selected" : "order_bump_unselected", {
+      session_id: sessionId,
+      product_id: productId,
+      product_title: option?.title ?? null,
+      price: option?.price ?? null,
+      active_payment_method: activeMethod,
+    });
+
     setSelectedOrderBumpIds((current) => (
       current.includes(productId)
         ? current.filter((item) => item !== productId)
@@ -107,11 +130,26 @@ export function CheckoutPaymentOptions({
     ));
   }
 
+  function selectPaymentMethod(nextMethod: PaymentMethod) {
+    setMethod(nextMethod);
+    publishCommerceAgentEvent("payment_method_selected", {
+      session_id: sessionId,
+      payment_method: nextMethod,
+      selected_order_bump_ids: selectedOrderBumpIds,
+      total_amount: totalAmount,
+    });
+  }
+
   async function updatePixWithOrderBumps() {
     if (selectedOrderBumpIds.length === 0) return;
 
     setPixUpdating(true);
     setPixUpdateError(null);
+    publishCommerceAgentEvent("order_bump_update_started", {
+      session_id: sessionId,
+      selected_order_bump_ids: selectedOrderBumpIds,
+      total_amount: totalAmount,
+    });
 
     try {
       const response = await fetch(`/api/checkout/${sessionId}/pix`, {
@@ -127,8 +165,18 @@ export function CheckoutPaymentOptions({
         throw new Error(data?.error ?? "Nao foi possivel atualizar o Pix com as ofertas.");
       }
 
+      publishCommerceAgentEvent("order_bump_accepted", {
+        session_id: sessionId,
+        selected_order_bump_ids: selectedOrderBumpIds,
+        total_amount: totalAmount,
+      });
       window.location.href = data?.checkoutUrl ?? `/checkout/${sessionId}`;
     } catch (error) {
+      publishCommerceAgentEvent("order_bump_failed", {
+        session_id: sessionId,
+        selected_order_bump_ids: selectedOrderBumpIds,
+        reason: error instanceof Error ? error.message : "unknown_error",
+      });
       setPixUpdateError(error instanceof Error ? error.message : "Nao foi possivel atualizar o Pix com as ofertas.");
     } finally {
       setPixUpdating(false);
@@ -152,13 +200,13 @@ export function CheckoutPaymentOptions({
             active={activeMethod === "pix"}
             icon={<QrCode className="h-4 w-4" />}
             label="Pix"
-            onClick={() => setMethod("pix")}
+            onClick={() => selectPaymentMethod("pix")}
           />
           <PaymentMethodButton
             active={activeMethod === "card"}
             icon={<CreditCard className="h-4 w-4" />}
             label="Cartao"
-            onClick={() => setMethod("card")}
+            onClick={() => selectPaymentMethod("card")}
           />
         </div>
       ) : null}

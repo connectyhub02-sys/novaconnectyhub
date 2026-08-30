@@ -62,6 +62,10 @@ import {
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
   type SalesCatalogAutomationSettings,
+  type SalesCatalogCommerceAgentSettings,
+  type SalesCatalogCommerceAgentMode,
+  type SalesCatalogCommerceAgentSurface,
+  type SalesCatalogCommerceAgentVerticalPlaybook,
   type SalesCatalogOrderBumpSettings,
   type SalesCatalogSource,
   type SalesCatalogSalesDestination,
@@ -1075,6 +1079,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
     automationSettings: readAutomationSettings(metadata.automation_settings ?? metadata.automationSettings, commerceDefaults.automationSettings),
     orderBumps: readOrderBumps(metadata.order_bumps ?? metadata.orderBumps, createDefaultSalesCatalogOrderBumps()),
+    commerceAgent: readCommerceAgentSettings(metadata.commerce_agent ?? metadata.commerceAgent, commerceDefaults.commerceAgent),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1885,6 +1890,70 @@ function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings)
     enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
     items,
   };
+}
+
+function readCommerceAgentSettings(
+  value: unknown,
+  fallback: SalesCatalogCommerceAgentSettings,
+): SalesCatalogCommerceAgentSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
+    mode: normalizeCommerceAgentMode(readString(record.mode), fallback.mode),
+    surfaces: normalizeCommerceAgentSurfaces(record.surfaces, fallback.surfaces),
+    verticalPlaybook: normalizeCommerceAgentVerticalPlaybook(
+      readString(record.vertical_playbook) ?? readString(record.verticalPlaybook),
+      fallback.verticalPlaybook,
+    ),
+    maxOffersPerSession: readNumber(record.max_offers_per_session ?? record.maxOffersPerSession)
+      ?? fallback.maxOffersPerSession,
+    allowAutoAddToCart: readNullableBoolean(record.allow_auto_add_to_cart ?? record.allowAutoAddToCart)
+      ?? fallback.allowAutoAddToCart,
+    checkoutQuietMode: readNullableBoolean(record.checkout_quiet_mode ?? record.checkoutQuietMode)
+      ?? fallback.checkoutQuietMode,
+    agentDockLabel: readString(record.agent_dock_label ?? record.agentDockLabel) ?? fallback.agentDockLabel,
+  };
+}
+
+function normalizeCommerceAgentMode(
+  value: string | null,
+  fallback: SalesCatalogCommerceAgentMode,
+): SalesCatalogCommerceAgentMode {
+  if (value === "observer" || value === "assistant" || value === "active_seller") return value;
+  return fallback;
+}
+
+function normalizeCommerceAgentSurfaces(
+  value: unknown,
+  fallback: SalesCatalogCommerceAgentSurface[],
+): SalesCatalogCommerceAgentSurface[] {
+  const allowed = new Set<SalesCatalogCommerceAgentSurface>(["store", "product", "cart", "checkout"]);
+  const surfaces = readStringList(value, [])
+    .filter((surface): surface is SalesCatalogCommerceAgentSurface => allowed.has(surface as SalesCatalogCommerceAgentSurface));
+
+  return surfaces.length > 0 ? Array.from(new Set(surfaces)) : [...fallback];
+}
+
+function normalizeCommerceAgentVerticalPlaybook(
+  value: string | null,
+  fallback: SalesCatalogCommerceAgentVerticalPlaybook,
+): SalesCatalogCommerceAgentVerticalPlaybook {
+  if (
+    value === "generic"
+    || value === "food"
+    || value === "fashion"
+    || value === "beauty"
+    || value === "real_estate"
+    || value === "services"
+    || value === "digital"
+    || value === "physical"
+  ) {
+    return value;
+  }
+
+  return fallback;
 }
 
 function readWhatsappExportTargets(value: unknown): SalesCatalogWhatsappExportTarget[] {

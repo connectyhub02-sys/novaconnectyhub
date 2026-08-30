@@ -8,6 +8,7 @@ import {
   ArrowDown,
   ArrowUp,
   BadgePercent,
+  Bot,
   CheckCircle2,
   ChevronDown,
   ClipboardList,
@@ -61,6 +62,9 @@ import {
   resolveSalesCatalogCheckoutStatus,
   salesCatalogLeadDataFields,
   salesCatalogBusinessTemplates,
+  salesCatalogCommerceAgentModeOptions,
+  salesCatalogCommerceAgentSurfaceOptions,
+  salesCatalogCommerceAgentVerticalPlaybookOptions,
   salesCatalogStorefrontFontPresetOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
@@ -73,6 +77,8 @@ import {
   type SalesCatalogBusinessType,
   type SalesCatalogCheckoutStage,
   type SalesCatalogCommercialFlowType,
+  type SalesCatalogCommerceAgentSettings,
+  type SalesCatalogCommerceAgentSurface,
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
   type SalesCatalogItemStatus,
@@ -361,6 +367,7 @@ type SettingsDraft = {
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
   automationSettings: ClientSalesCatalogSettings["automationSettings"];
   orderBumps: SalesCatalogOrderBumpSettings;
+  commerceAgent: SalesCatalogCommerceAgentSettings;
 };
 
 type ShippingDraft = {
@@ -1295,6 +1302,30 @@ export function SalesCatalogConsole({
     }));
   }
 
+  function updateCommerceAgentSettings(patch: Partial<SalesCatalogCommerceAgentSettings>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      commerceAgent: { ...current.commerceAgent, ...patch },
+    }));
+  }
+
+  function toggleCommerceAgentSurface(surface: SalesCatalogCommerceAgentSurface) {
+    setSettingsDraft((current) => {
+      const exists = current.commerceAgent.surfaces.includes(surface);
+      const nextSurfaces = exists
+        ? current.commerceAgent.surfaces.filter((item) => item !== surface)
+        : [...current.commerceAgent.surfaces, surface];
+
+      return {
+        ...current,
+        commerceAgent: {
+          ...current.commerceAgent,
+          surfaces: nextSurfaces.length > 0 ? nextSurfaces : [surface],
+        },
+      };
+    });
+  }
+
   function toggleSelectedAttribute(attribute: SalesCatalogAttribute, value: string) {
     setSelectedAttributes((current) => {
       const values = current[attribute.id] ?? [];
@@ -1453,6 +1484,16 @@ export function SalesCatalogConsole({
           messageTemplates: settingsDraft.messageTemplates,
           automationSettings: settingsDraft.automationSettings,
           orderBumps: settingsDraft.orderBumps,
+          commerceAgent: {
+            enabled: settingsDraft.commerceAgent.enabled,
+            mode: settingsDraft.commerceAgent.mode,
+            surfaces: settingsDraft.commerceAgent.surfaces,
+            verticalPlaybook: settingsDraft.commerceAgent.verticalPlaybook,
+            maxOffersPerSession: settingsDraft.commerceAgent.maxOffersPerSession,
+            allowAutoAddToCart: settingsDraft.commerceAgent.allowAutoAddToCart,
+            checkoutQuietMode: settingsDraft.commerceAgent.checkoutQuietMode,
+            agentDockLabel: cleanInput(settingsDraft.commerceAgent.agentDockLabel, 60),
+          },
         }),
       });
       const data = await response.json().catch(() => null) as {
@@ -3290,6 +3331,113 @@ export function SalesCatalogConsole({
                     style={{ borderColor: "var(--ch-border)" }}
                   />
                 </label>
+              </AccordionSection>
+
+              <AccordionSection icon={Bot} title="Agente na loja" tone="cyan">
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      Agent Dock
+                      <HelpHint title="Agent Dock">Mostra o agente dentro da loja, produto, carrinho e checkout quando houver contexto de atendimento.</HelpHint>
+                    </span>
+                    <input
+                      checked={settingsDraft.commerceAgent.enabled}
+                      type="checkbox"
+                      onChange={(event) => updateCommerceAgentSettings({ enabled: event.target.checked })}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <FieldLabel>Modo</FieldLabel>
+                    <select
+                      value={settingsDraft.commerceAgent.mode}
+                      onChange={(event) => updateCommerceAgentSettings({ mode: event.target.value as SalesCatalogCommerceAgentSettings["mode"] })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      {salesCatalogCommerceAgentModeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <FieldLabel>Playbook</FieldLabel>
+                    <select
+                      value={settingsDraft.commerceAgent.verticalPlaybook}
+                      onChange={(event) => updateCommerceAgentSettings({ verticalPlaybook: event.target.value as SalesCatalogCommerceAgentSettings["verticalPlaybook"] })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      {salesCatalogCommerceAgentVerticalPlaybookOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <FieldLabel>Ofertas por sessao</FieldLabel>
+                    <input
+                      value={settingsDraft.commerceAgent.maxOffersPerSession ?? ""}
+                      onChange={(event) => updateCommerceAgentSettings({ maxOffersPerSession: parseOptionalNumber(event.target.value) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="2"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+
+                  <label className="block lg:col-span-2">
+                    <FieldLabel>Texto do dock</FieldLabel>
+                    <input
+                      value={settingsDraft.commerceAgent.agentDockLabel ?? ""}
+                      onChange={(event) => updateCommerceAgentSettings({ agentDockLabel: event.target.value.slice(0, 60) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="Estou por aqui"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {salesCatalogCommerceAgentSurfaceOptions.map((option) => {
+                    const checked = settingsDraft.commerceAgent.surfaces.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => toggleCommerceAgentSurface(option.value)}
+                        className={cn(
+                          "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] transition",
+                          checked ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+                        )}
+                        style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
+                      >
+                        {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="text-slate-300">Pre-adicionar ao carrinho</span>
+                    <input
+                      checked={settingsDraft.commerceAgent.allowAutoAddToCart}
+                      type="checkbox"
+                      onChange={(event) => updateCommerceAgentSettings({ allowAutoAddToCart: event.target.checked })}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="text-slate-300">Checkout silencioso</span>
+                    <input
+                      checked={settingsDraft.commerceAgent.checkoutQuietMode}
+                      type="checkbox"
+                      onChange={(event) => updateCommerceAgentSettings({ checkoutQuietMode: event.target.checked })}
+                    />
+                  </label>
+                </div>
               </AccordionSection>
 
               <AccordionSection icon={MessageSquareText} title="Automacoes do checkout" tone="cyan">
@@ -8579,6 +8727,10 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     orderBumps: {
       enabled: settings?.orderBumps?.enabled ?? false,
       items: (settings?.orderBumps?.items ?? []).map((item) => ({ ...item })),
+    },
+    commerceAgent: {
+      ...(settings?.commerceAgent ?? commerceDefaults.commerceAgent),
+      surfaces: [...(settings?.commerceAgent?.surfaces ?? commerceDefaults.commerceAgent.surfaces)],
     },
   };
 }

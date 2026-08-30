@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Audiowide, Geist, Geist_Mono } from "next/font/google";
 import { MagicLinkFragmentRedirect } from "@/components/auth/magic-link-fragment-redirect";
+import { CommerceAgentDock } from "@/components/commerce-agent/commerce-agent-dock";
 import { JsonLd } from "@/components/seo/json-ld";
 import { ConnectyTracker } from "@/components/tracking/connecty-tracker";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -139,6 +140,7 @@ export default function RootLayout({
           <MagicLinkFragmentRedirect />
           <Suspense fallback={null}>
             <ConnectyTracker />
+            <CommerceAgentDock />
           </Suspense>
           {children}
         </TooltipProvider>

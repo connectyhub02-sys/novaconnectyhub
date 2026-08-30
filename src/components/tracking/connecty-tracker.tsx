@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, LocateFixed, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { commerceAgentTrackingEventName } from "@/lib/commerce-agent/client-events";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
@@ -86,6 +87,91 @@ export function ConnectyTracker() {
       event_type: isDashboardPath(pathname) ? "dashboard_page_view" : "public_page_view",
       metadata: getPageMetadata(),
     });
+
+    const commerceEventType = getCommercePageViewEvent(pathname);
+    if (commerceEventType) {
+      void trackEvent({
+        event_type: commerceEventType,
+        metadata: getPageMetadata(),
+      });
+    }
+  }, [pathname, search]);
+
+  useEffect(() => {
+    if (isTrackingDisabled() || !resolveCommerceSurface(pathname)) {
+      return;
+    }
+
+    function handleCustomCommerceEvent(event: Event) {
+      const detail = event instanceof CustomEvent ? readRecord(event.detail) : null;
+      const eventType = normalizeCommerceCustomEventType(
+        readString(detail?.event_type) ?? readString(detail?.eventType),
+      );
+
+      if (!eventType) {
+        return;
+      }
+
+      void trackEvent({
+        event_type: eventType,
+        metadata: {
+          ...getPageMetadata(),
+          ...(readRecord(detail?.metadata) ?? {}),
+        },
+      });
+    }
+
+    window.addEventListener(commerceAgentTrackingEventName, handleCustomCommerceEvent);
+
+    return () => {
+      window.removeEventListener(commerceAgentTrackingEventName, handleCustomCommerceEvent);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    const surface = resolveCommerceSurface(pathname);
+
+    if (isTrackingDisabled() || !surface) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const idleMs = surface === "checkout" ? 30_000 : 45_000;
+    const eventType = surface === "checkout" ? "commerce.checkout_idle" : "commerce.page_idle";
+
+    function clearIdleTimer() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function resetIdleTimer() {
+      clearIdleTimer();
+      timer = setTimeout(() => {
+        void trackEvent({
+          event_type: eventType,
+          metadata: {
+            ...getPageMetadata(),
+            idle_ms: idleMs,
+          },
+        });
+      }, idleMs);
+    }
+
+    resetIdleTimer();
+
+    for (const eventName of ["click", "input", "keydown", "pointermove", "scroll"]) {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true });
+    }
+
+    return () => {
+      clearIdleTimer();
+
+      for (const eventName of ["click", "input", "keydown", "pointermove", "scroll"]) {
+        window.removeEventListener(eventName, resetIdleTimer);
+      }
+    };
   }, [pathname, search]);
 
   useEffect(() => {
@@ -966,10 +1052,25 @@ function urlBase64ToUint8Array(value: string) {
 }
 
 function getPageMetadata() {
+  const publicTracking = readPublicTrackingContext();
+  const commerceSurface = resolveCommerceSurface(window.location.pathname);
+
   return {
     page_path: window.location.pathname,
     page_url: window.location.href,
     page_title: document.title,
+    commerce_surface: commerceSurface,
+    commerce_context: commerceSurface
+      ? {
+          surface: commerceSurface,
+          product_id: publicTracking?.product_id ?? publicTracking?.catalog_item_id ?? null,
+          catalog_item_id: publicTracking?.catalog_item_id ?? null,
+          order_id: publicTracking?.order_id ?? null,
+          payment_session_id: publicTracking?.payment_session_id ?? null,
+          tracking_source: publicTracking?.tracking_source ?? null,
+        }
+      : null,
+    commerce_cart_snapshot: commerceSurface ? readCommerceCartSnapshot(publicTracking?.organization_id ?? null) : null,
   };
 }
 
@@ -1000,4 +1101,76 @@ function isCommercePublicPath(pathname: string | null) {
     || pathname?.startsWith("/produto/")
     || pathname?.startsWith("/checkout/"),
   );
+}
+
+function resolveCommerceSurface(pathname: string | null) {
+  const path = pathname?.toLowerCase() ?? "";
+
+  if (path.startsWith("/checkout/")) return "checkout";
+  if (path.startsWith("/produto/") || path.includes("/produto/")) return "product";
+  if (path.startsWith("/loja/") && path.includes("/carrinho")) return "cart";
+  if (path.startsWith("/loja/")) return "store";
+  return null;
+}
+
+function getCommercePageViewEvent(pathname: string | null) {
+  const surface = resolveCommerceSurface(pathname);
+
+  if (surface === "checkout") return "commerce.checkout_viewed";
+  if (surface === "product") return "commerce.product_viewed";
+  if (surface === "cart") return "commerce.cart_viewed";
+  if (surface === "store") return "commerce.store_viewed";
+  return null;
+}
+
+function readCommerceCartSnapshot(organizationId: string | null) {
+  if (!organizationId) {
+    return null;
+  }
+
+  try {
+    const rawCart = window.localStorage.getItem(`connecty-store-cart:${organizationId}`);
+    const parsed = rawCart ? JSON.parse(rawCart) as unknown : null;
+    const items = Array.isArray(parsed) ? parsed : [];
+    const itemCount = items.reduce((total, item) => {
+      const record = readRecord(item);
+      const quantity = typeof record?.quantity === "number" && Number.isFinite(record.quantity)
+        ? record.quantity
+        : 1;
+
+      return total + Math.max(0, quantity);
+    }, 0);
+
+    return {
+      lines: items.length,
+      item_count: itemCount,
+      product_ids: items
+        .map((item) => readString(readRecord(item)?.productId))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 20),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCommerceCustomEventType(value: string | null) {
+  if (!value) return null;
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "_")
+    .slice(0, 80);
+
+  if (!normalized) return null;
+  return normalized.startsWith("commerce.") ? normalized : `commerce.${normalized}`;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
