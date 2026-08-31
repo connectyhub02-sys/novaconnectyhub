@@ -691,7 +691,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
 
     setConnectingPagBank(true);
-    setNotice({ tone: "warning", message: "Abrindo PagBank para cadastro, login e autorizacao..." });
+    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do PagBank..." });
     window.setTimeout(() => setConnectingPagBank(false), 1500);
   }
 
@@ -1919,7 +1919,7 @@ function PagBankGuidedCard({
           <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
           <h2 className="mt-1 text-[16px] font-semibold text-slate-100">PagBank</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">
-            O cliente usa um unico botao da ConnectyHub para abrir PagBank, criar conta ou fazer login, e autorizar o recebimento sem informar token manual.
+            O cliente autoriza a conta PagBank pelo fluxo oficial sem informar token manual. Quem ainda nao tiver conta pode abrir pelo link indicado e voltar para conectar.
           </p>
         </div>
         <WalletCards className="h-5 w-5 shrink-0 text-emerald-300" />
@@ -1927,7 +1927,7 @@ function PagBankGuidedCard({
 
       <div className="mt-4 grid gap-2 sm:grid-cols-4">
         <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
-        <PaymentGuideStep done={connected} index="2" title="PagBank" body="Cadastro ou login" />
+        <PaymentGuideStep done={connected} index="2" title="PagBank" body="Login e autorizacao" />
         <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
         <PaymentGuideStep done={connected} index="4" title="Checkout" body="Pix ativo" />
       </div>
@@ -1947,7 +1947,7 @@ function PagBankGuidedCard({
           </p>
         ) : null}
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <a
             href={buildPagBankConnectUrl(selectedCompanyId)}
             target="_blank"
@@ -1962,6 +1962,20 @@ function PagBankGuidedCard({
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
             {connected ? "Reconectar PagBank" : "Conectar PagBank"}
           </a>
+          <a
+            href={buildPagBankAffiliateUrl(selectedCompanyId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={!selectedCompanyId}
+            className={cn(
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-emerald-300/10 hover:text-emerald-100",
+              !selectedCompanyId ? "cursor-not-allowed opacity-50" : "",
+            )}
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Abrir conta indicada
+          </a>
           <button
             type="button"
             disabled={!connected || disconnecting}
@@ -1975,7 +1989,7 @@ function PagBankGuidedCard({
         </div>
 
         <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
-          O link pode passar pela afiliacao da ConnectyHub antes da autorizacao. Quem ja tem conta entra direto; quem nao tem segue o cadastro no PagBank.
+          Conectar PagBank abre a tela oficial de permissoes. A indicacao fica separada porque a pagina de afiliado do PagBank nao continua automaticamente para a autorizacao.
         </p>
       </div>
     </section>
@@ -3205,6 +3219,17 @@ function buildPagBankConnectUrl(companyId: string) {
   });
 
   return `/api/dashboard/sales-catalog/payments/pagbank/connect?${params.toString()}`;
+}
+
+function buildPagBankAffiliateUrl(companyId: string) {
+  if (!companyId) return "#";
+
+  const params = new URLSearchParams({
+    companyId,
+    returnTo: "integrations",
+  });
+
+  return `/api/dashboard/sales-catalog/payments/pagbank/affiliate?${params.toString()}`;
 }
 
 function buildGuidedOAuthConnectUrl(kind: "meta" | "google", companyId: string) {

@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
           oauth_requested_at: now,
           oauth_started_from: returnTo === "integrations" ? "integrations_hub" : "guided_connect_route",
           affiliate_url_used: connect.affiliateUrlUsed,
+          affiliate_url_available: connect.affiliateUrlAvailable,
           authorization_url: connect.authorizationUrl,
         },
         updated_at: now,

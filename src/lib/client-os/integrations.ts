@@ -195,7 +195,7 @@ const integrationProviders: ClientIntegrationProvider[] = [
     status: "active",
     mode: "external",
     headline: "Recebimento por Pix no checkout WhatsApp",
-    summary: "Conecte a conta PagBank da empresa pelo fluxo oficial com link da ConnectyHub.",
+    summary: "Conecte a conta PagBank da empresa pelo fluxo oficial; o link indicado fica separado para abertura de conta.",
     phase: "Fase atual - gateway principal",
     primaryUse: "Receber Pix dos pedidos do catalogo, acompanhar status e atualizar pedidos automaticamente por webhook.",
     actionLabel: "Conectar PagBank",

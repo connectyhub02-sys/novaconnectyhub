@@ -212,26 +212,31 @@ export async function buildPagBankSellerConnectUrl(input: {
   const config = await loadPagBankOAuthConfig({ client: input.client });
   const authorizationUrl = buildPagBankAuthorizationUrlFromConfig({ config, state: input.state });
 
+  return {
+    authorizationUrl,
+    redirectUrl: authorizationUrl,
+    affiliateUrlUsed: false,
+    affiliateUrlAvailable: Boolean(config.affiliateConnectUrl),
+  };
+}
+
+export async function buildPagBankAffiliateLandingUrl(input: {
+  companyId: string;
+  state: string;
+  client?: SupabaseClient;
+}) {
+  const config = await loadPagBankOAuthConfig({ client: input.client });
+
   if (!config.affiliateConnectUrl) {
-    return {
-      authorizationUrl,
-      redirectUrl: authorizationUrl,
-      affiliateUrlUsed: false,
-    };
+    return null;
   }
 
-  const redirectUrl = buildPagBankAffiliateUrl({
+  return buildPagBankAffiliateUrl({
     affiliateUrl: config.affiliateConnectUrl,
-    authorizationUrl,
+    continueUrl: null,
     companyId: input.companyId,
     state: input.state,
   });
-
-  return {
-    authorizationUrl,
-    redirectUrl,
-    affiliateUrlUsed: true,
-  };
 }
 
 export async function exchangePagBankAuthorizationCode(input: {
@@ -579,20 +584,20 @@ function buildPagBankAuthorizationUrlFromConfig(input: {
 
 function buildPagBankAffiliateUrl(input: {
   affiliateUrl: string;
-  authorizationUrl: string;
+  continueUrl: string | null;
   companyId: string;
   state: string;
 }) {
   const replaced = input.affiliateUrl
-    .replaceAll("{authorizationUrl}", encodeURIComponent(input.authorizationUrl))
-    .replaceAll("{continueUrl}", encodeURIComponent(input.authorizationUrl))
+    .replaceAll("{authorizationUrl}", encodeURIComponent(input.continueUrl ?? ""))
+    .replaceAll("{continueUrl}", encodeURIComponent(input.continueUrl ?? ""))
     .replaceAll("{state}", encodeURIComponent(input.state))
     .replaceAll("{companyId}", encodeURIComponent(input.companyId));
 
   const url = new URL(replaced);
-  if (!input.affiliateUrl.includes("{authorizationUrl}") && !input.affiliateUrl.includes("{continueUrl}")) {
-    url.searchParams.set("continue_url", input.authorizationUrl);
-    url.searchParams.set("oauth_url", input.authorizationUrl);
+  if (input.continueUrl && !input.affiliateUrl.includes("{authorizationUrl}") && !input.affiliateUrl.includes("{continueUrl}")) {
+    url.searchParams.set("continue_url", input.continueUrl);
+    url.searchParams.set("oauth_url", input.continueUrl);
   }
 
   url.searchParams.set("utm_source", url.searchParams.get("utm_source") ?? "connectyhub");

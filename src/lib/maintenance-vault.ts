@@ -597,7 +597,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     sector: "Pagamentos no WhatsApp",
     owner: "Setor Financeiro IA",
     description:
-      "Aplicativo Connect Authorization da ConnectyHub usado para levar o cliente pelo link de afiliado, criar ou acessar a conta PagBank e autorizar recebimentos sem informar token manual.",
+      "Aplicativo Connect Authorization da ConnectyHub. O botao principal abre a autorizacao oficial PagBank; o link afiliado fica separado para abertura de conta.",
     tone: "green",
     modules: ["Link afiliado", "OAuth Connect", "Pix", "QR Code", "Webhooks"],
     fields: [

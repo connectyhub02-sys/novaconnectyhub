@@ -672,8 +672,8 @@ async function testPagBank(credentials: CredentialBag): Promise<ConnectionTestRe
     details: [
       `Ambiente: ${environment.trim().toLowerCase() === "sandbox" ? "sandbox" : "production"}.`,
       affiliateUrl
-        ? "Link de afiliado configurado para abrir antes da autorizacao PagBank."
-        : "Link de afiliado ainda ausente; o botao abre direto a autorizacao PagBank.",
+        ? "Link de afiliado configurado para abertura de conta, separado da autorizacao oficial."
+        : "Link de afiliado ainda ausente; apenas a autorizacao oficial ficara disponivel.",
       webhookToken
         ? "Webhook token configurado para validar notificacoes."
         : "Webhook token ausente; configure antes da producao para validar notificacoes.",

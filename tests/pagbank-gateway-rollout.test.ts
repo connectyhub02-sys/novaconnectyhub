@@ -26,6 +26,7 @@ describe("PagBank gateway rollout", () => {
   it("ships dedicated PagBank OAuth and webhook routes", () => {
     expect(existsSync("src/app/api/dashboard/sales-catalog/payments/pagbank/connect/route.ts")).toBe(true);
     expect(existsSync("src/app/api/dashboard/sales-catalog/payments/pagbank/callback/route.ts")).toBe(true);
+    expect(existsSync("src/app/api/dashboard/sales-catalog/payments/pagbank/affiliate/route.ts")).toBe(true);
     expect(existsSync("src/app/api/webhooks/pagbank/route.ts")).toBe(true);
     expect(existsSync("src/lib/sales-catalog/pagbank.ts")).toBe(true);
   });
@@ -43,7 +44,9 @@ describe("PagBank gateway rollout", () => {
     expect(integrationsSource).toContain("buildPagBankConnections");
     expect(clientConsoleSource).toContain("function PagBankGuidedCard");
     expect(clientConsoleSource).toContain("Conectar PagBank");
-    expect(clientConsoleSource).toContain("O link pode passar pela afiliacao da ConnectyHub");
+    expect(clientConsoleSource).toContain("Abrir conta indicada");
+    expect(clientConsoleSource).toContain("Conectar PagBank abre a tela oficial de permissoes");
+    expect(clientConsoleSource).toContain("buildPagBankAffiliateUrl");
     expect(clientConsoleSource).not.toContain("function MercadoPagoGuidedCard");
   });
 
