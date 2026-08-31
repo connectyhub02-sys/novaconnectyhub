@@ -88,4 +88,38 @@ describe("Commerce Agent checkout continuity", () => {
     expect(commerceAgentServerSource).toContain("estou aqui. Se precisar de ajuda, clica na minha foto");
     expect(commerceAgentDockSource).not.toContain("import { Bot");
   });
+
+  it("grounds storefront replies in the WhatsApp conversation and commerce context", () => {
+    expect(commerceAgentServerSource).toContain("loadGeminiCredentials(input.context.client)");
+    expect(commerceAgentServerSource).toContain("loadWhatsappConversationMessages");
+    expect(commerceAgentServerSource).toContain("HISTORICO RECENTE DO WHATSAPP");
+    expect(commerceAgentServerSource).toContain("PEDIDO/CHECKOUT ATUAL");
+    expect(commerceAgentServerSource).toContain("OFERTA CONTEXTUAL POSSIVEL");
+    expect(commerceAgentServerSource).toContain("Nao repita a ultima resposta");
+    expect(commerceAgentServerSource).toContain("buildFallbackCommerceAgentReply");
+  });
+
+  it("hydrates lead and agent identity from an active commerce session when navigation drops URL params", () => {
+    const resolver = sourceBetween(
+      commerceAgentServerSource,
+      "export async function resolveCommerceAgentContext",
+      "export async function buildCommerceAgentSessionPayload",
+    );
+
+    expect(resolver).toContain("findCommerceSessionContext");
+    expect(resolver).toContain("hasValidHydratedSessionContext");
+    expect(resolver).toContain("readString(hydratedSession?.lead_id)");
+    expect(resolver).toContain("readUuid(hydratedSessionMetadata?.agent_id)");
+    expect(resolver).toContain("requestedCommerceSessionId ?? hydratedSession?.id ?? null");
+  });
+
+  it("keeps page context hidden while showing contextual whispers per navigation", () => {
+    expect(commerceAgentServerSource).toContain("recordCommerceAgentPageContext");
+    expect(commerceAgentServerSource).toContain("role: \"system\"");
+    expect(commerceAgentServerSource).toContain("message.role === \"lead\" || message.role === \"assistant\"");
+    expect(commerceAgentServerSource).toContain("vi que voce abriu");
+    expect(commerceAgentDockSource).toContain("${pathname ?? \"\"}?${search}");
+    expect(commerceAgentDockSource).toContain("message.role !== \"system\"");
+    expect(commerceAgentDockSource).toContain("digitando");
+  });
 });

@@ -155,7 +155,7 @@ export function CommerceAgentDock() {
       return;
     }
 
-    const whisperKey = `${session.commerceSessionId ?? session.agentId ?? session.agentName}:${session.surface}:${session.leadName ?? ""}`;
+    const whisperKey = `${session.commerceSessionId ?? session.agentId ?? session.agentName}:${session.surface}:${session.leadName ?? ""}:${pathname ?? ""}?${search}`;
 
     if (lastWhisperKey.current === whisperKey) {
       return;
@@ -173,7 +173,7 @@ export function CommerceAgentDock() {
       window.clearTimeout(showTimer);
       window.clearTimeout(hideTimer);
     };
-  }, [open, session]);
+  }, [open, pathname, search, session]);
 
   useEffect(() => {
     if (!open) return;
@@ -322,11 +322,11 @@ export function CommerceAgentDock() {
           </div>
 
           <div className="max-h-[min(26rem,52dvh)] space-y-2 overflow-y-auto bg-slate-50 px-3 py-3">
-            {messages.map((message) => (
+            {messages.filter((message) => message.role !== "system").map((message) => (
               <div
                 key={message.id}
                 className={cn(
-                  "max-w-[85%] rounded-[8px] px-3 py-2 text-xs font-medium leading-5",
+                  "max-w-[85%] whitespace-pre-line rounded-[8px] px-3 py-2 text-xs font-medium leading-5",
                   message.role === "lead"
                     ? "ml-auto bg-slate-950 text-white"
                     : "mr-auto border border-slate-200 bg-white text-slate-700",
@@ -337,8 +337,14 @@ export function CommerceAgentDock() {
             ))}
             {sending ? (
               <div className="mr-auto inline-flex items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Pensando
+                <span className="flex items-center gap-1" aria-live="polite">
+                  <span>{firstName(session.agentName)} digitando</span>
+                  <span className="inline-flex gap-0.5" aria-hidden="true">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.2s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.1s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500" />
+                  </span>
+                </span>
               </div>
             ) : null}
             <div ref={messagesEndRef} />
