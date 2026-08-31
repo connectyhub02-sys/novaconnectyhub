@@ -697,7 +697,7 @@ function isOfferProduct(value: ReturnType<typeof mapOfferProduct>): value is Non
 
 function buildWelcomeMessage(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
-  const agentIntro = `sou ${context.agentName}. `;
+  const agentIntro = name ? `sou ${context.agentName} e ` : `Sou ${context.agentName} e `;
 
   if (context.surface === "checkout") {
     return `${name}${agentIntro}fico por perto sem atrapalhar seu pagamento. Se pintar qualquer duvida, me chama.`;
@@ -814,7 +814,7 @@ function firstName(value: string) {
 function readUuid(value: unknown) {
   const text = readString(value);
 
-  if (!text || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(text)) {
+  if (!text || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)) {
     return null;
   }
 

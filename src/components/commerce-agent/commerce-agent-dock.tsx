@@ -58,14 +58,35 @@ export function CommerceAgentDock() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState("");
+  const [trackingContextProbe, setTrackingContextProbe] = useState({ pageKey: "", attempts: 0 });
   const lastSessionKey = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const surface = resolveCommerceSurface(pathname);
     const publicTracking = readPublicTrackingContext();
+    const pageKey = `${pathname ?? ""}?${search}`;
+    const probeAttempts = trackingContextProbe.pageKey === pageKey ? trackingContextProbe.attempts : 0;
 
-    if (isTrackingDisabled() || !surface || !publicTracking?.organization_id) {
+    if (isTrackingDisabled() || !surface) {
+      window.setTimeout(() => {
+        setSession(null);
+        setMessages([]);
+        setOpen(false);
+        setWhisperVisible(false);
+      }, 0);
+      return;
+    }
+
+    if (!publicTracking?.organization_id) {
+      if (probeAttempts < 10) {
+        const retryTimer = window.setTimeout(() => {
+          setTrackingContextProbe({ pageKey, attempts: probeAttempts + 1 });
+        }, 250);
+
+        return () => window.clearTimeout(retryTimer);
+      }
+
       window.setTimeout(() => {
         setSession(null);
         setMessages([]);
@@ -126,7 +147,7 @@ export function CommerceAgentDock() {
       });
 
     return () => controller.abort();
-  }, [pathname, search]);
+  }, [pathname, search, trackingContextProbe]);
 
   useEffect(() => {
     if (!session || open || session.mode === "observer" || (session.surface === "checkout" && session.checkoutQuietMode)) {
