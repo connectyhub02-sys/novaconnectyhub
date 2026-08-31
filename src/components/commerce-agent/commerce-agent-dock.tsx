@@ -38,6 +38,7 @@ type CommerceAgentSession = {
   welcomeMessage: string | null;
   whisperMessage: string | null;
   contextualIntentMessage: string | null;
+  contextualAssistantOpener: string | null;
   whatsappHref: string | null;
   quickActions: Array<{
     id: string;
@@ -52,6 +53,9 @@ type CommerceAgentMessageResponse = {
   commerceSessionId?: string | null;
   error?: string;
 };
+
+const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d910a997b.r2.dev/8c98994518b575bfd8c949e91d20548b.jpg";
+const assistantBubbleDelayMs = 520;
 
 export function CommerceAgentDock() {
   const pathname = usePathname();
@@ -68,6 +72,8 @@ export function CommerceAgentDock() {
   const [trackingContextSignature, setTrackingContextSignature] = useState("");
   const lastSessionKey = useRef<string | null>(null);
   const lastWhisperKey = useRef<string | null>(null);
+  const lastContextualOpenerKey = useRef<string | null>(null);
+  const assistantBubbleTimersRef = useRef<number[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -82,6 +88,12 @@ export function CommerceAgentDock() {
       window.removeEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
     };
   }, [pathname, search]);
+
+  useEffect(() => () => {
+    for (const timer of assistantBubbleTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     const surface = resolveCommerceSurface(pathname);
@@ -154,7 +166,7 @@ export function CommerceAgentDock() {
         }
 
         setSession(payload);
-        setMessages(payload.messages.length > 0 ? payload.messages : createInitialMessages(payload));
+        setMessages(expandMessagesForChat(payload.messages.length > 0 ? payload.messages : createInitialMessages(payload)));
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -220,7 +232,15 @@ export function CommerceAgentDock() {
     : session.dockLabel;
 
   function openDock() {
-    const contextualIntentMessage = !open && whisperVisible ? session?.contextualIntentMessage : null;
+    const contextualAssistantOpener = !open ? session?.contextualAssistantOpener : null;
+    const contextualOpenerKey = contextualAssistantOpener
+      ? [
+          session?.commerceSessionId ?? session?.agentId ?? session?.agentName,
+          session?.surface ?? "",
+          session?.currentProductId ?? "",
+          contextualAssistantOpener,
+        ].join(":")
+      : null;
 
     setOpen(true);
     setWhisperVisible(false);
@@ -230,13 +250,23 @@ export function CommerceAgentDock() {
       mode: session?.mode ?? null,
       product_id: session?.currentProductId ?? null,
       product_title: session?.currentProductTitle ?? null,
-      contextual_intent: Boolean(contextualIntentMessage),
+      contextual_intent: Boolean(contextualAssistantOpener),
     });
 
-    if (contextualIntentMessage) {
-      window.setTimeout(() => {
-        void submitMessage(undefined, contextualIntentMessage);
-      }, 0);
+    const openerAlreadyVisible = contextualAssistantOpener
+      ? splitAssistantText(contextualAssistantOpener).every((part) => (
+          messages.some((message) => message.role === "assistant" && message.content === part)
+        ))
+      : false;
+
+    if (contextualAssistantOpener && contextualOpenerKey && !openerAlreadyVisible && lastContextualOpenerKey.current !== contextualOpenerKey) {
+      lastContextualOpenerKey.current = contextualOpenerKey;
+      appendAssistantMessageWithCadence({
+        id: createClientId("assistant"),
+        role: "assistant",
+        content: contextualAssistantOpener,
+      });
+      void recordContextualOpener(contextualAssistantOpener);
     }
   }
 
@@ -300,16 +330,73 @@ export function CommerceAgentDock() {
         ...current,
         commerceSessionId: payload.commerceSessionId ?? current.commerceSessionId,
       } : current);
-      setMessages((current) => [...current, payload.message!]);
+      appendAssistantMessageWithCadence(payload.message);
     } catch {
-      setMessages((current) => [...current, {
+      appendAssistantMessageWithCadence({
         id: createClientId("assistant"),
         role: "assistant",
         content: "Nao consegui responder agora por aqui. Voce pode continuar no WhatsApp ou tentar de novo em instantes.",
-      }]);
+      });
     } finally {
       setSending(false);
     }
+  }
+
+  function appendAssistantMessageWithCadence(message: CommerceAgentMessage | undefined) {
+    if (!message) {
+      return;
+    }
+
+    const parts = splitAssistantMessageForChat(message);
+
+    if (parts.length <= 1) {
+      setMessages((current) => [...current, ...parts]);
+      return;
+    }
+
+    parts.forEach((part, index) => {
+      if (index === 0) {
+        setMessages((current) => [...current, part]);
+        return;
+      }
+
+      const timer = window.setTimeout(() => {
+        setMessages((current) => [...current, part]);
+      }, index * assistantBubbleDelayMs);
+      assistantBubbleTimersRef.current.push(timer);
+    });
+  }
+
+  async function recordContextualOpener(opener: string) {
+    if (!session) {
+      return;
+    }
+
+    const publicTracking = readPublicTrackingContext();
+    const snapshot = getTrackingSnapshot();
+
+    await fetch("/api/public/commerce-agent/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...buildPublicTrackingApiBody(publicTracking),
+        product_id: session.currentProductId ?? publicTracking?.product_id ?? null,
+        catalog_item_id: session.currentProductId ?? publicTracking?.catalog_item_id ?? null,
+        visitor_cookie_id: snapshot.visitorId,
+        session_cookie_id: snapshot.sessionId,
+        commerce_session_id: session.commerceSessionId,
+        surface: session.surface,
+        action_type: "contextual_opener",
+        status: "applied",
+        page_path: window.location.pathname,
+        page_url: window.location.href,
+        request_payload: {
+          opener,
+          product_id: session.currentProductId,
+          product_title: session.currentProductTitle,
+        },
+      }),
+    }).catch(() => null);
   }
 
   return (
@@ -324,27 +411,27 @@ export function CommerceAgentDock() {
       {whisperVisible && session.whisperMessage ? (
         <div
           aria-live="polite"
-          className="relative mb-3 ml-auto mr-1 max-w-[min(20rem,calc(100vw-5.5rem))] rounded-[8px] border border-cyan-200/80 bg-white/95 px-3.5 py-3 text-left shadow-2xl shadow-cyan-950/15 backdrop-blur animate-in fade-in slide-in-from-bottom-2"
+          className="relative mb-3 ml-auto mr-1 max-w-[min(21rem,calc(100vw-5.5rem))] rounded-[8px] border border-[#9de7c2] bg-[#f6fff9] px-3.5 py-3 text-left shadow-2xl shadow-[#075E54]/15 backdrop-blur animate-in fade-in slide-in-from-bottom-2"
         >
-          <p className="text-xs font-semibold leading-5 text-slate-700">{session.whisperMessage}</p>
-          <span className="absolute -bottom-1.5 right-6 h-3 w-3 rotate-45 border-b border-r border-cyan-200/80 bg-white/95" />
+          <p className="text-xs font-semibold leading-5 text-[#111b21]">{session.whisperMessage}</p>
+          <span className="absolute -bottom-1.5 right-6 h-3 w-3 rotate-45 border-b border-r border-[#9de7c2] bg-[#f6fff9]" />
         </div>
       ) : null}
 
       {open ? (
-        <section className="mb-3 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-[8px] border border-cyan-200/70 bg-white shadow-2xl shadow-slate-950/20">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-950 px-3 py-3 text-white">
+        <section className="mb-3 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-[8px] border border-[#c7efe0] bg-white shadow-2xl shadow-slate-950/20">
+          <div className="flex items-center justify-between gap-3 border-b border-[#064c44] bg-[#075E54] px-3 py-3 text-white">
             <div className="flex min-w-0 items-center gap-2">
               <AgentAvatar session={session} />
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-black">{session.agentName}</h2>
-                <p className="truncate text-[11px] font-semibold text-cyan-100">{surfaceLabel(session.surface)}</p>
+                <p className="truncate text-[11px] font-semibold text-[#d9fdd3]">{surfaceLabel(session.surface)}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
               <button
                 aria-label="Minimizar agente"
-                className="grid h-8 w-8 place-items-center rounded-[8px] text-cyan-100 transition hover:bg-white/10"
+                className="grid h-8 w-8 place-items-center rounded-[8px] text-[#d9fdd3] transition hover:bg-white/10"
                 type="button"
                 onClick={closeDock}
               >
@@ -352,7 +439,7 @@ export function CommerceAgentDock() {
               </button>
               <button
                 aria-label="Fechar agente"
-                className="grid h-8 w-8 place-items-center rounded-[8px] text-cyan-100 transition hover:bg-white/10"
+                className="grid h-8 w-8 place-items-center rounded-[8px] text-[#d9fdd3] transition hover:bg-white/10"
                 type="button"
                 onClick={() => {
                   setOpen(false);
@@ -364,28 +451,37 @@ export function CommerceAgentDock() {
             </div>
           </div>
 
-          <div className="max-h-[min(26rem,52dvh)] space-y-2 overflow-y-auto bg-slate-50 px-3 py-3">
+          <div
+            className="max-h-[min(26rem,52dvh)] space-y-2 overflow-y-auto px-3 py-3"
+            style={{
+              backgroundColor: "#efeae2",
+              backgroundImage: `linear-gradient(rgba(239,234,226,0.22), rgba(239,234,226,0.22)), url("${whatsappConversationBackgroundUrl}")`,
+              backgroundPosition: "center",
+              backgroundRepeat: "repeat",
+              backgroundSize: "420px auto",
+            }}
+          >
             {messages.filter((message) => message.role !== "system").map((message) => (
               <div
                 key={message.id}
                 className={cn(
-                  "max-w-[85%] whitespace-pre-line rounded-[8px] px-3 py-2 text-xs font-medium leading-5",
+                  "max-w-[86%] whitespace-pre-line rounded-[8px] px-3 py-2 text-xs font-medium leading-5 shadow-sm",
                   message.role === "lead"
-                    ? "ml-auto bg-slate-950 text-white"
-                    : "mr-auto border border-slate-200 bg-white text-slate-700",
+                    ? "ml-auto bg-[#d9fdd3] text-[#111b21]"
+                    : "mr-auto bg-white text-[#111b21]",
                 )}
               >
                 {message.content}
               </div>
             ))}
             {sending ? (
-              <div className="mr-auto inline-flex items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500">
+              <div className="mr-auto inline-flex items-center gap-2 rounded-[8px] bg-white px-3 py-2 text-xs font-semibold text-[#667781] shadow-sm">
                 <span className="flex items-center gap-1" aria-live="polite">
                   <span>{firstName(session.agentName)} digitando</span>
                   <span className="inline-flex gap-0.5" aria-hidden="true">
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.2s]" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500 [animation-delay:-0.1s]" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-cyan-500" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-[#00a884] [animation-delay:-0.2s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-[#00a884] [animation-delay:-0.1s]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-[#00a884]" />
                   </span>
                 </span>
               </div>
@@ -393,13 +489,13 @@ export function CommerceAgentDock() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t border-slate-200 bg-white p-3">
+          <div className="border-t border-[#d1d7db] bg-[#f0f2f5] p-3">
             {session.quickActions.length > 0 ? (
               <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
                 {session.quickActions.map((action) => (
                   <button
                     key={action.id}
-                    className="shrink-0 rounded-[8px] border border-cyan-200 px-2.5 py-1.5 text-[11px] font-bold text-cyan-800 transition hover:bg-cyan-50"
+                    className="shrink-0 rounded-[8px] border border-[#9de7c2] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#075E54] transition hover:bg-[#e7fce3]"
                     type="button"
                     onClick={() => void submitMessage(undefined, action.message)}
                   >
@@ -408,7 +504,7 @@ export function CommerceAgentDock() {
                 ))}
                 {session.whatsappHref ? (
                   <a
-                    className="inline-flex shrink-0 items-center gap-1 rounded-[8px] border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-[8px] border border-[#d1d7db] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#54656f] transition hover:bg-white/80"
                     href={session.whatsappHref}
                     target="_blank"
                     rel="noreferrer"
@@ -425,14 +521,14 @@ export function CommerceAgentDock() {
             ) : null}
             <form className="grid grid-cols-[minmax(0,1fr)_40px] gap-2" onSubmit={(event) => void submitMessage(event)}>
               <input
-                className="h-10 min-w-0 rounded-[8px] border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-300"
+                className="h-10 min-w-0 rounded-[8px] border border-white bg-white px-3 text-xs font-semibold text-[#111b21] outline-none transition placeholder:text-[#8696a0] focus:border-[#00a884]"
                 value={input}
                 onChange={(event) => setInput(event.target.value.slice(0, 700))}
                 placeholder="Pergunte aqui"
               />
               <button
                 aria-label="Enviar mensagem"
-                className="grid h-10 w-10 place-items-center rounded-[8px] bg-slate-950 text-cyan-100 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="grid h-10 w-10 place-items-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008f72] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!input.trim() || sending}
                 type="submit"
               >
@@ -446,7 +542,7 @@ export function CommerceAgentDock() {
       <button
         type="button"
         className={cn(
-          "group relative ml-auto grid h-16 w-16 place-items-center rounded-full border border-cyan-200/80 bg-white p-1 text-slate-950 shadow-2xl shadow-cyan-950/20 transition hover:-translate-y-0.5 hover:shadow-cyan-950/30",
+          "group relative ml-auto grid h-16 w-16 place-items-center rounded-full border border-[#9de7c2] bg-white p-1 text-slate-950 shadow-2xl shadow-[#075E54]/20 transition hover:-translate-y-0.5 hover:shadow-[#075E54]/30",
           isCheckout ? "opacity-95" : "opacity-100",
         )}
         onClick={openDock}
@@ -475,8 +571,8 @@ function AgentAvatar({
 
   return (
     <span className={cn(
-      "relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-slate-950 text-white ring-2 ring-cyan-200/80",
-      size === "coin" ? "shadow-lg shadow-cyan-950/20 ring-4 ring-white" : "",
+      "relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-slate-950 text-white ring-2 ring-[#25D366]/70",
+      size === "coin" ? "shadow-lg shadow-[#075E54]/20 ring-4 ring-white" : "",
       boxClass,
     )}>
       {session.agentAvatarUrl ? (
@@ -502,13 +598,122 @@ function AgentAvatar({
 }
 
 function createInitialMessages(session: CommerceAgentSession): CommerceAgentMessage[] {
-  const content = session.welcomeMessage ?? "Continuo por aqui para te ajudar nesta compra.";
+  const content = session.contextualAssistantOpener
+    ?? session.welcomeMessage
+    ?? "Continuo por aqui para te ajudar nesta compra.";
 
   return [{
     id: createClientId("assistant"),
     role: "assistant",
     content,
   }];
+}
+
+function expandMessagesForChat(messages: CommerceAgentMessage[]) {
+  return messages.flatMap(splitAssistantMessageForChat);
+}
+
+function splitAssistantMessageForChat(message: CommerceAgentMessage): CommerceAgentMessage[] {
+  if (message.role !== "assistant") {
+    return [message];
+  }
+
+  const parts = splitAssistantText(message.content);
+
+  if (parts.length <= 1) {
+    return [message];
+  }
+
+  return parts.map((content, index) => ({
+    ...message,
+    id: `${message.id}_part_${index + 1}`,
+    content,
+  }));
+}
+
+function splitAssistantText(content: string) {
+  const normalized = content
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphParts = normalized
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const baseParts = paragraphParts.length > 1
+    ? paragraphParts
+    : normalized.split(/\n+/).map((part) => part.trim()).filter(Boolean);
+
+  return baseParts.flatMap((part) => splitLongAssistantBubble(part, 230));
+}
+
+function splitLongAssistantBubble(content: string, maxLength: number) {
+  if (content.length <= maxLength) {
+    return [content];
+  }
+
+  const sentences = content.match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+    ?.map((sentence) => sentence.trim())
+    .filter(Boolean) ?? [content];
+  const parts: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    if (!current) {
+      current = sentence;
+      continue;
+    }
+
+    if (`${current} ${sentence}`.length > maxLength) {
+      parts.push(current);
+      current = sentence;
+      continue;
+    }
+
+    current = `${current} ${sentence}`;
+  }
+
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts.flatMap((part) => splitOversizedText(part, maxLength));
+}
+
+function splitOversizedText(content: string, maxLength: number) {
+  if (content.length <= maxLength) {
+    return [content];
+  }
+
+  const words = content.split(/\s+/).filter(Boolean);
+  const parts: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+
+    if (`${current} ${word}`.length > maxLength) {
+      parts.push(current);
+      current = word;
+      continue;
+    }
+
+    current = `${current} ${word}`;
+  }
+
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts;
 }
 
 function resolveCommerceSurface(pathname: string | null): CommerceAgentSession["surface"] | null {

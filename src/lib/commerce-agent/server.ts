@@ -200,6 +200,7 @@ const geminiSafetySettings = [
 const commerceAgentResponseTimeoutMs = 45000;
 const commerceAgentMaxOutputTokens = 520;
 const commerceAgentAssistantMaxLength = 1600;
+const commerceAgentWelcomeBackAfterMs = 24 * 60 * 60 * 1000;
 
 export type CommerceAgentResolvedContext =
   | {
@@ -237,6 +238,7 @@ export type CommerceAgentResolvedContext =
       agentAvatarAlt: string | null;
       whatsappHref: string | null;
       returningVisitor: boolean;
+      welcomeBackEligible: boolean;
     };
 
 export type CommerceAgentSessionPayload = {
@@ -257,6 +259,7 @@ export type CommerceAgentSessionPayload = {
   welcomeMessage: string | null;
   whisperMessage: string | null;
   contextualIntentMessage: string | null;
+  contextualAssistantOpener: string | null;
   whatsappHref: string | null;
   quickActions: Array<{
     id: string;
@@ -398,6 +401,10 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   });
   const agentAvatarUrl = readWhatsappInstanceProfileImageUrl(whatsappInstance?.metadata)
     ?? readString(agent?.avatar_url);
+  const returningVisitor = Boolean(
+    hydratedSession?.restored_from_identity
+      || (!hasExplicitLeadContext && (hydratedSession?.lead_id || hydratedSession?.conversation_id)),
+  );
   const context = {
     ok: true,
     client,
@@ -429,10 +436,8 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     agentAvatarUrl,
     agentAvatarAlt: readString(agent?.avatar_alt) ?? agentName,
     whatsappHref,
-    returningVisitor: Boolean(
-      hydratedSession?.restored_from_identity
-        || (!hasExplicitLeadContext && (hydratedSession?.lead_id || hydratedSession?.conversation_id)),
-    ),
+    returningVisitor,
+    welcomeBackEligible: returningVisitor && isCommerceAgentWelcomeBackEligible(hydratedSession),
   } satisfies Extract<CommerceAgentResolvedContext, { ok: true }>;
 
   const commerceSessionId = await ensureCommerceSession(context).catch(() => context.commerceSessionId);
@@ -470,6 +475,7 @@ export async function buildCommerceAgentSessionPayload(
     welcomeMessage,
     whisperMessage: buildWhisperMessage(context, promptContext),
     contextualIntentMessage: buildContextualIntentMessage(context, promptContext),
+    contextualAssistantOpener: buildContextualAssistantOpener(context, promptContext),
     whatsappHref: context.whatsappHref,
     quickActions: buildQuickActions(context),
     messages: visibleMessages.map((message) => ({
@@ -508,6 +514,7 @@ export async function persistCommerceAgentMessage(input: {
         page_path: input.context.pagePath,
         page_url: input.context.pageUrl,
         returning_visitor: input.context.returningVisitor,
+        welcome_back_eligible: input.context.welcomeBackEligible,
       },
     })
     .select("id, role, content, created_at")
@@ -552,6 +559,7 @@ export async function recordCommerceAgentAction(input: {
         page_path: input.context.pagePath,
         page_url: input.context.pageUrl,
         returning_visitor: input.context.returningVisitor,
+        welcome_back_eligible: input.context.welcomeBackEligible,
       },
   });
 }
@@ -702,7 +710,7 @@ async function buildFallbackCommerceAgentReply(input: {
 
   if (input.context.surface === "product" && promptContext.currentProduct) {
     return offer && offer.id !== promptContext.currentProduct.id
-      ? `${promptContext.currentProduct.title} pode fazer sentido pra voce. Se quiser montar uma compra mais completa, ${offer.title} tambem combina como proximo passo.`
+      ? `${promptContext.currentProduct.title} esta na tela agora. Se quiser montar uma compra mais completa, eu comparo com ${offer.title} e te digo qual encaixa melhor.`
       : `${promptContext.currentProduct.title} e o produto que voce esta vendo agora. Me diz o que voce quer comparar nele que eu te ajudo a decidir.`;
   }
 
@@ -796,6 +804,7 @@ function buildCommerceSessionMetadata(
     latest_page_path: context.pagePath,
     latest_page_url: context.pageUrl,
     returning_visitor: context.returningVisitor || existing.returning_visitor === true,
+    welcome_back_eligible: context.welcomeBackEligible,
     last_seen_at: now,
     commerce_journey: appendCommerceJourney(existing.commerce_journey, journeyEntry),
   };
@@ -825,6 +834,34 @@ function appendCommerceJourney(value: unknown, entry: JsonRecord) {
   });
 
   return [...withoutDuplicate, entry].slice(-18);
+}
+
+function isCommerceAgentWelcomeBackEligible(session: CommerceSessionContextRow | null) {
+  if (!session) {
+    return false;
+  }
+
+  const metadata = readRecord(session.metadata);
+  const lastSeenTimes = [
+    session.identity_last_seen_at,
+    session.last_seen_at,
+    readString(metadata?.last_seen_at),
+  ]
+    .map(parseTimestampMs)
+    .filter((value): value is number => value !== null);
+  const mostRecentSeenAt = lastSeenTimes.length > 0 ? Math.max(...lastSeenTimes) : null;
+
+  return mostRecentSeenAt !== null && Date.now() - mostRecentSeenAt >= commerceAgentWelcomeBackAfterMs;
+}
+
+function parseTimestampMs(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const time = Date.parse(value);
+
+  return Number.isFinite(time) ? time : null;
 }
 
 async function upsertLeadWebIdentities(
@@ -869,6 +906,7 @@ async function upsertLeadWebIdentity(
     latest_page_url: context.pageUrl,
     latest_product_id: context.productId ?? readString(existingMetadata.latest_product_id),
     returning_visitor: context.returningVisitor || existingMetadata.returning_visitor === true,
+    welcome_back_eligible: context.welcomeBackEligible,
   };
   const payload = {
     organization_id: context.organization.id,
@@ -1813,7 +1851,7 @@ function buildCommerceAgentSystemInstruction(
     `- Voce e ${context.agentName}, o mesmo agente que atendeu este lead no WhatsApp.`,
     "- A conversa atual esta dentro da loja, produto, carrinho ou checkout. Continue o atendimento como continuidade real do WhatsApp.",
     "- Nao aja como robo de suporte e nao reinicie a conversa. Use o historico para responder como quem ja estava falando com a pessoa.",
-    "- Se o lead foi reconhecido pela memoria persistente, pode dar boas-vindas de volta de forma humana e curta.",
+    "- So de boas-vindas de volta se o contexto marcar retorno real apos pausa. Em navegacao normal, fale do produto, carrinho ou checkout atual.",
     "- Pode mencionar de forma leve que viu a pessoa abrir uma pagina ou produto, mas nunca soe invasivo ou tecnico.",
     "- Nao diga que esta monitorando, rastreando, analisando eventos, usando cookie, banco, sistema ou memoria.",
     "- Se o lead mudou de produto, conecte com a conversa anterior: compare, complemente ou pergunte uma coisa simples.",
@@ -1826,7 +1864,7 @@ function buildCommerceAgentSystemInstruction(
     "",
     "REGRAS DE RESPOSTA NA LOJA:",
     "- Responda em portugues do Brasil, com naturalidade de WhatsApp.",
-    "- Use 1 a 3 blocos curtos separados por linha em branco. Nada de markdown, lista, bullet ou texto corporativo.",
+    "- Use 1 a 3 bolhas curtas separadas por linha em branco, como WhatsApp. Nada de markdown, lista, bullet ou texto corporativo.",
     "- Nao repita a ultima resposta. Se o lead mandar 'ok', 'legal', 'sim' ou algo curto, avance a conversa de forma nova.",
     "- Chame pelo primeiro nome so quando soar natural. Nao repita o nome em toda mensagem.",
     "- Nao prometa desconto, estoque, prazo, resultado, entrega ou pagamento se isso nao estiver no contexto.",
@@ -1874,6 +1912,7 @@ function buildCommerceAgentTurnPrompt(
     `Agente: ${context.agentName}`,
     context.leadName ? `Lead: ${context.leadName}` : "Lead: nome pessoal nao confirmado",
     `Superficie atual: ${formatSurfaceForPrompt(context.surface)}`,
+    `Retorno real apos pausa: ${context.welcomeBackEligible ? "sim" : "nao"}`,
     context.pagePath ? `Pagina atual: ${context.pagePath}` : null,
     context.pageUrl ? `URL atual: ${context.pageUrl}` : null,
     "",
@@ -1922,7 +1961,7 @@ function buildWelcomeMessage(
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
   const agentIntro = name ? `sou ${context.agentName} e ` : `Sou ${context.agentName} e `;
 
-  if (context.returningVisitor && context.surface === "store") {
+  if (context.welcomeBackEligible && context.surface === "store") {
     return `${name}bem-vindo de volta. ${agentIntro}posso continuar de onde a gente parou ou te ajudar a escolher outra coisa.`;
   }
 
@@ -1956,7 +1995,7 @@ function buildWhisperMessage(
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
   const productWhisper = buildProductWhisperMessage(context, promptContext, name);
 
-  if (context.returningVisitor && context.surface === "store") {
+  if (context.welcomeBackEligible && context.surface === "store") {
     return `${name}bem-vindo de volta. ${context.agentName} lembrou de voce por aqui; clica na minha foto se quiser continuar.`;
   }
 
@@ -1977,7 +2016,7 @@ function buildWhisperMessage(
   }
 
   if (context.surface === "store") {
-    return `${name}vi que voce voltou para a loja. Se quiser escolher mais alguma coisa, clica na minha foto.`;
+    return `${name}quer olhar as opcoes com calma? Clica na minha foto que eu te ajudo a escolher sem voltar pro WhatsApp.`;
   }
 
   return `${name}estou aqui. Se precisar de ajuda, clica na minha foto que eu continuo por aqui.`;
@@ -2000,27 +2039,23 @@ function buildProductWhisperMessage(
     ? promptContext.contextualOffer
     : null;
 
-  if (context.returningVisitor && previousProducts.length === 0) {
-    return `${name}bem-vindo de volta. ${product.title} pode fazer sentido pra voce; clica na minha foto que eu te ajudo a decidir.`;
-  }
-
   if (viewedManyProducts) {
-    return `${name}vi que voce esta comparando algumas opcoes. ${product.title} pode ser o foco agora; clica na minha foto que eu te ajudo a escolher.`;
+    return `${name}voce esta olhando algumas opcoes. ${product.title} entrou na lista; clica na minha foto que eu te ajudo a decidir.`;
   }
 
   if (context.settings.commerceAgent.verticalPlaybook === "food") {
-    return `${name}${product.title} e uma boa pedida. Clica na minha foto que eu te ajudo a montar combo ou meia-meio com algo que combine.`;
+    return `${name}${product.title} e uma boa pedida. Clica na minha foto que eu te ajudo a montar um combo ou meia-meio que combine.`;
   }
 
   if (offer) {
-    return `${name}${product.title} pode combinar com ${offer.title}. Clica na minha foto que eu te ajudo a montar a melhor opcao.`;
+    return `${name}${product.title} combina com ${offer.title}. Clica na minha foto que eu te ajudo a montar a melhor opcao.`;
   }
 
   if (comparison) {
     return `${name}${product.title} entrou bem nessa comparacao com ${comparison}. Clica na minha foto que eu te ajudo a escolher sem enrolacao.`;
   }
 
-  return `${name}${product.title} pode ser uma boa opcao. Clica na minha foto que eu te falo se combina com o que voce procura.`;
+  return `${name}${product.title} esta na tela agora. Clica na minha foto que eu te ajudo a decidir se ele e o melhor caminho.`;
 }
 
 function buildContextualIntentMessage(
@@ -2049,6 +2084,71 @@ function buildContextualIntentMessage(
   }
 
   return null;
+}
+
+function buildContextualAssistantOpener(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  promptContext: CommerceAgentPromptContext,
+) {
+  const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
+
+  if (context.surface === "product" && promptContext.currentProduct) {
+    const product = promptContext.currentProduct;
+    const previousProducts = promptContext.recentProductViews
+      .filter((item) => item.id !== product.id)
+      .slice(0, 3);
+    const offer = promptContext.contextualOffer && promptContext.contextualOffer.id !== product.id
+      ? promptContext.contextualOffer
+      : null;
+
+    if (previousProducts.length >= 3) {
+      return [
+        `${name}${product.title} entrou na lista tambem.`,
+        "Voce ja olhou algumas opcoes, entao posso comparar por objetivo, preco e encaixe no pedido. Quer que eu separe a melhor agora?",
+      ].join("\n\n");
+    }
+
+    if (context.settings.commerceAgent.verticalPlaybook === "food") {
+      return [
+        `${name}${product.title} ficou na tela agora.`,
+        offer
+          ? `Da para combinar com ${offer.title} se voce quiser montar algo mais completo. Quer que eu te ajude a fechar sem exagerar?`
+          : "Quer que eu te ajude a montar uma combinacao boa, tipo complemento, bebida ou meia-meio?",
+      ].join("\n\n");
+    }
+
+    if (offer) {
+      return [
+        `${name}${product.title} esta na tela agora.`,
+        `Se a ideia for montar uma compra mais completa, eu comparo com ${offer.title} e te digo qual encaixa melhor.`,
+      ].join("\n\n");
+    }
+
+    return [
+      `${name}${product.title} esta na tela agora.`,
+      "Me fala rapidinho o que voce quer priorizar que eu te ajudo a decidir sem enrolar.",
+    ].join("\n\n");
+  }
+
+  if (context.surface === "checkout") {
+    const order = formatOrderItemsForSentence(promptContext.orderItems);
+
+    return order
+      ? `${name}abri aqui do lado sem atrapalhar o pagamento.\n\nSeu pedido esta com ${order}. Se quiser, eu reviso antes de voce pagar.`
+      : `${name}abri aqui do lado sem atrapalhar o pagamento.\n\nSe pintar qualquer duvida no checkout, me chama que eu resolvo por aqui.`;
+  }
+
+  if (context.surface === "cart") {
+    return `${name}estou vendo seu carrinho por aqui.\n\nSe quiser, eu reviso o que ja entrou e vejo se falta algum complemento que realmente combine.`;
+  }
+
+  if (context.surface === "store") {
+    return context.welcomeBackEligible
+      ? `${name}bem-vindo de volta.\n\nQuer continuar do ponto em que parou ou olhar algo novo comigo?`
+      : `${name}continuei por aqui tambem.\n\nSe quiser, me chama e eu te ajudo a escolher sem precisar voltar pro WhatsApp.`;
+  }
+
+  return `${name}continuei por aqui tambem.\n\nMe chama quando quiser que eu te ajudo a escolher ou finalizar.`;
 }
 
 function formatSurfaceForPrompt(surface: SalesCatalogCommerceAgentSurface | "unknown") {

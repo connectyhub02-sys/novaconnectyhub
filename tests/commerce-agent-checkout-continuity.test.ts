@@ -132,6 +132,8 @@ describe("Commerce Agent checkout continuity", () => {
 
     expect(resolver).toContain("restored_from_identity");
     expect(resolver).toContain("returningVisitor");
+    expect(resolver).toContain("welcomeBackEligible");
+    expect(resolver).toContain("isCommerceAgentWelcomeBackEligible");
     expect(resolver).toContain("!hasExplicitLeadContext");
     expect(identityLookup).toContain(".from(\"lead_web_identities\")");
     expect(identityLookup).toContain("identity_type.eq.");
@@ -189,7 +191,7 @@ describe("Commerce Agent checkout continuity", () => {
     expect(commerceAgentServerSource).toContain("message.role === \"lead\" || message.role === \"assistant\"");
     expect(commerceAgentServerSource).toContain("buildProductWhisperMessage");
     expect(commerceAgentServerSource).toContain("produto atual da pagina sempre tem prioridade");
-    expect(commerceAgentServerSource).toContain("vi que voce esta comparando algumas opcoes");
+    expect(commerceAgentServerSource).toContain("voce esta olhando algumas opcoes");
     expect(commerceAgentDockSource).toContain("${pathname ?? \"\"}?${search}");
     expect(commerceAgentDockSource).toContain("message.role !== \"system\"");
     expect(commerceAgentDockSource).toContain("digitando");
@@ -220,12 +222,34 @@ describe("Commerce Agent checkout continuity", () => {
     expect(trackingRouteSource).toContain("function inferCommerceProductId");
   });
 
-  it("opens the dock as a contextual product question when the lead clicks the agent photo from a whisper", () => {
+  it("opens the dock with a contextual agent opener when the lead clicks the agent photo", () => {
     expect(commerceAgentServerSource).toContain("contextualIntentMessage: buildContextualIntentMessage");
+    expect(commerceAgentServerSource).toContain("contextualAssistantOpener: buildContextualAssistantOpener");
     expect(commerceAgentServerSource).toContain("Me fala sobre");
     expect(commerceAgentServerSource).toContain("Me ajuda a comparar");
+    expect(commerceAgentServerSource).toContain("entrou na lista tambem");
     expect(commerceAgentDockSource).toContain("contextualIntentMessage");
-    expect(commerceAgentDockSource).toContain("contextual_intent: Boolean(contextualIntentMessage)");
-    expect(commerceAgentDockSource).toContain("void submitMessage(undefined, contextualIntentMessage)");
+    expect(commerceAgentDockSource).toContain("contextualAssistantOpener");
+    expect(commerceAgentDockSource).toContain("contextual_intent: Boolean(contextualAssistantOpener)");
+    expect(commerceAgentDockSource).toContain("appendAssistantMessageWithCadence");
+    expect(commerceAgentDockSource).toContain("action_type: \"contextual_opener\"");
+    expect(commerceAgentDockSource).not.toContain("void submitMessage(undefined, contextualIntentMessage)");
+  });
+
+  it("renders the storefront dock as a mini WhatsApp chat with split assistant bubbles", () => {
+    expect(commerceAgentDockSource).toContain("whatsappConversationBackgroundUrl");
+    expect(commerceAgentDockSource).toContain("backgroundColor: \"#efeae2\"");
+    expect(commerceAgentDockSource).toContain("bg-[#075E54]");
+    expect(commerceAgentDockSource).toContain("bg-[#d9fdd3]");
+    expect(commerceAgentDockSource).toContain("splitAssistantMessageForChat");
+    expect(commerceAgentDockSource).toContain("assistantBubbleDelayMs");
+  });
+
+  it("allows contextual opener actions to be stored without billing a fake lead message", () => {
+    const actionRouteSource = readFileSync("src/app/api/public/commerce-agent/action/route.ts", "utf8");
+
+    expect(actionRouteSource).toContain("\"contextual_opener\"");
+    expect(commerceAgentDockSource).toContain("recordContextualOpener");
+    expect(commerceAgentDockSource).toContain("/api/public/commerce-agent/action");
   });
 });

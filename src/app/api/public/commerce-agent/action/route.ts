@@ -20,6 +20,7 @@ const allowedActionTypes = new Set([
   "update_checkout",
   "return_to_whatsapp",
   "idle_nudge",
+  "contextual_opener",
   "message",
 ]);
 
