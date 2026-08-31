@@ -5,6 +5,7 @@ import {
 } from "@/lib/security/public-request-guard";
 import {
   buildCommerceAgentReply,
+  isCommerceAgentBillingError,
   persistCommerceAgentMessage,
   readCommerceAgentBody,
   readCommerceAgentMessage,
@@ -50,7 +51,21 @@ export async function POST(request: NextRequest) {
     content: message,
   }).catch(() => null);
 
-  const reply = await buildCommerceAgentReply({ context, message });
+  let reply: string;
+
+  try {
+    reply = await buildCommerceAgentReply({ context, message });
+  } catch (error) {
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Nao foi possivel contabilizar os creditos do atendimento na loja.";
+
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: isCommerceAgentBillingError(error) ? 402 : 500 },
+    );
+  }
+
   const savedReply = await persistCommerceAgentMessage({
     context,
     role: "assistant",

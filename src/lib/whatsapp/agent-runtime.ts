@@ -273,6 +273,25 @@ type CrossAgentConversationContext = {
   }>;
 };
 
+type CommerceStoreContext = {
+  latestSessionAt: string | null;
+  sessions: Array<{
+    surface: string | null;
+    pagePath: string | null;
+    productId: string | null;
+    orderId: string | null;
+    agentName: string | null;
+    occurredAt: string | null;
+  }>;
+  messages: Array<{
+    speaker: "lead" | "agent" | "system";
+    text: string;
+    surface: string | null;
+    agentName: string | null;
+    occurredAt: string;
+  }>;
+};
+
 type RegisteredClientProfileContext = {
   matchType: "phone" | "name" | "none";
   confidence: "confirmed" | "possible" | "none";
@@ -783,6 +802,7 @@ export async function processWhatsappAgentRun(input: {
           salesCatalogOrders: context.salesCatalogOrders,
           learnings: context.learnings,
           crossAgentContext: context.crossAgentContext,
+          commerceStoreContext: context.commerceStoreContext,
           registeredClientContext,
           messages: context.messages,
           latestInbound,
@@ -811,6 +831,7 @@ export async function processWhatsappAgentRun(input: {
         salesCatalogOrders: context.salesCatalogOrders,
         learnings: context.learnings,
         crossAgentContext: context.crossAgentContext,
+        commerceStoreContext: context.commerceStoreContext,
         registeredClientContext,
         messages: context.messages,
         latestInbound,
@@ -1012,6 +1033,13 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
         currentWhatsappInstanceId: whatsappInstanceId,
       })
     : null;
+  const commerceStoreContext = !isPlatformWhatsapp
+    ? await loadLeadCommerceStoreContext(client, {
+        organizationId: run.organization_id,
+        leadId: lead?.id ?? leadId,
+        conversationId,
+      }).catch(() => null)
+    : null;
 
   return {
     run,
@@ -1034,6 +1062,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     salesCatalogOrders,
     learnings,
     crossAgentContext,
+    commerceStoreContext,
     behavior,
     qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
     providerChatId: asString(metadata?.providerChatId),
@@ -1821,6 +1850,98 @@ async function loadCrossAgentConversationContext(
   };
 }
 
+async function loadLeadCommerceStoreContext(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    conversationId: string | null;
+  },
+): Promise<CommerceStoreContext | null> {
+  if (!input.leadId && !input.conversationId) {
+    return null;
+  }
+
+  let sessionQuery = client
+    .from("commerce_sessions")
+    .select("last_surface, current_path, order_id, payment_session_id, metadata, last_seen_at")
+    .eq("organization_id", input.organizationId)
+    .order("last_seen_at", { ascending: false })
+    .limit(5);
+  let messageQuery = client
+    .from("commerce_agent_messages")
+    .select("role, content, surface, metadata, created_at")
+    .eq("organization_id", input.organizationId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (input.leadId && input.conversationId) {
+    sessionQuery = sessionQuery.or(`lead_id.eq.${input.leadId},conversation_id.eq.${input.conversationId}`);
+    messageQuery = messageQuery.or(`lead_id.eq.${input.leadId},conversation_id.eq.${input.conversationId}`);
+  } else if (input.leadId) {
+    sessionQuery = sessionQuery.eq("lead_id", input.leadId);
+    messageQuery = messageQuery.eq("lead_id", input.leadId);
+  } else if (input.conversationId) {
+    sessionQuery = sessionQuery.eq("conversation_id", input.conversationId);
+    messageQuery = messageQuery.eq("conversation_id", input.conversationId);
+  }
+
+  const [sessionsResult, messagesResult] = await Promise.all([sessionQuery, messageQuery]);
+  const sessions = ((sessionsResult.data ?? []) as Array<{
+    last_surface: string | null;
+    current_path: string | null;
+    order_id: string | null;
+    payment_session_id: string | null;
+    metadata: JsonRecord | null;
+    last_seen_at: string | null;
+  }>).map((session) => {
+    const metadata = readRecord(session.metadata) ?? {};
+
+    return {
+      surface: session.last_surface ?? asString(metadata.latest_surface),
+      pagePath: session.current_path ?? asString(metadata.latest_page_path),
+      productId: asString(metadata.latest_product_id) ?? asString(metadata.product_id),
+      orderId: session.order_id ?? asString(metadata.order_id),
+      agentName: asString(metadata.agent_name),
+      occurredAt: session.last_seen_at,
+    };
+  });
+  const messages = ((messagesResult.data ?? []) as Array<{
+    role: "lead" | "assistant" | "system" | "tool";
+    content: string;
+    surface: string | null;
+    metadata: JsonRecord | null;
+    created_at: string;
+  }>)
+    .map((message) => {
+      const metadata = readRecord(message.metadata) ?? {};
+      const text = message.content?.trim();
+
+      if (!text) return null;
+
+      return {
+        speaker: message.role === "lead" ? "lead" : message.role === "assistant" ? "agent" : "system",
+        text: preview(text, 320),
+        surface: message.surface ?? asString(metadata.surface),
+        agentName: asString(metadata.agent_name),
+        occurredAt: message.created_at,
+      };
+    })
+    .filter((message): message is CommerceStoreContext["messages"][number] => Boolean(message))
+    .sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt))
+    .slice(-10);
+
+  if (sessions.length === 0 && messages.length === 0) {
+    return null;
+  }
+
+  return {
+    latestSessionAt: sessions[0]?.occurredAt ?? messages[messages.length - 1]?.occurredAt ?? null,
+    sessions,
+    messages,
+  };
+}
+
 async function loadOrganizationKnowledge(client: SupabaseClient, organizationId: string) {
   const { data, error } = await client
     .from("intelligence_memory")
@@ -1986,6 +2107,7 @@ async function generateAgentResponse(input: {
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
+  commerceStoreContext: CommerceStoreContext | null;
   registeredClientContext: RegisteredClientProfileContext | null;
   messages: ConversationMessageRow[];
   latestInbound: ConversationMessageRow | null;
@@ -2243,6 +2365,7 @@ function buildSystemInstruction(input: {
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
+  commerceStoreContext: CommerceStoreContext | null;
   registeredClientContext: RegisteredClientProfileContext | null;
   messages: ConversationMessageRow[];
   userText: string;
@@ -2303,6 +2426,7 @@ function buildSystemInstruction(input: {
     ...buildSalesCatalogCommerceLines(input.salesCatalogSettings),
     ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
     ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
+    ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
     "",
     "COMPORTAMENTO CONFIGURADO:",
     `- Modo de resposta: ${input.behavior.responseMode}.`,
@@ -2646,6 +2770,54 @@ function buildCrossAgentConversationLines(context: CrossAgentConversationContext
       return `- ${author}: ${message.text}`;
     }),
   ];
+}
+
+function buildCommerceStoreContextLines(context: CommerceStoreContext | null, agent: AgentRow): string[] {
+  if (!context || (context.sessions.length === 0 && context.messages.length === 0)) return [];
+
+  const currentAgentName = agent.persona_name?.trim() || agent.name;
+  const sessionLines = context.sessions.slice(0, 4).map((session) => {
+    const agentLabel = session.agentName && normalizeSearch(session.agentName) !== normalizeSearch(currentAgentName)
+      ? `com ${session.agentName}`
+      : "com este agente";
+
+    return [
+      "- Navegacao na loja",
+      session.surface ? `area: ${formatCommerceSurfaceLabel(session.surface)}` : null,
+      session.pagePath ? `pagina: ${session.pagePath}` : null,
+      session.productId ? `produto: ${session.productId}` : null,
+      session.orderId ? `pedido: ${session.orderId}` : null,
+      agentLabel,
+    ].filter(Boolean).join(" | ");
+  });
+  const messageLines = context.messages.map((message) => {
+    const author = message.speaker === "lead"
+      ? "Lead na loja"
+      : message.speaker === "agent"
+        ? `Agente${message.agentName ? ` ${message.agentName}` : ""} na loja`
+        : "Contexto da loja";
+
+    return `- ${author}: ${message.text}`;
+  });
+
+  return [
+    "",
+    "MEMORIA DA LOJA CONNECTYHUB:",
+    "- Este lead tambem pode ter navegado ou conversado com o agente dentro da loja, produto, carrinho ou checkout.",
+    "- Use esta memoria para continuar no WhatsApp sem recomeçar do zero.",
+    "- Se mencionar algo da loja, faca de forma natural, como vendedor atento. Nunca diga que rastreou, monitorou, leu cookie, banco ou sistema.",
+    context.latestSessionAt ? `- Ultima atividade conhecida na loja: ${context.latestSessionAt}.` : null,
+    ...sessionLines,
+    ...messageLines,
+  ].filter((line): line is string => Boolean(line));
+}
+
+function formatCommerceSurfaceLabel(value: string) {
+  if (value === "checkout") return "checkout";
+  if (value === "product") return "produto";
+  if (value === "cart") return "carrinho";
+  if (value === "store") return "loja";
+  return value;
 }
 
 type RegisteredClientProfileRow = {

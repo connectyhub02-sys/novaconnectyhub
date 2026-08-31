@@ -16,6 +16,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import { resolveLeadTrackingContext } from "@/lib/tracking/lead-context";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadGeminiCredentials, normalizeGeminiModel, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { defaultWhatsappAgentPrompt, defaultWhatsappGlobalPrompt } from "@/lib/whatsapp/agent-behavior";
 import {
@@ -91,10 +92,18 @@ type WhatsappRow = {
 
 type CommerceSessionRow = {
   id: string;
+  lead_id?: string | null;
+  conversation_id?: string | null;
+  status?: string | null;
+  lead_name?: string | null;
+  lead_phone?: string | null;
+  metadata?: JsonRecord | null;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
 };
 
 type CommerceSessionContextRow = {
-  id: string;
+  id: string | null;
   lead_id: string | null;
   conversation_id: string | null;
   tracking_link_id: string | null;
@@ -103,6 +112,26 @@ type CommerceSessionContextRow = {
   lead_name: string | null;
   lead_phone: string | null;
   metadata: JsonRecord | null;
+  status?: string | null;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  restored_from_identity?: boolean;
+  identity_type?: string | null;
+  identity_value?: string | null;
+  identity_first_seen_at?: string | null;
+  identity_last_seen_at?: string | null;
+};
+
+type LeadWebIdentityContextRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  identity_type: string;
+  identity_value: string;
+  confidence: number | string | null;
+  metadata: JsonRecord | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
 };
 
 type CommerceAgentMessageRow = {
@@ -155,6 +184,8 @@ type CommerceAgentPromptContext = {
   whatsappMessages: WhatsappConversationMessageRow[];
   recentEvents: CommerceTrackingEventRow[];
   catalogProducts: OfferProduct[];
+  persistentMemory: string | null;
+  returningVisitor: boolean;
 };
 
 const geminiSafetySettings = [
@@ -204,6 +235,7 @@ export type CommerceAgentResolvedContext =
       agentAvatarUrl: string | null;
       agentAvatarAlt: string | null;
       whatsappHref: string | null;
+      returningVisitor: boolean;
     };
 
 export type CommerceAgentSessionPayload = {
@@ -233,6 +265,17 @@ export type CommerceAgentSessionPayload = {
   }>;
 };
 
+export class CommerceAgentBillingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CommerceAgentBillingError";
+  }
+}
+
+export function isCommerceAgentBillingError(error: unknown) {
+  return error instanceof BillingAccessError || error instanceof CommerceAgentBillingError;
+}
+
 export async function resolveCommerceAgentContext(body: CommerceAgentBody): Promise<CommerceAgentResolvedContext> {
   const organizationId = readUuid(body.organization_id);
   const trackingToken = readString(body.tracking_token);
@@ -253,6 +296,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     commerceSessionId: requestedCommerceSessionId,
     visitorId,
     sessionId,
+    trackingLinkId: requestedTrackingLinkId,
   }).catch(() => null);
   const hasValidTrackingToken = verifyOrganizationTrackingToken(organizationId, trackingToken);
   const hasValidCheckoutContext = hasValidTrackingToken
@@ -270,7 +314,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
         trackingLinkId: requestedTrackingLinkId,
       }).catch(() => false);
   const hasValidHydratedSessionContext = Boolean(
-    hydratedSession?.id
+    hydratedSession
       && (hydratedSession.lead_id || hydratedSession.conversation_id || hydratedSession.tracking_link_id || hydratedSession.order_id || hydratedSession.payment_session_id),
   );
 
@@ -296,6 +340,14 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   }
 
   const hydratedSessionMetadata = readRecord(hydratedSession?.metadata);
+  const hasExplicitLeadContext = Boolean(
+    readString(body.lead_id)
+      || readString(body.conversation_id)
+      || readString(body.lead_phone)
+      || requestedTrackingLinkId
+      || requestedOrderId
+      || requestedPaymentSessionId,
+  );
   const trackingLinkId = requestedTrackingLinkId ?? readUuid(hydratedSession?.tracking_link_id);
   const orderId = requestedOrderId ?? readUuid(hydratedSession?.order_id);
   const paymentSessionId = requestedPaymentSessionId ?? readUuid(hydratedSession?.payment_session_id);
@@ -310,7 +362,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     : null;
   const leadName = (lead
     ? resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata })
-    : null) ?? readString(hydratedSession?.lead_name);
+    : null) ?? readString(hydratedSession?.lead_name) ?? readString(hydratedSessionMetadata?.lead_name);
   const requestedAgentId = readUuid(body.agent_id)
     ?? readUuid(body.agentId)
     ?? readUuid(hydratedSessionMetadata?.agent_id);
@@ -370,6 +422,10 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     agentAvatarUrl,
     agentAvatarAlt: readString(agent?.avatar_alt) ?? agentName,
     whatsappHref,
+    returningVisitor: Boolean(
+      hydratedSession?.restored_from_identity
+        || (!hasExplicitLeadContext && (hydratedSession?.lead_id || hydratedSession?.conversation_id)),
+    ),
   } satisfies Extract<CommerceAgentResolvedContext, { ok: true }>;
 
   const commerceSessionId = await ensureCommerceSession(context).catch(() => context.commerceSessionId);
@@ -436,8 +492,11 @@ export async function persistCommerceAgentMessage(input: {
       metadata: {
         agent_id: input.context.agentId,
         agent_name: input.context.agentName,
+        visitor_cookie_id: input.context.visitorId,
+        session_cookie_id: input.context.sessionId,
         page_path: input.context.pagePath,
         page_url: input.context.pageUrl,
+        returning_visitor: input.context.returningVisitor,
       },
     })
     .select("id, role, content, created_at")
@@ -474,12 +533,15 @@ export async function recordCommerceAgentAction(input: {
     result_payload: input.resultPayload ?? {},
     reason: input.reason ?? null,
     applied_at: input.status === "applied" ? new Date().toISOString() : null,
-    metadata: {
-      agent_id: input.context.agentId,
-      agent_name: input.context.agentName,
-      page_path: input.context.pagePath,
-      page_url: input.context.pageUrl,
-    },
+      metadata: {
+        agent_id: input.context.agentId,
+        agent_name: input.context.agentName,
+        visitor_cookie_id: input.context.visitorId,
+        session_cookie_id: input.context.sessionId,
+        page_path: input.context.pagePath,
+        page_url: input.context.pageUrl,
+        returning_visitor: input.context.returningVisitor,
+      },
   });
 }
 
@@ -487,10 +549,16 @@ export async function buildCommerceAgentReply(input: {
   context: Extract<CommerceAgentResolvedContext, { ok: true }>;
   message: string;
 }) {
-  const generated = await generateCommerceAgentReply(input).catch(() => null);
+  try {
+    const generated = await generateCommerceAgentReply(input);
 
-  if (generated) {
-    return generated;
+    if (generated) {
+      return generated;
+    }
+  } catch (error) {
+    if (isCommerceAgentBillingError(error)) {
+      throw error;
+    }
   }
 
   return buildFallbackCommerceAgentReply(input);
@@ -501,6 +569,10 @@ async function generateCommerceAgentReply(input: {
   message: string;
 }) {
   const promptContext = await loadCommerceAgentPromptContext(input.context);
+  await assertBillableAccess({
+    client: input.context.client,
+    organizationId: input.context.organization.id,
+  });
   const credentials = await loadGeminiCredentials(input.context.client);
   const modelId = normalizeGeminiModel(input.context.agentModelId || credentials.model);
   const systemInstruction = buildCommerceAgentSystemInstruction(input.context, promptContext);
@@ -518,27 +590,37 @@ async function generateCommerceAgentReply(input: {
     throw new Error(blockReason ? `Gemini bloqueou a resposta: ${blockReason}.` : "Gemini nao retornou resposta.");
   }
 
-  await meterGeminiGenerationUsage({
-    client: input.context.client,
-    organizationId: input.context.organization.id,
-    featureCode: "chat_completion",
-    modelId,
-    agentId: input.context.agentId,
-    conversationId: input.context.conversationId,
-    leadId: input.context.leadId,
-    promptText: [systemInstruction, turnPrompt],
-    outputText: text,
-    responseData: data,
-    requestId: buildCommerceAgentRequestId(input.context, input.message),
-    debitDescription: "Atendimento do agente na loja",
-    metadata: {
-      source: "commerce_agent",
-      channel: "storefront",
-      surface: input.context.surface,
-      commerce_session_id: input.context.commerceSessionId,
-      tracking_link_id: input.context.trackingLinkId,
-    },
-  }).catch(() => null);
+  try {
+    await meterGeminiGenerationUsage({
+      client: input.context.client,
+      organizationId: input.context.organization.id,
+      featureCode: "chat_completion",
+      modelId,
+      agentId: input.context.agentId,
+      conversationId: input.context.conversationId,
+      leadId: input.context.leadId,
+      promptText: [systemInstruction, turnPrompt],
+      outputText: text,
+      responseData: data,
+      requestId: buildCommerceAgentRequestId(input.context, input.message),
+      debitDescription: "Atendimento do agente na loja",
+      metadata: {
+        source: "commerce_agent",
+        channel: "storefront",
+        billing_owner: "store_organization",
+        bill_to_organization_id: input.context.organization.id,
+        surface: input.context.surface,
+        commerce_session_id: input.context.commerceSessionId,
+        tracking_link_id: input.context.trackingLinkId,
+      },
+    });
+  } catch (error) {
+    throw new CommerceAgentBillingError(
+      error instanceof Error
+        ? error.message
+        : "Nao foi possivel contabilizar os creditos do atendimento na loja.",
+    );
+  }
 
   return text;
 }
@@ -625,10 +707,14 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
   const currentSession = context.commerceSessionId
     ? await loadCommerceSessionById(context.client, context.organization.id, context.commerceSessionId)
     : await findCommerceSession(context);
+  const sessionLeadId = context.leadId ?? currentSession?.lead_id ?? null;
+  const sessionConversationId = context.conversationId ?? currentSession?.conversation_id ?? null;
+  const sessionLeadName = context.leadName ?? currentSession?.lead_name ?? null;
+  const sessionLeadPhone = context.leadPhone ?? currentSession?.lead_phone ?? null;
   const payload = {
     organization_id: context.organization.id,
-    lead_id: context.leadId,
-    conversation_id: context.conversationId,
+    lead_id: sessionLeadId,
+    conversation_id: sessionConversationId,
     visitor_cookie_id: context.visitorId,
     session_cookie_id: context.sessionId,
     tracking_link_id: context.trackingLinkId,
@@ -638,14 +724,9 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
     current_url: context.pageUrl,
     current_path: context.pagePath,
     last_surface: context.surface,
-    lead_name: context.leadName,
-    lead_phone: context.leadPhone,
-    metadata: {
-      source: "commerce_agent_session",
-      agent_id: context.agentId,
-      agent_name: context.agentName,
-      product_id: context.productId,
-    },
+    lead_name: sessionLeadName,
+    lead_phone: sessionLeadPhone,
+    metadata: buildCommerceSessionMetadata(context, currentSession, now),
     last_seen_at: now,
   };
 
@@ -669,6 +750,66 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
   return data?.id ?? null;
 }
 
+function buildCommerceSessionMetadata(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  currentSession: CommerceSessionRow | null,
+  now: string,
+) {
+  const existing = readRecord(currentSession?.metadata) ?? {};
+  const journeyEntry = {
+    at: now,
+    surface: context.surface,
+    page_path: context.pagePath,
+    page_url: context.pageUrl,
+    product_id: context.productId,
+    order_id: context.orderId,
+    payment_session_id: context.paymentSessionId,
+  };
+
+  return {
+    ...existing,
+    source: "commerce_agent_session",
+    agent_id: context.agentId ?? readString(existing.agent_id),
+    agent_name: context.agentName || readString(existing.agent_name),
+    lead_name: context.leadName ?? readString(existing.lead_name),
+    lead_phone: context.leadPhone ?? readString(existing.lead_phone),
+    product_id: context.productId ?? readString(existing.product_id),
+    latest_product_id: context.productId ?? readString(existing.latest_product_id),
+    latest_surface: context.surface,
+    latest_page_path: context.pagePath,
+    latest_page_url: context.pageUrl,
+    returning_visitor: context.returningVisitor || existing.returning_visitor === true,
+    last_seen_at: now,
+    commerce_journey: appendCommerceJourney(existing.commerce_journey, journeyEntry),
+  };
+}
+
+function appendCommerceJourney(value: unknown, entry: JsonRecord) {
+  const current = Array.isArray(value)
+    ? value.filter((item): item is JsonRecord => Boolean(readRecord(item)))
+    : [];
+  const signature = [
+    readString(entry.surface),
+    readString(entry.page_path),
+    readString(entry.product_id),
+    readString(entry.order_id),
+    readString(entry.payment_session_id),
+  ].join(":");
+  const withoutDuplicate = current.filter((item) => {
+    const itemSignature = [
+      readString(item.surface),
+      readString(item.page_path),
+      readString(item.product_id),
+      readString(item.order_id),
+      readString(item.payment_session_id),
+    ].join(":");
+
+    return itemSignature !== signature;
+  });
+
+  return [...withoutDuplicate, entry].slice(-18);
+}
+
 async function upsertLeadWebIdentities(
   context: Extract<CommerceAgentResolvedContext, { ok: true }>,
   now: string,
@@ -683,24 +824,58 @@ async function upsertLeadWebIdentities(
     return;
   }
 
-  await context.client.from("lead_web_identities").upsert(
-    rows.map((row) => ({
-      organization_id: context.organization.id,
-      lead_id: context.leadId,
-      conversation_id: context.conversationId,
-      identity_type: row.identity_type,
-      identity_value: row.identity_value,
-      confidence: context.leadId ? 0.95 : 0.65,
-      last_seen_at: now,
-      metadata: {
-        source: "commerce_agent",
-        agent_id: context.agentId,
-        agent_name: context.agentName,
-        page_path: context.pagePath,
-      },
-    })),
-    { onConflict: "organization_id,identity_type,identity_value" },
-  );
+  await Promise.all(rows.map((row) => upsertLeadWebIdentity(context, row, now)));
+}
+
+async function upsertLeadWebIdentity(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  row: { identity_type: string; identity_value: string },
+  now: string,
+) {
+  const { data: existing } = await context.client
+    .from("lead_web_identities")
+    .select("id, lead_id, conversation_id, confidence, metadata, first_seen_at, last_seen_at")
+    .eq("organization_id", context.organization.id)
+    .eq("identity_type", row.identity_type)
+    .eq("identity_value", row.identity_value)
+    .maybeSingle<LeadWebIdentityContextRow>();
+  const existingMetadata = readRecord(existing?.metadata) ?? {};
+  const metadata = {
+    ...existingMetadata,
+    source: "commerce_agent",
+    agent_id: context.agentId ?? readString(existingMetadata.agent_id),
+    agent_name: context.agentName || readString(existingMetadata.agent_name),
+    lead_name: context.leadName ?? readString(existingMetadata.lead_name),
+    lead_phone: context.leadPhone ?? readString(existingMetadata.lead_phone),
+    latest_surface: context.surface,
+    latest_page_path: context.pagePath,
+    latest_page_url: context.pageUrl,
+    latest_product_id: context.productId ?? readString(existingMetadata.latest_product_id),
+    returning_visitor: context.returningVisitor || existingMetadata.returning_visitor === true,
+  };
+  const payload = {
+    organization_id: context.organization.id,
+    lead_id: context.leadId ?? existing?.lead_id ?? null,
+    conversation_id: context.conversationId ?? existing?.conversation_id ?? null,
+    identity_type: row.identity_type,
+    identity_value: row.identity_value,
+    confidence: context.leadId ? 0.95 : readNumber(existing?.confidence) ?? 0.65,
+    last_seen_at: now,
+    metadata,
+  };
+
+  if (existing?.id) {
+    await context.client
+      .from("lead_web_identities")
+      .update(payload)
+      .eq("id", existing.id);
+    return;
+  }
+
+  await context.client.from("lead_web_identities").insert({
+    ...payload,
+    first_seen_at: now,
+  });
 }
 
 async function loadCommerceAgentPromptContext(
@@ -716,6 +891,7 @@ async function loadCommerceAgentPromptContext(
     whatsappMessages,
     recentEvents,
     catalogProducts,
+    persistentMemory,
   ] = await Promise.all([
     loadCurrentProduct(context),
     resolveContextualOffer(context).catch(() => null),
@@ -724,6 +900,7 @@ async function loadCommerceAgentPromptContext(
     includeMessages ? loadWhatsappConversationMessages(context).catch(() => []) : Promise.resolve([]),
     loadRecentCommerceEvents(context).catch(() => []),
     loadCatalogProducts(context.client, context.organization.id).catch(() => []),
+    loadPersistentLeadCommerceMemory(context).catch(() => null),
   ]);
 
   return {
@@ -734,6 +911,8 @@ async function loadCommerceAgentPromptContext(
     whatsappMessages,
     recentEvents,
     catalogProducts,
+    persistentMemory,
+    returningVisitor: context.returningVisitor,
   };
 }
 
@@ -746,6 +925,8 @@ function emptyPromptContext(): CommerceAgentPromptContext {
     whatsappMessages: [],
     recentEvents: [],
     catalogProducts: [],
+    persistentMemory: null,
+    returningVisitor: false,
   };
 }
 
@@ -789,9 +970,12 @@ async function recordCommerceAgentPageContext(
       page_key: pageKey,
       agent_id: context.agentId,
       agent_name: context.agentName,
+      visitor_cookie_id: context.visitorId,
+      session_cookie_id: context.sessionId,
       page_path: context.pagePath,
       page_url: context.pageUrl,
       surface: context.surface,
+      returning_visitor: context.returningVisitor,
       product_id: context.productId,
       current_product_title: promptContext.currentProduct?.title ?? null,
       order_item_titles: promptContext.orderItems.map((item) => item.title).slice(0, 8),
@@ -841,7 +1025,7 @@ function buildPageContextMessage(
 async function loadCommerceSessionById(client: SupabaseClient, organizationId: string, sessionId: string) {
   const { data } = await client
     .from("commerce_sessions")
-    .select("id")
+    .select("id, lead_id, conversation_id, status, lead_name, lead_phone, metadata, first_seen_at, last_seen_at")
     .eq("id", sessionId)
     .eq("organization_id", organizationId)
     .maybeSingle<CommerceSessionRow>();
@@ -856,9 +1040,10 @@ async function findCommerceSessionContext(
     commerceSessionId: string | null;
     visitorId: string | null;
     sessionId: string | null;
+    trackingLinkId: string | null;
   },
 ) {
-  const select = "id, lead_id, conversation_id, tracking_link_id, order_id, payment_session_id, lead_name, lead_phone, metadata";
+  const select = "id, lead_id, conversation_id, tracking_link_id, order_id, payment_session_id, status, lead_name, lead_phone, metadata, first_seen_at, last_seen_at";
 
   if (input.commerceSessionId) {
     const { data } = await client
@@ -885,28 +1070,135 @@ async function findCommerceSessionContext(
     if (data) return data;
   }
 
-  if (!input.visitorId) {
+  if (input.visitorId) {
+    const { data } = await client
+      .from("commerce_sessions")
+      .select(select)
+      .eq("organization_id", organizationId)
+      .eq("visitor_cookie_id", input.visitorId)
+      .eq("status", "active")
+      .order("last_seen_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<CommerceSessionContextRow>();
+
+    if (data) return data;
+  }
+
+  const identity = await findLeadWebIdentityContext(client, organizationId, input);
+
+  if (!identity) {
     return null;
   }
 
+  const identityMetadata = readRecord(identity.metadata) ?? {};
+  const latestSession = await findLatestCommerceSessionByLeadIdentity(client, organizationId, identity, select);
+  const latestMetadata = readRecord(latestSession?.metadata) ?? {};
+  const metadata = {
+    ...identityMetadata,
+    ...latestMetadata,
+    restored_from_identity: true,
+    identity_type: identity.identity_type,
+    identity_value: identity.identity_value,
+    identity_first_seen_at: identity.first_seen_at,
+    identity_last_seen_at: identity.last_seen_at,
+  };
+
+  return {
+    id: latestSession?.status === "active" ? latestSession.id : null,
+    lead_id: latestSession?.lead_id ?? identity.lead_id,
+    conversation_id: latestSession?.conversation_id ?? identity.conversation_id,
+    tracking_link_id: latestSession?.tracking_link_id ?? null,
+    order_id: latestSession?.order_id ?? null,
+    payment_session_id: latestSession?.payment_session_id ?? null,
+    status: latestSession?.status ?? null,
+    lead_name: latestSession?.lead_name ?? readString(identityMetadata.lead_name),
+    lead_phone: latestSession?.lead_phone ?? readString(identityMetadata.lead_phone),
+    metadata,
+    first_seen_at: latestSession?.first_seen_at ?? null,
+    last_seen_at: latestSession?.last_seen_at ?? null,
+    restored_from_identity: true,
+    identity_type: identity.identity_type,
+    identity_value: identity.identity_value,
+    identity_first_seen_at: identity.first_seen_at,
+    identity_last_seen_at: identity.last_seen_at,
+  } satisfies CommerceSessionContextRow;
+}
+
+async function findLeadWebIdentityContext(
+  client: SupabaseClient,
+  organizationId: string,
+  input: {
+    visitorId: string | null;
+    sessionId: string | null;
+    trackingLinkId: string | null;
+  },
+) {
+  const identities = [
+    input.visitorId ? { identity_type: "visitor_cookie", identity_value: input.visitorId } : null,
+    input.sessionId ? { identity_type: "session_cookie", identity_value: input.sessionId } : null,
+    input.trackingLinkId ? { identity_type: "tracking_link", identity_value: input.trackingLinkId } : null,
+  ].filter((row): row is { identity_type: string; identity_value: string } => Boolean(row));
+
+  if (identities.length === 0) {
+    return null;
+  }
+
+  const filters = identities
+    .map((row) => `and(identity_type.eq.${row.identity_type},identity_value.eq.${escapeSupabaseOrValue(row.identity_value)})`)
+    .join(",");
   const { data } = await client
+    .from("lead_web_identities")
+    .select("id, lead_id, conversation_id, identity_type, identity_value, confidence, metadata, first_seen_at, last_seen_at")
+    .eq("organization_id", organizationId)
+    .or(filters)
+    .order("confidence", { ascending: false })
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<LeadWebIdentityContextRow>();
+
+  if (!data?.lead_id && !data?.conversation_id) {
+    return null;
+  }
+
+  return data;
+}
+
+async function findLatestCommerceSessionByLeadIdentity(
+  client: SupabaseClient,
+  organizationId: string,
+  identity: LeadWebIdentityContextRow,
+  select: string,
+) {
+  let query = client
     .from("commerce_sessions")
     .select(select)
     .eq("organization_id", organizationId)
-    .eq("visitor_cookie_id", input.visitorId)
-    .eq("status", "active")
     .order("last_seen_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<CommerceSessionContextRow>();
+    .limit(1);
 
+  if (identity.lead_id && identity.conversation_id) {
+    query = query.or(`lead_id.eq.${identity.lead_id},conversation_id.eq.${identity.conversation_id}`);
+  } else if (identity.lead_id) {
+    query = query.eq("lead_id", identity.lead_id);
+  } else if (identity.conversation_id) {
+    query = query.eq("conversation_id", identity.conversation_id);
+  } else {
+    return null;
+  }
+
+  const { data } = await query.maybeSingle<CommerceSessionContextRow>();
   return data ?? null;
+}
+
+function escapeSupabaseOrValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/\)/g, "\\)");
 }
 
 async function findCommerceSession(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   if (context.sessionId) {
     const { data } = await context.client
       .from("commerce_sessions")
-      .select("id")
+      .select("id, lead_id, conversation_id, status, lead_name, lead_phone, metadata, first_seen_at, last_seen_at")
       .eq("organization_id", context.organization.id)
       .eq("session_cookie_id", context.sessionId)
       .eq("status", "active")
@@ -923,7 +1215,7 @@ async function findCommerceSession(context: Extract<CommerceAgentResolvedContext
 
   const { data } = await context.client
     .from("commerce_sessions")
-    .select("id")
+    .select("id, lead_id, conversation_id, status, lead_name, lead_phone, metadata, first_seen_at, last_seen_at")
     .eq("organization_id", context.organization.id)
     .eq("visitor_cookie_id", context.visitorId)
     .eq("status", "active")
@@ -935,20 +1227,68 @@ async function findCommerceSession(context: Extract<CommerceAgentResolvedContext
 }
 
 async function loadRecentMessages(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
-  if (!context.commerceSessionId) {
+  if (!context.commerceSessionId && !context.leadId && !context.conversationId) {
     return [];
   }
 
-  const { data } = await context.client
+  const [sessionResult, leadResult] = await Promise.all([
+    context.commerceSessionId
+      ? context.client
+          .from("commerce_agent_messages")
+          .select("id, role, content, metadata, created_at")
+          .eq("organization_id", context.organization.id)
+          .eq("commerce_session_id", context.commerceSessionId)
+          .order("created_at", { ascending: false })
+          .limit(24)
+          .returns<CommerceAgentMessageRow[]>()
+      : Promise.resolve({ data: [] as CommerceAgentMessageRow[] }),
+    loadRecentLeadCommerceMessages(context),
+  ]);
+
+  return mergeRecentCommerceMessages([
+    ...(sessionResult.data ?? []),
+    ...(leadResult ?? []),
+  ]);
+}
+
+async function loadRecentLeadCommerceMessages(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
+  if (!context.leadId && !context.conversationId) {
+    return [];
+  }
+
+  let query = context.client
     .from("commerce_agent_messages")
     .select("id, role, content, metadata, created_at")
     .eq("organization_id", context.organization.id)
-    .eq("commerce_session_id", context.commerceSessionId)
     .order("created_at", { ascending: false })
-    .limit(24)
-    .returns<CommerceAgentMessageRow[]>();
+    .limit(18);
 
-  return (data ?? []).reverse();
+  if (context.leadId && context.conversationId) {
+    query = query.or(`lead_id.eq.${context.leadId},conversation_id.eq.${context.conversationId}`);
+  } else if (context.leadId) {
+    query = query.eq("lead_id", context.leadId);
+  } else if (context.conversationId) {
+    query = query.eq("conversation_id", context.conversationId);
+  }
+
+  const { data } = await query.returns<CommerceAgentMessageRow[]>();
+  return data ?? [];
+}
+
+function mergeRecentCommerceMessages(messages: CommerceAgentMessageRow[]) {
+  const seen = new Set<string>();
+
+  return messages
+    .filter((message) => {
+      if (seen.has(message.id)) {
+        return false;
+      }
+
+      seen.add(message.id);
+      return true;
+    })
+    .sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at))
+    .slice(-28);
 }
 
 async function loadLead(client: SupabaseClient, organizationId: string, leadId: string) {
@@ -995,6 +1335,96 @@ async function loadRecentCommerceEvents(context: Extract<CommerceAgentResolvedCo
     .returns<CommerceTrackingEventRow[]>();
 
   return (data ?? []).reverse();
+}
+
+async function loadPersistentLeadCommerceMemory(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
+  const lines: string[] = [];
+
+  if (context.returningVisitor) {
+    lines.push("- Lead reconhecido pelo navegador desta loja. Trate como retorno de atendimento, nao como primeira visita.");
+  }
+
+  if (context.leadName) {
+    lines.push(`- Nome do lead reconhecido: ${context.leadName}.`);
+  }
+
+  if (context.agentName) {
+    lines.push(`- Agente que deve continuar a relacao: ${context.agentName}.`);
+  }
+
+  const identity = await findLeadWebIdentityContext(context.client, context.organization.id, {
+    visitorId: context.visitorId,
+    sessionId: context.sessionId,
+    trackingLinkId: context.trackingLinkId,
+  }).catch(() => null);
+  const identityMetadata = readRecord(identity?.metadata) ?? {};
+  const latestProductId = readString(identityMetadata.latest_product_id);
+  const latestPagePath = readString(identityMetadata.latest_page_path);
+
+  if (identity?.first_seen_at) {
+    lines.push(`- Primeira identificacao deste navegador na loja: ${identity.first_seen_at}.`);
+  }
+
+  if (identity?.last_seen_at) {
+    lines.push(`- Ultimo retorno identificado: ${identity.last_seen_at}.`);
+  }
+
+  if (latestPagePath) {
+    lines.push(`- Ultima pagina lembrada: ${latestPagePath}.`);
+  }
+
+  if (latestProductId && latestProductId !== context.productId) {
+    const previousProduct = (await loadOfferProducts(context.client, context.organization.id, [latestProductId]).catch(() => []))[0];
+
+    if (previousProduct) {
+      lines.push(`- Produto visto anteriormente: ${previousProduct.title}${previousProduct.priceLabel ? ` (${previousProduct.priceLabel})` : ""}.`);
+    }
+  }
+
+  const sessions = await loadRecentCommerceSessionsForMemory(context).catch(() => []);
+  for (const session of sessions) {
+    const metadata = readRecord(session.metadata) ?? {};
+    const path = session.current_path ?? readString(metadata.latest_page_path);
+    const surface = session.last_surface ?? readString(metadata.latest_surface);
+    const productId = readString(metadata.latest_product_id) ?? readString(metadata.product_id);
+    lines.push([
+      "- Jornada recente",
+      surface ? `superficie ${formatSurfaceForPrompt(normalizeSurface(surface))}` : null,
+      path ? `pagina ${path}` : null,
+      productId ? `produto ${productId}` : null,
+      session.last_seen_at ? `em ${session.last_seen_at}` : null,
+    ].filter(Boolean).join(" | "));
+  }
+
+  return lines.length > 0 ? lines.slice(0, 12).join("\n") : null;
+}
+
+async function loadRecentCommerceSessionsForMemory(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
+  let query = context.client
+    .from("commerce_sessions")
+    .select("id, lead_id, conversation_id, status, current_path, last_surface, lead_name, lead_phone, metadata, first_seen_at, last_seen_at")
+    .eq("organization_id", context.organization.id)
+    .order("last_seen_at", { ascending: false })
+    .limit(4);
+
+  if (context.leadId && context.conversationId) {
+    query = query.or(`lead_id.eq.${context.leadId},conversation_id.eq.${context.conversationId}`);
+  } else if (context.leadId) {
+    query = query.eq("lead_id", context.leadId);
+  } else if (context.conversationId) {
+    query = query.eq("conversation_id", context.conversationId);
+  } else if (context.visitorId) {
+    query = query.eq("visitor_cookie_id", context.visitorId);
+  } else {
+    return [];
+  }
+
+  const { data } = await query.returns<Array<CommerceSessionRow & {
+    current_path: string | null;
+    last_surface: string | null;
+  }>>();
+
+  return data ?? [];
 }
 
 async function loadCurrentProduct(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
@@ -1295,6 +1725,7 @@ function buildCommerceAgentSystemInstruction(
     `- Voce e ${context.agentName}, o mesmo agente que atendeu este lead no WhatsApp.`,
     "- A conversa atual esta dentro da loja, produto, carrinho ou checkout. Continue o atendimento como continuidade real do WhatsApp.",
     "- Nao aja como robo de suporte e nao reinicie a conversa. Use o historico para responder como quem ja estava falando com a pessoa.",
+    "- Se o lead foi reconhecido pela memoria persistente, pode dar boas-vindas de volta de forma humana e curta.",
     "- Pode mencionar de forma leve que viu a pessoa abrir uma pagina ou produto, mas nunca soe invasivo ou tecnico.",
     "- Nao diga que esta monitorando, rastreando, analisando eventos, usando cookie, banco, sistema ou memoria.",
     "- Se o lead mudou de produto, conecte com a conversa anterior: compare, complemente ou pergunte uma coisa simples.",
@@ -1356,6 +1787,9 @@ function buildCommerceAgentTurnPrompt(
     context.pagePath ? `Pagina atual: ${context.pagePath}` : null,
     context.pageUrl ? `URL atual: ${context.pageUrl}` : null,
     "",
+    "MEMORIA PERSISTENTE DO LEAD NA CONNECTYHUB",
+    formatPersistentCommerceMemory(promptContext),
+    "",
     "HISTORICO RECENTE DO WHATSAPP",
     formatWhatsappHistory(promptContext.whatsappMessages),
     "",
@@ -1382,6 +1816,7 @@ function buildCommerceAgentTurnPrompt(
     "",
     "TAREFA",
     "Responda agora como o mesmo agente que vinha conversando no WhatsApp.",
+    "Se a memoria indicar que e retorno, trate como continuidade e nao como primeiro contato.",
     "Use o produto atual, o pedido atual e o historico para continuar a conversa sem parecer script.",
     "Se fizer sentido, sugira um complemento ou proximo passo. Se nao fizer, responda a duvida e reduza atrito.",
   ].filter((line): line is string => typeof line === "string").join("\n");
@@ -1393,6 +1828,10 @@ function buildWelcomeMessage(
 ) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
   const agentIntro = name ? `sou ${context.agentName} e ` : `Sou ${context.agentName} e `;
+
+  if (context.returningVisitor && context.surface === "store") {
+    return `${name}bem-vindo de volta. ${agentIntro}posso continuar de onde a gente parou ou te ajudar a escolher outra coisa.`;
+  }
 
   if (context.surface === "checkout") {
     const order = formatOrderItemsForSentence(promptContext.orderItems);
@@ -1423,6 +1862,14 @@ function buildWhisperMessage(
 ) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
 
+  if (context.returningVisitor && context.surface === "store") {
+    return `${name}bem-vindo de volta. ${context.agentName} lembrou de voce por aqui; clica na minha foto se quiser continuar.`;
+  }
+
+  if (context.returningVisitor && context.surface === "product" && promptContext.currentProduct) {
+    return `${name}bem-vindo de volta. Vi que voce abriu ${promptContext.currentProduct.title}; clica na minha foto que eu continuo contigo.`;
+  }
+
   if (context.surface === "product" && promptContext.currentProduct) {
     return `${name}vi que voce abriu ${promptContext.currentProduct.title}. Clica na minha foto que eu continuo contigo por aqui.`;
   }
@@ -1452,6 +1899,19 @@ function formatSurfaceForPrompt(surface: SalesCatalogCommerceAgentSurface | "unk
   if (surface === "cart") return "carrinho";
   if (surface === "store") return "home/catalogo da loja";
   return "loja";
+}
+
+function formatPersistentCommerceMemory(promptContext: CommerceAgentPromptContext) {
+  const lines = [
+    promptContext.returningVisitor
+      ? "- Este acesso parece ser de um lead que ja passou pela loja neste navegador."
+      : null,
+    promptContext.persistentMemory,
+  ].filter((line): line is string => Boolean(line));
+
+  return lines.length > 0
+    ? lines.join("\n")
+    : "- Sem memoria persistente adicional carregada para este lead.";
 }
 
 function formatWhatsappHistory(messages: WhatsappConversationMessageRow[]) {

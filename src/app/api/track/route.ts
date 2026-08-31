@@ -44,6 +44,27 @@ type TrackingBody = {
   metadata?: unknown;
 };
 
+type LeadWebIdentityTrackingRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  identity_type: string;
+  identity_value: string;
+  confidence: number | string | null;
+  metadata: JsonRecord | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+};
+
+type CommerceSessionTrackingRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  lead_name: string | null;
+  lead_phone: string | null;
+  metadata: JsonRecord | null;
+};
+
 export async function POST(request: NextRequest) {
   const guard = validatePublicWriteRequest({
     headers: request.headers,
@@ -79,7 +100,7 @@ export async function POST(request: NextRequest) {
   const requestedLeadId = readString(body.lead_id) ?? readString(metadata.lead_id) ?? readString(publicTracking.lead_id);
   const requestedConversationId = readString(body.conversation_id) ?? readString(metadata.conversation_id) ?? readString(publicTracking.conversation_id);
   const requestedLeadPhone = readString(body.lead_phone) ?? readString(metadata.lead_phone) ?? readString(publicTracking.lead_phone);
-  const agentId = readString(body.agent_id)
+  const requestedAgentId = readString(body.agent_id)
     ?? readString(body.agentId)
     ?? readString(metadata.agent_id)
     ?? readString(publicTracking.agent_id);
@@ -103,6 +124,15 @@ export async function POST(request: NextRequest) {
       authenticatedCanAccessOrganization,
       hasValidTrackingToken: verifyOrganizationTrackingToken(requestedOrganizationId, trackingToken),
     });
+    const restoredIdentity = organizationAttribution.organizationId
+      ? await findLeadWebIdentityForTracking(client, {
+          organizationId: organizationAttribution.organizationId,
+          visitorId,
+          sessionId,
+          trackingLinkId,
+        }).catch(() => null)
+      : null;
+    const restoredIdentityMetadata = readRecord(restoredIdentity?.metadata) ?? {};
     const scope = organizationAttribution.scope;
     const sourceType = scope === "organization"
       ? "client_marketing_tracking"
@@ -111,10 +141,13 @@ export async function POST(request: NextRequest) {
         : "platform_marketing_tracking";
     const leadContext = await resolveLeadTrackingContext(client, {
       organizationId: organizationAttribution.organizationId,
-      leadId: requestedLeadId,
-      conversationId: requestedConversationId,
-      leadPhone: requestedLeadPhone,
+      leadId: requestedLeadId ?? restoredIdentity?.lead_id,
+      conversationId: requestedConversationId ?? restoredIdentity?.conversation_id,
+      leadPhone: requestedLeadPhone ?? readString(restoredIdentityMetadata.lead_phone),
     });
+    const agentId = requestedAgentId
+      ?? readString(restoredIdentityMetadata.agent_id)
+      ?? readString(restoredIdentityMetadata.latest_agent_id);
     const pagePath = readString(metadata.page_path);
     const title = buildEventTitle(eventType, pagePath, sourceType);
     const summary = buildEventSummary(eventType, metadata, tracking);
@@ -431,6 +464,18 @@ async function syncCommerceTrackingContext(input: {
   const leadId = readUuid(input.leadId);
   const conversationId = readUuid(input.conversationId);
   const trackingLinkId = readUuid(input.trackingLinkId);
+  const restoredIdentity = await findLeadWebIdentityForTracking(input.client, {
+    organizationId,
+    visitorId: input.visitorId,
+    sessionId: input.sessionId,
+    trackingLinkId,
+  }).catch(() => null);
+  const restoredIdentityMetadata = readRecord(restoredIdentity?.metadata) ?? {};
+  const resolvedLeadId = leadId ?? restoredIdentity?.lead_id ?? null;
+  const resolvedConversationId = conversationId ?? restoredIdentity?.conversation_id ?? null;
+  const resolvedAgentId = readUuid(input.agentId)
+    ?? readUuid(readString(restoredIdentityMetadata.agent_id))
+    ?? readUuid(readString(restoredIdentityMetadata.latest_agent_id));
   const orderId = readUuid(input.orderId);
   const paymentSessionId = readUuid(input.paymentSessionId);
   const currentUrl = readString(input.metadata.page_url);
@@ -442,24 +487,22 @@ async function syncCommerceTrackingContext(input: {
   ].filter((row): row is { identity_type: string; identity_value: string } => Boolean(row?.identity_value));
 
   if (identityRows.length > 0) {
-    await input.client.from("lead_web_identities").upsert(
-      identityRows.map((row) => ({
-        organization_id: organizationId,
-        lead_id: leadId,
-        conversation_id: conversationId,
-        identity_type: row.identity_type,
-        identity_value: row.identity_value,
-        confidence: leadId ? 0.95 : 0.65,
-        last_seen_at: now,
-        metadata: {
-          latest_event_type: input.eventType,
-          latest_page_path: pagePath,
-          agent_id: input.agentId,
-          tracking_source: input.trackingSource,
-        },
-      })),
-      { onConflict: "organization_id,identity_type,identity_value" },
-    );
+    await Promise.all(identityRows.map((row) => upsertTrackingLeadWebIdentity(input.client, {
+      organizationId,
+      leadId: resolvedLeadId,
+      conversationId: resolvedConversationId,
+      identityType: row.identity_type,
+      identityValue: row.identity_value,
+      agentId: resolvedAgentId,
+      leadPhone: input.leadPhone ?? readString(restoredIdentityMetadata.lead_phone),
+      eventType: input.eventType,
+      pagePath,
+      currentUrl,
+      surface,
+      productId: input.productId,
+      trackingSource: input.trackingSource,
+      now,
+    })));
   }
 
   const existingSession = await findCommerceSession(input.client, {
@@ -469,8 +512,8 @@ async function syncCommerceTrackingContext(input: {
   });
   const sessionPayload = {
     organization_id: organizationId,
-    lead_id: leadId,
-    conversation_id: conversationId,
+    lead_id: resolvedLeadId ?? existingSession?.lead_id ?? null,
+    conversation_id: resolvedConversationId ?? existingSession?.conversation_id ?? null,
     visitor_cookie_id: input.visitorId,
     session_cookie_id: input.sessionId,
     tracking_link_id: trackingLinkId,
@@ -481,15 +524,21 @@ async function syncCommerceTrackingContext(input: {
     current_path: pagePath,
     referrer: input.referrer,
     last_surface: surface,
-    lead_phone: input.leadPhone,
+    lead_name: existingSession?.lead_name ?? readString(restoredIdentityMetadata.lead_name),
+    lead_phone: input.leadPhone ?? existingSession?.lead_phone ?? readString(restoredIdentityMetadata.lead_phone),
     metadata: {
+      ...(readRecord(existingSession?.metadata) ?? {}),
       latest_event_type: input.eventType,
       product_id: input.productId,
       catalog_item_id: input.catalogItemId,
-      agent_id: input.agentId,
+      agent_id: resolvedAgentId,
       tracking_source: input.trackingSource,
       commerce_context: readRecord(input.metadata.commerce_context),
       commerce_cart_snapshot: readRecord(input.metadata.commerce_cart_snapshot),
+      latest_surface: surface,
+      latest_page_path: pagePath,
+      latest_page_url: currentUrl,
+      returning_visitor: Boolean(restoredIdentity?.id),
     },
     last_seen_at: now,
   };
@@ -520,28 +569,134 @@ async function findCommerceSession(
   if (input.sessionId) {
     const { data } = await client
       .from("commerce_sessions")
-      .select("id")
+      .select("id, lead_id, conversation_id, lead_name, lead_phone, metadata")
       .eq("organization_id", input.organizationId)
       .eq("session_cookie_id", input.sessionId)
       .eq("status", "active")
       .order("last_seen_at", { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<CommerceSessionTrackingRow>();
 
     if (data) return data;
   }
 
   const { data } = await client
     .from("commerce_sessions")
-    .select("id")
+    .select("id, lead_id, conversation_id, lead_name, lead_phone, metadata")
     .eq("organization_id", input.organizationId)
     .eq("visitor_cookie_id", input.visitorId)
     .eq("status", "active")
     .order("last_seen_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<CommerceSessionTrackingRow>();
 
   return data ?? null;
+}
+
+async function findLeadWebIdentityForTracking(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    visitorId: string | null;
+    sessionId: string | null;
+    trackingLinkId: string | null;
+  },
+) {
+  const identities = [
+    input.visitorId ? { identity_type: "visitor_cookie", identity_value: input.visitorId } : null,
+    input.sessionId ? { identity_type: "session_cookie", identity_value: input.sessionId } : null,
+    input.trackingLinkId ? { identity_type: "tracking_link", identity_value: input.trackingLinkId } : null,
+  ].filter((row): row is { identity_type: string; identity_value: string } => Boolean(row));
+
+  if (identities.length === 0) {
+    return null;
+  }
+
+  const filters = identities
+    .map((row) => `and(identity_type.eq.${row.identity_type},identity_value.eq.${escapeSupabaseOrValue(row.identity_value)})`)
+    .join(",");
+  const { data } = await client
+    .from("lead_web_identities")
+    .select("id, lead_id, conversation_id, identity_type, identity_value, confidence, metadata, first_seen_at, last_seen_at")
+    .eq("organization_id", input.organizationId)
+    .or(filters)
+    .order("confidence", { ascending: false })
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<LeadWebIdentityTrackingRow>();
+
+  if (!data?.lead_id && !data?.conversation_id) {
+    return null;
+  }
+
+  return data;
+}
+
+async function upsertTrackingLeadWebIdentity(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    conversationId: string | null;
+    identityType: string;
+    identityValue: string;
+    agentId: string | null;
+    leadPhone: string | null;
+    eventType: string;
+    pagePath: string | null;
+    currentUrl: string | null;
+    surface: string;
+    productId: string | null;
+    trackingSource: string | null;
+    now: string;
+  },
+) {
+  const { data: existing } = await client
+    .from("lead_web_identities")
+    .select("id, lead_id, conversation_id, confidence, metadata, first_seen_at, last_seen_at")
+    .eq("organization_id", input.organizationId)
+    .eq("identity_type", input.identityType)
+    .eq("identity_value", input.identityValue)
+    .maybeSingle<LeadWebIdentityTrackingRow>();
+  const existingMetadata = readRecord(existing?.metadata) ?? {};
+  const payload = {
+    organization_id: input.organizationId,
+    lead_id: input.leadId ?? existing?.lead_id ?? null,
+    conversation_id: input.conversationId ?? existing?.conversation_id ?? null,
+    identity_type: input.identityType,
+    identity_value: input.identityValue,
+    confidence: input.leadId ? 0.95 : readNumber(existing?.confidence) ?? 0.65,
+    last_seen_at: input.now,
+    metadata: {
+      ...existingMetadata,
+      latest_event_type: input.eventType,
+      latest_page_path: input.pagePath,
+      latest_page_url: input.currentUrl,
+      latest_surface: input.surface,
+      latest_product_id: input.productId ?? readString(existingMetadata.latest_product_id),
+      agent_id: input.agentId ?? readString(existingMetadata.agent_id),
+      lead_phone: input.leadPhone ?? readString(existingMetadata.lead_phone),
+      tracking_source: input.trackingSource ?? readString(existingMetadata.tracking_source),
+      returning_visitor: Boolean(existing?.lead_id || existing?.conversation_id),
+    },
+  };
+
+  if (existing?.id) {
+    await client
+      .from("lead_web_identities")
+      .update(payload)
+      .eq("id", existing.id);
+    return;
+  }
+
+  await client.from("lead_web_identities").insert({
+    ...payload,
+    first_seen_at: input.now,
+  });
+}
+
+function escapeSupabaseOrValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/\)/g, "\\)");
 }
 
 function isCommerceActivity(eventType: string, pagePath: string | null) {
@@ -606,4 +761,17 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
