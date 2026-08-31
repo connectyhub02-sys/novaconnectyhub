@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const checkoutPageSource = readFileSync("src/app/checkout/[sessionId]/page.tsx", "utf8");
 const paymentSessionsSource = readFileSync("src/lib/sales-catalog/payment-sessions.ts", "utf8");
 const commerceAgentServerSource = readFileSync("src/lib/commerce-agent/server.ts", "utf8");
+const commerceAgentDockSource = readFileSync("src/components/commerce-agent/commerce-agent-dock.tsx", "utf8");
 
 function sourceBetween(source: string, start: string, end: string) {
   const startIndex = source.indexOf(start);
@@ -75,5 +76,16 @@ describe("Commerce Agent checkout continuity", () => {
     expect(trackedLinkValidator).toContain(".from(\"intelligence_memory\")");
     expect(trackedLinkValidator).toContain(".contains(\"tags\", [\"tracked_link_button\"])");
     expect(trackedLinkValidator).toContain("input.trackingLinkId");
+  });
+
+  it("uses the WhatsApp agent photo and keeps the minimized dock as a circular avatar", () => {
+    expect(commerceAgentServerSource).toContain("readWhatsappInstanceProfileImageUrl(whatsappInstance?.metadata)");
+    expect(commerceAgentServerSource).toContain(".select(\"phone_number, metadata\")");
+
+    expect(commerceAgentDockSource).toContain("aria-live=\"polite\"");
+    expect(commerceAgentDockSource).toContain("size=\"coin\"");
+    expect(commerceAgentDockSource).toContain("rounded-full");
+    expect(commerceAgentServerSource).toContain("estou aqui. Se precisar de ajuda, clica na minha foto");
+    expect(commerceAgentDockSource).not.toContain("import { Bot");
   });
 });

@@ -14,6 +14,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import { resolveLeadTrackingContext } from "@/lib/tracking/lead-context";
+import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 
 type JsonRecord = Record<string, unknown>;
@@ -74,6 +75,7 @@ type AgentRow = {
 
 type WhatsappRow = {
   phone_number: string | null;
+  metadata: JsonRecord | null;
 };
 
 type CommerceSessionRow = {
@@ -221,13 +223,19 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   }
 
   const agentName = readString(agent?.persona_name) ?? readString(agent?.name) ?? "Agente ConnectyHub";
-  const whatsappHref = await loadWhatsappHref(client, {
-    organizationId: organization.id,
+  const agentWhatsappInstance = await loadAgentWhatsappInstance(client, organization.id, agent?.id ?? null);
+  const fallbackWhatsappInstance = agentWhatsappInstance
+    ? null
+    : await loadFallbackWhatsappInstance(client, organization.id);
+  const whatsappInstance = agentWhatsappInstance ?? fallbackWhatsappInstance;
+  const whatsappHref = buildWhatsappHref({
     organizationName: organization.name,
-    agentId: agent?.id ?? null,
+    instance: whatsappInstance,
     agentName,
     leadName,
   });
+  const agentAvatarUrl = readWhatsappInstanceProfileImageUrl(whatsappInstance?.metadata)
+    ?? readString(agent?.avatar_url);
   const context = {
     ok: true,
     client,
@@ -250,7 +258,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     pageUrl: readString(body.page_url),
     agentId: agent?.id ?? null,
     agentName,
-    agentAvatarUrl: readString(agent?.avatar_url),
+    agentAvatarUrl,
     agentAvatarAlt: readString(agent?.avatar_alt) ?? agentName,
     whatsappHref,
   } satisfies Extract<CommerceAgentResolvedContext, { ok: true }>;
@@ -612,19 +620,13 @@ async function loadCommerceAgent(client: SupabaseClient, organizationId: string,
   return data ?? null;
 }
 
-async function loadWhatsappHref(
-  client: SupabaseClient,
-  input: {
-    organizationId: string;
+function buildWhatsappHref(input: {
     organizationName: string;
-    agentId: string | null;
+    instance: WhatsappRow | null;
     agentName: string;
     leadName: string | null;
-  },
-) {
-  const instance = await loadAgentWhatsappInstance(client, input.organizationId, input.agentId)
-    ?? await loadFallbackWhatsappInstance(client, input.organizationId);
-  const phone = normalizePhone(instance?.phone_number ?? null);
+}) {
+  const phone = normalizePhone(input.instance?.phone_number ?? null);
 
   if (!phone) {
     return null;
@@ -647,7 +649,7 @@ async function loadAgentWhatsappInstance(
 
   const { data } = await client
     .from("whatsapp_instances")
-    .select("phone_number")
+    .select("phone_number, metadata")
     .eq("organization_id", organizationId)
     .eq("status", "connected")
     .not("phone_number", "is", null)
@@ -662,7 +664,7 @@ async function loadAgentWhatsappInstance(
 async function loadFallbackWhatsappInstance(client: SupabaseClient, organizationId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("phone_number")
+    .select("phone_number, metadata")
     .eq("organization_id", organizationId)
     .eq("status", "connected")
     .not("phone_number", "is", null)
@@ -786,19 +788,7 @@ function buildWelcomeMessage(context: Extract<CommerceAgentResolvedContext, { ok
 function buildWhisperMessage(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
 
-  if (context.surface === "checkout") {
-    return `${name}${context.agentName} esta aqui se precisar de ajuda para concluir.`;
-  }
-
-  if (context.surface === "product") {
-    return `${name}${context.agentName} continuou contigo nesse produto.`;
-  }
-
-  if (context.surface === "cart") {
-    return `${name}${context.agentName} pode revisar seu pedido antes do checkout.`;
-  }
-
-  return `${name}${context.agentName} continuou contigo na loja.`;
+  return `${name}estou aqui. Se precisar de ajuda, clica na minha foto que eu continuo por aqui.`;
 }
 
 function buildQuickActions(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
