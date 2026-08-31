@@ -50,7 +50,8 @@ export function setCookie(name: string, value: string, days = cookieDays) {
 
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}`;
+  const domain = getSharedCookieDomain();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${secure}${domain}`;
 }
 
 export function deleteCookie(name: string) {
@@ -59,6 +60,12 @@ export function deleteCookie(name: string) {
   }
 
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+
+  const domain = getSharedCookieDomain();
+
+  if (domain) {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax${domain}`;
+  }
 }
 
 export function isTrackingDisabled() {
@@ -205,4 +212,16 @@ function createTrackingId(prefix: string) {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
   return `${prefix}_${id}`;
+}
+
+function getSharedCookieDomain() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const hostname = window.location.hostname.toLowerCase();
+
+  return hostname === "connectyhub.com.br" || hostname.endsWith(".connectyhub.com.br")
+    ? "; Domain=.connectyhub.com.br"
+    : "";
 }
