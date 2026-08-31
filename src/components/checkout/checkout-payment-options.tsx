@@ -21,6 +21,7 @@ type CheckoutPaymentOptionsProps = {
   pixQrCode: string | null;
   pixQrCodeBase64: string | null;
   pixTicketUrl: string | null;
+  paymentProviderLabel: string;
   organizationName: string;
   orderCode: string;
   items: CheckoutPaymentFeedbackItem[];
@@ -49,6 +50,7 @@ export function CheckoutPaymentOptions({
   pixQrCode,
   pixQrCodeBase64,
   pixTicketUrl,
+  paymentProviderLabel,
   organizationName,
   orderCode,
   items,
@@ -233,6 +235,7 @@ export function CheckoutPaymentOptions({
           pixQrCode={pixQrCode}
           pixQrCodeBase64={pixQrCodeBase64}
           pixTicketUrl={pixTicketUrl}
+          paymentProviderLabel={paymentProviderLabel}
         />
       )}
       <CheckoutPaymentFeedbackModal
@@ -409,10 +412,12 @@ function PixPaymentPanel({
   pixQrCode,
   pixQrCodeBase64,
   pixTicketUrl,
+  paymentProviderLabel,
 }: {
   pixQrCode: string | null;
   pixQrCodeBase64: string | null;
   pixTicketUrl: string | null;
+  paymentProviderLabel: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -440,6 +445,11 @@ function PixPaymentPanel({
             unoptimized
             className="h-[220px] w-[220px]"
           />
+        </div>
+      ) : pixQrCode ? (
+        <div className="rounded-[8px] border border-blue-100 bg-blue-50 p-4">
+          <p className="font-bold text-slate-950">Pix pronto</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Use o codigo copia e cola abaixo para pagar no app do seu banco.</p>
         </div>
       ) : (
         <div className="rounded-[8px] border border-blue-100 bg-blue-50 p-4">
@@ -487,7 +497,7 @@ function PixPaymentPanel({
             color: "var(--store-button-text, #ffffff)",
           }}
         >
-          Abrir pagamento no Mercado Pago
+          Abrir pagamento no {paymentProviderLabel}
         </a>
       ) : null}
     </div>

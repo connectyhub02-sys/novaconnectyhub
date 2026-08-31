@@ -33,7 +33,7 @@ export function AdminClientIntegrationsConsole({ overview }: { overview: AdminCl
     <CompanyCell key={`${company.id}-company`} company={company} filters={overview.filters} />,
     providerCell(company, "meta-ads"),
     providerCell(company, "google-growth"),
-    providerCell(company, "mercado-pago"),
+    providerCell(company, "pagbank"),
     providerCell(company, "webhook-universal"),
     <span key={`${company.id}-last`} className="font-mono text-[11px] text-slate-400">
       {formatDateTime(company.lastActivityAt)}
@@ -100,7 +100,7 @@ export function AdminClientIntegrationsConsole({ overview }: { overview: AdminCl
       <Panel title="Clientes e conexoes" eyebrow="controle visual" tone="violet">
         {overview.companies.length > 0 ? (
           <DataTable
-            columns={["Cliente", "Meta Ads", "Google Ads", "Mercado Pago", "Webhook", "Ultima atividade", "Pendencia"]}
+            columns={["Cliente", "Meta Ads", "Google Ads", "PagBank", "Webhook", "Ultima atividade", "Pendencia"]}
             rows={rows}
           />
         ) : (

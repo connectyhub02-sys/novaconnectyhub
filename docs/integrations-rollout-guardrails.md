@@ -1,15 +1,14 @@
 # Central de Integracoes - Guardrails de rollout
 
-## Fase 0 - Mercado Pago protegido
+## Fase 0 - Mercado Pago em standby
 
-O Mercado Pago ja possui um fluxo funcional no catalogo de vendas. A Central de Integracoes deve reaproveitar esse estado e direcionar o usuario para o fluxo existente, sem recriar ou alterar a cobranca nesta primeira etapa.
+O Mercado Pago ja possui codigo funcional no catalogo de vendas, mas a conexao fica oculta no painel do cliente enquanto a conta/aplicativo oficial nao estiver liberada. O codigo deve continuar preservado para reativacao futura, sem remover rotas, helpers, webhooks ou historico de sessoes existentes.
 
 Pontos protegidos:
 
 - `src/components/connectyhub-os/sales-catalog-console.tsx`
-  - UI atual de conexao, reconexao e desconexao do Mercado Pago.
-  - Mensagens de status do usuario.
-  - Fluxo de checkout Pix/cartao dentro do catalogo.
+  - Mensagens antigas de retorno OAuth do Mercado Pago.
+  - Fluxo de checkout Pix/cartao em sessoes Mercado Pago ja criadas.
 - `src/app/api/dashboard/sales-catalog/route.ts`
   - Acao de inicio OAuth do Mercado Pago.
   - Salvamento de webhook secret.
@@ -27,20 +26,40 @@ Pontos protegidos:
 
 Regra de implementacao:
 
-1. A Central de Integracoes pode ler `sales_catalog_payment_integrations` para mostrar status.
-2. A Central de Integracoes pode apontar o usuario para `/dashboard/links`, onde o fluxo atual vive.
-3. A Central de Integracoes nao deve duplicar tokens, callbacks ou webhooks do Mercado Pago.
-4. Qualquer mudanca futura no Mercado Pago precisa validar: OAuth, callback, webhook, geracao de checkout/Pix, atualizacao de pedido e exibicao de status no painel.
+1. Nao deletar codigo Mercado Pago.
+2. Nao exibir Mercado Pago como opcao principal para clientes durante o rollout PagBank.
+3. Manter compatibilidade com sessoes antigas `provider = mercado_pago`.
+4. Qualquer reativacao futura precisa validar: OAuth, callback, webhook, geracao de checkout/Pix, cartao, atualizacao de pedido e exibicao de status no painel.
 
-## Fase 1 - Central sem risco
+## Fase 1 - PagBank principal
+
+O PagBank passa a ser o gateway principal para pagamentos recebidos pelos clientes da ConnectyHub.
+
+Fluxo do cliente:
+
+1. O painel mostra um unico botao: Conectar PagBank.
+2. O botao abre a URL de afiliado configurada em `PAGBANK_AFFILIATE_CONNECT_URL`.
+3. Quem ja tem conta segue para login/autorizacao PagBank; quem nao tem conta segue para cadastro pelo mesmo caminho.
+4. Apos autorizar, o PagBank retorna para `/api/dashboard/sales-catalog/payments/pagbank/callback`.
+5. A ConnectyHub troca o `code` por `access_token` e `refresh_token`, salva a conexao e libera Pix no checkout.
+
+Pontos obrigatorios:
+
+- `PAGBANK_CLIENT_ID`, `PAGBANK_CLIENT_SECRET` e `PAGBANK_CONNECT_TOKEN` precisam estar no cofre/env.
+- `PAGBANK_REDIRECT_URI` deve bater com o app PagBank.
+- `PAGBANK_WEBHOOK_TOKEN` deve ser configurado antes da producao.
+- O checkout de venda do cliente deve usar `provider = pagbank`.
+- Pagamentos de billing/produtos da propria ConnectyHub podem continuar usando Mercado Pago enquanto nao forem migrados.
+
+## Fase 2 - Central sem risco
 
 A primeira versao da Central deve nascer como uma camada transversal:
 
-- Mostrar status do Mercado Pago sem alterar sua integracao.
+- Mostrar status do PagBank como pagamento principal.
 - Exibir Meta/Google em modo acompanhamento planejado.
 - Exibir E-commerce, Agenda, Envios e Webhook Universal como blocos de produto.
 - Usar SQL novo somente para o modelo base e Webhook Universal.
 
-## Fase 2 - Modelo base
+## Fase 3 - Modelo base
 
 O modelo novo fica separado das tabelas de pagamento atuais. Isso evita que a evolucao de Meta, Google, E-commerce, Agenda, Frete e Webhook Universal quebre o checkout ja entregue.

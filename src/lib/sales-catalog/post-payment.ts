@@ -85,7 +85,7 @@ export async function handleSalesCatalogApprovedPayment(input: {
   paymentSessionId: string;
   providerPaymentId: string | null;
   paymentMethodLabel: string;
-  source: "mercado_pago_webhook" | "checkout_card";
+  source: "mercado_pago_webhook" | "pagbank_webhook" | "checkout_card";
 }) {
   const order = await loadOrder(input.client, input.organizationId, input.orderId);
   if (!order) {

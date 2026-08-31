@@ -83,10 +83,11 @@ export async function POST(
       summary: `Checkout ${sourceSession.id.slice(0, 8)} atualizado com ${orderBumpApplication.appliedBumps.length} oferta(s).`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "payment", "mercado_pago", "pix", "order_bump"],
+      tags: ["sales_catalog", "payment", result.session.provider === "pagbank" ? "pagbank" : "mercado_pago", "pix", "order_bump"],
       payload: {
         source_payment_session_id: sourceSession.id,
         new_payment_session_id: result.session.id,
+        payment_gateway: result.session.provider,
         order_id: sourceSession.order_id,
         selected_order_bump_product_ids: selectedOrderBumpIds,
         applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),

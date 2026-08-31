@@ -893,8 +893,16 @@ export function SalesCatalogConsole({
     const timeoutId = window.setTimeout(() => {
       setActiveTab("payments");
 
+      if (payment === "pagbank_connected") {
+        setNotice({ tone: "success", message: "PagBank conectado. O agente ja pode cobrar por Pix no checkout." });
+      }
+
+      if (payment === "pagbank_error") {
+        setNotice({ tone: "error", message: getPagBankConnectionErrorMessage(reason) });
+      }
+
       if (payment === "mercado_pago_connected") {
-        setNotice({ tone: "success", message: "Mercado Pago conectado. O agente ja pode cobrar por Pix e cartao no checkout." });
+        setNotice({ tone: "success", message: "Mercado Pago conectado. O fluxo esta preservado para reativacao futura." });
       }
 
       if (payment === "mercado_pago_error") {
@@ -1396,7 +1404,7 @@ export function SalesCatalogConsole({
       setPaymentSessions((current) => [data.session!, ...current.filter((session) => session.id !== data.session!.id)]);
       setOrders((current) => current.map((entry) => (
         entry.id === order.id
-          ? { ...entry, latestPaymentSessionId: data.session!.id, paymentMethod: "Pix Mercado Pago", paymentStatus: "pending", status: "pending_payment" }
+          ? { ...entry, latestPaymentSessionId: data.session!.id, paymentMethod: data.session!.provider === "pagbank" ? "Pix PagBank" : "Pix Mercado Pago", paymentStatus: "pending", status: "pending_payment" }
           : entry
       )));
       setNotice({ tone: "success", message: "Pix gerado. O link de checkout ja pode ser enviado no WhatsApp." });
@@ -8000,6 +8008,30 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   }
 
   return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
+}
+
+function getPagBankConnectionErrorMessage(reason: string | null) {
+  if (reason === "config") {
+    return "PagBank ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, conecte pela secao Integracoes.";
+  }
+
+  if (reason === "invalid_oauth_credentials") {
+    return "As credenciais do aplicativo PagBank da ConnectyHub nao foram aceitas. Confira Client ID, Client Secret e token do app no PagBank.";
+  }
+
+  if (reason === "missing_company") {
+    return "Escolha uma empresa antes de conectar o PagBank.";
+  }
+
+  if (reason === "invalid_state") {
+    return "Nao conseguimos validar o retorno do PagBank. Tente conectar novamente.";
+  }
+
+  if (reason === "token_exchange") {
+    return "PagBank retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
+  }
+
+  return "Nao foi possivel abrir a conexao com PagBank agora. Tente novamente ou chame o suporte.";
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {

@@ -791,6 +791,19 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       return NextResponse.json(result);
     }
 
+    if (action === "disconnect_pagbank") {
+      const result = await disconnectPagBankIntegration({
+        client,
+        companyId,
+        userId: workspace.user.id,
+      });
+
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/integracoes");
+
+      return NextResponse.json(result);
+    }
+
     if (action === "create_payment_session") {
       const result = await createPaymentSession({
         client,
@@ -1467,6 +1480,45 @@ async function disconnectMercadoPagoIntegration(input: {
 
   if (!data) {
     throw new Error("Nenhuma conexao Mercado Pago encontrada para esta empresa.");
+  }
+
+  return { integration: mapSalesCatalogPaymentIntegration(data) };
+}
+
+async function disconnectPagBankIntegration(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const { data, error } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .update({
+      status: "disabled",
+      access_token_encrypted: null,
+      refresh_token_encrypted: null,
+      token_expires_at: null,
+      last_error: null,
+      metadata: {
+        disconnected_by: input.userId,
+        disconnected_at: new Date().toISOString(),
+      },
+    })
+    .eq("organization_id", company.id)
+    .eq("provider", "pagbank")
+    .select(salesCatalogPaymentIntegrationSelect)
+    .maybeSingle<SalesCatalogPaymentIntegrationRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel desconectar PagBank: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Nenhuma conexao PagBank encontrada para esta empresa.");
   }
 
   return { integration: mapSalesCatalogPaymentIntegration(data) };

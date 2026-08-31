@@ -13,7 +13,7 @@ type AdminIntegrationAction = "admin_alert_acknowledged" | "admin_retest_request
 const providerIds = new Set<AdminClientIntegrationProviderId>([
   "meta-ads",
   "google-growth",
-  "mercado-pago",
+  "pagbank",
   "webhook-universal",
 ]);
 

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/service";
 
-const providerIds = ["meta-ads", "google-growth", "mercado-pago", "webhook-universal"] as const;
+const providerIds = ["meta-ads", "google-growth", "pagbank", "webhook-universal"] as const;
 
 export type AdminClientIntegrationProviderId = (typeof providerIds)[number];
 export type AdminClientIntegrationStatus = "connected" | "warning" | "error" | "not_configured";
@@ -214,14 +214,14 @@ type QueryResult<T> = {
 const providerLabels: Record<AdminClientIntegrationProviderId, string> = {
   "meta-ads": "Meta Ads",
   "google-growth": "Google Ads",
-  "mercado-pago": "Mercado Pago",
+  "pagbank": "PagBank",
   "webhook-universal": "Webhook Universal",
 };
 
 const providerCustomerRoutes: Record<AdminClientIntegrationProviderId, { href: string; label: string }> = {
   "meta-ads": { href: "/dashboard/integracoes", label: "Rota do cliente" },
   "google-growth": { href: "/dashboard/integracoes", label: "Rota do cliente" },
-  "mercado-pago": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+  "pagbank": { href: "/dashboard/integracoes", label: "Rota do cliente" },
   "webhook-universal": { href: "/dashboard/integracoes", label: "Rota do cliente" },
 };
 
@@ -509,7 +509,7 @@ async function loadPaymentIntegrations(
     .from("sales_catalog_payment_integrations")
     .select("id, organization_id, provider, status, account_label, provider_account_id, connected_at, last_error, webhook_url, created_at, updated_at")
     .in("organization_id", organizationIds)
-    .eq("provider", "mercado_pago");
+    .eq("provider", "pagbank");
 
   if (error) {
     return { ready: false, rows: [], error: `sales_catalog_payment_integrations: ${error.message}` };
@@ -557,8 +557,8 @@ function buildProviderStatus({
     return buildGoogleStatus(integrations, credentials);
   }
 
-  if (providerId === "mercado-pago") {
-    return buildMercadoPagoStatus(payments);
+  if (providerId === "pagbank") {
+    return buildPagBankStatus(payments);
   }
 
   return buildWebhookStatus(integrations, webhooks);
@@ -679,7 +679,7 @@ function buildGoogleStatus(integrations: OrganizationIntegrationRow[], credentia
   return providerStatus("google-growth", "not_configured", null, "Sem OAuth ou credenciais Google.", null, selection);
 }
 
-function buildMercadoPagoStatus(payments: PaymentIntegrationRow[]): AdminClientProviderStatus {
+function buildPagBankStatus(payments: PaymentIntegrationRow[]): AdminClientProviderStatus {
   const payment = latestPayment(payments);
   const account = payment?.account_label ?? payment?.provider_account_id ?? null;
   const lastActivityAt = mostRecentDate([
@@ -689,20 +689,20 @@ function buildMercadoPagoStatus(payments: PaymentIntegrationRow[]): AdminClientP
   ]);
 
   if (payment?.last_error || payment?.status === "error") {
-    return providerStatus("mercado-pago", "error", account, payment.last_error ?? "Mercado Pago retornou erro.", lastActivityAt);
+    return providerStatus("pagbank", "error", account, payment.last_error ?? "PagBank retornou erro.", lastActivityAt);
   }
 
   if (payment?.status === "connected") {
-    const detail = payment.webhook_url ? "Conta e webhook mapeados." : "Conta conectada. Webhook pendente.";
+    const detail = payment.webhook_url ? "Conta PagBank e webhook mapeados." : "Conta PagBank conectada. Webhook pendente.";
     const status = payment.webhook_url ? "connected" : "warning";
-    return providerStatus("mercado-pago", status, account, detail, lastActivityAt);
+    return providerStatus("pagbank", status, account, detail, lastActivityAt);
   }
 
   if (payment) {
-    return providerStatus("mercado-pago", "warning", account, `Status atual: ${payment.status ?? "pendente"}.`, lastActivityAt);
+    return providerStatus("pagbank", "warning", account, `Status atual: ${payment.status ?? "pendente"}.`, lastActivityAt);
   }
 
-  return providerStatus("mercado-pago", "not_configured", null, "Sem conta Mercado Pago conectada.");
+  return providerStatus("pagbank", "not_configured", null, "Sem conta PagBank conectada.");
 }
 
 function buildWebhookStatus(integrations: OrganizationIntegrationRow[], webhooks: WebhookEndpointRow[]): AdminClientProviderStatus {
@@ -1085,7 +1085,7 @@ function normalizeProviderId(
     if (isProviderId(candidate)) return candidate;
     if (candidate === "meta") return "meta-ads";
     if (candidate === "google-ads" || candidate === "google") return "google-growth";
-    if (candidate === "mercado_pago") return "mercado-pago";
+    if (candidate === "pagbank" || candidate === "pag_bank") return "pagbank";
     if (candidate === "webhook") return "webhook-universal";
   }
 

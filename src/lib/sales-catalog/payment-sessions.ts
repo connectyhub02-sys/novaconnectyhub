@@ -19,12 +19,22 @@ import {
   normalizeCurrencyAmount,
 } from "./mercado-pago";
 import {
+  buildPagBankWebhookUrl,
+  createPagBankPixOrder,
+  ensurePagBankAccessToken,
+  extractPagBankPixData,
+} from "./pagbank";
+import {
   buildTrackedLinkUrl,
   createTrackedLinkSlug,
   createTrackedLinkTag,
 } from "@/lib/tracking/tracked-links";
 
 type JsonRecord = Record<string, unknown>;
+type PaymentGatewayProvider = "mercado_pago" | "pagbank";
+type PaymentGatewayIntegration =
+  | Awaited<ReturnType<typeof ensureMercadoPagoAccessToken>>
+  | Awaited<ReturnType<typeof ensurePagBankAccessToken>>;
 
 type OrderRow = {
   id: string;
@@ -112,7 +122,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
     orderId: order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
-  let integration: Awaited<ReturnType<typeof ensureMercadoPagoAccessToken>> | null = null;
+  const paymentProvider = resolvePaymentGatewayProvider(connectyHubOwned);
+  const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
+  const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
+  const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, "pix");
+  let integration: PaymentGatewayIntegration | null = null;
   let platformBilling: Awaited<ReturnType<typeof loadMercadoPagoPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
 
@@ -120,7 +134,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
     if (connectyHubOwned) {
       platformBilling = await loadMercadoPagoPlatformBillingConfig({ client: input.client });
     } else {
-      integration = await ensureMercadoPagoAccessToken({
+      integration = await ensurePagBankAccessToken({
         client: input.client,
         organizationId: input.organizationId,
       });
@@ -128,11 +142,13 @@ export async function createSalesCatalogPixPaymentSession(input: {
   } catch (error) {
     providerSetupError = error instanceof Error
       ? error.message
-      : "Nao foi possivel preparar o Mercado Pago para este checkout.";
+      : `Nao foi possivel preparar o ${paymentProviderLabel} para este checkout.`;
   }
 
   const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
-  const missingAccessTokenMessage = "Nao foi possivel localizar a conta Mercado Pago para este pagamento.";
+  const missingAccessTokenMessage = connectyHubOwned
+    ? "Nao foi possivel localizar a conta Mercado Pago da ConnectyHub para este pagamento."
+    : "Nao foi possivel localizar a conta PagBank para este pagamento.";
 
   const sessionId = randomUUID();
   const idempotencyKey = randomUUID();
@@ -163,7 +179,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       organization_id: input.organizationId,
       order_id: order.id,
       integration_id: integration?.id ?? null,
-      provider: "mercado_pago",
+      provider: paymentProvider,
       method: "pix",
       status: accessToken ? "created" : "error",
       amount,
@@ -189,6 +205,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
         agent_id: agentId,
         order_item_count: items.length,
         payment_owner: paymentOwner.owner,
+        payment_gateway: paymentProvider,
+        payment_gateway_label: paymentProviderLabel,
+        payment_gateway_mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
         commission_eligible: paymentOwner.commissionEligible,
@@ -236,6 +255,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
           checkoutTracking,
           paymentOwner,
           connectyHubOwned,
+          paymentProvider,
           gatewayAvailable: false,
           gatewayError: failureReason,
         }),
@@ -258,6 +278,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       checkoutTracking,
       paymentOwner,
       connectyHubOwned,
+      paymentProvider,
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       failureReason,
@@ -273,7 +294,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       summary: failureReason,
       confidence: 0.86,
       visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "checkout", "lead_tracking"],
+      tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "lead_tracking"],
       payload: {
         order_id: order.id,
         payment_session_id: sessionId,
@@ -289,6 +310,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         lead_phone: order.customer_phone,
         source: input.source,
         gateway_error: failureReason,
+        payment_gateway: paymentProvider,
         payment_owner: paymentOwner.owner,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
@@ -312,20 +334,43 @@ export async function createSalesCatalogPixPaymentSession(input: {
   }
 
   try {
-    const pix = await createMercadoPagoPixPayment({
-      accessToken,
-      amount,
-      description,
-      externalReference,
-      payerEmail,
-      payerName: order.customer_name,
-      payerDocument: order.customer_document,
-      payerZipCode: order.destination_cep,
-      notificationUrl: buildMercadoPagoWebhookUrl(),
-      idempotencyKey,
-      additionalInfo,
-    });
-    const pixData = extractMercadoPagoPixData(pix.payment);
+    const pixData = paymentProvider === "pagbank"
+      ? extractPagBankPixData((await createPagBankPixOrder({
+          accessToken,
+          mode: getPaymentIntegrationMode(integration),
+          amount,
+          description,
+          externalReference,
+          payerEmail,
+          payerName: order.customer_name,
+          payerDocument: order.customer_document,
+          payerPhone: order.customer_phone,
+          notificationUrl: buildPagBankWebhookUrl(),
+          idempotencyKey,
+          items: items.map((item) => ({
+            id: item.id,
+            title: item.title,
+            skuCode: item.sku_code,
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            salePrice: item.sale_price,
+            total: item.total,
+          })),
+        })).order)
+      : extractMercadoPagoPixData((await createMercadoPagoPixPayment({
+          accessToken,
+          amount,
+          description,
+          externalReference,
+          payerEmail,
+          payerName: order.customer_name,
+          payerDocument: order.customer_document,
+          payerZipCode: order.destination_cep,
+          notificationUrl: buildMercadoPagoWebhookUrl(),
+          idempotencyKey,
+          additionalInfo,
+        })).payment);
+    const providerMetadata = buildProviderPaymentMetadata(paymentProvider, pixData);
     const { data: updated, error: updateError } = await input.client
       .from("sales_catalog_payment_sessions")
       .update({
@@ -342,13 +387,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
           checkoutTracking,
           paymentOwner,
           connectyHubOwned,
+          paymentProvider,
           gatewayAvailable: true,
           providerPaymentId: pixData.providerPaymentId,
           providerStatus: pixData.providerStatus,
-          extra: {
-          mercado_pago_payment_id: pixData.providerPaymentId,
-          mercado_pago_status: pixData.providerStatus,
-          },
+          extra: providerMetadata,
         }),
       })
       .eq("id", sessionId)
@@ -369,6 +412,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       checkoutTracking,
       paymentOwner,
       connectyHubOwned,
+      paymentProvider,
       paymentStatus: pixData.status === "approved" ? "confirmed" : "pending",
       orderStatus: pixData.status === "approved" ? "paid" : "pending_payment",
       providerPaymentId: pixData.providerPaymentId,
@@ -380,15 +424,16 @@ export async function createSalesCatalogPixPaymentSession(input: {
       source_type: "sales_catalog_payment_session",
       source_id: sessionId,
       event_type: "sales_catalog.payment_session_created",
-      title: "Pix Mercado Pago gerado",
+      title: `${paymentMethodLabel} gerado`,
       summary: `Sessao de pagamento criada para pedido ${order.id.slice(0, 8)}.`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "whatsapp_agent", "lead_tracking"],
+      tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "whatsapp_agent", "lead_tracking"],
       payload: {
         order_id: order.id,
         payment_session_id: sessionId,
         provider_payment_id: pixData.providerPaymentId,
+        payment_gateway: paymentProvider,
         checkout_url: checkoutUrl,
         tracking_url: checkoutTracking?.trackingUrl ?? null,
         tracking_link_id: checkoutTracking?.id ?? null,
@@ -421,7 +466,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentDeferredReason: null,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro ao gerar Pix Mercado Pago.";
+    const message = error instanceof Error ? error.message : `Erro ao gerar ${paymentMethodLabel}.`;
 
     const { data: failed } = await input.client
       .from("sales_catalog_payment_sessions")
@@ -434,6 +479,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
           checkoutTracking,
           paymentOwner,
           connectyHubOwned,
+          paymentProvider,
           gatewayAvailable: false,
           gatewayError: message,
         }),
@@ -452,6 +498,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       checkoutTracking,
       paymentOwner,
       connectyHubOwned,
+      paymentProvider,
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       failureReason: message,
@@ -467,7 +514,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       summary: message,
       confidence: 0.82,
       visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "checkout", "lead_tracking"],
+      tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "lead_tracking"],
       payload: {
         order_id: order.id,
         payment_session_id: sessionId,
@@ -483,6 +530,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         lead_phone: order.customer_phone,
         source: input.source,
         gateway_error: message,
+        payment_gateway: paymentProvider,
         payment_owner: paymentOwner.owner,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
@@ -525,6 +573,9 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     orderId: input.order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
+  const paymentProvider = resolvePaymentGatewayProvider(connectyHubOwned);
+  const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
+  const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const sessionId = randomUUID();
   const idempotencyKey = randomUUID();
   const externalReference = `sales_catalog_order:${input.order.id}:${sessionId}`;
@@ -541,7 +592,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
       organization_id: input.organizationId,
       order_id: input.order.id,
       integration_id: null,
-      provider: "mercado_pago",
+      provider: paymentProvider,
       method: "pix",
       status: "created",
       amount: input.amount,
@@ -567,6 +618,8 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
         agent_id: agentId,
         order_item_count: input.items.length,
         payment_owner: paymentOwner.owner,
+        payment_gateway: paymentProvider,
+        payment_gateway_label: paymentProviderLabel,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
         commission_eligible: paymentOwner.commissionEligible,
@@ -610,6 +663,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
         checkoutTracking,
         paymentOwner,
         connectyHubOwned,
+        paymentProvider,
         gatewayAvailable: true,
         providerStatus: "payment_deferred",
         extra: {
@@ -637,6 +691,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     checkoutTracking,
     paymentOwner,
     connectyHubOwned,
+    paymentProvider,
     paymentStatus: "pending",
     orderStatus: "pending_payment",
     paymentMethod: "Checkout pendente",
@@ -653,7 +708,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     summary: "Pagamento adiado ate confirmar frete, retirada ou entrega.",
     confidence: 0.92,
     visibility: "organization",
-    tags: ["sales_catalog", "sales_catalog_order", "payment", "checkout", "shipping", "lead_tracking"],
+    tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "shipping", "lead_tracking"],
     payload: {
       order_id: input.order.id,
       payment_session_id: sessionId,
@@ -669,6 +724,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
       lead_phone: input.order.customer_phone,
       source: input.source,
       payment_deferred_reason: input.reason,
+      payment_gateway: paymentProvider,
       payment_owner: paymentOwner.owner,
       commercial_flow_type: paymentOwner.commercialFlowType,
       revenue_owner_type: paymentOwner.revenueOwnerType,
@@ -700,6 +756,7 @@ async function persistCheckoutOrderReference(input: {
   checkoutTracking: Awaited<ReturnType<typeof createPaymentSessionTrackedLink>> | null;
   paymentOwner: Awaited<ReturnType<typeof resolveSalesCatalogOrderPaymentOwner>>;
   connectyHubOwned: boolean;
+  paymentProvider: PaymentGatewayProvider;
   paymentStatus: "pending" | "confirmed";
   orderStatus: "pending_payment" | "paid";
   paymentMethod?: string;
@@ -711,7 +768,7 @@ async function persistCheckoutOrderReference(input: {
     .from("sales_catalog_orders")
     .update({
       latest_payment_session_id: input.sessionId,
-      payment_method: input.paymentMethod ?? "Pix Mercado Pago",
+      payment_method: input.paymentMethod ?? formatPaymentMethodLabel(input.paymentProvider, "pix"),
       payment_status: input.paymentStatus,
       status: input.orderStatus,
       metadata: {
@@ -723,7 +780,7 @@ async function persistCheckoutOrderReference(input: {
         latest_checkout_tracking_link_id: input.checkoutTracking?.id ?? null,
         latest_checkout_tracking_tag: input.checkoutTracking?.tag ?? null,
         latest_payment_session_id: input.sessionId,
-        latest_payment_provider: "mercado_pago",
+        latest_payment_provider: input.paymentProvider,
         latest_payment_method: "pix",
         latest_provider_payment_id: input.providerPaymentId ?? null,
         latest_payment_failure_reason: input.failureReason ?? null,
@@ -749,6 +806,7 @@ function buildPaymentSessionMetadata(input: {
   checkoutTracking: Awaited<ReturnType<typeof createPaymentSessionTrackedLink>> | null;
   paymentOwner: Awaited<ReturnType<typeof resolveSalesCatalogOrderPaymentOwner>>;
   connectyHubOwned: boolean;
+  paymentProvider: PaymentGatewayProvider;
   gatewayAvailable: boolean;
   gatewayError?: string | null;
   providerPaymentId?: string | null;
@@ -764,6 +822,8 @@ function buildPaymentSessionMetadata(input: {
     gateway_error: input.gatewayError ?? null,
     provider_payment_id: input.providerPaymentId ?? null,
     provider_status: input.providerStatus ?? null,
+    payment_gateway: input.paymentProvider,
+    payment_gateway_label: formatPaymentGatewayProviderLabel(input.paymentProvider),
     payment_owner: input.paymentOwner.owner,
     commercial_flow_type: input.paymentOwner.commercialFlowType,
     revenue_owner_type: input.paymentOwner.revenueOwnerType,
@@ -773,6 +833,52 @@ function buildPaymentSessionMetadata(input: {
     platform_product_ids: input.paymentOwner.platformProductIds,
     platform_catalog_item_ids: input.paymentOwner.catalogItemIds,
     ...(input.extra ?? {}),
+  };
+}
+
+function resolvePaymentGatewayProvider(connectyHubOwned: boolean): PaymentGatewayProvider {
+  return connectyHubOwned ? "mercado_pago" : "pagbank";
+}
+
+function formatPaymentGatewayProviderLabel(provider: PaymentGatewayProvider) {
+  return provider === "pagbank" ? "PagBank" : "Mercado Pago";
+}
+
+function formatPaymentGatewayProviderTag(provider: PaymentGatewayProvider) {
+  return provider === "pagbank" ? "pagbank" : "mercado_pago";
+}
+
+function formatPaymentMethodLabel(provider: PaymentGatewayProvider, method: "pix" | "card") {
+  const paymentLabel = method === "card" ? "Cartao" : "Pix";
+
+  return `${paymentLabel} ${formatPaymentGatewayProviderLabel(provider)}`;
+}
+
+function getPaymentIntegrationMode(integration: PaymentGatewayIntegration | null) {
+  return integration && "mode" in integration ? integration.mode : null;
+}
+
+function buildProviderPaymentMetadata(
+  provider: PaymentGatewayProvider,
+  pixData: ReturnType<typeof extractMercadoPagoPixData> | ReturnType<typeof extractPagBankPixData>,
+): JsonRecord {
+  if (provider === "pagbank") {
+    const providerOrderId = "providerOrderId" in pixData ? pixData.providerOrderId : null;
+    const pixQrCodePngUrl = "pixQrCodePngUrl" in pixData ? pixData.pixQrCodePngUrl : null;
+    const pixQrCodeBase64Url = "pixQrCodeBase64Url" in pixData ? pixData.pixQrCodeBase64Url : null;
+
+    return {
+      pagbank_order_id: providerOrderId,
+      pagbank_charge_id: pixData.providerPaymentId,
+      pagbank_status: pixData.providerStatus,
+      pagbank_qrcode_png_url: pixQrCodePngUrl,
+      pagbank_qrcode_base64_url: pixQrCodeBase64Url,
+    };
+  }
+
+  return {
+    mercado_pago_payment_id: pixData.providerPaymentId,
+    mercado_pago_status: pixData.providerStatus,
   };
 }
 

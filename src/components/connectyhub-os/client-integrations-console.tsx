@@ -402,8 +402,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
   const [webhookEndpoints, setWebhookEndpoints] = useState(state.webhookEndpoints);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
-  const [connectingMercadoPago, setConnectingMercadoPago] = useState(false);
-  const [disconnectingMercadoPago, setDisconnectingMercadoPago] = useState(false);
+  const [connectingPagBank, setConnectingPagBank] = useState(false);
+  const [disconnectingPagBank, setDisconnectingPagBank] = useState(false);
   const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
@@ -453,8 +453,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
     return map;
   }, [credentialSnapshots]);
-  const mercadoPagoConnection = connectionByProvider.get("mercado-pago");
-  const mercadoPagoConnected = mercadoPagoConnection?.status === "connected";
+  const pagBankConnection = connectionByProvider.get("pagbank");
+  const pagBankConnected = pagBankConnection?.status === "connected";
   const metaConnection = connectionByProvider.get("meta-ads");
   const googleConnection = connectionByProvider.get("google-growth");
   const webhookConnection = connectionByProvider.get("webhook-universal");
@@ -489,15 +489,15 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
     const reason = params.get("reason");
     const timeoutId = window.setTimeout(() => {
-      if (payment === "mercado_pago_connected") {
+      if (payment === "pagbank_connected") {
         setNotice({
           tone: "success",
-          message: "Mercado Pago conectado. Agora esta empresa pode receber Pix e cartao no Catalogo de Vendas.",
+          message: "PagBank conectado. Agora esta empresa pode receber Pix no Catalogo de Vendas.",
         });
       }
 
-      if (payment === "mercado_pago_error") {
-        setNotice({ tone: "error", message: getMercadoPagoConnectionErrorMessage(reason) });
+      if (payment === "pagbank_error") {
+        setNotice({ tone: "error", message: getPagBankConnectionErrorMessage(reason) });
       }
 
       if (integration === "meta_connected" || integration === "google_connected") {
@@ -681,18 +681,18 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
-  function handleMercadoPagoConnectClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (!selectedCompanyId || connectingMercadoPago) {
+  function handlePagBankConnectClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!selectedCompanyId || connectingPagBank) {
       event.preventDefault();
       if (!selectedCompanyId) {
-        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o Mercado Pago." });
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o PagBank." });
       }
       return;
     }
 
-    setConnectingMercadoPago(true);
-    setNotice({ tone: "warning", message: "Abrindo Mercado Pago em uma nova aba para login e autorizacao..." });
-    window.setTimeout(() => setConnectingMercadoPago(false), 1500);
+    setConnectingPagBank(true);
+    setNotice({ tone: "warning", message: "Abrindo PagBank para cadastro, login e autorizacao..." });
+    window.setTimeout(() => setConnectingPagBank(false), 1500);
   }
 
   function handleGuidedOAuthConnectClick(providerId: "meta-ads" | "google-growth", event: MouseEvent<HTMLAnchorElement>) {
@@ -1253,10 +1253,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
-  async function disconnectMercadoPago() {
-    if (!selectedCompanyId || disconnectingMercadoPago) return;
+  async function disconnectPagBank() {
+    if (!selectedCompanyId || disconnectingPagBank) return;
 
-    setDisconnectingMercadoPago(true);
+    setDisconnectingPagBank(true);
     setNotice(null);
 
     try {
@@ -1264,25 +1264,25 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "disconnect_mercado_pago",
+          action: "disconnect_pagbank",
           companyId: selectedCompanyId,
         }),
       });
       const data = await response.json().catch(() => null) as { error?: string } | null;
 
       if (!response.ok) {
-        throw new Error(data?.error ?? "Nao foi possivel desconectar Mercado Pago.");
+        throw new Error(data?.error ?? "Nao foi possivel desconectar PagBank.");
       }
 
       setConnections((current) => {
-        const existing = current.find((connection) => connection.companyId === selectedCompanyId && connection.providerId === "mercado-pago");
+        const existing = current.find((connection) => connection.companyId === selectedCompanyId && connection.providerId === "pagbank");
         const nextConnection: ClientIntegrationConnection = {
-          providerId: "mercado-pago",
+          providerId: "pagbank",
           companyId: selectedCompanyId,
           companyName: selectedCompany?.name ?? existing?.companyName ?? "Empresa",
           status: "disabled",
           label: "Desativado",
-          detail: "Mercado Pago desconectado desta empresa.",
+          detail: "PagBank desconectado desta empresa.",
           accountLabel: null,
           lastSyncAt: new Date().toISOString(),
           lastError: null,
@@ -1292,14 +1292,14 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
         return [
           nextConnection,
-          ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "mercado-pago")),
+          ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "pagbank")),
         ];
       });
-      setNotice({ tone: "success", message: "Mercado Pago desconectado desta empresa." });
+      setNotice({ tone: "success", message: "PagBank desconectado desta empresa." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar Mercado Pago." });
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar PagBank." });
     } finally {
-      setDisconnectingMercadoPago(false);
+      setDisconnectingPagBank(false);
     }
   }
 
@@ -1365,22 +1365,22 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Mercado Pago e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
+          A Central organiza as conexoes por empresa. PagBank e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
         </div>
       </div>
 
       {state.companies.length > 0 ? (
         <div className="mb-5 grid gap-3 xl:grid-cols-2">
-          <MercadoPagoGuidedCard
-            accountLabel={mercadoPagoConnection?.accountLabel ?? null}
-            connected={mercadoPagoConnected}
-            connecting={connectingMercadoPago}
-            disconnecting={disconnectingMercadoPago}
-            lastError={mercadoPagoConnection?.lastError ?? null}
+          <PagBankGuidedCard
+            accountLabel={pagBankConnection?.accountLabel ?? null}
+            connected={pagBankConnected}
+            connecting={connectingPagBank}
+            disconnecting={disconnectingPagBank}
+            lastError={pagBankConnection?.lastError ?? null}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
-            onConnect={handleMercadoPagoConnectClick}
-            onDisconnect={disconnectMercadoPago}
+            onConnect={handlePagBankConnectClick}
+            onDisconnect={disconnectPagBank}
           />
 
           {metaFeatureLaunchPaused ? (
@@ -1891,7 +1891,7 @@ function MetaIntegrationComingSoonCard() {
   );
 }
 
-function MercadoPagoGuidedCard({
+function PagBankGuidedCard({
   accountLabel,
   connected,
   connecting,
@@ -1913,13 +1913,13 @@ function MercadoPagoGuidedCard({
   onDisconnect: () => void;
 }) {
   return (
-    <section id="mercado-pago-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+    <section id="pagbank-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
-          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Mercado Pago</h2>
+          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">PagBank</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">
-            O cliente conecta pela autorizacao oficial do Mercado Pago. A ConnectyHub nao pede token manual, senha, callback ou webhook.
+            O cliente usa um unico botao da ConnectyHub para abrir PagBank, criar conta ou fazer login, e autorizar o recebimento sem informar token manual.
           </p>
         </div>
         <WalletCards className="h-5 w-5 shrink-0 text-emerald-300" />
@@ -1927,15 +1927,15 @@ function MercadoPagoGuidedCard({
 
       <div className="mt-4 grid gap-2 sm:grid-cols-4">
         <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
-        <PaymentGuideStep done={connected} index="2" title="Autorizar" body="Aba oficial" />
+        <PaymentGuideStep done={connected} index="2" title="PagBank" body="Cadastro ou login" />
         <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
-        <PaymentGuideStep done={connected} index="4" title="Checkout" body="Pix e cartao" />
+        <PaymentGuideStep done={connected} index="4" title="Checkout" body="Pix ativo" />
       </div>
 
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-100">Conta Mercado Pago</p>
+            <p className="text-[13px] font-semibold text-slate-100">Conta PagBank</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
           </div>
           <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
@@ -1949,7 +1949,7 @@ function MercadoPagoGuidedCard({
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <a
-            href={buildMercadoPagoConnectUrl(selectedCompanyId)}
+            href={buildPagBankConnectUrl(selectedCompanyId)}
             target="_blank"
             rel="noopener noreferrer"
             aria-disabled={!selectedCompanyId || connecting}
@@ -1960,7 +1960,7 @@ function MercadoPagoGuidedCard({
             )}
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            {connected ? "Reconectar no Mercado Pago" : "Conectar com Mercado Pago"}
+            {connected ? "Reconectar PagBank" : "Conectar PagBank"}
           </a>
           <button
             type="button"
@@ -1975,7 +1975,7 @@ function MercadoPagoGuidedCard({
         </div>
 
         <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
-          Se o usuario ja estiver logado, ele so confirma a autorizacao. Se nao estiver, o login acontece no proprio Mercado Pago.
+          O link pode passar pela afiliacao da ConnectyHub antes da autorizacao. Quem ja tem conta entra direto; quem nao tem segue o cadastro no PagBank.
         </p>
       </div>
     </section>
@@ -3196,7 +3196,7 @@ function upsertWebhookConnection(
   ];
 }
 
-function buildMercadoPagoConnectUrl(companyId: string) {
+function buildPagBankConnectUrl(companyId: string) {
   if (!companyId) return "#";
 
   const params = new URLSearchParams({
@@ -3204,7 +3204,7 @@ function buildMercadoPagoConnectUrl(companyId: string) {
     returnTo: "integrations",
   });
 
-  return `/api/dashboard/sales-catalog/payments/mercado-pago/connect?${params.toString()}`;
+  return `/api/dashboard/sales-catalog/payments/pagbank/connect?${params.toString()}`;
 }
 
 function buildGuidedOAuthConnectUrl(kind: "meta" | "google", companyId: string) {
@@ -3428,7 +3428,7 @@ function buildGuidedReadinessText(
 }
 
 function isTopGuidedProvider(providerId: string) {
-  return providerId === "meta-ads" || providerId === "google-growth" || providerId === "webhook-universal";
+  return providerId === "pagbank" || providerId === "meta-ads" || providerId === "google-growth" || providerId === "webhook-universal";
 }
 
 function guidedSelectionKey(companyId: string, providerId: string) {
@@ -3473,28 +3473,28 @@ function getGuidedOAuthErrorMessage(integration: string, reason: string | null) 
   return `Nao foi possivel concluir a conexao com ${provider}. Tente novamente ou chame o suporte.`;
 }
 
-function getMercadoPagoConnectionErrorMessage(reason: string | null) {
+function getPagBankConnectionErrorMessage(reason: string | null) {
   if (reason === "config") {
-    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre a autorizacao oficial.";
+    return "PagBank ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre o cadastro/login e a autorizacao oficial.";
   }
 
   if (reason === "invalid_oauth_credentials") {
-    return "As credenciais do aplicativo Mercado Pago da ConnectyHub nao foram aceitas. Confira se o Client ID e o App ID do aplicativo, nao o e-mail da conta, e tente novamente.";
+    return "As credenciais do aplicativo PagBank da ConnectyHub nao foram aceitas. Confira Client ID, Client Secret e token do app no PagBank.";
   }
 
   if (reason === "missing_company") {
-    return "Escolha uma empresa antes de conectar o Mercado Pago.";
+    return "Escolha uma empresa antes de conectar o PagBank.";
   }
 
   if (reason === "invalid_state") {
-    return "Nao conseguimos validar o retorno do Mercado Pago. Tente conectar novamente.";
+    return "Nao conseguimos validar o retorno do PagBank. Tente conectar novamente.";
   }
 
   if (reason === "token_exchange") {
-    return "Mercado Pago retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
+    return "PagBank retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
   }
 
-  return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
+  return "Nao foi possivel abrir a conexao com PagBank agora. Tente novamente ou chame o suporte.";
 }
 
 function copyText(value: string) {

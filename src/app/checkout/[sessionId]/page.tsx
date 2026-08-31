@@ -204,7 +204,9 @@ export default async function CheckoutPage({
   const shipping = formatCurrency(order.shipping_total);
   const updatedAt = formatDateTime(session.updated_at);
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
+  const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const canUseCard = session.method !== "card"
+    && session.provider === "mercado_pago"
     && !shippingBlocked
     && !paid
     && !failed
@@ -254,7 +256,11 @@ export default async function CheckoutPage({
   });
 
   return (
-    <CheckoutShell publicTrackingContext={publicTrackingContext} style={publicLayoutStyle}>
+    <CheckoutShell
+      publicTrackingContext={publicTrackingContext}
+      style={publicLayoutStyle}
+      loadMercadoPagoSecurity={session.provider === "mercado_pago" && canUseCard}
+    >
       <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
         Checkout seguro da {branding.displayName}.{" "}
         <a className="font-bold underline underline-offset-2" href={publicStoreUrl}>
@@ -332,7 +338,7 @@ export default async function CheckoutPage({
         <aside className="order-2 rounded-[20px] border border-black/10 bg-white p-4 shadow-2xl shadow-black/10 sm:p-6 lg:sticky lg:top-28 lg:order-none lg:row-span-3 lg:self-start">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Mercado Pago</span>
+              <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{paymentProviderLabel}</span>
               <h2 className="mt-2 text-2xl font-black text-[color:var(--store-text)]">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-[#128C4A]">
@@ -382,6 +388,7 @@ export default async function CheckoutPage({
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}
+              paymentProviderLabel={paymentProviderLabel}
               organizationName={branding.displayName}
               orderCode={order.id.slice(0, 8).toUpperCase()}
               items={items.map((item) => ({
@@ -443,17 +450,24 @@ export default async function CheckoutPage({
           </dl>
         </section>
       </main>
-      <PublicStoreFooter branding={branding} footerContactText={storefront.footerContactText} footerText={storefront.footerText} />
+      <PublicStoreFooter
+        branding={branding}
+        footerContactText={storefront.footerContactText}
+        footerText={storefront.footerText}
+        paymentProviderLabel={paymentProviderLabel}
+      />
     </CheckoutShell>
   );
 }
 
 function CheckoutShell({
   children,
+  loadMercadoPagoSecurity = false,
   publicTrackingContext,
   style,
 }: {
   children: ReactNode;
+  loadMercadoPagoSecurity?: boolean;
   publicTrackingContext?: ConnectyPublicTrackingContext | null;
   style?: CSSProperties;
 }) {
@@ -470,12 +484,14 @@ function CheckoutShell({
           <PublicTrackingContextBridge context={publicTrackingContext} />
         </>
       ) : null}
-      <Script
-        id="mercado-pago-security"
-        src="https://www.mercadopago.com/v2/security.js"
-        strategy="afterInteractive"
-        {...mercadoPagoSecurityScriptAttributes}
-      />
+      {loadMercadoPagoSecurity ? (
+        <Script
+          id="mercado-pago-security"
+          src="https://www.mercadopago.com/v2/security.js"
+          strategy="afterInteractive"
+          {...mercadoPagoSecurityScriptAttributes}
+        />
+      ) : null}
       <div className="relative">{children}</div>
     </div>
   );
@@ -913,6 +929,10 @@ async function loadCheckoutIntegration(client: ReturnType<typeof createServiceCl
     return null;
   }
 
+  if (session.provider !== "mercado_pago") {
+    return null;
+  }
+
   try {
     const billing = await loadMercadoPagoPlatformBillingConfig({ client });
 
@@ -941,6 +961,10 @@ function normalizePaymentSessionStatus(value: string | null) {
   }
 
   return "created";
+}
+
+function formatCheckoutPaymentProviderLabel(provider: string | null) {
+  return provider === "pagbank" ? "PagBank" : "Mercado Pago";
 }
 
 function formatCurrency(value: string | number | null | undefined) {
@@ -1114,10 +1138,12 @@ function PublicStoreFooter({
   branding,
   footerContactText,
   footerText,
+  paymentProviderLabel,
 }: {
   branding: OrganizationBranding;
   footerContactText: string;
   footerText: string;
+  paymentProviderLabel: string;
 }) {
   return (
     <footer className="mt-12 bg-[#f0f0f0]">
@@ -1137,7 +1163,7 @@ function PublicStoreFooter({
           <p className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Checkout seguro</p>
           <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">Checkout seguro pela ConnectyHub, pagamento protegido e pedido acompanhado no WhatsApp.</p>
           <div className="mt-5 flex flex-wrap gap-2">
-            {checkoutPaymentBadges.map((item) => (
+            {buildCheckoutPaymentBadges(paymentProviderLabel).map((item) => (
               <CheckoutPaymentBadge key={item.label} label={item.label} tone={item.tone} />
             ))}
           </div>
@@ -1153,14 +1179,16 @@ function PublicStoreFooter({
   );
 }
 
-type CheckoutPaymentBadgeTone = "visa" | "pix" | "card" | "mp";
+type CheckoutPaymentBadgeTone = "visa" | "pix" | "card" | "provider";
 
-const checkoutPaymentBadges: Array<{ label: string; tone: CheckoutPaymentBadgeTone }> = [
-  { label: "Visa", tone: "visa" },
-  { label: "Pix", tone: "pix" },
-  { label: "Card", tone: "card" },
-  { label: "MP", tone: "mp" },
-];
+function buildCheckoutPaymentBadges(paymentProviderLabel: string): Array<{ label: string; tone: CheckoutPaymentBadgeTone }> {
+  return [
+    { label: "Visa", tone: "visa" },
+    { label: "Pix", tone: "pix" },
+    { label: "Card", tone: "card" },
+    { label: paymentProviderLabel, tone: "provider" },
+  ];
+}
 
 function CheckoutPaymentBadge({ label, tone }: { label: string; tone: CheckoutPaymentBadgeTone }) {
   return (
@@ -1170,7 +1198,8 @@ function CheckoutPaymentBadge({ label, tone }: { label: string; tone: CheckoutPa
         tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
         tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
         tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
-        tone === "mp" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+        tone === "provider" && label === "PagBank" && "border-[#ffe082]/60 bg-[#f7c331] text-slate-950",
+        tone === "provider" && label !== "PagBank" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
       )}
     >
       {label}

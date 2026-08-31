@@ -211,6 +211,8 @@ async function testIntegration(integrationId: string, credentials: CredentialBag
       return testVapid(credentials);
     case "payments":
       return testStripe(credentials);
+    case "pagbank":
+      return testPagBank(credentials);
     case "mercado-pago":
       return testMercadoPago(credentials);
     default:
@@ -631,6 +633,53 @@ async function testMercadoPago(credentials: CredentialBag): Promise<ConnectionTe
       httpStatus: error instanceof MercadoPagoOAuthRequestError ? error.httpStatus ?? undefined : undefined,
     });
   }
+}
+
+async function testPagBank(credentials: CredentialBag): Promise<ConnectionTestResult> {
+  const clientId = getCredential(credentials, ["PAGBANK_CLIENT_ID", "PAGSEGURO_CLIENT_ID"]);
+  const clientSecret = getCredential(credentials, ["PAGBANK_CLIENT_SECRET", "PAGSEGURO_CLIENT_SECRET"]);
+  const appToken = getCredential(credentials, [
+    "PAGBANK_CONNECT_TOKEN",
+    "PAGBANK_AUTHORIZATION_TOKEN",
+    "PAGBANK_APP_TOKEN",
+    "PAGSEGURO_AUTH_TOKEN",
+    "PAGSEGURO_CONNECT_TOKEN",
+  ]);
+  const redirectUri = getCredential(credentials, ["PAGBANK_REDIRECT_URI", "PAGSEGURO_REDIRECT_URI"])
+    || `${resolveAppBaseUrlForTest()}/api/dashboard/sales-catalog/payments/pagbank/callback`;
+  const affiliateUrl = getCredential(credentials, ["PAGBANK_AFFILIATE_CONNECT_URL"]);
+  const environment = getCredential(credentials, ["PAGBANK_ENVIRONMENT", "PAGSEGURO_ENVIRONMENT"]) || "production";
+  const webhookToken = getCredential(credentials, [
+    "PAGBANK_WEBHOOK_TOKEN",
+    "PAGBANK_CONNECT_TOKEN",
+    "PAGBANK_AUTHORIZATION_TOKEN",
+    "PAGSEGURO_CONNECT_TOKEN",
+  ]);
+
+  if (!clientId || !clientSecret || !appToken) {
+    return offline("Preencha Client ID, Client Secret e Token do app PagBank antes de testar.");
+  }
+
+  if (!isValidHttpUrl(redirectUri)) {
+    return offline("Redirect URI do PagBank precisa ser uma URL http ou https valida.");
+  }
+
+  if (affiliateUrl && !isValidHttpUrl(affiliateUrl)) {
+    return offline("Link afiliado PagBank precisa ser uma URL http ou https valida.");
+  }
+
+  return online("PagBank configurado. O teste final de OAuth acontece quando o cliente clica em Conectar PagBank.", {
+    details: [
+      `Ambiente: ${environment.trim().toLowerCase() === "sandbox" ? "sandbox" : "production"}.`,
+      affiliateUrl
+        ? "Link de afiliado configurado para abrir antes da autorizacao PagBank."
+        : "Link de afiliado ainda ausente; o botao abre direto a autorizacao PagBank.",
+      webhookToken
+        ? "Webhook token configurado para validar notificacoes."
+        : "Webhook token ausente; configure antes da producao para validar notificacoes.",
+      `Redirect URI: ${redirectUri}.`,
+    ],
+  });
 }
 
 async function testConfiguredCredentials(credentials: CredentialBag): Promise<ConnectionTestResult> {

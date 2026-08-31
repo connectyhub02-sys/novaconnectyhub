@@ -1592,6 +1592,7 @@ function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
 }
 
 function normalizePaymentProvider(value: string | null): SalesCatalogPaymentProvider {
+  if (value === "pagbank") return "pagbank";
   if (value === "mercado_pago") return "mercado_pago";
   return "mercado_pago";
 }

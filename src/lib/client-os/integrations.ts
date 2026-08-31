@@ -189,6 +189,21 @@ const clientCredentialDefinitions = buildClientCredentialDefinitions();
 
 const integrationProviders: ClientIntegrationProvider[] = [
   {
+    id: "pagbank",
+    name: "PagBank",
+    category: "payments",
+    status: "active",
+    mode: "external",
+    headline: "Recebimento por Pix no checkout WhatsApp",
+    summary: "Conecte a conta PagBank da empresa pelo fluxo oficial com link da ConnectyHub.",
+    phase: "Fase atual - gateway principal",
+    primaryUse: "Receber Pix dos pedidos do catalogo, acompanhar status e atualizar pedidos automaticamente por webhook.",
+    actionLabel: "Conectar PagBank",
+    actionHref: null,
+    items: ["Pix", "OAuth Connect", "Webhooks", "Afiliado"],
+    metrics: ["pagamentos", "aprovados", "pendentes", "erros"],
+  },
+  {
     id: "meta-ads",
     name: "Meta Ads / Instagram / Facebook",
     category: "ads",
@@ -300,7 +315,7 @@ export async function getClientIntegrationHub(input: {
   ]);
 
   const connections = attachGrowthAssetSummaries([
-    ...buildMercadoPagoConnections(companies, paymentIntegrations),
+    ...buildPagBankConnections(companies, paymentIntegrations),
     ...buildGenericConnections(companies, genericResult.rows),
     ...buildFallbackConnections(companies, genericResult.rows, webhookResult.rows),
   ], growthAssetResult.rows);
@@ -308,7 +323,7 @@ export async function getClientIntegrationHub(input: {
 
   return {
     schemaReady,
-    schemaMessage: schemaReady ? null : "As migrations 0028 e 0045 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal e assets Meta/Google normalizados.",
+    schemaMessage: schemaReady ? null : "As migrations 0028, 0045 e 0068 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal, PagBank e assets Meta/Google normalizados.",
     appBaseUrl: resolveAppBaseUrl(),
     companies,
     selectedCompanyId,
@@ -339,21 +354,21 @@ function resolveSelectedCompanyId(companies: ClientCompany[], preferred?: string
   return companies[0]?.id ?? null;
 }
 
-function buildMercadoPagoConnections(
+function buildPagBankConnections(
   companies: ClientCompany[],
   integrations: ClientSalesCatalogPaymentIntegration[],
 ): ClientIntegrationConnection[] {
   return companies.map((company) => {
-    const integration = integrations.find((item) => item.companyId === company.id && item.provider === "mercado_pago");
+    const integration = integrations.find((item) => item.companyId === company.id && item.provider === "pagbank");
 
     if (!integration) {
       return {
-        providerId: "mercado-pago",
+        providerId: "pagbank",
         companyId: company.id,
         companyName: company.name,
         status: "not_configured",
         label: "Aguardando conexao",
-        detail: "Conecte pelo Catalogo de Vendas para liberar checkout Pix/cartao.",
+        detail: "Conecte PagBank para liberar checkout Pix no Catalogo de Vendas.",
         accountLabel: null,
         lastSyncAt: null,
         lastError: null,
@@ -363,14 +378,14 @@ function buildMercadoPagoConnections(
     }
 
     return {
-      providerId: "mercado-pago",
+      providerId: "pagbank",
       companyId: company.id,
       companyName: company.name,
       status: mapPaymentStatus(integration.status),
       label: formatPaymentStatus(integration.status),
       detail: integration.connectedAt
         ? `Conectado em ${formatDateTime(integration.connectedAt)}`
-        : "Fluxo Mercado Pago iniciado no Catalogo de Vendas.",
+        : "Fluxo PagBank iniciado pelo Connect Authorization.",
       accountLabel: integration.accountLabel ?? integration.providerAccountId,
       lastSyncAt: integration.updatedAt ?? integration.connectedAt,
       lastError: integration.lastError,
@@ -420,7 +435,7 @@ function buildFallbackConnections(
     for (const provider of integrationProviders) {
       const key = `${company.id}:${provider.id}`;
 
-      if (provider.id === "mercado-pago" || existing.has(key)) {
+      if (provider.id === "pagbank" || existing.has(key)) {
         continue;
       }
 
