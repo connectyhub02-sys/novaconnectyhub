@@ -88,6 +88,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const amount = normalizeCurrencyAmount(input.amount)
     ?? normalizeCurrencyAmount(order.total)
     ?? normalizeCurrencyAmount(order.subtotal);
+  const orderMetadata = readRecord(order.metadata);
+  const agentId = resolveOrderAgentId(orderMetadata);
 
   if (!amount) {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
@@ -184,6 +186,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       metadata: {
         created_from: input.source,
         actor_id: input.actorId ?? null,
+        agent_id: agentId,
         order_item_count: items.length,
         payment_owner: paymentOwner.owner,
         commercial_flow_type: paymentOwner.commercialFlowType,
@@ -282,6 +285,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         items: summarizePaymentItems(items),
         lead_id: order.lead_id,
         conversation_id: order.conversation_id,
+        agent_id: agentId,
         lead_phone: order.customer_phone,
         source: input.source,
         gateway_error: failureReason,
@@ -393,6 +397,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         items: summarizePaymentItems(items),
         lead_id: order.lead_id,
         conversation_id: order.conversation_id,
+        agent_id: agentId,
         lead_phone: order.customer_phone,
         source: input.source,
         payment_owner: paymentOwner.owner,
@@ -474,6 +479,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         items: summarizePaymentItems(items),
         lead_id: order.lead_id,
         conversation_id: order.conversation_id,
+        agent_id: agentId,
         lead_phone: order.customer_phone,
         source: input.source,
         gateway_error: message,
@@ -524,6 +530,8 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
   const externalReference = `sales_catalog_order:${input.order.id}:${sessionId}`;
   const checkoutUrl = buildSalesCatalogCheckoutUrl(sessionId);
   const payerEmail = normalizePayerEmail(input.payerEmail ?? input.order.customer_email, input.order.id);
+  const orderMetadata = readRecord(input.order.metadata);
+  const agentId = resolveOrderAgentId(orderMetadata);
   const now = new Date().toISOString();
 
   const { data: inserted, error: insertError } = await input.client
@@ -556,6 +564,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
       metadata: {
         created_from: input.source,
         actor_id: input.actorId ?? null,
+        agent_id: agentId,
         order_item_count: input.items.length,
         payment_owner: paymentOwner.owner,
         commercial_flow_type: paymentOwner.commercialFlowType,
@@ -656,6 +665,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
       items: summarizePaymentItems(input.items),
       lead_id: input.order.lead_id,
       conversation_id: input.order.conversation_id,
+      agent_id: agentId,
       lead_phone: input.order.customer_phone,
       source: input.source,
       payment_deferred_reason: input.reason,
@@ -706,6 +716,8 @@ async function persistCheckoutOrderReference(input: {
       status: input.orderStatus,
       metadata: {
         ...readRecord(input.order.metadata),
+        agent_id: resolveOrderAgentId(readRecord(input.order.metadata)),
+        latest_agent_id: resolveOrderAgentId(readRecord(input.order.metadata)),
         latest_checkout_url: input.checkoutUrl,
         latest_checkout_tracking_url: input.checkoutTracking?.trackingUrl ?? null,
         latest_checkout_tracking_link_id: input.checkoutTracking?.id ?? null,
@@ -802,6 +814,7 @@ async function createPaymentSessionTrackedLink(input: {
     item_count: input.itemCount,
     created_from: input.source,
     actor_id: input.actorId,
+    agent_id: resolveOrderAgentId(readRecord(input.order.metadata)),
   } satisfies JsonRecord;
 
   const { error } = await input.client
@@ -890,4 +903,16 @@ function normalizePayerEmail(email: string | null | undefined, orderId: string) 
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function resolveOrderAgentId(metadata: JsonRecord) {
+  return readString(metadata.agent_id)
+    ?? readString(metadata.whatsapp_agent_id)
+    ?? readString(metadata.producer_agent_id)
+    ?? readString(metadata.created_by_agent_id)
+    ?? readString(metadata.latest_agent_id);
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

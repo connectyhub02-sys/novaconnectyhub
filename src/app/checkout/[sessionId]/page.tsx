@@ -483,6 +483,8 @@ function buildCheckoutPublicTrackingContext(input: {
   session: CheckoutSessionRow;
 }): ConnectyPublicTrackingContext {
   const secret = process.env.TRACKING_PUBLIC_TOKEN_SECRET;
+  const orderMetadata = readRecord(input.order.metadata);
+  const sessionMetadata = readRecord(input.session.metadata);
 
   return {
     scope: "organization",
@@ -491,10 +493,32 @@ function buildCheckoutPublicTrackingContext(input: {
     lead_id: input.order.lead_id,
     lead_phone: input.order.customer_phone,
     conversation_id: input.order.conversation_id,
+    agent_id: resolveCheckoutAgentId(orderMetadata, sessionMetadata),
     order_id: input.order.id,
     payment_session_id: input.session.id,
+    tracking_link_id: resolveCheckoutTrackingLinkId(orderMetadata, sessionMetadata),
     tracking_source: "sales_catalog_checkout",
   };
+}
+
+function resolveCheckoutAgentId(orderMetadata: JsonRecord, sessionMetadata: JsonRecord) {
+  return readString(orderMetadata.agent_id)
+    ?? readString(orderMetadata.whatsapp_agent_id)
+    ?? readString(orderMetadata.producer_agent_id)
+    ?? readString(orderMetadata.created_by_agent_id)
+    ?? readString(orderMetadata.latest_agent_id)
+    ?? readString(sessionMetadata.agent_id)
+    ?? readString(sessionMetadata.whatsapp_agent_id)
+    ?? readString(sessionMetadata.producer_agent_id)
+    ?? readString(sessionMetadata.created_by_agent_id)
+    ?? readString(sessionMetadata.latest_agent_id);
+}
+
+function resolveCheckoutTrackingLinkId(orderMetadata: JsonRecord, sessionMetadata: JsonRecord) {
+  return readString(sessionMetadata.checkout_tracking_link_id)
+    ?? readString(sessionMetadata.tracking_link_id)
+    ?? readString(orderMetadata.latest_checkout_tracking_link_id)
+    ?? readString(orderMetadata.tracking_link_id);
 }
 
 function safeJson(value: unknown) {

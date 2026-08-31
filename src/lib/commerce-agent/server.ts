@@ -150,12 +150,29 @@ export type CommerceAgentSessionPayload = {
 export async function resolveCommerceAgentContext(body: CommerceAgentBody): Promise<CommerceAgentResolvedContext> {
   const organizationId = readUuid(body.organization_id);
   const trackingToken = readString(body.tracking_token);
+  const surface = normalizeSurface(readString(body.surface) ?? inferSurface(readString(body.page_path)));
+  const orderId = readUuid(body.order_id);
+  const paymentSessionId = readUuid(body.payment_session_id);
+  const client = createServiceClient();
 
-  if (!organizationId || !verifyOrganizationTrackingToken(organizationId, trackingToken)) {
+  if (!organizationId) {
     return { ok: false, status: 403, error: "Contexto da loja nao autorizado." };
   }
 
-  const client = createServiceClient();
+  const hasValidTrackingToken = verifyOrganizationTrackingToken(organizationId, trackingToken);
+  const hasValidCheckoutContext = hasValidTrackingToken
+    ? false
+    : await validateCheckoutCommerceAgentContext(client, {
+        organizationId,
+        surface,
+        orderId,
+        paymentSessionId,
+      }).catch(() => false);
+
+  if (!hasValidTrackingToken && !hasValidCheckoutContext) {
+    return { ok: false, status: 403, error: "Contexto da loja nao autorizado." };
+  }
+
   const { data: organization, error: organizationError } = await client
     .from("organizations")
     .select("id, name, metadata")
@@ -168,7 +185,6 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
 
   const settings = await getOrganizationSalesCatalogSettings(client, organization.id);
   const commerceAgent = settings?.commerceAgent;
-  const surface = normalizeSurface(readString(body.surface) ?? inferSurface(readString(body.page_path)));
 
   if (!settings || !commerceAgent?.enabled || !commerceAgent.surfaces.includes(surface as SalesCatalogCommerceAgentSurface)) {
     return { ok: false, status: 200, error: "Agente da loja inativo." };
@@ -220,8 +236,8 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     visitorId: readString(body.visitor_cookie_id),
     sessionId: readString(body.session_cookie_id),
     trackingLinkId: readUuid(body.tracking_link_id),
-    orderId: readUuid(body.order_id),
-    paymentSessionId: readUuid(body.payment_session_id),
+    orderId,
+    paymentSessionId,
     productId: readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
     pagePath: readString(body.page_path),
     pageUrl: readString(body.page_url),
@@ -528,6 +544,29 @@ async function loadLead(client: SupabaseClient, organizationId: string, leadId: 
     .maybeSingle<LeadRow>();
 
   return data ?? null;
+}
+
+async function validateCheckoutCommerceAgentContext(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    surface: SalesCatalogCommerceAgentSurface | "unknown";
+    orderId: string | null;
+    paymentSessionId: string | null;
+  },
+) {
+  if (input.surface !== "checkout" || !input.paymentSessionId) {
+    return false;
+  }
+
+  const { data } = await client
+    .from("sales_catalog_payment_sessions")
+    .select("id, order_id")
+    .eq("id", input.paymentSessionId)
+    .eq("organization_id", input.organizationId)
+    .maybeSingle<{ id: string; order_id: string | null }>();
+
+  return Boolean(data?.id && (!input.orderId || data.order_id === input.orderId));
 }
 
 async function loadCommerceAgent(client: SupabaseClient, organizationId: string, agentId: string | null) {

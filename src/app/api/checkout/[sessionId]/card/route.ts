@@ -191,6 +191,8 @@ export async function POST(
     }
 
     const sourceMetadata = readRecord(sourceSession.metadata) ?? {};
+    const orderMetadata = readRecord(order.metadata) ?? {};
+    const checkoutAgentId = resolveCheckoutAgentId(sourceMetadata, orderMetadata);
     const resolvedOwner = await resolveSalesCatalogOrderPaymentOwner({
       client,
       organizationId: sourceSession.organization_id,
@@ -270,6 +272,7 @@ export async function POST(
         metadata: {
           created_from: "checkout_card_brick",
           source_payment_session_id: sourceSession.id,
+          agent_id: checkoutAgentId,
           selected_order_bump_product_ids: selectedOrderBumpIds,
           applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
           added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
@@ -334,6 +337,7 @@ export async function POST(
         metadata: {
           created_from: "checkout_card_brick",
           source_payment_session_id: sourceSession.id,
+          agent_id: checkoutAgentId,
           payment_method_id: paymentMethodId,
           installments,
           mercado_pago_device_session_sent: Boolean(deviceSessionId),
@@ -399,6 +403,7 @@ export async function POST(
         payment_method_label: "Cartao Mercado Pago",
         lead_id: order.lead_id,
         conversation_id: order.conversation_id,
+        agent_id: checkoutAgentId,
         lead_phone: order.customer_phone,
         items: summarizePaymentItems(items),
         selected_order_bump_product_ids: selectedOrderBumpIds,
@@ -619,4 +624,20 @@ function readStringList(value: unknown, fallback: string[]) {
   return value
     .map((item) => readString(item))
     .filter((item): item is string => Boolean(item));
+}
+
+function resolveCheckoutAgentId(...metadataRecords: JsonRecord[]) {
+  for (const metadata of metadataRecords) {
+    const agentId = readString(metadata.agent_id)
+      ?? readString(metadata.whatsapp_agent_id)
+      ?? readString(metadata.producer_agent_id)
+      ?? readString(metadata.created_by_agent_id)
+      ?? readString(metadata.latest_agent_id);
+
+    if (agentId) {
+      return agentId;
+    }
+  }
+
+  return null;
 }
