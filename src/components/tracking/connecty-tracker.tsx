@@ -8,6 +8,8 @@ import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
   buildPublicTrackingMetadata,
+  getPublicTrackingContextSignature,
+  publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
 } from "@/lib/tracking/public-context";
 
@@ -44,6 +46,7 @@ export function ConnectyTracker() {
   const startedForms = useRef(new WeakSet<HTMLFormElement>());
   const promptShownTracked = useRef(new Set<PermissionStep>());
   const search = useMemo(() => searchParams?.toString() ?? "", [searchParams]);
+  const [trackingContextSignature, setTrackingContextSignature] = useState("");
   const [permissionPromptReady, setPermissionPromptReady] = useState(false);
   const [permissions, setPermissions] = useState<PermissionPromptState>({
     push: "unknown",
@@ -55,6 +58,19 @@ export function ConnectyTracker() {
     message: null,
   });
   const suppressPermissionPrompt = isCommercePublicPath(pathname);
+
+  useEffect(() => {
+    function syncPublicTrackingSignature() {
+      setTrackingContextSignature(getPublicTrackingContextSignature(readPublicTrackingContext()));
+    }
+
+    syncPublicTrackingSignature();
+    window.addEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
+
+    return () => {
+      window.removeEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
+    };
+  }, [pathname, search]);
 
   useEffect(() => {
     if (isTrackingDisabled() || trackedSession.current) {
@@ -74,28 +90,33 @@ export function ConnectyTracker() {
       return;
     }
 
-    const pageKey = `${pathname ?? "/"}?${search}`;
+    const timer = window.setTimeout(() => {
+      const currentSignature = getPublicTrackingContextSignature(readPublicTrackingContext());
+      const pageKey = `${pathname ?? "/"}?${search}:${currentSignature}`;
 
-    if (trackedPageKey.current === pageKey) {
-      return;
-    }
+      if (trackedPageKey.current === pageKey) {
+        return;
+      }
 
-    trackedPageKey.current = pageKey;
-    scrollMilestones.current = new Set();
+      trackedPageKey.current = pageKey;
+      scrollMilestones.current = new Set();
 
-    void trackEvent({
-      event_type: isDashboardPath(pathname) ? "dashboard_page_view" : "public_page_view",
-      metadata: getPageMetadata(),
-    });
-
-    const commerceEventType = getCommercePageViewEvent(pathname);
-    if (commerceEventType) {
       void trackEvent({
-        event_type: commerceEventType,
+        event_type: isDashboardPath(pathname) ? "dashboard_page_view" : "public_page_view",
         metadata: getPageMetadata(),
       });
-    }
-  }, [pathname, search]);
+
+      const commerceEventType = getCommercePageViewEvent(pathname);
+      if (commerceEventType) {
+        void trackEvent({
+          event_type: commerceEventType,
+          metadata: getPageMetadata(),
+        });
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [pathname, search, trackingContextSignature]);
 
   useEffect(() => {
     if (isTrackingDisabled() || !resolveCommerceSurface(pathname)) {

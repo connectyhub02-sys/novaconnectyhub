@@ -5,7 +5,10 @@ const checkoutPageSource = readFileSync("src/app/checkout/[sessionId]/page.tsx",
 const paymentSessionsSource = readFileSync("src/lib/sales-catalog/payment-sessions.ts", "utf8");
 const commerceAgentServerSource = readFileSync("src/lib/commerce-agent/server.ts", "utf8");
 const commerceAgentDockSource = readFileSync("src/components/commerce-agent/commerce-agent-dock.tsx", "utf8");
+const publicTrackingContextSource = readFileSync("src/lib/tracking/public-context.ts", "utf8");
+const publicTrackingBridgeSource = readFileSync("src/components/tracking/public-tracking-context-bridge.tsx", "utf8");
 const trackingRouteSource = readFileSync("src/app/api/track/route.ts", "utf8");
+const connectyTrackerSource = readFileSync("src/components/tracking/connecty-tracker.tsx", "utf8");
 const whatsappRuntimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 
 function sourceBetween(source: string, start: string, end: string) {
@@ -184,9 +187,45 @@ describe("Commerce Agent checkout continuity", () => {
     expect(commerceAgentServerSource).toContain("recordCommerceAgentPageContext");
     expect(commerceAgentServerSource).toContain("role: \"system\"");
     expect(commerceAgentServerSource).toContain("message.role === \"lead\" || message.role === \"assistant\"");
-    expect(commerceAgentServerSource).toContain("vi que voce abriu");
+    expect(commerceAgentServerSource).toContain("buildProductWhisperMessage");
+    expect(commerceAgentServerSource).toContain("produto atual da pagina sempre tem prioridade");
+    expect(commerceAgentServerSource).toContain("vi que voce esta comparando algumas opcoes");
     expect(commerceAgentDockSource).toContain("${pathname ?? \"\"}?${search}");
     expect(commerceAgentDockSource).toContain("message.role !== \"system\"");
     expect(commerceAgentDockSource).toContain("digitando");
+  });
+
+  it("refreshes public tracking context on client navigation so the dock follows the current product", () => {
+    expect(publicTrackingContextSource).toContain("publicTrackingContextUpdatedEventName");
+    expect(publicTrackingContextSource).toContain("writePublicTrackingContext");
+    expect(publicTrackingBridgeSource).toContain("writePublicTrackingContext(context)");
+    expect(commerceAgentDockSource).toContain("publicTrackingContextUpdatedEventName");
+    expect(commerceAgentDockSource).toContain("trackingContextSignature");
+    expect(commerceAgentDockSource).toContain("getPublicTrackingContextSignature(publicTracking)");
+    expect(connectyTrackerSource).toContain("publicTrackingContextUpdatedEventName");
+    expect(connectyTrackerSource).toContain("const currentSignature = getPublicTrackingContextSignature(readPublicTrackingContext())");
+  });
+
+  it("lets the current product path override stale tracking product ids", () => {
+    const resolver = sourceBetween(
+      commerceAgentServerSource,
+      "export async function resolveCommerceAgentContext",
+      "export async function buildCommerceAgentSessionPayload",
+    );
+
+    expect(resolver).toContain("inferProductIdFromPagePath(pagePath) ?? readUuid(body.product_id)");
+    expect(commerceAgentServerSource).toContain("function inferProductIdFromPagePath");
+    expect(trackingRouteSource).toContain("const metadataPagePath = readString(metadata.page_path)");
+    expect(trackingRouteSource).toContain("const productId = inferCommerceProductId(metadataPagePath)");
+    expect(trackingRouteSource).toContain("function inferCommerceProductId");
+  });
+
+  it("opens the dock as a contextual product question when the lead clicks the agent photo from a whisper", () => {
+    expect(commerceAgentServerSource).toContain("contextualIntentMessage: buildContextualIntentMessage");
+    expect(commerceAgentServerSource).toContain("Me fala sobre");
+    expect(commerceAgentServerSource).toContain("Me ajuda a comparar");
+    expect(commerceAgentDockSource).toContain("contextualIntentMessage");
+    expect(commerceAgentDockSource).toContain("contextual_intent: Boolean(contextualIntentMessage)");
+    expect(commerceAgentDockSource).toContain("void submitMessage(undefined, contextualIntentMessage)");
   });
 });

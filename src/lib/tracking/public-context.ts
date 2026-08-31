@@ -14,6 +14,8 @@ export type ConnectyPublicTrackingContext = {
   tracking_source?: string | null;
 };
 
+export const publicTrackingContextUpdatedEventName = "connectyhub:public-tracking-context-updated";
+
 const contextKeys = [
   "scope",
   "organization_id",
@@ -34,6 +36,24 @@ declare global {
   interface Window {
     __CONNECTYHUB_TRACKING_CONTEXT__?: ConnectyPublicTrackingContext;
   }
+}
+
+export function writePublicTrackingContext(context: ConnectyPublicTrackingContext | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const normalized = normalizePublicTrackingContext(context);
+
+  if (normalized) {
+    window.__CONNECTYHUB_TRACKING_CONTEXT__ = normalized;
+  } else {
+    delete window.__CONNECTYHUB_TRACKING_CONTEXT__;
+  }
+
+  window.dispatchEvent(new CustomEvent(publicTrackingContextUpdatedEventName, {
+    detail: { context: normalized },
+  }));
 }
 
 export function readPublicTrackingContext() {
@@ -136,6 +156,16 @@ export function buildPublicTrackingMetadata(context: ConnectyPublicTrackingConte
     catalog_item_id: context.catalog_item_id,
     tracking_source: context.tracking_source,
   };
+}
+
+export function getPublicTrackingContextSignature(context: ConnectyPublicTrackingContext | null) {
+  const normalized = normalizePublicTrackingContext(context);
+
+  if (!normalized) {
+    return "";
+  }
+
+  return contextKeys.map((key) => `${key}:${normalized[key] ?? ""}`).join("|");
 }
 
 function readContextString(value: unknown) {

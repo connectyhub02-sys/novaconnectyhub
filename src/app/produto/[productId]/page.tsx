@@ -28,6 +28,7 @@ import { ProductPageCartController } from "@/components/checkout/product-page-ca
 import { ProductMobileCheckoutBar, ProductPurchaseControls } from "@/components/checkout/sales-catalog-product-actions";
 import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
 import { JsonLd } from "@/components/seo/json-ld";
+import { PublicTrackingContextBridge } from "@/components/tracking/public-tracking-context-bridge";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
@@ -348,6 +349,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
         }}
       />
+      <PublicTrackingContextBridge context={publicTrackingContext} />
       <ProductTopBar
         branding={branding}
         cartUrl={storeCartUrl}

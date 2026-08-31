@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicStorefront } from "@/components/checkout/public-storefront";
+import { PublicTrackingContextBridge } from "@/components/tracking/public-tracking-context-bridge";
 import {
   loadPublicStorefrontOrganization,
   loadPublicStorefrontPageData,
@@ -56,6 +57,7 @@ export default async function StoreCartPage({ params, searchParams }: StoreCartP
           __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(data.publicTrackingContext)};`,
         }}
       />
+      <PublicTrackingContextBridge context={data.publicTrackingContext} />
       <PublicStorefront
         mode="shop"
         initialCartOpen

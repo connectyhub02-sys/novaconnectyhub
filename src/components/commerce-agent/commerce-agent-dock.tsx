@@ -8,6 +8,8 @@ import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
+  getPublicTrackingContextSignature,
+  publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
 } from "@/lib/tracking/public-context";
 import { cn } from "@/lib/utils";
@@ -30,8 +32,12 @@ type CommerceAgentSession = {
   agentAvatarUrl: string | null;
   agentAvatarAlt: string | null;
   leadName: string | null;
+  currentProductId: string | null;
+  currentProductTitle: string | null;
+  recentProductViewCount: number;
   welcomeMessage: string | null;
   whisperMessage: string | null;
+  contextualIntentMessage: string | null;
   whatsappHref: string | null;
   quickActions: Array<{
     id: string;
@@ -59,9 +65,23 @@ export function CommerceAgentDock() {
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState("");
   const [trackingContextProbe, setTrackingContextProbe] = useState({ pageKey: "", attempts: 0 });
+  const [trackingContextSignature, setTrackingContextSignature] = useState("");
   const lastSessionKey = useRef<string | null>(null);
   const lastWhisperKey = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function syncPublicTrackingSignature() {
+      setTrackingContextSignature(getPublicTrackingContextSignature(readPublicTrackingContext()));
+    }
+
+    syncPublicTrackingSignature();
+    window.addEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
+
+    return () => {
+      window.removeEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
+    };
+  }, [pathname, search]);
 
   useEffect(() => {
     const surface = resolveCommerceSurface(pathname);
@@ -97,7 +117,8 @@ export function CommerceAgentDock() {
       return;
     }
 
-    const sessionKey = `${surface}:${pathname ?? ""}?${search}:${publicTracking.organization_id}:${publicTracking.lead_id ?? ""}:${publicTracking.conversation_id ?? ""}:${publicTracking.agent_id ?? ""}`;
+    const publicTrackingSignature = getPublicTrackingContextSignature(publicTracking);
+    const sessionKey = `${surface}:${pathname ?? ""}?${search}:${publicTrackingSignature}`;
     if (lastSessionKey.current === sessionKey) {
       return;
     }
@@ -148,14 +169,23 @@ export function CommerceAgentDock() {
       });
 
     return () => controller.abort();
-  }, [pathname, search, trackingContextProbe]);
+  }, [pathname, search, trackingContextProbe, trackingContextSignature]);
 
   useEffect(() => {
     if (!session || open || session.mode === "observer" || !session.whisperMessage) {
       return;
     }
 
-    const whisperKey = `${session.commerceSessionId ?? session.agentId ?? session.agentName}:${session.surface}:${session.leadName ?? ""}:${pathname ?? ""}?${search}`;
+    const whisperKey = [
+      session.commerceSessionId ?? session.agentId ?? session.agentName,
+      session.surface,
+      session.leadName ?? "",
+      session.currentProductId ?? "",
+      session.currentProductTitle ?? "",
+      session.whisperMessage,
+      pathname ?? "",
+      search,
+    ].join(":");
 
     if (lastWhisperKey.current === whisperKey) {
       return;
@@ -190,13 +220,24 @@ export function CommerceAgentDock() {
     : session.dockLabel;
 
   function openDock() {
+    const contextualIntentMessage = !open && whisperVisible ? session?.contextualIntentMessage : null;
+
     setOpen(true);
     setWhisperVisible(false);
     publishCommerceAgentEvent("agent_dock_opened", {
       commerce_session_id: session?.commerceSessionId ?? null,
       surface: session?.surface ?? null,
       mode: session?.mode ?? null,
+      product_id: session?.currentProductId ?? null,
+      product_title: session?.currentProductTitle ?? null,
+      contextual_intent: Boolean(contextualIntentMessage),
     });
+
+    if (contextualIntentMessage) {
+      window.setTimeout(() => {
+        void submitMessage(undefined, contextualIntentMessage);
+      }, 0);
+    }
   }
 
   function closeDock() {
@@ -238,6 +279,8 @@ export function CommerceAgentDock() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...buildPublicTrackingApiBody(publicTracking),
+          product_id: session.currentProductId ?? publicTracking?.product_id ?? null,
+          catalog_item_id: session.currentProductId ?? publicTracking?.catalog_item_id ?? null,
           visitor_cookie_id: snapshot.visitorId,
           session_cookie_id: snapshot.sessionId,
           commerce_session_id: session.commerceSessionId,

@@ -10,6 +10,7 @@ import {
   type CheckoutPaymentFeedbackStatus,
 } from "@/components/checkout/checkout-payment-feedback-modal";
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
+import { PublicTrackingContextBridge } from "@/components/tracking/public-tracking-context-bridge";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   loadSalesCatalogCheckoutOrderBumps,
@@ -459,12 +460,15 @@ function CheckoutShell({
   return (
     <div className="storefront-public min-h-screen bg-white text-[color:var(--store-text,#0f172a)]" style={style}>
       {publicTrackingContext ? (
-        <script
-          id="connecty-public-tracking-context"
-          dangerouslySetInnerHTML={{
-            __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
-          }}
-        />
+        <>
+          <script
+            id="connecty-public-tracking-context"
+            dangerouslySetInnerHTML={{
+              __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
+            }}
+          />
+          <PublicTrackingContextBridge context={publicTrackingContext} />
+        </>
       ) : null}
       <Script
         id="mercado-pago-security"

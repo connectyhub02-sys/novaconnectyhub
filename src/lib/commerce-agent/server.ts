@@ -179,6 +179,7 @@ type OfferProduct = {
 type CommerceAgentPromptContext = {
   currentProduct: OfferProduct | null;
   contextualOffer: OfferProduct | null;
+  recentProductViews: OfferProduct[];
   orderItems: CommerceOrderItem[];
   commerceMessages: CommerceAgentMessageRow[];
   whatsappMessages: WhatsappConversationMessageRow[];
@@ -250,8 +251,12 @@ export type CommerceAgentSessionPayload = {
   agentAvatarUrl: string | null;
   agentAvatarAlt: string | null;
   leadName: string | null;
+  currentProductId: string | null;
+  currentProductTitle: string | null;
+  recentProductViewCount: number;
   welcomeMessage: string | null;
   whisperMessage: string | null;
+  contextualIntentMessage: string | null;
   whatsappHref: string | null;
   quickActions: Array<{
     id: string;
@@ -286,6 +291,8 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   const requestedTrackingLinkId = readUuid(body.tracking_link_id);
   const visitorId = readString(body.visitor_cookie_id);
   const sessionId = readString(body.session_cookie_id);
+  const pagePath = readString(body.page_path);
+  const pageUrl = readString(body.page_url);
   const client = createServiceClient();
 
   if (!organizationId) {
@@ -410,9 +417,9 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     trackingLinkId,
     orderId,
     paymentSessionId,
-    productId: readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
-    pagePath: readString(body.page_path),
-    pageUrl: readString(body.page_url),
+    productId: inferProductIdFromPagePath(pagePath) ?? readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
+    pagePath,
+    pageUrl,
     agentId: agent?.id ?? null,
     agentName,
     agentPrompt: readString(agent?.prompt),
@@ -457,8 +464,12 @@ export async function buildCommerceAgentSessionPayload(
     agentAvatarUrl: context.agentAvatarUrl,
     agentAvatarAlt: context.agentAvatarAlt,
     leadName: context.leadName,
+    currentProductId: promptContext.currentProduct?.id ?? context.productId,
+    currentProductTitle: promptContext.currentProduct?.title ?? null,
+    recentProductViewCount: promptContext.recentProductViews.length,
     welcomeMessage,
     whisperMessage: buildWhisperMessage(context, promptContext),
+    contextualIntentMessage: buildContextualIntentMessage(context, promptContext),
     whatsappHref: context.whatsappHref,
     quickActions: buildQuickActions(context),
     messages: visibleMessages.map((message) => ({
@@ -689,6 +700,12 @@ async function buildFallbackCommerceAgentReply(input: {
       : buildNoOfferMessage(input.context);
   }
 
+  if (input.context.surface === "product" && promptContext.currentProduct) {
+    return offer && offer.id !== promptContext.currentProduct.id
+      ? `${promptContext.currentProduct.title} pode fazer sentido pra voce. Se quiser montar uma compra mais completa, ${offer.title} tambem combina como proximo passo.`
+      : `${promptContext.currentProduct.title} e o produto que voce esta vendo agora. Me diz o que voce quer comparar nele que eu te ajudo a decidir.`;
+  }
+
   if (input.context.surface === "checkout") {
     const orderLine = formatOrderItemsForSentence(promptContext.orderItems);
 
@@ -902,10 +919,12 @@ async function loadCommerceAgentPromptContext(
     loadCatalogProducts(context.client, context.organization.id).catch(() => []),
     loadPersistentLeadCommerceMemory(context).catch(() => null),
   ]);
+  const recentProductViews = await loadRecentProductViews(context, recentEvents, currentProduct).catch(() => []);
 
   return {
     currentProduct,
     contextualOffer,
+    recentProductViews,
     orderItems,
     commerceMessages,
     whatsappMessages,
@@ -920,6 +939,7 @@ function emptyPromptContext(): CommerceAgentPromptContext {
   return {
     currentProduct: null,
     contextualOffer: null,
+    recentProductViews: [],
     orderItems: [],
     commerceMessages: [],
     whatsappMessages: [],
@@ -1337,6 +1357,68 @@ async function loadRecentCommerceEvents(context: Extract<CommerceAgentResolvedCo
   return (data ?? []).reverse();
 }
 
+async function loadRecentProductViews(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  events: CommerceTrackingEventRow[],
+  currentProduct: OfferProduct | null,
+) {
+  const ids = collectRecentProductViewIds(context, events);
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const products = await loadOfferProducts(context.client, context.organization.id, ids);
+  const byId = new Map<string, OfferProduct>(products.map((product) => [product.id, product]));
+  const ordered: OfferProduct[] = [];
+
+  for (const id of ids) {
+    const product = byId.get(id);
+
+    if (product) {
+      ordered.push(product);
+    }
+  }
+
+  if (currentProduct && !ordered.some((product) => product.id === currentProduct.id)) {
+    return [currentProduct, ...ordered].slice(0, 6);
+  }
+
+  return ordered.slice(0, 6);
+}
+
+function collectRecentProductViewIds(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  events: CommerceTrackingEventRow[],
+) {
+  const ids: string[] = [];
+
+  if (context.productId) {
+    ids.push(context.productId);
+  }
+
+  for (const event of [...events].reverse()) {
+    const productId = readProductIdFromTrackingEvent(event);
+
+    if (productId) {
+      ids.push(productId);
+    }
+  }
+
+  return uniqueStrings(ids).slice(0, 8);
+}
+
+function readProductIdFromTrackingEvent(event: CommerceTrackingEventRow) {
+  const payload = readRecord(event.payload);
+  const commerceContext = readRecord(payload?.commerce_context);
+
+  return readUuid(payload?.product_id)
+    ?? readUuid(payload?.catalog_item_id)
+    ?? readUuid(commerceContext?.product_id)
+    ?? readUuid(commerceContext?.catalog_item_id)
+    ?? inferProductIdFromPagePath(readString(payload?.page_path));
+}
+
 async function loadPersistentLeadCommerceMemory(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const lines: string[] = [];
 
@@ -1620,11 +1702,17 @@ async function resolveContextualOffer(context: Extract<CommerceAgentResolvedCont
   }
 
   const categoryHints = getPlaybookCategoryHints(settings.commerceAgent.verticalPlaybook);
-  const fallbackProducts = products.length > 0
+  const fallbackProducts = products.some((item) => item.id !== context.productId)
     ? products
     : await loadCatalogProducts(context.client, context.organization.id);
+  const currentProduct = products.find((item) => item.id === context.productId) ?? null;
+  const currentCategory = currentProduct?.category?.trim().toLowerCase() ?? null;
 
   return fallbackProducts.find((item) => (
+    currentCategory
+      && item.id !== context.productId
+      && item.category?.trim().toLowerCase() === currentCategory
+  )) ?? fallbackProducts.find((item) => (
     categoryHints.some((hint) => item.category?.toLowerCase().includes(hint))
     && item.id !== context.productId
   )) ?? fallbackProducts.find((item) => item.id !== context.productId) ?? null;
@@ -1729,6 +1817,8 @@ function buildCommerceAgentSystemInstruction(
     "- Pode mencionar de forma leve que viu a pessoa abrir uma pagina ou produto, mas nunca soe invasivo ou tecnico.",
     "- Nao diga que esta monitorando, rastreando, analisando eventos, usando cookie, banco, sistema ou memoria.",
     "- Se o lead mudou de produto, conecte com a conversa anterior: compare, complemente ou pergunte uma coisa simples.",
+    "- O produto atual da pagina sempre tem prioridade sobre produtos antigos do historico.",
+    "- Se o lead abriu varios produtos sem comprar, trate como duvida/comparacao e ajude a escolher com uma pergunta curta.",
     "- Se estiver no checkout, ajude sem atrapalhar o pagamento. Seja curto e resolutivo.",
     "- Faca upsell, cross-sell ou order bump somente quando combinar com o pedido, produto atual ou configuracao da loja.",
     "- Nunca force venda. Uma sugestao por vez. Se a pessoa ignorar ou recusar, siga ajudando no pedido principal.",
@@ -1799,6 +1889,9 @@ function buildCommerceAgentTurnPrompt(
     "NAVEGACAO RECENTE RASTREADA",
     formatCommerceEventHistory(promptContext.recentEvents),
     "",
+    "PRODUTOS RECENTES QUE O LEAD COMPAROU",
+    formatRecentProductViews(promptContext.recentProductViews, context.productId),
+    "",
     "PRODUTO/PAGINA ATUAL",
     formatProductContext(promptContext.currentProduct),
     "",
@@ -1845,7 +1938,7 @@ function buildWelcomeMessage(
 
   if (context.surface === "product") {
     return promptContext.currentProduct
-      ? `${name}${agentIntro}vi que voce abriu ${promptContext.currentProduct.title}. Se quiser, comparo com o que a gente estava vendo.`
+      ? `${name}${agentIntro}${promptContext.currentProduct.title} esta na tela agora. Se quiser, comparo com o que a gente estava vendo.`
       : `${name}${agentIntro}continuei contigo por aqui nesse produto.`;
   }
 
@@ -1861,17 +1954,14 @@ function buildWhisperMessage(
   promptContext: CommerceAgentPromptContext,
 ) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
+  const productWhisper = buildProductWhisperMessage(context, promptContext, name);
 
   if (context.returningVisitor && context.surface === "store") {
     return `${name}bem-vindo de volta. ${context.agentName} lembrou de voce por aqui; clica na minha foto se quiser continuar.`;
   }
 
-  if (context.returningVisitor && context.surface === "product" && promptContext.currentProduct) {
-    return `${name}bem-vindo de volta. Vi que voce abriu ${promptContext.currentProduct.title}; clica na minha foto que eu continuo contigo.`;
-  }
-
-  if (context.surface === "product" && promptContext.currentProduct) {
-    return `${name}vi que voce abriu ${promptContext.currentProduct.title}. Clica na minha foto que eu continuo contigo por aqui.`;
+  if (productWhisper) {
+    return productWhisper;
   }
 
   if (context.surface === "checkout") {
@@ -1891,6 +1981,74 @@ function buildWhisperMessage(
   }
 
   return `${name}estou aqui. Se precisar de ajuda, clica na minha foto que eu continuo por aqui.`;
+}
+
+function buildProductWhisperMessage(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  promptContext: CommerceAgentPromptContext,
+  name: string,
+) {
+  if (context.surface !== "product" || !promptContext.currentProduct) {
+    return null;
+  }
+
+  const product = promptContext.currentProduct;
+  const previousProducts = promptContext.recentProductViews.filter((item) => item.id !== product.id);
+  const viewedManyProducts = promptContext.recentProductViews.length >= 4;
+  const comparison = previousProducts[0]?.title;
+  const offer = promptContext.contextualOffer && promptContext.contextualOffer.id !== product.id
+    ? promptContext.contextualOffer
+    : null;
+
+  if (context.returningVisitor && previousProducts.length === 0) {
+    return `${name}bem-vindo de volta. ${product.title} pode fazer sentido pra voce; clica na minha foto que eu te ajudo a decidir.`;
+  }
+
+  if (viewedManyProducts) {
+    return `${name}vi que voce esta comparando algumas opcoes. ${product.title} pode ser o foco agora; clica na minha foto que eu te ajudo a escolher.`;
+  }
+
+  if (context.settings.commerceAgent.verticalPlaybook === "food") {
+    return `${name}${product.title} e uma boa pedida. Clica na minha foto que eu te ajudo a montar combo ou meia-meio com algo que combine.`;
+  }
+
+  if (offer) {
+    return `${name}${product.title} pode combinar com ${offer.title}. Clica na minha foto que eu te ajudo a montar a melhor opcao.`;
+  }
+
+  if (comparison) {
+    return `${name}${product.title} entrou bem nessa comparacao com ${comparison}. Clica na minha foto que eu te ajudo a escolher sem enrolacao.`;
+  }
+
+  return `${name}${product.title} pode ser uma boa opcao. Clica na minha foto que eu te falo se combina com o que voce procura.`;
+}
+
+function buildContextualIntentMessage(
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+  promptContext: CommerceAgentPromptContext,
+) {
+  if (context.surface === "product" && promptContext.currentProduct) {
+    const previousProducts = promptContext.recentProductViews
+      .filter((item) => item.id !== promptContext.currentProduct?.id)
+      .slice(0, 3)
+      .map((item) => item.title);
+
+    if (previousProducts.length >= 2) {
+      return `Me ajuda a comparar ${promptContext.currentProduct.title} com ${previousProducts.join(", ")} e escolher o melhor para mim.`;
+    }
+
+    return `Me fala sobre ${promptContext.currentProduct.title} e se ele combina com o que eu estava procurando.`;
+  }
+
+  if (context.surface === "checkout") {
+    return "Me ajuda a revisar esse checkout antes de eu pagar.";
+  }
+
+  if (context.surface === "cart") {
+    return "Me ajuda a revisar meu carrinho antes de finalizar.";
+  }
+
+  return null;
 }
 
 function formatSurfaceForPrompt(surface: SalesCatalogCommerceAgentSurface | "unknown") {
@@ -1961,11 +2119,26 @@ function formatCommerceEventHistory(events: CommerceTrackingEventRow[]) {
     .map((event) => {
       const payload = readRecord(event.payload);
       const pagePath = readString(payload?.page_path);
-      const productId = readString(payload?.product_id) ?? readString(payload?.catalog_item_id);
+      const productId = readProductIdFromTrackingEvent(event);
       const summary = event.summary ?? event.title ?? event.event_type;
 
       return `- ${summary}${pagePath ? ` | pagina: ${pagePath}` : ""}${productId ? ` | produto: ${productId}` : ""}`;
     })
+    .join("\n");
+}
+
+function formatRecentProductViews(products: OfferProduct[], currentProductId: string | null) {
+  if (products.length === 0) {
+    return "- Nenhum produto recente alem do contexto atual foi carregado.";
+  }
+
+  return products
+    .map((product, index) => [
+      `- ${index === 0 && product.id === currentProductId ? "Produto atual" : "Produto visto"}: ${product.title}`,
+      product.priceLabel,
+      product.category,
+      product.description ? preview(product.description, 140) : null,
+    ].filter(Boolean).join(" | "))
     .join("\n");
 }
 
@@ -2268,6 +2441,22 @@ function inferSurface(pagePath: string | null) {
   return null;
 }
 
+function inferProductIdFromPagePath(pagePath: string | null) {
+  const path = pagePath?.trim() ?? "";
+  const match = path.match(/(?:^|\/)produto\/([^/?#]+)/i);
+  const rawProductId = match?.[1];
+
+  if (!rawProductId) {
+    return null;
+  }
+
+  try {
+    return readUuid(decodeURIComponent(rawProductId));
+  } catch {
+    return readUuid(rawProductId);
+  }
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -2297,6 +2486,10 @@ function preview(value: string | null | undefined, maxLength: number) {
   }
 
   return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
 export function readCommerceAgentBody(value: unknown): CommerceAgentBody {

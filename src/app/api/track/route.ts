@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
   const lastTouch = readRecord(body.last_touch) ?? readRecord(metadata.last_touch);
   const attribution = readRecord(body.attribution) ?? readRecord(metadata.attribution);
   const consent = readString(body.consent) ?? readString(metadata.consent);
+  const metadataPagePath = readString(metadata.page_path);
   const requestedLeadId = readString(body.lead_id) ?? readString(metadata.lead_id) ?? readString(publicTracking.lead_id);
   const requestedConversationId = readString(body.conversation_id) ?? readString(metadata.conversation_id) ?? readString(publicTracking.conversation_id);
   const requestedLeadPhone = readString(body.lead_phone) ?? readString(metadata.lead_phone) ?? readString(publicTracking.lead_phone);
@@ -107,8 +108,14 @@ export async function POST(request: NextRequest) {
   const orderId = readString(body.order_id) ?? readString(metadata.order_id) ?? readString(publicTracking.order_id);
   const paymentSessionId = readString(body.payment_session_id) ?? readString(metadata.payment_session_id) ?? readString(publicTracking.payment_session_id);
   const trackingLinkId = readString(body.tracking_link_id) ?? readString(metadata.tracking_link_id) ?? readString(publicTracking.tracking_link_id);
-  const productId = readString(body.product_id) ?? readString(metadata.product_id) ?? readString(publicTracking.product_id);
-  const catalogItemId = readString(body.catalog_item_id) ?? readString(metadata.catalog_item_id) ?? readString(publicTracking.catalog_item_id);
+  const productId = inferCommerceProductId(metadataPagePath)
+    ?? readString(body.product_id)
+    ?? readString(metadata.product_id)
+    ?? readString(publicTracking.product_id);
+  const catalogItemId = inferCommerceProductId(metadataPagePath)
+    ?? readString(body.catalog_item_id)
+    ?? readString(metadata.catalog_item_id)
+    ?? readString(publicTracking.catalog_item_id);
   const trackingSource = readString(body.tracking_source) ?? readString(metadata.tracking_source) ?? readString(publicTracking.tracking_source);
 
   try {
@@ -148,7 +155,7 @@ export async function POST(request: NextRequest) {
     const agentId = requestedAgentId
       ?? readString(restoredIdentityMetadata.agent_id)
       ?? readString(restoredIdentityMetadata.latest_agent_id);
-    const pagePath = readString(metadata.page_path);
+    const pagePath = metadataPagePath;
     const title = buildEventTitle(eventType, pagePath, sourceType);
     const summary = buildEventSummary(eventType, metadata, tracking);
     const tags = buildTags({
@@ -713,6 +720,22 @@ function inferCommerceSurface(pagePath: string | null) {
   if (path.startsWith("/loja/") && path.includes("/carrinho")) return "cart";
   if (path.startsWith("/loja/")) return "store";
   return null;
+}
+
+function inferCommerceProductId(pagePath: string | null) {
+  const path = pagePath?.trim() ?? "";
+  const match = path.match(/(?:^|\/)produto\/([^/?#]+)/i);
+  const rawProductId = match?.[1];
+
+  if (!rawProductId) {
+    return null;
+  }
+
+  try {
+    return readUuid(decodeURIComponent(rawProductId));
+  } catch {
+    return readUuid(rawProductId);
+  }
 }
 
 function normalizeCommerceSurface(value: string | null) {
