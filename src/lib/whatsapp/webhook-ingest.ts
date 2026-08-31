@@ -191,6 +191,7 @@ export async function ingestUazapiWebhook(input: {
           organizationId: instance.organization_id,
           phoneNumber: message.phoneNumber,
           displayName: message.displayName,
+          messageDirection: message.direction,
           lastEventSummary: message.textContent,
           lastMessageAt: message.occurredAt,
           profileImageUrl: message.profileImageUrl,
@@ -608,6 +609,7 @@ async function ensureLead(
     organizationId: string;
     phoneNumber: string;
     displayName: string | null;
+    messageDirection: MessageSnapshot["direction"];
     lastEventSummary: string | null;
     lastMessageAt: string;
     profileImageUrl: string | null;
@@ -626,14 +628,32 @@ async function ensureLead(
   const incomingDisplayNameIsPersonal = isLikelyPersonalLeadName(incomingDisplayName);
 
   if (existing) {
+    const baseMetadata = readRecord(existing.metadata);
+    const existingPersonalName = resolveLeadPersonalName({
+      displayName: existing.display_name,
+      metadata: baseMetadata,
+    });
+    const shouldAcceptIncomingDisplayName = Boolean(
+      incomingDisplayName &&
+      incomingDisplayNameIsPersonal &&
+      !existingPersonalName &&
+      input.messageDirection === "inbound",
+    );
     const metadata = buildLeadMetadata(readRecord(existing.metadata), {
       createdFrom: null,
-      displayName: incomingDisplayName,
+      displayName: shouldAcceptIncomingDisplayName ? incomingDisplayName : null,
       lastSource: "uazapi_webhook",
       profileImageUrl: input.profileImageUrl,
       providerChatId: input.providerChatId,
       providerMessageId: input.providerMessageId,
     });
+    const providerDisplayNameMetadata = !shouldAcceptIncomingDisplayName && incomingDisplayName
+      ? {
+          last_provider_display_name: incomingDisplayName,
+          last_provider_display_name_kind: classifyWhatsappLeadDisplayName(incomingDisplayName),
+          last_provider_display_name_direction: input.messageDirection,
+        }
+      : {};
     const safeExistingName = resolveLeadPersonalName({
       displayName: existing.display_name,
       metadata,
@@ -642,10 +662,13 @@ async function ensureLead(
       status: "active",
       last_event_summary: input.lastEventSummary,
       last_message_at: input.lastMessageAt,
-      metadata,
+      metadata: {
+        ...metadata,
+        ...providerDisplayNameMetadata,
+      },
     };
 
-    if (incomingDisplayNameIsPersonal && incomingDisplayName) {
+    if (shouldAcceptIncomingDisplayName && incomingDisplayName) {
       updatePayload.display_name = incomingDisplayName;
     } else if (safeExistingName) {
       updatePayload.display_name = safeExistingName;
@@ -1324,16 +1347,6 @@ type MessageSnapshot = {
 
 function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
   const messageRecord = findMessageRecord(payload) ?? payload;
-  const rawProviderChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid", "from", "to"])
-    ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
-  const providerChatId = resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId);
-  const isGroupChat = isWhatsappGroupChatId(providerChatId)
-    || findBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
-    || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
-    || false;
-  const textContent =
-    findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
-    ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
   const providerMessageId =
     findString(messageRecord, ["messageId", "message_id", "messageid", "id"])
     ?? findNestedString(messageRecord, ["id", "messageId"]);
@@ -1341,6 +1354,16 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     ?? findNestedBoolean(messageRecord, ["fromMe", "from_me"]);
   const sentByApi = findBoolean(messageRecord, ["wasSentByApi", "sentByApi", "sent_by_api", "fromApi"])
     ?? findNestedBoolean(messageRecord, ["wasSentByApi", "sentByApi", "sent_by_api", "fromApi"]);
+  const rawProviderChatId = resolveRawProviderChatId(messageRecord, fromMe, sentByApi)
+    ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
+  const providerChatId = resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId, fromMe === true || sentByApi === true);
+  const isGroupChat = isWhatsappGroupChatId(providerChatId)
+    || findBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
+    || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
+    || false;
+  const textContent =
+    findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
+    ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
   const outbound = typeof fromMe === "boolean" ? fromMe : sentByApi === true ? true : null;
   const messageType = resolveMessageType(messageRecord);
   const occurredAt = parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]));
@@ -1388,14 +1411,34 @@ function buildConversationMessagePayload(payload: JsonRecord, message: MessageSn
   };
 }
 
+function resolveRawProviderChatId(messageRecord: JsonRecord, fromMe: boolean | null, sentByApi: boolean | null) {
+  const directChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid"]);
+
+  if (directChatId) {
+    return directChatId;
+  }
+
+  const from = findString(messageRecord, ["from"]);
+  const to = findString(messageRecord, ["to"]);
+  const outbound = fromMe === true || sentByApi === true;
+
+  return outbound ? to ?? from : from ?? to;
+}
+
 function resolveCanonicalProviderChatId(
   payload: JsonRecord,
   messageRecord: JsonRecord,
   rawProviderChatId: string | null,
+  isOutbound: boolean,
 ) {
+  if (isCanonicalWhatsappChatId(rawProviderChatId)) {
+    return rawProviderChatId;
+  }
+
   const directCanonical = [
-    findString(messageRecord, ["sender_pn", "senderPn", "chat_pn", "chatPn", "participant_pn", "participantPn"]),
     findString(messageRecord, ["wa_chatid", "waChatId"]),
+    findString(messageRecord, ["chat_pn", "chatPn"]),
+    !isOutbound ? findString(messageRecord, ["sender_pn", "senderPn", "participant_pn", "participantPn"]) : null,
   ].find((candidate) => isCanonicalWhatsappChatId(candidate));
 
   if (directCanonical) {

@@ -310,7 +310,7 @@ export function LeadCrmConsole({
         return 30_000;
       }
 
-      return failedAttempts > 0 ? Math.min(15_000, 5_000 + failedAttempts * 2_000) : 4_000;
+      return failedAttempts > 0 ? Math.min(15_000, 4_000 + failedAttempts * 2_000) : 2_000;
     };
 
     const refreshNow = () => {
@@ -374,7 +374,7 @@ export function LeadCrmConsole({
       }
     }
 
-    schedule(900);
+    schedule(350);
     window.addEventListener("focus", refreshNow);
     document.addEventListener("visibilitychange", refreshNow);
 
@@ -4709,6 +4709,9 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
   const transcript = isGenericMediaPlaceholder(message.text)
     ? null
     : redactInternalProviderNames(message.text);
+  const audioLabel = isOutbound
+    ? "Áudio do atendimento"
+    : "Áudio do lead";
 
   return (
     <div className="space-y-2">
@@ -4721,7 +4724,7 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
             <PlayCircle className="h-3.5 w-3.5" />
-            Áudio do lead
+            {audioLabel}
           </span>
           {message.mediaMimeType ? (
             <span className="shrink-0 font-mono text-[8px] uppercase tracking-wide text-slate-500">

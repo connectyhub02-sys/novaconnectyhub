@@ -142,7 +142,7 @@ const whatsappPresenceTimeoutMs = 12000;
 const whatsappReactionTimeoutMs = 8000;
 const geminiAgentResponseTimeoutMs = 60000;
 const geminiMediaAcknowledgementTimeoutMs = 20000;
-const linkButtonTagRegex = /\{\{\s*link_[^{}]+?\s*\}\}/gi;
+const linkButtonTagRegex = /\{\{\s*(?:link|checkout)_[^{}]+?\s*\}\}/gi;
 
 type AgentRunRow = {
   id: string;
@@ -7548,6 +7548,10 @@ function isSalesCatalogPaymentLinkFollowUp(
   }
 
   if (/^\?+$/.test(rawText.replace(/\s+/g, ""))) {
+    return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
+  }
+
+  if (/\b(?:ainda nao|nao ainda|nao chegou|nao apareceu|nao recebi|nao abriu|sem link|cade|kd)\b/.test(normalized)) {
     return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
   }
 

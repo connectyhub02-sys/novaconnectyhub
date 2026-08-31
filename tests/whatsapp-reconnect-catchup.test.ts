@@ -83,7 +83,7 @@ describe("WhatsApp reconnect catch-up", () => {
   });
 
   it("resolves Uazapi LID chat ids to the canonical WhatsApp phone chat id", () => {
-    expect(webhookIngestSource).toContain("resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId)");
+    expect(webhookIngestSource).toContain("resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId, fromMe === true || sentByApi === true)");
     expect(webhookIngestSource).toContain('"sender_pn"');
     expect(webhookIngestSource).toContain('"wa_chatlid"');
     expect(webhookIngestSource).toContain('"wa_chatid"');

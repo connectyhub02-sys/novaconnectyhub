@@ -60,6 +60,7 @@ describe("Lead CRM quoted message preview", () => {
     expect(chatMessages).toContain("<ChatAudioMessage");
     expect(audioMessage).toContain("<audio");
     expect(audioMessage).toContain("controls");
+    expect(audioMessage).toContain("Áudio do atendimento");
     expect(audioMessage).toContain("Transcrição");
     expect(attendanceMediaRouteSource).toContain("buildUazapiDownloadBodies");
     expect(attendanceMediaRouteSource).toContain("/message/download");
@@ -86,5 +87,16 @@ describe("Lead CRM quoted message preview", () => {
     expect(chatMessages).toContain("return `IA ${channelLabel}`");
     expect(chatMessages).toContain("return `Lead ${channelLabel}`");
     expect(chatMessages).toContain("Humano Painel");
+  });
+
+  it("keeps the attendance panel polling fast enough for live WhatsApp handoff", () => {
+    const livePolling = sourceBetween(
+      leadsCrmConsoleSource,
+      "const getNextDelay = () =>",
+      "const refreshNow = () =>",
+    );
+
+    expect(livePolling).toContain(": 2_000");
+    expect(leadsCrmConsoleSource).toContain("schedule(350)");
   });
 });

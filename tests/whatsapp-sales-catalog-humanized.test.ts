@@ -113,6 +113,19 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRecovery).toContain("sendSalesCatalogPaymentLink");
     expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutPromise");
     expect(followUpDetection).toContain("link de pagamento");
+    expect(followUpDetection).toContain("nao abriu");
+    expect(followUpDetection).toContain("ainda nao");
+  });
+
+  it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
+    const tagRenderer = sourceBetween(
+      "function renderLinkButtonTags",
+      "function findLinkButtonByReference",
+    );
+
+    expect(runtimeSource).toContain("const linkButtonTagRegex = /\\{\\{\\s*(?:link|checkout)_");
+    expect(tagRenderer).toContain("findLinkButtonByReference(reference, linkButtons)");
+    expect(tagRenderer).toContain("return link ? buildLeadAwareTrackingUrl(link, input) : \"\";");
   });
 
   it("keeps checkout payment links out of reusable agent links", () => {
