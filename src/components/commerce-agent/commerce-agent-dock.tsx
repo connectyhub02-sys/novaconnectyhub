@@ -141,6 +141,7 @@ export function CommerceAgentDock() {
 
     const controller = new AbortController();
     const snapshot = getTrackingSnapshot();
+    let sessionRequestSettled = false;
 
     fetch("/api/public/commerce-agent/session", {
       method: "POST",
@@ -175,12 +176,19 @@ export function CommerceAgentDock() {
         }
       })
       .finally(() => {
+        sessionRequestSettled = true;
         if (!controller.signal.aborted) {
           setLoading(false);
         }
       });
 
-    return () => controller.abort();
+    return () => {
+      if (!sessionRequestSettled && lastSessionKey.current === sessionKey) {
+        lastSessionKey.current = null;
+      }
+
+      controller.abort();
+    };
   }, [pathname, search, trackingContextProbe, trackingContextSignature]);
 
   useEffect(() => {
