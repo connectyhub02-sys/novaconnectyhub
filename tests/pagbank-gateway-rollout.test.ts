@@ -5,6 +5,7 @@ const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.s
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
+const pagBankGatewaySource = read("src/lib/sales-catalog/pagbank.ts");
 const checkoutPageSource = read("src/app/checkout/[sessionId]/page.tsx");
 const checkoutOptionsSource = read("src/components/checkout/checkout-payment-options.tsx");
 const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
@@ -44,10 +45,17 @@ describe("PagBank gateway rollout", () => {
     expect(integrationsSource).toContain("buildPagBankConnections");
     expect(clientConsoleSource).toContain("function PagBankGuidedCard");
     expect(clientConsoleSource).toContain("Conectar PagBank");
-    expect(clientConsoleSource).toContain("Abrir conta indicada");
-    expect(clientConsoleSource).toContain("Conectar PagBank abre a tela oficial de permissoes");
+    expect(clientConsoleSource).toContain("Ja tenho conta");
+    expect(clientConsoleSource).toContain("Nao tenho conta");
+    expect(clientConsoleSource).toContain("Ja tenho conta abre a tela oficial de permissoes");
     expect(clientConsoleSource).toContain("buildPagBankAffiliateUrl");
     expect(clientConsoleSource).not.toContain("function MercadoPagoGuidedCard");
+  });
+
+  it("encodes PagBank OAuth scopes as plus-separated values for the provider", () => {
+    expect(pagBankGatewaySource).toContain("PagBank expects between scopes");
+    expect(pagBankGatewaySource).toContain("].join(\" \");");
+    expect(pagBankGatewaySource).not.toContain("].join(\"+\");");
   });
 
   it("labels public checkout payment surfaces by provider", () => {

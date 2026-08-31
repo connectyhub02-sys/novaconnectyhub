@@ -37,10 +37,10 @@ O PagBank passa a ser o gateway principal para pagamentos recebidos pelos client
 
 Fluxo do cliente:
 
-1. O painel mostra um unico botao: Conectar PagBank.
-2. O botao abre diretamente a URL oficial `connect.pagbank.com.br/oauth2/authorize`.
+1. O painel mostra o bloco Conectar PagBank com dois botoes: Ja tenho conta e Nao tenho conta.
+2. Ja tenho conta abre diretamente a URL oficial `connect.pagbank.com.br/oauth2/authorize`.
 3. Quem ja tem conta faz login e autoriza as permissoes PagBank.
-4. Quem nao tem conta usa o link indicado separado, configurado em `PAGBANK_AFFILIATE_CONNECT_URL`, e depois volta para conectar.
+4. Nao tenho conta abre o link indicado separado, configurado em `PAGBANK_AFFILIATE_CONNECT_URL`, e depois o cliente volta para conectar.
 5. Apos autorizar, o PagBank retorna para `/api/dashboard/sales-catalog/payments/pagbank/callback`.
 6. A ConnectyHub troca o `code` por `access_token` e `refresh_token`, salva a conexao e libera Pix no checkout.
 

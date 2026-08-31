@@ -1919,7 +1919,7 @@ function PagBankGuidedCard({
           <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
           <h2 className="mt-1 text-[16px] font-semibold text-slate-100">PagBank</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">
-            O cliente autoriza a conta PagBank pelo fluxo oficial sem informar token manual. Quem ainda nao tiver conta pode abrir pelo link indicado e voltar para conectar.
+            Quem ja tem conta autoriza pelo fluxo oficial sem informar token manual. Quem nao tem conta abre pelo link indicado e depois volta para conectar.
           </p>
         </div>
         <WalletCards className="h-5 w-5 shrink-0 text-emerald-300" />
@@ -1935,7 +1935,7 @@ function PagBankGuidedCard({
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-100">Conta PagBank</p>
+            <p className="text-[13px] font-semibold text-slate-100">Conectar PagBank</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
           </div>
           <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
@@ -1947,7 +1947,7 @@ function PagBankGuidedCard({
           </p>
         ) : null}
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className={cn("mt-3 grid gap-2", connected ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
           <a
             href={buildPagBankConnectUrl(selectedCompanyId)}
             target="_blank"
@@ -1960,7 +1960,7 @@ function PagBankGuidedCard({
             )}
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            {connected ? "Reconectar PagBank" : "Conectar PagBank"}
+            {connected ? "Reconectar PagBank" : "Ja tenho conta"}
           </a>
           <a
             href={buildPagBankAffiliateUrl(selectedCompanyId)}
@@ -1974,22 +1974,24 @@ function PagBankGuidedCard({
             style={{ borderColor: "var(--ch-border)" }}
           >
             <ExternalLink className="h-4 w-4" />
-            Abrir conta indicada
+            Nao tenho conta
           </a>
-          <button
-            type="button"
-            disabled={!connected || disconnecting}
-            onClick={onDisconnect}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ borderColor: "var(--ch-border)" }}
-          >
-            {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-            Desconectar
-          </button>
+          {connected ? (
+            <button
+              type="button"
+              disabled={disconnecting}
+              onClick={onDisconnect}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              Desconectar
+            </button>
+          ) : null}
         </div>
 
         <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
-          Conectar PagBank abre a tela oficial de permissoes. A indicacao fica separada porque a pagina de afiliado do PagBank nao continua automaticamente para a autorizacao.
+          Ja tenho conta abre a tela oficial de permissoes. Nao tenho conta abre o cadastro indicado; depois volte e autorize a conta PagBank.
         </p>
       </div>
     </section>

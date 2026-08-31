@@ -142,7 +142,8 @@ const pagBankDefaultScopes = [
   "payments.create",
   "payments.refund",
   "accounts.read",
-].join("+");
+  // URLSearchParams serializes spaces as raw plus signs, which PagBank expects between scopes.
+].join(" ");
 const pagBankCredentialNames = [
   "PAGBANK_CLIENT_ID",
   "PAGBANK_CLIENT_SECRET",
