@@ -11,6 +11,7 @@ import {
   loadBillingCheckoutIntent,
   readBillingCheckoutPixData,
   readSelectedBillingCheckoutBumpCodesForCatalog,
+  resolveBillingCheckoutProvider,
 } from "@/lib/billing/plan-checkout";
 import { loadMercadoPagoPlatformBillingConfig, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -61,9 +62,12 @@ export default async function DashboardBillingCheckoutPage({
     subscriptionId,
   });
   const availableBumps = await loadBillingCheckoutBumps(client);
-  const publicKey = await loadMercadoPagoPlatformBillingConfig({ client })
-    .then((config) => config.publicKey)
-    .catch(() => null);
+  const billingProvider = resolveBillingCheckoutProvider(intent);
+  const publicKey = billingProvider === "mercado_pago"
+    ? await loadMercadoPagoPlatformBillingConfig({ client })
+        .then((config) => config.publicKey)
+        .catch(() => null)
+    : null;
 
   return (
     <ConnectyShell
@@ -74,12 +78,14 @@ export default async function DashboardBillingCheckoutPage({
       userLabel={workspace.profile.email ?? undefined}
       workspaceName={workspace.organization.name ?? workspace.profile.companyName ?? "Workspace"}
     >
-      <Script
-        id="mercado-pago-security"
-        src="https://www.mercadopago.com/v2/security.js"
-        strategy="afterInteractive"
-        {...mercadoPagoSecurityScriptAttributes}
-      />
+      {billingProvider === "mercado_pago" ? (
+        <Script
+          id="mercado-pago-security"
+          src="https://www.mercadopago.com/v2/security.js"
+          strategy="afterInteractive"
+          {...mercadoPagoSecurityScriptAttributes}
+        />
+      ) : null}
 
       {!intent ? (
         <section className="rounded-[8px] border border-rose-300/25 bg-rose-950/20 p-6">
@@ -108,7 +114,7 @@ export default async function DashboardBillingCheckoutPage({
                 Finalize sua assinatura.
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                Confira seu plano, adicione creditos promocionais e pague com cartao ou Pix no checkout ConnectyHub.
+                Confira seu plano, adicione creditos promocionais e pague no checkout ConnectyHub.
               </p>
             </div>
             <Link
@@ -134,6 +140,7 @@ export default async function DashboardBillingCheckoutPage({
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
             initialProviderPaymentId={intent.payment.provider_payment_id}
+            billingProvider={billingProvider}
             cardPublicKey={publicKey}
             availableBumps={availableBumps}
             initialSelectedBumpCodes={readSelectedBillingCheckoutBumpCodesForCatalog(intent, availableBumps)}

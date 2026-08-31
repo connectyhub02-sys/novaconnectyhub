@@ -20,6 +20,7 @@ import {
   loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
   normalizeBillingCheckoutBumpCodesForCatalog,
+  resolveBillingCheckoutProvider,
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
 import {
@@ -70,6 +71,10 @@ export async function POST(
 
   if (!isBillingCheckoutPayable(intent)) {
     return NextResponse.json({ error: "Este checkout nao esta aberto para pagamento." }, { status: 409 });
+  }
+
+  if (resolveBillingCheckoutProvider(intent) !== "mercado_pago") {
+    return NextResponse.json({ error: "Cartao esta indisponivel neste checkout. Use Pix PagBank." }, { status: 409 });
   }
 
   const token = readString(formData.token);

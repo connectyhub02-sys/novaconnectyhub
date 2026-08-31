@@ -34,6 +34,7 @@ type BillingPlanCheckoutProps = {
   subscriptionStatus: string;
   paymentStatus: string;
   initialProviderPaymentId: string | null;
+  billingProvider: "mercado_pago" | "pagbank";
   cardPublicKey: string | null;
   availableBumps: BillingCheckoutBump[];
   initialSelectedBumpCodes: BillingCheckoutBumpCode[];
@@ -103,6 +104,7 @@ export function BillingPlanCheckout({
   subscriptionStatus,
   paymentStatus,
   initialProviderPaymentId,
+  billingProvider,
   cardPublicKey,
   availableBumps,
   initialSelectedBumpCodes,
@@ -120,7 +122,9 @@ export function BillingPlanCheckout({
     Boolean(initialProviderPaymentId) && ["pending", "in_process"].includes(paymentStatus) && !initialPixQrCode,
   );
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
-  const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardPublicKey ? "card" : "pix");
+  const cardEnabled = billingProvider === "mercado_pago" && Boolean(cardPublicKey);
+  const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
+  const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardEnabled ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({
     qrCode: initialPixQrCode,
     qrCodeBase64: initialPixQrCodeBase64,
@@ -146,7 +150,7 @@ export function BillingPlanCheckout({
     () => availableBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
     [availableBumps, selectedBumpCodes],
   );
-  const paymentStatusNotice = useMemo(() => buildPaymentStatusNotice(currentPaymentStatus), [currentPaymentStatus]);
+  const paymentStatusNotice = useMemo(() => buildPaymentStatusNotice(currentPaymentStatus, providerLabel), [currentPaymentStatus, providerLabel]);
   const bumpsAmount = selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0);
   const totalAmount = Math.round((planAmountBrl + bumpsAmount) * 100) / 100;
   const cardExtraPayload = useMemo(
@@ -246,7 +250,7 @@ export function BillingPlanCheckout({
         setNotice({
           tone: "warning",
           message: data?.providerStatus
-            ? `Mercado Pago retornou ${data.providerStatus}. Ainda estamos aguardando a confirmacao.`
+            ? `${providerLabel} retornou ${data.providerStatus}. Ainda estamos aguardando a confirmacao.`
             : "Pagamento ainda aguardando confirmacao.",
         });
       }
@@ -262,7 +266,7 @@ export function BillingPlanCheckout({
         setStatusChecking(false);
       }
     }
-  }, [openApprovedFeedback, openRejectedFeedback, queueCheckoutRefresh, subscriptionId]);
+  }, [openApprovedFeedback, openRejectedFeedback, providerLabel, queueCheckoutRefresh, subscriptionId]);
 
   useEffect(() => {
     if (checkoutConfirmed) {
@@ -329,13 +333,13 @@ export function BillingPlanCheckout({
       tone: "warning",
       message: result.hasThreeDSChallenge
         ? "Confirme sua identidade no banco. Depois disso, vamos atualizar o checkout automaticamente."
-        : "Pagamento enviado. Estamos consultando a confirmacao do Mercado Pago automaticamente.",
+        : `Pagamento enviado. Estamos consultando a confirmacao do ${providerLabel} automaticamente.`,
     });
 
     window.setTimeout(() => {
       void checkPaymentStatus();
     }, 2500);
-  }, [checkPaymentStatus, openApprovedFeedback, openRejectedFeedback, queueCheckoutRefresh]);
+  }, [checkPaymentStatus, openApprovedFeedback, openRejectedFeedback, providerLabel, queueCheckoutRefresh]);
 
   const handleCardThreeDSComplete = useCallback(() => {
     setCardStatusPolling(true);
@@ -613,7 +617,7 @@ export function BillingPlanCheckout({
             <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-900/70 p-1">
               <PaymentMethodButton
                 active={method === "card"}
-                disabled={!cardPublicKey}
+                disabled={!cardEnabled}
                 icon={<CreditCard className="h-4 w-4" />}
                 label="Cartao"
                 onClick={() => setMethod("card")}
@@ -627,7 +631,7 @@ export function BillingPlanCheckout({
               />
             </div>
 
-            {method === "card" && cardPublicKey ? (
+            {method === "card" && cardEnabled && cardPublicKey ? (
               <MercadoPagoCardBrick
                 key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
                 publicKey={cardPublicKey}
@@ -1106,7 +1110,7 @@ function CartRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
+function buildPaymentStatusNotice(paymentStatus: string, providerLabel: string): NoticeState {
   if (paymentStatus === "approved") {
     return {
       tone: "success",
@@ -1124,7 +1128,7 @@ function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
   if (paymentStatus === "in_process") {
     return {
       tone: "warning",
-      message: "Pagamento em analise. Assim que o Mercado Pago confirmar, os creditos serao liberados.",
+      message: `Pagamento em analise. Assim que o ${providerLabel} confirmar, os creditos serao liberados.`,
     };
   }
 

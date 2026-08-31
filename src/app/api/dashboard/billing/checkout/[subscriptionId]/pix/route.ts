@@ -13,15 +13,23 @@ import {
   loadMercadoPagoPlatformBillingConfig,
 } from "@/lib/sales-catalog/mercado-pago";
 import {
+  buildPagBankPlatformBillingWebhookUrl,
+  createPagBankPixOrder,
+  extractPagBankPixData,
+  loadPagBankPlatformBillingConfig,
+} from "@/lib/sales-catalog/pagbank";
+import {
   formatBillingCheckoutDescription,
   isBillingCheckoutPayable,
   loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
   normalizeBillingCheckoutBumpCodesForCatalog,
+  resolveBillingCheckoutProvider,
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
 import {
   processPlatformBillingMercadoPagoWebhook,
+  processPlatformBillingPagBankWebhook,
   sendPlatformPlanInteractionNotification,
 } from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -31,6 +39,17 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type JsonRecord = Record<string, unknown>;
+type BillingPixProvider = "mercado_pago" | "pagbank";
+type BillingCheckoutItem = {
+  id: string;
+  title: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+};
+type BillingPixData =
+  | ReturnType<typeof extractMercadoPagoPixData>
+  | ReturnType<typeof extractPagBankPixData>;
 
 export async function POST(
   request: NextRequest,
@@ -76,6 +95,7 @@ export async function POST(
   }
 
   try {
+    const billingProvider = resolveBillingCheckoutProvider(intent);
     const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
     await notifyPaymentStartedSafely(client, {
       organizationId: workspace.organization.id,
@@ -94,42 +114,50 @@ export async function POST(
       selectedBumpCodes: cart.selectedBumps.map((bump) => bump.code),
       selectedBumpTitles: cart.selectedBumps.map((bump) => bump.title),
     });
-    const config = await loadMercadoPagoPlatformBillingConfig({ client });
-    const additionalInfo = buildMercadoPagoAdditionalInfo({
-      payerName: workspace.profile.fullName ?? workspace.organization.name,
-      items: [
-        {
-          id: intent.plan.plan_code,
-          title: `Plano ${intent.plan.name}`,
-          quantity: 1,
-          unitPrice: cart.planAmount,
-          total: cart.planAmount,
-        },
-        ...cart.selectedBumps.map((bump) => ({
-          id: bump.code,
-          title: bump.title,
-          quantity: 1,
-          unitPrice: bump.priceBrl,
-          total: bump.priceBrl,
-        })),
-      ],
-    });
-    const payment = await createMercadoPagoPixPayment({
-      accessToken: config.accessToken,
-      amount: cart.totalAmount,
-      description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
-      externalReference: cart.externalReference,
-      payerEmail,
-      payerName: workspace.profile.fullName ?? workspace.organization.name,
-      notificationUrl: buildMercadoPagoPlatformBillingWebhookUrl(),
-      idempotencyKey: randomUUID(),
-      additionalInfo,
-    });
-    const paymentData = extractMercadoPagoPixData(payment.payment);
+    const checkoutItems = [
+      {
+        id: intent.plan.plan_code,
+        title: `Plano ${intent.plan.name}`,
+        quantity: 1,
+        unitPrice: cart.planAmount,
+        total: cart.planAmount,
+      },
+      ...cart.selectedBumps.map((bump) => ({
+        id: bump.code,
+        title: bump.title,
+        quantity: 1,
+        unitPrice: bump.priceBrl,
+        total: bump.priceBrl,
+      })),
+    ];
+    const paymentData = billingProvider === "pagbank"
+      ? await createPagBankBillingPix({
+          client,
+          amount: cart.totalAmount,
+          description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
+          externalReference: cart.externalReference,
+          payerEmail,
+          payerName: workspace.profile.fullName ?? workspace.organization.name,
+          items: checkoutItems,
+        })
+      : await createMercadoPagoBillingPix({
+          client,
+          amount: cart.totalAmount,
+          description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
+          externalReference: cart.externalReference,
+          payerEmail,
+          payerName: workspace.profile.fullName ?? workspace.organization.name,
+          items: checkoutItems,
+        });
+    const providerPaymentId = readProviderPaymentId(paymentData);
 
-    if (paymentData.providerPaymentId) {
-      await processPlatformBillingMercadoPagoWebhook(client, {
-        dataId: paymentData.providerPaymentId,
+    if (paymentData.status === "approved" && providerPaymentId) {
+      const processor = billingProvider === "pagbank"
+        ? processPlatformBillingPagBankWebhook
+        : processPlatformBillingMercadoPagoWebhook;
+
+      await processor(client, {
+        dataId: providerPaymentId,
         eventType: "payment",
         action: "payment.created",
         providerEventId: null,
@@ -146,22 +174,20 @@ export async function POST(
     await client
       .from("billing_payments")
       .update({
-        provider_payment_id: paymentData.providerPaymentId,
-        provider_status: paymentData.providerStatus,
+        provider: billingProvider,
+        provider_payment_id: providerPaymentId,
+        provider_status: paymentData.providerStatus ?? paymentData.status,
         status: normalizeBillingPaymentStatus(paymentData.status),
         payload: {
           ...(intent.payment.payload ?? {}),
           ...cart.metadata,
-          provider_payment_id: paymentData.providerPaymentId,
+          billing_provider: billingProvider,
+          provider_payment_id: providerPaymentId,
           provider_status: paymentData.providerStatus,
           pix_qr_code: paymentData.pixQrCode,
           pix_qr_code_base64: paymentData.pixQrCodeBase64,
           pix_ticket_url: paymentData.pixTicketUrl,
-          mercado_pago_payment: {
-            id: paymentData.providerPaymentId,
-            status: paymentData.providerStatus,
-            status_detail: paymentData.providerStatusDetail,
-          },
+          ...buildBillingPixProviderPayload(billingProvider, paymentData),
         },
       })
       .eq("id", intent.payment.id)
@@ -172,7 +198,7 @@ export async function POST(
       status: paymentData.status,
       providerStatus: paymentData.providerStatus,
       providerStatusDetail: paymentData.providerStatusDetail,
-      providerPaymentId: paymentData.providerPaymentId,
+      providerPaymentId,
       pixQrCode: paymentData.pixQrCode,
       pixQrCodeBase64: paymentData.pixQrCodeBase64,
       pixTicketUrl: paymentData.pixTicketUrl,
@@ -197,10 +223,98 @@ function normalizeEmail(value: string | null) {
 function normalizeBillingPaymentStatus(value: string) {
   if (value === "approved") return "approved";
   if (value === "rejected") return "rejected";
-  if (value === "cancelled") return "canceled";
+  if (value === "cancelled" || value === "canceled" || value === "expired") return "canceled";
   if (value === "refunded") return "refunded";
   if (value === "pending") return "pending";
   return "in_process";
+}
+
+async function createPagBankBillingPix(input: {
+  client: ReturnType<typeof createServiceClient>;
+  amount: number;
+  description: string;
+  externalReference: string;
+  payerEmail: string;
+  payerName: string | null;
+  items: BillingCheckoutItem[];
+}) {
+  const config = await loadPagBankPlatformBillingConfig({ client: input.client });
+  const order = await createPagBankPixOrder({
+    accessToken: config.accessToken,
+    mode: config.mode,
+    apiBaseUrl: config.apiBaseUrl,
+    amount: input.amount,
+    description: input.description,
+    externalReference: input.externalReference,
+    payerEmail: input.payerEmail,
+    payerName: input.payerName,
+    notificationUrl: config.webhookUrl || buildPagBankPlatformBillingWebhookUrl(),
+    idempotencyKey: randomUUID(),
+    pixExpirationMinutes: 1440,
+    items: input.items,
+  });
+
+  return extractPagBankPixData(order.order);
+}
+
+async function createMercadoPagoBillingPix(input: {
+  client: ReturnType<typeof createServiceClient>;
+  amount: number;
+  description: string;
+  externalReference: string;
+  payerEmail: string;
+  payerName: string | null;
+  items: BillingCheckoutItem[];
+}) {
+  const config = await loadMercadoPagoPlatformBillingConfig({ client: input.client });
+  const additionalInfo = buildMercadoPagoAdditionalInfo({
+    payerName: input.payerName,
+    items: input.items,
+  });
+  const payment = await createMercadoPagoPixPayment({
+    accessToken: config.accessToken,
+    amount: input.amount,
+    description: input.description,
+    externalReference: input.externalReference,
+    payerEmail: input.payerEmail,
+    payerName: input.payerName,
+    notificationUrl: buildMercadoPagoPlatformBillingWebhookUrl(),
+    idempotencyKey: randomUUID(),
+    additionalInfo,
+  });
+
+  return extractMercadoPagoPixData(payment.payment);
+}
+
+function readProviderPaymentId(paymentData: BillingPixData) {
+  const providerOrderId = "providerOrderId" in paymentData ? paymentData.providerOrderId : null;
+
+  return providerOrderId ?? paymentData.providerPaymentId;
+}
+
+function buildBillingPixProviderPayload(provider: BillingPixProvider, paymentData: BillingPixData): JsonRecord {
+  if (provider === "pagbank") {
+    const providerOrderId = "providerOrderId" in paymentData ? paymentData.providerOrderId : null;
+
+    return {
+      pagbank_order_id: providerOrderId,
+      pagbank_charge_id: paymentData.providerPaymentId,
+      pagbank_payment: {
+        id: providerOrderId ?? paymentData.providerPaymentId,
+        charge_id: paymentData.providerPaymentId,
+        status: paymentData.providerStatus,
+        status_detail: paymentData.providerStatusDetail,
+      },
+    };
+  }
+
+  return {
+    mercado_pago_payment: {
+      id: paymentData.providerPaymentId,
+      status: paymentData.providerStatus,
+      status_detail: paymentData.providerStatusDetail,
+    },
+  };
 }
 
 async function notifyPaymentStartedSafely(

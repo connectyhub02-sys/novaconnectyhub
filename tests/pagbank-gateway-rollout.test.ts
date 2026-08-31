@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.sql");
+const platformBillingMigrationSource = read("supabase/migrations/0069_pagbank_platform_billing.sql");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
@@ -11,6 +12,13 @@ const checkoutOptionsSource = read("src/components/checkout/checkout-payment-opt
 const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
 const maintenanceVaultSource = read("src/lib/maintenance-vault.ts");
 const envExampleSource = read(".env.example");
+const planIntentSource = read("src/app/api/dashboard/billing/plan-intent/route.ts");
+const billingPixRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/pix/route.ts");
+const platformBillingWebhookSource = read("src/lib/billing/platform-billing-webhook.ts");
+const platformBillingAdminSource = read("src/lib/billing/platform-billing-admin.ts");
+const dashboardSalesCatalogSource = read("src/app/api/dashboard/sales-catalog/route.ts");
+const salesCatalogConsoleSource = read("src/components/connectyhub-os/sales-catalog-console.tsx");
+const salesCatalogSharedSource = read("src/lib/sales-catalog/shared.ts");
 
 function read(path: string) {
   return readFileSync(path, "utf8");
@@ -69,11 +77,38 @@ describe("PagBank gateway rollout", () => {
     expect(adminIntegrationsSource).toContain("[\"meta-ads\", \"google-growth\", \"pagbank\", \"webhook-universal\"]");
     expect(adminIntegrationsSource).toContain(".eq(\"provider\", \"pagbank\")");
     expect(maintenanceVaultSource).toContain("id: \"pagbank\"");
+    expect(maintenanceVaultSource).toContain("id: \"pagbank-billing\"");
     expect(maintenanceVaultSource).toContain("PAGBANK_AFFILIATE_CONNECT_URL");
     expect(maintenanceVaultSource).toContain("id: \"mercado-pago\"");
     expect(maintenanceVaultSource).toContain("standby");
     expect(envExampleSource).toContain("PAGBANK_CLIENT_ID=");
+    expect(envExampleSource).toContain("PAGBANK_BILLING_ACCESS_TOKEN=");
     expect(envExampleSource).toContain("PAGBANK_AFFILIATE_CONNECT_URL=");
     expect(envExampleSource).toContain("MERCADO_PAGO_CLIENT_ID=");
+  });
+
+  it("uses PagBank as the default ConnectyHub plan billing provider", () => {
+    expect(platformBillingMigrationSource).toContain("recurring_provider = 'pagbank'");
+    expect(platformBillingMigrationSource).toContain("alter column billing_provider set default 'pagbank'");
+    expect(platformBillingMigrationSource).toContain("'pagbank-billing'");
+    expect(planIntentSource).toContain("loadPlatformBillingProvider");
+    expect(planIntentSource).toContain(".select(\"recurring_provider\")");
+    expect(billingPixRouteSource).toContain("createPagBankBillingPix");
+    expect(billingPixRouteSource).toContain("processPlatformBillingPagBankWebhook");
+    expect(existsSync("src/app/api/webhooks/pagbank/platform-billing/route.ts")).toBe(true);
+    expect(platformBillingWebhookSource).toContain("processPlatformBillingPagBankWebhook");
+    expect(platformBillingWebhookSource).toContain("provider: \"pagbank\"");
+    expect(platformBillingAdminSource).toContain("providerLabel: \"PagBank\"");
+  });
+
+  it("exposes maintainable PagBank payment preferences for client stores", () => {
+    expect(salesCatalogSharedSource).toContain("SalesCatalogPagBankSettings");
+    expect(salesCatalogSharedSource).toContain("salesCatalogPagBankPaymentMethodOptions");
+    expect(paymentSessionsSource).toContain("pagbank_settings");
+    expect(dashboardSalesCatalogSource).toContain("normalizePagBankSettings");
+    expect(dashboardSalesCatalogSource).toContain("serializePagBankSettings");
+    expect(salesCatalogConsoleSource).toContain("PagBank Checkout");
+    expect(salesCatalogConsoleSource).toContain("togglePagBankPaymentMethod");
+    expect(salesCatalogConsoleSource).toContain("Nome no extrato");
   });
 });

@@ -1,7 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { processPlatformBillingMercadoPagoWebhook } from "@/lib/billing/platform-billing-webhook";
+import {
+  processPlatformBillingMercadoPagoWebhook,
+  processPlatformBillingPagBankWebhook,
+} from "@/lib/billing/platform-billing-webhook";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -13,18 +16,24 @@ type JsonRecord = Record<string, unknown>;
 type ReconcileTarget = {
   subscriptionId: string;
   organizationId: string;
-  providerSubscriptionId: string;
+  provider: "mercado_pago" | "pagbank";
+  providerReferenceId: string;
 };
 
 type SubscriptionTargetRow = {
   id: string;
   organization_id: string;
+  billing_provider: string | null;
   provider_subscription_id: string | null;
+  metadata: JsonRecord | null;
 };
 
 type PaymentTargetRow = {
   id: string;
   subscription_id: string | null;
+  provider: string | null;
+  provider_payment_id: string | null;
+  payload: JsonRecord | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -51,9 +60,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Registro de billing nao encontrado para reconciliacao." }, { status: 404 });
     }
 
-    const result = await processPlatformBillingMercadoPagoWebhook(client, {
-      dataId: target.providerSubscriptionId,
-      eventType: "subscription_preapproval",
+    const processor = target.provider === "pagbank"
+      ? processPlatformBillingPagBankWebhook
+      : processPlatformBillingMercadoPagoWebhook;
+    const result = await processor(client, {
+      dataId: target.providerReferenceId,
+      eventType: target.provider === "pagbank" ? "payment" : "subscription_preapproval",
       action: "admin.manual_reconcile",
       providerEventId: null,
       requestId: `admin-reconcile-${Date.now()}`,
@@ -72,7 +84,8 @@ export async function POST(request: NextRequest) {
       target_id: target.subscriptionId,
       metadata: {
         organizationId: target.organizationId,
-        providerSubscriptionId: target.providerSubscriptionId,
+        provider: target.provider,
+        providerReferenceId: target.providerReferenceId,
         paymentId,
         processingStatus: result.processingStatus,
         providerStatus: result.providerStatus,
@@ -88,7 +101,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ result });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Nao foi possivel sincronizar Mercado Pago." },
+      { error: error instanceof Error ? error.message : "Nao foi possivel sincronizar provedor de billing." },
       { status: 502 },
     );
   }
@@ -102,38 +115,50 @@ async function resolveReconcileTarget(
   },
 ): Promise<ReconcileTarget | null> {
   if (input.subscriptionId) {
-    return loadSubscriptionTarget(client, input.subscriptionId);
+    const payment = input.paymentId ? await loadPaymentTarget(client, input.paymentId) : null;
+
+    return loadSubscriptionTarget(client, input.subscriptionId, payment);
   }
 
   if (!input.paymentId) {
     return null;
   }
 
-  const { data: payment, error } = await client
-    .from("billing_payments")
-    .select("id, subscription_id")
-    .eq("id", input.paymentId)
-    .maybeSingle<PaymentTargetRow>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar pagamento: ${error.message}`);
-  }
+  const payment = await loadPaymentTarget(client, input.paymentId);
 
   if (!payment) {
     return null;
   }
 
   if (payment.subscription_id) {
-    return loadSubscriptionTarget(client, payment.subscription_id);
+    return loadSubscriptionTarget(client, payment.subscription_id, payment);
   }
 
-  throw new Error("Pagamento sem assinatura vinculada para consultar no Mercado Pago.");
+  throw new Error("Pagamento sem assinatura vinculada para consultar o provedor.");
 }
 
-async function loadSubscriptionTarget(client: SupabaseClient, subscriptionId: string): Promise<ReconcileTarget | null> {
+async function loadPaymentTarget(client: SupabaseClient, paymentId: string) {
+  const { data: payment, error } = await client
+    .from("billing_payments")
+    .select("id, subscription_id, provider, provider_payment_id, payload")
+    .eq("id", paymentId)
+    .maybeSingle<PaymentTargetRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar pagamento: ${error.message}`);
+  }
+
+  return payment ?? null;
+}
+
+async function loadSubscriptionTarget(
+  client: SupabaseClient,
+  subscriptionId: string,
+  payment?: PaymentTargetRow | null,
+): Promise<ReconcileTarget | null> {
   const { data, error } = await client
     .from("organization_subscriptions")
-    .select("id, organization_id, provider_subscription_id")
+    .select("id, organization_id, billing_provider, provider_subscription_id, metadata")
     .eq("id", subscriptionId)
     .maybeSingle<SubscriptionTargetRow>();
 
@@ -145,14 +170,28 @@ async function loadSubscriptionTarget(client: SupabaseClient, subscriptionId: st
     return null;
   }
 
-  if (!data.provider_subscription_id) {
-    throw new Error("Assinatura sem provider_subscription_id do Mercado Pago.");
+  const provider = payment?.provider === "mercado_pago" || data.billing_provider === "mercado_pago"
+    ? "mercado_pago"
+    : "pagbank";
+  const providerReferenceId = provider === "pagbank"
+    ? readString(payment?.payload?.pagbank_order_id)
+      ?? readString(payment?.payload?.provider_order_id)
+      ?? payment?.provider_payment_id
+      ?? readString(data.metadata?.pagbank_order_id)
+      ?? readString(data.metadata?.provider_order_id)
+    : data.provider_subscription_id;
+
+  if (!providerReferenceId) {
+    throw new Error(provider === "pagbank"
+      ? "Pagamento sem order_id PagBank para reconciliar."
+      : "Assinatura sem provider_subscription_id do Mercado Pago.");
   }
 
   return {
     subscriptionId: data.id,
     organizationId: data.organization_id,
-    providerSubscriptionId: data.provider_subscription_id,
+    provider,
+    providerReferenceId,
   };
 }
 

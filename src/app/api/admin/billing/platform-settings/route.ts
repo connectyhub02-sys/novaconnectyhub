@@ -45,7 +45,8 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  const currentMetadata = await loadCurrentSettingsMetadata(client);
+  const currentSettings = await loadCurrentSettingsState(client);
+  const currentMetadata = currentSettings.metadata;
   const billingMessageTemplates = parsed.settings.billingMessageTemplates
     ?? normalizePlatformBillingMessageTemplates(currentMetadata.billing_message_templates);
   const billingOrderBumpProductIds = parsed.settings.billingOrderBumpProductIds
@@ -59,7 +60,7 @@ export async function PATCH(request: NextRequest) {
         notification_whatsapp_enabled: parsed.settings.notificationWhatsappEnabled,
         pix_automatic_required: parsed.settings.pixAutomaticRequired,
         checkout_mode: parsed.settings.checkoutMode,
-        recurring_provider: "mercado_pago",
+        recurring_provider: currentSettings.recurringProvider,
         updated_by: auth.userId,
         metadata: {
           ...currentMetadata,
@@ -88,6 +89,7 @@ export async function PATCH(request: NextRequest) {
       notificationWhatsappEnabled: parsed.settings.notificationWhatsappEnabled,
       pixAutomaticRequired: parsed.settings.pixAutomaticRequired,
       checkoutMode: parsed.settings.checkoutMode,
+      recurringProvider: currentSettings.recurringProvider,
       billingMessageTemplatesUpdated: Boolean(parsed.settings.billingMessageTemplates),
       billingOrderBumpProductIds,
     },
@@ -172,14 +174,17 @@ async function validateConnectedBillingAgent(client: SupabaseClient, agentId: st
   return { ok: true };
 }
 
-async function loadCurrentSettingsMetadata(client: SupabaseClient) {
+async function loadCurrentSettingsState(client: SupabaseClient) {
   const { data } = await client
     .from("platform_billing_settings")
-    .select("metadata")
+    .select("metadata, recurring_provider")
     .eq("setting_key", "default")
-    .maybeSingle<{ metadata: JsonRecord | null }>();
+    .maybeSingle<{ metadata: JsonRecord | null; recurring_provider: string | null }>();
 
-  return data?.metadata ?? {};
+  return {
+    metadata: data?.metadata ?? {},
+    recurringProvider: data?.recurring_provider === "pagbank" ? "pagbank" : "mercado_pago",
+  };
 }
 
 function readRecord(value: unknown): JsonRecord | null {

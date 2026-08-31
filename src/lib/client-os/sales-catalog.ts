@@ -20,6 +20,7 @@ import {
   normalizeSalesCatalogStorefrontFontPreset,
   resolveSalesCatalogMediaKind,
   salesCatalogLeadDataFields,
+  salesCatalogPagBankPaymentMethodOptions,
   salesCatalogPaymentMethodTemplates,
   type ClientSalesCatalogPaymentIntegration,
   type ClientSalesCatalogPaymentSession,
@@ -36,6 +37,8 @@ import {
   type SalesCatalogLeadDataField,
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
+  type SalesCatalogPagBankPaymentMethod,
+  type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
   type SalesCatalogPaymentIntegrationMode,
   type SalesCatalogPaymentIntegrationStatus,
@@ -1074,6 +1077,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     trackInventory: readNullableBoolean(metadata.track_inventory) ?? false,
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
+    pagBank: readPagBankSettings(metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank, commerceDefaults.pagBank),
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
@@ -1774,6 +1778,57 @@ function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[
   return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
 }
 
+function readPagBankSettings(value: unknown, fallback: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  const record = readRecord(value);
+  if (!record) return { ...fallback, enabledMethods: [...fallback.enabledMethods] };
+
+  const enabledMethods = normalizePagBankPaymentMethods(
+    record.enabled_methods ?? record.enabledMethods,
+    fallback.enabledMethods,
+  );
+  const maxInstallments = clampInteger(
+    readNumber(record.max_installments ?? record.maxInstallments) ?? fallback.maxInstallments,
+    1,
+    12,
+  );
+  const interestFreeInstallments = clampInteger(
+    readNumber(record.interest_free_installments ?? record.interestFreeInstallments) ?? fallback.interestFreeInstallments,
+    0,
+    maxInstallments,
+  );
+
+  return {
+    enabledMethods,
+    maxInstallments,
+    interestFreeInstallments,
+    softDescriptor: readString(record.soft_descriptor ?? record.softDescriptor) ?? fallback.softDescriptor,
+    pixExpirationMinutes: clampInteger(
+      readNumber(record.pix_expiration_minutes ?? record.pixExpirationMinutes) ?? fallback.pixExpirationMinutes,
+      5,
+      43200,
+    ),
+    checkoutExpirationMinutes: clampInteger(
+      readNumber(record.checkout_expiration_minutes ?? record.checkoutExpirationMinutes) ?? fallback.checkoutExpirationMinutes,
+      5,
+      43200,
+    ),
+    allowBuyerEdit: readNullableBoolean(record.allow_buyer_edit ?? record.allowBuyerEdit) ?? fallback.allowBuyerEdit,
+  };
+}
+
+function normalizePagBankPaymentMethods(
+  value: unknown,
+  fallback: SalesCatalogPagBankPaymentMethod[],
+): SalesCatalogPagBankPaymentMethod[] {
+  const allowed = new Set(salesCatalogPagBankPaymentMethodOptions.map((method) => method.id));
+  const source = Array.isArray(value) ? value : fallback;
+  const methods = source
+    .map((item) => readString(item))
+    .filter((method): method is SalesCatalogPagBankPaymentMethod => allowed.has(method as SalesCatalogPagBankPaymentMethod));
+
+  return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
+}
+
 function readStorefrontSettings(value: unknown, categories: string[] = []): ClientSalesCatalogSettings["storefront"] {
   const record = readRecord(value) ?? {};
 
@@ -2082,6 +2137,10 @@ function readHighlightLabel(metadata: JsonRecord) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function clampInteger(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function formatAmount(value: string | number | null) {

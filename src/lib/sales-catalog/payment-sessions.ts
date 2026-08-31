@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  getOrganizationSalesCatalogSettings,
   mapSalesCatalogPaymentSession,
   type SalesCatalogPaymentSessionRow,
 } from "@/lib/client-os/sales-catalog";
@@ -24,6 +25,7 @@ import {
   ensurePagBankAccessToken,
   extractPagBankPixData,
 } from "./pagbank";
+import type { SalesCatalogPagBankSettings } from "./shared";
 import {
   buildTrackedLinkUrl,
   createTrackedLinkSlug,
@@ -126,9 +128,17 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, "pix");
+  const catalogSettings = paymentProvider === "pagbank"
+    ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
+    : null;
+  const pagBankSettings = catalogSettings?.pagBank ?? null;
   let integration: PaymentGatewayIntegration | null = null;
   let platformBilling: Awaited<ReturnType<typeof loadMercadoPagoPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
+
+  if (paymentProvider === "pagbank" && pagBankSettings && !pagBankSettings.enabledMethods.includes("pix")) {
+    throw new Error("Pix PagBank esta desativado nas configuracoes do catalogo.");
+  }
 
   try {
     if (connectyHubOwned) {
@@ -208,6 +218,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         payment_gateway: paymentProvider,
         payment_gateway_label: paymentProviderLabel,
         payment_gateway_mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
+        pagbank_settings: pagBankSettings ? serializePagBankSessionSettings(pagBankSettings) : null,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
         commission_eligible: paymentOwner.commissionEligible,
@@ -347,6 +358,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
           payerPhone: order.customer_phone,
           notificationUrl: buildPagBankWebhookUrl(),
           idempotencyKey,
+          pixExpirationMinutes: pagBankSettings?.pixExpirationMinutes ?? null,
           items: items.map((item) => ({
             id: item.id,
             title: item.title,
@@ -879,6 +891,18 @@ function buildProviderPaymentMetadata(
   return {
     mercado_pago_payment_id: pixData.providerPaymentId,
     mercado_pago_status: pixData.providerStatus,
+  };
+}
+
+function serializePagBankSessionSettings(settings: SalesCatalogPagBankSettings): JsonRecord {
+  return {
+    enabled_methods: settings.enabledMethods,
+    max_installments: settings.maxInstallments,
+    interest_free_installments: settings.interestFreeInstallments,
+    soft_descriptor: settings.softDescriptor,
+    pix_expiration_minutes: settings.pixExpirationMinutes,
+    checkout_expiration_minutes: settings.checkoutExpirationMinutes,
+    allow_buyer_edit: settings.allowBuyerEdit,
   };
 }
 

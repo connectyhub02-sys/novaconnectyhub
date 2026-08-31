@@ -35,6 +35,7 @@ import {
   resolveSalesCatalogMediaKind,
   salesCatalogLeadDataFields,
   salesCatalogPaymentMethodTemplates,
+  salesCatalogPagBankPaymentMethodOptions,
   salesCatalogBusinessTemplates,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
@@ -46,6 +47,8 @@ import {
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
+  type SalesCatalogPagBankPaymentMethod,
+  type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
   type SalesCatalogAutomationSettings,
   type SalesCatalogCommerceAgentMode,
@@ -1059,6 +1062,7 @@ async function saveCatalogSettings(input: {
   const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
   const paymentMethods = normalizePaymentMethods(input.body?.paymentMethods, commerceDefaults.paymentMethods);
+  const pagBank = normalizePagBankSettings(input.body?.pagBank ?? input.body?.pagbank, commerceDefaults.pagBank);
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
   const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
@@ -1076,6 +1080,7 @@ async function saveCatalogSettings(input: {
     track_inventory: trackInventory,
     variation_media: variationMedia,
     payment_methods: paymentMethods.map(serializePaymentMethod),
+    pagbank: serializePagBankSettings(pagBank),
     order_policy: serializeOrderPolicy(orderPolicy),
     lead_data_policy: serializeLeadDataPolicy(leadDataPolicy),
     message_templates: serializeMessageTemplates(messageTemplates),
@@ -1098,6 +1103,8 @@ async function saveCatalogSettings(input: {
     trackInventory ? "Controle de estoque por variacao: sim" : "Controle de estoque por variacao: nao",
     variationMedia ? "Midia por variacao: sim" : "Midia por variacao: nao",
     enabledPayments.length ? `Pagamentos: ${enabledPayments.map((method) => method.label).join(", ")}` : "Pagamentos: acionar humano",
+    `PagBank: ${pagBank.enabledMethods.join(", ")}`,
+    pagBank.softDescriptor ? `PagBank descriptor: ${pagBank.softDescriptor}` : "",
     `Reserva do pedido: ${formatReservationPolicy(orderPolicy.reservationPolicy)}`,
     orderPolicy.minimumOrderValue ? `Pedido minimo: ${orderPolicy.minimumOrderValue}` : "",
     `CEP antes do frete: ${orderPolicy.askCepBeforeQuote ? "sim" : "nao"}`,
@@ -1176,6 +1183,7 @@ async function saveCatalogSettings(input: {
       track_inventory: trackInventory,
       variation_media: variationMedia,
       payment_methods_count: enabledPayments.length,
+      pagbank: serializePagBankSettings(pagBank),
       reservation_policy: orderPolicy.reservationPolicy,
       required_lead_fields: leadDataPolicy.requiredFields,
       commerce_agent: serializeCommerceAgentSettings(commerceAgent),
@@ -3466,6 +3474,59 @@ function normalizePaymentMethods(value: unknown, fallback: SalesCatalogPaymentMe
   return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
 }
 
+function normalizePagBankSettings(value: unknown, fallback: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  const record = readRecord(value);
+  if (!record) {
+    return { ...fallback, enabledMethods: [...fallback.enabledMethods] };
+  }
+
+  const enabledMethods = normalizePagBankPaymentMethods(
+    record.enabledMethods ?? record.enabled_methods,
+    fallback.enabledMethods,
+  );
+  const maxInstallments = normalizeNullableInteger(
+    record.maxInstallments ?? record.max_installments,
+    1,
+    12,
+  ) ?? fallback.maxInstallments;
+  const interestFreeInstallments = normalizeNullableInteger(
+    record.interestFreeInstallments ?? record.interest_free_installments,
+    0,
+    maxInstallments,
+  ) ?? Math.min(fallback.interestFreeInstallments, maxInstallments);
+
+  return {
+    enabledMethods,
+    maxInstallments,
+    interestFreeInstallments,
+    softDescriptor: normalizeOptionalText(readFormString(record.softDescriptor ?? record.soft_descriptor), 17),
+    pixExpirationMinutes: normalizeNullableInteger(
+      record.pixExpirationMinutes ?? record.pix_expiration_minutes,
+      5,
+      43200,
+    ) ?? fallback.pixExpirationMinutes,
+    checkoutExpirationMinutes: normalizeNullableInteger(
+      record.checkoutExpirationMinutes ?? record.checkout_expiration_minutes,
+      5,
+      43200,
+    ) ?? fallback.checkoutExpirationMinutes,
+    allowBuyerEdit: readBoolean(record.allowBuyerEdit ?? record.allow_buyer_edit) ?? fallback.allowBuyerEdit,
+  };
+}
+
+function normalizePagBankPaymentMethods(
+  value: unknown,
+  fallback: SalesCatalogPagBankPaymentMethod[],
+): SalesCatalogPagBankPaymentMethod[] {
+  const allowed = new Set(salesCatalogPagBankPaymentMethodOptions.map((method) => method.id));
+  const source = Array.isArray(value) ? value : fallback;
+  const methods = source
+    .map((item) => readFormString(item))
+    .filter((method): method is SalesCatalogPagBankPaymentMethod => allowed.has(method as SalesCatalogPagBankPaymentMethod));
+
+  return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
+}
+
 function normalizeOrderPolicy(value: unknown, fallback: ReturnType<typeof createDefaultSalesCatalogCommerceSettings>["orderPolicy"]) {
   const record = readRecord(value);
   if (!record) return fallback;
@@ -3654,6 +3715,18 @@ function serializePaymentMethod(method: SalesCatalogPaymentMethod) {
     enabled: method.enabled,
     instructions: method.instructions,
     requires_proof: method.requiresProof,
+  };
+}
+
+function serializePagBankSettings(settings: SalesCatalogPagBankSettings) {
+  return {
+    enabled_methods: settings.enabledMethods,
+    max_installments: settings.maxInstallments,
+    interest_free_installments: settings.interestFreeInstallments,
+    soft_descriptor: settings.softDescriptor,
+    pix_expiration_minutes: settings.pixExpirationMinutes,
+    checkout_expiration_minutes: settings.checkoutExpirationMinutes,
+    allow_buyer_edit: settings.allowBuyerEdit,
   };
 }
 

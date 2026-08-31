@@ -20,6 +20,12 @@ import {
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
 import { getAppBaseUrl, getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
+import {
+  extractPagBankPixData,
+  getPagBankOrder,
+  loadPagBankPlatformBillingConfig,
+  type PagBankOrderResponse,
+} from "@/lib/sales-catalog/pagbank";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 
@@ -33,6 +39,8 @@ type BillingWebhookInput = {
   requestId: string | null;
   payload: JsonRecord;
 };
+
+type BillingPaymentProvider = "mercado_pago" | "pagbank";
 
 export type PlatformBillingWebhookProcessingResult = {
   processingStatus: "processed" | "ignored" | "deferred" | "failed";
@@ -252,7 +260,7 @@ type PendingBillingNotificationRow = {
 
 const activePaymentStatuses = new Set(["approved", "authorized"]);
 const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation"]);
-const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "charged_back", "refunded"]);
+const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "expired", "charged_back", "refunded"]);
 const knownBillingMessageTemplateKeys: ReadonlySet<string> = new Set(
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => definition.eventType),
 );
@@ -299,6 +307,21 @@ export async function processPlatformBillingMercadoPagoWebhook(
       dataId: input.dataId,
     },
   });
+}
+
+export async function processPlatformBillingPagBankWebhook(
+  client: SupabaseClient,
+  input: BillingWebhookInput,
+): Promise<PlatformBillingWebhookProcessingResult> {
+  const config = await loadPagBankPlatformBillingConfig({ client });
+  const order = await getPagBankOrder({
+    accessToken: config.accessToken,
+    mode: config.mode,
+    apiBaseUrl: config.apiBaseUrl,
+    orderId: input.dataId,
+  });
+
+  return processPagBankPaymentWebhook(client, input, order);
 }
 
 export async function sendPlatformBillingOperationalTest(
@@ -523,6 +546,7 @@ async function processSubscriptionWebhook(client: SupabaseClient, input: Billing
 
   if (isMercadoPagoPreapprovalActive(providerStatus)) {
     return activateBillingPlan(client, record, {
+      provider: "mercado_pago",
       providerStatus,
       providerSubscription,
       providerPayment: null,
@@ -600,6 +624,7 @@ async function processPaymentWebhook(client: SupabaseClient, input: BillingWebho
   }
 
   await updatePaymentProviderState(client, record, {
+    provider: "mercado_pago",
     providerPayment,
     providerStatus,
     source: "mercado_pago_payment_webhook",
@@ -607,6 +632,7 @@ async function processPaymentWebhook(client: SupabaseClient, input: BillingWebho
 
   if (activePaymentStatuses.has(providerStatus)) {
     return activateBillingPlan(client, record, {
+      provider: "mercado_pago",
       providerStatus,
       providerSubscription: null,
       providerPayment,
@@ -654,10 +680,116 @@ async function processPaymentWebhook(client: SupabaseClient, input: BillingWebho
   });
 }
 
+async function processPagBankPaymentWebhook(
+  client: SupabaseClient,
+  input: BillingWebhookInput,
+  order: PagBankOrderResponse,
+) {
+  const paymentData = extractPagBankPixData(order);
+  const providerStatus = paymentData.status;
+  const externalReference = readString(order.reference_id)
+    ?? readString(order.charges?.[0]?.reference_id);
+  const parsedReference = parsePlatformBillingExternalReference(externalReference);
+  const providerPayment: MercadoPagoPaymentLike = {
+    id: paymentData.providerOrderId ?? paymentData.providerPaymentId ?? input.dataId,
+    status: providerStatus,
+    status_detail: paymentData.providerStatusDetail ?? paymentData.providerStatus ?? undefined,
+    external_reference: externalReference ?? undefined,
+    transaction_amount: readPagBankOrderAmount(order) ?? undefined,
+    date_approved: paymentData.paidAt ?? (activePaymentStatuses.has(providerStatus) ? new Date().toISOString() : undefined),
+    date_created: order.created_at ?? undefined,
+    payment_method_id: "pix",
+  };
+  const record = await loadBillingRecord(client, {
+    paymentId: parsedReference?.paymentId ?? null,
+    invoiceId: parsedReference?.invoiceId ?? null,
+    subscriptionId: parsedReference?.subscriptionId ?? null,
+    externalReference,
+    parsedReference,
+  });
+
+  if (!record.payment && !record.subscription) {
+    return buildResult({
+      processingStatus: "ignored",
+      reason: "Pagamento ConnectyHub nao encontrado para este evento PagBank.",
+      providerStatus,
+      metadata: {
+        pagbankOrderId: paymentData.providerOrderId ?? input.dataId,
+        pagbankChargeId: paymentData.providerPaymentId,
+        pagbankStatus: paymentData.providerStatus,
+        externalReference,
+      },
+    });
+  }
+
+  await updatePaymentProviderState(client, record, {
+    provider: "pagbank",
+    providerPayment,
+    providerStatus,
+    source: "pagbank_payment_webhook",
+  });
+
+  if (activePaymentStatuses.has(providerStatus)) {
+    return activateBillingPlan(client, record, {
+      provider: "pagbank",
+      providerStatus,
+      providerSubscription: null,
+      providerPayment,
+      source: "pagbank_payment_webhook",
+      webhook: input,
+    });
+  }
+
+  const paymentStatus = mapPaymentStatus(providerStatus);
+  const subscription = record.subscription;
+  const notification = subscription
+    ? await enqueuePlatformBillingNotification(client, {
+        organizationId: subscription.organization_id,
+        subscriptionId: subscription.id,
+        invoiceId: record.invoice?.id ?? null,
+        paymentId: record.payment?.id ?? null,
+        planCode: subscription.plan_code,
+        planName: record.plan?.name ?? subscription.plan_code,
+        amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
+        includedCredits: toNumber(record.plan?.included_credits),
+        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        dedupeKey: `billing:${subscription.id}:payment:${providerStatus}:${String(providerPayment.id ?? input.dataId)}`,
+        providerStatus,
+        providerReference: String(providerPayment.id ?? input.dataId),
+        metadata: {
+          source: "pagbank_payment_webhook",
+          pagbankOrderId: paymentData.providerOrderId,
+          pagbankChargeId: paymentData.providerPaymentId,
+          pagbankStatus: paymentData.providerStatus,
+          pagbankPayment: sanitizePayment(providerPayment),
+        },
+      })
+    : null;
+
+  return buildResult({
+    processingStatus: "processed",
+    reason: paymentStatus === "pending" ? "Pagamento PagBank ainda pendente." : "Pagamento PagBank nao aprovado.",
+    organizationId: subscription?.organization_id ?? record.payment?.organization_id ?? null,
+    subscriptionId: subscription?.id ?? null,
+    invoiceId: record.invoice?.id ?? null,
+    paymentId: record.payment?.id ?? null,
+    providerStatus,
+    notificationId: notification?.id ?? null,
+    metadata: {
+      paymentStatus,
+      pagbankOrderId: paymentData.providerOrderId,
+      pagbankChargeId: paymentData.providerPaymentId,
+      pagbankStatus: paymentData.providerStatus,
+      pagbankPayment: sanitizePayment(providerPayment),
+    },
+  });
+}
+
 async function activateBillingPlan(
   client: SupabaseClient,
   record: BillingRecord,
   input: {
+    provider: BillingPaymentProvider;
     providerStatus: string;
     providerSubscription: MercadoPagoBillingSubscriptionDetails | null;
     providerPayment: MercadoPagoPaymentLike | null;
@@ -727,8 +859,12 @@ async function activateBillingPlan(
     });
   }
 
+  const providerPaymentSnapshot = input.providerPayment ? sanitizePayment(input.providerPayment) : null;
+  const providerLabel = formatBillingPaymentProviderLabel(input.provider);
+  const providerTag = formatBillingPaymentProviderTag(input.provider);
   const metadata = {
     ...(subscription.metadata ?? {}),
+    billing_provider: input.provider,
     last_billing_activation_source: input.source,
     provider_status: input.providerStatus,
     provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : null,
@@ -738,8 +874,9 @@ async function activateBillingPlan(
     additional_bump_credits: additionalBumpCredits,
     credit_transaction_id: creditTransactionId,
     bump_credit_transaction_id: bumpCreditTransactionId ?? readString(subscription.metadata?.bump_credit_transaction_id),
-    mercado_pago_subscription: input.providerSubscription?.raw ?? null,
-    mercado_pago_payment: input.providerPayment ? sanitizePayment(input.providerPayment) : null,
+    mercado_pago_subscription: input.provider === "mercado_pago" ? input.providerSubscription?.raw ?? null : null,
+    mercado_pago_payment: input.provider === "mercado_pago" ? providerPaymentSnapshot : null,
+    pagbank_payment: input.provider === "pagbank" ? providerPaymentSnapshot : null,
   };
 
   const [subscriptionUpdate, invoiceUpdate, paymentUpdate] = await Promise.all([
@@ -747,6 +884,7 @@ async function activateBillingPlan(
       .from("organization_subscriptions")
       .update({
         status: "active",
+        billing_provider: input.provider,
         provider_subscription_id: input.providerSubscription?.id ?? subscription.provider_subscription_id,
         current_period_start: cycleStart.toISOString(),
         current_period_end: cycleEnd.toISOString(),
@@ -761,6 +899,7 @@ async function activateBillingPlan(
           .from("billing_invoices")
           .update({
             status: "paid",
+            provider: input.provider,
             paid_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
             provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : record.invoice.id,
             metadata,
@@ -773,6 +912,7 @@ async function activateBillingPlan(
           .from("billing_payments")
           .update({
             status: "approved",
+            provider: input.provider,
             provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : record.payment.provider_payment_id,
             provider_status: input.providerStatus,
             paid_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
@@ -815,10 +955,10 @@ async function activateBillingPlan(
     source_id: subscription.id,
     event_type: "billing.subscription_activated",
     title: "Plano ConnectyHub ativado",
-    summary: `Plano ${subscription.plan_code} ativado por webhook Mercado Pago.`,
+    summary: `Plano ${subscription.plan_code} ativado por webhook ${providerLabel}.`,
     confidence: 1,
     visibility: "platform",
-    tags: ["billing", "mercado_pago", "subscription"],
+    tags: ["billing", providerTag, "subscription"],
     payload: {
       ...metadata,
       notification_id: notification?.id ?? null,
@@ -881,6 +1021,7 @@ async function updatePaymentProviderState(
   client: SupabaseClient,
   record: BillingRecord,
   input: {
+    provider: BillingPaymentProvider;
     providerPayment: MercadoPagoPaymentLike;
     providerStatus: string;
     source: string;
@@ -892,10 +1033,12 @@ async function updatePaymentProviderState(
     : null;
   const paymentId = input.providerPayment.id ? String(input.providerPayment.id) : null;
   const metadata = {
+    billing_provider: input.provider,
     last_provider_sync_source: input.source,
     provider_status: input.providerStatus,
     provider_payment_id: paymentId,
-    mercado_pago_payment: sanitizePayment(input.providerPayment),
+    mercado_pago_payment: input.provider === "mercado_pago" ? sanitizePayment(input.providerPayment) : null,
+    pagbank_payment: input.provider === "pagbank" ? sanitizePayment(input.providerPayment) : null,
   };
 
   await Promise.all([
@@ -904,6 +1047,7 @@ async function updatePaymentProviderState(
           .from("billing_payments")
           .update({
             status: paymentStatus,
+            provider: input.provider,
             provider_payment_id: paymentId ?? record.payment.provider_payment_id,
             provider_status: input.providerStatus,
             paid_at: paidAt,
@@ -920,6 +1064,7 @@ async function updatePaymentProviderState(
           .from("billing_invoices")
           .update({
             status: mapInvoiceStatusFromPaymentStatus(paymentStatus),
+            provider: input.provider,
             paid_at: paidAt,
             provider_payment_id: paymentId ?? undefined,
             metadata: {
@@ -1778,11 +1923,28 @@ function mapPaymentStatus(providerStatus: string) {
   if (pendingPaymentStatuses.has(providerStatus)) return "pending";
   if (rejectedPaymentStatuses.has(providerStatus)) {
     if (providerStatus === "refunded" || providerStatus === "charged_back") return "refunded";
-    if (providerStatus === "cancelled" || providerStatus === "canceled") return "canceled";
+    if (providerStatus === "cancelled" || providerStatus === "canceled" || providerStatus === "expired") return "canceled";
     return "rejected";
   }
 
   return "in_process";
+}
+
+function readPagBankOrderAmount(order: PagBankOrderResponse) {
+  const cents = order.charges?.[0]?.amount?.value
+    ?? order.qr_codes?.[0]?.amount?.value
+    ?? order.qr_code?.[0]?.amount?.value
+    ?? null;
+
+  return typeof cents === "number" && Number.isFinite(cents) ? Math.round(cents) / 100 : null;
+}
+
+function formatBillingPaymentProviderLabel(provider: BillingPaymentProvider) {
+  return provider === "pagbank" ? "PagBank" : "Mercado Pago";
+}
+
+function formatBillingPaymentProviderTag(provider: BillingPaymentProvider) {
+  return provider === "pagbank" ? "pagbank" : "mercado_pago";
 }
 
 function mapInvoiceStatusFromPaymentStatus(paymentStatus: string) {

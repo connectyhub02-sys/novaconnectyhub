@@ -5,6 +5,7 @@ import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/merc
 import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpMedia } from "./plan-checkout-catalog";
 
 export type JsonRecord = Record<string, unknown>;
+export type BillingCheckoutProvider = "mercado_pago" | "pagbank";
 
 export type BillingCheckoutIntent = {
   subscription: {
@@ -14,6 +15,7 @@ export type BillingCheckoutIntent = {
     plan_code: string;
     status: string;
     payer_email: string | null;
+    billing_provider: string | null;
     provider_subscription_id: string | null;
     metadata: JsonRecord | null;
   };
@@ -25,6 +27,7 @@ export type BillingCheckoutIntent = {
     subtotal_brl: number | string | null;
     discount_brl: number | string | null;
     total_brl: number | string | null;
+    provider: string | null;
     metadata: JsonRecord | null;
   };
   payment: {
@@ -33,6 +36,7 @@ export type BillingCheckoutIntent = {
     invoice_id: string | null;
     subscription_id: string | null;
     status: string;
+    provider: string | null;
     amount_brl: number | string | null;
     provider_payment_id: string | null;
     provider_status: string | null;
@@ -95,7 +99,7 @@ export async function loadBillingCheckoutIntent(
 ): Promise<BillingCheckoutIntent | null> {
   const { data: subscription, error: subscriptionError } = await client
     .from("organization_subscriptions")
-    .select("id, organization_id, plan_id, plan_code, status, payer_email, provider_subscription_id, metadata")
+    .select("id, organization_id, plan_id, plan_code, status, payer_email, billing_provider, provider_subscription_id, metadata")
     .eq("id", input.subscriptionId)
     .eq("organization_id", input.organizationId)
     .maybeSingle<BillingCheckoutIntent["subscription"]>();
@@ -111,7 +115,7 @@ export async function loadBillingCheckoutIntent(
   const [invoiceResult, paymentResult, planResult] = await Promise.all([
     client
       .from("billing_invoices")
-      .select("id, organization_id, subscription_id, status, subtotal_brl, discount_brl, total_brl, metadata")
+      .select("id, organization_id, subscription_id, status, subtotal_brl, discount_brl, total_brl, provider, metadata")
       .eq("subscription_id", subscription.id)
       .eq("organization_id", input.organizationId)
       .order("created_at", { ascending: false })
@@ -119,7 +123,7 @@ export async function loadBillingCheckoutIntent(
       .maybeSingle<BillingCheckoutIntent["invoice"]>(),
     client
       .from("billing_payments")
-      .select("id, organization_id, invoice_id, subscription_id, status, amount_brl, provider_payment_id, provider_status, payload")
+      .select("id, organization_id, invoice_id, subscription_id, status, provider, amount_brl, provider_payment_id, provider_status, payload")
       .eq("subscription_id", subscription.id)
       .eq("organization_id", input.organizationId)
       .order("created_at", { ascending: false })
@@ -178,6 +182,7 @@ export async function syncBillingCheckoutCart(
     });
   const checkoutPath = buildDashboardBillingCheckoutPath(intent.subscription.id);
   const checkoutUrl = buildDashboardBillingCheckoutUrl(intent.subscription.id);
+  const billingProvider = resolveBillingCheckoutProvider(intent);
   const cartMetadata = {
     selected_bump_codes: selectedBumps.map((bump) => bump.code),
     selected_bumps: selectedBumps.map(serializeBump),
@@ -187,6 +192,7 @@ export async function syncBillingCheckoutCart(
     checkout_url: checkoutPath,
     checkout_public_url: checkoutUrl,
     external_reference: externalReference,
+    billing_provider: billingProvider,
     checkout_model: "connectyhub_plan_checkout",
     checkout_status: "internal_checkout_ready",
   };
@@ -231,6 +237,7 @@ export async function syncBillingCheckoutCart(
     client
       .from("organization_subscriptions")
       .update({
+        billing_provider: billingProvider,
         metadata: {
           ...(intent.subscription.metadata ?? {}),
           ...cartMetadata,
@@ -244,6 +251,7 @@ export async function syncBillingCheckoutCart(
         subtotal_brl: totalAmount,
         discount_brl: 0,
         total_brl: totalAmount,
+        provider: billingProvider,
         metadata: {
           ...(intent.invoice.metadata ?? {}),
           ...cartMetadata,
@@ -255,6 +263,7 @@ export async function syncBillingCheckoutCart(
       .from("billing_payments")
       .update({
         amount_brl: totalAmount,
+        provider: billingProvider,
         payload: {
           ...(intent.payment.payload ?? {}),
           ...cartMetadata,
@@ -342,6 +351,17 @@ export function readBillingCheckoutPixData(intent: BillingCheckoutIntent | null)
   };
 }
 
+export function resolveBillingCheckoutProvider(intent: BillingCheckoutIntent | null): BillingCheckoutProvider {
+  return normalizeBillingCheckoutProvider(
+    intent?.payment.provider
+    ?? intent?.invoice.provider
+    ?? intent?.subscription.billing_provider
+    ?? intent?.payment.payload?.billing_provider
+    ?? intent?.invoice.metadata?.billing_provider
+    ?? intent?.subscription.metadata?.billing_provider,
+  );
+}
+
 export function readExternalReference(intent: BillingCheckoutIntent) {
   return readString(intent.payment.payload?.external_reference)
     ?? readString(intent.invoice.metadata?.external_reference)
@@ -352,6 +372,10 @@ export function isBillingCheckoutPayable(intent: BillingCheckoutIntent) {
   return ["pending", "incomplete", "past_due"].includes(intent.subscription.status)
     && ["open", "draft", "failed"].includes(intent.invoice.status)
     && ["pending", "rejected", "in_process"].includes(intent.payment.status);
+}
+
+function normalizeBillingCheckoutProvider(value: unknown): BillingCheckoutProvider {
+  return readString(value) === "mercado_pago" ? "mercado_pago" : "pagbank";
 }
 
 export function formatBillingCheckoutDescription(intent: BillingCheckoutIntent, selectedBumps: BillingCheckoutBump[]) {

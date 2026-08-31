@@ -7,6 +7,7 @@ import {
   buildMercadoPagoPlatformBillingRedirectUrl,
   buildMercadoPagoPlatformBillingWebhookUrl,
 } from "@/lib/sales-catalog/mercado-pago";
+import { buildPagBankPlatformBillingWebhookUrl } from "@/lib/sales-catalog/pagbank";
 import {
   normalizePlatformBillingMessageTemplates,
   type PlatformBillingMessageTemplates,
@@ -25,7 +26,7 @@ export type PlatformBillingSettings = {
   notificationWhatsappEnabled: boolean;
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
-  recurringProvider: "mercado_pago";
+  recurringProvider: "mercado_pago" | "pagbank";
   billingMessageTemplates: PlatformBillingMessageTemplates;
   billingOrderBumpProductIds: string[];
   updatedAt: string | null;
@@ -118,6 +119,8 @@ export type PlatformBillingOperationsCatalog = {
   settings: PlatformBillingSettings;
   credentials: CredentialSnapshot[];
   mercadoPagoConnection: {
+    provider: "mercado_pago" | "pagbank";
+    providerLabel: string;
     connected: boolean;
     mode: string | null;
     accountId: string | null;
@@ -248,7 +251,7 @@ const defaultSettings: PlatformBillingSettings = {
   notificationWhatsappEnabled: true,
   pixAutomaticRequired: true,
   checkoutMode: "subscription",
-  recurringProvider: "mercado_pago",
+  recurringProvider: "pagbank",
   billingMessageTemplates: normalizePlatformBillingMessageTemplates(null),
   billingOrderBumpProductIds: [],
   updatedAt: null,
@@ -329,7 +332,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
     client
       .from("maintenance_audit_logs")
       .select("id, metadata, created_at")
-      .eq("event_type", "billing.mercado_pago.webhook")
+      .in("event_type", ["billing.mercado_pago.webhook", "billing.pagbank.webhook"])
       .order("created_at", { ascending: false })
       .limit(12)
       .returns<WebhookAuditRow[]>(),
@@ -348,8 +351,11 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
     webhookLogsResult.error?.message,
   ].filter((message): message is string => Boolean(message));
 
-  const credentials = buildBillingCredentialSnapshots((storedCredentialsResult.data ?? []) as MaintenanceStoredCredential[]);
   const settings = settingsResult.error ? defaultSettings : mapSettings(settingsResult.data ?? null);
+  const credentials = buildBillingCredentialSnapshots(
+    (storedCredentialsResult.data ?? []) as MaintenanceStoredCredential[],
+    settings.recurringProvider,
+  );
   const plans = (plansResult.data ?? []).map(mapPlan);
   const instancesByAgentId = buildInstancesByAgentId(instancesResult.data ?? []);
   const agents = (agentsResult.data ?? []).map((agent) => mapAgent(agent, instancesByAgentId.get(agent.id)));
@@ -389,7 +395,9 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
       configuredCredentialFields: credentials.filter((field) => field.configured).length,
       requiredCredentialFields: credentials.filter((field) => field.requirement === "required").length,
       connectedAgents: agents.filter((agent) => agent.isConnected).length,
-      mappedPaidPlans: plans.filter((plan) => Boolean(plan.mercadoPagoPreapprovalPlanId)).length,
+      mappedPaidPlans: settings.recurringProvider === "pagbank"
+        ? plans.filter((plan) => plan.status === "active" && plan.monthlyPriceBrl > 0).length
+        : plans.filter((plan) => Boolean(plan.mercadoPagoPreapprovalPlanId)).length,
       pendingPayments: payments.filter((payment) => payment.status === "pending" || payment.status === "in_process").length,
       activeSubscriptions: subscriptions.filter((subscription) => subscription.status === "active").length,
       pendingNotifications: notifications.filter((notification) => notification.status === "pending").length,
@@ -400,13 +408,21 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
   };
 }
 
-function buildBillingCredentialSnapshots(storedCredentials: MaintenanceStoredCredential[]) {
+function buildBillingCredentialSnapshots(
+  storedCredentials: MaintenanceStoredCredential[],
+  recurringProvider: PlatformBillingSettings["recurringProvider"],
+) {
   const vault = getMaintenanceVaultSnapshot({ storedCredentials });
-  const integration = vault.integrations.find((item) => item.id === "mercado-pago-billing");
+  const integrationId = recurringProvider === "pagbank" ? "pagbank-billing" : "mercado-pago-billing";
+  const integration = vault.integrations.find((item) => item.id === integrationId);
   return integration?.fields ?? [];
 }
 
 function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings: PlatformBillingSettings) {
+  if (settings.recurringProvider === "pagbank") {
+    return buildPagBankBillingConnection(credentials, settings);
+  }
+
   const fieldByEnv = new Map(credentials.map((field) => [field.env, field]));
   const accessToken = fieldByEnv.get("MERCADO_PAGO_BILLING_ACCESS_TOKEN");
   const mode = readConfiguredDisplayValue(fieldByEnv.get("MERCADO_PAGO_BILLING_MODE"));
@@ -416,6 +432,8 @@ function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings:
     ?? buildMercadoPagoPlatformBillingWebhookUrl();
 
   return {
+    provider: "mercado_pago" as const,
+    providerLabel: "Mercado Pago",
     connected: Boolean(accessToken?.configured),
     mode,
     accountId,
@@ -423,6 +441,26 @@ function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings:
     webhookUrl,
     redirectUrl: readString(settings.metadata.mercado_pago_billing_redirect_url) ?? buildMercadoPagoPlatformBillingRedirectUrl(),
     lastError: readString(settings.metadata.mercado_pago_billing_last_error),
+  };
+}
+
+function buildPagBankBillingConnection(credentials: CredentialSnapshot[], settings: PlatformBillingSettings) {
+  const fieldByEnv = new Map(credentials.map((field) => [field.env, field]));
+  const accessToken = fieldByEnv.get("PAGBANK_BILLING_ACCESS_TOKEN");
+  const mode = readConfiguredDisplayValue(fieldByEnv.get("PAGBANK_BILLING_MODE"));
+  const webhookUrl = readConfiguredDisplayValue(fieldByEnv.get("PAGBANK_BILLING_WEBHOOK_URL"))
+    ?? buildPagBankPlatformBillingWebhookUrl();
+
+  return {
+    provider: "pagbank" as const,
+    providerLabel: "PagBank",
+    connected: Boolean(accessToken?.configured),
+    mode,
+    accountId: "CNPJ ConnectyHub",
+    tokenExpiresAt: null,
+    webhookUrl,
+    redirectUrl: "/admin/maintenance#credenciais-do-sistema",
+    lastError: readString(settings.metadata.pagbank_billing_last_error),
   };
 }
 
@@ -440,7 +478,7 @@ function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSet
     notificationWhatsappEnabled: row.notification_whatsapp_enabled !== false,
     pixAutomaticRequired: row.pix_automatic_required !== false,
     checkoutMode: row.checkout_mode === "manual_review" ? "manual_review" : "subscription",
-    recurringProvider: "mercado_pago",
+    recurringProvider: row.recurring_provider === "mercado_pago" ? "mercado_pago" : "pagbank",
     billingMessageTemplates: normalizePlatformBillingMessageTemplates(row.metadata?.billing_message_templates),
     billingOrderBumpProductIds: readUuidList(row.metadata?.billing_order_bump_product_ids),
     updatedAt: row.updated_at,

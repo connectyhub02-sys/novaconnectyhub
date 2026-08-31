@@ -26,6 +26,15 @@ type PagBankOAuthConfig = {
   affiliateConnectUrl: string | null;
 };
 
+type PagBankPlatformBillingConfig = {
+  accessToken: string;
+  mode: "production" | "sandbox";
+  apiBaseUrl: string;
+  webhookToken: string | null;
+  webhookUrl: string;
+  softDescriptor: string | null;
+};
+
 type IntegrationSecrets = {
   id: string;
   organizationId: string;
@@ -57,7 +66,7 @@ type PagBankOAuthErrorResponse = {
   cause?: unknown;
 };
 
-type PagBankOrderResponse = {
+export type PagBankOrderResponse = {
   id?: string;
   reference_id?: string;
   status?: string;
@@ -77,6 +86,10 @@ type PagBankChargeResponse = {
   id?: string;
   reference_id?: string;
   status?: string;
+  amount?: {
+    value?: number;
+    currency?: string;
+  };
   paid_at?: string;
   created_at?: string;
   payment_response?: {
@@ -116,6 +129,7 @@ type PagBankLinkResponse = {
 export type PagBankPixOrderInput = {
   accessToken: string;
   mode?: "production" | "sandbox" | null;
+  apiBaseUrl?: string | null;
   amount: number;
   description: string;
   externalReference: string;
@@ -125,6 +139,7 @@ export type PagBankPixOrderInput = {
   payerPhone?: string | null;
   notificationUrl?: string | null;
   idempotencyKey?: string | null;
+  pixExpirationMinutes?: number | null;
   items?: Array<{
     id?: string | null;
     title?: string | null;
@@ -137,11 +152,15 @@ export type PagBankPixOrderInput = {
 };
 
 const pagBankPlatformIntegrationId = "pagbank";
+const pagBankPlatformBillingIntegrationId = "pagbank-billing";
 const pagBankDefaultScopes = [
   "payments.read",
   "payments.create",
   "payments.refund",
   "accounts.read",
+  "checkout.create",
+  "checkout.view",
+  "checkout.update",
   // URLSearchParams serializes spaces as raw plus signs, which PagBank expects between scopes.
 ].join(" ");
 const pagBankCredentialNames = [
@@ -165,6 +184,24 @@ const pagBankWebhookCredentialNames = [
   "PAGBANK_AUTHORIZATION_TOKEN",
   "PAGBANK_APP_TOKEN",
   "PAGSEGURO_AUTH_TOKEN",
+];
+const pagBankBillingCredentialNames = [
+  "PAGBANK_BILLING_ACCESS_TOKEN",
+  "PAGBANK_BILLING_AUTHORIZATION_TOKEN",
+  "PAGBANK_BILLING_APP_TOKEN",
+  "PAGBANK_BILLING_WEBHOOK_TOKEN",
+  "PAGBANK_BILLING_WEBHOOK_URL",
+  "PAGBANK_BILLING_MODE",
+  "PAGBANK_BILLING_API_BASE_URL",
+  "PAGBANK_BILLING_SOFT_DESCRIPTOR",
+  "PAGBANK_CONNECT_TOKEN",
+  "PAGBANK_AUTHORIZATION_TOKEN",
+  "PAGBANK_APP_TOKEN",
+  "PAGSEGURO_AUTH_TOKEN",
+  "PAGSEGURO_CONNECT_TOKEN",
+  "PAGBANK_ENVIRONMENT",
+  "PAGBANK_SANDBOX",
+  "PAGBANK_API_BASE_URL",
 ];
 
 export class PagBankOAuthRequestError extends Error {
@@ -193,6 +230,53 @@ export async function isPagBankSandboxMode(input: { client?: SupabaseClient } = 
   const credentials = await loadPagBankPlatformCredentials(input.client, ["PAGBANK_ENVIRONMENT", "PAGBANK_SANDBOX"]);
 
   return resolvePagBankMode(credentials) === "sandbox";
+}
+
+export async function loadPagBankPlatformBillingConfig(
+  input: { client?: SupabaseClient } = {},
+): Promise<PagBankPlatformBillingConfig> {
+  const billingCredentials = await loadPagBankPlatformCredentials(
+    input.client,
+    pagBankBillingCredentialNames,
+    pagBankPlatformBillingIntegrationId,
+  );
+  const sharedCredentials = await loadPagBankPlatformCredentials(
+    input.client,
+    pagBankBillingCredentialNames,
+    pagBankPlatformIntegrationId,
+  );
+  const accessToken = getCredentialValue(billingCredentials, [
+    "PAGBANK_BILLING_ACCESS_TOKEN",
+    "PAGBANK_BILLING_AUTHORIZATION_TOKEN",
+    "PAGBANK_BILLING_APP_TOKEN",
+  ]) || getCredentialValue(sharedCredentials, [
+    "PAGBANK_CONNECT_TOKEN",
+    "PAGBANK_AUTHORIZATION_TOKEN",
+    "PAGBANK_APP_TOKEN",
+    "PAGSEGURO_AUTH_TOKEN",
+    "PAGSEGURO_CONNECT_TOKEN",
+  ]);
+
+  if (!accessToken) {
+    throw new Error("Configure PagBank Billing na sala de manutencao antes de cobrar planos ConnectyHub.");
+  }
+
+  const mode = resolvePagBankBillingMode(billingCredentials, sharedCredentials);
+  const apiBaseUrl = getCredentialValue(billingCredentials, ["PAGBANK_BILLING_API_BASE_URL"])
+    || getCredentialValue(sharedCredentials, ["PAGBANK_API_BASE_URL"])
+    || (mode === "sandbox" ? "https://sandbox.api.pagseguro.com" : "https://api.pagseguro.com");
+
+  return {
+    accessToken,
+    mode,
+    apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
+    webhookToken: getCredentialValue(billingCredentials, ["PAGBANK_BILLING_WEBHOOK_TOKEN"])
+      || getCredentialValue(sharedCredentials, pagBankWebhookCredentialNames)
+      || null,
+    webhookUrl: getCredentialValue(billingCredentials, ["PAGBANK_BILLING_WEBHOOK_URL"])
+      || buildPagBankPlatformBillingWebhookUrl(),
+    softDescriptor: sanitizePagBankText(getCredentialValue(billingCredentials, ["PAGBANK_BILLING_SOFT_DESCRIPTOR"]), 17),
+  };
 }
 
 export async function buildPagBankAuthorizationUrl(input: {
@@ -298,6 +382,10 @@ export function buildPagBankWebhookUrl() {
   return `${getAppBaseUrl()}/api/webhooks/pagbank`;
 }
 
+export function buildPagBankPlatformBillingWebhookUrl() {
+  return `${getAppBaseUrl()}/api/webhooks/pagbank/platform-billing`;
+}
+
 export async function loadPagBankIntegrationSecrets(
   client: SupabaseClient,
   organizationId: string,
@@ -375,7 +463,7 @@ export async function ensurePagBankAccessToken(input: {
 }
 
 export async function createPagBankPixOrder(input: PagBankPixOrderInput) {
-  const config = getPagBankRuntimeConfig(input.mode);
+  const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const response = await fetch(`${config.apiBaseUrl}/orders`, {
     method: "POST",
@@ -399,9 +487,10 @@ export async function createPagBankPixOrder(input: PagBankPixOrderInput) {
 export async function getPagBankOrder(input: {
   accessToken: string;
   mode?: "production" | "sandbox" | null;
+  apiBaseUrl?: string | null;
   orderId: string;
 }) {
-  const config = getPagBankRuntimeConfig(input.mode);
+  const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
   const response = await fetch(`${config.apiBaseUrl}/orders/${encodeURIComponent(input.orderId)}`, {
     headers: {
       Accept: "application/json",
@@ -480,6 +569,14 @@ export async function loadPagBankWebhookToken(input: {
   const credentials = await loadPagBankPlatformCredentials(input.client, pagBankWebhookCredentialNames);
 
   return getCredentialValue(credentials, pagBankWebhookCredentialNames) || null;
+}
+
+export async function loadPagBankPlatformBillingWebhookToken(input: {
+  client?: SupabaseClient;
+} = {}) {
+  const config = await loadPagBankPlatformBillingConfig(input);
+
+  return config.webhookToken;
 }
 
 export function verifyPagBankWebhookSignature(input: {
@@ -679,10 +776,11 @@ async function loadPagBankPlatformCredentials(
   return credentials;
 }
 
-function getPagBankRuntimeConfig(modeOverride?: "production" | "sandbox" | null) {
+function getPagBankRuntimeConfig(modeOverride?: "production" | "sandbox" | null, apiBaseUrlOverride?: string | null) {
   const credentials = new Map<string, string>();
   const mode = modeOverride ?? resolvePagBankMode(credentials);
-  const apiBaseUrl = process.env.PAGBANK_API_BASE_URL?.trim()
+  const apiBaseUrl = apiBaseUrlOverride?.trim()
+    || process.env.PAGBANK_API_BASE_URL?.trim()
     || (mode === "sandbox" ? "https://sandbox.api.pagseguro.com" : "https://api.pagseguro.com");
 
   return {
@@ -695,6 +793,7 @@ function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
   const amountCents = Math.max(1, Math.round(input.amount * 100));
   const description = sanitizePagBankText(input.description, 255) ?? "Pedido ConnectyHub";
   const chargeReference = sanitizePagBankText(input.externalReference, 200) ?? input.externalReference;
+  const expirationMinutes = normalizePagBankExpirationMinutes(input.pixExpirationMinutes, 1440);
 
   return {
     reference_id: chargeReference,
@@ -711,7 +810,7 @@ function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
         payment_method: {
           type: "PIX",
           pix: {
-            expiration_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            expiration_date: new Date(Date.now() + expirationMinutes * 60 * 1000).toISOString(),
           },
         },
       },
@@ -782,6 +881,12 @@ function normalizePagBankItemUnitAmount(
   const amount = unitPrice ?? (total ? total / Math.max(1, quantity) : null);
 
   return amount ? Math.max(1, Math.round(amount * 100)) : null;
+}
+
+function normalizePagBankExpirationMinutes(value: number | null | undefined, fallback: number) {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+  return Math.min(43200, Math.max(5, Math.round(parsed)));
 }
 
 function buildPagBankPhone(value: string | null | undefined) {
@@ -901,6 +1006,18 @@ function resolvePagBankMode(credentials: Map<string, string>): "production" | "s
   }
 
   return "production";
+}
+
+function resolvePagBankBillingMode(
+  billingCredentials: Map<string, string>,
+  sharedCredentials: Map<string, string>,
+): "production" | "sandbox" {
+  const explicit = getCredentialValue(billingCredentials, ["PAGBANK_BILLING_MODE"]).toLowerCase();
+
+  if (explicit === "sandbox") return "sandbox";
+  if (explicit === "production") return "production";
+
+  return resolvePagBankMode(sharedCredentials);
 }
 
 function getAppBaseUrl() {

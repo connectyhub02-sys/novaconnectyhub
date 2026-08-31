@@ -4,9 +4,13 @@ import {
   isBillingCheckoutPayable,
   loadBillingCheckoutIntent,
   readBillingCheckoutPixData,
+  resolveBillingCheckoutProvider,
   type BillingCheckoutIntent,
 } from "@/lib/billing/plan-checkout";
-import { processPlatformBillingMercadoPagoWebhook } from "@/lib/billing/platform-billing-webhook";
+import {
+  processPlatformBillingMercadoPagoWebhook,
+  processPlatformBillingPagBankWebhook,
+} from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -44,7 +48,11 @@ export async function GET(
     } | null = null;
 
     if (providerPaymentId && shouldReconcileProviderPayment(intent)) {
-      const result = await processPlatformBillingMercadoPagoWebhook(client, {
+      const provider = resolveBillingCheckoutProvider(intent);
+      const processor = provider === "pagbank"
+        ? processPlatformBillingPagBankWebhook
+        : processPlatformBillingMercadoPagoWebhook;
+      const result = await processor(client, {
         dataId: providerPaymentId,
         eventType: "payment",
         action: "dashboard.status_poll",
@@ -86,6 +94,7 @@ export async function GET(
       paymentStatus: intent.payment.status,
       providerStatus: intent.payment.provider_status,
       providerPaymentId: readProviderPaymentId(intent),
+      provider: resolveBillingCheckoutProvider(intent),
       payable: isBillingCheckoutPayable(intent),
       confirmed: isCheckoutConfirmed(intent),
       reconciliation,
@@ -113,6 +122,15 @@ function isCheckoutConfirmed(intent: BillingCheckoutIntent) {
 }
 
 function readProviderPaymentId(intent: BillingCheckoutIntent) {
+  if (resolveBillingCheckoutProvider(intent) === "pagbank") {
+    return readString(intent.payment.payload?.pagbank_order_id)
+      ?? readString(intent.payment.payload?.provider_order_id)
+      ?? intent.payment.provider_payment_id
+      ?? readString(intent.payment.payload?.provider_payment_id)
+      ?? readString(intent.invoice.metadata?.pagbank_order_id)
+      ?? readString(intent.subscription.metadata?.pagbank_order_id);
+  }
+
   return intent.payment.provider_payment_id
     ?? readString(intent.payment.payload?.provider_payment_id)
     ?? readString(intent.invoice.metadata?.provider_payment_id)

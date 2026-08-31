@@ -466,14 +466,14 @@ export function PlatformBillingOperations({
       <div className="mb-4 space-y-3">
         <Panel
           title="Cobranca ConnectyHub"
-          eyebrow="Mercado Pago / Pix Automatico / WhatsApp"
+          eyebrow={`${catalog.mercadoPagoConnection.providerLabel} / Pix Automatico / WhatsApp`}
           tone="amber"
           compact
           collapsible
           action={
             <div className="flex flex-wrap gap-2">
               <NeonBadge tone={catalog.credentialReadiness === 100 ? "green" : "amber"}>
-                MP {catalog.credentialReadiness}%
+                {catalog.mercadoPagoConnection.providerLabel} {catalog.credentialReadiness}%
               </NeonBadge>
               <NeonBadge tone={connectedAgents.length > 0 ? "green" : "rose"}>
                 {connectedAgents.length} agente{connectedAgents.length === 1 ? "" : "s"} online
@@ -489,14 +489,14 @@ export function PlatformBillingOperations({
             icon={PlugZap}
             label="Credenciais"
             value={`${catalog.stats.configuredCredentialFields}/${catalog.credentials.length}`}
-            detail="Mercado Pago billing"
+            detail={`${catalog.mercadoPagoConnection.providerLabel} billing`}
             tone="cyan"
           />
           <BillingOpsMetric
             icon={Link2}
-            label="Planos MP"
+            label="Planos"
             value={`${catalog.stats.mappedPaidPlans}/3`}
-            detail="preapproval plan ID"
+            detail="checkout ativo"
             tone="amber"
           />
           <BillingOpsMetric
@@ -613,7 +613,7 @@ export function PlatformBillingOperations({
                   className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                   style={inputStyle}
                 >
-                  <option value="subscription">Assinatura recorrente Mercado Pago</option>
+                  <option value="subscription">Assinatura via provedor ativo</option>
                   <option value="manual_review">Revisao manual temporaria</option>
                 </select>
               </FieldLabel>
@@ -721,7 +721,7 @@ export function PlatformBillingOperations({
             >
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                  Credenciais Mercado Pago
+                  Credenciais {catalog.mercadoPagoConnection.providerLabel}
                 </p>
                 <StatusBadge
                   status={catalog.mercadoPagoConnection.connected ? "online" : "warning"}
@@ -783,36 +783,51 @@ export function PlatformBillingOperations({
 }
 
 function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatalog }) {
+  const billingProvider = catalog.mercadoPagoConnection.provider;
+  const isPagBankBilling = billingProvider === "pagbank";
+  const mappedLabel = isPagBankBilling
+    ? `${catalog.stats.mappedPaidPlans}/3 ativos`
+    : `${catalog.stats.mappedPaidPlans}/3 MP`;
+
   return (
     <Panel
       title="Planos recorrentes"
       eyebrow="Start / Pro / Scale"
       compact
-      action={<StatusBadge status={catalog.stats.mappedPaidPlans === 3 ? "online" : "warning"} label={`${catalog.stats.mappedPaidPlans}/3 MP`} />}
+      action={<StatusBadge status={catalog.stats.mappedPaidPlans === 3 ? "online" : "warning"} label={mappedLabel} />}
     >
       <div className="grid gap-2 md:grid-cols-3">
-        {catalog.plans.map((plan) => (
-          <div
-            key={plan.id}
-            className="rounded-xl p-3"
-            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-          >
-            <div className="mb-2 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
-                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{plan.planCode}</p>
+        {catalog.plans.map((plan) => {
+          const mapped = isPagBankBilling
+            ? plan.status === "active" && plan.monthlyPriceBrl > 0
+            : Boolean(plan.mercadoPagoPreapprovalPlanId);
+          const providerDetail = isPagBankBilling
+            ? `${catalog.mercadoPagoConnection.providerLabel} Pix ativo`
+            : plan.mercadoPagoPreapprovalPlanId ?? "Sem preapproval_plan_id";
+
+          return (
+            <div
+              key={plan.id}
+              className="rounded-xl p-3"
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{plan.planCode}</p>
+                </div>
+                <StatusBadge status={mapped ? "online" : "warning"} />
               </div>
-              <StatusBadge status={plan.mercadoPagoPreapprovalPlanId ? "online" : "warning"} />
+              <div className="grid grid-cols-2 gap-2">
+                <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
+                <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
+              </div>
+              <p className="mt-2 truncate font-mono text-[9px] text-slate-500">
+                {providerDetail}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
-              <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
-            </div>
-            <p className="mt-2 truncate font-mono text-[9px] text-slate-500">
-              {plan.mercadoPagoPreapprovalPlanId ?? "Sem preapproval_plan_id"}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Panel>
   );
@@ -840,14 +855,14 @@ function MercadoPagoBillingConnectionCard({
           <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-slate-500">
             {connection.connected
               ? `${connection.mode ?? "production"} / ${connection.accountId ?? "conta conectada"}`
-              : "Conecte por OAuth sem copiar access token"}
+              : `Configure ${connection.providerLabel} no cofre`}
           </p>
         </div>
         <StatusBadge status={connection.connected ? "online" : "warning"} label={connection.connected ? "ativa" : "pendente"} />
       </div>
 
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <MiniValue label="Callback" value={connection.redirectUrl} />
+        <MiniValue label={connection.provider === "mercado_pago" ? "Callback" : "Cofre"} value={connection.redirectUrl} />
         <MiniValue label="Webhook" value={connection.webhookUrl} />
       </div>
 
@@ -862,15 +877,17 @@ function MercadoPagoBillingConnectionCard({
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <a
-          href="/api/admin/billing/mercado-pago/connect"
+          href={connection.provider === "mercado_pago" ? "/api/admin/billing/mercado-pago/connect" : "/admin/maintenance#credenciais-do-sistema"}
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
           style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          {connection.connected ? "Reconectar" : "Conectar Mercado Pago"}
+          {connection.provider === "mercado_pago"
+            ? connection.connected ? "Reconectar" : "Conectar Mercado Pago"
+            : "Abrir cofre PagBank"}
         </a>
 
-        {connection.connected ? (
+        {connection.provider === "mercado_pago" && connection.connected ? (
           <button
             type="button"
             onClick={onDisconnect}

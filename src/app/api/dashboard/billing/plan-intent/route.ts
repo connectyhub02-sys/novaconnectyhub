@@ -9,6 +9,7 @@ import {
   buildDashboardBillingCheckoutPath,
   buildDashboardBillingCheckoutUrl,
   buildPlatformBillingExternalReference,
+  type BillingCheckoutProvider,
 } from "@/lib/billing/plan-checkout";
 import {
   sendPlatformPlanInteractionNotification,
@@ -38,6 +39,10 @@ type ExistingSubscriptionRow = {
   provider_subscription_id: string | null;
   metadata: JsonRecord | null;
   created_at: string;
+};
+
+type PlatformBillingProviderRow = {
+  recurring_provider: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -163,6 +168,7 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
+    const platformBillingProvider = await loadPlatformBillingProvider(client);
     const dueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
     const subscriptionId = randomUUID();
     const invoiceId = randomUUID();
@@ -189,6 +195,7 @@ export async function POST(request: NextRequest) {
       checkout_status: "internal_checkout_created",
       checkout_url: checkoutPath,
       checkout_public_url: checkoutUrl,
+      billing_provider: platformBillingProvider,
     };
 
     const { error: subscriptionError } = await client
@@ -199,7 +206,7 @@ export async function POST(request: NextRequest) {
         plan_id: plan.id,
         plan_code: plan.plan_code,
         status: "pending",
-        billing_provider: "mercado_pago",
+        billing_provider: platformBillingProvider,
         provider_plan_id: null,
         payer_email: payerEmail,
         included_credits_granted: 0,
@@ -222,7 +229,7 @@ export async function POST(request: NextRequest) {
         discount_brl: 0,
         total_brl: amountBrl,
         due_at: dueAt,
-        provider: "mercado_pago",
+        provider: platformBillingProvider,
         metadata: intentMetadata,
       });
 
@@ -253,7 +260,7 @@ export async function POST(request: NextRequest) {
         organization_id: workspace.organization.id,
         invoice_id: invoiceId,
         subscription_id: subscriptionId,
-        provider: "mercado_pago",
+        provider: platformBillingProvider,
         status: "pending",
         amount_brl: amountBrl,
         payload: intentMetadata,
@@ -369,6 +376,20 @@ async function loadBlockingSubscription(client: ReturnType<typeof createServiceC
 
 function isPendingSubscription(status: string) {
   return status === "pending" || status === "incomplete";
+}
+
+async function loadPlatformBillingProvider(client: ReturnType<typeof createServiceClient>): Promise<BillingCheckoutProvider> {
+  const { data, error } = await client
+    .from("platform_billing_settings")
+    .select("recurring_provider")
+    .eq("setting_key", "default")
+    .maybeSingle<PlatformBillingProviderRow>();
+
+  if (error) {
+    return "mercado_pago";
+  }
+
+  return data?.recurring_provider === "pagbank" ? "pagbank" : "mercado_pago";
 }
 
 async function cancelPendingSubscription(

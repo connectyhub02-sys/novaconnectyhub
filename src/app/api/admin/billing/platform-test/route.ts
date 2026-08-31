@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendPlatformBillingOperationalTest } from "@/lib/billing/platform-billing-webhook";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
+import { loadPagBankPlatformBillingConfig } from "@/lib/sales-catalog/pagbank";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -24,6 +25,7 @@ type PlatformBillingSettingsRow = {
   notification_whatsapp_enabled: boolean | null;
   pix_automatic_required: boolean | null;
   checkout_mode: string | null;
+  recurring_provider: string | null;
 };
 
 type WhatsappInstanceRow = {
@@ -104,7 +106,7 @@ async function getPlatformBillingOperationalHealth(client: SupabaseClient) {
   const [settingsResult, pendingPaymentsResult, notificationEventsResult] = await Promise.all([
     client
       .from("platform_billing_settings")
-      .select("billing_whatsapp_agent_id, notification_whatsapp_enabled, pix_automatic_required, checkout_mode")
+      .select("billing_whatsapp_agent_id, notification_whatsapp_enabled, pix_automatic_required, checkout_mode, recurring_provider")
       .eq("setting_key", "default")
       .maybeSingle<PlatformBillingSettingsRow>(),
     client
@@ -176,21 +178,26 @@ async function getPlatformBillingOperationalHealth(client: SupabaseClient) {
     }
   }
 
-  try {
-    const config = await loadMercadoPagoPlatformBillingConfig({ client });
+  const billingProvider = settings?.recurring_provider === "mercado_pago" ? "mercado_pago" : "pagbank";
 
+  try {
+    const config = billingProvider === "pagbank"
+      ? await loadPagBankPlatformBillingConfig({ client })
+      : await loadMercadoPagoPlatformBillingConfig({ client });
+    const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
     checks.push({
-      key: "mercado_pago",
-      label: "Mercado Pago billing",
+      key: billingProvider,
+      label: `${providerLabel} billing`,
       status: "ok",
       detail: `Credenciais carregadas em modo ${config.mode}.`,
     });
   } catch (error) {
+    const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
     checks.push({
-      key: "mercado_pago",
-      label: "Mercado Pago billing",
+      key: billingProvider,
+      label: `${providerLabel} billing`,
       status: "error",
-      detail: readErrorMessage(error, "Credenciais de cobranca Mercado Pago incompletas."),
+      detail: readErrorMessage(error, `Credenciais de cobranca ${providerLabel} incompletas.`),
     });
   }
 
