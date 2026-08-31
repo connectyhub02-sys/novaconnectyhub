@@ -254,4 +254,22 @@ describe("Commerce Agent checkout continuity", () => {
     expect(commerceAgentDockSource).toContain("recordContextualOpener");
     expect(commerceAgentDockSource).toContain("/api/public/commerce-agent/action");
   });
+
+  it("stores storefront chat messages with omnichannel audit metadata", () => {
+    const persistence = sourceBetween(
+      commerceAgentServerSource,
+      "export async function persistCommerceAgentMessage",
+      "export async function recordCommerceAgentAction",
+    );
+
+    expect(persistence).toContain("buildCommerceAgentMessageOrigin");
+    expect(persistence).toContain("normalizeCommerceAgentMessageChannel");
+    expect(persistence).toContain("author_type: origin.authorType");
+    expect(persistence).toContain("author_source: origin.authorSource");
+    expect(persistence).toContain("origin_source: origin.source");
+    expect(persistence).toContain("origin_confidence: origin.confidence");
+    expect(persistence).toContain("message_author");
+    expect(persistence).toContain("lead_storefront");
+    expect(persistence).toContain("connectyhub_ai_storefront");
+  });
 });

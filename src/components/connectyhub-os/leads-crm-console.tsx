@@ -4477,6 +4477,8 @@ function ConversationHeader({
   lead: ClientLeadRecord;
 }) {
   const messageCount = conversation?.messageCount ?? lead.conversation.messageCount;
+  const messages = conversation?.messages ?? lead.conversation.messages;
+  const hasStorefrontMessages = messages.some((message) => message.channel !== "whatsapp");
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -4488,11 +4490,104 @@ function ConversationHeader({
         </div>
       </div>
       <div className="flex flex-wrap gap-2 sm:justify-end">
+        {hasStorefrontMessages ? <NeonBadge tone="green">Omnicanal</NeonBadge> : null}
         {conversation ? <NeonBadge tone="zinc">{conversation.status ?? "sem status"}</NeonBadge> : null}
         <NeonBadge tone="cyan">{messageCount} mensagens</NeonBadge>
       </div>
     </div>
   );
+}
+
+function formatMessageOriginBadge(message: ClientLeadMessage) {
+  const channelLabel = formatMessageChannelLabel(message.channel, message.surface);
+
+  switch (message.originSource) {
+    case "connectyhub_ai_storefront":
+      return `IA ${channelLabel}`;
+    case "lead_storefront":
+      return `Lead ${channelLabel}`;
+    case "connectyhub_dashboard_human":
+      return "Humano Painel";
+    case "connectyhub_admin_human":
+      return "Admin Painel";
+    case "connectyhub_dashboard_storefront":
+      return "Humano Loja";
+    case "connectyhub_ai_whatsapp":
+      return "IA WhatsApp";
+    case "connected_whatsapp_mobile":
+      return "Celular WhatsApp";
+    case "connected_whatsapp_web":
+      return "WhatsApp Web";
+    case "connected_whatsapp_desktop":
+      return "WhatsApp Desktop";
+    case "connected_whatsapp_external":
+      return "WhatsApp Externo";
+    case "lead_whatsapp":
+      return "WhatsApp";
+    case "connectyhub_payment_system":
+      return "Sistema";
+    default:
+      if (message.channel && message.channel !== "whatsapp") {
+        return channelLabel;
+      }
+
+      return null;
+  }
+}
+
+function formatMessageChannelLabel(channel: string | null | undefined, surface: string | null | undefined) {
+  const value = (surface || channel || "").toLowerCase();
+
+  if (value === "checkout") return "Checkout";
+  if (value === "cart" || value === "carrinho") return "Carrinho";
+  if (value === "product" || value === "produto") return "Produto";
+  if (value === "store" || value === "storefront" || value === "loja") return "Loja";
+  if (value === "whatsapp") return "WhatsApp";
+
+  return "Loja";
+}
+
+function getMessageOriginBadgeClass(message: ClientLeadMessage) {
+  if (message.originSource.includes("storefront") || message.channel !== "whatsapp") {
+    return "border-cyan-300 bg-cyan-50 text-cyan-700";
+  }
+
+  if (message.originSource.includes("dashboard")) {
+    return "border-blue-300 bg-blue-50 text-blue-700";
+  }
+
+  if (message.originSource.includes("external") || message.originSource.includes("connected_whatsapp")) {
+    return "border-orange-300 bg-orange-50 text-orange-700";
+  }
+
+  if (message.originSource.includes("ai")) {
+    return "border-emerald-300 bg-emerald-50 text-emerald-700";
+  }
+
+  return "border-slate-300 bg-white/70 text-slate-600";
+}
+
+function formatMessageOriginTitle(message: ClientLeadMessage) {
+  const parts = [
+    `Origem: ${formatMessageOriginBadge(message) ?? message.originSource}`,
+    message.originDevice ? `Dispositivo: ${formatOriginDeviceLabel(message.originDevice)}` : null,
+    `Confianca: ${formatOriginConfidenceLabel(message.originConfidence)}`,
+  ].filter(Boolean);
+
+  return parts.join(" / ");
+}
+
+function formatOriginDeviceLabel(value: string) {
+  if (value === "mobile") return "celular";
+  if (value === "web") return "navegador";
+  if (value === "desktop") return "computador";
+  return value;
+}
+
+function formatOriginConfidenceLabel(value: ClientLeadMessage["originConfidence"]) {
+  if (value === "high") return "alta";
+  if (value === "medium") return "media";
+  return "baixa";
 }
 
 function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
@@ -4524,6 +4619,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
                 ? "Atendimento"
                 : "Mensagem citada")
           : null;
+        const originLabel = formatMessageOriginBadge(message);
         const bubbleStyle = isSystem
           ? { backgroundColor: "#fff7d6", borderColor: "#f6dc8c", color: "#3b3320" }
           : isOutbound
@@ -4540,8 +4636,21 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
               style={bubbleStyle}
             >
               <div className="mb-1 flex items-center justify-between gap-3">
-                <span className="font-mono text-[9px] uppercase tracking-wide opacity-60">
-                  {label}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-mono text-[9px] uppercase tracking-wide opacity-60">
+                    {label}
+                  </span>
+                  {originLabel ? (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wide",
+                        getMessageOriginBadgeClass(message),
+                      )}
+                      title={formatMessageOriginTitle(message)}
+                    >
+                      {originLabel}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="font-mono text-[9px] opacity-55">
                   {message.type !== "text" ? `${message.type} · ` : null}

@@ -65,4 +65,26 @@ describe("Lead CRM quoted message preview", () => {
     expect(attendanceMediaRouteSource).toContain("/message/download");
     expect(attendanceMediaRouteSource).toContain("Range");
   });
+
+  it("surfaces storefront agent messages in the same lead timeline with origin labels", () => {
+    const messageType = sourceBetween(leadsCrmSource, "export type ClientLeadMessage", "export type ClientLeadActivity");
+    const loader = sourceBetween(leadsCrmSource, "async function loadCommerceAgentMessageRows", "function isLeadCrmWhatsappInstance");
+    const mapper = sourceBetween(leadsCrmSource, "function mapCommerceAgentMessageToConversationMessage", "function normalizeCommerceMessageChannel");
+    const originResolver = sourceBetween(leadsCrmSource, "function resolveMessageOrigin", "function normalizeMessageAuthor");
+    const chatMessages = sourceBetween(leadsCrmConsoleSource, "function formatMessageOriginBadge", "function ChatMessages");
+
+    expect(messageType).toContain("originSource: string");
+    expect(messageType).toContain("originDevice: string | null");
+    expect(messageType).toContain('originConfidence: "high" | "medium" | "low"');
+    expect(loader).toContain('.from("commerce_agent_messages")');
+    expect(loader).toContain('.in("role", ["lead", "assistant"])');
+    expect(mapper).toContain('provider: "connectyhub_storefront"');
+    expect(mapper).toContain('origin_source: readString(metadata.origin_source) ?? originSource');
+    expect(originResolver).toContain("connectyhub_ai_storefront");
+    expect(originResolver).toContain("connected_whatsapp_mobile");
+    expect(chatMessages).toContain("Celular WhatsApp");
+    expect(chatMessages).toContain("return `IA ${channelLabel}`");
+    expect(chatMessages).toContain("return `Lead ${channelLabel}`");
+    expect(chatMessages).toContain("Humano Painel");
+  });
 });

@@ -67,6 +67,20 @@ type MessageRow = {
   created_at: string | null;
 };
 
+type CommerceAgentMessageRow = {
+  id: string;
+  organization_id: string;
+  commerce_session_id: string | null;
+  lead_id: string | null;
+  conversation_id: string | null;
+  role: "lead" | "assistant" | "system" | "tool";
+  channel: string;
+  surface: string | null;
+  content: string;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+};
+
 type IntelligenceEventRow = {
   id: string;
   organization_id: string | null;
@@ -137,6 +151,11 @@ export type ClientLeadMessage = {
   author: ClientLeadMessageAuthor;
   authorLabel: string;
   authorSource: string;
+  channel: string;
+  surface: string | null;
+  originSource: string;
+  originDevice: string | null;
+  originConfidence: "high" | "medium" | "low";
   agentRunId: string | null;
   agentId: string | null;
   provider: string;
@@ -591,6 +610,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   const conversationIds = conversationRows.map((conversation) => conversation.id);
   let messageRows: MessageRow[] = [];
+  let commerceMessageRows: MessageRow[] = [];
 
   try {
     if (conversationIds.length) {
@@ -606,6 +626,24 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     }
   } catch (error) {
     warnings.push(toLoadWarning("mensagens", error));
+  }
+
+  try {
+    if (conversationIds.length || leadIds.length) {
+      const commerceMessagesResult = await loadCommerceAgentMessageRows({
+        client: input.client,
+        companyIds,
+        conversationIds,
+        fallbackConversationIdByLead: buildFallbackConversationIdByLead(conversationRows),
+        leadIds,
+        messageLimit: input.messageLimit,
+      });
+
+      commerceMessageRows = commerceMessagesResult.rows;
+      warnings.push(...commerceMessagesResult.warnings);
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("mensagens da loja", error));
   }
 
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
@@ -639,7 +677,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   }
 
   const conversationsByLead = groupBy(conversationRows, (conversation) => conversation.lead_id ?? "none");
-  const messagesByConversation = groupBy(messageRows, (message) => message.conversation_id ?? "none");
+  const messagesByConversation = groupBy([...messageRows, ...commerceMessageRows], (message) => message.conversation_id ?? "none");
   const leads = hydratedLeadRows.map((lead) => {
     const company = companyById.get(lead.organization_id);
     const conversations = conversationsByLead.get(lead.id) ?? [];
@@ -682,6 +720,7 @@ function logLeadCrmLoadError(scope: string, error: unknown) {
 
 const conversationMessageColumns = "id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at";
 const conversationMessageSlimColumns = "id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, occurred_at, created_at";
+const commerceAgentMessageColumns = "id, organization_id, commerce_session_id, lead_id, conversation_id, role, channel, surface, content, metadata, created_at";
 
 async function loadConversationMessageRows(input: {
   client: SupabaseClient;
@@ -777,6 +816,159 @@ async function loadMessagesForConversation(input: {
     rows: [],
     error: slimResult.error,
   };
+}
+
+async function loadCommerceAgentMessageRows(input: {
+  client: SupabaseClient;
+  companyIds: string[];
+  conversationIds: string[];
+  leadIds: string[];
+  fallbackConversationIdByLead: Map<string, string>;
+  messageLimit?: number;
+}): Promise<{ rows: MessageRow[]; warnings: string[] }> {
+  const rawRows: CommerceAgentMessageRow[] = [];
+  const warnings: string[] = [];
+
+  for (const batch of chunkArray(input.conversationIds, 24)) {
+    const result = await loadCommerceAgentMessagesByColumn({
+      client: input.client,
+      column: "conversation_id",
+      companyIds: input.companyIds,
+      values: batch,
+      messageLimit: input.messageLimit,
+    });
+
+    rawRows.push(...result.rows);
+    if (result.error) warnings.push("Algumas mensagens da loja nao carregaram nesta tentativa.");
+  }
+
+  for (const batch of chunkArray(input.leadIds, 24)) {
+    const result = await loadCommerceAgentMessagesByColumn({
+      client: input.client,
+      column: "lead_id",
+      companyIds: input.companyIds,
+      values: batch,
+      messageLimit: input.messageLimit,
+    });
+
+    rawRows.push(...result.rows);
+    if (result.error) warnings.push("Algumas mensagens da loja por lead nao carregaram nesta tentativa.");
+  }
+
+  const seen = new Set<string>();
+  const rows = rawRows
+    .filter((row) => {
+      if (seen.has(row.id)) {
+        return false;
+      }
+
+      seen.add(row.id);
+      return row.role === "lead" || row.role === "assistant";
+    })
+    .map((row) => mapCommerceAgentMessageToConversationMessage(row, input.fallbackConversationIdByLead))
+    .filter((row): row is MessageRow => Boolean(row))
+    .sort((a, b) => compareDateAsc(a.occurred_at ?? a.created_at, b.occurred_at ?? b.created_at));
+
+  return {
+    rows,
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
+async function loadCommerceAgentMessagesByColumn(input: {
+  client: SupabaseClient;
+  column: "conversation_id" | "lead_id";
+  companyIds: string[];
+  values: string[];
+  messageLimit?: number;
+}): Promise<{ rows: CommerceAgentMessageRow[]; error: unknown | null }> {
+  if (!input.values.length) {
+    return { rows: [], error: null };
+  }
+
+  const result = await input.client
+    .from("commerce_agent_messages")
+    .select(commerceAgentMessageColumns)
+    .in("organization_id", input.companyIds)
+    .in(input.column, input.values)
+    .in("role", ["lead", "assistant"])
+    .order("created_at", { ascending: false })
+    .limit((input.messageLimit ?? 120) * input.values.length);
+
+  if (result.error) {
+    logLeadCrmLoadError(`mensagens da loja por ${input.column}`, result.error);
+    return { rows: [], error: result.error };
+  }
+
+  return {
+    rows: (result.data ?? []) as CommerceAgentMessageRow[],
+    error: null,
+  };
+}
+
+function mapCommerceAgentMessageToConversationMessage(
+  row: CommerceAgentMessageRow,
+  fallbackConversationIdByLead: Map<string, string>,
+): MessageRow | null {
+  const conversationId = row.conversation_id
+    ?? (row.lead_id ? fallbackConversationIdByLead.get(row.lead_id) ?? null : null);
+
+  if (!conversationId) {
+    return null;
+  }
+
+  const metadata = readRecord(row.metadata) ?? {};
+  const channel = normalizeCommerceMessageChannel(row.channel, row.surface);
+  const authorType = row.role === "lead" ? "lead" : "ai";
+  const authorLabel = row.role === "lead"
+    ? "Lead"
+    : readString(metadata.agent_name) ?? "Agente IA";
+  const authorSource = row.role === "lead" ? "store_agent_dock" : "commerce_agent_dock";
+  const originSource = row.role === "lead" ? "lead_storefront" : "connectyhub_ai_storefront";
+
+  return {
+    id: `commerce:${row.id}`,
+    organization_id: row.organization_id,
+    conversation_id: conversationId,
+    lead_id: row.lead_id,
+    whatsapp_instance_id: null,
+    provider: "connectyhub_storefront",
+    provider_message_id: null,
+    provider_chat_id: readString(metadata.session_cookie_id) ?? readString(metadata.visitor_cookie_id),
+    direction: row.role === "lead" ? "inbound" : "outbound",
+    message_type: "text",
+    text_content: row.content,
+    payload: {
+      ...metadata,
+      author_type: authorType,
+      author_label: authorLabel,
+      author_source: authorSource,
+      commerce_session_id: row.commerce_session_id,
+      origin_channel: channel,
+      origin_confidence: readString(metadata.origin_confidence) ?? "high",
+      origin_device: readString(metadata.origin_device),
+      origin_source: readString(metadata.origin_source) ?? originSource,
+      surface: row.surface,
+      message_author: {
+        type: authorType,
+        label: authorLabel,
+        source: authorSource,
+        agent_id: readString(metadata.agent_id),
+        commerce_session_id: row.commerce_session_id,
+      },
+    },
+    occurred_at: row.created_at,
+    created_at: row.created_at,
+  };
+}
+
+function normalizeCommerceMessageChannel(channel: string | null, surface: string | null) {
+  const value = (surface || channel || "storefront").toLowerCase();
+
+  if (value === "checkout") return "checkout";
+  if (value === "cart") return "cart";
+  if (value === "product") return "product";
+  return "storefront";
 }
 
 function isLeadCrmWhatsappInstance(instance: WhatsappInstanceQueueRow) {
@@ -1097,6 +1289,7 @@ function readWhatsappInstanceAvatarUrl(instance: WhatsappInstanceQueueRow | null
 function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): ClientLeadMessage {
   const payload = readRecord(row.payload) ?? {};
   const author = resolveMessageAuthor(row, payload);
+  const origin = resolveMessageOrigin(row, payload, author);
   const media = resolveConversationMessageMedia(row, {
     proxyBasePath: "/api/dashboard/attendance/media",
   });
@@ -1108,6 +1301,11 @@ function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): C
     author: author.type,
     authorLabel: author.label,
     authorSource: author.source,
+    channel: origin.channel,
+    surface: origin.surface,
+    originSource: origin.source,
+    originDevice: origin.device,
+    originConfidence: origin.confidence,
     agentRunId: readString(payload.agent_run_id),
     agentId: readString(payload.agent_id),
     provider: row.provider,
@@ -1444,6 +1642,170 @@ function resolveMessageAuthor(row: MessageRow, payload: JsonRecord): {
   return { type: "unknown", label: "Desconhecido", source: "direction_unknown" };
 }
 
+function resolveMessageOrigin(
+  row: MessageRow,
+  payload: JsonRecord,
+  author: { type: ClientLeadMessageAuthor; source: string },
+): {
+  channel: string;
+  surface: string | null;
+  source: string;
+  device: string | null;
+  confidence: "high" | "medium" | "low";
+} {
+  const nestedAuthor = readRecord(payload.message_author);
+  const explicitSource =
+    readString(payload.origin_source)
+    ?? readString(payload.message_origin_source)
+    ?? readString(readRecord(payload.message_origin)?.source)
+    ?? readString(nestedAuthor?.origin_source);
+  const channel =
+    normalizeOriginChannel(readString(payload.origin_channel) ?? readString(payload.channel), row.provider)
+    ?? inferOriginChannel(row, payload);
+  const surface =
+    readString(payload.surface)
+    ?? readString(payload.commerce_surface)
+    ?? readString(payload.page_surface)
+    ?? null;
+  const device =
+    normalizeOriginDevice(readString(payload.origin_device) ?? readString(readRecord(payload.message_origin)?.device))
+    ?? inferOriginDevice(payload);
+  const source = explicitSource ?? inferOriginSource({ row, payload, author, device, channel });
+  const confidence =
+    normalizeOriginConfidence(readString(payload.origin_confidence) ?? readString(readRecord(payload.message_origin)?.confidence))
+    ?? inferOriginConfidence(source, device);
+
+  return {
+    channel,
+    surface,
+    source,
+    device,
+    confidence,
+  };
+}
+
+function inferOriginChannel(row: MessageRow, payload: JsonRecord) {
+  if (row.provider === "connectyhub_storefront") {
+    return normalizeOriginChannel(readString(payload.surface), row.provider) ?? "storefront";
+  }
+
+  return "whatsapp";
+}
+
+function inferOriginSource(input: {
+  row: MessageRow;
+  payload: JsonRecord;
+  author: { type: ClientLeadMessageAuthor; source: string };
+  device: string | null;
+  channel: string;
+}) {
+  if (input.row.provider === "connectyhub_storefront" || input.channel !== "whatsapp") {
+    if (input.author.type === "lead") return "lead_storefront";
+    if (input.author.type === "ai") return "connectyhub_ai_storefront";
+    if (input.author.type === "human") return "connectyhub_dashboard_storefront";
+    return "storefront_system";
+  }
+
+  if (input.author.type === "lead" || input.row.direction === "inbound") {
+    return "lead_whatsapp";
+  }
+
+  if (input.author.source === "agent_runtime" || readString(input.payload.agent_run_id)) {
+    return "connectyhub_ai_whatsapp";
+  }
+
+  if (input.author.source === "connectyhub_dashboard") {
+    return "connectyhub_dashboard_human";
+  }
+
+  if (input.author.source === "connectyhub_admin") {
+    return "connectyhub_admin_human";
+  }
+
+  if (input.author.type === "human" && input.row.direction === "outbound") {
+    if (input.device === "mobile") return "connected_whatsapp_mobile";
+    if (input.device === "web") return "connected_whatsapp_web";
+    if (input.device === "desktop") return "connected_whatsapp_desktop";
+    return "connected_whatsapp_external";
+  }
+
+  return input.row.direction === "system" ? "whatsapp_system" : "unknown_external";
+}
+
+function inferOriginConfidence(source: string, device: string | null): "high" | "medium" | "low" {
+  if (source.startsWith("connectyhub_") || source === "lead_storefront") {
+    return "high";
+  }
+
+  if (source === "connected_whatsapp_external") {
+    return device ? "medium" : "low";
+  }
+
+  if (source.startsWith("connected_whatsapp_")) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function normalizeOriginChannel(value: string | null, provider?: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "checkout") return "checkout";
+  if (normalized === "cart" || normalized === "carrinho") return "cart";
+  if (normalized === "product" || normalized === "produto") return "product";
+  if (normalized === "store" || normalized === "storefront" || normalized === "loja") return "storefront";
+  if (normalized === "whatsapp" || provider === "uazapi") return "whatsapp";
+
+  return null;
+}
+
+function normalizeOriginDevice(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (!normalized) return null;
+  if (["android", "ios", "iphone", "mobile", "celular", "phone"].some((item) => normalized.includes(item))) return "mobile";
+  if (["web", "browser", "chrome", "firefox", "edge", "safari", "navegador"].some((item) => normalized.includes(item))) return "web";
+  if (["desktop", "windows", "mac", "linux", "computer", "computador"].some((item) => normalized.includes(item))) return "desktop";
+
+  return normalized.slice(0, 40);
+}
+
+function inferOriginDevice(payload: JsonRecord, depth = 0): string | null {
+  if (depth > 3) {
+    return null;
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    const normalizedKey = key.toLowerCase();
+    const directValue = readString(value);
+
+    if (
+      directValue
+      && ["device", "devicetype", "device_type", "platform", "client", "browser", "os", "source", "source_device", "sourcedevice"].includes(normalizedKey)
+    ) {
+      const device = normalizeOriginDevice(directValue);
+      if (device) return device;
+    }
+
+    const record = readRecord(value);
+    if (record) {
+      const nested = inferOriginDevice(record, depth + 1);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+}
+
+function normalizeOriginConfidence(value: string | null): "high" | "medium" | "low" | null {
+  if (value === "high" || value === "medium" || value === "low") {
+    return value;
+  }
+
+  return null;
+}
+
 function normalizeMessageAuthor(value: string | null): ClientLeadMessageAuthor | null {
   if (value === "lead" || value === "ai" || value === "human" || value === "system" || value === "unknown") {
     return value;
@@ -1491,6 +1853,7 @@ function buildConversationFiles(input: {
     .map((conversation) => {
       const conversationMessages = input.messagesByConversation.get(conversation.id) ?? [];
       const messages = conversationMessages.map((message) => mapMessage(message, conversationMessages));
+      const latestMessage = messages.at(-1) ?? null;
       const humanIntervention = readConversationHumanIntervention(conversation.metadata);
       const { agent, agentId, agentName, instance } = resolveInstanceAgent(conversation);
 
@@ -1507,13 +1870,13 @@ function buildConversationFiles(input: {
         provider: conversation.provider,
         providerChatId: conversation.provider_chat_id,
         status: conversation.status,
-        preview: conversation.last_message_preview,
+        preview: latestMessage?.text ?? conversation.last_message_preview,
         messageCount: messages.length,
         messages,
         humanIntervention,
         createdAt: conversation.created_at,
         updatedAt: conversation.updated_at,
-        lastMessageAt: conversation.last_message_at ?? conversation.updated_at,
+        lastMessageAt: latestMessage?.occurredAt ?? conversation.last_message_at ?? conversation.updated_at,
       };
     })
     .sort((a, b) => compareDateDesc(a.lastMessageAt ?? a.updatedAt, b.lastMessageAt ?? b.updatedAt));
@@ -1702,7 +2065,7 @@ function intersectsSet(a: Set<string>, b: Set<string>) {
 }
 
 function mergeEventPayloads(events: IntelligenceEventRow[]) {
-  return events.reduce<JsonRecord>((acc, event) => {
+  return [...events].reverse().reduce<JsonRecord>((acc, event) => {
     return {
       ...acc,
       ...(readRecord(event.payload) ?? {}),
@@ -1723,6 +2086,19 @@ function buildStats(leads: ClientLeadRecord[]): ClientLeadCrmWorkspace["stats"] 
 
 function pickActiveConversation(conversations: ConversationRow[]) {
   return [...conversations].sort((a, b) => compareDateDesc(a.last_message_at ?? a.updated_at, b.last_message_at ?? b.updated_at))[0];
+}
+
+function buildFallbackConversationIdByLead(conversations: ConversationRow[]) {
+  const map = new Map<string, string>();
+  const sorted = [...conversations].sort((a, b) => compareDateDesc(a.last_message_at ?? a.updated_at, b.last_message_at ?? b.updated_at));
+
+  for (const conversation of sorted) {
+    if (conversation.lead_id && !map.has(conversation.lead_id)) {
+      map.set(conversation.lead_id, conversation.id);
+    }
+  }
+
+  return map;
 }
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string) {

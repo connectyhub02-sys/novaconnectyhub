@@ -495,6 +495,8 @@ export async function persistCommerceAgentMessage(input: {
     return null;
   }
 
+  const origin = buildCommerceAgentMessageOrigin(input.role, input.context);
+
   const { data } = await input.context.client
     .from("commerce_agent_messages")
     .insert({
@@ -503,24 +505,83 @@ export async function persistCommerceAgentMessage(input: {
       lead_id: input.context.leadId,
       conversation_id: input.context.conversationId,
       role: input.role,
-      channel: input.context.surface === "unknown" ? "storefront" : input.context.surface,
+      channel: normalizeCommerceAgentMessageChannel(input.context.surface),
       surface: input.context.surface,
       content: input.content.slice(0, 4000),
       metadata: {
         agent_id: input.context.agentId,
         agent_name: input.context.agentName,
+        author_label: origin.label,
+        author_source: origin.authorSource,
+        author_type: origin.authorType,
+        origin_channel: origin.channel,
+        origin_confidence: origin.confidence,
+        origin_device: null,
+        origin_source: origin.source,
         visitor_cookie_id: input.context.visitorId,
         session_cookie_id: input.context.sessionId,
         page_path: input.context.pagePath,
         page_url: input.context.pageUrl,
         returning_visitor: input.context.returningVisitor,
         welcome_back_eligible: input.context.welcomeBackEligible,
+        message_author: {
+          type: origin.authorType,
+          label: origin.label,
+          source: origin.authorSource,
+          agent_id: input.context.agentId,
+          commerce_session_id: input.context.commerceSessionId,
+        },
       },
     })
     .select("id, role, content, created_at")
     .single<CommerceAgentMessageRow>();
 
   return data ?? null;
+}
+
+function buildCommerceAgentMessageOrigin(
+  role: "lead" | "assistant" | "system",
+  context: Extract<CommerceAgentResolvedContext, { ok: true }>,
+) {
+  const channel = normalizeCommerceAgentMessageChannel(context.surface);
+
+  if (role === "lead") {
+    return {
+      authorType: "lead",
+      label: "Lead",
+      authorSource: "store_agent_dock",
+      channel,
+      confidence: "high",
+      source: "lead_storefront",
+    };
+  }
+
+  if (role === "assistant") {
+    return {
+      authorType: "ai",
+      label: context.agentName,
+      authorSource: "commerce_agent_dock",
+      channel,
+      confidence: "high",
+      source: "connectyhub_ai_storefront",
+    };
+  }
+
+  return {
+    authorType: "system",
+    label: "Sistema",
+    authorSource: "commerce_agent_system",
+    channel,
+    confidence: "high",
+    source: "storefront_system",
+  };
+}
+
+function normalizeCommerceAgentMessageChannel(surface: SalesCatalogCommerceAgentSurface | "unknown") {
+  if (surface === "checkout") return "checkout";
+  if (surface === "cart") return "cart";
+  if (surface === "product") return "product";
+  return "storefront";
 }
 
 export async function recordCommerceAgentAction(input: {
@@ -1020,7 +1081,7 @@ async function recordCommerceAgentPageContext(
     lead_id: context.leadId,
     conversation_id: context.conversationId,
     role: "system",
-    channel: context.surface === "unknown" ? "storefront" : context.surface,
+    channel: normalizeCommerceAgentMessageChannel(context.surface),
     surface: context.surface,
     content,
     metadata: {

@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
   const actorSource = isPlatformAdmin ? "connectyhub_admin" : "connectyhub_dashboard";
   const trackSource = isPlatformAdmin ? "connectyhub_admin_human" : "connectyhub_dashboard_human";
   const deliverySource = isPlatformAdmin ? "admin_manual_reply" : "dashboard_manual_reply";
+  const originSource = isPlatformAdmin ? "connectyhub_admin_human" : "connectyhub_dashboard_human";
   const trackId = `${isPlatformAdmin ? "admin" : "dashboard"}_human_reply_${conversation.id}_${Date.now()}`;
   const providerResponse = await sendUazapiText({
     credentials,
@@ -216,10 +217,21 @@ export async function POST(request: NextRequest) {
     author_type: "human",
     author_label: authorLabel,
     author_source: actorSource,
+    origin_channel: "whatsapp",
+    origin_confidence: "high",
+    origin_device: null,
+    origin_source: originSource,
+    message_origin: {
+      channel: "whatsapp",
+      confidence: "high",
+      device: null,
+      source: originSource,
+    },
     message_author: {
       type: "human",
       label: authorLabel,
       source: actorSource,
+      origin_source: originSource,
       user_id: workspace.user.id,
     },
     provider_response: sanitizeProviderData(providerResponse.data),
@@ -334,6 +346,11 @@ export async function POST(request: NextRequest) {
       author: "human",
       authorLabel: authorLabel,
       authorSource: actorSource,
+      channel: "whatsapp",
+      surface: null,
+      originSource,
+      originDevice: null,
+      originConfidence: "high",
       agentRunId: null,
       agentId: null,
       provider: message.provider,
@@ -342,6 +359,10 @@ export async function POST(request: NextRequest) {
       type: message.message_type ?? "text",
       text: message.text_content ?? text,
       quotedMessage: null,
+      mediaKind: "unknown",
+      mediaMimeType: null,
+      mediaFileName: null,
+      mediaTranscription: null,
       mediaUrl: null,
       occurredAt: message.occurred_at ?? message.created_at ?? now,
     },

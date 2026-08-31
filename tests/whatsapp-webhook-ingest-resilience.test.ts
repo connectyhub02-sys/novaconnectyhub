@@ -24,4 +24,17 @@ describe("WhatsApp webhook ingest resilience", () => {
     expect(webhookIngestSource).not.toContain("await syncLeadAvatarFromUazapi({");
     expect(webhookIngestSource).not.toContain("await sendLeadReplyPushNotifications({");
   });
+
+  it("audits outbound WhatsApp origin without confusing external replies with the agent", () => {
+    expect(webhookIngestSource).toContain("resolveWebhookMessageOrigin");
+    expect(webhookIngestSource).toContain('origin_channel: "whatsapp"');
+    expect(webhookIngestSource).toContain("origin_confidence: origin.confidence");
+    expect(webhookIngestSource).toContain("connected_whatsapp_mobile");
+    expect(webhookIngestSource).toContain("connected_whatsapp_web");
+    expect(webhookIngestSource).toContain("connected_whatsapp_external");
+    expect(webhookIngestSource).toContain("connectyhub_dashboard_human");
+    expect(webhookIngestSource).toContain("connectyhub_ai_whatsapp");
+    expect(webhookIngestSource).toContain('trackId?.startsWith("dashboard_human_reply_")');
+    expect(webhookIngestSource).toContain('trackId?.startsWith("admin_human_reply_")');
+  });
 });

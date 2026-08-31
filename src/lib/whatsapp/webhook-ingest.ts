@@ -1365,15 +1365,22 @@ type MessageAuthorType = "lead" | "ai" | "human" | "system" | "unknown";
 
 function buildConversationMessagePayload(payload: JsonRecord, message: MessageSnapshot) {
   const author = resolveWebhookMessageAuthor(message, payload);
+  const origin = resolveWebhookMessageOrigin(message, payload, author);
 
   return {
     ...payload,
     author_type: author.type,
     author_label: author.label,
     author_source: author.source,
+    origin_channel: "whatsapp",
+    origin_confidence: origin.confidence,
+    origin_device: origin.device,
+    origin_source: origin.source,
+    message_origin: origin,
     message_author: {
       ...author,
       from_me: message.fromMe,
+      origin_source: origin.source,
       sent_by_api: message.sentByApi,
     },
     is_group_chat: message.isGroupChat,
@@ -1456,6 +1463,16 @@ function resolveWebhookMessageAuthor(message: MessageSnapshot, payload: JsonReco
   }
 
   if (message.direction === "outbound") {
+    if (isDashboardHumanReply(payload)) {
+      const trackSource = findNestedString(payload, ["track_source", "trackSource"]);
+
+      return {
+        type: "human",
+        label: "Humano",
+        source: trackSource === "connectyhub_admin_human" ? "connectyhub_admin" : "connectyhub_dashboard",
+      };
+    }
+
     if (isApiAuthoredWhatsappMessage(message, payload)) {
       return { type: "ai", label: "Agente IA", source: "uazapi_api_echo" };
     }
@@ -1468,6 +1485,105 @@ function resolveWebhookMessageAuthor(message: MessageSnapshot, payload: JsonReco
   }
 
   return { type: "unknown", label: "Desconhecido", source: "webhook_unknown" };
+}
+
+function resolveWebhookMessageOrigin(
+  message: MessageSnapshot,
+  payload: JsonRecord,
+  author: { type: MessageAuthorType; source: string },
+): {
+  channel: "whatsapp";
+  confidence: "high" | "medium" | "low";
+  device: string | null;
+  source: string;
+} {
+  const explicitSource = findNestedString(payload, ["origin_source", "originSource"]);
+  const explicitDevice = normalizeWhatsappOriginDevice(findNestedString(payload, [
+    "origin_device",
+    "originDevice",
+    "device",
+    "deviceType",
+    "device_type",
+    "platform",
+    "client",
+    "sourceDevice",
+    "source_device",
+  ]));
+
+  if (explicitSource) {
+    return {
+      channel: "whatsapp",
+      confidence: explicitSource.startsWith("connectyhub_") ? "high" : explicitDevice ? "medium" : "low",
+      device: explicitDevice,
+      source: explicitSource,
+    };
+  }
+
+  if (message.direction === "inbound") {
+    return {
+      channel: "whatsapp",
+      confidence: explicitDevice ? "medium" : "low",
+      device: explicitDevice,
+      source: "lead_whatsapp",
+    };
+  }
+
+  if (message.direction === "outbound") {
+    if (author.source === "connectyhub_dashboard" || author.source === "connectyhub_admin") {
+      const source = author.source === "connectyhub_admin"
+        ? "connectyhub_admin_human"
+        : "connectyhub_dashboard_human";
+
+      return {
+        channel: "whatsapp",
+        confidence: "high",
+        device: null,
+        source,
+      };
+    }
+
+    if (author.type === "ai" || author.source === "uazapi_api_echo") {
+      return {
+        channel: "whatsapp",
+        confidence: "high",
+        device: null,
+        source: "connectyhub_ai_whatsapp",
+      };
+    }
+
+    const source = explicitDevice === "mobile"
+      ? "connected_whatsapp_mobile"
+      : explicitDevice === "web"
+        ? "connected_whatsapp_web"
+        : explicitDevice === "desktop"
+          ? "connected_whatsapp_desktop"
+          : "connected_whatsapp_external";
+
+    return {
+      channel: "whatsapp",
+      confidence: explicitDevice ? "medium" : "low",
+      device: explicitDevice,
+      source,
+    };
+  }
+
+  return {
+    channel: "whatsapp",
+    confidence: "low",
+    device: explicitDevice,
+    source: message.direction === "system" ? "whatsapp_system" : "whatsapp_unknown",
+  };
+}
+
+function normalizeWhatsappOriginDevice(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (!normalized) return null;
+  if (["android", "ios", "iphone", "mobile", "phone", "celular"].some((item) => normalized.includes(item))) return "mobile";
+  if (["web", "browser", "chrome", "firefox", "edge", "safari", "navegador"].some((item) => normalized.includes(item))) return "web";
+  if (["desktop", "windows", "mac", "linux", "computer", "computador"].some((item) => normalized.includes(item))) return "desktop";
+
+  return normalized.slice(0, 40);
 }
 
 function isHumanAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRecord) {
@@ -1507,20 +1623,20 @@ function isApiAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRec
 function isDashboardHumanReply(payload: JsonRecord) {
   const trackSource = findNestedString(payload, ["track_source", "trackSource"]);
 
-  if (trackSource === "connectyhub_dashboard_human") {
+  if (trackSource === "connectyhub_dashboard_human" || trackSource === "connectyhub_admin_human") {
     return true;
   }
 
   const trackId = findNestedString(payload, ["track_id", "trackId"]);
 
-  if (trackId?.startsWith("dashboard_human_reply_")) {
+  if (trackId?.startsWith("dashboard_human_reply_") || trackId?.startsWith("admin_human_reply_")) {
     return true;
   }
 
   const authorSource = findNestedString(payload, ["author_source", "authorSource", "source"]);
   const authorType = findNestedString(payload, ["author_type", "authorType", "type"]);
 
-  return authorSource === "connectyhub_dashboard" && authorType === "human";
+  return (authorSource === "connectyhub_dashboard" || authorSource === "connectyhub_admin") && authorType === "human";
 }
 
 function buildLeadMetadata(
