@@ -153,6 +153,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   const surface = normalizeSurface(readString(body.surface) ?? inferSurface(readString(body.page_path)));
   const orderId = readUuid(body.order_id);
   const paymentSessionId = readUuid(body.payment_session_id);
+  const trackingLinkId = readUuid(body.tracking_link_id);
   const client = createServiceClient();
 
   if (!organizationId) {
@@ -168,8 +169,14 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
         orderId,
         paymentSessionId,
       }).catch(() => false);
+  const hasValidTrackedLinkContext = hasValidTrackingToken || hasValidCheckoutContext
+    ? false
+    : await validateTrackedLinkCommerceAgentContext(client, {
+        organizationId,
+        trackingLinkId,
+      }).catch(() => false);
 
-  if (!hasValidTrackingToken && !hasValidCheckoutContext) {
+  if (!hasValidTrackingToken && !hasValidCheckoutContext && !hasValidTrackedLinkContext) {
     return { ok: false, status: 403, error: "Contexto da loja nao autorizado." };
   }
 
@@ -235,7 +242,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     commerceSessionId: readUuid(body.commerce_session_id),
     visitorId: readString(body.visitor_cookie_id),
     sessionId: readString(body.session_cookie_id),
-    trackingLinkId: readUuid(body.tracking_link_id),
+    trackingLinkId,
     orderId,
     paymentSessionId,
     productId: readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
@@ -567,6 +574,29 @@ async function validateCheckoutCommerceAgentContext(
     .maybeSingle<{ id: string; order_id: string | null }>();
 
   return Boolean(data?.id && (!input.orderId || data.order_id === input.orderId));
+}
+
+async function validateTrackedLinkCommerceAgentContext(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    trackingLinkId: string | null;
+  },
+) {
+  if (!input.trackingLinkId) {
+    return false;
+  }
+
+  const { data } = await client
+    .from("intelligence_memory")
+    .select("id")
+    .eq("id", input.trackingLinkId)
+    .eq("organization_id", input.organizationId)
+    .eq("scope", "organization")
+    .contains("tags", ["tracked_link_button"])
+    .maybeSingle<{ id: string }>();
+
+  return Boolean(data?.id);
 }
 
 async function loadCommerceAgent(client: SupabaseClient, organizationId: string, agentId: string | null) {

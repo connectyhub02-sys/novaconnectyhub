@@ -47,7 +47,7 @@ describe("Commerce Agent checkout continuity", () => {
     expect(trackedLinkCreator).toContain("agent_id: resolveOrderAgentId(readRecord(input.order.metadata))");
   });
 
-  it("allows checkout sessions to authorize the dock when the public token is unavailable", () => {
+  it("allows checkout sessions and tracked links to authorize the dock when the public token is unavailable", () => {
     const resolver = sourceBetween(
       commerceAgentServerSource,
       "export async function resolveCommerceAgentContext",
@@ -60,9 +60,20 @@ describe("Commerce Agent checkout continuity", () => {
     );
 
     expect(resolver).toContain("validateCheckoutCommerceAgentContext");
-    expect(resolver).toContain("!hasValidTrackingToken && !hasValidCheckoutContext");
+    expect(resolver).toContain("validateTrackedLinkCommerceAgentContext");
+    expect(resolver).toContain("!hasValidTrackingToken && !hasValidCheckoutContext && !hasValidTrackedLinkContext");
     expect(checkoutValidator).toContain("input.surface !== \"checkout\"");
     expect(checkoutValidator).toContain(".from(\"sales_catalog_payment_sessions\")");
     expect(checkoutValidator).toContain("data.order_id === input.orderId");
+
+    const trackedLinkValidator = sourceBetween(
+      commerceAgentServerSource,
+      "async function validateTrackedLinkCommerceAgentContext",
+      "async function loadCommerceAgent",
+    );
+
+    expect(trackedLinkValidator).toContain(".from(\"intelligence_memory\")");
+    expect(trackedLinkValidator).toContain(".contains(\"tags\", [\"tracked_link_button\"])");
+    expect(trackedLinkValidator).toContain("input.trackingLinkId");
   });
 });
