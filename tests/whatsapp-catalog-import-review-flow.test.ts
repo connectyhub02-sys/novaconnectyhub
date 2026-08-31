@@ -22,9 +22,15 @@ describe("WhatsApp catalog import review flow", () => {
     expect(whatsappSyncSource).toContain("createSalesCatalogImportReviewJob");
     expect(whatsappSyncSource).toContain("processQueuedWhatsappCatalogImportReviews");
     expect(whatsappSyncSource).toContain("whatsappCatalogBackgroundPageTimeoutMs");
+    expect(whatsappSyncSource).toContain("whatsappCatalogListEndpoint");
     expect(whatsappSyncSource).toContain("inspectWhatsappBusinessProfile");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_profile_probe");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_fetch_started");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_catalog_list_request");
+    expect(whatsappSyncSource).toContain('first_page_payload_keys: ["jid"]');
+    expect(whatsappSyncSource).toContain('first_page_ignored_keys: ["after", "limit", "count", "page_size"]');
+    expect(whatsappSyncSource).toContain("Primeira chamada enviada somente com jid");
+    expect(whatsappSyncSource).toContain("documentacao da UaZapi");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_page_received");
     expect(whatsappSyncSource).toContain("resolveInstanceCatalogJidCandidates");
     expect(whatsappSyncSource).toContain("numero brasileiro com nono digito");

@@ -29,6 +29,7 @@ import {
 type JsonRecord = Record<string, unknown>;
 
 const uazapiRequestTimeoutMs = 18_000;
+const whatsappCatalogListEndpoint = "/business/catalog/list";
 const whatsappCatalogListPageTimeoutMs = 18_000;
 const whatsappCatalogBackgroundPageTimeoutMs = 90_000;
 const whatsappBusinessProfileProbeTimeoutMs = 8_000;
@@ -86,6 +87,16 @@ type WhatsappCatalogImportJobRow = {
 type WhatsappCatalogJidCandidate = {
   jid: string;
   reason: string;
+};
+
+type WhatsappCatalogListRequestInfo = {
+  endpoint: typeof whatsappCatalogListEndpoint;
+  page: number;
+  catalogJid: string;
+  bodyKeys: string[];
+  firstPage: boolean;
+  usesPagination: boolean;
+  timeoutMs: number;
 };
 
 export type WhatsappCatalogImportProcessRequestedEventData = {
@@ -167,6 +178,9 @@ export async function queueWhatsappCatalogImportReview(input: {
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
+      provider_endpoint: whatsappCatalogListEndpoint,
+      provider_first_page_payload_keys: ["jid"],
+      provider_first_page_ignored_keys: ["after", "limit", "count", "page_size"],
       provider_page_timeout_ms: whatsappCatalogBackgroundPageTimeoutMs,
       configured_categories_snapshot: categories,
     },
@@ -193,6 +207,9 @@ export async function queueWhatsappCatalogImportReview(input: {
       agent_id: agentId,
       categories_count: categories.length,
       provider: "uazapi",
+      provider_endpoint: whatsappCatalogListEndpoint,
+      first_page_payload_keys: ["jid"],
+      first_page_ignored_keys: ["after", "limit", "count", "page_size"],
     },
   });
 
@@ -273,6 +290,7 @@ export async function createWhatsappCatalogImportReview(input: {
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
+      provider_endpoint: whatsappCatalogListEndpoint,
       pages: fetched.pages,
       has_more: fetched.hasMore,
       provider_product_count: fetched.products.length,
@@ -493,11 +511,14 @@ async function processWhatsappCatalogImportReviewJob(input: {
     title: "Buscando produtos no WhatsApp",
     summary: "Consulta enviada ao provedor WhatsApp. Cada pagina pode levar ate 90 segundos para responder.",
     payload: {
+      endpoint: whatsappCatalogListEndpoint,
       catalog_jid: catalogCandidates[0]?.jid,
       catalog_jid_candidate_count: catalogCandidates.length,
       profile_valid_candidate_count: profileProbe.validCandidates.length,
       whatsapp_instance_id: instance.id,
       provider: "uazapi",
+      first_page_payload_keys: ["jid"],
+      first_page_ignored_keys: ["after", "limit", "count", "page_size"],
       timeout_ms: whatsappCatalogBackgroundPageTimeoutMs,
     },
   });
@@ -512,8 +533,32 @@ async function processWhatsappCatalogImportReviewJob(input: {
         title: "Tentando identificador do catalogo",
         summary: `Consulta usando ${candidate.reason}.`,
         payload: {
+          endpoint: whatsappCatalogListEndpoint,
           catalog_jid: candidate.jid,
           reason: candidate.reason,
+          first_page_payload_keys: ["jid"],
+          first_page_ignored_keys: ["after", "limit", "count", "page_size"],
+        },
+      });
+    },
+    onRequest: async (request) => {
+      await input.client.from("sales_catalog_import_events").insert({
+        import_job_id: input.jobId,
+        organization_id: input.companyId,
+        level: "info",
+        event_type: "sales_catalog_import.whatsapp_catalog_list_request",
+        title: request.firstPage ? "Primeira pagina solicitada" : `Pagina ${request.page} solicitada`,
+        summary: request.firstPage
+          ? "Chamada enviada conforme suporte UaZapi: somente jid, sem after, limit, count ou page_size."
+          : "Chamada de paginacao enviada com jid e after retornado pelo provedor.",
+        payload: {
+          endpoint: request.endpoint,
+          page: request.page,
+          catalog_jid: request.catalogJid,
+          request_body_keys: request.bodyKeys,
+          first_page: request.firstPage,
+          uses_pagination: request.usesPagination,
+          timeout_ms: request.timeoutMs,
         },
       });
     },
@@ -526,9 +571,12 @@ async function processWhatsappCatalogImportReviewJob(input: {
         title: "Identificador do catalogo nao respondeu",
         summary: `${candidate.reason}: ${error}`,
         payload: {
+          endpoint: whatsappCatalogListEndpoint,
           catalog_jid: candidate.jid,
           reason: candidate.reason,
           error,
+          first_page_payload_keys: ["jid"],
+          support_reproduction_required: isUazapiCatalogTimeoutMessage(error),
         },
       });
     },
@@ -574,11 +622,14 @@ async function processWhatsappCatalogImportReviewJob(input: {
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
+      provider_endpoint: whatsappCatalogListEndpoint,
       pages: fetched.pages,
       has_more: fetched.hasMore,
       provider_product_count: fetched.products.length,
       skipped_count: skipped,
       provider_page_timeout_ms: whatsappCatalogBackgroundPageTimeoutMs,
+      provider_first_page_payload_keys: ["jid"],
+      provider_first_page_ignored_keys: ["after", "limit", "count", "page_size"],
       configured_categories_snapshot: categories,
     },
     assignedAgentIds: agentId ? [agentId] : [],
@@ -824,6 +875,7 @@ async function fetchWhatsappCatalogPages(
   options?: {
     timeoutMs?: number;
     maxPages?: number;
+    onRequest?: (request: WhatsappCatalogListRequestInfo) => Promise<void> | void;
     onPage?: (page: {
       page: number;
       productsOnPage: number;
@@ -838,11 +890,30 @@ async function fetchWhatsappCatalogPages(
   let hasMore = false;
 
   for (let page = 0; page < (options?.maxPages ?? 6); page += 1) {
-    const response = await callUazapi(credentials, "/business/catalog/list", {
+    const timeoutMs = options?.timeoutMs ?? whatsappCatalogListPageTimeoutMs;
+    const body = buildWhatsappCatalogListPayload(catalogJid, after);
+    const requestInfo: WhatsappCatalogListRequestInfo = {
+      endpoint: whatsappCatalogListEndpoint,
+      page: page + 1,
+      catalogJid,
+      bodyKeys: Object.keys(body),
+      firstPage: !after,
+      usesPagination: Boolean(after),
+      timeoutMs,
+    };
+    await options?.onRequest?.(requestInfo);
+
+    const startedAt = Date.now();
+    const response = await callUazapi(credentials, whatsappCatalogListEndpoint, {
       method: "POST",
       token,
-      body: after ? { jid: catalogJid, after } : { jid: catalogJid },
-      timeoutMs: options?.timeoutMs ?? whatsappCatalogListPageTimeoutMs,
+      body,
+      timeoutMs,
+    }).catch((error) => {
+      throw new Error(formatWhatsappCatalogListError(error, {
+        ...requestInfo,
+        durationMs: Date.now() - startedAt,
+      }));
     });
     const parsed = readCatalogPage(response.data);
 
@@ -887,6 +958,7 @@ async function fetchWhatsappCatalogPagesWithCandidates(
     maxPages?: number;
     onCandidateStarted?: (candidate: WhatsappCatalogJidCandidate) => Promise<void> | void;
     onCandidateFailed?: (candidate: WhatsappCatalogJidCandidate, error: string) => Promise<void> | void;
+    onRequest?: (request: WhatsappCatalogListRequestInfo) => Promise<void> | void;
     onPage?: (page: {
       page: number;
       productsOnPage: number;
@@ -904,6 +976,7 @@ async function fetchWhatsappCatalogPagesWithCandidates(
       return await fetchWhatsappCatalogPages(credentials, token, candidate.jid, {
         timeoutMs: options?.timeoutMs,
         maxPages: options?.maxPages,
+        onRequest: options?.onRequest,
         onPage: options?.onPage,
       });
     } catch (error) {
@@ -935,11 +1008,11 @@ async function probeWhatsappBusinessProfileCandidates(
     await options?.onProbe?.(candidate, probe);
 
     if (probe.ok) {
-      validCandidates.push(candidate);
-
       if (probe.profile_jid) {
         pushCatalogJidCandidate(validCandidates, probe.profile_jid, "jid retornado pelo perfil comercial");
       }
+
+      pushCatalogJidCandidate(validCandidates, candidate.jid, candidate.reason);
     }
   }
 
@@ -1009,6 +1082,44 @@ function buildWhatsappCatalogImportDrafts(input: {
   }
 
   return { drafts, skipped };
+}
+
+function buildWhatsappCatalogListPayload(catalogJid: string, after: string | null) {
+  return after ? { jid: catalogJid, after } : { jid: catalogJid };
+}
+
+function formatWhatsappCatalogListError(
+  error: unknown,
+  request: WhatsappCatalogListRequestInfo & { durationMs: number },
+) {
+  const message = error instanceof Error ? error.message : "Nao foi possivel listar este catalogo.";
+
+  if (request.firstPage && isUazapiCatalogTimeoutMessage(message)) {
+    return [
+      `UaZapi nao retornou a primeira pagina do catalogo no ${request.endpoint}.`,
+      `A chamada foi enviada conforme suporte: somente jid, sem after, limit, count ou page_size.`,
+      `O provedor respondeu/estourou timeout apos ${Math.round(request.durationMs / 1000)}s: ${message}`,
+      "Reproduza a mesma chamada na documentacao da UaZapi e envie o print do 504 para analise do time deles.",
+    ].join(" ");
+  }
+
+  if (request.firstPage) {
+    return [
+      message,
+      "Primeira chamada enviada somente com jid, sem after, limit, count ou page_size.",
+    ].join(" ");
+  }
+
+  return message;
+}
+
+function isUazapiCatalogTimeoutMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("504")
+    || normalized.includes("request timeout")
+    || normalized.includes("timed out")
+    || normalized.includes("timeout")
+    || normalized.includes("demorou");
 }
 
 async function loadConfiguredCatalogCategories(client: SupabaseClient, companyId: string) {
@@ -1353,14 +1464,14 @@ function buildCatalogJidVariants(jid: string): Array<{ jid: string; reason?: str
   const digits = user?.replace(/\D/g, "") ?? "";
   const variants: Array<{ jid: string; reason?: string | null }> = [];
 
+  variants.push({ jid });
+
   if (server === "s.whatsapp.net" && /^55\d{10}$/.test(digits)) {
     variants.push({
       jid: `${digits.slice(0, 4)}9${digits.slice(4)}@${server}`,
       reason: "numero brasileiro com nono digito",
     });
   }
-
-  variants.push({ jid });
 
   if (server === "s.whatsapp.net" && /^55\d{11}$/.test(digits) && digits[4] === "9") {
     variants.push({
