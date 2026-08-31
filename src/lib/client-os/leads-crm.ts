@@ -557,6 +557,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   const leadCrmWhatsappInstanceRows = whatsappInstanceRows.filter(isLeadCrmWhatsappInstance);
   const leadCrmWhatsappInstanceIds = leadCrmWhatsappInstanceRows.map((instance) => instance.id);
+  const whatsappInstanceById = new Map(leadCrmWhatsappInstanceRows.map((instance) => [instance.id, instance]));
 
   try {
     if (leadCrmWhatsappInstanceIds.length) {
@@ -580,6 +581,8 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   } catch (error) {
     warnings.push(toLoadWarning("conversas", error));
   }
+
+  conversationRows = conversationRows.filter((conversation) => !isSelfEchoConversation(conversation, whatsappInstanceById));
 
   const leadIds = uniqueStrings(conversationRows.map((conversation) => conversation.lead_id));
 
@@ -649,7 +652,6 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
   const agentByOrgId = new Map<string, AgentRow>();
   const agentById = new Map(agentRows.map((agent) => [agent.id, agent]));
-  const whatsappInstanceById = new Map(leadCrmWhatsappInstanceRows.map((instance) => [instance.id, instance]));
   let syncedAvatarMetadata = new Map<string, JsonRecord>();
 
   if (input.syncAvatars ?? true) {
@@ -987,6 +989,21 @@ function isLeadCrmWhatsappInstance(instance: WhatsappInstanceQueueRow) {
   return metadata.client_agent === true
     || Boolean(readString(metadata.agent_id))
     || createdFrom === "client_dashboard";
+}
+
+function isSelfEchoConversation(
+  conversation: ConversationRow,
+  whatsappInstanceById: Map<string, WhatsappInstanceQueueRow>,
+) {
+  if (!conversation.whatsapp_instance_id || /@g\.us$/i.test(conversation.provider_chat_id ?? "")) {
+    return false;
+  }
+
+  const instance = whatsappInstanceById.get(conversation.whatsapp_instance_id);
+  const instancePhone = normalizePhone(instance?.phone_number);
+  const providerPhone = normalizePhone(conversation.provider_chat_id);
+
+  return Boolean(instancePhone && providerPhone && instancePhone === providerPhone);
 }
 
 async function syncMissingLeadAvatarsForCrm(input: {

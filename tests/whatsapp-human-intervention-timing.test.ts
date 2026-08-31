@@ -28,4 +28,10 @@ describe("WhatsApp human intervention timing", () => {
     expect(webhookIngestSource).not.toContain("HUMAN_INTERVENTION_DEFAULT_MS");
     expect(handoffRouteSource).not.toContain("clampMinutes(body?.minutes)");
   });
+
+  it("blocks manual replies to WhatsApp self-echo conversations", () => {
+    expect(replyRouteSource).toContain("isSameWhatsappRecipient(recipient, instance.phone_number)");
+    expect(replyRouteSource).toContain("Esta conversa parece ser um eco do proprio WhatsApp conectado");
+    expect(replyRouteSource).toContain("function isSameWhatsappRecipient");
+  });
 });

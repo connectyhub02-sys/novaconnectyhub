@@ -70,7 +70,10 @@ describe("WhatsApp webhook ingest resilience", () => {
 
     expect(extractor).toContain("resolveRawProviderChatId(messageRecord, fromMe, sentByApi)");
     expect(extractor).toContain("resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId, fromMe === true || sentByApi === true)");
-    expect(remoteChatResolver).toContain("return outbound ? to ?? from : from ?? to;");
+    expect(remoteChatResolver).toContain("return to ?? directChatId ?? from;");
+    expect(remoteChatResolver).toContain("return from ?? directChatId ?? to;");
+    expect(webhookIngestSource).toContain("const selfEcho = isOutboundSelfEcho(message, instance);");
+    expect(webhookIngestSource).toContain('Ignorado eco externo sem contato remoto.');
     expect(canonicalChatResolver).toContain("if (isCanonicalWhatsappChatId(rawProviderChatId))");
     expect(canonicalChatResolver).toContain("!isOutbound ? findString(messageRecord, [\"sender_pn\"");
     expect(leadEnsurer).toContain("const existingPersonalName = resolveLeadPersonalName");

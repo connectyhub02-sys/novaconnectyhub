@@ -151,6 +151,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nao encontramos o numero do lead para enviar a resposta." }, { status: 422 });
   }
 
+  if (isSameWhatsappRecipient(recipient, instance.phone_number)) {
+    return NextResponse.json(
+      { error: "Esta conversa parece ser um eco do proprio WhatsApp conectado. Atualize o atendimento e responda pela conversa correta do lead." },
+      { status: 409 },
+    );
+  }
+
   const credentials = await loadUazapiCredentials(client);
   const now = new Date().toISOString();
   const actorSource = isPlatformAdmin ? "connectyhub_admin" : "connectyhub_dashboard";
@@ -466,6 +473,13 @@ function normalizeWhatsappRecipient(value: string | null | undefined) {
   const digits = withoutDomain.replace(/\D/g, "");
 
   return digits.length >= 10 ? digits : null;
+}
+
+function isSameWhatsappRecipient(left: string | null | undefined, right: string | null | undefined) {
+  const leftRecipient = normalizeWhatsappRecipient(left);
+  const rightRecipient = normalizeWhatsappRecipient(right);
+
+  return Boolean(leftRecipient && rightRecipient && leftRecipient === rightRecipient);
 }
 
 function decryptInstanceToken(instance: WhatsappInstanceRow) {

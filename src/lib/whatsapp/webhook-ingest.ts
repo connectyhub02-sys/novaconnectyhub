@@ -43,6 +43,7 @@ type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
   provider_instance_id: string | null;
+  phone_number: string | null;
   instance_token_encrypted: string | null;
   status: string | null;
   disconnected_at: string | null;
@@ -182,6 +183,16 @@ export async function ingestUazapiWebhook(input: {
   }
 
   try {
+    const selfEcho = isOutboundSelfEcho(message, instance);
+
+    if (selfEcho) {
+      await markWebhookEvent(client, eventResult.eventId, "processed", "Ignorado eco externo sem contato remoto.");
+      return {
+        ...baseResult,
+        status: "processed",
+      };
+    }
+
     const behavior = normalizeWhatsappBehaviorConfig(readRecord(instance.metadata)?.behavior_config);
     const isHandoffNotificationReply = message.direction === "inbound"
       && !message.isGroupChat
@@ -341,7 +352,7 @@ export async function ingestUazapiWebhook(input: {
 async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, provider_instance_id, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
+    .select("id, organization_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .neq("status", "archived")
@@ -355,7 +366,7 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
 
   const { data: byProviderName } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, provider_instance_id, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
+    .select("id, organization_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
     .neq("status", "archived")
@@ -1413,16 +1424,30 @@ function buildConversationMessagePayload(payload: JsonRecord, message: MessageSn
 
 function resolveRawProviderChatId(messageRecord: JsonRecord, fromMe: boolean | null, sentByApi: boolean | null) {
   const directChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid"]);
-
-  if (directChatId) {
-    return directChatId;
-  }
-
   const from = findString(messageRecord, ["from"]);
   const to = findString(messageRecord, ["to"]);
   const outbound = fromMe === true || sentByApi === true;
 
-  return outbound ? to ?? from : from ?? to;
+  if (outbound) {
+    return to ?? directChatId ?? from;
+  }
+
+  if (fromMe === false || sentByApi === false) {
+    return from ?? directChatId ?? to;
+  }
+
+  return directChatId ?? from ?? to;
+}
+
+function isOutboundSelfEcho(message: MessageSnapshot, instance: WhatsappInstanceRow) {
+  if (message.direction !== "outbound" || message.isGroupChat) {
+    return false;
+  }
+
+  const messagePhone = normalizePhone(message.phoneNumber ?? message.providerChatId);
+  const instancePhone = normalizePhone(instance.phone_number);
+
+  return Boolean(messagePhone && instancePhone && messagePhone === instancePhone);
 }
 
 function resolveCanonicalProviderChatId(

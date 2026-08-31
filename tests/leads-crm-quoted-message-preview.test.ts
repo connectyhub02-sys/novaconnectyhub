@@ -99,4 +99,23 @@ describe("Lead CRM quoted message preview", () => {
     expect(livePolling).toContain(": 2_000");
     expect(leadsCrmConsoleSource).toContain("schedule(350)");
   });
+
+  it("keeps WhatsApp self-echo conversations out of the attendance lead list", () => {
+    const loader = sourceBetween(
+      leadsCrmSource,
+      "const leadCrmWhatsappInstanceRows = whatsappInstanceRows.filter(isLeadCrmWhatsappInstance);",
+      "const leadIds = uniqueStrings(conversationRows.map((conversation) => conversation.lead_id));",
+    );
+    const selfEchoFilter = sourceBetween(
+      leadsCrmSource,
+      "function isSelfEchoConversation",
+      "async function syncMissingLeadAvatarsForCrm",
+    );
+
+    expect(loader).toContain("const whatsappInstanceById = new Map(leadCrmWhatsappInstanceRows.map((instance) => [instance.id, instance]));");
+    expect(loader).toContain("conversationRows = conversationRows.filter((conversation) => !isSelfEchoConversation(conversation, whatsappInstanceById));");
+    expect(selfEchoFilter).toContain("normalizePhone(instance?.phone_number)");
+    expect(selfEchoFilter).toContain("normalizePhone(conversation.provider_chat_id)");
+    expect(selfEchoFilter).toContain("instancePhone === providerPhone");
+  });
 });
