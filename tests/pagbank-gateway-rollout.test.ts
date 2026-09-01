@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.sql");
 const platformBillingMigrationSource = read("supabase/migrations/0069_pagbank_platform_billing.sql");
+const platformProductBillingCycleMigrationSource = read("supabase/migrations/0070_platform_product_billing_cycle.sql");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
@@ -19,6 +20,10 @@ const platformBillingAdminSource = read("src/lib/billing/platform-billing-admin.
 const dashboardSalesCatalogSource = read("src/app/api/dashboard/sales-catalog/route.ts");
 const salesCatalogConsoleSource = read("src/components/connectyhub-os/sales-catalog-console.tsx");
 const salesCatalogSharedSource = read("src/lib/sales-catalog/shared.ts");
+const platformProductsSource = read("src/lib/platform-products.ts");
+const platformProductsApiSource = read("src/app/api/admin/platform-products/route.ts");
+const platformProductsConsoleSource = read("src/components/connectyhub-os/platform-products-console.tsx");
+const planCheckoutSource = read("src/lib/billing/plan-checkout.ts");
 
 function read(path: string) {
   return readFileSync(path, "utf8");
@@ -40,8 +45,10 @@ describe("PagBank gateway rollout", () => {
     expect(existsSync("src/lib/sales-catalog/pagbank.ts")).toBe(true);
   });
 
-  it("uses PagBank for client-owned Pix sessions and keeps Mercado Pago for ConnectyHub-owned billing", () => {
-    expect(paymentSessionsSource).toContain("return connectyHubOwned ? \"mercado_pago\" : \"pagbank\"");
+  it("uses PagBank for client-owned Pix sessions and ConnectyHub-owned products", () => {
+    expect(paymentSessionsSource).toContain("function resolvePaymentGatewayProvider(): PaymentGatewayProvider");
+    expect(paymentSessionsSource).toContain("return \"pagbank\"");
+    expect(paymentSessionsSource).toContain("loadPagBankPlatformBillingConfig");
     expect(paymentSessionsSource).toContain("createPagBankPixOrder");
     expect(paymentSessionsSource).toContain("extractPagBankPixData");
     expect(paymentSessionsSource).toContain("createMercadoPagoPixPayment");
@@ -110,5 +117,19 @@ describe("PagBank gateway rollout", () => {
     expect(salesCatalogConsoleSource).toContain("PagBank Checkout");
     expect(salesCatalogConsoleSource).toContain("togglePagBankPaymentMethod");
     expect(salesCatalogConsoleSource).toContain("Nome no extrato");
+  });
+
+  it("separates recurring plans from one-time or recurring ConnectyHub products", () => {
+    expect(platformProductBillingCycleMigrationSource).toContain("billing_cycle text not null default 'one_time'");
+    expect(platformProductBillingCycleMigrationSource).toContain("billing_interval text not null default 'month'");
+    expect(platformProductBillingCycleMigrationSource).toContain("check (billing_cycle in ('one_time', 'recurring'))");
+    expect(platformProductsSource).toContain("PlatformProductBillingCycle");
+    expect(platformProductsSource).toContain("billingCycle: normalizeBillingCycle");
+    expect(platformProductsApiSource).toContain("billing_cycle: billingCycle");
+    expect(platformProductsApiSource).toContain("billing_interval: billingInterval");
+    expect(platformProductsConsoleSource).toContain("Modelo de cobranca");
+    expect(platformProductsConsoleSource).toContain("Pagamento unico");
+    expect(platformProductsConsoleSource).toContain("Recorrente");
+    expect(planCheckoutSource).toContain("billingCycle === \"one_time\"");
   });
 });

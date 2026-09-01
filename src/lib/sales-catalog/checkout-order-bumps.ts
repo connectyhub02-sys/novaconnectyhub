@@ -288,6 +288,8 @@ async function insertOrderBumpItems(input: {
       currency: item.currency,
       source: item.source,
       stock_status: item.inventory.status,
+      billing_cycle: item.billingCycle,
+      billing_interval: item.billingInterval,
       platform_product_id: item.platformProductId,
       platform_product_code: item.platformProductCode,
       commercial_flow_type: item.commercialFlowType,
@@ -367,7 +369,13 @@ function toCheckoutOrderBump(
   config: { badge: string | null; title: string | null; description: string | null },
 ): SalesCatalogCheckoutOrderBump | null {
   const price = normalizeCurrencyAmount(item.price);
-  if (!isSalesCatalogDisplayableProduct(item) || item.status !== "active" || item.salesDestination !== "connectyhub_checkout" || !price) {
+  if (
+    !isSalesCatalogDisplayableProduct(item)
+    || item.status !== "active"
+    || item.salesDestination !== "connectyhub_checkout"
+    || item.billingCycle !== "one_time"
+    || !price
+  ) {
     return null;
   }
 

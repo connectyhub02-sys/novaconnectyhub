@@ -77,6 +77,10 @@ export async function POST(
     return NextResponse.json({ error: "Este produto nao esta disponivel para checkout online." }, { status: 422 });
   }
 
+  if (item.billingCycle !== "one_time") {
+    return NextResponse.json({ error: "Este produto usa cobranca recorrente e ainda nao esta disponivel neste checkout." }, { status: 422 });
+  }
+
   if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
     return NextResponse.json({ error: "Este produto esta esgotado no momento." }, { status: 422 });
   }
@@ -167,6 +171,8 @@ export async function POST(
         checkout_intent_key: checkoutIntentKey,
         currency: item.currency,
         category: item.category,
+        billing_cycle: item.billingCycle,
+        billing_interval: item.billingInterval,
         platform_product_id: item.platformProductId,
         platform_product_code: item.platformProductCode,
         commercial_flow_type: item.commercialFlowType,
@@ -219,6 +225,8 @@ export async function POST(
         category: item.category,
         currency: item.currency,
         stock_status: item.inventory.status,
+        billing_cycle: item.billingCycle,
+        billing_interval: item.billingInterval,
         platform_product_id: item.platformProductId,
         platform_product_code: item.platformProductCode,
         commercial_flow_type: item.commercialFlowType,

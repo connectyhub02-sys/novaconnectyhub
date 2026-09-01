@@ -43,6 +43,8 @@ type PlatformProductSalesRow = {
   commission_release_days: string | number | null;
   recurring_commission_months: string | number | null;
   refund_window_days: string | number | null;
+  billing_cycle?: string | null;
+  billing_interval?: string | null;
 };
 
 type PlatformProductImportRow = {
@@ -237,6 +239,8 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
         commission_base: product?.commission_base ?? "gross",
         recurring_commission_months: toInteger(product?.recurring_commission_months, 0),
         refund_window_days: toInteger(product?.refund_window_days, 7),
+        billing_cycle: product?.billing_cycle ?? readString(entry.catalogMetadata.billing_cycle) ?? "one_time",
+        billing_interval: product?.billing_interval ?? readString(entry.catalogMetadata.billing_interval) ?? "month",
         recorded_at: nowIso,
       },
       updated_at: nowIso,
@@ -433,7 +437,7 @@ async function loadPlatformProducts(client: SupabaseClient, productIds: string[]
 
   const { data } = await client
     .from("platform_products")
-    .select("id, product_code, name, sales_channel_type, revenue_owner_type, commission_policy_type, commission_percentage, commission_base, commission_release_days, recurring_commission_months, refund_window_days")
+    .select("id, product_code, name, sales_channel_type, revenue_owner_type, commission_policy_type, commission_percentage, commission_base, commission_release_days, recurring_commission_months, refund_window_days, billing_cycle, billing_interval")
     .in("id", productIds);
 
   for (const row of (data ?? []) as unknown as PlatformProductSalesRow[]) {

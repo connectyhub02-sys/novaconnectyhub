@@ -17,6 +17,8 @@ export type SalesCatalogOrderStatus = "draft" | "pending_payment" | "paid" | "in
 export type SalesCatalogPaymentStatus = "pending" | "proof_sent" | "confirmed" | "failed" | "refunded";
 export type SalesCatalogFulfillmentStatus = "pending" | "scheduled" | "in_progress" | "fulfilled" | "cancelled";
 export type SalesCatalogSkuStatus = "active" | "draft" | "archived";
+export type SalesCatalogBillingCycle = "one_time" | "recurring";
+export type SalesCatalogBillingInterval = "week" | "month" | "quarter" | "year";
 export type SalesCatalogPaymentProvider = "mercado_pago" | "pagbank";
 export type SalesCatalogPaymentIntegrationStatus = "pending" | "connected" | "disabled" | "error";
 export type SalesCatalogPaymentIntegrationMode = "production" | "sandbox";
@@ -315,6 +317,8 @@ export type ClientSalesCatalogItem = {
   offer: SalesCatalogProductOffer;
   fulfillment: SalesCatalogProductFulfillment;
   shipping: SalesCatalogProductShipping;
+  billingCycle: SalesCatalogBillingCycle;
+  billingInterval: SalesCatalogBillingInterval;
   pageContent: SalesCatalogProductPageContent;
   productOriginType: SalesCatalogProductOriginType;
   commercialFlowType: SalesCatalogCommercialFlowType;

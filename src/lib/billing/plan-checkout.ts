@@ -6,6 +6,8 @@ import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpM
 
 export type JsonRecord = Record<string, unknown>;
 export type BillingCheckoutProvider = "mercado_pago" | "pagbank";
+export type BillingProductBillingCycle = "one_time" | "recurring";
+export type BillingProductBillingInterval = "week" | "month" | "quarter" | "year";
 
 export type BillingCheckoutIntent = {
   subscription: {
@@ -67,6 +69,8 @@ export type BillingOrderBumpProductOption = {
   selected: boolean;
   available: boolean;
   creditAmount: number | null;
+  billingCycle: BillingProductBillingCycle;
+  billingInterval: BillingProductBillingInterval;
   recurrence: BillingCheckoutBump["recurrence"];
   badge: string;
   highlightLabel: string | null;
@@ -409,7 +413,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
   const settings = await loadBillingOrderBumpSettings(client);
   const { data, error } = await client
     .from("platform_products")
-    .select("id, product_code, name, short_description, commercial_description, category, status, owner_type, sales_channel_type, price, currency, offer, media, metadata, updated_at")
+    .select("id, product_code, name, short_description, commercial_description, category, status, owner_type, sales_channel_type, billing_cycle, billing_interval, price, currency, offer, media, metadata, updated_at")
     .eq("owner_type", "connectyhub")
     .eq("sales_channel_type", "direct")
     .neq("status", "archived")
@@ -433,8 +437,11 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       ?? readString(record.commercial_description)
       ?? "Adicional ConnectyHub para aumentar o carrinho no checkout.";
     const status = readString(record.status) ?? "draft";
+    const billingCycle = normalizeBillingProductCycle(record.billing_cycle ?? metadata.billing_cycle);
+    const billingInterval = normalizeBillingProductInterval(record.billing_interval ?? metadata.billing_interval);
     const creditAmount = readOrderBumpCreditAmount(metadata, name, description);
     const media = readOrderBumpMedia(record.media);
+    const available = status === "active" && priceBrl > 0 && billingCycle === "one_time";
 
     return {
       id: String(record.id),
@@ -445,9 +452,11 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       priceLabel: priceBrl > 0 ? formatBrl(priceBrl) : priceText ?? "Sem preco",
       status,
       selected: selectedIds.has(String(record.id)),
-      available: status === "active" && priceBrl > 0,
+      available,
       creditAmount,
-      recurrence: readString(metadata.billing_order_bump_recurrence) === "monthly" ? "monthly" : "one_time",
+      billingCycle,
+      billingInterval,
+      recurrence: billingCycle === "recurring" ? "monthly" : "one_time",
       badge: readString(metadata.billing_order_bump_badge)
         ?? (creditAmount && creditAmount > 0 ? "Creditos" : "Adicional"),
       highlightLabel: readHighlightLabel(metadata),
@@ -486,6 +495,16 @@ async function loadBillingOrderBumpSettings(client: SupabaseClient) {
   return {
     selectedProductIds: readUuidList(metadata.billing_order_bump_product_ids),
   };
+}
+
+function normalizeBillingProductCycle(value: unknown): BillingProductBillingCycle {
+  return readString(value) === "recurring" ? "recurring" : "one_time";
+}
+
+function normalizeBillingProductInterval(value: unknown): BillingProductBillingInterval {
+  const text = readString(value);
+  if (text === "week" || text === "quarter" || text === "year") return text;
+  return "month";
 }
 
 function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, description: string) {

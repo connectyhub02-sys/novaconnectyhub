@@ -130,6 +130,10 @@ export async function POST(
       throw new Error(`O produto "${item.title}" nao esta disponivel para checkout online.`);
     }
 
+    if (item.billingCycle !== "one_time") {
+      throw new Error(`O produto "${item.title}" usa cobranca recorrente e ainda nao esta disponivel neste checkout.`);
+    }
+
     if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
       throw new Error(`O produto "${item.title}" esta esgotado no momento.`);
     }
@@ -237,6 +241,7 @@ export async function POST(
         tracking_link_id: trackingLinkId,
         lead_phone: customerPhone,
         lead_name: customerName,
+        billing_cycles: uniqueStrings(resolvedItems.map((entry) => entry.item.billingCycle)),
         commercial_flow_type: orderCommercialFlowType,
         revenue_owner_type: orderRevenueOwnerType,
         commission_eligible: orderCommissionEligible,
@@ -285,6 +290,8 @@ export async function POST(
       category: entry.item.category,
       currency: entry.item.currency,
       stock_status: entry.item.inventory.status,
+      billing_cycle: entry.item.billingCycle,
+      billing_interval: entry.item.billingInterval,
       platform_product_id: entry.item.platformProductId,
       platform_product_code: entry.item.platformProductCode,
       commercial_flow_type: entry.item.commercialFlowType,
@@ -463,6 +470,10 @@ function normalizeQuantity(value: unknown) {
   if (!Number.isFinite(quantity)) return 1;
 
   return Math.min(20, Math.max(1, Math.round(quantity)));
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 }
 
 function formatMoneyCents(value: number) {

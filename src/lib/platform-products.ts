@@ -30,6 +30,8 @@ type JsonRecord = Record<string, unknown>;
 export type PlatformProductStatus = "draft" | "active" | "paused" | "archived";
 export type PlatformProductMarketplaceStatus = "hidden" | "visible" | "featured";
 export type PlatformProductCommissionBase = "gross" | "net";
+export type PlatformProductBillingCycle = "one_time" | "recurring";
+export type PlatformProductBillingInterval = "week" | "month" | "quarter" | "year";
 export type PlatformProductOwnerType = "connectyhub" | "client" | "external_provider";
 export type PlatformProductSalesChannelType = "direct" | "resale" | "affiliate" | "marketplace";
 export type PlatformProductRevenueOwnerType = "connectyhub" | "client" | "split" | "external_provider";
@@ -65,6 +67,8 @@ export type PlatformProduct = {
   revenueOwnerType: PlatformProductRevenueOwnerType;
   commissionPolicyType: PlatformProductCommissionPolicyType;
   payoutTargetType: PlatformProductPayoutTargetType;
+  billingCycle: PlatformProductBillingCycle;
+  billingInterval: PlatformProductBillingInterval;
   price: string | null;
   currency: string;
   attributes: SalesCatalogItemAttribute[];
@@ -156,6 +160,8 @@ export type PlatformProductRow = {
   revenue_owner_type?: string | null;
   commission_policy_type?: string | null;
   payout_target_type?: string | null;
+  billing_cycle?: string | null;
+  billing_interval?: string | null;
   price: string | null;
   currency: string | null;
   attributes: unknown;
@@ -241,6 +247,8 @@ export const PLATFORM_PRODUCT_SELECT = [
   "revenue_owner_type",
   "commission_policy_type",
   "payout_target_type",
+  "billing_cycle",
+  "billing_interval",
   "price",
   "currency",
   "attributes",
@@ -512,6 +520,8 @@ export async function importPlatformProductToCompany(input: {
           revenue_owner_type: product.revenueOwnerType,
           commission_policy_type: product.commissionPolicyType,
           payout_target_type: product.payoutTargetType,
+          billing_cycle: product.billingCycle,
+          billing_interval: product.billingInterval,
           commercial_flow_type: resolvePlatformProductCommercialFlow(product),
           commission_eligible: isPlatformProductCommissionEligible(product),
           commission_percentage: product.commissionPercentage,
@@ -543,6 +553,8 @@ export async function importPlatformProductToCompany(input: {
       catalog_item_id: localCatalogItemId,
       owner_type: product.ownerType,
       sales_channel_type: product.salesChannelType,
+      billing_cycle: product.billingCycle,
+      billing_interval: product.billingInterval,
       commercial_flow_type: resolvePlatformProductCommercialFlow(product),
       revenue_owner_type: product.revenueOwnerType,
       commission_policy_type: product.commissionPolicyType,
@@ -582,6 +594,8 @@ export function mapPlatformProductRow(row: PlatformProductRow): PlatformProduct 
     revenueOwnerType: normalizeRevenueOwnerType(row.revenue_owner_type),
     commissionPolicyType: normalizeCommissionPolicyType(row.commission_policy_type),
     payoutTargetType: normalizePayoutTargetType(row.payout_target_type),
+    billingCycle: normalizeBillingCycle(row.billing_cycle ?? readString(metadata.billing_cycle)),
+    billingInterval: normalizeBillingInterval(row.billing_interval ?? readString(metadata.billing_interval)),
     price: readString(row.price),
     currency: readString(row.currency) ?? "BRL",
     attributes: readItemAttributes(row.attributes),
@@ -886,6 +900,8 @@ async function persistImportedSkus(input: {
       platform_product_code: input.product.productCode,
       product_origin_type: input.product.ownerType,
       sales_channel_type: input.product.salesChannelType,
+      billing_cycle: input.product.billingCycle,
+      billing_interval: input.product.billingInterval,
       commercial_flow_type: resolvePlatformProductCommercialFlow(input.product),
       revenue_owner_type: input.product.revenueOwnerType,
       commission_policy_type: input.product.commissionPolicyType,
@@ -1211,6 +1227,15 @@ function normalizeCommissionPolicyType(value: string | null | undefined): Platfo
 function normalizePayoutTargetType(value: string | null | undefined): PlatformProductPayoutTargetType {
   if (value === "client" || value === "split" || value === "external_provider") return value;
   return "connectyhub";
+}
+
+function normalizeBillingCycle(value: string | null | undefined): PlatformProductBillingCycle {
+  return value === "recurring" ? "recurring" : "one_time";
+}
+
+function normalizeBillingInterval(value: string | null | undefined): PlatformProductBillingInterval {
+  if (value === "week" || value === "quarter" || value === "year") return value;
+  return "month";
 }
 
 function normalizeImportSalesChannel(value: string | null | undefined): Exclude<PlatformProductSalesChannelType, "direct"> {

@@ -1466,6 +1466,7 @@ function OrderBumpProductsEditor({
         {products.length > 0 ? (
           products.map((product) => {
             const checked = selectedProductIds.includes(product.id);
+            const availabilityLabel = getOrderBumpAvailabilityLabel(product);
 
             return (
               <label
@@ -1487,7 +1488,7 @@ function OrderBumpProductsEditor({
                     </span>
                     <StatusBadge
                       status={product.available ? "online" : "warning"}
-                      label={product.available ? product.priceLabel : product.status === "active" ? "sem preco" : product.status}
+                      label={availabilityLabel}
                     />
                   </span>
                   <span className="mt-1 block text-[10px] leading-4 text-slate-500">
@@ -1496,7 +1497,7 @@ function OrderBumpProductsEditor({
                   <span className="mt-1 block font-mono text-[9px] uppercase tracking-wide text-slate-500">
                     {product.productCode}
                     {product.creditAmount ? ` / ${formatCredits(product.creditAmount)} creditos` : ""}
-                    {product.recurrence === "monthly" ? " / recorrente" : " / unico"}
+                    {product.billingCycle === "recurring" ? " / recorrente" : " / unico"}
                   </span>
                 </span>
               </label>
@@ -1511,6 +1512,13 @@ function OrderBumpProductsEditor({
       </div>
     </details>
   );
+}
+
+function getOrderBumpAvailabilityLabel(product: PlatformBillingOperationsCatalog["orderBumpProducts"][number]) {
+  if (product.available) return product.priceLabel;
+  if (product.billingCycle === "recurring") return "recorrente";
+  if (product.status === "active") return "sem preco";
+  return product.status;
 }
 
 function MiniValue({ label, value }: { label: string; value: string }) {

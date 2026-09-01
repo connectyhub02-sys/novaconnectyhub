@@ -8,6 +8,8 @@ import {
   mapPlatformProductRow,
   PLATFORM_PRODUCT_SELECT,
   type PlatformProductCommissionBase,
+  type PlatformProductBillingCycle,
+  type PlatformProductBillingInterval,
   type PlatformProductCommissionPolicyType,
   type PlatformProductMarketplaceStatus,
   type PlatformProductOwnerType,
@@ -309,6 +311,10 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
     const commissionPercentage = commissionPolicyType === "none"
       ? 0
       : normalizeMoneyNumber(formData.get("commissionPercentage"), 0, 100);
+    const billingCycle = normalizeBillingCycle(readFormString(formData.get("billingCycle")));
+    const billingInterval = billingCycle === "recurring"
+      ? normalizeBillingInterval(readFormString(formData.get("billingInterval")))
+      : "month";
     const highlightLabel = normalizeHighlightLabel(readFormString(formData.get("highlightLabel")));
     const payload = {
       id: productId,
@@ -325,6 +331,8 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
       revenue_owner_type: revenueOwnerType,
       commission_policy_type: commissionPolicyType,
       payout_target_type: payoutTargetType,
+      billing_cycle: billingCycle,
+      billing_interval: billingInterval,
       price: normalizeOptionalText(readFormString(formData.get("price")), 60),
       currency: normalizeOptionalText(readFormString(formData.get("currency")), 12) ?? "BRL",
       attributes: serializeItemAttributes(readItemAttributesPayload(formData.get("attributes"))),
@@ -350,6 +358,8 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
         updated_by: auth.userId,
         highlight_label: highlightLabel,
         product_highlight_label: highlightLabel,
+        billing_cycle: billingCycle,
+        billing_interval: billingInterval,
       },
     };
     const query = existingProduct
@@ -377,6 +387,8 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
         revenueOwnerType: data.revenue_owner_type,
         commissionPolicyType: data.commission_policy_type,
         commissionPercentage: data.commission_percentage,
+        billingCycle: data.billing_cycle,
+        billingInterval: data.billing_interval,
       },
     });
 
@@ -712,6 +724,15 @@ function normalizeCommissionPolicyType(value: string | null): PlatformProductCom
 function normalizePayoutTargetType(value: string | null): PlatformProductPayoutTargetType {
   if (value === "client" || value === "split" || value === "external_provider") return value;
   return "connectyhub";
+}
+
+function normalizeBillingCycle(value: string | null): PlatformProductBillingCycle {
+  return value === "recurring" ? "recurring" : "one_time";
+}
+
+function normalizeBillingInterval(value: string | null): PlatformProductBillingInterval {
+  if (value === "week" || value === "quarter" || value === "year") return value;
+  return "month";
 }
 
 function normalizeCommissionBase(value: string | null): PlatformProductCommissionBase {

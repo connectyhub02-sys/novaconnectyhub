@@ -16,7 +16,6 @@ import {
   createMercadoPagoPixPayment,
   ensureMercadoPagoAccessToken,
   extractMercadoPagoPixData,
-  loadMercadoPagoPlatformBillingConfig,
   normalizeCurrencyAmount,
 } from "./mercado-pago";
 import {
@@ -24,6 +23,7 @@ import {
   createPagBankPixOrder,
   ensurePagBankAccessToken,
   extractPagBankPixData,
+  loadPagBankPlatformBillingConfig,
 } from "./pagbank";
 import type { SalesCatalogPagBankSettings } from "./shared";
 import {
@@ -124,16 +124,16 @@ export async function createSalesCatalogPixPaymentSession(input: {
     orderId: order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
-  const paymentProvider = resolvePaymentGatewayProvider(connectyHubOwned);
+  const paymentProvider = resolvePaymentGatewayProvider();
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, "pix");
-  const catalogSettings = paymentProvider === "pagbank"
+  const catalogSettings = paymentProvider === "pagbank" && !connectyHubOwned
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
   const pagBankSettings = catalogSettings?.pagBank ?? null;
   let integration: PaymentGatewayIntegration | null = null;
-  let platformBilling: Awaited<ReturnType<typeof loadMercadoPagoPlatformBillingConfig>> | null = null;
+  let platformBilling: Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
 
   if (paymentProvider === "pagbank" && pagBankSettings && !pagBankSettings.enabledMethods.includes("pix")) {
@@ -142,7 +142,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   try {
     if (connectyHubOwned) {
-      platformBilling = await loadMercadoPagoPlatformBillingConfig({ client: input.client });
+      platformBilling = await loadPagBankPlatformBillingConfig({ client: input.client });
     } else {
       integration = await ensurePagBankAccessToken({
         client: input.client,
@@ -157,7 +157,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
   const missingAccessTokenMessage = connectyHubOwned
-    ? "Nao foi possivel localizar a conta Mercado Pago da ConnectyHub para este pagamento."
+    ? "Nao foi possivel localizar a conta PagBank da ConnectyHub para este pagamento."
     : "Nao foi possivel localizar a conta PagBank para este pagamento.";
 
   const sessionId = randomUUID();
@@ -348,7 +348,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
     const pixData = paymentProvider === "pagbank"
       ? extractPagBankPixData((await createPagBankPixOrder({
           accessToken,
-          mode: getPaymentIntegrationMode(integration),
+          mode: connectyHubOwned ? platformBilling?.mode ?? "production" : getPaymentIntegrationMode(integration),
+          apiBaseUrl: connectyHubOwned ? platformBilling?.apiBaseUrl ?? null : null,
           amount,
           description,
           externalReference,
@@ -585,7 +586,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     orderId: input.order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
-  const paymentProvider = resolvePaymentGatewayProvider(connectyHubOwned);
+  const paymentProvider = resolvePaymentGatewayProvider();
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const sessionId = randomUUID();
@@ -848,8 +849,8 @@ function buildPaymentSessionMetadata(input: {
   };
 }
 
-function resolvePaymentGatewayProvider(connectyHubOwned: boolean): PaymentGatewayProvider {
-  return connectyHubOwned ? "mercado_pago" : "pagbank";
+function resolvePaymentGatewayProvider(): PaymentGatewayProvider {
+  return "pagbank";
 }
 
 function formatPaymentGatewayProviderLabel(provider: PaymentGatewayProvider) {

@@ -56,6 +56,8 @@ const baseItem: ClientSalesCatalogItem = {
     profile: "default",
     notes: null,
   },
+  billingCycle: "one_time",
+  billingInterval: "month",
   pageContent: emptySalesCatalogProductPageContent(),
   productOriginType: "client",
   commercialFlowType: "client_direct",

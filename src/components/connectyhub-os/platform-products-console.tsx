@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import type {
   PlatformProduct,
+  PlatformProductBillingCycle,
+  PlatformProductBillingInterval,
   PlatformProductCatalog,
   PlatformProductCommission,
   PlatformProductCommissionPolicyType,
@@ -76,6 +78,8 @@ type ProductDraft = {
   revenueOwnerType: PlatformProductRevenueOwnerType;
   commissionPolicyType: PlatformProductCommissionPolicyType;
   payoutTargetType: PlatformProductPayoutTargetType;
+  billingCycle: PlatformProductBillingCycle;
+  billingInterval: PlatformProductBillingInterval;
   commissionPercentage: string;
   commissionBase: "gross" | "net";
   commissionReleaseDays: string;
@@ -198,6 +202,8 @@ const emptyDraft: ProductDraft = {
   revenueOwnerType: "connectyhub",
   commissionPolicyType: "percentage",
   payoutTargetType: "connectyhub",
+  billingCycle: "one_time",
+  billingInterval: "month",
   commissionPercentage: "0",
   commissionBase: "gross",
   commissionReleaseDays: "15",
@@ -245,6 +251,8 @@ const platformProductHelpText: Record<string, string> = {
   "Visibilidade no painel do usuario": "Escolha se o produto aparece para clientes importarem ou fica oculto apenas no admin.",
   Nome: "Nome publico do produto que sera visto no admin, vitrine e importacao.",
   Valor: "Preco principal usado para venda, repasse e apresentacao ao usuario.",
+  "Modelo de cobranca": "Define se o produto e uma compra unica ou uma cobranca recorrente. Planos da ConnectyHub ja sao recorrentes por padrao.",
+  Periodicidade: "Intervalo usado para produtos recorrentes quando houver fluxo de assinatura proprio.",
   Categoria: "Selecione ou crie a categoria que melhor organiza esse produto.",
   "Descricao curta para vitrine": "Resumo rapido para cards, listas e importacao do usuario.",
   "Descricao comercial": "Texto completo para venda no WhatsApp: beneficios, condicoes, entrega, garantia e objeccoes.",
@@ -282,11 +290,11 @@ const platformProductHelpText: Record<string, string> = {
   Receita: "Define quem deve receber a receita principal da venda.",
   Comissao: "Escolha se havera comissao, percentual, valor fixo futuro ou regra personalizada.",
   "Repasse para": "Define para onde o repasse financeiro deve ir.",
-  "Regra de comissao": "Configure percentual, base de calculo, prazo de liberacao, recorrencia e garantia.",
+  "Regra de comissao": "Configure percentual, base de calculo, prazo de liberacao, meses com comissao e garantia.",
   "% comissao": "Percentual pago ao cliente quando ele vender produto ConnectyHub por comissao.",
   Base: "Define se o calculo da comissao usa valor bruto ou liquido.",
   "Repasse dias": "Quantidade de dias apos a venda para liberar a comissao.",
-  "Recorrencia meses": "Quantidade de meses em que a comissao continua em vendas recorrentes.",
+  "Comissao meses": "Quantidade de meses em que a comissao continua em vendas recorrentes.",
   "Garantia dias": "Prazo de seguranca para estorno ou bloqueio antes de liberar comissao.",
   "Referencia do repasse": "Identificador interno do pagamento em lote, como PIX ou data.",
   "Observacao interna": "Nota administrativa sobre o pagamento de repasse.",
@@ -859,12 +867,13 @@ export function PlatformProductsConsole({
                     <>
                       <ProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={platformProductFormTabs} />
 
-                      <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_140px_130px_140px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                      <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_120px_120px_120px_140px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                         <div className="min-w-0">
                           <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
                           <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{draft.name.trim() || "Novo produto"}</p>
                         </div>
                         <MiniValue label="preco" value={draft.price.trim() || "Sem preco"} />
+                        <MiniValue label="cobranca" value={formatBillingCycle(draft.billingCycle)} />
                         <MiniValue label="status" value={draft.status} />
                         <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-3.5 w-3.5" />
@@ -961,6 +970,47 @@ export function PlatformProductsConsole({
                       ) : null}
 
                       {productFormTab === "pricing" ? (
+                        <>
+                      <Block icon={BadgePercent} title="Modelo de cobranca" tone="cyan" defaultOpen>
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                          <Field label="Modelo de cobranca">
+                            <select
+                              value={draft.billingCycle}
+                              onChange={(event) => {
+                                const billingCycle = event.target.value as PlatformProductBillingCycle;
+                                patchDraft({
+                                  billingCycle,
+                                  billingInterval: billingCycle === "recurring" ? draft.billingInterval : "month",
+                                  ...(billingCycle === "recurring" && draft.fulfillmentMode !== "subscription" ? { fulfillmentMode: "subscription" } : {}),
+                                });
+                              }}
+                              className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                              style={inputStyle}
+                            >
+                              <option value="one_time">Pagamento unico</option>
+                              <option value="recurring">Recorrente</option>
+                            </select>
+                          </Field>
+                          <Field label="Periodicidade">
+                            <select
+                              value={draft.billingInterval}
+                              disabled={draft.billingCycle !== "recurring"}
+                              onChange={(event) => patchDraft({ billingInterval: event.target.value as PlatformProductBillingInterval })}
+                              className="h-10 w-full rounded-xl px-3 text-[13px] outline-none disabled:opacity-50"
+                              style={inputStyle}
+                            >
+                              <option value="week">Semanal</option>
+                              <option value="month">Mensal</option>
+                              <option value="quarter">Trimestral</option>
+                              <option value="year">Anual</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                          Ebooks, creditos e produtos avulsos ficam como pagamento unico. Produtos recorrentes ficam marcados para um fluxo de assinatura.
+                        </p>
+                      </Block>
+
                       <Block icon={BadgePercent} title="Oferta e fechamento" tone="amber">
                         <div className="grid gap-3 md:grid-cols-4">
                           <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
@@ -974,6 +1024,7 @@ export function PlatformProductsConsole({
                           <input value={draft.offerNotes} onChange={(event) => patchDraft({ offerNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Condicoes comerciais" style={inputStyle} />
                         </div>
                       </Block>
+                        </>
                       ) : null}
 
                       {productFormTab === "stock" ? (
@@ -1298,7 +1349,7 @@ export function PlatformProductsConsole({
                             </select>
                           </Field>
                           <NumberField label="Repasse dias" value={draft.commissionReleaseDays} onChange={(value) => patchDraft({ commissionReleaseDays: value })} step="1" />
-                          <NumberField label="Recorrencia meses" value={draft.recurringCommissionMonths} onChange={(value) => patchDraft({ recurringCommissionMonths: value })} step="1" />
+                          <NumberField label="Comissao meses" value={draft.recurringCommissionMonths} onChange={(value) => patchDraft({ recurringCommissionMonths: value })} step="1" />
                           <NumberField label="Garantia dias" value={draft.refundWindowDays} onChange={(value) => patchDraft({ refundWindowDays: value })} step="1" />
                         </div>
                       </Block>
@@ -1521,6 +1572,7 @@ function ProductCard({
         <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{product.shortDescription || product.commercialDescription}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           <MiniTag icon={ShoppingBag}>{formatSalesChannel(product.salesChannelType)}</MiniTag>
+          <MiniTag icon={BadgePercent}>{formatBillingCycleWithInterval(product.billingCycle, product.billingInterval)}</MiniTag>
           <MiniTag icon={BadgePercent}>{product.commissionPolicyType === "none" ? "sem comissao" : `${product.commissionPercentage}%`}</MiniTag>
           <MiniTag icon={Truck}>{product.shipping.profile === "free" ? "frete gratis" : product.shipping.profile === "custom" ? "frete combinado" : "tabela por estado"}</MiniTag>
           <MiniTag icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
@@ -2004,6 +2056,8 @@ function createDraft(product: PlatformProduct | null): ProductDraft {
     revenueOwnerType: product.revenueOwnerType,
     commissionPolicyType: product.commissionPolicyType,
     payoutTargetType: product.payoutTargetType,
+    billingCycle: product.billingCycle,
+    billingInterval: product.billingInterval,
     commissionPercentage: String(product.commissionPercentage),
     commissionBase: product.commissionBase,
     commissionReleaseDays: String(product.commissionReleaseDays),
@@ -2289,6 +2343,22 @@ function formatSalesChannel(value: PlatformProductSalesChannelType) {
   if (value === "affiliate") return "afiliado";
   if (value === "marketplace") return "marketplace";
   return "revenda";
+}
+
+function formatBillingCycle(value: PlatformProductBillingCycle) {
+  return value === "recurring" ? "Recorrente" : "Unica";
+}
+
+function formatBillingCycleWithInterval(cycle: PlatformProductBillingCycle, interval: PlatformProductBillingInterval) {
+  if (cycle === "one_time") return "pagamento unico";
+  return `recorrente ${formatBillingInterval(interval)}`;
+}
+
+function formatBillingInterval(value: PlatformProductBillingInterval) {
+  if (value === "week") return "semanal";
+  if (value === "quarter") return "trimestral";
+  if (value === "year") return "anual";
+  return "mensal";
 }
 
 function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" | "green" | "amber" | "rose" | "zinc" {

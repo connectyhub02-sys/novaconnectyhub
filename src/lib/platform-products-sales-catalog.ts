@@ -39,6 +39,8 @@ export function mapPlatformProductToClientSalesCatalogItem(
     offer: product.offer,
     fulfillment: product.fulfillment,
     shipping: product.shipping,
+    billingCycle: product.billingCycle,
+    billingInterval: product.billingInterval,
     pageContent: emptySalesCatalogProductPageContent(),
     productOriginType: product.ownerType === "external_provider" ? "external_provider" : product.ownerType === "connectyhub" ? "connectyhub" : "client",
     commercialFlowType: resolvePlatformProductCommercialFlow(product),

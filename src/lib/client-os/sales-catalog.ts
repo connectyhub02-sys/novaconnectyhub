@@ -30,6 +30,8 @@ import {
   type ClientSalesCatalogShippingSettings,
   type ClientSalesCatalogWhatsappInstance,
   type SalesCatalogAttribute,
+  type SalesCatalogBillingCycle,
+  type SalesCatalogBillingInterval,
   type SalesCatalogBusinessType,
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
@@ -1010,6 +1012,8 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     offer: readProductOffer(metadata.offer),
     fulfillment: readProductFulfillment(metadata.fulfillment),
     shipping: readProductShipping(metadata.shipping),
+    billingCycle: normalizeBillingCycle(readString(metadata.billing_cycle)),
+    billingInterval: normalizeBillingInterval(readString(metadata.billing_interval)),
     pageContent: readProductPageContent(metadata.page_content ?? metadata.pageContent),
     productOriginType: normalizeProductOriginType(readString(metadata.product_origin_type)),
     commercialFlowType: normalizeCommercialFlowType(readString(metadata.commercial_flow_type)),
@@ -1588,6 +1592,15 @@ function normalizeRevenueOwnerType(value: string | null): SalesCatalogRevenueOwn
 function normalizeCommissionPolicyType(value: string | null) {
   if (value === "percentage" || value === "fixed" || value === "custom") return value;
   return "none";
+}
+
+function normalizeBillingCycle(value: string | null): SalesCatalogBillingCycle {
+  return value === "recurring" ? "recurring" : "one_time";
+}
+
+function normalizeBillingInterval(value: string | null): SalesCatalogBillingInterval {
+  if (value === "week" || value === "quarter" || value === "year") return value;
+  return "month";
 }
 
 function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
