@@ -131,6 +131,7 @@ describe("PagBank gateway rollout", () => {
     expect(clientConsoleSource).toContain("buildPagBankInterestFreeOptions");
     expect(salesCatalogConsoleSource).not.toContain("PagBank Checkout");
     expect(salesCatalogConsoleSource).not.toContain("togglePagBankPaymentMethod");
+    expect(salesCatalogConsoleSource).toContain("recurringEnabled: settingsDraft.pagBank.recurringEnabled");
   });
 
   it("separates recurring plans from one-time or recurring ConnectyHub products", () => {
@@ -158,6 +159,19 @@ describe("PagBank gateway rollout", () => {
     expect(commerceAgentSource).toContain("Metodos PagBank habilitados");
     expect(commerceAgentSource).toContain("O agente so pode oferecer formas de pagamento habilitadas");
     expect(whatsappAgentRuntimeSource).toContain("Metodos PagBank habilitados");
+    expect(whatsappAgentRuntimeSource).toContain("Pix PagBank: depois da confirmacao do pedido");
+    expect(whatsappAgentRuntimeSource).toContain("Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp");
     expect(whatsappAgentRuntimeSource).toContain("cobranca interna");
+  });
+
+  it("delivers PagBank Pix directly in WhatsApp and blocks one-time Pix for recurring products", () => {
+    expect(whatsappAgentRuntimeSource).toContain("shouldSendSalesCatalogPixInsideWhatsapp");
+    expect(whatsappAgentRuntimeSource).toContain("sendSalesCatalogPixDirectWhatsapp");
+    expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
+    expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code");
+    expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment");
+    expect(whatsappAgentRuntimeSource).toContain("billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle)))");
+    expect(paymentSessionsSource).toContain("hasRecurringSalesCatalogOrderItem(orderMetadata, items)");
+    expect(paymentSessionsSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
   });
 });

@@ -229,6 +229,9 @@ type RuntimeOrganizationLocation = OrganizationLocation;
 
 type SalesCatalogPaymentLinkResult = {
   orderId: string;
+  amount: string | null;
+  provider: string | null;
+  providerLabel: string;
   checkoutUrl: string;
   trackingUrl: string | null;
   pixQrCode: string | null;
@@ -241,6 +244,8 @@ type SalesCatalogPaymentLinkResult = {
 type SalesCatalogPaymentSessionLinkRow = {
   id: string;
   order_id: string | null;
+  provider: string | null;
+  amount: string | number | null;
   checkout_url: string | null;
   pix_qr_code: string | null;
   pix_ticket_url: string | null;
@@ -3636,11 +3641,11 @@ function buildKnowledgeLines(knowledge: KnowledgeMemoryRow[]) {
 function buildGlobalCheckoutConfirmationLines() {
   return [
     "- Esta regra vale para todos os agentes, inclusive agentes internos e agentes de clientes.",
-    "- Converse normalmente, tire duvidas e ajude o lead a escolher. Mas antes de enviar qualquer link de pagamento, checkout, PIX, boleto, carrinho ou pedido fechado, mostre uma previa curta do pedido/contratacao.",
-    "- A previa deve conter itens, quantidades, plano/servico quando aplicavel e total quando houver preco. Pergunte claramente se pode fechar e enviar o link de pagamento.",
-    "- So envie link de pagamento, checkout, PIX ou botao de finalizar depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si.",
-    "- Se o lead corrigir qualquer item, quantidade, variacao, endereco, plano ou forma de pagamento, atualize a previa e peca nova confirmacao antes do link.",
-    "- Nunca reutilize link de checkout/pagamento antigo ou de outro lead. Gere ou use apenas o link do pedido confirmado na conversa atual.",
+    "- Converse normalmente, tire duvidas e ajude o lead a escolher. Mas antes de gerar Pix, enviar checkout, boleto, carrinho ou pedido fechado, mostre uma previa curta do pedido/contratacao.",
+    "- A previa deve conter itens, quantidades, plano/servico quando aplicavel e total quando houver preco. Pergunte claramente se pode fechar e gerar o pagamento.",
+    "- So gere Pix, checkout/link ou botao de finalizar depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si.",
+    "- Se o lead corrigir qualquer item, quantidade, variacao, endereco, plano ou forma de pagamento, atualize a previa e peca nova confirmacao antes do pagamento.",
+    "- Nunca reutilize link, Pix ou pagamento antigo ou de outro lead. Gere ou use apenas a cobranca do pedido confirmado na conversa atual.",
   ];
 }
 
@@ -3713,15 +3718,15 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando o lead perguntar se tem um produto, responda em ate 2 mensagens curtas, confirme que tem e apresente no maximo 3 opcoes com nome, preco e uma frase simples de contexto.",
     "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
-    "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber PIX, boleto, cartao ou link de pagamento, nunca envie checkout direto na primeira intencao.",
-    "- Antes do checkout, envie uma previa curta do pedido com itens, quantidades e total quando houver preco. Pergunte claramente: Posso fechar seu pedido e te mandar o link de pagamento?",
-    "- Somente depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, envie o checkout/link de pagamento.",
-    "- Se o lead corrigir item, quantidade, sabor, variacao, endereco ou forma de pagamento, ajuste a previa e peca nova confirmacao antes do link.",
+    "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartao ou link de pagamento, nunca gere pagamento direto na primeira intencao.",
+    "- Antes do pagamento, envie uma previa curta do pedido com itens, quantidades e total quando houver preco. Pergunte claramente: Posso fechar seu pedido e gerar o pagamento?",
+    "- Somente depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, gere Pix direto ou checkout/link conforme a forma habilitada.",
+    "- Se o lead corrigir item, quantidade, sabor, variacao, endereco ou forma de pagamento, ajuste a previa e peca nova confirmacao antes do pagamento.",
     "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; depois da confirmacao do lead, o sistema deve criar um unico checkout com todos os itens somados.",
     "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate apenas os produtos recentes da intencao atual como um carrinho unico. Resuma o carrinho em uma frase curta, sem repetir ficha tecnica.",
     "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheca naturalmente como fracionamento/combinacao e confirme antes de inventar regra de preco.",
     "- Se o lead pedir variacao, sabor, tamanho, combo ou adicional cadastrado, use exatamente o que existe no catalogo/SKUs/atributos. Se houver preco explicito do adicional, o sistema pode somar no pedido.",
-    "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto com a previa do pedido; o sistema so registra pedido e gera checkout/botao depois da confirmacao clara do lead.",
+    "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto com a previa do pedido; o sistema so registra pedido e gera Pix/checkout depois da confirmacao clara do lead.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
@@ -3792,8 +3797,17 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     return [];
   }
 
-  const activePaymentMethods = settings.paymentMethods.filter((method) => method.enabled);
+  const manualPaymentMethods = settings.paymentMethods.filter((method) => (
+    method.enabled
+    && method.id !== "pix"
+    && method.id !== "card_link"
+    && method.id !== "boleto"
+  ));
   const pagBankMethods = formatRuntimePagBankPaymentMethods(settings.pagBank.enabledMethods);
+  const pixEnabled = settings.pagBank.enabledMethods.includes("pix");
+  const creditCardEnabled = settings.pagBank.enabledMethods.includes("credit_card");
+  const debitCardEnabled = settings.pagBank.enabledMethods.includes("debit_card");
+  const boletoEnabled = settings.pagBank.enabledMethods.includes("boleto");
   const requiredFields = settings.leadDataPolicy.requiredFields.length > 0
     ? settings.leadDataPolicy.requiredFields.join(", ")
     : "somente os dados essenciais do pedido";
@@ -3803,17 +3817,29 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
     "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
-    activePaymentMethods.length > 0
-      ? `- Metodos de pagamento ativos: ${activePaymentMethods.map((method) => `${method.label}${method.requiresProof ? " (pedir comprovante)" : ""}`).join(", ")}.`
-      : "- Nenhum pagamento automatico ativo; acione humano para fechar pagamento.",
-    ...activePaymentMethods
-      .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
-      .filter(Boolean),
     `- Metodos PagBank habilitados: ${pagBankMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    pixEnabled
+      ? "- Pix PagBank: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do PagBank, nao por comprovante manual."
+      : "- Pix PagBank esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
+    creditCardEnabled
+      ? "- Cartao de credito: use o checkout seguro da ConnectyHub. Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp."
+      : "- Cartao de credito esta desativado; nao ofereca pagamento em credito.",
+    debitCardEnabled
+      ? "- Cartao de debito: use o checkout seguro da ConnectyHub com autenticacao 3DS quando solicitada. Nunca colete dados de debito pelo WhatsApp."
+      : "- Cartao de debito esta desativado; nao ofereca pagamento em debito.",
+    boletoEnabled
+      ? "- Boleto: quando habilitado, direcione para o checkout da ConnectyHub; nao gaste a conversa tentando fechar boleto manual no WhatsApp."
+      : "- Boleto esta desativado; nao ofereca boleto.",
+    manualPaymentMethods.length > 0
+      ? `- Regras complementares de atendimento: ${manualPaymentMethods.map((method) => method.label).join(", ")}.`
+      : "",
+    ...manualPaymentMethods
+      .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
+      .filter(Boolean),
     `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
     settings.pagBank.recurringEnabled
-      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente."
+      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
       : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
     settings.orderPolicy.minimumOrderValue ? `- Pedido minimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
     `- Reserva do pedido: ${formatRuntimeReservationPolicy(settings.orderPolicy.reservationPolicy)}.`,
@@ -6691,7 +6717,7 @@ function buildSalesCatalogOrderConfirmationPrompt(selections: RuntimeSalesCatalo
     "Antes de fechar, confirma se o pedido ficou assim:",
     lines.join("\n"),
     totalLine,
-    "Posso fechar seu pedido e te mandar o link de pagamento?",
+    "Posso fechar seu pedido e gerar o pagamento?",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -7272,8 +7298,11 @@ async function recordSalesCatalogOrderIntent(input: {
             selected_attributes: selection.attributes,
             attribute_modifiers: selection.attributeModifiers,
             attribute_modifier_total: selection.attributeModifierTotal,
+            billing_cycle: selection.item.billingCycle,
+            billing_interval: selection.item.billingInterval,
             mention_preview: selection.mentionText,
           })),
+          billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle))),
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
           commission_eligible: commissionEligible,
@@ -7339,6 +7368,8 @@ async function recordSalesCatalogOrderIntent(input: {
           currency: sku?.currency ?? item.currency,
           source: item.source,
           stock_status: sku?.stockStatus ?? item.inventory.status,
+          billing_cycle: item.billingCycle,
+          billing_interval: item.billingInterval,
           platform_product_id: item.platformProductId,
           platform_product_code: item.platformProductCode,
           commercial_flow_type: item.commercialFlowType,
@@ -7436,6 +7467,9 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
 
     return {
       orderId: input.orderId,
+      amount: result.session.amount ?? input.total,
+      provider: result.session.provider,
+      providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(result.session.provider),
       checkoutUrl: result.checkoutUrl,
       trackingUrl: result.trackingUrl ?? null,
       pixQrCode: result.pixQrCode,
@@ -7489,7 +7523,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   const { data, error } = await input.client
     .from("sales_catalog_payment_sessions")
-    .select("id, order_id, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, metadata")
+    .select("id, order_id, provider, amount, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, metadata")
     .eq("id", paymentSessionId)
     .eq("organization_id", input.context.organization.id)
     .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
@@ -7518,6 +7552,9 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     phone: input.phone,
     payment: {
       orderId: order.id,
+      amount: data.amount !== null && data.amount !== undefined ? String(data.amount) : null,
+      provider: asString(data.provider),
+      providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(asString(data.provider)),
       checkoutUrl,
       trackingUrl,
       pixQrCode: asString(data.pix_qr_code),
@@ -7612,7 +7649,10 @@ function hasRecentSalesCatalogCheckoutPromise(
     const normalized = normalizeSearch(message.text_content);
     const promisedCheckout = normalized.includes("checkout")
       || normalized.includes("link de pagamento")
-      || normalized.includes("finalizar pedido");
+      || normalized.includes("finalizar pedido")
+      || normalized.includes("pix copia")
+      || normalized.includes("codigo pix")
+      || normalized.includes("copia e cola");
 
     return promisedCheckout
       && /\b(?:vou|deixei|gerei|gerar|acionar)\b/.test(normalized);
@@ -7626,6 +7666,10 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (shouldSendSalesCatalogPixInsideWhatsapp(input.payment)) {
+    return sendSalesCatalogPixDirectWhatsapp(input);
+  }
+
   const text = input.payment.paymentDeferred
     ? "Perfeito, deixei seu checkout seguro separado. Ele abre com o pedido e confirma entrega/frete antes do pagamento."
     : "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
@@ -7694,6 +7738,82 @@ async function sendSalesCatalogPaymentLink(input: {
   await saveOutboundMessage(input.client, input.context, message);
 
   return message;
+}
+
+function shouldSendSalesCatalogPixInsideWhatsapp(payment: SalesCatalogPaymentLinkResult) {
+  return !payment.paymentDeferred
+    && !payment.gatewayUnavailable
+    && Boolean(payment.pixQrCode?.trim());
+}
+
+async function sendSalesCatalogPixDirectWhatsapp(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  payment: SalesCatalogPaymentLinkResult;
+}): Promise<OutboundMessage> {
+  const messageText = buildSalesCatalogPixDirectWhatsappText(input.payment);
+  const textProviderResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: messageText,
+    trackId: `agent_pix_payment_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+    mentions: resolveGroupMentions(input.context),
+  });
+  const providerResponse = {
+    delivery: "whatsapp_pix_code",
+    provider: input.payment.provider,
+    providerLabel: input.payment.providerLabel,
+    orderId: input.payment.orderId,
+    checkoutUrl: input.payment.checkoutUrl,
+    trackingUrl: input.payment.trackingUrl,
+    pixTicketUrl: input.payment.pixTicketUrl,
+    textProviderResponse,
+  };
+  const message: OutboundMessage = {
+    text: messageText,
+    mode: "text",
+    providerResponse,
+    persisted: true,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+
+  return message;
+}
+
+function buildSalesCatalogPixDirectWhatsappText(payment: SalesCatalogPaymentLinkResult) {
+  const amount = formatSalesCatalogWhatsappPaymentAmount(payment.amount);
+  const code = payment.pixQrCode?.trim() ?? "";
+
+  return [
+    "Pedido fechado. Gerei o Pix para voce pagar direto por aqui.",
+    amount ? `Valor: ${amount}` : "",
+    "Pix copia e cola:",
+    "```",
+    code,
+    "```",
+    `Assim que o ${payment.providerLabel} confirmar, o pedido atualiza automaticamente por aqui.`,
+  ].filter(Boolean).join("\n");
+}
+
+function formatSalesCatalogWhatsappPaymentAmount(value: string | number | null | undefined) {
+  const amount = normalizeCurrencyAmount(value);
+
+  if (!amount) {
+    return null;
+  }
+
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(amount);
+}
+
+function formatSalesCatalogRuntimePaymentProviderLabel(provider: string | null | undefined) {
+  return provider === "mercado_pago" ? "Mercado Pago" : "PagBank";
 }
 
 async function maybeSendSalesCatalogProductPageLinks(input: {

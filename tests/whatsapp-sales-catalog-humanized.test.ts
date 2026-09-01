@@ -59,7 +59,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(catalogRuntime).toContain("hasSalesCatalogOrderIntent(intentText)");
   });
 
-  it("requires a confirmed order preview before creating checkout links", () => {
+  it("requires a confirmed order preview before creating payment requests", () => {
     const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
     const checkoutRuntime = sourceBetween(
       "type RuntimeSalesCatalogOrderSelection",
@@ -71,11 +71,11 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)");
     expect(checkoutRuntime).toContain("source: \"current_response\" | \"recent_lead_message\" | \"confirmation_preview\"");
     expect(checkoutRuntime).toContain("salesCatalogCheckoutConfirmationWindowMs");
-    expect(checkoutRuntime).toContain("Posso fechar seu pedido e te mandar o link de pagamento?");
+    expect(checkoutRuntime).toContain("Posso fechar seu pedido e gerar o pagamento?");
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
   });
 
-  it("sends checkout links even when payment is deferred for shipping", () => {
+  it("sends checkout links only when payment needs the checkout surface", () => {
     const deliveryText = sourceBetween(
       "function prepareSalesCatalogDeliveryText",
       "function hasSubstantiveSalesCatalogAnswer",
@@ -93,6 +93,10 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).not.toContain("if (result.paymentDeferred)");
     expect(checkoutRuntime).toContain("paymentDeferred: result.paymentDeferred === true");
     expect(checkoutRuntime).toContain("paymentDeferredReason: result.paymentDeferredReason ?? null");
+    expect(paymentSender).toContain("shouldSendSalesCatalogPixInsideWhatsapp");
+    expect(paymentSender).toContain("sendSalesCatalogPixDirectWhatsapp");
+    expect(paymentSender).toContain("Pix copia e cola:");
+    expect(paymentSender).toContain("agent_pix_payment");
     expect(paymentSender).toContain("confirma entrega/frete antes do pagamento");
   });
 
@@ -113,6 +117,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRecovery).toContain("sendSalesCatalogPaymentLink");
     expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutPromise");
     expect(followUpDetection).toContain("link de pagamento");
+    expect(followUpDetection).toContain("codigo pix");
     expect(followUpDetection).toContain("nao abriu");
     expect(followUpDetection).toContain("ainda nao");
   });
@@ -156,7 +161,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(instruction).toContain("REGRA GLOBAL DE FECHAMENTO E PAGAMENTO");
     expect(globalRule).toContain("vale para todos os agentes");
     expect(globalRule).toContain("inclusive agentes internos");
-    expect(globalRule).toContain("Nunca reutilize link de checkout/pagamento antigo ou de outro lead");
+    expect(globalRule).toContain("Nunca reutilize link, Pix ou pagamento antigo ou de outro lead");
   });
 
   it("preserves substantive product explanations before offering product pages", () => {

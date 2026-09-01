@@ -63,6 +63,7 @@ type OrderItemRow = {
   total: string | null;
   sku_code: string | null;
   fulfillment?: unknown;
+  metadata?: JsonRecord | null;
 };
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
@@ -93,7 +94,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const { data: itemRows } = await input.client
     .from("sales_catalog_order_items")
-    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment")
+    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment, metadata")
     .eq("order_id", order.id)
     .order("created_at", { ascending: true });
   const items = (itemRows ?? []) as OrderItemRow[];
@@ -116,6 +117,10 @@ export async function createSalesCatalogPixPaymentSession(input: {
       reason: "shipping_required",
       reasonLabel: "Frete pendente",
     });
+  }
+
+  if (hasRecurringSalesCatalogOrderItem(orderMetadata, items)) {
+    throw new Error("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
   }
 
   const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
@@ -1035,6 +1040,27 @@ function normalizePayerEmail(email: string | null | undefined, orderId: string) 
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function hasRecurringSalesCatalogOrderItem(orderMetadata: JsonRecord, items: OrderItemRow[]) {
+  if (readString(orderMetadata.billing_cycle) === "recurring") {
+    return true;
+  }
+
+  const orderBillingCycles = Array.isArray(orderMetadata.billing_cycles)
+    ? orderMetadata.billing_cycles
+    : [];
+
+  if (orderBillingCycles.some((cycle) => readString(cycle) === "recurring")) {
+    return true;
+  }
+
+  return items.some((item) => {
+    const metadata = readRecord(item.metadata);
+
+    return readString(metadata.billing_cycle) === "recurring"
+      || readString(metadata.billingCycle) === "recurring";
+  });
 }
 
 function resolveOrderAgentId(metadata: JsonRecord) {

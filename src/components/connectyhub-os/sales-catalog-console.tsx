@@ -1482,6 +1482,7 @@ export function SalesCatalogConsole({
             pixExpirationMinutes: clampNumber(settingsDraft.pagBank.pixExpirationMinutes, 5, 43200),
             checkoutExpirationMinutes: clampNumber(settingsDraft.pagBank.checkoutExpirationMinutes, 5, 43200),
             allowBuyerEdit: settingsDraft.pagBank.allowBuyerEdit,
+            recurringEnabled: settingsDraft.pagBank.recurringEnabled,
           },
           orderPolicy: {
             minimumOrderValue: cleanInput(settingsDraft.orderPolicy.minimumOrderValue, 40),

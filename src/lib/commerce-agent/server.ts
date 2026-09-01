@@ -2381,13 +2381,29 @@ function formatCatalogContext(products: OfferProduct[], currentProductId: string
 
 function buildPagBankCommercePolicyLines(settings: ClientSalesCatalogSettings) {
   const paymentMethods = formatPagBankPaymentMethods(settings.pagBank.enabledMethods);
+  const pixEnabled = settings.pagBank.enabledMethods.includes("pix");
+  const creditCardEnabled = settings.pagBank.enabledMethods.includes("credit_card");
+  const debitCardEnabled = settings.pagBank.enabledMethods.includes("debit_card");
+  const boletoEnabled = settings.pagBank.enabledMethods.includes("boleto");
 
   return [
     `- Metodos PagBank habilitados: ${paymentMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    pixEnabled
+      ? "- Pix PagBank: pode ser resolvido no WhatsApp quando a venda vier do atendimento; na loja/checkout, use o Pix exibido pela ConnectyHub."
+      : "- Pix PagBank esta desativado; nao ofereca Pix.",
+    creditCardEnabled
+      ? "- Cartao de credito: use sempre o checkout seguro da ConnectyHub, nunca colete dados sensiveis no chat."
+      : "- Cartao de credito esta desativado; nao ofereca credito.",
+    debitCardEnabled
+      ? "- Cartao de debito: use sempre o checkout seguro da ConnectyHub com 3DS quando solicitado, nunca colete dados sensiveis no chat."
+      : "- Cartao de debito esta desativado; nao ofereca debito.",
+    boletoEnabled
+      ? "- Boleto: quando habilitado, direcione para o checkout da ConnectyHub."
+      : "- Boleto esta desativado; nao ofereca boleto.",
     `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
     settings.pagBank.recurringEnabled
-      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente."
+      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
       : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
   ];
 }
