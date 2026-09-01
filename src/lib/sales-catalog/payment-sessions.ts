@@ -904,6 +904,7 @@ function serializePagBankSessionSettings(settings: SalesCatalogPagBankSettings):
     pix_expiration_minutes: settings.pixExpirationMinutes,
     checkout_expiration_minutes: settings.checkoutExpirationMinutes,
     allow_buyer_edit: settings.allowBuyerEdit,
+    recurring_enabled: settings.recurringEnabled,
   };
 }
 

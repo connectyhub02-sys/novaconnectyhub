@@ -74,6 +74,8 @@ import {
   type ClientSalesCatalogShippingSettings,
   type ClientSalesCatalogWhatsappInstance,
   type SalesCatalogAttribute,
+  type SalesCatalogBillingCycle,
+  type SalesCatalogBillingInterval,
   type SalesCatalogBusinessType,
   type SalesCatalogCheckoutStage,
   type SalesCatalogCommercialFlowType,
@@ -557,6 +559,8 @@ const salesCatalogHelpText: Record<string, string> = {
   "Valor promocional": "Preco de oferta exibido quando houver promocao ativa.",
   "Descricao comercial": "Explique o que e, beneficios, condicoes, entrega, garantia e objeccoes comuns.",
   "Oferta e fechamento": "Configure preco promocional, cupom, validade e chamada de venda.",
+  "Modelo de cobranca": "Escolha pagamento unico para produtos avulsos ou recorrente para planos, clubes, assinaturas e servicos continuos.",
+  Periodicidade: "Defina de quanto em quanto tempo o produto recorrente deve ser cobrado.",
   Promocional: "Preco de oferta que pode substituir o valor principal durante uma campanha.",
   Cupom: "Codigo curto que o agente pode informar ao cliente.",
   Inicio: "Data em que a oferta passa a valer.",
@@ -641,6 +645,8 @@ export function SalesCatalogConsole({
   const [pageImportantNotice, setPageImportantNotice] = useState("");
   const [pageQuickDetails, setPageQuickDetails] = useState<ProductPageQuickDetailDraft[]>([]);
   const [salePrice, setSalePrice] = useState("");
+  const [billingCycle, setBillingCycle] = useState<SalesCatalogBillingCycle>("one_time");
+  const [billingInterval, setBillingInterval] = useState<SalesCatalogBillingInterval>("month");
   const [saleStartsAt, setSaleStartsAt] = useState("");
   const [saleEndsAt, setSaleEndsAt] = useState("");
   const [couponCode, setCouponCode] = useState("");
@@ -1746,6 +1752,8 @@ export function SalesCatalogConsole({
       formData.set("productUrl", productUrl);
       formData.set("externalButtonLabel", externalButtonLabel);
       formData.set("salePrice", salePrice);
+      formData.set("billingCycle", billingCycle);
+      formData.set("billingInterval", billingInterval);
       formData.set("pageFullDescription", pageFullDescription);
       formData.set("pageUsage", pageUsage);
       formData.set("pageShippingInfo", pageShippingInfo);
@@ -2662,6 +2670,8 @@ export function SalesCatalogConsole({
       value: detail.value,
     })));
     setSalePrice(item.offer.salePrice ?? "");
+    setBillingCycle(item.billingCycle);
+    setBillingInterval(item.billingInterval);
     setSaleStartsAt(item.offer.saleStartsAt ?? "");
     setSaleEndsAt(item.offer.saleEndsAt ?? "");
     setCouponCode(item.offer.couponCode ?? "");
@@ -2729,6 +2739,8 @@ export function SalesCatalogConsole({
     setPageImportantNotice("");
     setPageQuickDetails([]);
     setSalePrice("");
+    setBillingCycle("one_time");
+    setBillingInterval("month");
     setSaleStartsAt("");
     setSaleEndsAt("");
     setCouponCode("");
@@ -4615,12 +4627,13 @@ export function SalesCatalogConsole({
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
 
-            <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_130px_120px_130px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_120px_130px_110px_130px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="min-w-0">
                 <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
                 <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{title.trim() || "Novo produto"}</p>
               </div>
               <MiniStat label="preco" value={price.trim() || "Sem preco"} />
+              <MiniStat label="cobranca" value={formatBillingCycleWithInterval(billingCycle, billingInterval)} />
               <MiniStat label="status" value={status} />
               <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
                 <Upload className="h-3.5 w-3.5" />
@@ -4808,6 +4821,53 @@ export function SalesCatalogConsole({
             ) : null}
 
             {productFormTab === "pricing" ? (
+            <div className="grid gap-3">
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="mb-3 flex items-center gap-2">
+                <BadgePercent className="h-4 w-4 text-cyan-300" />
+                <FieldLabel>Modelo de cobranca</FieldLabel>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <FieldLabel>Modelo de cobranca</FieldLabel>
+                  <select
+                    value={billingCycle}
+                    onChange={(event) => {
+                      const nextCycle = event.target.value as SalesCatalogBillingCycle;
+                      setBillingCycle(nextCycle);
+                      setBillingInterval(nextCycle === "recurring" ? billingInterval : "month");
+                      if (nextCycle === "recurring" && fulfillmentMode !== "subscription") {
+                        setFulfillmentMode("subscription");
+                      }
+                    }}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="one_time">Pagamento unico</option>
+                    <option value="recurring">Recorrente</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <FieldLabel>Periodicidade</FieldLabel>
+                  <select
+                    value={billingInterval}
+                    disabled={billingCycle !== "recurring"}
+                    onChange={(event) => setBillingInterval(event.target.value as SalesCatalogBillingInterval)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="week">Semanal</option>
+                    <option value="month">Mensal</option>
+                    <option value="quarter">Trimestral</option>
+                    <option value="year">Anual</option>
+                  </select>
+                </label>
+              </div>
+              <p className="mt-3 text-[11px] leading-4 text-slate-500">
+                A recorrencia tambem precisa estar habilitada em Integracoes / PagBank para o agente vender como assinatura.
+              </p>
+            </div>
+
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="mb-3 flex items-center gap-2">
                 <BadgePercent className="h-4 w-4 text-cyan-300" />
@@ -4880,6 +4940,7 @@ export function SalesCatalogConsole({
                   style={{ borderColor: "var(--ch-border)" }}
                 />
               </div>
+            </div>
             </div>
             ) : null}
 
@@ -7479,6 +7540,7 @@ function CatalogItemCard({
             {item.storeFeatured ? <NeonBadge tone="green">Destaque loja{item.storeFeaturedRank ? ` #${item.storeFeaturedRank}` : ""}</NeonBadge> : null}
             {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
             <NeonBadge tone={salesDestinationTone(item.salesDestination)}>{formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
+            <NeonBadge tone={item.billingCycle === "recurring" ? "violet" : "zinc"}>{formatBillingCycleWithInterval(item.billingCycle, item.billingInterval)}</NeonBadge>
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
             {item.assignedAgentIds.length > 0 || item.assignedWhatsappInstanceIds.length > 0 ? (
               <NeonBadge tone="violet">{item.assignedAgentIds.length || item.assignedWhatsappInstanceIds.length} agente(s)</NeonBadge>
@@ -8009,6 +8071,18 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-[12px] font-semibold text-slate-200">{value}</p>
     </div>
   );
+}
+
+function formatBillingCycleWithInterval(cycle: SalesCatalogBillingCycle, interval: SalesCatalogBillingInterval) {
+  if (cycle === "one_time") return "pagamento unico";
+  return `recorrente ${formatBillingInterval(interval)}`;
+}
+
+function formatBillingInterval(value: SalesCatalogBillingInterval) {
+  if (value === "week") return "semanal";
+  if (value === "quarter") return "trimestral";
+  if (value === "year") return "anual";
+  return "mensal";
 }
 
 function SalesProductFormTabs({

@@ -2069,7 +2069,7 @@ function PagBankGuidedCard({
         <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
         <PaymentGuideStep done={connected} index="2" title="PagBank" body="Login e autorizacao" />
         <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
-        <PaymentGuideStep done={connected && pagBankSettings.enabledMethods.length > 0} index="4" title="Checkout" body={formatPagBankPaymentMethods(pagBankSettings.enabledMethods)} />
+        <PaymentGuideStep done={connected && pagBankSettings.enabledMethods.length > 0} index="4" title="Checkout" body={formatPagBankCheckoutSummary(pagBankSettings)} />
       </div>
 
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -2167,6 +2167,18 @@ function PagBankGuidedCard({
             );
           })}
         </div>
+
+        <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+          <span className="min-w-0">
+            <span className="block font-semibold text-slate-200">Pagamento recorrente</span>
+            <span className="mt-1 block text-[11px] leading-4 text-slate-500">Permite que o agente trate produtos recorrentes como assinatura quando o produto tambem estiver marcado como recorrente.</span>
+          </span>
+          <input
+            checked={pagBankSettings.recurringEnabled}
+            type="checkbox"
+            onChange={(event) => onPreferenceChange({ recurringEnabled: event.target.checked })}
+          />
+        </label>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <label className="block">
@@ -2281,6 +2293,7 @@ function normalizePagBankPreferenceDraft(settings: SalesCatalogPagBankSettings):
     pixExpirationMinutes: clampNumber(settings.pixExpirationMinutes, 5, 43200),
     checkoutExpirationMinutes: clampNumber(settings.checkoutExpirationMinutes, 5, 43200),
     allowBuyerEdit: settings.allowBuyerEdit,
+    recurringEnabled: Boolean(settings.recurringEnabled),
   };
 }
 
@@ -2301,6 +2314,12 @@ function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]
     .map((option) => option.label);
 
   return labels.length ? labels.join(", ") : "Pix";
+}
+
+function formatPagBankCheckoutSummary(settings: SalesCatalogPagBankSettings) {
+  const paymentMethods = formatPagBankPaymentMethods(settings.enabledMethods);
+
+  return settings.recurringEnabled ? `${paymentMethods}; recorrencia` : paymentMethods;
 }
 
 function GuidedOAuthCard({

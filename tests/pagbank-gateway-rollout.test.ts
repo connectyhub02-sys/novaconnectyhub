@@ -20,6 +20,8 @@ const platformBillingAdminSource = read("src/lib/billing/platform-billing-admin.
 const dashboardSalesCatalogSource = read("src/app/api/dashboard/sales-catalog/route.ts");
 const salesCatalogConsoleSource = read("src/components/connectyhub-os/sales-catalog-console.tsx");
 const salesCatalogSharedSource = read("src/lib/sales-catalog/shared.ts");
+const commerceAgentSource = read("src/lib/commerce-agent/server.ts");
+const whatsappAgentRuntimeSource = read("src/lib/whatsapp/agent-runtime.ts");
 const platformProductsSource = read("src/lib/platform-products.ts");
 const platformProductsApiSource = read("src/app/api/admin/platform-products/route.ts");
 const platformProductsConsoleSource = read("src/components/connectyhub-os/platform-products-console.tsx");
@@ -111,12 +113,17 @@ describe("PagBank gateway rollout", () => {
   it("exposes maintainable PagBank payment preferences for client stores", () => {
     expect(salesCatalogSharedSource).toContain("SalesCatalogPagBankSettings");
     expect(salesCatalogSharedSource).toContain("salesCatalogPagBankPaymentMethodOptions");
+    expect(salesCatalogSharedSource).toContain("recurringEnabled: boolean");
     expect(paymentSessionsSource).toContain("pagbank_settings");
+    expect(paymentSessionsSource).toContain("recurring_enabled: settings.recurringEnabled");
     expect(dashboardSalesCatalogSource).toContain("normalizePagBankSettings");
     expect(dashboardSalesCatalogSource).toContain("serializePagBankSettings");
     expect(dashboardSalesCatalogSource).toContain("save_pagbank_settings");
+    expect(dashboardSalesCatalogSource).toContain("PagBank regra do agente");
+    expect(dashboardSalesCatalogSource).toContain("recurring_enabled: settings.recurringEnabled");
     expect(integrationsSource).toContain("pagBankPreferences");
     expect(clientConsoleSource).toContain("Preferencias de pagamento");
+    expect(clientConsoleSource).toContain("Pagamento recorrente");
     expect(clientConsoleSource).toContain("Salvar preferencias PagBank");
     expect(clientConsoleSource).toContain("togglePagBankPreferenceMethod");
     expect(clientConsoleSource).toContain("Nome no extrato");
@@ -136,5 +143,19 @@ describe("PagBank gateway rollout", () => {
     expect(platformProductsConsoleSource).toContain("Pagamento unico");
     expect(platformProductsConsoleSource).toContain("Recorrente");
     expect(planCheckoutSource).toContain("billingCycle === \"one_time\"");
+  });
+
+  it("keeps client product billing model and agent payment policy explicit", () => {
+    expect(salesCatalogSharedSource).toContain("formatSalesCatalogBillingCycleWithInterval");
+    expect(salesCatalogSharedSource).toContain("Cobranca:");
+    expect(dashboardSalesCatalogSource).toContain("billing_cycle: billingCycle");
+    expect(dashboardSalesCatalogSource).toContain("billing_interval: billingInterval");
+    expect(salesCatalogConsoleSource).toContain("Modelo de cobranca");
+    expect(salesCatalogConsoleSource).toContain("Pagamento unico");
+    expect(salesCatalogConsoleSource).toContain("Recorrente");
+    expect(commerceAgentSource).toContain("Metodos PagBank habilitados");
+    expect(commerceAgentSource).toContain("O agente so pode oferecer formas de pagamento habilitadas");
+    expect(whatsappAgentRuntimeSource).toContain("Metodos PagBank habilitados");
+    expect(whatsappAgentRuntimeSource).toContain("cobranca interna");
   });
 });

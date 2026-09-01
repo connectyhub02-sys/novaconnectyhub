@@ -1826,6 +1826,7 @@ function readPagBankSettings(value: unknown, fallback: SalesCatalogPagBankSettin
       43200,
     ),
     allowBuyerEdit: readNullableBoolean(record.allow_buyer_edit ?? record.allowBuyerEdit) ?? fallback.allowBuyerEdit,
+    recurringEnabled: readNullableBoolean(record.recurring_enabled ?? record.recurringEnabled) ?? fallback.recurringEnabled,
   };
 }
 

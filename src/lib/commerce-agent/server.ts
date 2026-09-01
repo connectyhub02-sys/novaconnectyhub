@@ -7,10 +7,15 @@ import {
 } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
+  formatSalesCatalogBillingCycleWithInterval,
   isSalesCatalogDisplayableProduct,
+  salesCatalogPagBankPaymentMethodOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogSettings,
+  type SalesCatalogBillingCycle,
+  type SalesCatalogBillingInterval,
   type SalesCatalogCommerceAgentSurface,
+  type SalesCatalogPagBankPaymentMethod,
 } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
@@ -174,6 +179,8 @@ type OfferProduct = {
   description: string | null;
   tag: string | null;
   priceLabel: string | null;
+  billingCycle: SalesCatalogBillingCycle;
+  billingInterval: SalesCatalogBillingInterval;
 };
 
 type CommerceAgentPromptContext = {
@@ -1879,6 +1886,8 @@ function mapOfferProduct(item: ClientSalesCatalogItem) {
     description: item.description,
     tag: item.tag,
     priceLabel: price !== null ? formatCurrency(price) : null,
+    billingCycle: item.billingCycle,
+    billingInterval: item.billingInterval,
   } satisfies OfferProduct;
 }
 
@@ -1938,6 +1947,7 @@ function buildCommerceAgentSystemInstruction(
     `- Order bumps configurados: ${context.settings.orderBumps.enabled ? "ativos" : "inativos"}.`,
     `- Pre-adicionar ao carrinho: ${context.settings.commerceAgent.allowAutoAddToCart ? "permitido pela configuracao" : "nao permitido"}.`,
     `- Checkout silencioso: ${context.settings.commerceAgent.checkoutQuietMode ? "sim" : "nao"}.`,
+    ...buildPagBankCommercePolicyLines(context.settings),
   ].join("\n");
 }
 
@@ -2297,6 +2307,7 @@ function formatRecentProductViews(products: OfferProduct[], currentProductId: st
     .map((product, index) => [
       `- ${index === 0 && product.id === currentProductId ? "Produto atual" : "Produto visto"}: ${product.title}`,
       product.priceLabel,
+      formatOfferProductBilling(product),
       product.category,
       product.description ? preview(product.description, 140) : null,
     ].filter(Boolean).join(" | "))
@@ -2311,6 +2322,7 @@ function formatProductContext(product: OfferProduct | null) {
   return [
     `- Produto atual: ${product.title}`,
     product.priceLabel ? `- Preco: ${product.priceLabel}` : null,
+    `- Cobranca: ${formatOfferProductBilling(product)}`,
     product.category ? `- Categoria: ${product.category}` : null,
     product.description ? `- Resumo: ${preview(product.description, 420)}` : null,
     product.tag ? `- Tag/catalogo: ${product.tag}` : null,
@@ -2340,6 +2352,7 @@ function formatOfferContext(
   return [
     `- Oferta candidata: ${offer.title}`,
     offer.priceLabel ? `- Preco: ${offer.priceLabel}` : null,
+    `- Cobranca: ${formatOfferProductBilling(offer)}`,
     offer.category ? `- Categoria: ${offer.category}` : null,
     manualBump ? "- Origem: order bump configurado no painel." : "- Origem: sugestao pelo catalogo/playbook.",
     "- Use esta oferta so se combinar com o pedido ou a duvida atual. Nao repita se ja foi oferecida recentemente.",
@@ -2359,10 +2372,36 @@ function formatCatalogContext(products: OfferProduct[], currentProductId: string
     .map((product) => [
       `- ${product.title}`,
       product.priceLabel,
+      formatOfferProductBilling(product),
       product.category,
       product.description ? preview(product.description, 120) : null,
     ].filter(Boolean).join(" | "))
     .join("\n");
+}
+
+function buildPagBankCommercePolicyLines(settings: ClientSalesCatalogSettings) {
+  const paymentMethods = formatPagBankPaymentMethods(settings.pagBank.enabledMethods);
+
+  return [
+    `- Metodos PagBank habilitados: ${paymentMethods}.`,
+    "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    settings.pagBank.recurringEnabled
+      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente."
+      : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
+  ];
+}
+
+function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
+  const labels = salesCatalogPagBankPaymentMethodOptions
+    .filter((option) => methods.includes(option.id))
+    .map((option) => option.label);
+
+  return labels.length > 0 ? labels.join(", ") : "Pix";
+}
+
+function formatOfferProductBilling(product: OfferProduct) {
+  return formatSalesCatalogBillingCycleWithInterval(product.billingCycle, product.billingInterval);
 }
 
 function readWhatsappMessageText(message: WhatsappConversationMessageRow) {

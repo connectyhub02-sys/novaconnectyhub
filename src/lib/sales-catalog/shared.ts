@@ -113,6 +113,7 @@ export type SalesCatalogPagBankSettings = {
   pixExpirationMinutes: number;
   checkoutExpirationMinutes: number;
   allowBuyerEdit: boolean;
+  recurringEnabled: boolean;
 };
 
 export type SalesCatalogOrderPolicy = {
@@ -820,6 +821,7 @@ export function createDefaultSalesCatalogPagBankSettings(): SalesCatalogPagBankS
     pixExpirationMinutes: 1440,
     checkoutExpirationMinutes: 60,
     allowBuyerEdit: true,
+    recurringEnabled: false,
   };
 }
 
@@ -923,6 +925,8 @@ export type SalesCatalogContentInput = {
   fulfillment?: SalesCatalogProductFulfillment | null;
   shipping?: SalesCatalogProductShipping | null;
   pageContent?: SalesCatalogProductPageContent | null;
+  billingCycle?: SalesCatalogBillingCycle | null;
+  billingInterval?: SalesCatalogBillingInterval | null;
   salesDestination?: SalesCatalogSalesDestination | null;
   productUrl?: string | null;
   externalLinkButtonTag?: string | null;
@@ -1240,11 +1244,29 @@ export function formatSalesCatalogSalesDestination(destination: SalesCatalogSale
   return "checkout ConnectyHub";
 }
 
+export function formatSalesCatalogBillingInterval(interval: SalesCatalogBillingInterval) {
+  if (interval === "week") return "semanal";
+  if (interval === "quarter") return "trimestral";
+  if (interval === "year") return "anual";
+  return "mensal";
+}
+
+export function formatSalesCatalogBillingCycleWithInterval(
+  cycle: SalesCatalogBillingCycle,
+  interval: SalesCatalogBillingInterval,
+) {
+  if (cycle === "recurring") return `recorrente ${formatSalesCatalogBillingInterval(interval)}`;
+  return "pagamento unico";
+}
+
 export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
   const lines = [
     `Produto/oferta: ${input.title}`,
     input.category ? `Categoria: ${input.category}` : "",
     input.price ? `Preco: ${input.price}${input.currency ? ` ${input.currency}` : ""}` : "",
+    input.billingCycle
+      ? `Cobranca: ${formatSalesCatalogBillingCycleWithInterval(input.billingCycle, input.billingInterval ?? "month")}`
+      : "",
     input.salesDestination ? `Destino da venda: ${formatSalesCatalogSalesDestination(input.salesDestination)}` : "",
     input.productUrl ? `Link externo: ${input.productUrl}` : "",
     input.externalLinkButtonTag ? `Botao externo do agente: ${input.externalLinkButtonTag}` : "",
@@ -1317,6 +1339,7 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
   const lines = [
     item.title,
     item.price ? `Valor: ${item.price}${item.currency ? ` ${item.currency}` : ""}` : "",
+    `Cobranca: ${formatSalesCatalogBillingCycleWithInterval(item.billingCycle, item.billingInterval)}`,
     `Destino da venda: ${formatSalesCatalogSalesDestination(item.salesDestination)}`,
     item.salesDestination === "external_site" && item.externalLinkButtonTag
       ? `Botao para enviar ao lead: ${item.externalLinkButtonTag}`

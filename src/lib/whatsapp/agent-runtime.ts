@@ -52,17 +52,20 @@ import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import {
+  formatSalesCatalogBillingCycleWithInterval,
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogFulfillmentStatus,
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
   formatSalesCatalogStockStatus,
+  salesCatalogPagBankPaymentMethodOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogItemAttribute,
   type SalesCatalogMedia,
+  type SalesCatalogPagBankPaymentMethod,
   type SalesCatalogShippingQuote,
 } from "@/lib/sales-catalog/shared";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
@@ -3756,6 +3759,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
         item.fulfillment.schedulingRequired ? "precisa agendar" : "",
         item.fulfillment.serviceDuration ? `duracao/prazo ${item.fulfillment.serviceDuration}` : "",
       ].filter(Boolean).join(", ");
+      const billingSummary = formatSalesCatalogBillingCycleWithInterval(item.billingCycle, item.billingInterval);
       const destinationSummary = formatRuntimeSalesCatalogDestinationForPrompt(item);
       const externalSummary = item.salesDestination === "external_site"
         ? item.externalLinkButtonTag
@@ -3764,7 +3768,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
             ? ` | site externo: ${item.productUrl}`
             : " | botao externo pendente"
         : "";
-      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
+      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
     }),
   ];
 }
@@ -3775,12 +3779,21 @@ function formatRuntimeSalesCatalogDestinationForPrompt(item: RuntimeSalesCatalog
   return "pagamento interno automatico";
 }
 
+function formatRuntimePagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
+  const labels = salesCatalogPagBankPaymentMethodOptions
+    .filter((option) => methods.includes(option.id))
+    .map((option) => option.label);
+
+  return labels.length > 0 ? labels.join(", ") : "Pix";
+}
+
 function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | null) {
   if (!settings?.configured) {
     return [];
   }
 
   const activePaymentMethods = settings.paymentMethods.filter((method) => method.enabled);
+  const pagBankMethods = formatRuntimePagBankPaymentMethods(settings.pagBank.enabledMethods);
   const requiredFields = settings.leadDataPolicy.requiredFields.length > 0
     ? settings.leadDataPolicy.requiredFields.join(", ")
     : "somente os dados essenciais do pedido";
@@ -3796,6 +3809,12 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     ...activePaymentMethods
       .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
       .filter(Boolean),
+    `- Metodos PagBank habilitados: ${pagBankMethods}.`,
+    "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    settings.pagBank.recurringEnabled
+      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente."
+      : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
     settings.orderPolicy.minimumOrderValue ? `- Pedido minimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
     `- Reserva do pedido: ${formatRuntimeReservationPolicy(settings.orderPolicy.reservationPolicy)}.`,
     `- Pode fechar sem pagamento: ${settings.orderPolicy.allowOrderWithoutPayment ? "sim" : "nao"}.`,

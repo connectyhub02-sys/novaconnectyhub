@@ -38,6 +38,8 @@ import {
   salesCatalogPagBankPaymentMethodOptions,
   salesCatalogBusinessTemplates,
   type SalesCatalogAttribute,
+  type SalesCatalogBillingCycle,
+  type SalesCatalogBillingInterval,
   type SalesCatalogBusinessType,
   type SalesCatalogItemStatus,
   type SalesCatalogItemAttribute,
@@ -218,6 +220,10 @@ export async function POST(request: NextRequest) {
   const fulfillment = readProductFulfillmentPayload(formData);
   const shipping = readProductShippingPayload(formData);
   const pageContent = readProductPageContentPayload(formData);
+  const billingCycle = normalizeBillingCycle(readFormString(formData.get("billingCycle")));
+  const billingInterval = billingCycle === "recurring"
+    ? normalizeBillingInterval(readFormString(formData.get("billingInterval")))
+    : "month";
   const skus = readProductSkusPayload(formData.get("skus"));
   const storeFeatured = readFormBoolean(formData.get("storeFeatured")) ?? false;
   const storeFeaturedRank = storeFeatured
@@ -416,6 +422,8 @@ export async function POST(request: NextRequest) {
       fulfillment,
       shipping,
       pageContent,
+      billingCycle,
+      billingInterval,
       salesDestination,
       productUrl,
       externalLinkButtonTag: trackedLink?.tag ?? null,
@@ -451,6 +459,8 @@ export async function POST(request: NextRequest) {
       fulfillment: serializeProductFulfillment(fulfillment),
       shipping: serializeProductShipping(shipping),
       page_content: serializeProductPageContent(pageContent),
+      billing_cycle: billingCycle,
+      billing_interval: billingInterval,
       media: serializeSalesCatalogMedia(media),
       skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,
@@ -529,6 +539,8 @@ export async function POST(request: NextRequest) {
           fulfillment,
           shipping,
           pageContent,
+          billingCycle,
+          billingInterval,
           salesDestination,
           productUrl,
           externalLinkButtonTag: trackedLink?.tag ?? null,
@@ -1120,6 +1132,8 @@ async function saveCatalogSettings(input: {
     variationMedia ? "Midia por variacao: sim" : "Midia por variacao: nao",
     enabledPayments.length ? `Pagamentos: ${enabledPayments.map((method) => method.label).join(", ")}` : "Pagamentos: acionar humano",
     `PagBank: ${pagBank.enabledMethods.join(", ")}`,
+    "PagBank regra do agente: ofereca somente os metodos habilitados nesta configuracao; nao ofereca Pix, cartao, debito ou boleto quando o metodo estiver desativado.",
+    `PagBank recorrencia: ${pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
     pagBank.softDescriptor ? `PagBank descriptor: ${pagBank.softDescriptor}` : "",
     `Reserva do pedido: ${formatReservationPolicy(orderPolicy.reservationPolicy)}`,
     orderPolicy.minimumOrderValue ? `Pedido minimo: ${orderPolicy.minimumOrderValue}` : "",
@@ -1310,10 +1324,14 @@ function mergePagBankSettingsContent(content: string, pagBank: SalesCatalogPagBa
       return !normalized.startsWith("pagbank:")
         && !normalized.startsWith("pagbank descriptor:")
         && !normalized.startsWith("pagbank parcelas:")
-        && !normalized.startsWith("pagbank pix:");
+        && !normalized.startsWith("pagbank pix:")
+        && !normalized.startsWith("pagbank recorrencia:")
+        && !normalized.startsWith("pagbank regra do agente:");
     });
 
   lines.push(`PagBank: ${pagBank.enabledMethods.join(", ")}`);
+  lines.push("PagBank regra do agente: ofereca somente os metodos habilitados nesta configuracao; nao ofereca Pix, cartao, debito ou boleto quando o metodo estiver desativado.");
+  lines.push(`PagBank recorrencia: ${pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`);
   lines.push(`PagBank parcelas: maximo ${pagBank.maxInstallments}, sem juros ate ${pagBank.interestFreeInstallments}`);
   if (pagBank.softDescriptor) {
     lines.push(`PagBank descriptor: ${pagBank.softDescriptor}`);
@@ -3293,6 +3311,15 @@ function normalizeSalesDestination(value: string | null): SalesCatalogSalesDesti
   return "connectyhub_checkout";
 }
 
+function normalizeBillingCycle(value: string | null): SalesCatalogBillingCycle {
+  return value === "recurring" ? "recurring" : "one_time";
+}
+
+function normalizeBillingInterval(value: string | null): SalesCatalogBillingInterval {
+  if (value === "week" || value === "quarter" || value === "year") return value;
+  return "month";
+}
+
 function normalizeButtonLabel(value: string | null) {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized.length >= 2 ? normalized.slice(0, 48) : null;
@@ -3638,6 +3665,7 @@ function normalizePagBankSettings(value: unknown, fallback: SalesCatalogPagBankS
       43200,
     ) ?? fallback.checkoutExpirationMinutes,
     allowBuyerEdit: readBoolean(record.allowBuyerEdit ?? record.allow_buyer_edit) ?? fallback.allowBuyerEdit,
+    recurringEnabled: readBoolean(record.recurringEnabled ?? record.recurring_enabled) ?? fallback.recurringEnabled,
   };
 }
 
@@ -3854,6 +3882,7 @@ function serializePagBankSettings(settings: SalesCatalogPagBankSettings) {
     pix_expiration_minutes: settings.pixExpirationMinutes,
     checkout_expiration_minutes: settings.checkoutExpirationMinutes,
     allow_buyer_edit: settings.allowBuyerEdit,
+    recurring_enabled: settings.recurringEnabled,
   };
 }
 
