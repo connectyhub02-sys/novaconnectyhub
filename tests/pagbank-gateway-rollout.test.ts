@@ -114,9 +114,14 @@ describe("PagBank gateway rollout", () => {
     expect(paymentSessionsSource).toContain("pagbank_settings");
     expect(dashboardSalesCatalogSource).toContain("normalizePagBankSettings");
     expect(dashboardSalesCatalogSource).toContain("serializePagBankSettings");
-    expect(salesCatalogConsoleSource).toContain("PagBank Checkout");
-    expect(salesCatalogConsoleSource).toContain("togglePagBankPaymentMethod");
-    expect(salesCatalogConsoleSource).toContain("Nome no extrato");
+    expect(dashboardSalesCatalogSource).toContain("save_pagbank_settings");
+    expect(integrationsSource).toContain("pagBankPreferences");
+    expect(clientConsoleSource).toContain("Preferencias de pagamento");
+    expect(clientConsoleSource).toContain("Salvar preferencias PagBank");
+    expect(clientConsoleSource).toContain("togglePagBankPreferenceMethod");
+    expect(clientConsoleSource).toContain("Nome no extrato");
+    expect(salesCatalogConsoleSource).not.toContain("PagBank Checkout");
+    expect(salesCatalogConsoleSource).not.toContain("togglePagBankPaymentMethod");
   });
 
   it("separates recurring plans from one-time or recurring ConnectyHub products", () => {

@@ -61,7 +61,6 @@ import {
   resolveSalesCatalogStorefrontFontFamily,
   resolveSalesCatalogCheckoutStatus,
   salesCatalogLeadDataFields,
-  salesCatalogPagBankPaymentMethodOptions,
   salesCatalogBusinessTemplates,
   salesCatalogCommerceAgentModeOptions,
   salesCatalogCommerceAgentSurfaceOptions,
@@ -89,7 +88,6 @@ import {
   type SalesCatalogOrderStatus,
   type SalesCatalogOrderPolicy,
   type SalesCatalogPaymentMethod,
-  type SalesCatalogPagBankPaymentMethod,
   type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
   type SalesCatalogPaymentSessionStatus,
@@ -1274,39 +1272,6 @@ export function SalesCatalogConsole({
     if (!category) return;
 
     setCategoryIconPicker(category);
-  }
-
-  function updatePaymentMethod(methodId: SalesCatalogPaymentMethod["id"], patch: Partial<SalesCatalogPaymentMethod>) {
-    setSettingsDraft((current) => ({
-      ...current,
-      paymentMethods: current.paymentMethods.map((method) => (
-        method.id === methodId ? { ...method, ...patch } : method
-      )),
-    }));
-  }
-
-  function updatePagBankSettings(patch: Partial<SalesCatalogPagBankSettings>) {
-    setSettingsDraft((current) => ({
-      ...current,
-      pagBank: { ...current.pagBank, ...patch },
-    }));
-  }
-
-  function togglePagBankPaymentMethod(methodId: SalesCatalogPagBankPaymentMethod) {
-    setSettingsDraft((current) => {
-      const exists = current.pagBank.enabledMethods.includes(methodId);
-      const enabledMethods = exists
-        ? current.pagBank.enabledMethods.filter((item) => item !== methodId)
-        : [...current.pagBank.enabledMethods, methodId];
-
-      return {
-        ...current,
-        pagBank: {
-          ...current.pagBank,
-          enabledMethods: enabledMethods.length > 0 ? enabledMethods : ["pix"],
-        },
-      };
-    });
   }
 
   function updateOrderPolicy(patch: Partial<SalesCatalogOrderPolicy>) {
@@ -3214,148 +3179,6 @@ export function SalesCatalogConsole({
                   </div>
                 ))}
               </div>
-
-              <AccordionSection id="sales-catalog-tour-payments" icon={CreditCard} title="Pagamentos no WhatsApp" tone="amber">
-                <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
-                  {settingsDraft.paymentMethods.map((method) => (
-                    <div key={method.id} className="grid gap-2 py-3 first:pt-0 last:pb-0" style={{ borderColor: "var(--ch-border)" }}>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <label className="flex items-center gap-2 text-[12px] font-semibold text-slate-200">
-                          <input
-                            checked={method.enabled}
-                            type="checkbox"
-                            onChange={(event) => updatePaymentMethod(method.id, { enabled: event.target.checked })}
-                          />
-                          {method.label}
-                        </label>
-                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
-                          <input
-                            checked={method.requiresProof}
-                            type="checkbox"
-                            onChange={(event) => updatePaymentMethod(method.id, { requiresProof: event.target.checked })}
-                          />
-                          Comprovante
-                        </label>
-                      </div>
-                      <input
-                        value={method.instructions ?? ""}
-                        onChange={(event) => updatePaymentMethod(method.id, { instructions: event.target.value.slice(0, 240) })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        placeholder="Regra que o agente deve seguir"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">
-                        PagBank Checkout
-                      </div>
-                      <p className="mt-1 text-[12px] font-semibold text-slate-200">
-                        Preferencias da loja
-                      </p>
-                    </div>
-                    <QrCode className="h-4 w-4 text-amber-200" />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {salesCatalogPagBankPaymentMethodOptions.map((option) => {
-                      const checked = settingsDraft.pagBank.enabledMethods.includes(option.id);
-
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => togglePagBankPaymentMethod(option.id)}
-                          className={cn(
-                            "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[11px] font-semibold transition",
-                            checked
-                              ? "border-amber-300/55 bg-amber-300/12 text-amber-100"
-                              : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
-                          )}
-                          style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
-                        >
-                          {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                    <label className="block">
-                      <FieldLabel>Parcelas maximas</FieldLabel>
-                      <input
-                        value={settingsDraft.pagBank.maxInstallments}
-                        onChange={(event) => updatePagBankSettings({
-                          maxInstallments: clampNumber(parseOptionalNumber(event.target.value), 1, 12),
-                        })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        inputMode="numeric"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </label>
-                    <label className="block">
-                      <FieldLabel>Sem juros ate</FieldLabel>
-                      <input
-                        value={settingsDraft.pagBank.interestFreeInstallments}
-                        onChange={(event) => updatePagBankSettings({
-                          interestFreeInstallments: clampNumber(
-                            parseOptionalNumber(event.target.value),
-                            0,
-                            settingsDraft.pagBank.maxInstallments,
-                          ),
-                        })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        inputMode="numeric"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </label>
-                    <label className="block">
-                      <FieldLabel>Nome no extrato</FieldLabel>
-                      <input
-                        value={settingsDraft.pagBank.softDescriptor ?? ""}
-                        onChange={(event) => updatePagBankSettings({ softDescriptor: event.target.value.slice(0, 17) })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        placeholder="Ate 17 caracteres"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </label>
-                    <label className="block">
-                      <FieldLabel>Pix expira em</FieldLabel>
-                      <input
-                        value={settingsDraft.pagBank.pixExpirationMinutes}
-                        onChange={(event) => updatePagBankSettings({
-                          pixExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
-                        })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        inputMode="numeric"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </label>
-                    <label className="block">
-                      <FieldLabel>Checkout expira em</FieldLabel>
-                      <input
-                        value={settingsDraft.pagBank.checkoutExpirationMinutes}
-                        onChange={(event) => updatePagBankSettings({
-                          checkoutExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
-                        })}
-                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        inputMode="numeric"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                    </label>
-                    <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                      <span className="text-slate-300">Cliente edita dados</span>
-                      <input
-                        checked={settingsDraft.pagBank.allowBuyerEdit}
-                        type="checkbox"
-                        onChange={(event) => updatePagBankSettings({ allowBuyerEdit: event.target.checked })}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </AccordionSection>
 
               <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet">
                 <div className="grid gap-3 lg:grid-cols-2">

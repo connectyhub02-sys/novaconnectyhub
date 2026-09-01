@@ -9,11 +9,13 @@ import {
   CalendarDays,
   CheckCircle2,
   Copy,
+  CreditCard,
   ExternalLink,
   Link2,
   Loader2,
   PackageCheck,
   PlugZap,
+  QrCode,
   Save,
   Send,
   ShieldCheck,
@@ -29,11 +31,18 @@ import type {
   ClientIntegrationCredentialSnapshot,
   ClientGrowthIntegrationAsset,
   ClientIntegrationHubState,
+  ClientIntegrationPagBankPreference,
   ClientIntegrationProvider,
   ClientIntegrationWebhookEndpoint,
   IntegrationCategory,
   IntegrationConnectionStatus,
 } from "@/lib/client-os/integrations";
+import {
+  createDefaultSalesCatalogPagBankSettings,
+  salesCatalogPagBankPaymentMethodOptions,
+  type SalesCatalogPagBankPaymentMethod,
+  type SalesCatalogPagBankSettings,
+} from "@/lib/sales-catalog/shared";
 import {
   metaFeatureComingSoonDetail,
   metaFeatureComingSoonMessage,
@@ -58,6 +67,11 @@ type CreatedWebhookResponse = {
 type SavedCredentialsResponse = {
   credentials?: ClientIntegrationCredentialSnapshot[];
   connection?: ClientIntegrationConnection;
+  error?: string;
+};
+
+type SavedPagBankPreferencesResponse = {
+  pagBankPreferences?: ClientIntegrationPagBankPreference;
   error?: string;
 };
 
@@ -404,6 +418,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [creatingWebhook, setCreatingWebhook] = useState(false);
   const [connectingPagBank, setConnectingPagBank] = useState(false);
   const [disconnectingPagBank, setDisconnectingPagBank] = useState(false);
+  const [pagBankPreferences, setPagBankPreferences] = useState(state.pagBankPreferences);
+  const [pagBankSettingsDrafts, setPagBankSettingsDrafts] = useState<Record<string, SalesCatalogPagBankSettings>>({});
+  const [savingPagBankPreferences, setSavingPagBankPreferences] = useState(false);
   const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
@@ -455,6 +472,18 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }, [credentialSnapshots]);
   const pagBankConnection = connectionByProvider.get("pagbank");
   const pagBankConnected = pagBankConnection?.status === "connected";
+  const selectedPagBankPreference = useMemo(
+    () => pagBankPreferences.find((preference) => preference.companyId === selectedCompanyId) ?? null,
+    [pagBankPreferences, selectedCompanyId],
+  );
+  const pagBankSettingsDraft = useMemo(
+    () => clonePagBankSettings(
+      pagBankSettingsDrafts[selectedCompanyId]
+        ?? selectedPagBankPreference?.settings
+        ?? createDefaultSalesCatalogPagBankSettings(),
+    ),
+    [pagBankSettingsDrafts, selectedCompanyId, selectedPagBankPreference],
+  );
   const metaConnection = connectionByProvider.get("meta-ads");
   const googleConnection = connectionByProvider.get("google-growth");
   const webhookConnection = connectionByProvider.get("webhook-universal");
@@ -693,6 +722,102 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     setConnectingPagBank(true);
     setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do PagBank..." });
     window.setTimeout(() => setConnectingPagBank(false), 1500);
+  }
+
+  function updatePagBankPreferenceDraft(patch: Partial<SalesCatalogPagBankSettings>) {
+    if (!selectedCompanyId) return;
+
+    setPagBankSettingsDrafts((currentDrafts) => {
+      const current = clonePagBankSettings(
+        currentDrafts[selectedCompanyId]
+          ?? selectedPagBankPreference?.settings
+          ?? createDefaultSalesCatalogPagBankSettings(),
+      );
+      const next = { ...current, ...patch };
+
+      if (next.interestFreeInstallments > next.maxInstallments) {
+        next.interestFreeInstallments = next.maxInstallments;
+      }
+
+      return {
+        ...currentDrafts,
+        [selectedCompanyId]: next,
+      };
+    });
+  }
+
+  function togglePagBankPreferenceMethod(methodId: SalesCatalogPagBankPaymentMethod) {
+    if (!selectedCompanyId) return;
+
+    setPagBankSettingsDrafts((currentDrafts) => {
+      const current = clonePagBankSettings(
+        currentDrafts[selectedCompanyId]
+          ?? selectedPagBankPreference?.settings
+          ?? createDefaultSalesCatalogPagBankSettings(),
+      );
+      const exists = current.enabledMethods.includes(methodId);
+      const enabledMethods = exists
+        ? current.enabledMethods.filter((item) => item !== methodId)
+        : [...current.enabledMethods, methodId];
+
+      const next: SalesCatalogPagBankSettings = {
+        ...current,
+        enabledMethods: enabledMethods.length > 0 ? enabledMethods : ["pix"],
+      };
+
+      return {
+        ...currentDrafts,
+        [selectedCompanyId]: next,
+      };
+    });
+  }
+
+  async function savePagBankPreferences() {
+    if (!selectedCompanyId || savingPagBankPreferences) {
+      if (!selectedCompanyId) {
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de salvar o PagBank." });
+      }
+      return;
+    }
+
+    setSavingPagBankPreferences(true);
+    setNotice(null);
+
+    try {
+      const nextPagBank = normalizePagBankPreferenceDraft(pagBankSettingsDraft);
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_pagbank_settings",
+          companyId: selectedCompanyId,
+          pagBank: nextPagBank,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as SavedPagBankPreferencesResponse;
+
+      if (!response.ok || !data.pagBankPreferences) {
+        throw new Error(data.error ?? "Nao foi possivel salvar as preferencias PagBank.");
+      }
+
+      setPagBankPreferences((current) => [
+        data.pagBankPreferences!,
+        ...current.filter((preference) => preference.companyId !== data.pagBankPreferences!.companyId),
+      ]);
+      setPagBankSettingsDrafts((current) => {
+        const next = { ...current };
+        delete next[data.pagBankPreferences!.companyId];
+        return next;
+      });
+      setNotice({ tone: "success", message: "Preferencias PagBank salvas para esta empresa." });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao salvar preferencias PagBank.",
+      });
+    } finally {
+      setSavingPagBankPreferences(false);
+    }
   }
 
   function handleGuidedOAuthConnectClick(providerId: "meta-ads" | "google-growth", event: MouseEvent<HTMLAnchorElement>) {
@@ -1377,10 +1502,15 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             connecting={connectingPagBank}
             disconnecting={disconnectingPagBank}
             lastError={pagBankConnection?.lastError ?? null}
+            pagBankSettings={pagBankSettingsDraft}
+            savingPreferences={savingPagBankPreferences}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
             onConnect={handlePagBankConnectClick}
             onDisconnect={disconnectPagBank}
+            onPreferenceChange={updatePagBankPreferenceDraft}
+            onSavePreferences={savePagBankPreferences}
+            onTogglePaymentMethod={togglePagBankPreferenceMethod}
           />
 
           {metaFeatureLaunchPaused ? (
@@ -1897,20 +2027,30 @@ function PagBankGuidedCard({
   connecting,
   disconnecting,
   lastError,
+  pagBankSettings,
+  savingPreferences,
   selectedCompanyId,
   selectedCompanyName,
   onConnect,
   onDisconnect,
+  onPreferenceChange,
+  onSavePreferences,
+  onTogglePaymentMethod,
 }: {
   accountLabel: string | null;
   connected: boolean;
   connecting: boolean;
   disconnecting: boolean;
   lastError: string | null;
+  pagBankSettings: SalesCatalogPagBankSettings;
+  savingPreferences: boolean;
   selectedCompanyId: string;
   selectedCompanyName: string | null;
   onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onDisconnect: () => void;
+  onPreferenceChange: (patch: Partial<SalesCatalogPagBankSettings>) => void;
+  onSavePreferences: () => void;
+  onTogglePaymentMethod: (methodId: SalesCatalogPagBankPaymentMethod) => void;
 }) {
   return (
     <section id="pagbank-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -1929,7 +2069,7 @@ function PagBankGuidedCard({
         <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
         <PaymentGuideStep done={connected} index="2" title="PagBank" body="Login e autorizacao" />
         <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
-        <PaymentGuideStep done={connected} index="4" title="Checkout" body="Pix ativo" />
+        <PaymentGuideStep done={connected && pagBankSettings.enabledMethods.length > 0} index="4" title="Checkout" body={formatPagBankPaymentMethods(pagBankSettings.enabledMethods)} />
       </div>
 
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -1994,8 +2134,173 @@ function PagBankGuidedCard({
           Ja tenho conta abre a tela oficial de permissoes. Nao tenho conta abre o cadastro indicado; depois volte e autorize a conta PagBank.
         </p>
       </div>
+
+      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">checkout PagBank</p>
+            <p className="mt-1 text-[13px] font-semibold text-slate-100">Preferencias de pagamento</p>
+          </div>
+          <QrCode className="h-4 w-4 shrink-0 text-amber-200" />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {salesCatalogPagBankPaymentMethodOptions.map((option) => {
+            const checked = pagBankSettings.enabledMethods.includes(option.id);
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onTogglePaymentMethod(option.id)}
+                className={cn(
+                  "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[11px] font-semibold transition",
+                  checked
+                    ? "border-amber-300/55 bg-amber-300/12 text-amber-100"
+                    : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
+                )}
+                style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
+              >
+                {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />}
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <label className="block">
+            <PaymentPreferenceLabel>Parcelas maximas</PaymentPreferenceLabel>
+            <input
+              value={pagBankSettings.maxInstallments}
+              onChange={(event) => onPreferenceChange({
+                maxInstallments: clampNumber(parseOptionalNumber(event.target.value), 1, 12),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Sem juros ate</PaymentPreferenceLabel>
+            <input
+              value={pagBankSettings.interestFreeInstallments}
+              onChange={(event) => onPreferenceChange({
+                interestFreeInstallments: clampNumber(
+                  parseOptionalNumber(event.target.value),
+                  0,
+                  pagBankSettings.maxInstallments,
+                ),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Nome no extrato</PaymentPreferenceLabel>
+            <input
+              value={pagBankSettings.softDescriptor ?? ""}
+              onChange={(event) => onPreferenceChange({ softDescriptor: event.target.value.slice(0, 17) })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              placeholder="Ate 17 caracteres"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Pix expira em</PaymentPreferenceLabel>
+            <input
+              value={pagBankSettings.pixExpirationMinutes}
+              onChange={(event) => onPreferenceChange({
+                pixExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Checkout expira em</PaymentPreferenceLabel>
+            <input
+              value={pagBankSettings.checkoutExpirationMinutes}
+              onChange={(event) => onPreferenceChange({
+                checkoutExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+            <span className="text-slate-300">Cliente edita dados</span>
+            <input
+              checked={pagBankSettings.allowBuyerEdit}
+              type="checkbox"
+              onChange={(event) => onPreferenceChange({ allowBuyerEdit: event.target.checked })}
+            />
+          </label>
+        </div>
+
+        <button
+          type="button"
+          disabled={!selectedCompanyId || savingPreferences}
+          onClick={onSavePreferences}
+          className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {savingPreferences ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Salvar preferencias PagBank
+        </button>
+      </div>
     </section>
   );
+}
+
+function PaymentPreferenceLabel({ children }: { children: string }) {
+  return (
+    <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">
+      {children}
+    </span>
+  );
+}
+
+function clonePagBankSettings(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  return {
+    ...settings,
+    enabledMethods: [...settings.enabledMethods],
+  };
+}
+
+function normalizePagBankPreferenceDraft(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  const maxInstallments = clampNumber(settings.maxInstallments, 1, 12);
+
+  return {
+    enabledMethods: settings.enabledMethods.length > 0 ? [...settings.enabledMethods] : ["pix"],
+    maxInstallments,
+    interestFreeInstallments: clampNumber(settings.interestFreeInstallments, 0, maxInstallments),
+    softDescriptor: settings.softDescriptor?.trim().slice(0, 17) || null,
+    pixExpirationMinutes: clampNumber(settings.pixExpirationMinutes, 5, 43200),
+    checkoutExpirationMinutes: clampNumber(settings.checkoutExpirationMinutes, 5, 43200),
+    allowBuyerEdit: settings.allowBuyerEdit,
+  };
+}
+
+function parseOptionalNumber(value: string) {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampNumber(value: number | null | undefined, min: number, max: number) {
+  const normalized = Number.isFinite(value) ? Number(value) : min;
+  return Math.min(max, Math.max(min, Math.round(normalized)));
+}
+
+function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
+  const labels = salesCatalogPagBankPaymentMethodOptions
+    .filter((option) => methods.includes(option.id))
+    .map((option) => option.label);
+
+  return labels.length ? labels.join(", ") : "Pix";
 }
 
 function GuidedOAuthCard({

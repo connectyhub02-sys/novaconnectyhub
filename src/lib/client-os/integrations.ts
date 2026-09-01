@@ -3,9 +3,17 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import { listClientCompanies } from "@/lib/client-os/companies";
-import { listClientSalesCatalogPaymentIntegrations } from "@/lib/client-os/sales-catalog";
+import {
+  listClientSalesCatalogPaymentIntegrations,
+  listClientSalesCatalogSettings,
+} from "@/lib/client-os/sales-catalog";
 import { maintenanceIntegrations, type CredentialKind, type CredentialRequirement } from "@/lib/maintenance-vault";
-import type { ClientSalesCatalogPaymentIntegration } from "@/lib/sales-catalog/shared";
+import {
+  createDefaultSalesCatalogPagBankSettings,
+  type ClientSalesCatalogPaymentIntegration,
+  type ClientSalesCatalogSettings,
+  type SalesCatalogPagBankSettings,
+} from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   getGrowthIntegrationAssets,
@@ -114,6 +122,13 @@ export type ClientIntegrationActionLog = {
 
 export type ClientGrowthIntegrationAsset = GrowthIntegrationAsset;
 
+export type ClientIntegrationPagBankPreference = {
+  companyId: string;
+  settings: SalesCatalogPagBankSettings;
+  configured: boolean;
+  updatedAt: string | null;
+};
+
 export type ClientIntegrationHubState = {
   schemaReady: boolean;
   schemaMessage: string | null;
@@ -128,6 +143,7 @@ export type ClientIntegrationHubState = {
   webhookEndpoints: ClientIntegrationWebhookEndpoint[];
   growthAssets: ClientGrowthIntegrationAsset[];
   growthAssetsReady: boolean;
+  pagBankPreferences: ClientIntegrationPagBankPreference[];
 };
 
 type OrganizationIntegrationRow = {
@@ -305,8 +321,9 @@ export async function getClientIntegrationHub(input: {
   const selectedCompanyId = resolveSelectedCompanyId(companies, input.preferredCompanyId);
   const companyIds = companies.map((company) => company.id);
 
-  const [paymentIntegrations, genericResult, webhookResult, credentialResult, actionLogResult, growthAssetResult] = await Promise.all([
+  const [paymentIntegrations, catalogSettings, genericResult, webhookResult, credentialResult, actionLogResult, growthAssetResult] = await Promise.all([
     listClientSalesCatalogPaymentIntegrations({ userId: input.userId, client }).catch(() => []),
+    listClientSalesCatalogSettings({ userId: input.userId, client }).catch(() => []),
     loadOrganizationIntegrations(client, companyIds),
     loadWebhookEndpoints(client, companyIds),
     loadOrganizationCredentials(client, companyIds),
@@ -335,6 +352,7 @@ export async function getClientIntegrationHub(input: {
     webhookEndpoints: webhookResult.rows.map((row) => mapWebhookEndpoint(row)),
     growthAssets: growthAssetResult.rows,
     growthAssetsReady: growthAssetResult.ready,
+    pagBankPreferences: buildPagBankPreferences(companies, catalogSettings),
   };
 }
 
@@ -398,6 +416,31 @@ function buildPagBankConnections(
       },
     };
   });
+}
+
+function buildPagBankPreferences(
+  companies: ClientCompany[],
+  settings: ClientSalesCatalogSettings[],
+): ClientIntegrationPagBankPreference[] {
+  const settingsByCompany = new Map(settings.map((item) => [item.companyId, item]));
+
+  return companies.map((company) => {
+    const companySettings = settingsByCompany.get(company.id);
+
+    return {
+      companyId: company.id,
+      settings: clonePagBankSettings(companySettings?.pagBank ?? createDefaultSalesCatalogPagBankSettings()),
+      configured: companySettings?.configured ?? false,
+      updatedAt: companySettings?.updatedAt ?? null,
+    };
+  });
+}
+
+function clonePagBankSettings(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  return {
+    ...settings,
+    enabledMethods: [...settings.enabledMethods],
+  };
 }
 
 function buildGenericConnections(

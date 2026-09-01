@@ -734,6 +734,22 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       return NextResponse.json(result);
     }
 
+    if (action === "save_pagbank_settings") {
+      const result = await savePagBankSettings({
+        client,
+        companyId,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard/integracoes");
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+      revalidatePath(`/loja/${company.slug ?? company.id}`);
+
+      return NextResponse.json(result);
+    }
+
     if (action === "save_shipping_settings") {
       const shippingSettings = await saveShippingSettings({
         client,
@@ -1194,6 +1210,117 @@ async function saveCatalogSettings(input: {
   return {
     settings: mapSalesCatalogSettings(data),
   };
+}
+
+async function savePagBankSettings(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
+  const pagBank = normalizePagBankSettings(input.body?.pagBank ?? input.body?.pagbank, commerceDefaults.pagBank);
+  const now = new Date().toISOString();
+  const { data: existing, error: existingError } = await input.client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", company.id)
+    .eq("memory_type", "sales_catalog_settings")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<SalesCatalogMemoryRow>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
+  }
+
+  const currentMetadata = readRecord(existing?.metadata) ?? {};
+  const metadata = {
+    ...currentMetadata,
+    configured: readBoolean(currentMetadata.configured) ?? false,
+    pagbank: serializePagBankSettings(pagBank),
+    updated_by: input.userId,
+    updated_from: "pagbank_integration_settings",
+  };
+  const settingsId = existing?.id ?? randomUUID();
+  const payload = {
+    id: settingsId,
+    scope: "organization",
+    organization_id: company.id,
+    memory_type: "sales_catalog_settings",
+    title: existing?.title ?? "Configuracao do Catalogo de Vendas",
+    content: mergePagBankSettingsContent(existing?.content ?? "", pagBank),
+    importance: 0.76,
+    tags: ["sales_catalog", "sales_catalog_settings", "pagbank", "payment_preferences"],
+    metadata,
+    updated_at: now,
+  };
+  const query = existing
+    ? input.client.from("intelligence_memory").update(payload).eq("id", existing.id)
+    : input.client.from("intelligence_memory").insert({ ...payload, created_at: now });
+  const { data, error } = await query
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .single<SalesCatalogMemoryRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar as preferencias PagBank.");
+  }
+
+  const settings = mapSalesCatalogSettings(data);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: company.id,
+    source_type: "sales_catalog",
+    source_id: data.id,
+    event_type: "sales_catalog.pagbank_settings_saved",
+    title: "Preferencias PagBank salvas",
+    summary: `PagBank configurado com ${pagBank.enabledMethods.length} metodo(s) de pagamento.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "pagbank", "payment_preferences"],
+    payload: {
+      pagbank: serializePagBankSettings(pagBank),
+      updated_by: input.userId,
+    },
+  });
+
+  return {
+    settings,
+    pagBankPreferences: {
+      companyId: settings.companyId,
+      settings: settings.pagBank,
+      configured: settings.configured,
+      updatedAt: settings.updatedAt,
+    },
+  };
+}
+
+function mergePagBankSettingsContent(content: string, pagBank: SalesCatalogPagBankSettings) {
+  const lines = content
+    .split(/\r?\n/)
+    .filter((line) => {
+      const normalized = line.trim().toLowerCase();
+      return !normalized.startsWith("pagbank:")
+        && !normalized.startsWith("pagbank descriptor:")
+        && !normalized.startsWith("pagbank parcelas:")
+        && !normalized.startsWith("pagbank pix:");
+    });
+
+  lines.push(`PagBank: ${pagBank.enabledMethods.join(", ")}`);
+  lines.push(`PagBank parcelas: maximo ${pagBank.maxInstallments}, sem juros ate ${pagBank.interestFreeInstallments}`);
+  if (pagBank.softDescriptor) {
+    lines.push(`PagBank descriptor: ${pagBank.softDescriptor}`);
+  }
+  lines.push(`PagBank Pix: expira em ${pagBank.pixExpirationMinutes} minuto(s)`);
+
+  return lines.filter(Boolean).join("\n");
 }
 
 async function saveShippingSettings(input: {
