@@ -759,6 +759,27 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         help: "Texto curto da ConnectyHub para identificacao no pagamento, limitado a 17 caracteres quando usado pelo PagBank.",
       },
       {
+        label: "Public Key cartao",
+        env: "PAGBANK_BILLING_PUBLIC_KEY",
+        kind: "public",
+        requirement: "recommended",
+        help: "Chave publica da conta CNPJ PagBank usada no SDK do checkout transparente para criptografar cartoes.",
+      },
+      {
+        label: "Sessao 3DS URL",
+        env: "PAGBANK_BILLING_3DS_SESSION_URL",
+        kind: "endpoint",
+        requirement: "optional",
+        help: "Endpoint do PagBank para criar sessoes 3DS. Padrao: https://sdk.pagseguro.com/checkout-sdk/sessions em producao.",
+      },
+      {
+        label: "Ambiente SDK cartao",
+        env: "PAGBANK_BILLING_SDK_ENV",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Use PROD em producao e SANDBOX em homologacao para o SDK PagBank de cartao e 3DS.",
+      },
+      {
         label: "API Base URL billing",
         env: "PAGBANK_BILLING_API_BASE_URL",
         kind: "endpoint",

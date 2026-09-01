@@ -30,6 +30,9 @@ type PagBankPlatformBillingConfig = {
   accessToken: string;
   mode: "production" | "sandbox";
   apiBaseUrl: string;
+  publicKey: string | null;
+  threeDSSessionUrl: string;
+  sdkEnvironment: "PROD" | "SANDBOX";
   webhookToken: string | null;
   webhookUrl: string;
   softDescriptor: string | null;
@@ -96,13 +99,38 @@ type PagBankChargeResponse = {
     code?: string;
     message?: string;
     reference?: string;
+    brand_reference_id?: string;
   };
   payment_method?: {
     type?: string;
+    installments?: number;
+    capture?: boolean;
+    soft_descriptor?: string;
+    authentication_method?: {
+      type?: string;
+      id?: string;
+      status?: string;
+    };
+    card?: {
+      id?: string;
+      brand?: string;
+      first_digits?: string;
+      last_digits?: string;
+      exp_month?: string;
+      exp_year?: string;
+      store?: boolean;
+      holder?: {
+        name?: string;
+        tax_id?: string;
+      };
+    };
     pix?: {
       expiration_date?: string;
       end_to_end_id?: string;
     };
+  };
+  recurring?: {
+    type?: string;
   };
   qr_code?: PagBankQrCodeResponse;
   links?: PagBankLinkResponse[];
@@ -151,6 +179,47 @@ export type PagBankPixOrderInput = {
   }>;
 };
 
+export type PagBankCardPaymentMethodType = "CREDIT_CARD" | "DEBIT_CARD";
+export type PagBankCardRecurringType = "INITIAL" | "SUBSEQUENT";
+
+export type PagBankCardOrderInput = Omit<PagBankPixOrderInput, "pixExpirationMinutes"> & {
+  encryptedCard?: string | null;
+  cardToken?: string | null;
+  securityCode?: string | null;
+  holderName?: string | null;
+  holderTaxId?: string | null;
+  installments?: number | null;
+  paymentMethodType?: PagBankCardPaymentMethodType | null;
+  authenticationMethodId?: string | null;
+  authenticationStatus?: string | null;
+  storeCard?: boolean | null;
+  recurringType?: PagBankCardRecurringType | null;
+  softDescriptor?: string | null;
+};
+
+export type PagBankCardPaymentData = {
+  status: SalesCatalogPaymentSessionStatus;
+  providerStatus: string | null;
+  providerStatusDetail: string | null;
+  providerPaymentId: string | null;
+  providerOrderId: string | null;
+  paidAt: string | null;
+  paymentMethodType: string | null;
+  installments: number | null;
+  cardToken: string | null;
+  cardBrand: string | null;
+  cardFirstDigits: string | null;
+  cardLastDigits: string | null;
+  cardExpMonth: string | null;
+  cardExpYear: string | null;
+  cardHolderName: string | null;
+  cardHolderTaxId: string | null;
+  recurringType: string | null;
+  authenticationMethodId: string | null;
+  authenticationStatus: string | null;
+  paymentResponseReference: string | null;
+};
+
 const pagBankPlatformIntegrationId = "pagbank";
 const pagBankPlatformBillingIntegrationId = "pagbank-billing";
 const pagBankDefaultScopes = [
@@ -194,6 +263,9 @@ const pagBankBillingCredentialNames = [
   "PAGBANK_BILLING_MODE",
   "PAGBANK_BILLING_API_BASE_URL",
   "PAGBANK_BILLING_SOFT_DESCRIPTOR",
+  "PAGBANK_BILLING_PUBLIC_KEY",
+  "PAGBANK_BILLING_3DS_SESSION_URL",
+  "PAGBANK_BILLING_SDK_ENV",
   "PAGBANK_CONNECT_TOKEN",
   "PAGBANK_AUTHORIZATION_TOKEN",
   "PAGBANK_APP_TOKEN",
@@ -202,6 +274,8 @@ const pagBankBillingCredentialNames = [
   "PAGBANK_ENVIRONMENT",
   "PAGBANK_SANDBOX",
   "PAGBANK_API_BASE_URL",
+  "PAGBANK_PUBLIC_KEY",
+  "PAGBANK_3DS_SESSION_URL",
 ];
 
 export class PagBankOAuthRequestError extends Error {
@@ -265,11 +339,21 @@ export async function loadPagBankPlatformBillingConfig(
   const apiBaseUrl = getCredentialValue(billingCredentials, ["PAGBANK_BILLING_API_BASE_URL"])
     || getCredentialValue(sharedCredentials, ["PAGBANK_API_BASE_URL"])
     || (mode === "sandbox" ? "https://sandbox.api.pagseguro.com" : "https://api.pagseguro.com");
+  const sdkEnvironment = resolvePagBankSdkEnvironment(billingCredentials, sharedCredentials, mode);
 
   return {
     accessToken,
     mode,
     apiBaseUrl: apiBaseUrl.replace(/\/+$/, ""),
+    publicKey: getCredentialValue(billingCredentials, ["PAGBANK_BILLING_PUBLIC_KEY"])
+      || getCredentialValue(sharedCredentials, ["PAGBANK_PUBLIC_KEY"])
+      || null,
+    threeDSSessionUrl: getCredentialValue(billingCredentials, ["PAGBANK_BILLING_3DS_SESSION_URL"])
+      || getCredentialValue(sharedCredentials, ["PAGBANK_3DS_SESSION_URL"])
+      || (mode === "sandbox"
+        ? "https://sandbox.sdk.pagseguro.com/checkout-sdk/sessions"
+        : "https://sdk.pagseguro.com/checkout-sdk/sessions"),
+    sdkEnvironment,
     webhookToken: getCredentialValue(billingCredentials, ["PAGBANK_BILLING_WEBHOOK_TOKEN"])
       || getCredentialValue(sharedCredentials, pagBankWebhookCredentialNames)
       || null,
@@ -484,6 +568,136 @@ export async function createPagBankPixOrder(input: PagBankPixOrderInput) {
   return { order: body, idempotencyKey };
 }
 
+export async function createPagBankCardOrder(input: PagBankCardOrderInput) {
+  const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
+  const idempotencyKey = input.idempotencyKey ?? randomUUID();
+  const response = await fetch(`${config.apiBaseUrl}/orders`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+      "x-idempotency-key": idempotencyKey,
+    },
+    body: JSON.stringify(buildPagBankCardOrderPayload(input)),
+  });
+  const body = await response.json().catch(() => null) as PagBankOrderResponse | null;
+
+  if (!response.ok || !body?.id) {
+    throw new Error(readPagBankErrorMessage(body) ?? "Nao foi possivel processar o cartao no PagBank.");
+  }
+
+  return { order: body, idempotencyKey };
+}
+
+export async function getPagBankCardPublicKey(input: {
+  accessToken: string;
+  mode?: "production" | "sandbox" | null;
+  apiBaseUrl?: string | null;
+}) {
+  const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
+  const response = await fetch(`${config.apiBaseUrl}/public-keys/card`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+    },
+  });
+  const body = await response.json().catch(() => null) as JsonRecord | null;
+
+  if (!response.ok) {
+    throw new Error(readPagBankErrorMessage(body as (PagBankOrderResponse & PagBankOAuthErrorResponse) | null) ?? "Nao foi possivel consultar a chave publica PagBank.");
+  }
+
+  const publicKey = readPagBankPublicKeyFromResponse(body);
+
+  if (!publicKey) {
+    throw new Error("PagBank nao retornou uma chave publica de cartao.");
+  }
+
+  return publicKey;
+}
+
+export async function createPagBankCardPublicKey(input: {
+  accessToken: string;
+  mode?: "production" | "sandbox" | null;
+  apiBaseUrl?: string | null;
+}) {
+  const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
+  const response = await fetch(`${config.apiBaseUrl}/public-keys`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ type: "card" }),
+  });
+  const body = await response.json().catch(() => null) as JsonRecord | null;
+
+  if (!response.ok) {
+    throw new Error(readPagBankErrorMessage(body as (PagBankOrderResponse & PagBankOAuthErrorResponse) | null) ?? "Nao foi possivel criar a chave publica PagBank.");
+  }
+
+  const publicKey = readPagBankPublicKeyFromResponse(body);
+
+  if (!publicKey) {
+    throw new Error("PagBank criou a chave, mas nao retornou o valor publico.");
+  }
+
+  return publicKey;
+}
+
+export async function ensurePagBankCardPublicKey(input: {
+  accessToken: string;
+  mode?: "production" | "sandbox" | null;
+  apiBaseUrl?: string | null;
+  configuredPublicKey?: string | null;
+}) {
+  const configured = input.configuredPublicKey?.trim();
+
+  if (configured) {
+    return { publicKey: configured, source: "configured" as const };
+  }
+
+  try {
+    return {
+      publicKey: await getPagBankCardPublicKey(input),
+      source: "pagbank_existing" as const,
+    };
+  } catch {
+    return {
+      publicKey: await createPagBankCardPublicKey(input),
+      source: "pagbank_created" as const,
+    };
+  }
+}
+
+export async function createPagBankThreeDSSession(input: {
+  accessToken: string;
+  sessionUrl: string;
+}) {
+  const response = await fetch(input.sessionUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+    },
+  });
+  const body = await response.json().catch(() => null) as JsonRecord | null;
+
+  if (!response.ok) {
+    throw new Error(readPagBankErrorMessage(body as (PagBankOrderResponse & PagBankOAuthErrorResponse) | null) ?? "Nao foi possivel criar sessao 3DS PagBank.");
+  }
+
+  const session = readPagBankSessionFromResponse(body);
+
+  if (!session) {
+    throw new Error("PagBank nao retornou a sessao 3DS.");
+  }
+
+  return session;
+}
+
 export async function getPagBankOrder(input: {
   accessToken: string;
   mode?: "production" | "sandbox" | null;
@@ -516,6 +730,39 @@ export function mapPagBankPaymentStatus(status: string | null | undefined): Sale
   if (normalized === "REFUNDED" || normalized === "CHARGEBACK") return "refunded";
   if (normalized === "WAITING" || normalized === "IN_ANALYSIS") return "pending";
   return "created";
+}
+
+export function extractPagBankCardData(order: PagBankOrderResponse): PagBankCardPaymentData {
+  const charge = order.charges?.[0] ?? null;
+  const providerStatus = charge?.status ?? order.status ?? null;
+  const paymentMethod = charge?.payment_method ?? null;
+  const card = paymentMethod?.card ?? null;
+  const authentication = paymentMethod?.authentication_method ?? null;
+  const paymentResponse = charge?.payment_response ?? null;
+
+  return {
+    status: mapPagBankPaymentStatus(providerStatus),
+    providerStatus,
+    providerStatusDetail: paymentResponse?.message ?? paymentResponse?.code ?? null,
+    providerPaymentId: charge?.id ?? null,
+    providerOrderId: order.id ?? null,
+    paidAt: charge?.paid_at ?? null,
+    paymentMethodType: paymentMethod?.type ?? null,
+    installments: typeof paymentMethod?.installments === "number" ? paymentMethod.installments : null,
+    cardToken: readOptionalString(card?.id),
+    cardBrand: readOptionalString(card?.brand),
+    cardFirstDigits: readOptionalString(card?.first_digits),
+    cardLastDigits: readOptionalString(card?.last_digits),
+    cardExpMonth: readOptionalString(card?.exp_month),
+    cardExpYear: readOptionalString(card?.exp_year),
+    cardHolderName: readOptionalString(card?.holder?.name),
+    cardHolderTaxId: readOptionalString(card?.holder?.tax_id),
+    recurringType: readOptionalString(charge?.recurring?.type),
+    authenticationMethodId: readOptionalString(authentication?.id),
+    authenticationStatus: readOptionalString(authentication?.status),
+    paymentResponseReference: readOptionalString(paymentResponse?.reference)
+      ?? readOptionalString(paymentResponse?.brand_reference_id),
+  };
 }
 
 export function extractPagBankPixData(order: PagBankOrderResponse) {
@@ -819,6 +1066,91 @@ function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
   };
 }
 
+function buildPagBankCardOrderPayload(input: PagBankCardOrderInput) {
+  const amountCents = Math.max(100, Math.round(input.amount * 100));
+  const description = sanitizePagBankText(input.description, 255) ?? "Pedido ConnectyHub";
+  const chargeReference = sanitizePagBankText(input.externalReference, 200) ?? input.externalReference;
+  const paymentMethodType = input.paymentMethodType === "DEBIT_CARD" ? "DEBIT_CARD" : "CREDIT_CARD";
+  const installments = paymentMethodType === "DEBIT_CARD" ? 1 : normalizePagBankInstallments(input.installments);
+  const paymentMethod: JsonRecord = {
+    type: paymentMethodType,
+    installments,
+    capture: true,
+    card: buildPagBankCardPayload(input),
+  };
+  const softDescriptor = sanitizePagBankText(input.softDescriptor, 17);
+
+  if (softDescriptor) {
+    paymentMethod.soft_descriptor = softDescriptor;
+  }
+
+  if (input.authenticationMethodId) {
+    paymentMethod.authentication_method = {
+      type: "THREEDS",
+      id: input.authenticationMethodId,
+    };
+  }
+
+  return {
+    reference_id: chargeReference,
+    customer: buildPagBankCustomer(input),
+    items: buildPagBankOrderItems(input.items ?? [], amountCents),
+    charges: [
+      {
+        reference_id: chargeReference,
+        description,
+        amount: {
+          value: amountCents,
+          currency: "BRL",
+        },
+        payment_method: paymentMethod,
+        recurring: input.recurringType ? { type: input.recurringType } : undefined,
+      },
+    ],
+    notification_urls: input.notificationUrl ? [input.notificationUrl] : undefined,
+  };
+}
+
+function buildPagBankCardPayload(input: PagBankCardOrderInput) {
+  const token = input.cardToken?.trim();
+  const encrypted = input.encryptedCard?.trim();
+  const holderName = sanitizePagBankText(input.holderName, 80);
+  const holderTaxId = normalizePagBankDocument(input.holderTaxId);
+
+  if (token) {
+    return {
+      id: token,
+      holder: holderName || holderTaxId
+        ? {
+            name: holderName ?? undefined,
+            tax_id: holderTaxId ?? undefined,
+          }
+        : undefined,
+      store: input.storeCard === true ? true : undefined,
+    };
+  }
+
+  if (!encrypted) {
+    throw new Error("Cartao PagBank criptografado ausente.");
+  }
+
+  return {
+    encrypted,
+    security_code: sanitizePagBankText(input.securityCode, 4),
+    holder: {
+      name: holderName ?? "Cliente ConnectyHub",
+      tax_id: holderTaxId ?? undefined,
+    },
+    store: input.storeCard === true ? true : undefined,
+  };
+}
+
+function normalizePagBankInstallments(value: number | null | undefined) {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? value : 1;
+
+  return Math.min(12, Math.max(1, Math.trunc(parsed)));
+}
+
 function buildPagBankCustomer(input: PagBankPixOrderInput) {
   const customer: JsonRecord = {
     name: sanitizePagBankText(input.payerName, 120) ?? "Cliente ConnectyHub",
@@ -926,6 +1258,54 @@ function readPagBankQrCodeBase64(qrCode: PagBankQrCodeResponse | null) {
     ?? readOptionalString(record.image_base64);
 }
 
+function readPagBankPublicKeyFromResponse(value: JsonRecord | null): string | null {
+  return readNestedString(value, [
+    ["public_key"],
+    ["publicKey"],
+    ["key"],
+    ["value"],
+    ["data", "public_key"],
+    ["data", "publicKey"],
+    ["card", "public_key"],
+    ["card", "publicKey"],
+  ]);
+}
+
+function readPagBankSessionFromResponse(value: JsonRecord | null): string | null {
+  return readNestedString(value, [
+    ["session"],
+    ["session_id"],
+    ["sessionId"],
+    ["id"],
+    ["data", "session"],
+    ["data", "session_id"],
+    ["data", "sessionId"],
+  ]);
+}
+
+function readNestedString(value: unknown, paths: string[][]): string | null {
+  for (const path of paths) {
+    let current = value;
+
+    for (const key of path) {
+      if (!current || typeof current !== "object" || Array.isArray(current)) {
+        current = null;
+        break;
+      }
+
+      current = (current as JsonRecord)[key];
+    }
+
+    const string = readOptionalString(current);
+
+    if (string) {
+      return string;
+    }
+  }
+
+  return null;
+}
+
 function readPagBankLink(links: PagBankLinkResponse[], rel: string) {
   const link = links.find((item) => item.rel?.toUpperCase() === rel);
 
@@ -1018,6 +1398,21 @@ function resolvePagBankBillingMode(
   if (explicit === "production") return "production";
 
   return resolvePagBankMode(sharedCredentials);
+}
+
+function resolvePagBankSdkEnvironment(
+  billingCredentials: Map<string, string>,
+  sharedCredentials: Map<string, string>,
+  mode: "production" | "sandbox",
+): "PROD" | "SANDBOX" {
+  const explicit = getCredentialValue(billingCredentials, ["PAGBANK_BILLING_SDK_ENV"])
+    || getCredentialValue(sharedCredentials, ["PAGBANK_SDK_ENV"]);
+  const normalized = explicit.trim().toLowerCase();
+
+  if (normalized === "sandbox") return "SANDBOX";
+  if (normalized === "prod" || normalized === "production") return "PROD";
+
+  return mode === "sandbox" ? "SANDBOX" : "PROD";
 }
 
 function getAppBaseUrl() {

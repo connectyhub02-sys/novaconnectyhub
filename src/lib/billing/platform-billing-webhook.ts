@@ -840,27 +840,56 @@ async function activateBillingPlan(
     });
   }
 
-  const plan = record.plan;
+  const paymentPayload = record.payment?.payload ?? null;
+  const invoiceMetadata = record.invoice?.metadata ?? null;
+  const subscriptionMetadata = subscription.metadata ?? {};
+  const checkoutMetadata = {
+    ...subscriptionMetadata,
+    ...(invoiceMetadata ?? {}),
+    ...(paymentPayload ?? {}),
+  };
+  const targetPlanCode = normalizePlanCode(checkoutMetadata.target_plan_code)
+    ?? normalizePlanCode(checkoutMetadata.requested_plan_code)
+    ?? subscription.plan_code;
+  const plan = record.plan?.plan_code === targetPlanCode ? record.plan : await loadPlanByCode(client, targetPlanCode);
+
+  if (!plan) {
+    throw new Error(`Pagamento aprovado, mas o plano ${targetPlanCode} nao foi encontrado.`);
+  }
+
+  const activatedPlanCode = plan.plan_code;
+  const checkoutKind = readString(checkoutMetadata.checkout_kind) ?? "initial";
   const now = new Date();
-  const cycleStart = readDate(input.providerPayment?.date_approved)
+  const cycleStart = readDate(paymentPayload?.cycle_start_at)
+    ?? readDate(invoiceMetadata?.cycle_start_at)
+    ?? readDate(input.providerPayment?.date_approved)
     ?? readDate(input.providerSubscription?.raw.date_created)
     ?? now;
-  const cycleEnd = readDate(input.providerSubscription?.nextPaymentDate) ?? addMonths(cycleStart, 1);
+  const cycleEnd = readDate(paymentPayload?.cycle_end_at)
+    ?? readDate(invoiceMetadata?.cycle_end_at)
+    ?? readDate(input.providerSubscription?.nextPaymentDate)
+    ?? addMonths(cycleStart, 1);
   const includedCredits = toNumber(plan?.included_credits);
-  const alreadyGranted = toNumber(subscription.included_credits_granted) > 0;
-  const additionalBumpCredits = readSelectedBumpCreditAmount(subscription.metadata ?? record.payment?.payload ?? record.invoice?.metadata);
-  const bumpCreditsAlreadyGranted = Boolean(readString(subscription.metadata?.bump_credit_transaction_id));
+  const previousCreditTransactionId = readString(paymentPayload?.credit_transaction_id)
+    ?? readString(invoiceMetadata?.credit_transaction_id);
+  const previousBumpCreditTransactionId = readString(paymentPayload?.bump_credit_transaction_id)
+    ?? readString(invoiceMetadata?.bump_credit_transaction_id);
+  const alreadyGranted = Boolean(previousCreditTransactionId);
+  const additionalBumpCredits = readSelectedBumpCreditAmount(paymentPayload ?? invoiceMetadata);
+  const bumpCreditsAlreadyGranted = Boolean(previousBumpCreditTransactionId);
   const externalReference = input.providerSubscription?.externalReference
     ?? readString(input.providerPayment?.external_reference)
-    ?? readString(subscription.metadata?.external_reference)
+    ?? readString(paymentPayload?.external_reference)
+    ?? readString(invoiceMetadata?.external_reference)
+    ?? readString(subscriptionMetadata.external_reference)
     ?? `connectyhub_subscription:${subscription.organization_id}:${subscription.id}`;
-  let creditTransactionId: string | null = null;
-  let bumpCreditTransactionId: string | null = null;
+  let creditTransactionId: string | null = previousCreditTransactionId;
+  let bumpCreditTransactionId: string | null = previousBumpCreditTransactionId;
 
   if (!alreadyGranted && includedCredits > 0) {
     const { data, error } = await client.rpc("grant_billing_plan_credits", {
       p_organization_id: subscription.organization_id,
-      p_plan_code: subscription.plan_code,
+      p_plan_code: activatedPlanCode,
       p_cycle_start: cycleStart.toISOString(),
       p_cycle_end: cycleEnd.toISOString(),
       p_external_reference: externalReference,
@@ -882,8 +911,8 @@ async function activateBillingPlan(
       metadata: {
         source: "dashboard_plan_checkout_bump",
         subscription_id: subscription.id,
-        plan_code: subscription.plan_code,
-        selected_bumps: readSelectedBumps(subscription.metadata ?? record.payment?.payload ?? record.invoice?.metadata),
+        plan_code: activatedPlanCode,
+        selected_bumps: readSelectedBumps(paymentPayload ?? invoiceMetadata),
       },
       transactionType: "purchase",
     });
@@ -893,9 +922,12 @@ async function activateBillingPlan(
   const providerLabel = formatBillingPaymentProviderLabel(input.provider);
   const providerTag = formatBillingPaymentProviderTag(input.provider);
   const metadata = {
-    ...(subscription.metadata ?? {}),
+    ...checkoutMetadata,
     billing_provider: input.provider,
     last_billing_activation_source: input.source,
+    checkout_kind: checkoutKind,
+    activated_plan_code: activatedPlanCode,
+    previous_plan_code: readString(checkoutMetadata.previous_plan_code) ?? subscription.plan_code,
     provider_status: input.providerStatus,
     provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : null,
     provider_subscription_id: input.providerSubscription?.id ?? subscription.provider_subscription_id,
@@ -903,7 +935,7 @@ async function activateBillingPlan(
     included_credits: includedCredits,
     additional_bump_credits: additionalBumpCredits,
     credit_transaction_id: creditTransactionId,
-    bump_credit_transaction_id: bumpCreditTransactionId ?? readString(subscription.metadata?.bump_credit_transaction_id),
+    bump_credit_transaction_id: bumpCreditTransactionId,
     mercado_pago_subscription: input.provider === "mercado_pago" ? input.providerSubscription?.raw ?? null : null,
     mercado_pago_payment: input.provider === "mercado_pago" ? providerPaymentSnapshot : null,
     pagbank_payment: input.provider === "pagbank" ? providerPaymentSnapshot : null,
@@ -914,12 +946,14 @@ async function activateBillingPlan(
       .from("organization_subscriptions")
       .update({
         status: "active",
+        plan_id: plan.id,
+        plan_code: activatedPlanCode,
         billing_provider: input.provider,
         provider_subscription_id: input.providerSubscription?.id ?? subscription.provider_subscription_id,
         current_period_start: cycleStart.toISOString(),
         current_period_end: cycleEnd.toISOString(),
         next_billing_at: cycleEnd.toISOString(),
-        included_credits_granted: alreadyGranted ? subscription.included_credits_granted : includedCredits,
+        included_credits_granted: includedCredits,
         metadata,
       })
       .eq("id", subscription.id)
@@ -967,8 +1001,8 @@ async function activateBillingPlan(
     subscriptionId: subscription.id,
     invoiceId: record.invoice?.id ?? null,
     paymentId: record.payment?.id ?? null,
-    planCode: subscription.plan_code,
-    planName: plan?.name ?? subscription.plan_code,
+    planCode: activatedPlanCode,
+    planName: plan.name ?? activatedPlanCode,
     amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? plan?.monthly_price_brl),
     includedCredits,
     eventType: "payment_approved",
@@ -985,7 +1019,7 @@ async function activateBillingPlan(
     source_id: subscription.id,
     event_type: "billing.subscription_activated",
     title: "Plano ConnectyHub ativado",
-    summary: `Plano ${subscription.plan_code} ativado por webhook ${providerLabel}.`,
+    summary: `Plano ${activatedPlanCode} ativado por webhook ${providerLabel}.`,
     confidence: 1,
     visibility: "platform",
     tags: ["billing", providerTag, "subscription"],
@@ -1009,6 +1043,8 @@ async function activateBillingPlan(
       activated: true,
       alreadyGranted,
       bumpCreditsAlreadyGranted,
+      checkoutKind,
+      activatedPlanCode,
       includedCredits,
       additionalBumpCredits,
       cycleStart: cycleStart.toISOString(),
@@ -2261,6 +2297,11 @@ function sanitizePayment(payment: MercadoPagoPaymentLike): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizePlanCode(value: unknown) {
+  const text = readString(value)?.toLowerCase();
+  return text && /^[a-z0-9_-]{2,60}$/.test(text) ? text : null;
 }
 
 function readRecord(value: unknown): JsonRecord {

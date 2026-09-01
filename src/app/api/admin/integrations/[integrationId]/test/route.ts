@@ -695,6 +695,9 @@ async function testPagBankBilling(credentials: CredentialBag): Promise<Connectio
     || `${resolveAppBaseUrlForTest()}/api/webhooks/pagbank/platform-billing`;
   const webhookToken = getCredential(credentials, ["PAGBANK_BILLING_WEBHOOK_TOKEN"]);
   const apiBaseUrl = getCredential(credentials, ["PAGBANK_BILLING_API_BASE_URL"]);
+  const publicKey = getCredential(credentials, ["PAGBANK_BILLING_PUBLIC_KEY"]);
+  const threeDSSessionUrl = getCredential(credentials, ["PAGBANK_BILLING_3DS_SESSION_URL"]);
+  const sdkEnvironment = getCredential(credentials, ["PAGBANK_BILLING_SDK_ENV"]);
 
   if (!accessToken) {
     return offline("Preencha o Access Token CNPJ do PagBank Billing antes de testar.");
@@ -704,13 +707,24 @@ async function testPagBankBilling(credentials: CredentialBag): Promise<Connectio
     return offline("Webhook billing PagBank precisa ser uma URL http ou https valida.");
   }
 
-  return online("PagBank Billing configurado para cobrar planos por Pix.", {
+  if (threeDSSessionUrl && !isValidHttpUrl(threeDSSessionUrl)) {
+    return offline("Sessao 3DS URL do PagBank precisa ser uma URL http ou https valida.");
+  }
+
+  return online("PagBank Billing configurado para cobrar planos por Pix e preparar cartao/3DS.", {
     details: [
       `Ambiente: ${environment.trim().toLowerCase() === "sandbox" ? "sandbox" : "production"}.`,
       `Webhook: ${webhookUrl}.`,
       webhookToken
         ? "Webhook token configurado para validar notificacoes."
         : "Webhook token ausente; configure antes da producao para validar notificacoes.",
+      publicKey
+        ? "Public Key de cartao configurada para o SDK PagBank."
+        : "Public Key de cartao ausente; o checkout tentara consultar/criar via PagBank antes do pagamento.",
+      threeDSSessionUrl
+        ? `Sessao 3DS URL: ${threeDSSessionUrl}.`
+        : "Sessao 3DS usara o endpoint padrao do ambiente.",
+      sdkEnvironment ? `Ambiente SDK: ${sdkEnvironment}.` : "Ambiente SDK segue o modo da cobranca.",
       apiBaseUrl ? `API Base URL: ${apiBaseUrl}.` : "API Base URL padrao do PagBank sera usada.",
     ],
   });

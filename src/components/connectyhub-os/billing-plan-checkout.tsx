@@ -12,6 +12,7 @@ import {
   type CardPaymentStatusChange,
   type RejectedPaymentCopy,
 } from "@/components/checkout/mercado-pago-card-brick";
+import { PagBankCardForm } from "@/components/checkout/pagbank-card-form";
 import {
   type BillingCheckoutBump,
   type BillingCheckoutBumpCode,
@@ -31,6 +32,7 @@ type BillingPlanCheckoutProps = {
   storageVideoMaxBytes: number;
   storageFileMaxBytes: number;
   payerEmail: string | null;
+  payerPhone: string | null;
   subscriptionStatus: string;
   paymentStatus: string;
   initialProviderPaymentId: string | null;
@@ -101,6 +103,7 @@ export function BillingPlanCheckout({
   storageVideoMaxBytes,
   storageFileMaxBytes,
   payerEmail,
+  payerPhone,
   subscriptionStatus,
   paymentStatus,
   initialProviderPaymentId,
@@ -122,7 +125,7 @@ export function BillingPlanCheckout({
     Boolean(initialProviderPaymentId) && ["pending", "in_process"].includes(paymentStatus) && !initialPixQrCode,
   );
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
-  const cardEnabled = billingProvider === "mercado_pago" && Boolean(cardPublicKey);
+  const cardEnabled = billingProvider === "pagbank" || (billingProvider === "mercado_pago" && Boolean(cardPublicKey));
   const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
   const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardEnabled ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({
@@ -138,10 +141,10 @@ export function BillingPlanCheckout({
   const [feedbackModal, setFeedbackModal] = useState<PaymentFeedbackModalState | null>(null);
   const currentSubscriptionStatus = subscriptionStatusOverride ?? subscriptionStatus;
   const currentPaymentStatus = paymentStatusOverride ?? paymentStatus;
-  const canPay = ["pending", "incomplete", "past_due"].includes(currentSubscriptionStatus)
+  const canPay = ["pending", "incomplete", "past_due", "active"].includes(currentSubscriptionStatus)
     && ["pending", "rejected", "in_process"].includes(currentPaymentStatus);
   const paymentRejected = currentPaymentStatus === "rejected";
-  const checkoutConfirmed = currentSubscriptionStatus === "active" || currentPaymentStatus === "approved";
+  const checkoutConfirmed = currentPaymentStatus === "approved";
   const shouldPollExistingProviderPayment = Boolean(providerPaymentId)
     && ["pending", "in_process"].includes(currentPaymentStatus)
     && !checkoutConfirmed
@@ -230,7 +233,7 @@ export function BillingPlanCheckout({
         ticketUrl: data?.pixTicketUrl ?? current.ticketUrl,
       }));
 
-      if (data?.confirmed || data?.paymentStatus === "approved" || data?.subscriptionStatus === "active") {
+      if (data?.confirmed || data?.paymentStatus === "approved") {
         setNotice({
           tone: "success",
           message: "Pagamento confirmado. Plano ativo e creditos liberados.",
@@ -631,7 +634,7 @@ export function BillingPlanCheckout({
               />
             </div>
 
-            {method === "card" && cardEnabled && cardPublicKey ? (
+            {method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
               <MercadoPagoCardBrick
                 key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
                 publicKey={cardPublicKey}
@@ -647,6 +650,21 @@ export function BillingPlanCheckout({
                 onPaymentStatusChange={handleCardPaymentStatusChange}
                 onAlternativePaymentRequest={switchToPixAndGenerate}
                 onThreeDSComplete={handleCardThreeDSComplete}
+              />
+            ) : method === "card" && billingProvider === "pagbank" && cardEnabled ? (
+              <PagBankCardForm
+                key={`${subscriptionId}-pagbank-${totalAmount}-${selectedBumpCodes.join(".")}`}
+                sessionId={subscriptionId}
+                amount={totalAmount}
+                payerEmail={payerEmail}
+                payerPhone={payerPhone}
+                submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
+                extraPayload={cardExtraPayload}
+                successMessage="Pagamento aprovado. Seu plano sera ativado agora."
+                pendingMessage="Pagamento enviado ao PagBank. Assim que confirmar, os creditos serao liberados."
+                rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
+                onPaymentStatusChange={handleCardPaymentStatusChange}
+                onAlternativePaymentRequest={switchToPixAndGenerate}
               />
             ) : (
               <PixPanel

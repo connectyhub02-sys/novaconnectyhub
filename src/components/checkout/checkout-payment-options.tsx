@@ -9,6 +9,7 @@ import {
   type CheckoutPaymentFeedbackPayload,
 } from "./checkout-payment-feedback-modal";
 import { MercadoPagoCardBrick, type CardPaymentStatusChange } from "./mercado-pago-card-brick";
+import { PagBankCardForm } from "./pagbank-card-form";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,8 @@ type CheckoutPaymentOptionsProps = {
   sessionId: string;
   amount: number;
   payerEmail: string | null;
+  payerPhone: string | null;
+  paymentProvider: "mercado_pago" | "pagbank";
   canUseCard: boolean;
   cardPublicKey: string | null;
   pixQrCode: string | null;
@@ -45,6 +48,8 @@ export function CheckoutPaymentOptions({
   sessionId,
   amount,
   payerEmail,
+  payerPhone,
+  paymentProvider,
   canUseCard,
   cardPublicKey,
   pixQrCode,
@@ -62,7 +67,7 @@ export function CheckoutPaymentOptions({
   const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>([]);
   const [pixUpdating, setPixUpdating] = useState(false);
   const [pixUpdateError, setPixUpdateError] = useState<string | null>(null);
-  const showCard = canUseCard && Boolean(cardPublicKey);
+  const showCard = canUseCard && (paymentProvider === "pagbank" || Boolean(cardPublicKey));
   const activeMethod = method === "card" && showCard ? "card" : "pix";
   const selectedOrderBumps = useMemo(
     () => orderBumps.filter((item) => selectedOrderBumpIds.includes(item.productId)),
@@ -213,7 +218,7 @@ export function CheckoutPaymentOptions({
         </div>
       ) : null}
 
-      {activeMethod === "card" && cardPublicKey ? (
+      {activeMethod === "card" && paymentProvider === "mercado_pago" && cardPublicKey ? (
         <MercadoPagoCardBrick
           publicKey={cardPublicKey}
           sessionId={sessionId}
@@ -222,6 +227,19 @@ export function CheckoutPaymentOptions({
           extraPayload={cardExtraPayload}
           showRejectionModal={false}
           onPaymentStatusChange={handleCardPaymentStatusChange}
+        />
+      ) : activeMethod === "card" && paymentProvider === "pagbank" ? (
+        <PagBankCardForm
+          sessionId={sessionId}
+          amount={totalAmount}
+          payerEmail={payerEmail}
+          payerPhone={payerPhone}
+          submitPath={`/api/checkout/${sessionId}/card`}
+          cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}
+          extraPayload={cardExtraPayload}
+          rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
+          onPaymentStatusChange={handleCardPaymentStatusChange}
+          onAlternativePaymentRequest={() => setMethod("pix")}
         />
       ) : selectedOrderBumpIds.length > 0 ? (
         <PixOrderBumpUpdatePanel

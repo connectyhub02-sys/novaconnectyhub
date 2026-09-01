@@ -190,7 +190,7 @@ export async function processPendingTrialConversionMessages(
       const result = await sendPlatformTrialNotification(client, {
         organizationId: row.organization_id,
         eventType: mapTrialTriggerToNotification(trigger),
-        dedupeKey: `trial:${trigger}:${row.organization_id}`,
+        dedupeKey: buildTrialNotificationDedupeKey(trigger, row.organization_id),
         balanceCredits: Math.max(status.balanceCredits, 0),
         usedCredits: status.usedCredits,
         includedCredits: readIncludedCredits(status),
@@ -282,6 +282,14 @@ function shouldSkipStaleTrialReminder(trigger: TrialConversionTrigger, scheduled
 
 function mapTrialTriggerToNotification(trigger: TrialConversionTrigger) {
   return trigger;
+}
+
+function buildTrialNotificationDedupeKey(trigger: TrialConversionTrigger, organizationId: string) {
+  if (trigger === "trial_started") {
+    return `trial:started:${organizationId}`;
+  }
+
+  return `trial:${trigger}:${organizationId}`;
 }
 
 function readTrialTrigger(value: string): TrialConversionTrigger | null {

@@ -5,17 +5,23 @@ const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.s
 const platformBillingMigrationSource = read("supabase/migrations/0069_pagbank_platform_billing.sql");
 const platformProductBillingCycleMigrationSource = read("supabase/migrations/0070_platform_product_billing_cycle.sql");
 const renewalAndResponsibleMigrationSource = read("supabase/migrations/0071_platform_renewal_and_agent_responsibles.sql");
+const pagBankBillingCardMethodsMigrationSource = read("supabase/migrations/0072_pagbank_billing_card_methods.sql");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
 const pagBankGatewaySource = read("src/lib/sales-catalog/pagbank.ts");
 const checkoutPageSource = read("src/app/checkout/[sessionId]/page.tsx");
 const checkoutOptionsSource = read("src/components/checkout/checkout-payment-options.tsx");
+const publicCheckoutCardRouteSource = read("src/app/api/checkout/[sessionId]/card/route.ts");
+const publicPagBankCardSessionRouteSource = read("src/app/api/checkout/[sessionId]/pagbank-card-session/route.ts");
 const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
 const maintenanceVaultSource = read("src/lib/maintenance-vault.ts");
 const envExampleSource = read(".env.example");
 const planIntentSource = read("src/app/api/dashboard/billing/plan-intent/route.ts");
 const billingPixRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/pix/route.ts");
+const billingCardRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/card/route.ts");
+const billingPagBankCardSessionRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/pagbank-card-session/route.ts");
+const billingStatusRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/status/route.ts");
 const platformBillingWebhookSource = read("src/lib/billing/platform-billing-webhook.ts");
 const platformBillingAdminSource = read("src/lib/billing/platform-billing-admin.ts");
 const dashboardSalesCatalogSource = read("src/app/api/dashboard/sales-catalog/route.ts");
@@ -28,6 +34,11 @@ const platformProductsSource = read("src/lib/platform-products.ts");
 const platformProductsApiSource = read("src/app/api/admin/platform-products/route.ts");
 const platformProductsConsoleSource = read("src/components/connectyhub-os/platform-products-console.tsx");
 const planCheckoutSource = read("src/lib/billing/plan-checkout.ts");
+const billingPlanCheckoutComponentSource = read("src/components/connectyhub-os/billing-plan-checkout.tsx");
+const pagBankCardFormSource = read("src/components/checkout/pagbank-card-form.tsx");
+const billingPaymentMethodsSource = read("src/lib/billing/payment-methods.ts");
+const trialAccessSource = read("src/lib/billing/trial.ts");
+const trialNotificationsSource = read("src/lib/billing/trial-notifications.ts");
 const renewalPolicySource = read("src/lib/billing/renewal-policy.ts");
 const platformAutomationsSource = read("src/lib/automations/platform-automations.ts");
 const platformAutomationsConsoleSource = read("src/components/connectyhub-os/platform-automations-center.tsx");
@@ -103,6 +114,9 @@ describe("PagBank gateway rollout", () => {
     expect(maintenanceVaultSource).toContain("standby");
     expect(envExampleSource).toContain("PAGBANK_CLIENT_ID=");
     expect(envExampleSource).toContain("PAGBANK_BILLING_ACCESS_TOKEN=");
+    expect(envExampleSource).toContain("PAGBANK_BILLING_PUBLIC_KEY=");
+    expect(envExampleSource).toContain("PAGBANK_BILLING_3DS_SESSION_URL=");
+    expect(envExampleSource).toContain("PAGBANK_BILLING_SDK_ENV=");
     expect(envExampleSource).toContain("PAGBANK_AFFILIATE_CONNECT_URL=");
     expect(envExampleSource).toContain("MERCADO_PAGO_CLIENT_ID=");
   });
@@ -119,6 +133,47 @@ describe("PagBank gateway rollout", () => {
     expect(platformBillingWebhookSource).toContain("processPlatformBillingPagBankWebhook");
     expect(platformBillingWebhookSource).toContain("provider: \"pagbank\"");
     expect(platformBillingAdminSource).toContain("providerLabel: \"PagBank\"");
+  });
+
+  it("adds PagBank transparent card checkout, 3DS and encrypted token storage for ConnectyHub billing", () => {
+    expect(pagBankGatewaySource).toContain("createPagBankCardOrder");
+    expect(pagBankGatewaySource).toContain("ensurePagBankCardPublicKey");
+    expect(pagBankGatewaySource).toContain("createPagBankThreeDSSession");
+    expect(pagBankGatewaySource).toContain("authentication_method");
+    expect(pagBankGatewaySource).toContain("recurring: input.recurringType");
+    expect(pagBankGatewaySource).toContain("store: input.storeCard");
+    expect(maintenanceVaultSource).toContain("PAGBANK_BILLING_PUBLIC_KEY");
+    expect(maintenanceVaultSource).toContain("PAGBANK_BILLING_3DS_SESSION_URL");
+    expect(maintenanceVaultSource).toContain("PAGBANK_BILLING_SDK_ENV");
+    expect(billingPagBankCardSessionRouteSource).toContain("createPagBankThreeDSSession");
+    expect(billingPagBankCardSessionRouteSource).toContain("ensurePagBankCardPublicKey");
+    expect(billingCardRouteSource).toContain("createPagBankCardOrder");
+    expect(billingCardRouteSource).toContain("extractPagBankCardData");
+    expect(billingCardRouteSource).toContain("saveDefaultPagBankBillingCardMethod");
+    expect(billingCardRouteSource).toContain("processPlatformBillingPagBankWebhook");
+    expect(billingPlanCheckoutComponentSource).toContain("PagBankCardForm");
+    expect(billingPlanCheckoutComponentSource).toContain("billingProvider === \"pagbank\"");
+    expect(pagBankCardFormSource).toContain("PagSeguro.encryptCard");
+    expect(pagBankCardFormSource).toContain("PagSeguro.authenticate3DS");
+    expect(pagBankCardFormSource).toContain("billingAddress");
+    expect(pagBankBillingCardMethodsMigrationSource).toContain("create table if not exists public.billing_payment_methods");
+    expect(pagBankBillingCardMethodsMigrationSource).toContain("provider_token_encrypted text not null");
+    expect(billingPaymentMethodsSource).toContain("encryptCredentialValue(token)");
+    expect(billingPaymentMethodsSource).toContain("decryptCredentialValue(row.provider_token_encrypted)");
+  });
+
+  it("extends PagBank card checkout to public product payments without treating recurring products as one-time", () => {
+    expect(checkoutPageSource).toContain("canUsePagBankCard");
+    expect(checkoutPageSource).toContain("paymentProvider={paymentProvider}");
+    expect(checkoutOptionsSource).toContain("PagBankCardForm");
+    expect(checkoutOptionsSource).toContain("cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}");
+    expect(publicPagBankCardSessionRouteSource).toContain("ensurePagBankCardPublicKey");
+    expect(publicPagBankCardSessionRouteSource).toContain("createPagBankThreeDSSession");
+    expect(publicCheckoutCardRouteSource).toContain("processPagBankPublicCardPayment");
+    expect(publicCheckoutCardRouteSource).toContain("createPagBankCardOrder");
+    expect(publicCheckoutCardRouteSource).toContain("extractPagBankCardData");
+    expect(publicCheckoutCardRouteSource).toContain("hasRecurringSalesCatalogOrderItem");
+    expect(publicCheckoutCardRouteSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente");
   });
 
   it("exposes maintainable PagBank payment preferences for client stores", () => {
@@ -194,6 +249,12 @@ describe("PagBank gateway rollout", () => {
     expect(platformAutomationsConsoleSource).toContain("Regua financeira");
     expect(platformAutomationsConsoleSource).toContain("/api/admin/automations/renewal-policy");
     expect(paidLifecycleSource).toContain("loadRenewalPolicy");
+    expect(paidLifecycleSource).toContain("ensureLifecycleRenewalCheckout");
+    expect(paidLifecycleSource).toContain("maybeAttemptPagBankCardRenewal");
+    expect(paidLifecycleSource).toContain("loadDefaultPagBankBillingCardMethod");
+    expect(paidLifecycleSource).toContain("recurringType: \"SUBSEQUENT\"");
+    expect(paidLifecycleSource).toContain("paid_lifecycle_renewal_checkout");
+    expect(paidLifecycleSource).toContain("renewal_invoice_id");
     expect(paidLifecycleSource).toContain("payment_card_retry_failed");
     expect(platformBillingWebhookSource).toContain("dias_carencia");
     expect(platformBillingWebhookSource).toContain("enqueueResponsibleBillingNotifications");
@@ -223,5 +284,42 @@ describe("PagBank gateway rollout", () => {
     expect(postPaymentSource).toContain("resolveResponsiblePaymentPhone");
     expect(postPaymentSource).toContain("readAgentResponsibleHuman");
     expect(postPaymentSource).toContain("loadResponsiblePaymentAgent");
+  });
+
+  it("blocks zero-credit trials and keeps trial start notifications deduped", () => {
+    expect(trialAccessSource).toContain("state: \"trial_no_credits\"");
+    expect(trialAccessSource).toContain("canUseBillableFeatures: false");
+    expect(trialAccessSource).toContain("Creditos do teste acabaram");
+    expect(trialNotificationsSource).toContain("buildTrialNotificationDedupeKey(trigger, row.organization_id)");
+    expect(trialNotificationsSource).toContain("return `trial:started:${organizationId}`;");
+  });
+
+  it("creates renewal and plan-change checkouts without changing the active plan first", () => {
+    expect(planIntentSource).toContain("createCheckoutForExistingSubscription");
+    expect(planIntentSource).toContain("isRenewableSubscription(existingSubscription.status)");
+    expect(planIntentSource).toContain("checkoutKind: BillingCheckoutKind");
+    expect(planIntentSource).toContain("checkout_kind: input.checkoutKind");
+    expect(planIntentSource).toContain("target_plan_code: input.plan.plan_code");
+    expect(planIntentSource).toContain("A troca sera aplicada apos o pagamento aprovado");
+    expect(planCheckoutSource).toContain("export type BillingCheckoutKind = \"initial\" | \"renewal\" | \"plan_change\"");
+    expect(planCheckoutSource).toContain("targetPlanCode: string");
+    expect(planCheckoutSource).toContain("[\"pending\", \"incomplete\", \"past_due\", \"active\"].includes(intent.subscription.status)");
+  });
+
+  it("applies the target plan and grants credits per paid invoice", () => {
+    expect(platformBillingWebhookSource).toContain("const targetPlanCode = normalizePlanCode(checkoutMetadata.target_plan_code)");
+    expect(platformBillingWebhookSource).toContain("const previousCreditTransactionId = readString(paymentPayload?.credit_transaction_id)");
+    expect(platformBillingWebhookSource).toContain("p_plan_code: activatedPlanCode");
+    expect(platformBillingWebhookSource).toContain("plan_id: plan.id");
+    expect(platformBillingWebhookSource).toContain("plan_code: activatedPlanCode");
+    expect(platformBillingWebhookSource).toContain("included_credits_granted: includedCredits");
+  });
+
+  it("does not treat active subscriptions as confirmed while a renewal payment is pending", () => {
+    expect(billingStatusRouteSource).toContain("return intent.invoice.status === \"paid\"");
+    expect(billingStatusRouteSource).not.toContain("return intent.subscription.status === \"active\"");
+    expect(billingPlanCheckoutComponentSource).toContain("[\"pending\", \"incomplete\", \"past_due\", \"active\"].includes(currentSubscriptionStatus)");
+    expect(billingPlanCheckoutComponentSource).toContain("const checkoutConfirmed = currentPaymentStatus === \"approved\";");
+    expect(billingPlanCheckoutComponentSource).not.toContain("data?.subscriptionStatus === \"active\"");
   });
 });

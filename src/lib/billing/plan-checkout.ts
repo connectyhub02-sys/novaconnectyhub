@@ -6,6 +6,7 @@ import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpM
 
 export type JsonRecord = Record<string, unknown>;
 export type BillingCheckoutProvider = "mercado_pago" | "pagbank";
+export type BillingCheckoutKind = "initial" | "renewal" | "plan_change";
 export type BillingProductBillingCycle = "one_time" | "recurring";
 export type BillingProductBillingInterval = "week" | "month" | "quarter" | "year";
 
@@ -56,6 +57,8 @@ export type BillingCheckoutIntent = {
     storage_video_max_bytes: number | string | null;
     storage_file_max_bytes: number | string | null;
   };
+  checkoutKind: BillingCheckoutKind;
+  targetPlanCode: string;
 };
 
 export type BillingOrderBumpProductOption = {
@@ -116,7 +119,7 @@ export async function loadBillingCheckoutIntent(
     return null;
   }
 
-  const [invoiceResult, paymentResult, planResult] = await Promise.all([
+  const [invoiceResult, paymentResult] = await Promise.all([
     client
       .from("billing_invoices")
       .select("id, organization_id, subscription_id, status, subtotal_brl, discount_brl, total_brl, provider, metadata")
@@ -133,11 +136,6 @@ export async function loadBillingCheckoutIntent(
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle<BillingCheckoutIntent["payment"]>(),
-    client
-      .from("billing_plans")
-      .select("id, plan_code, name, monthly_price_brl, included_credits, storage_limit_bytes, storage_file_limit, storage_image_max_bytes, storage_video_max_bytes, storage_file_max_bytes")
-      .eq("plan_code", subscription.plan_code)
-      .maybeSingle<BillingCheckoutIntent["plan"]>(),
   ]);
 
   if (invoiceResult.error) {
@@ -148,11 +146,23 @@ export async function loadBillingCheckoutIntent(
     throw new Error(`Nao foi possivel carregar o pagamento: ${paymentResult.error.message}`);
   }
 
+  if (!invoiceResult.data || !paymentResult.data) {
+    return null;
+  }
+
+  const checkoutKind = readBillingCheckoutKindFromRecords(subscription, invoiceResult.data, paymentResult.data);
+  const targetPlanCode = readBillingCheckoutTargetPlanCodeFromRecords(subscription, invoiceResult.data, paymentResult.data);
+  const planResult = await client
+    .from("billing_plans")
+    .select("id, plan_code, name, monthly_price_brl, included_credits, storage_limit_bytes, storage_file_limit, storage_image_max_bytes, storage_video_max_bytes, storage_file_max_bytes")
+    .eq("plan_code", targetPlanCode)
+    .maybeSingle<BillingCheckoutIntent["plan"]>();
+
   if (planResult.error) {
     throw new Error(`Nao foi possivel carregar o plano: ${planResult.error.message}`);
   }
 
-  if (!invoiceResult.data || !paymentResult.data || !planResult.data) {
+  if (!planResult.data) {
     return null;
   }
 
@@ -161,6 +171,8 @@ export async function loadBillingCheckoutIntent(
     invoice: invoiceResult.data,
     payment: paymentResult.data,
     plan: planResult.data,
+    checkoutKind,
+    targetPlanCode,
   };
 }
 
@@ -198,6 +210,9 @@ export async function syncBillingCheckoutCart(
     external_reference: externalReference,
     billing_provider: billingProvider,
     checkout_model: "connectyhub_plan_checkout",
+    checkout_kind: intent.checkoutKind,
+    target_plan_code: intent.targetPlanCode,
+    current_subscription_plan_code: intent.subscription.plan_code,
     checkout_status: "internal_checkout_ready",
   };
 
@@ -372,10 +387,51 @@ export function readExternalReference(intent: BillingCheckoutIntent) {
     ?? readString(intent.subscription.metadata?.external_reference);
 }
 
+export function readBillingCheckoutKind(intent: BillingCheckoutIntent): BillingCheckoutKind {
+  return readBillingCheckoutKindFromRecords(intent.subscription, intent.invoice, intent.payment);
+}
+
+export function readBillingCheckoutTargetPlanCode(intent: BillingCheckoutIntent) {
+  return readBillingCheckoutTargetPlanCodeFromRecords(intent.subscription, intent.invoice, intent.payment);
+}
+
 export function isBillingCheckoutPayable(intent: BillingCheckoutIntent) {
-  return ["pending", "incomplete", "past_due"].includes(intent.subscription.status)
+  return ["pending", "incomplete", "past_due", "active"].includes(intent.subscription.status)
     && ["open", "draft", "failed"].includes(intent.invoice.status)
     && ["pending", "rejected", "in_process"].includes(intent.payment.status);
+}
+
+function readBillingCheckoutKindFromRecords(
+  subscription: BillingCheckoutIntent["subscription"],
+  invoice: BillingCheckoutIntent["invoice"],
+  payment: BillingCheckoutIntent["payment"],
+): BillingCheckoutKind {
+  return normalizeBillingCheckoutKind(
+    payment.payload?.checkout_kind
+    ?? invoice.metadata?.checkout_kind
+    ?? subscription.metadata?.checkout_kind,
+  );
+}
+
+function readBillingCheckoutTargetPlanCodeFromRecords(
+  subscription: BillingCheckoutIntent["subscription"],
+  invoice: BillingCheckoutIntent["invoice"],
+  payment: BillingCheckoutIntent["payment"],
+) {
+  return normalizePlanCode(
+    payment.payload?.target_plan_code
+    ?? invoice.metadata?.target_plan_code
+    ?? subscription.metadata?.target_plan_code
+    ?? payment.payload?.requested_plan_code
+    ?? invoice.metadata?.requested_plan_code
+    ?? subscription.metadata?.requested_plan_code,
+  ) ?? subscription.plan_code;
+}
+
+function normalizeBillingCheckoutKind(value: unknown): BillingCheckoutKind {
+  const text = readString(value);
+  if (text === "renewal" || text === "plan_change") return text;
+  return "initial";
 }
 
 function normalizeBillingCheckoutProvider(value: unknown): BillingCheckoutProvider {
@@ -624,6 +680,11 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizePlanCode(value: unknown) {
+  const text = readString(value)?.toLowerCase();
+  return text && /^[a-z0-9_-]{2,60}$/.test(text) ? text : null;
 }
 
 function toNumberOrNull(value: unknown) {

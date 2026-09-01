@@ -116,8 +116,7 @@ function shouldReconcileProviderPayment(intent: BillingCheckoutIntent) {
 }
 
 function isCheckoutConfirmed(intent: BillingCheckoutIntent) {
-  return intent.subscription.status === "active"
-    || intent.invoice.status === "paid"
+  return intent.invoice.status === "paid"
     || intent.payment.status === "approved";
 }
 

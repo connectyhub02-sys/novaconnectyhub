@@ -27,6 +27,7 @@ export const metadata: Metadata = {
 const mercadoPagoSecurityScriptAttributes: Record<string, string> = {
   view: "checkout",
 };
+const pagBankCheckoutSdkUrl = "https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js";
 
 export default async function DashboardBillingCheckoutPage({
   params,
@@ -86,6 +87,13 @@ export default async function DashboardBillingCheckoutPage({
           {...mercadoPagoSecurityScriptAttributes}
         />
       ) : null}
+      {billingProvider === "pagbank" ? (
+        <Script
+          id="pagbank-checkout-sdk"
+          src={pagBankCheckoutSdkUrl}
+          strategy="afterInteractive"
+        />
+      ) : null}
 
       {!intent ? (
         <section className="rounded-[8px] border border-rose-300/25 bg-rose-950/20 p-6">
@@ -137,6 +145,7 @@ export default async function DashboardBillingCheckoutPage({
             storageVideoMaxBytes={normalizePlanNumber(intent.plan.storage_video_max_bytes)}
             storageFileMaxBytes={normalizePlanNumber(intent.plan.storage_file_max_bytes)}
             payerEmail={intent.subscription.payer_email}
+            payerPhone={workspace.profile.phone}
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
             initialProviderPaymentId={intent.payment.provider_payment_id}

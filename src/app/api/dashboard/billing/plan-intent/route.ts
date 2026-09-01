@@ -9,6 +9,9 @@ import {
   buildDashboardBillingCheckoutPath,
   buildDashboardBillingCheckoutUrl,
   buildPlatformBillingExternalReference,
+  isBillingCheckoutPayable,
+  loadBillingCheckoutIntent,
+  type BillingCheckoutKind,
   type BillingCheckoutProvider,
 } from "@/lib/billing/plan-checkout";
 import {
@@ -34,9 +37,14 @@ type BillingPlanIntentRow = {
 
 type ExistingSubscriptionRow = {
   id: string;
+  plan_id: string | null;
   plan_code: string;
   status: string;
   provider_subscription_id: string | null;
+  payer_email: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_billing_at: string | null;
   metadata: JsonRecord | null;
   created_at: string;
 };
@@ -97,6 +105,7 @@ export async function POST(request: NextRequest) {
 
     let replacedSubscription: ExistingSubscriptionRow | null = null;
     const existingSubscription = await loadBlockingSubscription(client, workspace.organization.id);
+    const platformBillingProvider = await loadPlatformBillingProvider(client);
 
     if (existingSubscription) {
       if (isPendingSubscription(existingSubscription.status)) {
@@ -147,28 +156,40 @@ export async function POST(request: NextRequest) {
             { status: 409 },
           );
         }
-      } else {
-        if (existingSubscription.status === "active" && existingSubscription.plan_code === plan.plan_code) {
-          return NextResponse.json({
-            ok: true,
-            subscriptionId: existingSubscription.id,
-            planCode: existingSubscription.plan_code,
-            checkoutUrl: null,
-            message: "Este plano ja esta ativo nesta empresa.",
-          });
-        }
+      } else if (isRenewableSubscription(existingSubscription.status)) {
+        const checkoutKind: BillingCheckoutKind = existingSubscription.plan_code === plan.plan_code
+          ? "renewal"
+          : "plan_change";
+        const checkout = await createCheckoutForExistingSubscription(client, {
+          organizationId: workspace.organization.id,
+          actorId: workspace.user.id,
+          subscription: existingSubscription,
+          plan,
+          payerEmail,
+          provider: platformBillingProvider,
+          checkoutKind,
+        });
 
-        return NextResponse.json(
-          {
-            error: "Mudanca de plano com assinatura ativa sera liberada na proxima etapa.",
-          },
-          { status: 409 },
-        );
+        return NextResponse.json({
+          ok: true,
+          subscriptionId: existingSubscription.id,
+          invoiceId: checkout.invoiceId,
+          paymentId: checkout.paymentId,
+          planCode: plan.plan_code,
+          previousPlanCode: existingSubscription.plan_code,
+          checkoutKind,
+          checkoutUrl: checkout.checkoutPath,
+          notificationStatus: checkout.notification.status,
+          notificationError: checkout.notification.errorMessage,
+          reusedCheckout: checkout.reused,
+          message: checkoutKind === "renewal"
+            ? "Checkout de renovacao criado. Finalize o pagamento para manter seu plano ativo."
+            : "Checkout de troca de plano criado. A troca sera aplicada apos o pagamento aprovado.",
+        });
       }
     }
 
     const now = new Date();
-    const platformBillingProvider = await loadPlatformBillingProvider(client);
     const dueAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
     const subscriptionId = randomUUID();
     const invoiceId = randomUUID();
@@ -184,7 +205,9 @@ export async function POST(request: NextRequest) {
     const intentMetadata = {
       source: "dashboard_plan_intent",
       checkout_model: "connectyhub_plan_checkout",
+      checkout_kind: "initial",
       requested_plan_code: plan.plan_code,
+      target_plan_code: plan.plan_code,
       current_plan_code: workspace.organization.planCode,
       organization_status: workspace.organization.status,
       actor_id: workspace.user.id,
@@ -357,10 +380,25 @@ function toNumber(value: number | string | null | undefined) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function readDate(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
 async function loadBlockingSubscription(client: ReturnType<typeof createServiceClient>, organizationId: string) {
   const { data, error } = await client
     .from("organization_subscriptions")
-    .select("id, plan_code, status, provider_subscription_id, metadata, created_at")
+    .select("id, plan_id, plan_code, status, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, metadata, created_at")
     .eq("organization_id", organizationId)
     .in("status", ["pending", "active", "past_due", "incomplete"])
     .order("created_at", { ascending: false })
@@ -378,6 +416,10 @@ function isPendingSubscription(status: string) {
   return status === "pending" || status === "incomplete";
 }
 
+function isRenewableSubscription(status: string) {
+  return status === "active" || status === "past_due";
+}
+
 async function loadPlatformBillingProvider(client: ReturnType<typeof createServiceClient>): Promise<BillingCheckoutProvider> {
   const { data, error } = await client
     .from("platform_billing_settings")
@@ -390,6 +432,261 @@ async function loadPlatformBillingProvider(client: ReturnType<typeof createServi
   }
 
   return data?.recurring_provider === "pagbank" ? "pagbank" : "mercado_pago";
+}
+
+async function createCheckoutForExistingSubscription(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    subscription: ExistingSubscriptionRow;
+    plan: BillingPlanIntentRow;
+    payerEmail: string;
+    provider: BillingCheckoutProvider;
+    checkoutKind: BillingCheckoutKind;
+  },
+) {
+  const existingIntent = await loadBillingCheckoutIntent(client, {
+    organizationId: input.organizationId,
+    subscriptionId: input.subscription.id,
+  });
+
+  if (
+    existingIntent
+    && isBillingCheckoutPayable(existingIntent)
+    && existingIntent.targetPlanCode === input.plan.plan_code
+    && existingIntent.checkoutKind === input.checkoutKind
+  ) {
+    const checkoutPath = buildDashboardBillingCheckoutPath(input.subscription.id);
+    const checkoutUrl = buildDashboardBillingCheckoutUrl(input.subscription.id);
+    const notification = await notifySubscriptionPendingSafely(client, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      subscriptionId: input.subscription.id,
+      invoiceId: existingIntent.invoice.id,
+      paymentId: existingIntent.payment.id,
+      planCode: input.plan.plan_code,
+      planName: input.plan.name,
+      amountBrl: toNumber(existingIntent.payment.amount_brl ?? existingIntent.invoice.total_brl ?? input.plan.monthly_price_brl),
+      includedCredits: toNumber(input.plan.included_credits),
+      checkoutPath,
+      checkoutUrl,
+      source: `dashboard_plan_${input.checkoutKind}_existing_checkout`,
+    });
+
+    return {
+      invoiceId: existingIntent.invoice.id,
+      paymentId: existingIntent.payment.id,
+      checkoutPath,
+      checkoutUrl,
+      notification,
+      reused: true,
+    };
+  }
+
+  if (existingIntent && isBillingCheckoutPayable(existingIntent)) {
+    await cancelOpenCheckoutForSubscription(client, {
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      subscription: input.subscription,
+      nextPlanCode: input.plan.plan_code,
+    });
+  }
+
+  const now = new Date();
+  const amountBrl = toNumber(input.plan.monthly_price_brl);
+  const invoiceId = randomUUID();
+  const paymentId = randomUUID();
+  const externalReference = buildPlatformBillingExternalReference({
+    organizationId: input.organizationId,
+    subscriptionId: input.subscription.id,
+    invoiceId,
+    paymentId,
+  });
+  const checkoutPath = buildDashboardBillingCheckoutPath(input.subscription.id);
+  const checkoutUrl = buildDashboardBillingCheckoutUrl(input.subscription.id);
+  const currentPeriodEnd = readDate(input.subscription.current_period_end);
+  const cycleStart = input.checkoutKind === "renewal" && currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime()
+    ? currentPeriodEnd
+    : now;
+  const cycleEnd = addMonths(cycleStart, 1);
+  const dueAt = input.checkoutKind === "renewal" && currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime()
+    ? currentPeriodEnd
+    : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const intentMetadata = {
+    ...(input.subscription.metadata ?? {}),
+    source: `dashboard_plan_${input.checkoutKind}`,
+    checkout_model: "connectyhub_plan_checkout",
+    checkout_kind: input.checkoutKind,
+    requested_plan_code: input.plan.plan_code,
+    target_plan_code: input.plan.plan_code,
+    previous_plan_code: input.subscription.plan_code,
+    current_subscription_plan_code: input.subscription.plan_code,
+    previous_current_period_start: input.subscription.current_period_start,
+    previous_current_period_end: input.subscription.current_period_end,
+    cycle_start_at: cycleStart.toISOString(),
+    cycle_end_at: cycleEnd.toISOString(),
+    actor_id: input.actorId,
+    subscription_id: input.subscription.id,
+    invoice_id: invoiceId,
+    payment_id: paymentId,
+    external_reference: externalReference,
+    checkout_status: "internal_checkout_created",
+    checkout_url: checkoutPath,
+    checkout_public_url: checkoutUrl,
+    billing_provider: input.provider,
+  };
+
+  const subscriptionUpdate = await client
+    .from("organization_subscriptions")
+    .update({
+      billing_provider: input.provider,
+      payer_email: input.subscription.payer_email ?? input.payerEmail,
+      metadata: intentMetadata,
+    })
+    .eq("id", input.subscription.id)
+    .eq("organization_id", input.organizationId);
+
+  if (subscriptionUpdate.error) {
+    throw new Error(`Nao foi possivel atualizar a assinatura para checkout: ${subscriptionUpdate.error.message}`);
+  }
+
+  const invoiceInsert = await client
+    .from("billing_invoices")
+    .insert({
+      id: invoiceId,
+      organization_id: input.organizationId,
+      subscription_id: input.subscription.id,
+      status: "open",
+      currency: "BRL",
+      subtotal_brl: amountBrl,
+      discount_brl: 0,
+      total_brl: amountBrl,
+      due_at: dueAt.toISOString(),
+      provider: input.provider,
+      metadata: intentMetadata,
+    });
+
+  if (invoiceInsert.error) {
+    throw new Error(`Nao foi possivel registrar a fatura da assinatura: ${invoiceInsert.error.message}`);
+  }
+
+  const itemInsert = await client.from("billing_invoice_items").insert({
+    invoice_id: invoiceId,
+    organization_id: input.organizationId,
+    item_type: "plan",
+    description: input.checkoutKind === "plan_change" ? `Troca para Plano ${input.plan.name}` : `Renovacao Plano ${input.plan.name}`,
+    quantity: 1,
+    unit_price_brl: amountBrl,
+    total_brl: amountBrl,
+    credit_amount: toNumber(input.plan.included_credits),
+    metadata: intentMetadata,
+  });
+
+  if (itemInsert.error) {
+    throw new Error(`Fatura criada, mas o item do plano falhou: ${itemInsert.error.message}`);
+  }
+
+  const paymentInsert = await client
+    .from("billing_payments")
+    .insert({
+      id: paymentId,
+      organization_id: input.organizationId,
+      invoice_id: invoiceId,
+      subscription_id: input.subscription.id,
+      provider: input.provider,
+      status: "pending",
+      amount_brl: amountBrl,
+      payload: intentMetadata,
+    });
+
+  if (paymentInsert.error) {
+    throw new Error(`Nao foi possivel registrar o pagamento pendente: ${paymentInsert.error.message}`);
+  }
+
+  await client.from("maintenance_audit_logs").insert({
+    event_type: `billing.plan_checkout.${input.checkoutKind}.created`,
+    target_table: "billing_payments",
+    target_id: paymentId,
+    metadata: {
+      ...intentMetadata,
+      amount_brl: amountBrl,
+    },
+  });
+
+  const notification = await notifySubscriptionPendingSafely(client, {
+    organizationId: input.organizationId,
+    actorId: input.actorId,
+    subscriptionId: input.subscription.id,
+    invoiceId,
+    paymentId,
+    planCode: input.plan.plan_code,
+    planName: input.plan.name,
+    amountBrl,
+    includedCredits: toNumber(input.plan.included_credits),
+    checkoutPath,
+    checkoutUrl,
+    source: `dashboard_plan_${input.checkoutKind}_created`,
+  });
+
+  return {
+    invoiceId,
+    paymentId,
+    checkoutPath,
+    checkoutUrl,
+    notification,
+    reused: false,
+  };
+}
+
+async function cancelOpenCheckoutForSubscription(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    subscription: ExistingSubscriptionRow;
+    nextPlanCode: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const replacementMetadata = {
+    ...(input.subscription.metadata ?? {}),
+    checkout_status: "replaced_by_customer",
+    replaced_at: now,
+    replaced_by: input.actorId,
+    replaced_by_plan_code: input.nextPlanCode,
+    previous_plan_code: input.subscription.plan_code,
+  };
+
+  const [invoiceUpdate, paymentUpdate] = await Promise.all([
+    client
+      .from("billing_invoices")
+      .update({
+        status: "void",
+        metadata: replacementMetadata,
+      })
+      .eq("subscription_id", input.subscription.id)
+      .eq("organization_id", input.organizationId)
+      .in("status", ["draft", "open", "failed"]),
+    client
+      .from("billing_payments")
+      .update({
+        status: "canceled",
+        provider_status: "replaced_before_payment",
+        payload: replacementMetadata,
+      })
+      .eq("subscription_id", input.subscription.id)
+      .eq("organization_id", input.organizationId)
+      .in("status", ["pending", "rejected", "in_process"]),
+  ]);
+
+  if (invoiceUpdate.error || paymentUpdate.error) {
+    throw new Error(
+      invoiceUpdate.error?.message
+      ?? paymentUpdate.error?.message
+      ?? "Nao foi possivel trocar o checkout aberto.",
+    );
+  }
 }
 
 async function cancelPendingSubscription(
@@ -487,7 +784,7 @@ async function notifySubscriptionPendingSafely(
       planName: input.planName,
       amountBrl: input.amountBrl,
       includedCredits: input.includedCredits,
-      dedupeKey: `billing:${input.subscriptionId}:subscription:pending`,
+      dedupeKey: `billing:${input.subscriptionId}:${input.paymentId ?? "subscription"}:pending`,
       providerStatus: "pending",
       metadata: {
         source: input.source,

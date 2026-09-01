@@ -205,7 +205,14 @@ export default async function CheckoutPage({
   const updatedAt = formatDateTime(session.updated_at);
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
-  const canUseCard = session.method !== "card"
+  const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const sessionMetadata = readRecord(session.metadata);
+  const checkoutPaymentOwner = readString(session.payment_owner_type)
+    ?? readString(sessionMetadata.payment_owner)
+    ?? readString(sessionMetadata.payment_receiver);
+  const connectyHubOwned = checkoutPaymentOwner === "connectyhub";
+  const paymentProvider = session.provider === "pagbank" ? "pagbank" : "mercado_pago";
+  const canUseMercadoPagoCard = session.method !== "card"
     && session.provider === "mercado_pago"
     && !shippingBlocked
     && !paid
@@ -213,7 +220,15 @@ export default async function CheckoutPage({
     && amountNumber !== null
     && integration?.status === "connected"
     && Boolean(integration.public_key);
-  const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const canUsePagBankCard = session.method !== "card"
+    && session.provider === "pagbank"
+    && !shippingBlocked
+    && !paid
+    && !failed
+    && amountNumber !== null
+    && (connectyHubOwned || integration?.status === "connected")
+    && (connectyHubOwned || Boolean(catalogSettings?.pagBank.enabledMethods.includes("credit_card")));
+  const canUseCard = canUseMercadoPagoCard || canUsePagBankCard;
   const commercialContext = resolveCheckoutCommercialContext(session, order);
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
@@ -383,6 +398,8 @@ export default async function CheckoutPage({
               sessionId={session.id}
               amount={amountNumber ?? 0}
               payerEmail={session.payer_email}
+              payerPhone={order.customer_phone}
+              paymentProvider={paymentProvider}
               canUseCard={canUseCard}
               cardPublicKey={integration?.public_key ?? null}
               pixQrCode={session.pix_qr_code}
