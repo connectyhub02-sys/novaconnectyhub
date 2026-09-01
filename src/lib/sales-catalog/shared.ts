@@ -651,6 +651,7 @@ export type ClientSalesCatalogShippingSettings = {
   id: string;
   companyId: string;
   configured: boolean;
+  shippingEnabled: boolean;
   localPickup: boolean;
   originCep: string | null;
   defaultHandlingDays: number | null;

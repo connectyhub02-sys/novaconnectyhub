@@ -824,6 +824,7 @@ export async function processWhatsappAgentRun(input: {
           companyLocations: context.companyLocations,
           salesCatalog: context.salesCatalog,
           salesCatalogSettings: context.salesCatalogSettings,
+          salesCatalogShippingSettings: context.salesCatalogShippingSettings,
           salesCatalogShippingQuotes,
           salesCatalogOrders: context.salesCatalogOrders,
           learnings: context.learnings,
@@ -853,6 +854,7 @@ export async function processWhatsappAgentRun(input: {
         companyLocations: context.companyLocations,
         salesCatalog: context.salesCatalog,
         salesCatalogSettings: context.salesCatalogSettings,
+        salesCatalogShippingSettings: context.salesCatalogShippingSettings,
         salesCatalogShippingQuotes,
         salesCatalogOrders: context.salesCatalogOrders,
         learnings: context.learnings,
@@ -1666,7 +1668,8 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
   const cep = extractFirstBrazilianCep(input.userText);
-  if (!cep || !input.context.salesCatalogShippingSettings?.configured) return null;
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) return null;
 
   const order = input.context.salesCatalogOrders.find((item) => (
     item.status !== "cancelled"
@@ -1684,7 +1687,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
 
   const result = calculateSalesCatalogShippingQuotes({
     item: catalogItem,
-    settings: input.context.salesCatalogShippingSettings,
+    settings: shippingSettings,
     cep,
   });
   const quote = result.quotes[0];
@@ -1776,6 +1779,9 @@ async function maybeAttachSalesCatalogPickupToOrder(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  if (!shippingSettings?.configured || !shippingSettings.localPickup) return null;
+
   if (!hasSalesCatalogPickupSignal(input.userText)) return null;
 
   const order = input.context.salesCatalogOrders.find((item) => (
@@ -1869,12 +1875,13 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   intentText: string;
 }) {
   const physicalItem = input.selections.find((selection) => selection.item.fulfillment.mode === "physical")?.item ?? null;
+  const shippingSettings = input.context.salesCatalogShippingSettings;
 
   if (!physicalItem) {
     return null;
   }
 
-  if (hasSalesCatalogPickupSignal(input.intentText)) {
+  if (shippingSettings?.configured && shippingSettings.localPickup && hasSalesCatalogPickupSignal(input.intentText)) {
     return {
       destinationCep: null,
       shippingTotal: "0,00",
@@ -1889,13 +1896,13 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   }
 
   const cep = extractFirstBrazilianCep(input.intentText);
-  if (!cep || !input.context.salesCatalogShippingSettings?.configured) {
+  if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) {
     return null;
   }
 
   const result = calculateSalesCatalogShippingQuotes({
     item: physicalItem,
-    settings: input.context.salesCatalogShippingSettings,
+    settings: shippingSettings,
     cep,
   });
   const quote = result.quotes[0];
@@ -2308,6 +2315,7 @@ async function generateAgentResponse(input: {
   companyLocations: RuntimeOrganizationLocation[];
   salesCatalog: RuntimeSalesCatalogItem[];
   salesCatalogSettings: ClientSalesCatalogSettings | null;
+  salesCatalogShippingSettings: ClientSalesCatalogShippingSettings | null;
   salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
@@ -2566,6 +2574,7 @@ function buildSystemInstruction(input: {
   companyLocations: RuntimeOrganizationLocation[];
   salesCatalog: RuntimeSalesCatalogItem[];
   salesCatalogSettings: ClientSalesCatalogSettings | null;
+  salesCatalogShippingSettings: ClientSalesCatalogShippingSettings | null;
   salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
@@ -2628,7 +2637,8 @@ function buildSystemInstruction(input: {
     ...buildLinkButtonLines(input.linkButtons, input),
     ...buildOrganizationLocationLines(input.companyLocations),
     ...buildSalesCatalogLines(input.salesCatalog),
-    ...buildSalesCatalogCommerceLines(input.salesCatalogSettings),
+    ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
+    ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
     ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
     ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
     ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
@@ -3935,7 +3945,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando houver preco promocional ou CTA cadastrado, use isso para conduzir o fechamento sem parecer texto automatico.",
     "- Se o item estiver esgotado, nao venda como disponivel; ofereca alternativa ou pergunte se pode avisar quando voltar.",
     "- Se o item estiver sob encomenda, deixe claro que depende de prazo/confirmacao antes de fechar.",
-    "- Para produto fisico, peca CEP/endereco quando precisar calcular entrega.",
+    "- Para produto fisico, siga somente as regras de entrega e frete cadastradas; nao ofereca retirada nem frete quando estiverem desativados.",
     "- Para item digital, conduza pagamento e envie/prepare o acesso dentro do WhatsApp.",
     "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
     "- Se o item tiver arquivos, fale sobre foto/video somente quando o lead pedir ver ou quando a midia for realmente necessaria para decidir.",
@@ -3990,7 +4000,10 @@ function formatRuntimePagBankPaymentMethods(methods: SalesCatalogPagBankPaymentM
   return labels.length > 0 ? labels.join(", ") : "Pix";
 }
 
-function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | null) {
+function buildSalesCatalogCommerceLines(
+  settings: ClientSalesCatalogSettings | null,
+  shippingSettings: ClientSalesCatalogShippingSettings | null,
+) {
   if (!settings?.configured) {
     return [];
   }
@@ -4020,7 +4033,7 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
       ? "- Como ha mais de uma forma de pagamento habilitada, depois da confirmacao do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobranca."
       : "",
-    "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca CEP para entrega ou confirme retirada na loja.",
+    buildSalesCatalogPhysicalPaymentReadinessLine(shippingSettings),
     pixEnabled
       ? "- Pix PagBank: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do PagBank, nao por comprovante manual."
       : "- Pix PagBank esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
@@ -4060,6 +4073,56 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     `  Indisponivel: ${settings.messageTemplates.unavailableItem}`,
     `  Humano: ${settings.messageTemplates.humanHandoff}`,
   ].filter(Boolean);
+}
+
+function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCatalogShippingSettings | null) {
+  if (!settings?.configured) {
+    return "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao; como a loja ainda nao configurou isso, acione humano antes de cobrar.";
+  }
+
+  if (settings.shippingEnabled && settings.localPickup) {
+    return "- Produto fisico precisa ter CEP/frete calculado ou retirada local confirmada antes de gerar Pix ou checkout de cartao.";
+  }
+
+  if (settings.shippingEnabled) {
+    return "- Produto fisico precisa ter CEP/frete calculado antes de gerar Pix ou checkout de cartao. Nao ofereca retirada local.";
+  }
+
+  if (settings.localPickup) {
+    return "- Produto fisico precisa ter retirada local confirmada antes de gerar Pix ou checkout de cartao. Nao peca CEP para calcular frete.";
+  }
+
+  return "- Produto fisico nao tem frete por entrega nem retirada local habilitados; acione humano antes de gerar Pix ou checkout de cartao.";
+}
+
+function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippingSettings | null) {
+  if (!settings?.configured) {
+    return [
+      "",
+      "REGRAS DE ENTREGA E FRETE:",
+      "- Entrega/frete ainda nao configurados. Nao prometa retirada local, frete, prazo ou entrega automatica; se o produto fisico precisar disso, acione humano antes de cobrar.",
+    ];
+  }
+
+  const activeRules = settings.shippingEnabled
+    ? settings.rules.filter((rule) => rule.active)
+    : [];
+
+  return [
+    "",
+    "REGRAS DE ENTREGA E FRETE:",
+    `- Frete por entrega: ${settings.shippingEnabled ? "habilitado" : "desativado"}.`,
+    `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
+    settings.shippingEnabled
+      ? "- Quando precisar de entrega, peca CEP e use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
+      : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
+    settings.localPickup
+      ? "- Retirada local pode ser oferecida quando fizer sentido e libera o pagamento com frete zero depois da confirmacao do lead."
+      : "- Nao ofereca retirada local e nao aceite retirada na loja como forma de liberar pagamento.",
+    activeRules.length > 0
+      ? `- Estados com entrega ativa: ${activeRules.map((rule) => rule.uf).join(", ")}.`
+      : "- Nenhum estado com entrega ativa.",
+  ];
 }
 
 function buildSalesCatalogShippingQuoteLines(quotes: RuntimeSalesCatalogShippingQuote[]) {
@@ -4147,7 +4210,7 @@ function buildRuntimeSalesCatalogShippingQuoteContext(input: {
   userText: string;
 }): RuntimeSalesCatalogShippingQuote[] {
   const checkoutItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
-  if (!input.settings?.configured || checkoutItems.length === 0) return [];
+  if (!input.settings?.configured || !input.settings.shippingEnabled || checkoutItems.length === 0) return [];
 
   const cep = extractFirstBrazilianCep(input.userText);
   if (!cep) return [];
@@ -8226,11 +8289,24 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled);
+  const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup);
+  const intro = canShip && canPickup
+    ? "Antes de gerar o pagamento, preciso confirmar entrega ou retirada desse pedido."
+    : canShip
+      ? "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido."
+      : canPickup
+        ? "Antes de gerar o pagamento, preciso confirmar a retirada desse pedido."
+        : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
-    "Antes de gerar o pagamento, preciso confirmar entrega ou retirada desse pedido.",
-    "Se for entrega, me envie o CEP para eu calcular o frete.",
-    "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero.",
-  ].join("\n");
+    intro,
+    canShip ? "Se for entrega, me envie o CEP para eu calcular o frete." : "",
+    canPickup ? "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
+    !canShip && !canPickup
+      ? "A loja ainda nao habilitou frete ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
+      : "",
+  ].filter(Boolean).join("\n");
   const providerResponse = await sendWhatsappText({
     credentials: input.context.credentials,
     token: input.token,

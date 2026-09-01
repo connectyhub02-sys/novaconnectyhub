@@ -375,6 +375,7 @@ type SettingsDraft = {
 };
 
 type ShippingDraft = {
+  shippingEnabled: boolean;
   localPickup: boolean;
   originCep: string;
   defaultHandlingDays: string;
@@ -888,7 +889,7 @@ export function SalesCatalogConsole({
   );
   const canImportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogImportInstance && configuredCategoryOptions.length > 0 && !importing);
   const canExportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogExportInstance && selectedCatalogExportItems.length > 0 && !exportingWhatsappCatalog);
-  const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
+  const canCalculateQuote = Boolean(shippingDraft.shippingEnabled && selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
 
   useEffect(() => {
@@ -1676,6 +1677,7 @@ export function SalesCatalogConsole({
         body: JSON.stringify({
           action: "save_shipping_settings",
           companyId: selectedCompanyId,
+          shippingEnabled: shippingDraft.shippingEnabled,
           localPickup: shippingDraft.localPickup,
           originCep: shippingDraft.originCep,
           defaultHandlingDays: parseOptionalNumber(shippingDraft.defaultHandlingDays),
@@ -3829,40 +3831,67 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <label className="block">
-                <FieldLabel>CEP de origem</FieldLabel>
+              <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  Frete por entrega
+                  <HelpHint title="Frete por entrega">Ative quando a loja entregar pedidos por CEP com regras de estado, valor e prazo.</HelpHint>
+                </span>
                 <input
-                  value={shippingDraft.originCep}
-                  onChange={(event) => setShippingDraft((current) => ({ ...current, originCep: cepInput(event.target.value) }))}
-                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  inputMode="numeric"
-                  placeholder="00000-000"
-                  style={{ borderColor: "var(--ch-border)" }}
+                  checked={shippingDraft.shippingEnabled}
+                  type="checkbox"
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setShippingDraft((current) => ({ ...current, shippingEnabled: checked }));
+                    if (!checked) {
+                      setQuoteResult(null);
+                    }
+                  }}
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Estados ativos</p>
-                  <p className="mt-2 font-mono text-[24px] font-bold text-cyan-200">{shippingDraft.rules.filter((rule) => rule.active).length}</p>
-                </div>
-                <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Status</p>
-                  <p className="mt-2 text-[13px] font-semibold text-slate-200">{selectedShippingSettings?.configured ? "Configurado" : "Pendente"}</p>
-                </div>
-              </div>
+              {shippingDraft.shippingEnabled ? (
+                <>
+                  <label className="block">
+                    <FieldLabel>CEP de origem</FieldLabel>
+                    <input
+                      value={shippingDraft.originCep}
+                      onChange={(event) => setShippingDraft((current) => ({ ...current, originCep: cepInput(event.target.value) }))}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="00000-000"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
 
-              <label className="block">
-                <FieldLabel>Separacao</FieldLabel>
-                <input
-                  value={shippingDraft.defaultHandlingDays}
-                  onChange={(event) => setShippingDraft((current) => ({ ...current, defaultHandlingDays: digitsOnly(event.target.value, 2) }))}
-                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  inputMode="numeric"
-                  placeholder="Dias internos"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
-              </label>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Estados ativos</p>
+                      <p className="mt-2 font-mono text-[24px] font-bold text-cyan-200">{shippingDraft.rules.filter((rule) => rule.active).length}</p>
+                    </div>
+                    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Status</p>
+                      <p className="mt-2 text-[13px] font-semibold text-slate-200">{selectedShippingSettings?.configured ? "Configurado" : "Pendente"}</p>
+                    </div>
+                  </div>
+
+                  <label className="block">
+                    <FieldLabel>Separacao</FieldLabel>
+                    <input
+                      value={shippingDraft.defaultHandlingDays}
+                      onChange={(event) => setShippingDraft((current) => ({ ...current, defaultHandlingDays: digitsOnly(event.target.value, 2) }))}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="Dias internos"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed p-4" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                  <p className="text-[13px] font-semibold text-slate-200">Frete por entrega desativado</p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-500">O agente nao vai pedir CEP nem oferecer entrega automatica.</p>
+                </div>
+              )}
 
               <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
                 <span className="flex items-center gap-1.5 text-slate-300">
@@ -3883,108 +3912,146 @@ export function SalesCatalogConsole({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingShipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Salvar frete
+                Salvar entrega e frete
               </button>
             </div>
 
-            <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
-              <div className="overflow-visible md:overflow-x-auto">
-                <div className="min-w-0 md:min-w-[1120px]">
-                  <div className="hidden grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                    <span>Estado</span>
-                    <span>Atendimento</span>
-                    <span>CEP ini.</span>
-                    <span>CEP fim</span>
-                    <span>Valor</span>
-                    <span>Prazo min.</span>
-                    <span>Prazo max.</span>
-                    <span>Gratis acima</span>
-                    <span>Faixas</span>
-                  </div>
-                  <div className="max-h-[620px] overflow-y-auto">
-                    {shippingDraft.rules.map((rule) => (
-                      <div
-                        key={rule.uf}
-                        className="grid gap-2 border-b px-3 py-3 last:border-b-0 md:grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] md:items-center md:py-2"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      >
-                        <div>
-                          <p className="font-mono text-[12px] font-bold text-cyan-200">{rule.uf}</p>
-                          <p className="truncate text-[10px] text-slate-500">{rule.state}</p>
-                        </div>
-                        <label className="flex items-center gap-2 text-[12px] text-slate-300">
-                          <input
-                            checked={rule.active}
-                            type="checkbox"
-                            onChange={(event) => updateShippingRule(rule.uf, { active: event.target.checked })}
-                          />
-                          Vende neste estado
-                        </label>
-                        <input
-                          value={rule.cepStart ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { cepStart: cepInput(event.target.value) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          inputMode="numeric"
-                          placeholder="00000-000"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <input
-                          value={rule.cepEnd ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { cepEnd: cepInput(event.target.value) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          inputMode="numeric"
-                          placeholder="99999-999"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <input
-                          value={rule.price ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { price: event.target.value.slice(0, 40) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          placeholder="R$ 29,90"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <input
-                          value={rule.minDays ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { minDays: parseOptionalNumber(event.target.value) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          inputMode="numeric"
-                          placeholder="2"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <input
-                          value={rule.maxDays ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { maxDays: parseOptionalNumber(event.target.value) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          inputMode="numeric"
-                          placeholder="5"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <input
-                          value={rule.freeShippingThreshold ?? ""}
-                          onChange={(event) => updateShippingRule(rule.uf, { freeShippingThreshold: event.target.value.slice(0, 40) })}
-                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
-                          placeholder="R$ 300,00"
-                          style={{ borderColor: "var(--ch-border)" }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setSelectedShippingUf(rule.uf)}
-                          className={cn(
-                            "h-10 min-w-0 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
-                            selectedShippingUf === rule.uf ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
-                          )}
-                          style={{ borderColor: selectedShippingUf === rule.uf ? undefined : "var(--ch-border)" }}
-                        >
-                          Editar
-                        </button>
-                      </div>
-                    ))}
+            {shippingDraft.shippingEnabled ? (
+              <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
+                <div className="overflow-visible md:overflow-x-auto">
+                  <div className="min-w-0 md:min-w-[1200px]">
+                    <div className="hidden grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                      <span>Estado</span>
+                      <span>Entrega</span>
+                      <span>CEP ini.</span>
+                      <span>CEP fim</span>
+                      <span>Valor</span>
+                      <span>Prazo min.</span>
+                      <span>Prazo max.</span>
+                      <span>Gratis acima</span>
+                      <span>Faixas</span>
+                    </div>
+                    <div className="max-h-[620px] overflow-y-auto">
+                      {shippingDraft.rules.map((rule) => {
+                        const deliveryInputClassName = cn(
+                          "h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none transition disabled:cursor-not-allowed disabled:opacity-45",
+                          !rule.active && "text-slate-500",
+                        );
+
+                        return (
+                          <div
+                            key={rule.uf}
+                            className="grid gap-2 border-b px-3 py-3 last:border-b-0 md:grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] md:items-center md:py-2"
+                            style={{ borderColor: "var(--ch-border)" }}
+                          >
+                            <div>
+                              <p className="font-mono text-[12px] font-bold text-cyan-200">{rule.uf}</p>
+                              <p className="truncate text-[10px] text-slate-500">{rule.state}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
+                              <button
+                                type="button"
+                                onClick={() => updateShippingRule(rule.uf, { active: true })}
+                                className={cn(
+                                  "min-h-8 rounded-md px-2 text-[11px] font-semibold transition",
+                                  rule.active ? "bg-cyan-300 text-slate-950" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+                                )}
+                              >
+                                Entrego
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateShippingRule(rule.uf, { active: false })}
+                                className={cn(
+                                  "min-h-8 rounded-md px-2 text-[11px] font-semibold transition",
+                                  !rule.active ? "bg-rose-400/15 text-rose-100" : "text-slate-400 hover:bg-rose-400/10 hover:text-rose-100",
+                                )}
+                              >
+                                Nao entrego
+                              </button>
+                            </div>
+                            <input
+                              value={rule.cepStart ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { cepStart: cepInput(event.target.value) })}
+                              className={deliveryInputClassName}
+                              inputMode="numeric"
+                              placeholder="00000-000"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <input
+                              value={rule.cepEnd ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { cepEnd: cepInput(event.target.value) })}
+                              className={deliveryInputClassName}
+                              inputMode="numeric"
+                              placeholder="99999-999"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <input
+                              value={rule.price ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { price: event.target.value.slice(0, 40) })}
+                              className={deliveryInputClassName}
+                              placeholder="R$ 29,90"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <input
+                              value={rule.minDays ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { minDays: parseOptionalNumber(event.target.value) })}
+                              className={deliveryInputClassName}
+                              inputMode="numeric"
+                              placeholder="2"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <input
+                              value={rule.maxDays ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { maxDays: parseOptionalNumber(event.target.value) })}
+                              className={deliveryInputClassName}
+                              inputMode="numeric"
+                              placeholder="5"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <input
+                              value={rule.freeShippingThreshold ?? ""}
+                              disabled={!rule.active}
+                              onChange={(event) => updateShippingRule(rule.uf, { freeShippingThreshold: event.target.value.slice(0, 40) })}
+                              className={deliveryInputClassName}
+                              placeholder="R$ 300,00"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                            <button
+                              type="button"
+                              disabled={!rule.active}
+                              onClick={() => setSelectedShippingUf(rule.uf)}
+                              className={cn(
+                                "h-10 min-w-0 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-45",
+                                selectedShippingUf === rule.uf ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+                              )}
+                              style={{ borderColor: selectedShippingUf === rule.uf ? undefined : "var(--ch-border)" }}
+                            >
+                              Editar
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed p-8 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="max-w-sm">
+                  <Truck className="mx-auto h-8 w-8 text-slate-500" />
+                  <p className="mt-3 text-[13px] font-semibold text-slate-200">Frete por entrega desligado</p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-500">Ative para liberar estados, faixas, prazos e calculo por CEP.</p>
+                </div>
+              </div>
+            )}
 
-            {selectedShippingRule ? (
+            {shippingDraft.shippingEnabled && selectedShippingRule?.active ? (
               <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -4111,75 +4178,77 @@ export function SalesCatalogConsole({
               </AccordionSection>
             ) : null}
 
-            <AccordionSection icon={Truck} title="Calculo por CEP" tone="cyan" className="xl:col-span-2">
-              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_140px_150px]">
-                <select
-                  value={quoteItemId}
-                  onChange={(event) => setQuoteItemId(event.target.value)}
-                  className="h-11 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  <option value="">Selecionar produto</option>
-                  {visibleItems.map((item) => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
-                  ))}
-                </select>
-                <input
-                  value={quoteCep}
-                  onChange={(event) => setQuoteCep(cepInput(event.target.value))}
-                  className="h-11 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  inputMode="numeric"
-                  placeholder="CEP destino"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
-                <button
-                  type="button"
-                  disabled={!canCalculateQuote}
-                  onClick={calculateQuote}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  {calculatingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
-                  Calcular
-                </button>
-              </div>
+            {shippingDraft.shippingEnabled ? (
+              <AccordionSection icon={Truck} title="Calculo por CEP" tone="cyan" className="xl:col-span-2">
+                <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_140px_150px]">
+                  <select
+                    value={quoteItemId}
+                    onChange={(event) => setQuoteItemId(event.target.value)}
+                    className="h-11 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="">Selecionar produto</option>
+                    {visibleItems.map((item) => (
+                      <option key={item.id} value={item.id}>{item.title}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={quoteCep}
+                    onChange={(event) => setQuoteCep(cepInput(event.target.value))}
+                    className="h-11 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    placeholder="CEP destino"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <button
+                    type="button"
+                    disabled={!canCalculateQuote}
+                    onClick={calculateQuote}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {calculatingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                    Calcular
+                  </button>
+                </div>
 
-              {quoteResult ? (
-                <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--ch-border)" }}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[12px] font-semibold text-slate-200">
-                      {quoteResult.destination ? `${quoteResult.destination.uf} - ${quoteResult.destination.state}` : "Destino nao identificado"}
-                    </p>
-                    {quoteResult.item ? (
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-slate-500">
-                        {formatSalesCatalogWeight(quoteResult.item.weightGrams)}
-                        {quoteResult.item.weightSource === "default" ? " estimado" : ""}
+                {quoteResult ? (
+                  <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--ch-border)" }}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] font-semibold text-slate-200">
+                        {quoteResult.destination ? `${quoteResult.destination.uf} - ${quoteResult.destination.state}` : "Destino nao identificado"}
                       </p>
+                      {quoteResult.item ? (
+                        <p className="font-mono text-[10px] uppercase tracking-wide text-slate-500">
+                          {formatSalesCatalogWeight(quoteResult.item.weightGrams)}
+                          {quoteResult.item.weightSource === "default" ? " estimado" : ""}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {quoteResult.error ? (
+                      <p className="mt-2 text-[12px] text-amber-200">{quoteResult.error}</p>
+                    ) : null}
+
+                    {quoteResult.quotes.length > 0 ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {quoteResult.quotes.map((quote) => (
+                          <div key={`${quote.serviceId}-${quote.price}-${quote.minDays}-${quote.maxDays}`} className="rounded-lg border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[12px] font-semibold text-slate-100">{quote.serviceName}</p>
+                              <NeonBadge tone={quote.provider === "correios" ? "cyan" : "green"}>{quote.provider === "correios" ? "Correios" : quote.provider === "carrier" ? "Transp." : "Manual"}</NeonBadge>
+                            </div>
+                            <p className="mt-2 font-mono text-[18px] font-bold text-cyan-200">{quote.price}</p>
+                            <p className="mt-1 text-[11px] text-slate-500">{formatQuoteDeadline(quote.minDays, quote.maxDays)}</p>
+                            {quote.notes ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{quote.notes}</p> : null}
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                   </div>
-
-                  {quoteResult.error ? (
-                    <p className="mt-2 text-[12px] text-amber-200">{quoteResult.error}</p>
-                  ) : null}
-
-                  {quoteResult.quotes.length > 0 ? (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {quoteResult.quotes.map((quote) => (
-                        <div key={`${quote.serviceId}-${quote.price}-${quote.minDays}-${quote.maxDays}`} className="rounded-lg border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[12px] font-semibold text-slate-100">{quote.serviceName}</p>
-                            <NeonBadge tone={quote.provider === "correios" ? "cyan" : "green"}>{quote.provider === "correios" ? "Correios" : quote.provider === "carrier" ? "Transp." : "Manual"}</NeonBadge>
-                          </div>
-                          <p className="mt-2 font-mono text-[18px] font-bold text-cyan-200">{quote.price}</p>
-                          <p className="mt-1 text-[11px] text-slate-500">{formatQuoteDeadline(quote.minDays, quote.maxDays)}</p>
-                          {quote.notes ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{quote.notes}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </AccordionSection>
+                ) : null}
+              </AccordionSection>
+            ) : null}
           </div>
         </Panel>
       ) : activeTab === "checkout" ? (
@@ -8828,6 +8897,7 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
   }
 
   return {
+    shippingEnabled: settings?.shippingEnabled ?? Array.from(rulesByUf.values()).some((rule) => rule.active),
     localPickup: settings?.localPickup ?? false,
     originCep: settings?.originCep ?? "",
     defaultHandlingDays: settings?.defaultHandlingDays !== null && settings?.defaultHandlingDays !== undefined

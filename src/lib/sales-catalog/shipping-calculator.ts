@@ -103,6 +103,17 @@ export function calculateSalesCatalogShippingQuotes(input: {
 
   const weightSource = input.item.shipping.weightGrams ? "product" : "default";
   const weightGrams = input.item.shipping.weightGrams ?? defaultWeightGrams;
+
+  if (!input.settings.shippingEnabled) {
+    return {
+      destination,
+      weightGrams,
+      weightSource,
+      quotes: [],
+      error: "Frete por entrega esta desativado para esta loja.",
+    };
+  }
+
   const rule = findShippingRule(input.settings.rules, destination);
 
   if (input.item.shipping.profile === "free") {

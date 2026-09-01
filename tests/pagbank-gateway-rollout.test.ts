@@ -249,6 +249,23 @@ describe("PagBank gateway rollout", () => {
     expect(paymentSessionsSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
   });
 
+  it("binds catalog freight and pickup offers to explicit store settings", () => {
+    expect(salesCatalogSharedSource).toContain("shippingEnabled: boolean");
+    expect(dashboardSalesCatalogSource).toContain("shipping_enabled: shippingEnabled");
+    expect(dashboardSalesCatalogSource).toContain("Informe o CEP de origem antes de ativar o frete por entrega");
+    expect(dashboardSalesCatalogSource).toContain("Complete CEP inicial, CEP final, valor e prazo dos estados ativos");
+    expect(dashboardSalesCatalogSource).toContain("Frete por entrega esta desativado para este catalogo");
+    expect(salesCatalogConsoleSource).toContain("Frete por entrega");
+    expect(salesCatalogConsoleSource).toContain("Nao entrego");
+    expect(salesCatalogConsoleSource).toContain("disabled={!rule.active}");
+    expect(salesCatalogConsoleSource).toContain("shippingDraft.shippingEnabled");
+    expect(whatsappAgentRuntimeSource).toContain("buildSalesCatalogShippingPolicyLines");
+    expect(whatsappAgentRuntimeSource).toContain("Nao peca CEP para calcular frete");
+    expect(whatsappAgentRuntimeSource).toContain("Nao ofereca retirada local");
+    expect(whatsappAgentRuntimeSource).toContain("const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled)");
+    expect(whatsappAgentRuntimeSource).toContain("const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup)");
+  });
+
   it("adds a configurable WhatsApp renewal policy for ConnectyHub billing", () => {
     expect(renewalPolicySource).toContain("pixReminderStartDays: 3");
     expect(renewalPolicySource).toContain("cardChargeAttemptDays: 3");

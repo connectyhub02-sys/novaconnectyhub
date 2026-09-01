@@ -1050,15 +1050,19 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
 
 export function mapSalesCatalogShippingSettings(row: SalesCatalogMemoryRow): ClientSalesCatalogShippingSettings {
   const metadata = readRecord(row.metadata) ?? {};
+  const rules = readShippingRules(metadata.rules);
+  const shippingEnabled = readNullableBoolean(metadata.shipping_enabled ?? metadata.shippingEnabled)
+    ?? rules.some((rule) => rule.active);
 
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
     configured: readBoolean(metadata.configured),
+    shippingEnabled,
     localPickup: readBoolean(metadata.local_pickup),
     originCep: readString(metadata.origin_cep),
     defaultHandlingDays: readNumber(metadata.default_handling_days),
-    rules: readShippingRules(metadata.rules),
+    rules,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

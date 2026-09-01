@@ -1353,13 +1353,23 @@ async function saveShippingSettings(input: {
     client: input.client,
   });
   const rules = normalizeShippingRules(input.body?.rules);
+  const shippingEnabled = readBoolean(input.body?.shippingEnabled) ?? false;
   const localPickup = readBoolean(input.body?.localPickup) ?? false;
   const originCep = normalizeSalesCatalogCep(readFormString(input.body?.originCep));
   const defaultHandlingDays = normalizeNullableInteger(input.body?.defaultHandlingDays, 0, 45);
   const activeRules = rules.filter((rule) => rule.active);
+  const activeDeliveryRules = shippingEnabled ? activeRules : [];
+
+  assertShippingSettingsReady({
+    shippingEnabled,
+    originCep,
+    activeRules,
+  });
+
   const now = new Date().toISOString();
   const metadata = {
     configured: true,
+    shipping_enabled: shippingEnabled,
     local_pickup: localPickup,
     origin_cep: originCep,
     default_handling_days: defaultHandlingDays,
@@ -1368,11 +1378,14 @@ async function saveShippingSettings(input: {
     updated_from: "sales_catalog_shipping",
   };
   const content = [
+    shippingEnabled ? "Frete por entrega: sim" : "Frete por entrega: nao",
     originCep ? `CEP de origem: ${originCep}` : "",
     localPickup ? "Retirada local: sim" : "Retirada local: nao",
     defaultHandlingDays !== null ? `Prazo de separacao: ${defaultHandlingDays} dia(s)` : "",
-    activeRules.length ? "Estados atendidos:" : "Nenhum estado atendido foi marcado.",
-    ...activeRules.map(formatShippingRuleContent),
+    shippingEnabled
+      ? activeDeliveryRules.length ? "Estados atendidos:" : "Nenhum estado atendido foi marcado."
+      : "Frete por entrega desativado.",
+    ...activeDeliveryRules.map(formatShippingRuleContent),
   ].filter(Boolean).join("\n");
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
@@ -1418,12 +1431,15 @@ async function saveShippingSettings(input: {
     source_id: data.id,
     event_type: "sales_catalog.shipping_saved",
     title: "Entrega e frete do Catalogo de Vendas salvos",
-    summary: `${activeRules.length} estado(s) atendido(s) configurado(s).`,
+    summary: shippingEnabled
+      ? `${activeDeliveryRules.length} estado(s) atendido(s) configurado(s).`
+      : "Frete por entrega desativado.",
     confidence: 1,
     visibility: "organization",
     tags: ["sales_catalog", "sales_catalog_shipping", "whatsapp_agent"],
     payload: {
-      active_states_count: activeRules.length,
+      shipping_enabled: shippingEnabled,
+      active_states_count: activeDeliveryRules.length,
       local_pickup: localPickup,
       origin_cep: originCep,
       default_handling_days: defaultHandlingDays,
@@ -1493,6 +1509,11 @@ async function calculateShippingQuote(input: {
 
   const item = mapSalesCatalogItem(itemRow);
   const shippingSettings = mapSalesCatalogShippingSettings(settingsRow);
+
+  if (!shippingSettings.shippingEnabled) {
+    throw new Error("Frete por entrega esta desativado para este catalogo.");
+  }
+
   const result = calculateSalesCatalogShippingQuotes({ item, settings: shippingSettings, cep });
 
   return {
@@ -1506,6 +1527,38 @@ async function calculateShippingQuote(input: {
     quotes: result.quotes,
     error: result.error,
   };
+}
+
+function assertShippingSettingsReady(input: {
+  shippingEnabled: boolean;
+  originCep: string | null;
+  activeRules: SalesCatalogShippingRule[];
+}) {
+  if (!input.shippingEnabled) {
+    return;
+  }
+
+  if (!input.originCep) {
+    throw new Error("Informe o CEP de origem antes de ativar o frete por entrega.");
+  }
+
+  if (input.activeRules.length === 0) {
+    throw new Error("Marque ao menos um estado como Entrego ou desative o frete por entrega.");
+  }
+
+  const incompleteStates = input.activeRules
+    .filter((rule) => (
+      !rule.cepStart
+      || !rule.cepEnd
+      || !rule.price?.trim()
+      || rule.minDays === null
+      || rule.maxDays === null
+    ))
+    .map((rule) => rule.uf);
+
+  if (incompleteStates.length > 0) {
+    throw new Error(`Complete CEP inicial, CEP final, valor e prazo dos estados ativos: ${incompleteStates.join(", ")}.`);
+  }
 }
 
 async function startMercadoPagoOAuth(input: {
