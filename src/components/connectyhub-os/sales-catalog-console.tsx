@@ -541,7 +541,7 @@ const salesCatalogHelpText: Record<string, string> = {
   "Pagamento confirmado": "Texto enviado quando o pagamento ja foi conferido.",
   "Item indisponivel": "Resposta para quando um produto, SKU ou variacao nao puder ser vendido.",
   "Transferencia humana": "Mensagem usada quando o atendimento precisa sair do agente e ir para uma pessoa.",
-  "CEP de origem": "CEP usado como base para calcular frete, retirada e prazos.",
+  "CEP de origem": "Opcional neste frete manual. Use quando quiser registrar a base de envio da loja.",
   Separacao: "Prazo interno, em dias, antes do produto ficar pronto para envio ou retirada.",
   "Servicos e faixas": "Configure transportadoras, tipos de entrega, prazos e faixas por peso.",
   "Calculo por CEP": "Teste um CEP real para conferir se as regras de frete retornam valor e prazo corretos.",
@@ -3852,13 +3852,13 @@ export function SalesCatalogConsole({
               {shippingDraft.shippingEnabled ? (
                 <>
                   <label className="block">
-                    <FieldLabel>CEP de origem</FieldLabel>
+                    <FieldLabel>CEP de origem opc.</FieldLabel>
                     <input
                       value={shippingDraft.originCep}
                       onChange={(event) => setShippingDraft((current) => ({ ...current, originCep: cepInput(event.target.value) }))}
                       className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
                       inputMode="numeric"
-                      placeholder="00000-000"
+                      placeholder="opcional"
                       style={{ borderColor: "var(--ch-border)" }}
                     />
                   </label>
@@ -3885,6 +3885,10 @@ export function SalesCatalogConsole({
                       style={{ borderColor: "var(--ch-border)" }}
                     />
                   </label>
+
+                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-[12px] leading-5 text-cyan-950 dark:text-cyan-100">
+                    CEP inicial e final sao opcionais. Vazios, a entrega vale para todo o estado.
+                  </div>
                 </>
               ) : (
                 <div className="rounded-xl border border-dashed p-4" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -3923,8 +3927,8 @@ export function SalesCatalogConsole({
                     <div className="hidden grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                       <span>Estado</span>
                       <span>Entrega</span>
-                      <span>CEP ini.</span>
-                      <span>CEP fim</span>
+                      <span>CEP ini. opc.</span>
+                      <span>CEP fim opc.</span>
                       <span>Valor</span>
                       <span>Prazo min.</span>
                       <span>Prazo max.</span>
@@ -3976,7 +3980,7 @@ export function SalesCatalogConsole({
                               onChange={(event) => updateShippingRule(rule.uf, { cepStart: cepInput(event.target.value) })}
                               className={deliveryInputClassName}
                               inputMode="numeric"
-                              placeholder="00000-000"
+                              placeholder="todo estado"
                               style={{ borderColor: "var(--ch-border)" }}
                             />
                             <input
@@ -3985,7 +3989,7 @@ export function SalesCatalogConsole({
                               onChange={(event) => updateShippingRule(rule.uf, { cepEnd: cepInput(event.target.value) })}
                               className={deliveryInputClassName}
                               inputMode="numeric"
-                              placeholder="99999-999"
+                              placeholder="todo estado"
                               style={{ borderColor: "var(--ch-border)" }}
                             />
                             <input
@@ -3993,7 +3997,7 @@ export function SalesCatalogConsole({
                               disabled={!rule.active}
                               onChange={(event) => updateShippingRule(rule.uf, { price: event.target.value.slice(0, 40) })}
                               className={deliveryInputClassName}
-                              placeholder="R$ 29,90"
+                              placeholder="29,90"
                               style={{ borderColor: "var(--ch-border)" }}
                             />
                             <input
@@ -4019,7 +4023,7 @@ export function SalesCatalogConsole({
                               disabled={!rule.active}
                               onChange={(event) => updateShippingRule(rule.uf, { freeShippingThreshold: event.target.value.slice(0, 40) })}
                               className={deliveryInputClassName}
-                              placeholder="R$ 300,00"
+                              placeholder="300,00"
                               style={{ borderColor: "var(--ch-border)" }}
                             />
                             <button

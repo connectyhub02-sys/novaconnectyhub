@@ -1362,7 +1362,6 @@ async function saveShippingSettings(input: {
 
   assertShippingSettingsReady({
     shippingEnabled,
-    originCep,
     activeRules,
   });
 
@@ -1531,15 +1530,10 @@ async function calculateShippingQuote(input: {
 
 function assertShippingSettingsReady(input: {
   shippingEnabled: boolean;
-  originCep: string | null;
   activeRules: SalesCatalogShippingRule[];
 }) {
   if (!input.shippingEnabled) {
     return;
-  }
-
-  if (!input.originCep) {
-    throw new Error("Informe o CEP de origem antes de ativar o frete por entrega.");
   }
 
   if (input.activeRules.length === 0) {
@@ -1548,17 +1542,27 @@ function assertShippingSettingsReady(input: {
 
   const incompleteStates = input.activeRules
     .filter((rule) => (
-      !rule.cepStart
-      || !rule.cepEnd
-      || !rule.price?.trim()
+      !hasShippingMoneyValue(rule.price)
       || rule.minDays === null
       || rule.maxDays === null
     ))
     .map((rule) => rule.uf);
 
   if (incompleteStates.length > 0) {
-    throw new Error(`Complete CEP inicial, CEP final, valor e prazo dos estados ativos: ${incompleteStates.join(", ")}.`);
+    throw new Error(`Complete valor, prazo minimo e prazo maximo dos estados ativos: ${incompleteStates.join(", ")}.`);
   }
+
+  const partialCepStates = input.activeRules
+    .filter((rule) => Boolean(rule.cepStart) !== Boolean(rule.cepEnd))
+    .map((rule) => rule.uf);
+
+  if (partialCepStates.length > 0) {
+    throw new Error(`Preencha CEP inicial e CEP final juntos, ou deixe os dois vazios para atender o estado inteiro: ${partialCepStates.join(", ")}.`);
+  }
+}
+
+function hasShippingMoneyValue(value: string | null) {
+  return /\d/.test(value?.trim() ?? "");
 }
 
 async function startMercadoPagoOAuth(input: {
@@ -4685,10 +4689,11 @@ function serializeShippingRule(rule: SalesCatalogShippingRule) {
 
 function formatShippingRuleContent(rule: SalesCatalogShippingRule) {
   const activeServices = rule.services.filter((service) => service.active);
+  const cepScope = rule.cepStart && rule.cepEnd ? `CEP ${rule.cepStart}-${rule.cepEnd}` : "todo o estado";
   const parts = [
     rule.price ? `frete ${rule.price}` : "frete a combinar",
     rule.minDays !== null || rule.maxDays !== null ? `prazo ${formatShippingDeadline(rule.minDays, rule.maxDays)}` : "",
-    rule.cepStart && rule.cepEnd ? `CEP ${rule.cepStart}-${rule.cepEnd}` : "",
+    cepScope,
     activeServices.length ? `servicos ${activeServices.map((service) => service.name).join(", ")}` : "",
     rule.freeShippingThreshold ? `gratis acima de ${rule.freeShippingThreshold}` : "",
   ].filter(Boolean);

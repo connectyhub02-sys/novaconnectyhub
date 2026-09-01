@@ -252,11 +252,14 @@ describe("PagBank gateway rollout", () => {
   it("binds catalog freight and pickup offers to explicit store settings", () => {
     expect(salesCatalogSharedSource).toContain("shippingEnabled: boolean");
     expect(dashboardSalesCatalogSource).toContain("shipping_enabled: shippingEnabled");
-    expect(dashboardSalesCatalogSource).toContain("Informe o CEP de origem antes de ativar o frete por entrega");
-    expect(dashboardSalesCatalogSource).toContain("Complete CEP inicial, CEP final, valor e prazo dos estados ativos");
+    expect(dashboardSalesCatalogSource).toContain("Complete valor, prazo minimo e prazo maximo dos estados ativos");
+    expect(dashboardSalesCatalogSource).toContain("deixe os dois vazios para atender o estado inteiro");
+    expect(dashboardSalesCatalogSource).toContain("todo o estado");
     expect(dashboardSalesCatalogSource).toContain("Frete por entrega esta desativado para este catalogo");
     expect(salesCatalogConsoleSource).toContain("Frete por entrega");
     expect(salesCatalogConsoleSource).toContain("Nao entrego");
+    expect(salesCatalogConsoleSource).toContain("CEP de origem opc.");
+    expect(salesCatalogConsoleSource).toContain("CEP inicial e final sao opcionais");
     expect(salesCatalogConsoleSource).toContain("disabled={!rule.active}");
     expect(salesCatalogConsoleSource).toContain("shippingDraft.shippingEnabled");
     expect(whatsappAgentRuntimeSource).toContain("buildSalesCatalogShippingPolicyLines");
