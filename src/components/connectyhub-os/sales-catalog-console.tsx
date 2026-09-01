@@ -1817,7 +1817,18 @@ export function SalesCatalogConsole({
   }
 
   function changeLocalDeliveryZoneShape(zoneId: string, shape: SalesCatalogLocalDeliveryZoneShape) {
-    updateLocalDeliveryZone(zoneId, { shape });
+    setShippingDraft((current) => ({
+      ...current,
+      localDeliveryZones: current.localDeliveryZones.map((zone) => (
+        zone.id === zoneId
+          ? {
+              ...zone,
+              shape,
+              radiusKm: shape === "neighborhoods" ? zone.radiusKm : (zone.radiusKm ?? 5),
+            }
+          : zone
+      )),
+    }));
   }
 
   function removeLocalDeliveryZone(zoneId: string) {
@@ -4169,8 +4180,23 @@ export function SalesCatalogConsole({
               </button>
             </div>
 
-            {shippingDraft.shippingEnabled ? (
-              <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
+            <div className="grid gap-4">
+              {shippingDraft.localDeliveryEnabled ? (
+                <LocalDeliveryZonesEditor
+                  googleMapsConfig={googleMapsConfig}
+                  loadingGoogleMapsConfig={loadingGoogleMapsConfig}
+                  selectedZone={selectedLocalDeliveryZone}
+                  zones={shippingDraft.localDeliveryZones}
+                  onAddZone={addLocalDeliveryZone}
+                  onChangeZoneShape={changeLocalDeliveryZoneShape}
+                  onRemoveZone={removeLocalDeliveryZone}
+                  onSelectZone={setSelectedLocalDeliveryZoneId}
+                  onUpdateZone={updateLocalDeliveryZone}
+                />
+              ) : null}
+
+              {shippingDraft.shippingEnabled ? (
+                <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
                 <div className="overflow-visible md:overflow-x-auto">
                   <div className="min-w-0 md:min-w-[1200px]">
                     <div className="hidden grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -4294,302 +4320,16 @@ export function SalesCatalogConsole({
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed p-8 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              ) : shippingDraft.localDeliveryEnabled ? null : (
+                <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed p-8 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="max-w-sm">
                   <Truck className="mx-auto h-8 w-8 text-slate-500" />
-                  <p className="mt-3 text-[13px] font-semibold text-slate-200">Frete por entrega desligado</p>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-500">Ative para liberar estados, faixas, prazos e calculo por CEP.</p>
+                  <p className="mt-3 text-[13px] font-semibold text-slate-200">Entrega e frete desligados</p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-500">Ative frete por entrega, entrega local ou retirada para orientar os agentes.</p>
                 </div>
               </div>
-            )}
-
-            {shippingDraft.localDeliveryEnabled ? (
-              <AccordionSection icon={MapPin} title="Entrega local por area" tone="amber" className="xl:col-span-2">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <FieldLabel>Zonas locais</FieldLabel>
-                    <p className="text-[12px] leading-5 text-slate-400">
-                      Use raio, bairros/cidades ou desenho no mapa. O agente so oferece entrega onde existir zona ativa.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => addLocalDeliveryZone("radius")}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    >
-                      <Navigation className="h-3.5 w-3.5" />
-                      Raio
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addLocalDeliveryZone("neighborhoods")}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    >
-                      <Tags className="h-3.5 w-3.5" />
-                      Bairros
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addLocalDeliveryZone("polygon")}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    >
-                      <MapPin className="h-3.5 w-3.5" />
-                      Mapa
-                    </button>
-                  </div>
-                </div>
-
-                {shippingDraft.localDeliveryZones.length > 0 ? (
-                  <div className="mt-4 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-                    <div className="space-y-2">
-                      {shippingDraft.localDeliveryZones.map((zone) => (
-                        <button
-                          key={zone.id}
-                          type="button"
-                          onClick={() => setSelectedLocalDeliveryZoneId(zone.id)}
-                          className={cn(
-                            "w-full rounded-xl border p-3 text-left transition",
-                            selectedLocalDeliveryZone?.id === zone.id ? "border-amber-300/60 bg-amber-300/15" : "hover:bg-amber-400/10",
-                          )}
-                          style={{ borderColor: selectedLocalDeliveryZone?.id === zone.id ? undefined : "var(--ch-border)" }}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-[12px] font-semibold text-slate-100">{zone.name}</p>
-                            <NeonBadge tone={zone.active ? "green" : "rose"}>{zone.active ? "ativa" : "off"}</NeonBadge>
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-500">{formatLocalDeliveryZoneShape(zone.shape)}</p>
-                          <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{formatLocalDeliveryZoneScope(zone)}</p>
-                        </button>
-                      ))}
-                    </div>
-
-                    {selectedLocalDeliveryZone ? (
-                      <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <FieldLabel>Zona selecionada</FieldLabel>
-                            <p className="text-[13px] font-semibold text-slate-100">{selectedLocalDeliveryZone.name}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <label className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-slate-200" style={{ borderColor: "var(--ch-border)" }}>
-                              <input
-                                checked={selectedLocalDeliveryZone.active}
-                                type="checkbox"
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { active: event.target.checked })}
-                              />
-                              Zona ativa
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => removeLocalDeliveryZone(selectedLocalDeliveryZone.id)}
-                              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-rose-100 transition hover:bg-rose-400/10"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Remover
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                          <label className="block">
-                            <FieldLabel>Nome da zona</FieldLabel>
-                            <input
-                              value={selectedLocalDeliveryZone.name}
-                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { name: event.target.value.slice(0, 80) })}
-                              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                              placeholder="Ex: Ate 5 km, Zona leste, Centro"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                          </label>
-
-                          <div>
-                            <FieldLabel>Tipo de area</FieldLabel>
-                            <div className="grid grid-cols-3 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
-                              {(["radius", "neighborhoods", "polygon"] as const).map((shape) => (
-                                <button
-                                  key={shape}
-                                  type="button"
-                                  onClick={() => changeLocalDeliveryZoneShape(selectedLocalDeliveryZone.id, shape)}
-                                  className={cn(
-                                    "min-h-9 rounded-md px-2 text-[11px] font-semibold transition",
-                                    selectedLocalDeliveryZone.shape === shape ? "bg-amber-300 text-slate-950" : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
-                                  )}
-                                >
-                                  {shape === "radius" ? "Raio" : shape === "neighborhoods" ? "Bairros" : "Mapa"}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <label className="block lg:col-span-2">
-                            <FieldLabel>Endereco base</FieldLabel>
-                            <input
-                              value={selectedLocalDeliveryZone.baseAddress ?? ""}
-                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseAddress: event.target.value.slice(0, 220) })}
-                              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                              placeholder="Rua, numero, bairro, cidade"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                          </label>
-
-                          <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
-                            <label className="block">
-                              <FieldLabel>Latitude</FieldLabel>
-                              <input
-                                value={coordinateInput(selectedLocalDeliveryZone.baseLatitude)}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseLatitude: parseOptionalDecimal(event.target.value, -90, 90) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                inputMode="decimal"
-                                placeholder="-23.5505"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Longitude</FieldLabel>
-                              <input
-                                value={coordinateInput(selectedLocalDeliveryZone.baseLongitude)}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseLongitude: parseOptionalDecimal(event.target.value, -180, 180) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                inputMode="decimal"
-                                placeholder="-46.6333"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Raio km</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.radiusKm ?? ""}
-                                disabled={selectedLocalDeliveryZone.shape !== "radius"}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { radiusKm: parseOptionalDecimal(event.target.value, 0.1, 200) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:cursor-not-allowed disabled:opacity-45"
-                                inputMode="decimal"
-                                placeholder="5"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                          </div>
-
-                          <div className="grid gap-3 sm:grid-cols-5 lg:col-span-2">
-                            <label className="block">
-                              <FieldLabel>Valor</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.price ?? ""}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { price: event.target.value.slice(0, 40) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                placeholder="15,00"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Prazo min.</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.minDays ?? ""}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { minDays: parseOptionalNumber(event.target.value) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                inputMode="numeric"
-                                placeholder="0"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Prazo max.</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.maxDays ?? ""}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { maxDays: parseOptionalNumber(event.target.value) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                inputMode="numeric"
-                                placeholder="1"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Pedido min.</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.orderMinimum ?? ""}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { orderMinimum: event.target.value.slice(0, 40) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                placeholder="30,00"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                            <label className="block">
-                              <FieldLabel>Gratis acima</FieldLabel>
-                              <input
-                                value={selectedLocalDeliveryZone.freeDeliveryThreshold ?? ""}
-                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { freeDeliveryThreshold: event.target.value.slice(0, 40) })}
-                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                placeholder="100,00"
-                                style={{ borderColor: "var(--ch-border)" }}
-                              />
-                            </label>
-                          </div>
-
-                          {selectedLocalDeliveryZone.shape === "neighborhoods" ? (
-                            <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
-                              <label className="block">
-                                <FieldLabel>Bairros atendidos</FieldLabel>
-                                <textarea
-                                  value={selectedLocalDeliveryZone.neighborhoods.join("\n")}
-                                  onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { neighborhoods: splitLocalDeliveryList(event.target.value) })}
-                                  className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
-                                  placeholder={"Centro\nMooca\nTatuape"}
-                                  style={{ borderColor: "var(--ch-border)" }}
-                                />
-                              </label>
-                              <label className="block">
-                                <FieldLabel>Cidades atendidas</FieldLabel>
-                                <textarea
-                                  value={selectedLocalDeliveryZone.cities.join("\n")}
-                                  onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { cities: splitLocalDeliveryList(event.target.value) })}
-                                  className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
-                                  placeholder={"Sao Paulo\nSanto Andre"}
-                                  style={{ borderColor: "var(--ch-border)" }}
-                                />
-                              </label>
-                            </div>
-                          ) : null}
-
-                          <label className="block lg:col-span-2">
-                            <FieldLabel>Observacoes para o agente</FieldLabel>
-                            <textarea
-                              value={selectedLocalDeliveryZone.notes ?? ""}
-                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { notes: event.target.value.slice(0, 220) })}
-                              className="min-h-20 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
-                              placeholder="Ex: confirmar portaria, taxa extra em condominio distante, nao entregar apos 23h"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                          </label>
-
-                          <div className="lg:col-span-2">
-                            <LocalDeliveryMapEditor
-                              apiKey={googleMapsConfig?.browserApiKey ?? ""}
-                              configured={Boolean(googleMapsConfig?.configured)}
-                              loading={loadingGoogleMapsConfig}
-                              mapId={googleMapsConfig?.mapId ?? null}
-                              zone={selectedLocalDeliveryZone}
-                              onPatch={(patch) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, patch)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-xl border border-dashed p-6 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                    <MapPin className="mx-auto h-8 w-8 text-slate-500" />
-                    <p className="mt-3 text-[13px] font-semibold text-slate-200">Nenhuma zona local criada</p>
-                    <p className="mt-1 text-[12px] leading-5 text-slate-500">Crie uma zona por raio, bairros ou mapa para o agente saber onde pode entregar.</p>
-                  </div>
-                )}
-              </AccordionSection>
-            ) : null}
-
+              )}
+            </div>
             {shippingDraft.shippingEnabled && selectedShippingRule?.active ? (
               <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -8357,6 +8097,321 @@ function CatalogItemCard({
   );
 }
 
+type LocalDeliveryZonesEditorProps = {
+  googleMapsConfig: GoogleMapsConfig | null;
+  loadingGoogleMapsConfig: boolean;
+  selectedZone: SalesCatalogLocalDeliveryZone | null;
+  zones: SalesCatalogLocalDeliveryZone[];
+  onAddZone: (shape: SalesCatalogLocalDeliveryZoneShape) => void;
+  onChangeZoneShape: (zoneId: string, shape: SalesCatalogLocalDeliveryZoneShape) => void;
+  onRemoveZone: (zoneId: string) => void;
+  onSelectZone: (zoneId: string) => void;
+  onUpdateZone: (zoneId: string, patch: Partial<SalesCatalogLocalDeliveryZone>) => void;
+};
+
+function LocalDeliveryZonesEditor({
+  googleMapsConfig,
+  loadingGoogleMapsConfig,
+  selectedZone,
+  zones,
+  onAddZone,
+  onChangeZoneShape,
+  onRemoveZone,
+  onSelectZone,
+  onUpdateZone,
+}: LocalDeliveryZonesEditorProps) {
+  const radiusDisabled = !selectedZone || selectedZone.shape === "neighborhoods";
+
+  return (
+    <section className="rounded-xl border border-amber-300/35 bg-amber-300/5 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-amber-300" />
+            <FieldLabel>Entrega local por area</FieldLabel>
+          </div>
+          <p className="text-[12px] leading-5 text-slate-400">
+            Use raio, bairros/cidades ou desenho no mapa. O agente so oferece entrega onde existir zona ativa.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onAddZone("radius")}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <Navigation className="h-3.5 w-3.5" />
+            Raio
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddZone("neighborhoods")}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <Tags className="h-3.5 w-3.5" />
+            Bairros
+          </button>
+          <button
+            type="button"
+            onClick={() => onAddZone("polygon")}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            Mapa
+          </button>
+        </div>
+      </div>
+
+      {zones.length > 0 ? (
+        <div className="mt-4 grid gap-4 2xl:grid-cols-[240px_minmax(0,1fr)]">
+          <div className="space-y-2">
+            {zones.map((zone) => (
+              <button
+                key={zone.id}
+                type="button"
+                onClick={() => onSelectZone(zone.id)}
+                className={cn(
+                  "w-full rounded-xl border p-3 text-left transition",
+                  selectedZone?.id === zone.id ? "border-amber-300/60 bg-amber-300/15" : "hover:bg-amber-400/10",
+                )}
+                style={{ borderColor: selectedZone?.id === zone.id ? undefined : "var(--ch-border)" }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-[12px] font-semibold text-slate-100">{zone.name}</p>
+                  <NeonBadge tone={zone.active ? "green" : "rose"}>{zone.active ? "ativa" : "off"}</NeonBadge>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">{formatLocalDeliveryZoneShape(zone.shape)}</p>
+                <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{formatLocalDeliveryZoneScope(zone)}</p>
+              </button>
+            ))}
+          </div>
+
+          {selectedZone ? (
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <FieldLabel>Zona selecionada</FieldLabel>
+                  <p className="text-[13px] font-semibold text-slate-100">{selectedZone.name}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-slate-200" style={{ borderColor: "var(--ch-border)" }}>
+                    <input
+                      checked={selectedZone.active}
+                      type="checkbox"
+                      onChange={(event) => onUpdateZone(selectedZone.id, { active: event.target.checked })}
+                    />
+                    Zona ativa
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveZone(selectedZone.id)}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-rose-100 transition hover:bg-rose-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remover
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <label className="block">
+                  <FieldLabel>Nome da zona</FieldLabel>
+                  <input
+                    value={selectedZone.name}
+                    onChange={(event) => onUpdateZone(selectedZone.id, { name: event.target.value.slice(0, 80) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Ex: Ate 5 km, Zona leste, Centro"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+
+                <div>
+                  <FieldLabel>Tipo de area</FieldLabel>
+                  <div className="grid grid-cols-3 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
+                    {(["radius", "neighborhoods", "polygon"] as const).map((shape) => (
+                      <button
+                        key={shape}
+                        type="button"
+                        onClick={() => onChangeZoneShape(selectedZone.id, shape)}
+                        className={cn(
+                          "min-h-9 rounded-md px-2 text-[11px] font-semibold transition",
+                          selectedZone.shape === shape ? "bg-amber-300 text-slate-950" : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
+                        )}
+                      >
+                        {shape === "radius" ? "Raio" : shape === "neighborhoods" ? "Bairros" : "Mapa"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="block lg:col-span-2">
+                  <FieldLabel>Endereco base</FieldLabel>
+                  <input
+                    value={selectedZone.baseAddress ?? ""}
+                    onChange={(event) => onUpdateZone(selectedZone.id, { baseAddress: event.target.value.slice(0, 220) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Rua, numero, bairro, cidade"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
+                  <label className="block">
+                    <FieldLabel>Latitude</FieldLabel>
+                    <input
+                      value={coordinateInput(selectedZone.baseLatitude)}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { baseLatitude: parseOptionalDecimal(event.target.value, -90, 90) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="decimal"
+                      placeholder="-23.5505"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Longitude</FieldLabel>
+                    <input
+                      value={coordinateInput(selectedZone.baseLongitude)}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { baseLongitude: parseOptionalDecimal(event.target.value, -180, 180) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="decimal"
+                      placeholder="-46.6333"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Raio km</FieldLabel>
+                    <input
+                      value={selectedZone.radiusKm ?? ""}
+                      disabled={radiusDisabled}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { radiusKm: parseOptionalDecimal(event.target.value, 0.1, 200) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                      inputMode="decimal"
+                      placeholder="5"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-5 lg:col-span-2">
+                  <label className="block">
+                    <FieldLabel>Valor</FieldLabel>
+                    <input
+                      value={selectedZone.price ?? ""}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { price: event.target.value.slice(0, 40) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="15,00"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Prazo min.</FieldLabel>
+                    <input
+                      value={selectedZone.minDays ?? ""}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { minDays: parseOptionalNumber(event.target.value) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="0"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Prazo max.</FieldLabel>
+                    <input
+                      value={selectedZone.maxDays ?? ""}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { maxDays: parseOptionalNumber(event.target.value) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="1"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Pedido min.</FieldLabel>
+                    <input
+                      value={selectedZone.orderMinimum ?? ""}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { orderMinimum: event.target.value.slice(0, 40) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="30,00"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Gratis acima</FieldLabel>
+                    <input
+                      value={selectedZone.freeDeliveryThreshold ?? ""}
+                      onChange={(event) => onUpdateZone(selectedZone.id, { freeDeliveryThreshold: event.target.value.slice(0, 40) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="100,00"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+
+                {selectedZone.shape === "neighborhoods" ? (
+                  <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+                    <label className="block">
+                      <FieldLabel>Bairros atendidos</FieldLabel>
+                      <textarea
+                        value={selectedZone.neighborhoods.join("\n")}
+                        onChange={(event) => onUpdateZone(selectedZone.id, { neighborhoods: splitLocalDeliveryList(event.target.value) })}
+                        className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                        placeholder={"Centro\nMooca\nTatuape"}
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Cidades atendidas</FieldLabel>
+                      <textarea
+                        value={selectedZone.cities.join("\n")}
+                        onChange={(event) => onUpdateZone(selectedZone.id, { cities: splitLocalDeliveryList(event.target.value) })}
+                        className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                        placeholder={"Sao Paulo\nSanto Andre"}
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                <label className="block lg:col-span-2">
+                  <FieldLabel>Observacoes para o agente</FieldLabel>
+                  <textarea
+                    value={selectedZone.notes ?? ""}
+                    onChange={(event) => onUpdateZone(selectedZone.id, { notes: event.target.value.slice(0, 220) })}
+                    className="min-h-20 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                    placeholder="Ex: confirmar portaria, taxa extra em condominio distante, nao entregar apos 23h"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+
+                <div className="lg:col-span-2">
+                  <LocalDeliveryMapEditor
+                    apiKey={googleMapsConfig?.browserApiKey ?? ""}
+                    configured={Boolean(googleMapsConfig?.configured)}
+                    loading={loadingGoogleMapsConfig}
+                    mapId={googleMapsConfig?.mapId ?? null}
+                    zone={selectedZone}
+                    onPatch={(patch) => onUpdateZone(selectedZone.id, patch)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed p-6 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+          <MapPin className="mx-auto h-8 w-8 text-slate-500" />
+          <p className="mt-3 text-[13px] font-semibold text-slate-200">Nenhuma zona local criada</p>
+          <p className="mt-1 text-[12px] leading-5 text-slate-500">Crie uma zona por raio, bairros ou mapa para o agente saber onde pode entregar.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AccordionSection({
   icon: Icon,
   title,
@@ -8891,7 +8946,9 @@ function LocalDeliveryMapEditor({
     clearLocalDeliveryMapOverlays(overlays);
     map.setCenter(center);
 
-    if (zone.shape === "radius") {
+    const showRadiusCircle = zone.shape === "radius" || (zone.shape === "polygon" && zone.polygon.length === 0);
+
+    if (showRadiusCircle) {
       map.setZoom(zone.radiusKm && zone.radiusKm > 12 ? 10 : 13);
 
       if (isValidCoordinate(zone.baseLatitude, zone.baseLongitude)) {
@@ -8959,10 +9016,10 @@ function LocalDeliveryMapEditor({
       google.maps.event.addListener(map, "click", (event: { latLng?: { lat: () => number; lng: () => number } }) => {
         if (!event.latLng) return;
 
-        const point = {
-          lat: roundCoordinate(event.latLng.lat()),
-          lng: roundCoordinate(event.latLng.lng()),
-        };
+          const point = {
+            lat: roundCoordinate(event.latLng.lat()),
+            lng: roundCoordinate(event.latLng.lng()),
+          };
 
         if (zone.shape === "polygon") {
           onPatch({ polygon: [...zone.polygon, point] });
@@ -9025,7 +9082,7 @@ function LocalDeliveryMapEditor({
           <FieldLabel>Mapa da area</FieldLabel>
           <p className="text-[12px] leading-5 text-slate-500">
             {zone.shape === "polygon"
-              ? "Clique no mapa para adicionar pontos. Arraste o desenho para ajustar a area."
+              ? "Use endereco e raio para alcance rapido ou clique no mapa para desenhar uma area."
               : "Clique no mapa para definir o centro. Arraste ou redimensione o raio."}
           </p>
         </div>
@@ -9946,7 +10003,7 @@ function createLocalDeliveryZone(shape: SalesCatalogLocalDeliveryZoneShape, inde
     baseAddress: null,
     baseLatitude: null,
     baseLongitude: null,
-    radiusKm: shape === "radius" ? 5 : null,
+    radiusKm: shape === "neighborhoods" ? null : 5,
     polygon: [],
     neighborhoods: [],
     cities: [],
@@ -9993,7 +10050,14 @@ function formatLocalDeliveryZoneScope(zone: SalesCatalogLocalDeliveryZone) {
   }
 
   if (zone.shape === "polygon") {
-    return `${zone.polygon.length} ponto(s) no mapa; ${price}; ${deadline}`;
+    if (zone.polygon.length >= 3) {
+      return `${zone.polygon.length} ponto(s) no mapa; ${price}; ${deadline}`;
+    }
+
+    const base = zone.baseAddress
+      || (isValidCoordinate(zone.baseLatitude, zone.baseLongitude) ? `${coordinateInput(zone.baseLatitude)}, ${coordinateInput(zone.baseLongitude)}` : "base pendente");
+
+    return `Ate ${zone.radiusKm ?? "?"} km de ${base}; ${price}; ${deadline}`;
   }
 
   const base = zone.baseAddress

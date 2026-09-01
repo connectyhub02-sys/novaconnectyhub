@@ -1603,7 +1603,8 @@ function assertShippingSettingsReady(input: {
         return zone.neighborhoods.length === 0 && zone.cities.length === 0;
       }
 
-      return zone.polygon.length < 3;
+      return zone.polygon.length < 3
+        && (!isValidGeoPoint(zone.baseLatitude, zone.baseLongitude) || zone.radiusKm === null || zone.radiusKm <= 0);
     })
     .map((zone) => zone.name);
 
@@ -4835,7 +4836,15 @@ function formatLocalDeliveryScope(zone: SalesCatalogLocalDeliveryZone) {
   }
 
   if (zone.shape === "polygon") {
-    return zone.polygon.length >= 3 ? `${zone.polygon.length} pontos desenhados no mapa` : "area no mapa pendente";
+    if (zone.polygon.length >= 3) {
+      return `${zone.polygon.length} pontos desenhados no mapa`;
+    }
+
+    const base = zone.baseAddress || (isValidGeoPoint(zone.baseLatitude, zone.baseLongitude)
+      ? `${zone.baseLatitude}, ${zone.baseLongitude}`
+      : "base pendente");
+
+    return zone.radiusKm ? `ate ${zone.radiusKm} km de ${base}` : `raio pendente de ${base}`;
   }
 
   const base = zone.baseAddress || (isValidGeoPoint(zone.baseLatitude, zone.baseLongitude)
