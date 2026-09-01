@@ -329,6 +329,7 @@ function ConnectyShellRoot({
   const logoTone  = "blue";
   const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
   const isAttendancePage = active === "/dashboard/atendimento";
+  const isBillingRecoveryPage = isClientBillingRecoveryPage(active);
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -1179,7 +1180,7 @@ function ConnectyShellRoot({
         {/* Content */}
         <main className="flex-1 overflow-auto" data-connecty-shell-scroll="true">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          {mode === "client" && !accountCompletionGateActive && !isAccountPage && !isAttendancePage ? <BillingStatusBanner status={billingAccess} /> : null}
+          {mode === "client" && !accountCompletionGateActive && !isAccountPage && !isAttendancePage && !isBillingRecoveryPage ? <BillingStatusBanner status={billingAccess} /> : null}
           <div
             className={cn(
               "connecty-shell-content mx-auto w-full px-3 sm:px-4 lg:px-6 xl:px-8",
@@ -1193,7 +1194,7 @@ function ConnectyShellRoot({
           </div>
         </main>
       </div>
-      {mode === "client" && !accountCompletionGateActive && active !== "/dashboard/planos" ? (
+      {mode === "client" && !accountCompletionGateActive && !isBillingRecoveryPage ? (
         <BillingAccessLockOverlay status={billingAccess} />
       ) : null}
       {mode === "client" ? (
@@ -2941,4 +2942,8 @@ function resolveActiveItem(sections: NavSection[], active: string) {
     .flatMap((s) => s.items)
     .filter((item) => isActive(item.href, active))
     .sort((left, right) => right.href.length - left.href.length)[0];
+}
+
+function isClientBillingRecoveryPage(pathname: string) {
+  return pathname === "/dashboard/planos" || pathname.startsWith("/dashboard/planos/");
 }

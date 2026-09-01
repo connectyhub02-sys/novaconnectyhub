@@ -61,6 +61,15 @@ describe("Connecty shell responsive layout", () => {
     expect(shellSource).not.toContain('mode === "admin" ? "/dashboard" : "/admin"');
   });
 
+  it("lets blocked clients reach the plan checkout instead of covering it with the billing lock", () => {
+    expect(shellSource).toContain("const isBillingRecoveryPage = isClientBillingRecoveryPage(active);");
+    expect(shellSource).toContain("!isAttendancePage && !isBillingRecoveryPage ? <BillingStatusBanner");
+    expect(shellSource).toContain("!accountCompletionGateActive && !isBillingRecoveryPage ? (");
+    expect(shellSource).toContain('pathname === "/dashboard/planos"');
+    expect(shellSource).toContain('pathname.startsWith("/dashboard/planos/")');
+    expect(shellSource).not.toContain('active !== "/dashboard/planos"');
+  });
+
   it("guards shell content against mobile overflow", () => {
     expect(globalCssSource).toContain("[data-connecty-shell-scroll=\"true\"]");
     expect(globalCssSource).toContain("overflow-x: clip;");
