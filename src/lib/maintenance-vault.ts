@@ -125,7 +125,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "GEMINI_DEFAULT_MODEL",
         kind: "identifier",
         requirement: "recommended",
-        help: "Modelo padrao usado pelos agentes. Pode ser alterado por plano, setor ou agente no futuro.",
+        help: "Modelo padrao usado pelos agentes. Recomendado: gemini-3.6-flash.",
       },
       {
         label: "Modelo Gemini de voz",

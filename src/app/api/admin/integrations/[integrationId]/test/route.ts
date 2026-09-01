@@ -3,6 +3,7 @@ import { Inngest } from "inngest";
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseServiceClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { defaultGeminiModel, normalizeGeminiModel } from "@/lib/gemini/models";
 import { maintenanceIntegrations, type CredentialDefinition } from "@/lib/maintenance-vault";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
@@ -36,7 +37,6 @@ type ConnectionTestResult = {
   responseData?: unknown;
 };
 
-const defaultGeminiModel = "gemini-2.5-flash";
 const googleAdsApiVersion = "v24";
 
 export async function POST(
@@ -841,10 +841,6 @@ function resolveAppBaseUrlForTest() {
     || normalizeBaseUrl(process.env.APP_URL)
     || normalizeBaseUrl(productionUrl)
     || normalizeBaseUrl(deploymentUrl);
-}
-
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }
 
 async function fetchJson(url: string, init: RequestInit = {}) {

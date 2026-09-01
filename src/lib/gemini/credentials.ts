@@ -1,6 +1,11 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  defaultGeminiModel,
+  defaultGeminiTtsModel,
+  normalizeGeminiModel,
+} from "@/lib/gemini/models";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -10,9 +15,6 @@ export type GeminiCredentials = {
   ttsModel: string;
 };
 
-const defaultGeminiModel = "gemini-2.5-flash";
-const defaultGeminiTtsModel = "gemini-3.1-flash-tts-preview";
-
 const geminiCredentialNames = [
   "GEMINI_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -21,7 +23,7 @@ const geminiCredentialNames = [
   "GEMINI_TTS_MODEL",
 ];
 
-export { defaultGeminiModel, defaultGeminiTtsModel, geminiCredentialNames };
+export { defaultGeminiModel, defaultGeminiTtsModel, geminiCredentialNames, normalizeGeminiModel };
 
 export async function loadGeminiCredentials(
   client: SupabaseClient = createServiceClient(),
@@ -77,8 +79,4 @@ export async function loadGeminiCredentials(
     model: normalizeGeminiModel(values.get("GEMINI_DEFAULT_MODEL") ?? defaultGeminiModel),
     ttsModel: normalizeGeminiModel(values.get("GEMINI_TTS_MODEL") ?? defaultGeminiTtsModel),
   };
-}
-
-export function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }

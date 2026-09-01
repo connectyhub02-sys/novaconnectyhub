@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-console";
+import { defaultGeminiModel, normalizeGeminiModel } from "@/lib/gemini/models";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -25,7 +26,6 @@ type GeminiCredentials = {
   model: string;
 };
 
-const defaultGeminiModel = "gemini-2.5-flash";
 const geminiCredentialNames = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY", "GEMINI_DEFAULT_MODEL"];
 const maxPageChars = 12000;
 const maxNotesChars = 1200;
@@ -363,10 +363,6 @@ function readGeminiError(value: unknown) {
   const error = readRecord(readRecord(value)?.error);
   const message = error?.message;
   return typeof message === "string" ? message : null;
-}
-
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }
 
 function normalizeUrl(value: string) {

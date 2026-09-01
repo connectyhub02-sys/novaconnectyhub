@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { defaultAgentChannelConfig } from "@/lib/agents/multichannel";
+import { defaultGeminiModel } from "@/lib/gemini/models";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import {
@@ -195,7 +196,7 @@ export async function createPlatformWhatsappAgent(input: {
       description: "Atende leads da ConnectyHub no WhatsApp, qualifica intencao e conduz o proximo passo comercial.",
       prompt,
       llm_provider: "gemini",
-      model_id: "gemini-2.5-flash",
+      model_id: defaultGeminiModel,
       status: "draft",
       autonomy_level: 50,
       requires_human_approval: true,

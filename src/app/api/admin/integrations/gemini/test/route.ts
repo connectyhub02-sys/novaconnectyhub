@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { defaultGeminiModel, normalizeGeminiModel } from "@/lib/gemini/models";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-
-const defaultGeminiModel = "gemini-2.5-flash";
 
 type CredentialRow = {
   env_name: string;
@@ -145,10 +144,6 @@ function resolveCredentialValue(credentials: CredentialRow[], envNames: string[]
   }
 
   return fallback;
-}
-
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }
 
 async function testGeminiConnection(apiKey: string, model: string) {

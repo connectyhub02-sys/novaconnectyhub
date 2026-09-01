@@ -24,6 +24,7 @@ import {
   type LeadQualificationAnalysis,
 } from "@/lib/leads/qualification";
 import {
+  defaultGeminiModel,
   loadGeminiCredentials,
   normalizeGeminiModel,
   type GeminiCredentials,
@@ -10971,7 +10972,7 @@ function readCachedRunResponse(metadata: JsonRecord | null): AgentResponseResult
 
   return {
     text,
-    modelId: asString(record?.runtime_response_model_id) ?? "gemini-2.5-flash",
+    modelId: asString(record?.runtime_response_model_id) ?? defaultGeminiModel,
     usage: readCachedGeminiUsage(record?.runtime_response_usage),
     fromCache: true,
   };

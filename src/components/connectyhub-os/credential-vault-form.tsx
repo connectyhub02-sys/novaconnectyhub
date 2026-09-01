@@ -17,6 +17,10 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
+import {
+  defaultGeminiModel,
+  getGeminiModelReplacement,
+} from "@/lib/gemini/models";
 import type { CredentialKind, CredentialRequirement } from "@/lib/maintenance-vault";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -91,13 +95,12 @@ type GeminiModelSelectOption = {
   enabled: boolean;
 };
 
-const defaultGeminiModel = "gemini-2.5-flash";
 const geminiModelOptions: GeminiModelSelectOption[] = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash", detail: "Padrao recomendado para atendimento rapido.", enabled: true },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", detail: "Mais raciocinio para tarefas complexas.", enabled: true },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", detail: "Opcao rapida e economica.", enabled: true },
-  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash", detail: "Compatibilidade com fluxos antigos.", enabled: true },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro", detail: "Compatibilidade com tarefas longas.", enabled: true },
+  { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash", detail: "Padrao recomendado para atendimento rapido.", enabled: true },
+  { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash", detail: "Mais capacidade para agentes e tarefas complexas.", enabled: true },
+  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash", detail: "Opcao estavel para alto volume.", enabled: true },
+  { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite", detail: "Baixo custo e baixa latencia.", enabled: true },
+  { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", detail: "Raciocinio avancado em preview.", enabled: true },
 ];
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -627,7 +630,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                                   autoComplete="off"
                                   value={value}
                                   onChange={(e) => updateField(fieldKey, e.target.value)}
-                                  placeholder="Ex: gemini-2.5-flash"
+                                  placeholder="Ex: gemini-3.6-flash"
                                   className="h-9 w-full rounded-lg pl-9 pr-3 font-mono text-[11px] outline-none transition"
                                   style={{
                                     background: "var(--ch-surface)",
@@ -945,7 +948,7 @@ function CodeHint({ label, value }: { label: string; value: string }) {
 }
 
 function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) {
-  const available = models.filter((model) => model.supportsGenerateContent).length;
+  const available = models.filter((model) => model.supportsGenerateContent && !getGeminiModelReplacement(model.id)).length;
   const unavailable = models.length - available;
 
   return (
@@ -977,11 +980,15 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
       </div>
       <div className="max-h-72 overflow-y-auto p-2">
         <div className="grid gap-2">
-          {models.map((model) => (
+          {models.map((model) => {
+            const replacement = getGeminiModelReplacement(model.id);
+            const availableForAgents = model.supportsGenerateContent && !replacement;
+
+            return (
             <div
               key={model.id}
               className="rounded-lg px-3 py-2"
-              style={model.supportsGenerateContent
+              style={availableForAgents
                 ? { background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.18)" }
                 : { background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.16)" }}
             >
@@ -993,21 +1000,23 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
                   <p className="mt-0.5 break-all font-mono text-[10px] text-slate-500">{model.id}</p>
                 </div>
                 <span
-                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${model.supportsGenerateContent ? "text-emerald-600" : "text-rose-600"}`}
-                  style={model.supportsGenerateContent
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${availableForAgents ? "text-emerald-600" : "text-rose-600"}`}
+                  style={availableForAgents
                     ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }
                     : { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
                 >
-                  {model.supportsGenerateContent
+                  {availableForAgents
                     ? <CheckCircle2 className="h-2.5 w-2.5" />
                     : <AlertTriangle className="h-2.5 w-2.5" />}
-                  {model.supportsGenerateContent ? "Disponivel" : "Indisponivel"}
+                  {availableForAgents ? "Disponivel" : replacement ? "Substituido" : "Indisponivel"}
                 </span>
               </div>
-              <p className={`mt-1 text-[10px] leading-4 ${model.supportsGenerateContent ? "text-emerald-700" : "text-rose-600"}`}>
-                {model.supportsGenerateContent
+              <p className={`mt-1 text-[10px] leading-4 ${availableForAgents ? "text-emerald-700" : "text-rose-600"}`}>
+                {availableForAgents
                   ? "Pode ser usado como modelo global dos agentes."
-                  : "Nao entra no seletor porque nao suporta generateContent para atendimento."}
+                  : replacement
+                    ? `Nao entra no seletor para novas chaves. Use ${replacement}.`
+                    : "Nao entra no seletor porque nao suporta generateContent para atendimento."}
               </p>
               <p className="mt-1 text-[10px] leading-4 text-slate-500">
                 {[
@@ -1017,7 +1026,8 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
                 ].filter(Boolean).join(" | ")}
               </p>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1105,7 +1115,8 @@ function getGeminiModelValue(saved: StoredCredential | undefined, isEditing: boo
     return value ?? defaultGeminiModel;
   }
 
-  return saved ? getSavedDisplay(saved) : defaultGeminiModel;
+  const savedValue = saved ? getSavedDisplay(saved) : defaultGeminiModel;
+  return getGeminiModelReplacement(savedValue) ?? savedValue;
 }
 
 function getGeminiModelSelectValue(value: string, options: GeminiModelSelectOption[]) {
@@ -1117,7 +1128,13 @@ function getGeminiModelOptions(models: GeminiApiModel[]): GeminiModelSelectOptio
     return geminiModelOptions;
   }
 
-  return models.filter((model) => model.supportsGenerateContent).map((model) => {
+  const compatibleModels = models.filter((model) => model.supportsGenerateContent && !getGeminiModelReplacement(model.id));
+
+  if (compatibleModels.length === 0) {
+    return geminiModelOptions;
+  }
+
+  return compatibleModels.map((model) => {
     const tokenDetails = [
       "generateContent",
       formatTokenLimit(model.inputTokenLimit, "entrada"),

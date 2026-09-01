@@ -7,6 +7,7 @@ import {
   meterUsageEvent,
   type GeminiTokenUsage,
 } from "@/lib/billing/metered-usage";
+import { defaultGeminiModel, normalizeGeminiModel } from "@/lib/gemini/models";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -50,7 +51,6 @@ type LlmResult =
   | { status: "generated"; text: string; model: string; usage: GeminiTokenUsage | null }
   | { status: "unavailable"; reason: string; model: string };
 
-const defaultGeminiModel = "gemini-2.5-flash";
 const geminiCredentialNames = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY", "GEMINI_DEFAULT_MODEL"];
 
 const growthAgentMissionDefinitions = {
@@ -567,10 +567,6 @@ function resolveCredentialValue(credentials: CredentialRow[], envNames: string[]
   }
 
   return fallback;
-}
-
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }
 
 async function readResponse(response: Response) {
