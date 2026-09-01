@@ -227,6 +227,12 @@ type RuntimeLinkButton = {
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
 type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
 type RuntimeOrganizationLocation = OrganizationLocation;
+type SalesCatalogRuntimePaymentPreference = "pix" | "card";
+type SalesCatalogRuntimePaymentChoice = {
+  id: SalesCatalogPagBankPaymentMethod;
+  preference: SalesCatalogRuntimePaymentPreference;
+  label: string;
+};
 
 type SalesCatalogPaymentLinkResult = {
   orderId: string;
@@ -240,7 +246,7 @@ type SalesCatalogPaymentLinkResult = {
   gatewayUnavailable?: boolean;
   paymentDeferred?: boolean;
   paymentDeferredReason?: string | null;
-  preferredMethod?: "pix" | "card" | null;
+  preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
 };
 
 type SalesCatalogPaymentSessionLinkRow = {
@@ -3835,6 +3841,7 @@ function buildGlobalCheckoutConfirmationLines() {
     "- Converse normalmente, tire duvidas e ajude o lead a escolher. Mas antes de gerar Pix, enviar checkout, boleto, carrinho ou pedido fechado, mostre uma previa curta do pedido/contratacao.",
     "- A previa deve conter itens, quantidades, plano/servico quando aplicavel e total quando houver preco. Pergunte claramente se pode fechar e gerar o pagamento.",
     "- So gere Pix, checkout/link ou botao de finalizar depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si.",
+    "- Se houver mais de uma forma de pagamento habilitada e o lead confirmar sem escolher, pergunte a forma de pagamento antes de gerar Pix, checkout, boleto ou link.",
     "- Se o lead corrigir qualquer item, quantidade, variacao, endereco, plano ou forma de pagamento, atualize a previa e peca nova confirmacao antes do pagamento.",
     "- Nunca reutilize link, Pix ou pagamento antigo ou de outro lead. Gere ou use apenas a cobranca do pedido confirmado na conversa atual.",
   ];
@@ -4010,6 +4017,9 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
     `- Metodos PagBank habilitados: ${pagBankMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
+      ? "- Como ha mais de uma forma de pagamento habilitada, depois da confirmacao do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobranca."
+      : "",
     "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca CEP para entrega ou confirme retirada na loja.",
     pixEnabled
       ? "- Pix PagBank: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do PagBank, nao por comprovante manual."
@@ -5716,14 +5726,25 @@ async function sendAgentResponse(input: {
     intentText: orderIntentText,
     selections: checkoutOrderSelections,
   });
+  const paymentMethodChoicePrompt = shouldRequestCheckoutConfirmation
+    ? null
+    : buildSalesCatalogPaymentMethodChoicePrompt({
+        context,
+        hasConfirmedCheckoutIntent,
+        intentText: orderIntentText,
+        selections: checkoutOrderSelections,
+      });
+  const shouldWaitForPaymentMethodChoice = Boolean(paymentMethodChoicePrompt);
   const deliveryText = shouldRequestCheckoutConfirmation
     ? buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)
-    : prepareSalesCatalogDeliveryText({
+    : paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText({
         text: cleanText,
         items: selectedCatalogItems,
         hasOrderIntent,
       });
-  const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
+  const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
+    && !shouldWaitForPaymentMethodChoice
+    && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
   const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
     && !shouldRequestCheckoutConfirmation
     ? collectSalesCatalogAttachments(selectedCatalogItems)
@@ -5869,13 +5890,15 @@ async function sendAgentResponse(input: {
       outbound.push(message);
     }
 
-    const paymentLink = await recordSalesCatalogOrderIntent({
-      client: input.client,
-      context,
-      items: selectedCatalogItems,
-      text: cleanText,
-      intentText: orderIntentText,
-    });
+    const paymentLink = shouldWaitForPaymentMethodChoice
+      ? null
+      : await recordSalesCatalogOrderIntent({
+          client: input.client,
+          context,
+          items: selectedCatalogItems,
+          text: cleanText,
+          intentText: orderIntentText,
+        });
 
     if (paymentLink) {
       await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
@@ -5973,13 +5996,15 @@ async function sendAgentResponse(input: {
     outbound.push(...mediaOutbound);
   }
 
-  const paymentLink = await recordSalesCatalogOrderIntent({
-    client: input.client,
-    context,
-    items: selectedCatalogItems,
-    text: cleanText,
-    intentText: orderIntentText,
-  });
+  const paymentLink = shouldWaitForPaymentMethodChoice
+    ? null
+    : await recordSalesCatalogOrderIntent({
+        client: input.client,
+        context,
+        items: selectedCatalogItems,
+        text: cleanText,
+        intentText: orderIntentText,
+      });
 
   if (paymentLink) {
     await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
@@ -6913,6 +6938,149 @@ function buildSalesCatalogOrderConfirmationPrompt(selections: RuntimeSalesCatalo
   ].filter(Boolean).join("\n\n");
 }
 
+function buildSalesCatalogPaymentMethodChoicePrompt(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  hasConfirmedCheckoutIntent: boolean;
+  intentText: string;
+  selections: RuntimeSalesCatalogOrderSelection[];
+}) {
+  if (!shouldWaitForSalesCatalogPaymentMethodChoice(input)) {
+    return null;
+  }
+
+  const choices = getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings);
+  const choiceText = formatSalesCatalogRuntimePaymentChoiceList(choices.map((choice) => choice.label));
+  const hasPix = choices.some((choice) => choice.preference === "pix");
+  const hasCardCheckout = choices.some((choice) => choice.preference === "card");
+
+  return [
+    "Perfeito, pedido confirmado.",
+    `Qual forma de pagamento voce prefere: ${choiceText}?`,
+    hasPix && hasCardCheckout
+      ? "No Pix eu gero o copia e cola por aqui. No cartao eu te envio o botao do checkout seguro."
+      : "",
+  ].filter(Boolean).join("\n");
+}
+
+function shouldWaitForSalesCatalogPaymentMethodChoice(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  hasConfirmedCheckoutIntent: boolean;
+  intentText: string;
+  selections: RuntimeSalesCatalogOrderSelection[];
+}) {
+  if (!input.hasConfirmedCheckoutIntent || input.selections.length === 0) {
+    return false;
+  }
+
+  const choices = getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings);
+  if (choices.length <= 1) {
+    return false;
+  }
+
+  return !resolveSalesCatalogConfirmedPaymentPreference(input.context, input.intentText);
+}
+
+function getEnabledSalesCatalogRuntimePaymentChoices(
+  settings: ClientSalesCatalogSettings | null,
+): SalesCatalogRuntimePaymentChoice[] {
+  const enabledMethods = new Set<SalesCatalogPagBankPaymentMethod>(
+    settings?.configured ? settings.pagBank.enabledMethods : ["pix"],
+  );
+  const choices: SalesCatalogRuntimePaymentChoice[] = [];
+
+  if (enabledMethods.has("pix")) {
+    choices.push({ id: "pix", preference: "pix", label: "Pix" });
+  }
+
+  if (enabledMethods.has("credit_card")) {
+    choices.push({ id: "credit_card", preference: "card", label: "cartao de credito" });
+  }
+
+  if (enabledMethods.has("debit_card")) {
+    choices.push({ id: "debit_card", preference: "card", label: "cartao de debito" });
+  }
+
+  return choices;
+}
+
+function formatSalesCatalogRuntimePaymentChoiceList(labels: string[]) {
+  const uniqueLabels = Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean)));
+
+  if (uniqueLabels.length <= 1) {
+    return uniqueLabels[0] ?? "Pix";
+  }
+
+  return `${uniqueLabels.slice(0, -1).join(", ")} ou ${uniqueLabels[uniqueLabels.length - 1]}`;
+}
+
+function resolveSalesCatalogConfirmedPaymentPreference(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  intentText: string,
+): SalesCatalogRuntimePaymentPreference | null {
+  const choices = getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings);
+  const directPreference = detectSalesCatalogPreferredPaymentMethod(intentText);
+
+  if (directPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, directPreference)) {
+    return directPreference;
+  }
+
+  const recentPreference = detectSalesCatalogPreferredPaymentMethod(
+    buildRecentSalesCatalogPaymentMethodMemoryText(context.messages, findLatestInbound(context.messages)),
+  );
+
+  if (recentPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, recentPreference)) {
+    return recentPreference;
+  }
+
+  return choices.length === 1 ? choices[0].preference : null;
+}
+
+function isSalesCatalogRuntimePaymentPreferenceEnabled(
+  choices: SalesCatalogRuntimePaymentChoice[],
+  preference: SalesCatalogRuntimePaymentPreference,
+) {
+  return choices.some((choice) => choice.preference === preference);
+}
+
+function buildRecentSalesCatalogPaymentMethodMemoryText(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  const preview = findRecentSalesCatalogCheckoutConfirmationPreview(messages, latestInbound);
+  if (!preview || !latestInbound) {
+    return "";
+  }
+
+  const previewMs = Date.parse(preview.occurred_at);
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+  if (!Number.isFinite(previewMs) || !Number.isFinite(latestInboundMs)) {
+    return "";
+  }
+
+  const previousInboundMs = messages
+    .filter((message) => {
+      if (message.direction !== "inbound") return false;
+      const occurredAt = Date.parse(message.occurred_at);
+      return Number.isFinite(occurredAt) && occurredAt < previewMs;
+    })
+    .map((message) => Date.parse(message.occurred_at))
+    .sort((left, right) => right - left)[0] ?? previewMs;
+
+  return messages
+    .filter((message) => {
+      if (message.direction !== "inbound") return false;
+      if (!message.text_content?.trim()) return false;
+
+      const occurredAt = Date.parse(message.occurred_at);
+      return Number.isFinite(occurredAt)
+        && occurredAt >= previousInboundMs
+        && occurredAt <= latestInboundMs;
+    })
+    .map((message) => message.text_content?.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildSalesCatalogOrderPreviewItem(selection: RuntimeSalesCatalogOrderSelection) {
   const mentionText = selection.mentionText ?? "";
   const sku = resolveRuntimeOrderSku(selection.item, mentionText);
@@ -7025,6 +7193,8 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
   return (
     /^(?:sim|s|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos)\b/.test(normalized)
     || /\b(?:pode fechar|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
+    || /^(?:pix|cartao|credito|debito|card)\b/.test(normalized)
+    || /\b(?:vou pagar|quero pagar|pago|pagamento)\b.{0,40}\b(?:pix|cartao|credito|debito|card)\b/.test(normalized)
     || /^(?:yes|yep|yeah|sure|confirmed|confirm|go ahead|send it)\b/.test(normalized)
     || /\b(?:yes please|send the link|close the order)\b/.test(normalized)
     || /^(?:si|dale|correcto|confirmo|confirmado|eso|es eso|esta bien)\b/.test(normalized)
@@ -7392,6 +7562,12 @@ async function recordSalesCatalogOrderIntent(input: {
     return null;
   }
 
+  const paymentPreference = resolveSalesCatalogConfirmedPaymentPreference(input.context, intentText);
+
+  if (!paymentPreference && getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings).length > 1) {
+    return null;
+  }
+
   try {
     const { data: existingData } = await input.client
       .from("sales_catalog_orders")
@@ -7642,7 +7818,7 @@ async function recordSalesCatalogOrderIntent(input: {
       context: input.context,
       orderId: order.id,
       total: payableTotal,
-      preferredMethod: detectSalesCatalogPreferredPaymentMethod(intentText),
+      preferredMethod: paymentPreference,
     });
   } catch {
     return null;
@@ -7654,7 +7830,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   orderId: string;
   total: string | null;
-  preferredMethod?: "pix" | "card" | null;
+  preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
   if (!input.total) {
     return null;
@@ -8613,7 +8789,7 @@ function hasSalesCatalogOrderIntent(text: string) {
     && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
 }
 
-function detectSalesCatalogPreferredPaymentMethod(text: string): "pix" | "card" | null {
+function detectSalesCatalogPreferredPaymentMethod(text: string): SalesCatalogRuntimePaymentPreference | null {
   const normalized = normalizeSearch(text);
 
   if (!normalized) return null;

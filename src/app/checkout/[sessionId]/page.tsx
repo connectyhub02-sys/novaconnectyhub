@@ -211,12 +211,21 @@ export default async function CheckoutPage({
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const pagBankCardEnabled = Boolean(catalogSettings?.pagBank.enabledMethods.some((method) => (
+    method === "credit_card" || method === "debit_card"
+  )));
   const initialPaymentMethod = normalizeCheckoutInitialPaymentMethod(query.payment_method ?? query.method);
   const sessionMetadata = readRecord(session.metadata);
   const checkoutPaymentOwner = readString(session.payment_owner_type)
     ?? readString(sessionMetadata.payment_owner)
     ?? readString(sessionMetadata.payment_receiver);
   const connectyHubOwned = checkoutPaymentOwner === "connectyhub";
+  const pagBankCardPaymentMethodTypes: Array<"CREDIT_CARD" | "DEBIT_CARD"> = connectyHubOwned
+    ? ["CREDIT_CARD", "DEBIT_CARD"]
+    : [
+        catalogSettings?.pagBank.enabledMethods.includes("credit_card") ? "CREDIT_CARD" : null,
+        catalogSettings?.pagBank.enabledMethods.includes("debit_card") ? "DEBIT_CARD" : null,
+      ].filter((method): method is "CREDIT_CARD" | "DEBIT_CARD" => Boolean(method));
   const paymentProvider = session.provider === "pagbank" ? "pagbank" : "mercado_pago";
   const canUseMercadoPagoCard = session.method !== "card"
     && session.provider === "mercado_pago"
@@ -233,7 +242,7 @@ export default async function CheckoutPage({
     && !failed
     && amountNumber !== null
     && (connectyHubOwned || integration?.status === "connected")
-    && (connectyHubOwned || Boolean(catalogSettings?.pagBank.enabledMethods.includes("credit_card")));
+    && (connectyHubOwned || pagBankCardEnabled);
   const canUseCard = canUseMercadoPagoCard || canUsePagBankCard;
   const canUsePix = connectyHubOwned || session.provider !== "pagbank" || Boolean(catalogSettings?.pagBank.enabledMethods.includes("pix"));
   const commercialContext = resolveCheckoutCommercialContext(session, order);
@@ -412,6 +421,7 @@ export default async function CheckoutPage({
               canUsePix={canUsePix}
               canUseCard={canUseCard}
               cardPublicKey={integration?.public_key ?? null}
+              pagBankCardPaymentMethodTypes={pagBankCardPaymentMethodTypes}
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}

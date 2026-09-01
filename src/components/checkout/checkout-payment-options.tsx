@@ -22,6 +22,7 @@ type CheckoutPaymentOptionsProps = {
   canUsePix: boolean;
   canUseCard: boolean;
   cardPublicKey: string | null;
+  pagBankCardPaymentMethodTypes?: PagBankCardPaymentMethodType[];
   pixQrCode: string | null;
   pixQrCodeBase64: string | null;
   pixTicketUrl: string | null;
@@ -36,6 +37,7 @@ type CheckoutPaymentOptionsProps = {
 };
 
 type PaymentMethod = "pix" | "card";
+type PagBankCardPaymentMethodType = "CREDIT_CARD" | "DEBIT_CARD";
 
 type CheckoutOrderBumpOption = {
   productId: string;
@@ -56,6 +58,7 @@ export function CheckoutPaymentOptions({
   canUsePix,
   canUseCard,
   cardPublicKey,
+  pagBankCardPaymentMethodTypes,
   pixQrCode,
   pixQrCodeBase64,
   pixTicketUrl,
@@ -249,6 +252,7 @@ export function CheckoutPaymentOptions({
           payerPhone={payerPhone}
           submitPath={`/api/checkout/${sessionId}/card`}
           cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}
+          enabledPaymentMethodTypes={pagBankCardPaymentMethodTypes}
           maxInstallments={maxInstallments}
           extraPayload={cardExtraPayload}
           rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."

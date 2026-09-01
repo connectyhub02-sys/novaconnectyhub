@@ -14,6 +14,7 @@ type PagBankCardFormProps = {
   payerPhone?: string | null;
   submitPath: string;
   cardSessionPath?: string;
+  enabledPaymentMethodTypes?: PagBankCardPaymentMethodType[];
   maxInstallments?: number;
   extraPayload?: JsonRecord;
   successMessage?: string;
@@ -22,6 +23,8 @@ type PagBankCardFormProps = {
   onPaymentStatusChange?: (result: CardPaymentStatusChange) => void;
   onAlternativePaymentRequest?: () => void;
 };
+
+type PagBankCardPaymentMethodType = "CREDIT_CARD" | "DEBIT_CARD";
 
 type PagBankCardSessionResponse = {
   ok?: boolean;
@@ -74,6 +77,7 @@ export function PagBankCardForm({
   payerPhone,
   submitPath,
   cardSessionPath,
+  enabledPaymentMethodTypes,
   maxInstallments = 12,
   extraPayload,
   successMessage = "Pagamento aprovado. Seu plano sera ativado agora.",
@@ -89,6 +93,17 @@ export function PagBankCardForm({
   const [expYear, setExpYear] = useState("");
   const [securityCode, setSecurityCode] = useState("");
   const [installments, setInstallments] = useState("1");
+  const enabledCardTypes = useMemo(
+    () => normalizePagBankEnabledCardTypes(enabledPaymentMethodTypes),
+    [enabledPaymentMethodTypes],
+  );
+  const defaultPaymentMethodType: PagBankCardPaymentMethodType = enabledCardTypes.includes("CREDIT_CARD")
+    ? "CREDIT_CARD"
+    : "DEBIT_CARD";
+  const [paymentMethodType, setPaymentMethodType] = useState<PagBankCardPaymentMethodType>("CREDIT_CARD");
+  const activePaymentMethodType = enabledCardTypes.includes(paymentMethodType)
+    ? paymentMethodType
+    : defaultPaymentMethodType;
   const [phone, setPhone] = useState(() => digits(payerPhone ?? "").slice(0, 13));
   const [postalCode, setPostalCode] = useState("");
   const [street, setStreet] = useState("");
@@ -118,7 +133,7 @@ export function PagBankCardForm({
         expMonth,
         expYear,
         securityCode,
-        installments,
+        installments: activePaymentMethodType === "DEBIT_CARD" ? "1" : installments,
         phone,
         postalCode,
         street,
@@ -157,6 +172,7 @@ export function PagBankCardForm({
         holderTaxId: normalized.holderTaxId,
         payerEmail,
         payerPhone: normalized.phone,
+        paymentMethodType: activePaymentMethodType,
         installments: normalized.installments,
         billingAddress: normalized.billingAddress,
       });
@@ -171,7 +187,7 @@ export function PagBankCardForm({
             holder_name: normalized.holderName,
             holder_tax_id: normalized.holderTaxId,
             installments: normalized.installments,
-            payment_method_type: "CREDIT_CARD",
+            payment_method_type: activePaymentMethodType,
             authentication_method_id: threeDS.authenticationMethodId,
             authentication_status: threeDS.authenticationStatus,
             authentication_flow_status: threeDS.status,
@@ -245,6 +261,7 @@ export function PagBankCardForm({
     holderTaxId: string;
     payerEmail: string | null;
     payerPhone: NormalizedPhone;
+    paymentMethodType: PagBankCardPaymentMethodType;
     installments: number;
     billingAddress: BillingAddress;
   }) {
@@ -265,7 +282,7 @@ export function PagBankCardForm({
           }],
         },
         paymentMethod: {
-          type: "CREDIT_CARD",
+          type: input.paymentMethodType,
           installments: input.installments,
           card: {
             encrypted: input.encryptedCard,
@@ -317,7 +334,7 @@ export function PagBankCardForm({
     <form onSubmit={handleSubmit} className="mt-6 rounded-[8px] border border-amber-100 bg-white p-4 text-slate-950">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-black">Cartao de credito</p>
+          <p className="text-sm font-black">{activePaymentMethodType === "DEBIT_CARD" ? "Cartao de debito" : "Cartao de credito"}</p>
           <p className="mt-1 text-xs leading-5 text-slate-600">
             Checkout transparente PagBank com 3DS e token para renovacoes.
           </p>
@@ -326,6 +343,20 @@ export function PagBankCardForm({
       </div>
 
       <div className="mt-4 grid gap-3">
+        {enabledCardTypes.length > 1 ? (
+          <div className="grid grid-cols-2 gap-2">
+            <PaymentTypeButton
+              active={activePaymentMethodType === "CREDIT_CARD"}
+              label="Credito"
+              onClick={() => setPaymentMethodType("CREDIT_CARD")}
+            />
+            <PaymentTypeButton
+              active={activePaymentMethodType === "DEBIT_CARD"}
+              label="Debito"
+              onClick={() => setPaymentMethodType("DEBIT_CARD")}
+            />
+          </div>
+        ) : null}
         <InputField label="Nome no cartao" value={holderName} autoComplete="cc-name" onChange={setHolderName} />
         <InputField label="CPF/CNPJ do titular" value={holderTaxId} inputMode="numeric" onChange={(value) => setHolderTaxId(formatDocument(value))} />
         <InputField label="Numero do cartao" value={cardNumber} autoComplete="cc-number" inputMode="numeric" onChange={(value) => setCardNumber(formatCardNumber(value))} />
@@ -344,13 +375,20 @@ export function PagBankCardForm({
           </SelectField>
           <InputField label="CVV" value={securityCode} autoComplete="cc-csc" inputMode="numeric" maxLength={4} onChange={(value) => setSecurityCode(digits(value).slice(0, 4))} />
         </div>
-        <SelectField label="Parcelas" value={installments} onChange={setInstallments}>
-          {Array.from({ length: installmentLimit }, (_, index) => index + 1).map((option) => (
-            <option key={option} value={String(option)}>
-              {option}x de {formatMoney(amount / option)}
-            </option>
-          ))}
-        </SelectField>
+        {activePaymentMethodType === "CREDIT_CARD" ? (
+          <SelectField label="Parcelas" value={installments} onChange={setInstallments}>
+            {Array.from({ length: installmentLimit }, (_, index) => index + 1).map((option) => (
+              <option key={option} value={String(option)}>
+                {option}x de {formatMoney(amount / option)}
+              </option>
+            ))}
+          </SelectField>
+        ) : (
+          <div className="rounded-[7px] border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Parcelas</p>
+            <p className="mt-1 text-sm font-bold text-slate-950">Debito em 1x</p>
+          </div>
+        )}
         <InputField label="Telefone do titular" value={phone} inputMode="numeric" onChange={(value) => setPhone(digits(value).slice(0, 13))} />
       </div>
 
@@ -609,6 +647,42 @@ function buildPagBankRejectedPaymentCopy(statusDetail: string | null | undefined
     ],
     statusDetail: detail,
   };
+}
+
+function normalizePagBankEnabledCardTypes(
+  value: PagBankCardPaymentMethodType[] | null | undefined,
+): PagBankCardPaymentMethodType[] {
+  const source = Array.isArray(value) && value.length > 0 ? value : ["CREDIT_CARD"];
+  const methods = source.filter((method): method is PagBankCardPaymentMethodType => (
+    method === "CREDIT_CARD" || method === "DEBIT_CARD"
+  ));
+
+  return methods.length > 0 ? Array.from(new Set(methods)) : ["CREDIT_CARD"];
+}
+
+function PaymentTypeButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "min-h-10 rounded-[7px] border px-3 text-sm font-black transition",
+        active
+          ? "border-amber-300 bg-amber-100 text-slate-950"
+          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+      )}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
 }
 
 function InputField({

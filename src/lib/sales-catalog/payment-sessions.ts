@@ -147,8 +147,13 @@ export async function createSalesCatalogPixPaymentSession(input: {
     throw new Error("Pix PagBank esta desativado nas configuracoes do catalogo.");
   }
 
-  if (paymentProvider === "pagbank" && pagBankSettings && preferredMethod === "card" && !pagBankSettings.enabledMethods.includes("credit_card")) {
-    throw new Error("Cartao de credito PagBank esta desativado nas configuracoes do catalogo.");
+  if (
+    paymentProvider === "pagbank"
+    && pagBankSettings
+    && preferredMethod === "card"
+    && !pagBankSettings.enabledMethods.some((method) => method === "credit_card" || method === "debit_card")
+  ) {
+    throw new Error("Cartao PagBank esta desativado nas configuracoes do catalogo.");
   }
 
   try {

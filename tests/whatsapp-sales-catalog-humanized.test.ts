@@ -75,6 +75,29 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
   });
 
+  it("asks for the payment method before creating payment when multiple methods are enabled", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const checkoutRuntime = sourceBetween(
+      "function buildSalesCatalogOrderConfirmationPrompt",
+      "function buildSalesCatalogOrderPreviewItem",
+    );
+    const orderRecorder = sourceBetween(
+      "async function recordSalesCatalogOrderIntent",
+      "async function maybeCreateSalesCatalogPaymentLink",
+    );
+
+    expect(delivery).toContain("paymentMethodChoicePrompt");
+    expect(delivery).toContain("shouldWaitForPaymentMethodChoice");
+    expect(delivery).toContain("paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText");
+    expect(delivery).toContain("shouldWaitForPaymentMethodChoice\n      ? null\n      : await recordSalesCatalogOrderIntent");
+    expect(checkoutRuntime).toContain("function buildSalesCatalogPaymentMethodChoicePrompt");
+    expect(checkoutRuntime).toContain("Qual forma de pagamento voce prefere");
+    expect(checkoutRuntime).toContain("No Pix eu gero o copia e cola por aqui");
+    expect(checkoutRuntime).toContain("getEnabledSalesCatalogRuntimePaymentChoices");
+    expect(orderRecorder).toContain("resolveSalesCatalogConfirmedPaymentPreference");
+    expect(orderRecorder).toContain("getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings).length > 1");
+  });
+
   it("sends checkout links only when payment needs the checkout surface", () => {
     const deliveryText = sourceBetween(
       "function prepareSalesCatalogDeliveryText",
@@ -161,6 +184,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(instruction).toContain("REGRA GLOBAL DE FECHAMENTO E PAGAMENTO");
     expect(globalRule).toContain("vale para todos os agentes");
     expect(globalRule).toContain("inclusive agentes internos");
+    expect(globalRule).toContain("pergunte a forma de pagamento antes de gerar Pix");
     expect(globalRule).toContain("Nunca reutilize link, Pix ou pagamento antigo ou de outro lead");
   });
 
@@ -171,7 +195,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function recordSalesCatalogOrderIntent",
     );
 
-    expect(delivery).toContain("const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
+    expect(delivery).toContain("const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation");
+    expect(delivery).toContain("&& !shouldWaitForPaymentMethodChoice");
+    expect(delivery).toContain("&& shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
     expect(delivery).toContain("!hasOrderIntent && shouldOfferProductPageLinks");
     expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
     expect(renderer).toContain("hasSubstantiveSalesCatalogAnswer(input.text)");

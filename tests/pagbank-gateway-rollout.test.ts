@@ -165,9 +165,16 @@ describe("PagBank gateway rollout", () => {
 
   it("extends PagBank card checkout to public product payments without treating recurring products as one-time", () => {
     expect(checkoutPageSource).toContain("canUsePagBankCard");
+    expect(checkoutPageSource).toContain("pagBankCardEnabled");
+    expect(checkoutPageSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutPageSource).toContain("paymentProvider={paymentProvider}");
     expect(checkoutOptionsSource).toContain("PagBankCardForm");
+    expect(checkoutOptionsSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutOptionsSource).toContain("cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}");
+    expect(paymentSessionsSource).toContain("method === \"credit_card\" || method === \"debit_card\"");
+    expect(pagBankCardFormSource).toContain("PaymentTypeButton");
+    expect(pagBankCardFormSource).toContain("payment_method_type: activePaymentMethodType");
+    expect(pagBankCardFormSource).toContain("type: input.paymentMethodType");
     expect(publicPagBankCardSessionRouteSource).toContain("ensurePagBankCardPublicKey");
     expect(publicPagBankCardSessionRouteSource).toContain("createPagBankThreeDSSession");
     expect(publicCheckoutCardRouteSource).toContain("processPagBankPublicCardPayment");
