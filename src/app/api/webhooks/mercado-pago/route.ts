@@ -9,7 +9,7 @@ import {
   verifyMercadoPagoWebhookSignature,
 } from "@/lib/sales-catalog/mercado-pago";
 import { markPlatformProductCommissionsForPaymentStatus } from "@/lib/platform-product-sales";
-import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
+import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -243,16 +243,18 @@ export async function POST(request: NextRequest) {
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id);
 
-    const postPayment = pixData.status === "approved"
-      ? await handleSalesCatalogApprovedPayment({
-          client,
-          organizationId: session.organization_id,
-          orderId: session.order_id,
-          paymentSessionId: session.id,
-          providerPaymentId: dataId,
-          paymentMethodLabel,
-          source: "mercado_pago_webhook",
-        })
+    const postPayment = await handleSalesCatalogPaymentStatusChange({
+      client,
+      organizationId: session.organization_id,
+      orderId: session.order_id,
+      paymentSessionId: session.id,
+      providerPaymentId: dataId,
+      paymentMethodLabel,
+      status: pixData.status,
+      source: "mercado_pago_webhook",
+    });
+    const commissions = pixData.status === "approved"
+      ? null
       : await markPlatformProductCommissionsForPaymentStatus({
           client,
           organizationId: session.organization_id,
@@ -302,7 +304,10 @@ export async function POST(request: NextRequest) {
         commercial_flow_type: commercialFlowType,
         revenue_owner_type: revenueOwnerType,
         commission_eligible: commissionEligible,
-        post_payment: postPayment,
+        post_payment: {
+          ...postPayment,
+          commissions: postPayment.commissions ?? commissions,
+        },
       },
     });
 

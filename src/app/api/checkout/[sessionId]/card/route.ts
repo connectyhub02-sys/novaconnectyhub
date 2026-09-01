@@ -23,7 +23,7 @@ import {
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
-import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
+import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -390,17 +390,16 @@ export async function POST(
       .eq("id", order.id)
       .eq("organization_id", sourceSession.organization_id);
 
-    const postPayment = paymentData.status === "approved"
-      ? await handleSalesCatalogApprovedPayment({
-          client,
-          organizationId: sourceSession.organization_id,
-          orderId: order.id,
-          paymentSessionId: cardSessionId,
-          providerPaymentId: paymentData.providerPaymentId,
-          paymentMethodLabel: "Cartao Mercado Pago",
-          source: "checkout_card",
-        })
-      : null;
+    const postPayment = await handleSalesCatalogPaymentStatusChange({
+      client,
+      organizationId: sourceSession.organization_id,
+      orderId: order.id,
+      paymentSessionId: cardSessionId,
+      providerPaymentId: paymentData.providerPaymentId,
+      paymentMethodLabel: "Cartao Mercado Pago",
+      status: paymentData.status,
+      source: "checkout_card",
+    });
 
     await client.from("intelligence_events").insert({
       scope: "organization",
@@ -772,17 +771,16 @@ async function processPagBankPublicCardPayment(input: {
       .eq("id", order.id)
       .eq("organization_id", sourceSession.organization_id);
 
-    const postPayment = paymentStatus === "approved"
-      ? await handleSalesCatalogApprovedPayment({
-          client,
-          organizationId: sourceSession.organization_id,
-          orderId: order.id,
-          paymentSessionId: cardSessionId,
-          providerPaymentId,
-          paymentMethodLabel: "Cartao PagBank",
-          source: "checkout_card",
-        })
-      : null;
+    const postPayment = await handleSalesCatalogPaymentStatusChange({
+      client,
+      organizationId: sourceSession.organization_id,
+      orderId: order.id,
+      paymentSessionId: cardSessionId,
+      providerPaymentId,
+      paymentMethodLabel: "Cartao PagBank",
+      status: paymentStatus,
+      source: "checkout_card",
+    });
 
     await client.from("intelligence_events").insert({
       scope: "organization",

@@ -89,6 +89,56 @@ type ResponsibleAgentRow = {
   metadata: JsonRecord | null;
 };
 
+type SalesCatalogPaymentStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
+type SalesCatalogPostPaymentSource = "mercado_pago_webhook" | "pagbank_webhook" | "checkout_card";
+type SalesCatalogPaymentNotificationStatus = "pending" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
+
+export async function handleSalesCatalogPaymentStatusChange(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  orderId: string;
+  paymentSessionId: string;
+  providerPaymentId: string | null;
+  paymentMethodLabel: string;
+  status: SalesCatalogPaymentStatus;
+  source: SalesCatalogPostPaymentSource;
+}) {
+  if (input.status === "approved") {
+    return handleSalesCatalogApprovedPayment(input);
+  }
+
+  const notificationStatus = normalizePaymentNotificationStatus(input.status);
+  const order = await loadOrder(input.client, input.organizationId, input.orderId);
+
+  if (!order || !notificationStatus) {
+    return { inventoryDeducted: false, whatsappNotified: false, responsibleNotified: false, commissions: null };
+  }
+
+  const items = await loadOrderItems(input.client, input.organizationId, input.orderId);
+  const whatsappNotified = await maybeNotifyPaymentStatus({
+    client: input.client,
+    order,
+    items,
+    paymentSessionId: input.paymentSessionId,
+    providerPaymentId: input.providerPaymentId,
+    paymentMethodLabel: input.paymentMethodLabel,
+    status: notificationStatus,
+    source: input.source,
+  });
+  const responsibleNotified = await maybeNotifyResponsiblePaymentStatus({
+    client: input.client,
+    order,
+    items,
+    paymentSessionId: input.paymentSessionId,
+    providerPaymentId: input.providerPaymentId,
+    paymentMethodLabel: input.paymentMethodLabel,
+    status: notificationStatus,
+    source: input.source,
+  });
+
+  return { inventoryDeducted: false, whatsappNotified, responsibleNotified, commissions: null };
+}
+
 export async function handleSalesCatalogApprovedPayment(input: {
   client: SupabaseClient;
   organizationId: string;
@@ -96,7 +146,7 @@ export async function handleSalesCatalogApprovedPayment(input: {
   paymentSessionId: string;
   providerPaymentId: string | null;
   paymentMethodLabel: string;
-  source: "mercado_pago_webhook" | "pagbank_webhook" | "checkout_card";
+  source: SalesCatalogPostPaymentSource;
 }) {
   const order = await loadOrder(input.client, input.organizationId, input.orderId);
   if (!order) {
@@ -528,7 +578,7 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
   if (!instance || !token) return false;
 
   const agent = await loadResponsiblePaymentAgent(input.client, input.order, instance);
-  const responsiblePhone = resolveResponsiblePaymentPhone(agent);
+  const responsiblePhone = resolveResponsiblePaymentPhone(agent, "approved");
   if (!responsiblePhone) return false;
 
   const text = buildResponsiblePaymentApprovedMessage({
@@ -601,6 +651,306 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
       responsible_phone: responsiblePhone,
       provider_message_id: findProviderMessageId(providerResponse),
       provider_response: sanitizeProviderData(providerResponse),
+      delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+      source: input.source,
+    },
+  });
+
+  return true;
+}
+
+async function maybeNotifyPaymentStatus(input: {
+  client: SupabaseClient;
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentSessionId: string;
+  providerPaymentId: string | null;
+  paymentMethodLabel: string;
+  status: SalesCatalogPaymentNotificationStatus;
+  source: string;
+}) {
+  const orderMetadata = readRecord(input.order.metadata);
+  const metadataPrefix = getPaymentStatusNotificationPrefix(input.status);
+  if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+
+  const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
+  const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
+
+  if (!automation.paymentStatusNotifications) return false;
+
+  const conversation = input.order.conversation_id && automation.useConversationWhatsappFirst
+    ? await loadOrderConversation(input.client, input.order)
+    : null;
+  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+
+  if (!whatsappInstanceId) return false;
+
+  const [{ data: instance }, { data: lead }] = await Promise.all([
+    input.client
+      .from("whatsapp_instances")
+      .select("id, organization_id, phone_number, display_name, instance_token_encrypted, metadata")
+      .eq("id", whatsappInstanceId)
+      .eq("organization_id", input.order.organization_id)
+      .maybeSingle<WhatsappInstanceRow>(),
+    input.order.lead_id
+      ? input.client
+          .from("leads")
+          .select("id, phone_number, display_name")
+          .eq("id", input.order.lead_id)
+          .eq("organization_id", input.order.organization_id)
+          .maybeSingle<LeadRow>()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const token = instance?.instance_token_encrypted ? decryptCredentialValue(instance.instance_token_encrypted) : null;
+  const phone = lead?.phone_number ?? input.order.customer_phone;
+  if (!instance || !token || !phone) return false;
+
+  const text = buildPaymentStatusMessage({
+    order: input.order,
+    items: input.items,
+    paymentMethod: input.paymentMethodLabel,
+    status: input.status,
+    template: getPaymentStatusTemplate(settings?.messageTemplates ?? null, input.status),
+  });
+  const credentials = await loadUazapiCredentials(input.client);
+  const providerResponse = await callUazapi(credentials, "/send/text", {
+    method: "POST",
+    token,
+    body: {
+      number: phone,
+      text,
+      linkPreview: false,
+      readchat: true,
+      readmessages: true,
+      track_source: "connectyhub",
+      track_id: `sales_catalog_${input.status}_${input.order.id.slice(0, 8)}_${Date.now()}`,
+    },
+  });
+  const now = new Date().toISOString();
+  const { data: latestOrder } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", input.order.id)
+    .eq("organization_id", input.order.organization_id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const latestMetadata = readRecord(latestOrder?.metadata);
+
+  if (conversation && input.order.conversation_id) {
+    await input.client.from("conversation_messages").insert({
+      organization_id: input.order.organization_id,
+      conversation_id: input.order.conversation_id,
+      lead_id: input.order.lead_id,
+      whatsapp_instance_id: instance.id,
+      provider: "uazapi",
+      provider_message_id: findProviderMessageId(providerResponse),
+      provider_chat_id: conversation.provider_chat_id,
+      direction: "outbound",
+      message_type: "text",
+      text_content: text,
+      payload: {
+        delivery_source: `sales_catalog_payment_${input.status}`,
+        author_type: "system",
+        author_label: "Sistema",
+        author_source: `sales_catalog_payment_${input.status}`,
+        origin_channel: "whatsapp",
+        origin_confidence: "high",
+        origin_device: null,
+        origin_source: "connectyhub_payment_system",
+        message_origin: {
+          channel: "whatsapp",
+          confidence: "high",
+          device: null,
+          source: "connectyhub_payment_system",
+        },
+        provider_response: sanitizeProviderData(providerResponse),
+        payment_session_id: input.paymentSessionId,
+        provider_payment_id: input.providerPaymentId,
+        payment_method: input.paymentMethodLabel,
+        payment_status: input.status,
+      },
+      occurred_at: now,
+    });
+  }
+
+  await Promise.all([
+    conversation && input.order.conversation_id
+      ? input.client
+          .from("conversations")
+          .update({
+            status: "waiting_customer",
+            last_message_preview: preview(text, 240),
+            last_message_at: now,
+          })
+          .eq("id", input.order.conversation_id)
+          .eq("organization_id", input.order.organization_id)
+      : Promise.resolve(),
+    input.order.lead_id
+      ? input.client
+          .from("leads")
+          .update({
+            last_event_summary: preview(text, 240),
+            last_message_at: now,
+          })
+          .eq("id", input.order.lead_id)
+          .eq("organization_id", input.order.organization_id)
+      : Promise.resolve(),
+    input.client
+      .from("sales_catalog_orders")
+      .update({
+        metadata: {
+          ...latestMetadata,
+          [`${metadataPrefix}_at`]: now,
+          [`${metadataPrefix}_session_id`]: input.paymentSessionId,
+          [`${metadataPrefix}_provider_payment_id`]: input.providerPaymentId,
+          [`${metadataPrefix}_instance_id`]: instance.id,
+          [`${metadataPrefix}_source`]: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+          [`${metadataPrefix}_status`]: input.status,
+        },
+      })
+      .eq("id", input.order.id)
+      .eq("organization_id", input.order.organization_id),
+  ]);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.order.organization_id,
+    source_type: "sales_catalog_order",
+    source_id: input.order.id,
+    event_type: `sales_catalog.payment_${input.status}_sent`,
+    title: getPaymentStatusCustomerEventTitle(input.status),
+    summary: preview(text, 500),
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "lead_tracking", input.status],
+    payload: {
+      order_id: input.order.id,
+      lead_id: input.order.lead_id,
+      lead_phone: input.order.customer_phone,
+      payment_session_id: input.paymentSessionId,
+      provider_payment_id: input.providerPaymentId,
+      whatsapp_instance_id: instance.id,
+      conversation_id: input.order.conversation_id,
+      payment_status: input.status,
+      payment_method: input.paymentMethodLabel,
+      items: summarizePaymentConfirmationItems(input.items),
+      delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+      source: input.source,
+    },
+  });
+
+  return true;
+}
+
+async function maybeNotifyResponsiblePaymentStatus(input: {
+  client: SupabaseClient;
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentSessionId: string;
+  providerPaymentId: string | null;
+  paymentMethodLabel: string;
+  status: SalesCatalogPaymentNotificationStatus;
+  source: string;
+}) {
+  const orderMetadata = readRecord(input.order.metadata);
+  const metadataPrefix = getPaymentStatusResponsibleNotificationPrefix(input.status);
+  if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+
+  const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
+  const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
+  const conversation = input.order.conversation_id ? await loadOrderConversation(input.client, input.order) : null;
+  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+
+  if (!whatsappInstanceId) return false;
+
+  const { data: instance } = await input.client
+    .from("whatsapp_instances")
+    .select("id, organization_id, phone_number, display_name, instance_token_encrypted, metadata")
+    .eq("id", whatsappInstanceId)
+    .eq("organization_id", input.order.organization_id)
+    .maybeSingle<WhatsappInstanceRow>();
+
+  const token = instance?.instance_token_encrypted ? decryptCredentialValue(instance.instance_token_encrypted) : null;
+  if (!instance || !token) return false;
+
+  const agent = await loadResponsiblePaymentAgent(input.client, input.order, instance);
+  const responsiblePhone = resolveResponsiblePaymentPhone(agent, input.status);
+  if (!responsiblePhone) return false;
+
+  const text = buildResponsiblePaymentStatusMessage({
+    order: input.order,
+    items: input.items,
+    paymentMethod: input.paymentMethodLabel,
+    status: input.status,
+    agent,
+  });
+  const credentials = await loadUazapiCredentials(input.client);
+  const providerResponse = await callUazapi(credentials, "/send/text", {
+    method: "POST",
+    token,
+    body: {
+      number: responsiblePhone,
+      text,
+      linkPreview: false,
+      readchat: true,
+      readmessages: true,
+      track_source: "connectyhub",
+      track_id: `sales_catalog_responsible_${input.status}_${input.order.id.slice(0, 8)}_${Date.now()}`,
+    },
+  });
+
+  const now = new Date().toISOString();
+  const { data: latestOrder } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", input.order.id)
+    .eq("organization_id", input.order.organization_id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const latestMetadata = readRecord(latestOrder?.metadata);
+
+  await input.client
+    .from("sales_catalog_orders")
+    .update({
+      metadata: {
+        ...latestMetadata,
+        [`${metadataPrefix}_at`]: now,
+        [`${metadataPrefix}_session_id`]: input.paymentSessionId,
+        [`${metadataPrefix}_provider_payment_id`]: input.providerPaymentId,
+        [`${metadataPrefix}_instance_id`]: instance.id,
+        [`${metadataPrefix}_agent_id`]: agent?.id ?? null,
+        [`${metadataPrefix}_phone`]: responsiblePhone,
+        [`${metadataPrefix}_source`]: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+        [`${metadataPrefix}_status`]: input.status,
+      },
+    })
+    .eq("id", input.order.id)
+    .eq("organization_id", input.order.organization_id);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.order.organization_id,
+    source_type: "sales_catalog_order",
+    source_id: input.order.id,
+    event_type: `sales_catalog.payment_${input.status}_responsible_notification_sent`,
+    title: getPaymentStatusResponsibleEventTitle(input.status),
+    summary: preview(text, 500),
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "agent_responsible", input.status],
+    payload: {
+      order_id: input.order.id,
+      lead_id: input.order.lead_id,
+      customer_phone: input.order.customer_phone,
+      payment_session_id: input.paymentSessionId,
+      provider_payment_id: input.providerPaymentId,
+      whatsapp_instance_id: instance.id,
+      conversation_id: input.order.conversation_id,
+      agent_id: agent?.id ?? null,
+      responsible_phone: responsiblePhone,
+      provider_message_id: findProviderMessageId(providerResponse),
+      provider_response: sanitizeProviderData(providerResponse),
+      payment_status: input.status,
+      payment_method: input.paymentMethodLabel,
       delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       source: input.source,
     },
@@ -708,21 +1058,168 @@ function buildResponsiblePaymentApprovedMessage(input: {
   ].filter(Boolean).join("\n");
 }
 
+function buildPaymentStatusMessage(input: {
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentMethod: string;
+  status: SalesCatalogPaymentNotificationStatus;
+  template: string | null;
+}) {
+  const itemSummary = summarizeItemsForMessage(input.items);
+  const variables = buildPaymentTemplateVariables(input.order, itemSummary, input.paymentMethod);
+  const template = input.template?.trim();
+  const checkoutUrl = readLatestCheckoutUrl(input.order.metadata);
+
+  if (template) {
+    const rendered = renderMessageTemplate(template, {
+      ...variables,
+      link_pagamento: checkoutUrl,
+    });
+
+    if (input.status === "pending" && checkoutUrl && !rendered.includes(checkoutUrl)) {
+      return `${rendered}\nLink de pagamento: ${checkoutUrl}`;
+    }
+
+    return rendered;
+  }
+
+  if (input.status === "pending") {
+    return [
+      `${variables.cliente}, seu pagamento do pedido ${variables.pedido} ainda esta aguardando confirmacao.`,
+      checkoutUrl ? `Link de pagamento: ${checkoutUrl}` : "Se ja pagou, assim que o gateway confirmar eu te aviso por aqui.",
+    ].join("\n");
+  }
+
+  if (input.status === "refunded") {
+    return `${variables.cliente}, o pagamento do pedido ${variables.pedido} foi estornado. Se precisar de ajuda para refazer a compra, eu te acompanho por aqui.`;
+  }
+
+  if (input.status === "cancelled" || input.status === "expired") {
+    const label = input.status === "expired" ? "expirou" : "foi cancelado";
+    return `${variables.cliente}, o pagamento do pedido ${variables.pedido} ${label}. Nenhuma cobranca foi concluida. Posso te ajudar a refazer o pagamento por aqui.`;
+  }
+
+  return `${variables.cliente}, o pagamento do pedido ${variables.pedido} nao foi aprovado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.`;
+}
+
+function buildResponsiblePaymentStatusMessage(input: {
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentMethod: string;
+  status: SalesCatalogPaymentNotificationStatus;
+  agent: ResponsibleAgentRow | null;
+}) {
+  const itemSummary = summarizeItemsForMessage(input.items);
+  const agentName = input.agent?.persona_name?.trim() || input.agent?.name || "agente";
+  const customerPhone = input.order.customer_phone ? ` (${input.order.customer_phone})` : "";
+  const total = formatOrderTotal(input.order.total);
+  const statusLabel = formatPaymentNotificationStatus(input.status);
+
+  return [
+    `Pagamento ${statusLabel}`,
+    `O pedido ${input.order.id.slice(0, 8)} foi atualizado para ${statusLabel} via ${input.paymentMethod}.`,
+    `Agente: ${agentName}.`,
+    `Cliente: ${input.order.customer_name ?? "cliente"}${customerPhone}.`,
+    `Itens: ${itemSummary}.`,
+    total ? `Valor: ${total}.` : null,
+    input.status === "pending"
+      ? "Acompanhe a conversa e ajude o cliente a concluir o pagamento se necessario."
+      : "Revise o pedido no painel e conduza recuperacao ou proximo passo com o cliente.",
+  ].filter(Boolean).join("\n");
+}
+
+function buildPaymentTemplateVariables(order: OrderRow, itemSummary: string, paymentMethod: string) {
+  return {
+    cliente: order.customer_name ?? "cliente",
+    pedido: order.id.slice(0, 8),
+    itens: itemSummary,
+    valor: order.total ? `R$ ${order.total}` : "valor do pedido",
+    metodo_pagamento: paymentMethod,
+  };
+}
+
 function renderMessageTemplate(template: string, variables: Record<string, string>) {
   return template.replace(/\{([a-z0-9_]+)\}/gi, (match, key: string) => variables[key.toLowerCase()] ?? match);
 }
 
-function resolveResponsiblePaymentPhone(agent: ResponsibleAgentRow | null) {
+function resolveResponsiblePaymentPhone(agent: ResponsibleAgentRow | null, status: "approved" | SalesCatalogPaymentNotificationStatus) {
   if (!agent) return "";
 
   const responsible = readAgentResponsibleHuman(agent.metadata);
-  if (responsible.phone && !responsible.notifySales) {
+  const wantsNotification = status === "approved"
+    ? responsible.notifySales || responsible.notifyPayments
+    : responsible.notifyPayments || responsible.notifyOperational;
+
+  if (responsible.phone && !wantsNotification) {
     return "";
   }
 
   return responsible.phone
     || readFirstResponsibleWhatsappPhone(readRecord(readRecord(agent.metadata).whatsapp_behavior_config).humanHandoffNotificationNumbers)
     || "";
+}
+
+function normalizePaymentNotificationStatus(status: SalesCatalogPaymentStatus): SalesCatalogPaymentNotificationStatus | null {
+  if (status === "created" || status === "pending") return "pending";
+  if (status === "rejected") return "rejected";
+  if (status === "cancelled") return "cancelled";
+  if (status === "expired") return "expired";
+  if (status === "refunded") return "refunded";
+  if (status === "error") return "error";
+  return null;
+}
+
+function getPaymentStatusNotificationPrefix(status: SalesCatalogPaymentNotificationStatus) {
+  return `payment_${status}_whatsapp_notified`;
+}
+
+function getPaymentStatusResponsibleNotificationPrefix(status: SalesCatalogPaymentNotificationStatus) {
+  return `payment_${status}_responsible_whatsapp_notified`;
+}
+
+function getPaymentStatusTemplate(
+  templates: ReturnType<typeof createDefaultSalesCatalogCommerceSettings>["messageTemplates"] | null,
+  status: SalesCatalogPaymentNotificationStatus,
+) {
+  if (!templates) return null;
+  if (status === "pending") return templates.paymentRequest;
+  if (status === "refunded") return templates.paymentRefunded;
+  if (status === "rejected" || status === "error") return templates.paymentRejected;
+  return null;
+}
+
+function getPaymentStatusCustomerEventTitle(status: SalesCatalogPaymentNotificationStatus) {
+  if (status === "pending") return "Pagamento pendente enviado no WhatsApp";
+  if (status === "refunded") return "Estorno informado no WhatsApp";
+  if (status === "expired") return "Pagamento expirado informado no WhatsApp";
+  if (status === "cancelled") return "Pagamento cancelado informado no WhatsApp";
+  return "Pagamento recusado informado no WhatsApp";
+}
+
+function getPaymentStatusResponsibleEventTitle(status: SalesCatalogPaymentNotificationStatus) {
+  if (status === "pending") return "Responsavel avisado sobre pagamento pendente";
+  if (status === "refunded") return "Responsavel avisado sobre estorno";
+  if (status === "expired") return "Responsavel avisado sobre pagamento expirado";
+  if (status === "cancelled") return "Responsavel avisado sobre pagamento cancelado";
+  return "Responsavel avisado sobre pagamento recusado";
+}
+
+function formatPaymentNotificationStatus(status: SalesCatalogPaymentNotificationStatus) {
+  if (status === "pending") return "pendente";
+  if (status === "refunded") return "estornado";
+  if (status === "expired") return "expirado";
+  if (status === "cancelled") return "cancelado";
+  return "recusado";
+}
+
+function readLatestCheckoutUrl(metadata: JsonRecord | null) {
+  const record = readRecord(metadata);
+
+  return readString(record.latest_checkout_tracking_url)
+    ?? readString(record.latest_checkout_url)
+    ?? readString(record.checkout_tracking_url)
+    ?? readString(record.checkout_url)
+    ?? "";
 }
 
 function resolveOrderAgentId(metadata: JsonRecord) {
