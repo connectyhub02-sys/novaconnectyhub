@@ -8248,16 +8248,15 @@ function LocalDeliveryZonesEditor({
                   </div>
                 </div>
 
-                <label className="block lg:col-span-2">
-                  <FieldLabel>Endereco base</FieldLabel>
-                  <input
-                    value={selectedZone.baseAddress ?? ""}
-                    onChange={(event) => onUpdateZone(selectedZone.id, { baseAddress: event.target.value.slice(0, 220) })}
-                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                    placeholder="Rua, numero, bairro, cidade"
-                    style={{ borderColor: "var(--ch-border)" }}
+                <div className="lg:col-span-2">
+                  <LocalDeliveryAddressSearch
+                    apiKey={googleMapsConfig?.browserApiKey ?? ""}
+                    configured={Boolean(googleMapsConfig?.configured)}
+                    loading={loadingGoogleMapsConfig}
+                    zone={selectedZone}
+                    onPatch={(patch) => onUpdateZone(selectedZone.id, patch)}
                   />
-                </label>
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
                   <label className="block">
@@ -8409,6 +8408,101 @@ function LocalDeliveryZonesEditor({
         </div>
       )}
     </section>
+  );
+}
+
+function LocalDeliveryAddressSearch({
+  apiKey,
+  configured,
+  loading,
+  zone,
+  onPatch,
+}: {
+  apiKey: string;
+  configured: boolean;
+  loading: boolean;
+  zone: SalesCatalogLocalDeliveryZone;
+  onPatch: (patch: Partial<SalesCatalogLocalDeliveryZone>) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const onPatchRef = useRef(onPatch);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onPatchRef.current = onPatch;
+  }, [onPatch]);
+
+  useEffect(() => {
+    if (!configured || loading || !apiKey.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+    let listener: GoogleMapsListener | null = null;
+
+    loadGoogleMapsScript(apiKey)
+      .then((google) => {
+        if (cancelled || !inputRef.current) return;
+
+        const autocomplete = google.maps.places?.Autocomplete;
+        if (!autocomplete) {
+          setLoadError("Busca de endereco indisponivel. Digite o endereco manualmente.");
+          return;
+        }
+
+        setLoadError(null);
+        const placesAutocomplete = new autocomplete(inputRef.current, {
+          componentRestrictions: { country: "br" },
+          fields: ["formatted_address", "geometry", "name"],
+        });
+
+        listener = placesAutocomplete.addListener("place_changed", () => {
+          const place = placesAutocomplete.getPlace();
+          const location = place.geometry?.location;
+          if (!location) return;
+
+          const point = {
+            lat: roundCoordinate(location.lat()),
+            lng: roundCoordinate(location.lng()),
+          };
+
+          onPatchRef.current({
+            baseAddress: (place.formatted_address ?? place.name ?? inputRef.current?.value ?? "").slice(0, 220),
+            baseLatitude: point.lat,
+            baseLongitude: point.lng,
+          });
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError("Busca de endereco indisponivel. Digite o endereco manualmente.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      listener?.remove();
+    };
+  }, [apiKey, configured, loading, zone.id]);
+
+  return (
+    <label className="block">
+      <FieldLabel>Endereco base</FieldLabel>
+      <div className="grid grid-cols-[40px_minmax(0,1fr)] rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        <span className="grid place-items-center text-slate-500">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+        </span>
+        <input
+          key={zone.id}
+          ref={inputRef}
+          value={zone.baseAddress ?? ""}
+          onChange={(event) => onPatch({ baseAddress: event.target.value.slice(0, 220) })}
+          className="h-11 min-w-0 bg-transparent pr-3 text-[12px] outline-none"
+          placeholder="Digite e selecione o endereco da loja"
+        />
+      </div>
+      {loadError ? <p className="mt-1.5 text-[11px] text-amber-200">{loadError}</p> : null}
+    </label>
   );
 }
 
@@ -8859,7 +8953,6 @@ function LocalDeliveryMapEditor({
   onPatch: (patch: Partial<SalesCatalogLocalDeliveryZone>) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const mapRef = useRef<GoogleMapsMap | null>(null);
   const overlaysRef = useRef<{ circle: GoogleMapsCircle | null; polygon: GoogleMapsPolygon | null; listeners: GoogleMapsListener[] }>({
     circle: null,
@@ -8904,36 +8997,6 @@ function LocalDeliveryMapEditor({
       clearLocalDeliveryMapOverlays(overlays);
     };
   }, [apiKey, configured, mapId]);
-
-  useEffect(() => {
-    if (!configured || !mapReadyVersion || !mapRef.current || !searchInputRef.current || !window.google?.maps?.places?.Autocomplete) {
-      return;
-    }
-
-    const autocomplete = new window.google.maps.places.Autocomplete(searchInputRef.current, {
-      componentRestrictions: { country: "br" },
-      fields: ["formatted_address", "geometry", "name"],
-    });
-    const listener = autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      const location = place.geometry?.location;
-      if (!location) return;
-
-      const point = {
-        lat: roundCoordinate(location.lat()),
-        lng: roundCoordinate(location.lng()),
-      };
-      mapRef.current?.setCenter(point);
-      mapRef.current?.setZoom(14);
-      onPatch({
-        baseAddress: (place.formatted_address ?? place.name ?? searchInputRef.current?.value ?? "").slice(0, 220),
-        baseLatitude: point.lat,
-        baseLongitude: point.lng,
-      });
-    });
-
-    return () => listener.remove();
-  }, [configured, mapReadyVersion, onPatch]);
 
   useEffect(() => {
     if (!configured || !mapReadyVersion || !mapRef.current || !window.google?.maps) return;
@@ -9016,10 +9079,10 @@ function LocalDeliveryMapEditor({
       google.maps.event.addListener(map, "click", (event: { latLng?: { lat: () => number; lng: () => number } }) => {
         if (!event.latLng) return;
 
-          const point = {
-            lat: roundCoordinate(event.latLng.lat()),
-            lng: roundCoordinate(event.latLng.lng()),
-          };
+        const point = {
+          lat: roundCoordinate(event.latLng.lat()),
+          lng: roundCoordinate(event.latLng.lng()),
+        };
 
         if (zone.shape === "polygon") {
           onPatch({ polygon: [...zone.polygon, point] });
@@ -9062,21 +9125,6 @@ function LocalDeliveryMapEditor({
 
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-      <label className="mb-3 block">
-        <FieldLabel>Buscar endereco no mapa</FieldLabel>
-        <div className="grid grid-cols-[40px_minmax(0,1fr)] rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-          <span className="grid place-items-center text-slate-500">
-            <Search className="h-4 w-4" />
-          </span>
-          <input
-            key={zone.id}
-            ref={searchInputRef}
-            defaultValue={zone.baseAddress ?? ""}
-            className="h-11 min-w-0 bg-transparent pr-3 text-[12px] outline-none"
-            placeholder="Digite o endereco da loja ou da base de entrega"
-          />
-        </div>
-      </label>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <FieldLabel>Mapa da area</FieldLabel>
