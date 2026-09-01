@@ -14,7 +14,7 @@ import {
   resolveBillingCheckoutProvider,
 } from "@/lib/billing/plan-checkout";
 import { loadMercadoPagoPlatformBillingConfig, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,9 @@ export default async function DashboardBillingCheckoutPage({
     redirect(`/login?next=${encodeURIComponent(`/dashboard/planos/checkout/${subscriptionId}`)}`);
   }
 
-  if (!workspace.organization) {
+  const organization = workspace.organization ?? await ensureStarterOrganization();
+
+  if (!organization) {
     redirect("/dashboard/planos");
   }
 
@@ -59,7 +61,7 @@ export default async function DashboardBillingCheckoutPage({
   }
 
   const intent = await loadBillingCheckoutIntent(client, {
-    organizationId: workspace.organization.id,
+    organizationId: organization.id,
     subscriptionId,
   });
   const availableBumps = await loadBillingCheckoutBumps(client);
@@ -77,7 +79,7 @@ export default async function DashboardBillingCheckoutPage({
       mode="client"
       userAvatarUrl={workspace.profile.avatarUrl}
       userLabel={workspace.profile.email ?? undefined}
-      workspaceName={workspace.organization.name ?? workspace.profile.companyName ?? "Workspace"}
+      workspaceName={organization.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       {billingProvider === "mercado_pago" ? (
         <Script

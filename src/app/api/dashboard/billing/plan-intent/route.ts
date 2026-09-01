@@ -18,7 +18,7 @@ import {
   sendPlatformPlanInteractionNotification,
   sendPlatformSubscriptionPendingNotification,
 } from "@/lib/billing/platform-billing-webhook";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  if (!workspace.organization) {
+  const organization = workspace.organization ?? await ensureStarterOrganization();
+
+  if (!organization) {
     return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 422 });
   }
 
@@ -104,14 +106,14 @@ export async function POST(request: NextRequest) {
     }
 
     let replacedSubscription: ExistingSubscriptionRow | null = null;
-    const existingSubscription = await loadBlockingSubscription(client, workspace.organization.id);
+    const existingSubscription = await loadBlockingSubscription(client, organization.id);
     const platformBillingProvider = await loadPlatformBillingProvider(client);
 
     if (existingSubscription) {
       if (isPendingSubscription(existingSubscription.status)) {
         if (existingSubscription.plan_code === plan.plan_code) {
           const notification = await notifySubscriptionPendingSafely(client, {
-            organizationId: workspace.organization.id,
+            organizationId: organization.id,
             actorId: workspace.user.id,
             subscriptionId: existingSubscription.id,
             invoiceId: null,
@@ -139,7 +141,7 @@ export async function POST(request: NextRequest) {
         if (replacePending) {
           await cancelPendingSubscription(client, {
             subscription: existingSubscription,
-            organizationId: workspace.organization.id,
+            organizationId: organization.id,
             actorId: workspace.user.id,
             nextPlanCode: plan.plan_code,
           });
@@ -161,7 +163,7 @@ export async function POST(request: NextRequest) {
           ? "renewal"
           : "plan_change";
         const checkout = await createCheckoutForExistingSubscription(client, {
-          organizationId: workspace.organization.id,
+          organizationId: organization.id,
           actorId: workspace.user.id,
           subscription: existingSubscription,
           plan,
@@ -195,7 +197,7 @@ export async function POST(request: NextRequest) {
     const invoiceId = randomUUID();
     const paymentId = randomUUID();
     const externalReference = buildPlatformBillingExternalReference({
-      organizationId: workspace.organization.id,
+      organizationId: organization.id,
       subscriptionId,
       invoiceId,
       paymentId,
@@ -208,8 +210,8 @@ export async function POST(request: NextRequest) {
       checkout_kind: "initial",
       requested_plan_code: plan.plan_code,
       target_plan_code: plan.plan_code,
-      current_plan_code: workspace.organization.planCode,
-      organization_status: workspace.organization.status,
+      current_plan_code: organization.planCode,
+      organization_status: organization.status,
       actor_id: workspace.user.id,
       subscription_id: subscriptionId,
       invoice_id: invoiceId,
@@ -225,7 +227,7 @@ export async function POST(request: NextRequest) {
       .from("organization_subscriptions")
       .insert({
         id: subscriptionId,
-        organization_id: workspace.organization.id,
+        organization_id: organization.id,
         plan_id: plan.id,
         plan_code: plan.plan_code,
         status: "pending",
@@ -244,7 +246,7 @@ export async function POST(request: NextRequest) {
       .from("billing_invoices")
       .insert({
         id: invoiceId,
-        organization_id: workspace.organization.id,
+        organization_id: organization.id,
         subscription_id: subscriptionId,
         status: "open",
         currency: "BRL",
@@ -262,7 +264,7 @@ export async function POST(request: NextRequest) {
 
     const { error: itemError } = await client.from("billing_invoice_items").insert({
       invoice_id: invoiceId,
-      organization_id: workspace.organization.id,
+      organization_id: organization.id,
       item_type: "plan",
       description: `Plano ${plan.name}`,
       quantity: 1,
@@ -280,7 +282,7 @@ export async function POST(request: NextRequest) {
       .from("billing_payments")
       .insert({
         id: paymentId,
-        organization_id: workspace.organization.id,
+        organization_id: organization.id,
         invoice_id: invoiceId,
         subscription_id: subscriptionId,
         provider: platformBillingProvider,
@@ -304,7 +306,7 @@ export async function POST(request: NextRequest) {
     });
 
     const notification = await notifySubscriptionPendingSafely(client, {
-      organizationId: workspace.organization.id,
+      organizationId: organization.id,
       actorId: workspace.user.id,
       subscriptionId,
       invoiceId,
@@ -319,7 +321,7 @@ export async function POST(request: NextRequest) {
     });
     const replacementNotification = replacedSubscription
       ? await notifySubscriptionReplacedSafely(client, {
-          organizationId: workspace.organization.id,
+          organizationId: organization.id,
           actorId: workspace.user.id,
           previousSubscriptionId: replacedSubscription.id,
           previousPlanCode: replacedSubscription.plan_code,

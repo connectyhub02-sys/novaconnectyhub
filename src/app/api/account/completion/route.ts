@@ -3,7 +3,7 @@ import {
   getAccountCompletionStatusForUser,
   saveAccountCompletionProfile,
 } from "@/lib/account/signup-completion";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +57,10 @@ export async function POST(request: NextRequest) {
       source: "account_completion_modal",
       client,
     });
+
+    if (accountCompletion.isComplete) {
+      await ensureStarterOrganization();
+    }
 
     return NextResponse.json({ accountCompletion });
   } catch (error) {
