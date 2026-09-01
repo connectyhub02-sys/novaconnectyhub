@@ -6,6 +6,7 @@ import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitle
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
+import { readAgentResponsibleHuman } from "@/lib/agents/responsible-human";
 import {
   leadQualificationConfigKey,
   normalizeLeadQualificationConfig,
@@ -1417,6 +1418,7 @@ function buildState(
           qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
           channelConfig: getAgentChannelConfig(agent),
           automationRoles: readAutomationRoles(agent.metadata),
+          responsibleHuman: readAgentResponsibleHuman(agent.metadata),
           updatedAt: agent.updated_at,
         }
       : null,

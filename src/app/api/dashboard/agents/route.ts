@@ -48,6 +48,8 @@ export async function POST(request: NextRequest) {
     roleTitle?: unknown;
     prompt?: unknown;
     promptTemplateConfig?: unknown;
+    responsibleHumanName?: unknown;
+    responsibleHumanPhone?: unknown;
     sourceAgentId?: unknown;
   }>(request);
 
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest) {
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
         prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
         promptTemplateConfig: body?.promptTemplateConfig,
+        responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
+        responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
       });
 
       return NextResponse.json({ agent }, { status: 201 });
@@ -82,6 +86,8 @@ export async function POST(request: NextRequest) {
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
       promptTemplateConfig: body?.promptTemplateConfig,
+      responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
+      responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
     });
 
     return NextResponse.json({ agent }, { status: 201 });
@@ -105,6 +111,8 @@ export async function PATCH(request: NextRequest) {
     roleTitle?: unknown;
     prompt?: unknown;
     promptTemplateConfig?: unknown;
+    responsibleHumanName?: unknown;
+    responsibleHumanPhone?: unknown;
   }>(request);
 
   try {
@@ -124,6 +132,8 @@ export async function PATCH(request: NextRequest) {
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
       promptTemplateConfig: body?.promptTemplateConfig,
+      responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
+      responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
     });
 
     return NextResponse.json({ agent });

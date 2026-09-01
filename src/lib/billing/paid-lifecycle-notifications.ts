@@ -5,6 +5,11 @@ import {
   sendPlatformBillingLifecycleNotification,
   type PlatformBillingLifecycleNotificationType,
 } from "@/lib/billing/platform-billing-webhook";
+import {
+  normalizePlatformBillingRenewalPolicy,
+  platformBillingRenewalPolicyMetadataKey,
+  type PlatformBillingRenewalPolicy,
+} from "@/lib/billing/renewal-policy";
 import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
 
 type JsonRecord = Record<string, unknown>;
@@ -47,6 +52,21 @@ type CycleRow = {
   status: string | null;
 };
 
+type PaymentRow = {
+  id: string;
+  subscription_id: string | null;
+  provider: string | null;
+  provider_status: string | null;
+  status: string | null;
+  payload: JsonRecord | null;
+  created_at: string | null;
+  paid_at: string | null;
+};
+
+type PlatformBillingSettingsRow = {
+  metadata: JsonRecord | null;
+};
+
 type PaidLifecycleSummary = {
   checked: number;
   deadlineNotifications: number;
@@ -83,11 +103,17 @@ export async function processPaidBillingLifecycleNotifications(
 
   const organizationIds = Array.from(new Set(subscriptions.map((subscription) => subscription.organization_id)));
   const subscriptionIds = subscriptions.map((subscription) => subscription.id);
-  const [wallets, cycles] = await Promise.all([
+  const [wallets, cycles, payments, renewalPolicy] = await Promise.all([
     loadWallets(client, organizationIds),
     loadOpenCycles(client, subscriptionIds),
+    loadLatestPayments(client, subscriptionIds),
+    loadRenewalPolicy(client).catch((error) => {
+      summary.warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar a regua de renovacao.");
+      return normalizePlatformBillingRenewalPolicy(null);
+    }),
   ]);
   const walletByOrganizationId = new Map(wallets.map((wallet) => [wallet.organization_id, wallet]));
+  const paymentBySubscriptionId = buildLatestPaymentMap(payments);
 
   for (const subscription of subscriptions) {
     try {
@@ -95,10 +121,12 @@ export async function processPaidBillingLifecycleNotifications(
         subscription,
         wallet: walletByOrganizationId.get(subscription.organization_id) ?? null,
         cycle: findCurrentCycle(cycles, subscription, now),
+        latestPayment: paymentBySubscriptionId.get(subscription.id) ?? null,
+        renewalPolicy,
         now,
       });
 
-      const deadlineEvent = pickDeadlineEvent(context.periodEnd, now);
+      const deadlineEvent = pickDeadlineEvent(context, renewalPolicy, now);
 
       if (deadlineEvent) {
         if (deadlineEvent.eventType === "paid_plan_expired") {
@@ -116,7 +144,7 @@ export async function processPaidBillingLifecycleNotifications(
         const result = await sendLifecycleNotification(client, {
           context,
           eventType: deadlineEvent.eventType,
-          dedupeSuffix: dateOnly(context.periodEnd) ?? "sem-data",
+          dedupeSuffix: deadlineEvent.dedupeSuffix,
           source: "paid_plan_deadline_sweep",
         });
 
@@ -214,10 +242,46 @@ async function loadOpenCycles(client: SupabaseClient, subscriptionIds: string[])
   return data ?? [];
 }
 
+async function loadLatestPayments(client: SupabaseClient, subscriptionIds: string[]) {
+  if (subscriptionIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from("billing_payments")
+    .select("id, subscription_id, provider, provider_status, status, payload, created_at, paid_at")
+    .in("subscription_id", subscriptionIds)
+    .order("created_at", { ascending: false })
+    .limit(subscriptionIds.length * 4)
+    .returns<PaymentRow[]>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar pagamentos recentes: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
+async function loadRenewalPolicy(client: SupabaseClient) {
+  const { data, error } = await client
+    .from("platform_billing_settings")
+    .select("metadata")
+    .eq("setting_key", "default")
+    .maybeSingle<PlatformBillingSettingsRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar a regua de renovacao: ${error.message}`);
+  }
+
+  return normalizePlatformBillingRenewalPolicy(data?.metadata?.[platformBillingRenewalPolicyMetadataKey]);
+}
+
 function buildNotificationContext(input: {
   subscription: SubscriptionRow;
   wallet: WalletRow | null;
   cycle: CycleRow | null;
+  latestPayment: PaymentRow | null;
+  renewalPolicy: PlatformBillingRenewalPolicy;
   now: Date;
 }) {
   const plan = readPlanRelation(input.subscription.billing_plans);
@@ -247,32 +311,71 @@ function buildNotificationContext(input: {
     usedCredits,
     creditBalancePercent,
     daysRemaining,
+    daysPastDue: periodEnd ? Math.max(Math.floor((input.now.getTime() - periodEnd.getTime()) / DAY_MS), 0) : null,
+    paymentMethod: resolveSubscriptionPaymentMethod(input.subscription, input.latestPayment),
+    latestPayment: input.latestPayment,
+    renewalPolicy: input.renewalPolicy,
     planName: plan?.name?.trim() || input.subscription.plan_code,
     amountBrl: toNumber(plan?.monthly_price_brl),
   };
 }
 
-function pickDeadlineEvent(periodEnd: Date | null, now: Date):
-  | { eventType: PlatformBillingLifecycleNotificationType }
+function pickDeadlineEvent(
+  context: ReturnType<typeof buildNotificationContext>,
+  policy: PlatformBillingRenewalPolicy,
+  now: Date,
+):
+  | { eventType: PlatformBillingLifecycleNotificationType; dedupeSuffix: string }
   | null {
+  const periodEnd = context.periodEnd;
   if (!periodEnd) {
     return null;
   }
 
   const diff = periodEnd.getTime() - now.getTime();
+  const periodDate = dateOnly(periodEnd) ?? "sem-data";
+  const today = dateOnly(now) ?? "hoje";
 
   if (diff <= 0) {
-    return { eventType: "paid_plan_expired" };
+    const daysPastDue = Math.max(Math.floor(Math.abs(diff) / DAY_MS), 0);
+
+    if (daysPastDue <= 0) {
+      return { eventType: "paid_plan_due_today", dedupeSuffix: `${periodDate}:${today}` };
+    }
+
+    const suspendAfterDays = Math.max(policy.suspendAfterDays, policy.gracePeriodDays);
+
+    if (suspendAfterDays > 0 && daysPastDue <= suspendAfterDays) {
+      return { eventType: "paid_plan_grace_period", dedupeSuffix: `${periodDate}:d${daysPastDue}:${today}` };
+    }
+
+    return { eventType: "paid_plan_expired", dedupeSuffix: `${periodDate}:expired` };
   }
 
   const daysRemaining = Math.ceil(diff / DAY_MS);
+  const cardRetryFailed = readString(context.subscription.metadata?.card_retry_status) === "failed"
+    || readString(context.latestPayment?.payload?.card_retry_status) === "failed";
 
-  if (daysRemaining <= 1) {
-    return { eventType: "paid_plan_one_day_remaining" };
+  if (cardRetryFailed && daysRemaining <= policy.cardChargeAttemptDays) {
+    return { eventType: "payment_card_retry_failed", dedupeSuffix: `${periodDate}:card_failed:${today}` };
   }
 
-  if (daysRemaining <= 3) {
-    return { eventType: "paid_plan_three_days_remaining" };
+  const shouldRemindPix =
+    context.paymentMethod !== "card"
+    || !policy.cardChargeAttemptEnabled
+    || (cardRetryFailed && policy.cardFailureUsesPixFallback);
+
+  if (shouldRemindPix && daysRemaining <= policy.pixReminderStartDays) {
+    return {
+      eventType: policy.dailyWhatsAppReminders
+        ? "paid_plan_renewal_reminder"
+        : daysRemaining <= 1
+          ? "paid_plan_one_day_remaining"
+          : "paid_plan_three_days_remaining",
+      dedupeSuffix: policy.dailyWhatsAppReminders
+        ? `${periodDate}:d${daysRemaining}:${today}`
+        : periodDate,
+    };
   }
 
   return null;
@@ -335,10 +438,57 @@ async function sendLifecycleNotification(
       next_billing_at: context.subscription.next_billing_at,
       cycle_id: context.cycle?.id ?? null,
       credit_balance_percent: context.creditBalancePercent,
+      payment_method: context.paymentMethod,
+      payment_method_label: formatPaymentMethod(context.paymentMethod),
+      days_past_due: context.daysPastDue,
+      grace_period_days: context.renewalPolicy.gracePeriodDays,
       checkout_url: "/dashboard/planos",
       checkout_public_url: `${getAppBaseUrl()}/dashboard/planos`,
     },
   });
+}
+
+function buildLatestPaymentMap(payments: PaymentRow[]) {
+  const map = new Map<string, PaymentRow>();
+
+  for (const payment of payments) {
+    if (payment.subscription_id && !map.has(payment.subscription_id)) {
+      map.set(payment.subscription_id, payment);
+    }
+  }
+
+  return map;
+}
+
+function resolveSubscriptionPaymentMethod(subscription: SubscriptionRow, payment: PaymentRow | null) {
+  const subscriptionMetadata = subscription.metadata ?? {};
+  const paymentPayload = payment?.payload ?? {};
+  const value = [
+    readString(paymentPayload.payment_method),
+    readString(paymentPayload.latest_payment_method),
+    readString(paymentPayload.paymentMethod),
+    readString(paymentPayload.method),
+    readString(subscriptionMetadata.payment_method),
+    readString(subscriptionMetadata.latest_payment_method),
+    readString(subscriptionMetadata.billing_payment_method),
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (value.includes("pix")) return "pix";
+  if (value.includes("card") || value.includes("cartao") || value.includes("cartão") || value.includes("credit") || value.includes("debit")) {
+    return "card";
+  }
+
+  if (subscription.provider_subscription_id) {
+    return "card";
+  }
+
+  return subscription.billing_provider === "pagbank" ? "pix" : "unknown";
+}
+
+function formatPaymentMethod(value: string) {
+  if (value === "pix") return "Pix";
+  if (value === "card") return "Cartao";
+  return "Pagamento";
 }
 
 async function markSubscriptionPastDue(
@@ -427,6 +577,10 @@ function readDate(value: unknown) {
 
   const date = new Date(string);
   return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function dateOnly(value: Date | null) {

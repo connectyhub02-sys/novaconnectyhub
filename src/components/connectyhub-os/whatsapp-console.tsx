@@ -224,6 +224,13 @@ type ClientWhatsappAgent = {
   description: string | null;
   prompt: string;
   promptTemplateConfig?: AgentPromptBuilderConfig;
+  responsibleHuman?: {
+    name: string;
+    phone: string;
+    notifySales?: boolean;
+    notifyPayments?: boolean;
+    notifyOperational?: boolean;
+  };
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -264,6 +271,7 @@ type WhatsappState = {
     prompt: string;
     promptPreview: string;
     promptTemplateConfig?: AgentPromptBuilderConfig;
+    responsibleHuman?: ClientWhatsappAgent["responsibleHuman"];
     cloneProfile?: WhatsappCloneProfile;
     cloneMemory?: WhatsappCloneMemory;
     cloneProfileImport?: CloneProfileImportStatus;
@@ -590,6 +598,8 @@ export function WhatsAppConsole({
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentSectorName, setAgentSectorName] = useState(agentPromptTemplates[0].sectorName);
+  const [agentResponsibleHumanName, setAgentResponsibleHumanName] = useState("");
+  const [agentResponsibleHumanPhone, setAgentResponsibleHumanPhone] = useState("");
   const [agentTemplateId, setAgentTemplateId] = useState<AgentPromptTemplateId>(defaultAgentPromptTemplateId);
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
@@ -1304,6 +1314,8 @@ export function WhatsAppConsole({
           name: agentName.trim() || "Agente WhatsApp",
           sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
           roleTitle: template.roleTitle || variant.agentRoleTitle,
+          responsibleHumanName: agentResponsibleHumanName.trim(),
+          responsibleHumanPhone: agentResponsibleHumanPhone.trim(),
           promptTemplateConfig,
         }),
       });
@@ -1317,6 +1329,8 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setAgentName("");
       setAgentSectorName(agentPromptTemplates[0].sectorName);
+      setAgentResponsibleHumanName("");
+      setAgentResponsibleHumanPhone("");
       setAgentTemplateId(defaultAgentPromptTemplateId);
       setShowAgentForm(false);
       setNotice({ tone: "success", message: "Agente criado. Agora configure o prompt, comportamento e conexao." });
@@ -1686,6 +1700,8 @@ export function WhatsAppConsole({
           creating={creatingAgent}
           deletingAgentId={deletingAgentId}
           sectorName={agentSectorName}
+          responsibleHumanName={agentResponsibleHumanName}
+          responsibleHumanPhone={agentResponsibleHumanPhone}
           selectedAgentId={selectedAgentId}
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
@@ -1696,6 +1712,8 @@ export function WhatsAppConsole({
           onCreate={createWhatsappAgent}
           onDelete={deleteWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
+          onResponsibleHumanNameChange={setAgentResponsibleHumanName}
+          onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
           onSelectAgent={switchWhatsappAgent}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
@@ -1710,11 +1728,15 @@ export function WhatsAppConsole({
           selectedCompany={selectedCompany}
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
+          responsibleHumanName={agentResponsibleHumanName}
+          responsibleHumanPhone={agentResponsibleHumanPhone}
           onAgentNameChange={setAgentName}
           onAgentTemplateChange={updateNewAgentTemplate}
           onCancel={() => setShowAgentForm(false)}
           onCreate={createWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
+          onResponsibleHumanNameChange={setAgentResponsibleHumanName}
+          onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
           sectorName={agentSectorName}
@@ -1731,6 +1753,8 @@ export function WhatsAppConsole({
             creating={creatingAgent}
             deletingAgentId={deletingAgentId}
             sectorName={agentSectorName}
+            responsibleHumanName={agentResponsibleHumanName}
+            responsibleHumanPhone={agentResponsibleHumanPhone}
             selectedAgentId={selectedAgentId}
             selectedCompanyId={selectedCompanyId}
             showForm={showAgentForm}
@@ -1741,6 +1765,8 @@ export function WhatsAppConsole({
             onCreate={createWhatsappAgent}
             onDelete={deleteWhatsappAgent}
             onSectorNameChange={setAgentSectorName}
+            onResponsibleHumanNameChange={setAgentResponsibleHumanName}
+            onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
             onSelectAgent={switchWhatsappAgent}
             onSelectCompany={setSelectedCompanyId}
             onStart={() => setShowAgentForm(true)}
@@ -2977,6 +3003,8 @@ function ClientAgentsManager({
   companies,
   creating,
   deletingAgentId,
+  responsibleHumanName,
+  responsibleHumanPhone,
   sectorName,
   selectedAgentId,
   selectedCompanyId,
@@ -2987,6 +3015,8 @@ function ClientAgentsManager({
   onClone,
   onCreate,
   onDelete,
+  onResponsibleHumanNameChange,
+  onResponsibleHumanPhoneChange,
   onSectorNameChange,
   onSelectAgent,
   onSelectCompany,
@@ -2999,6 +3029,8 @@ function ClientAgentsManager({
   companies: ClientCompany[];
   creating: boolean;
   deletingAgentId: string | null;
+  responsibleHumanName: string;
+  responsibleHumanPhone: string;
   sectorName: string;
   selectedAgentId: string;
   selectedCompanyId: string;
@@ -3009,6 +3041,8 @@ function ClientAgentsManager({
   onClone: (sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) => Promise<void>;
   onCreate: () => void;
   onDelete: (agent: ClientWhatsappAgent) => Promise<void>;
+  onResponsibleHumanNameChange: (value: string) => void;
+  onResponsibleHumanPhoneChange: (value: string) => void;
   onSectorNameChange: (value: string) => void;
   onSelectAgent: (value: string) => void;
   onSelectCompany: (value: string) => void;
@@ -3069,6 +3103,12 @@ function ClientAgentsManager({
                     </p>
                     <p className="mt-1 truncate text-[11px] text-slate-400">
                       {agent.companyName} / {agent.sectorName}
+                    </p>
+                    <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
+                      <UserRound className="h-3 w-3 shrink-0" />
+                      {agent.responsibleHuman?.phone
+                        ? `${agent.responsibleHuman.name || "Responsavel"} / ${agent.responsibleHuman.phone}`
+                        : "Responsavel pendente"}
                     </p>
                   </div>
                   <NeonBadge tone={active ? "green" : "amber"}>{active ? "aberto" : agent.status}</NeonBadge>
@@ -3162,10 +3202,28 @@ function ClientAgentsManager({
                 onChange={(event) => onSectorNameChange(event.target.value)}
               />
             </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Gerente comercial"
+                value={responsibleHumanName}
+                onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: 5599999999999"
+                value={responsibleHumanPhone}
+                onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
+              />
+            </label>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
-            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId} loading={creating} tone="ai" onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId || !responsibleHumanPhone.trim()} loading={creating} tone="ai" onClick={onCreate} />
           </div>
         </div>
       ) : null}
@@ -3548,6 +3606,8 @@ function AgentCreationGate({
   agentTemplateId,
   companies,
   creating,
+  responsibleHumanName,
+  responsibleHumanPhone,
   sectorName,
   selectedCompany,
   selectedCompanyId,
@@ -3556,6 +3616,8 @@ function AgentCreationGate({
   onAgentTemplateChange,
   onCancel,
   onCreate,
+  onResponsibleHumanNameChange,
+  onResponsibleHumanPhoneChange,
   onSectorNameChange,
   onSelectCompany,
   onStart,
@@ -3565,6 +3627,8 @@ function AgentCreationGate({
   agentTemplateId: AgentPromptTemplateId;
   companies: ClientCompany[];
   creating: boolean;
+  responsibleHumanName: string;
+  responsibleHumanPhone: string;
   sectorName: string;
   selectedCompany: ClientCompany | null;
   selectedCompanyId: string;
@@ -3573,6 +3637,8 @@ function AgentCreationGate({
   onAgentTemplateChange: (value: string) => void;
   onCancel: () => void;
   onCreate: () => void;
+  onResponsibleHumanNameChange: (value: string) => void;
+  onResponsibleHumanPhoneChange: (value: string) => void;
   onSectorNameChange: (value: string) => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
@@ -3669,11 +3735,29 @@ function AgentCreationGate({
                   onChange={(event) => onSectorNameChange(event.target.value)}
                 />
               </label>
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
+                <input
+                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  placeholder="Ex: Responsavel comercial"
+                  value={responsibleHumanName}
+                  onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
+                <input
+                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  placeholder="Ex: 5599999999999"
+                  value={responsibleHumanPhone}
+                  onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
+                />
+              </label>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               <SecondaryAction icon={RefreshCcw} label="Cancelar" disabled={creating} onClick={onCancel} />
-              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !selectedCompanyId} loading={creating} tone="ai" onClick={onCreate} />
+              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !selectedCompanyId || !responsibleHumanPhone.trim()} loading={creating} tone="ai" onClick={onCreate} />
             </div>
           </div>
         ) : (

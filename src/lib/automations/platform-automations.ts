@@ -7,6 +7,11 @@ import {
   PLATFORM_BILLING_MESSAGE_TEMPLATE_MAX_LENGTH,
   PLATFORM_BILLING_MESSAGE_VARIABLES,
 } from "@/lib/billing/platform-billing-messages";
+import {
+  normalizePlatformBillingRenewalPolicy,
+  platformBillingRenewalPolicyMetadataKey,
+  type PlatformBillingRenewalPolicy,
+} from "@/lib/billing/renewal-policy";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -85,6 +90,7 @@ export type PlatformAutomationsCatalog = {
   agents: PlatformAutomationAgentOption[];
   notifications: PlatformAutomationNotificationItem[];
   eventDefinitions: PlatformAutomationEventDefinition[];
+  renewalPolicy: PlatformBillingRenewalPolicy;
   variables: readonly string[];
   stats: {
     totalFlows: number;
@@ -154,6 +160,10 @@ type NotificationRow = {
   sent_at: string | null;
   error_message: string | null;
   created_at: string;
+};
+
+type PlatformBillingSettingsRow = {
+  metadata: JsonRecord | null;
 };
 
 type OrganizationRow = {
@@ -318,6 +328,14 @@ const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTrigge
     conditions: { plan_codes: PAID_PLAN_CODES },
     triggerConfig: { kind: "paid_plan_deadline", days_remaining: 3 },
   },
+  paid_plan_renewal_reminder: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 65,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_deadline", cadence: "daily_configured" },
+  },
   paid_plan_one_day_remaining: {
     delayMinutes: 0,
     cooldownMinutes: 1440,
@@ -326,13 +344,37 @@ const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTrigge
     conditions: { plan_codes: PAID_PLAN_CODES },
     triggerConfig: { kind: "paid_plan_deadline", days_remaining: 1 },
   },
+  paid_plan_due_today: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 67,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_deadline", days_remaining: 0 },
+  },
+  paid_plan_grace_period: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 68,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_grace_period" },
+  },
   paid_plan_expired: {
     delayMinutes: 0,
     cooldownMinutes: 1440,
     maxSendsPerContact: 2,
-    priority: 68,
+    priority: 69,
     conditions: { plan_codes: PAID_PLAN_CODES },
     triggerConfig: { kind: "paid_plan_expired" },
+  },
+  payment_card_retry_failed: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 70,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "card_charge_attempt", status: "failed" },
   },
   paid_low_credits_20: {
     delayMinutes: 0,
@@ -403,7 +445,7 @@ export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomatio
     .returns<FlowRow[]>();
 
   const schemaReady = !flowsResult.error;
-  const [agentsResult, instancesResult, notificationsResult] = await Promise.all([
+  const [agentsResult, instancesResult, notificationsResult, billingSettingsResult] = await Promise.all([
     client
       .from("agent_registry")
       .select("id, name, persona_name, role_title, sector_name, status")
@@ -428,6 +470,11 @@ export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomatio
           .limit(18)
           .returns<NotificationRow[]>()
       : Promise.resolve({ data: [] as NotificationRow[], error: null }),
+    client
+      .from("platform_billing_settings")
+      .select("metadata")
+      .eq("setting_key", "default")
+      .maybeSingle<PlatformBillingSettingsRow>(),
   ]);
 
   const warnings = [
@@ -435,6 +482,7 @@ export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomatio
     agentsResult.error?.message,
     instancesResult.error?.message,
     notificationsResult.error?.message,
+    billingSettingsResult.error?.message,
   ].filter((message): message is string => Boolean(message));
   const instancesByAgentId = buildInstancesByAgentId(instancesResult.data ?? []);
   const agents = (agentsResult.data ?? []).map((agent) => mapAgent(agent, instancesByAgentId.get(agent.id)));
@@ -452,6 +500,9 @@ export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomatio
   const notifications = (notificationsResult.data ?? []).map((notification) =>
     mapNotification(notification, organizations, agentNameById, flowById),
   );
+  const renewalPolicy = normalizePlatformBillingRenewalPolicy(
+    billingSettingsResult.data?.metadata?.[platformBillingRenewalPolicyMetadataKey],
+  );
   const sentWindowStart = Date.now() - 24 * 60 * 60 * 1000;
 
   return {
@@ -460,6 +511,7 @@ export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomatio
     agents,
     notifications,
     eventDefinitions: PLATFORM_AUTOMATION_EVENT_DEFINITIONS,
+    renewalPolicy,
     variables: PLATFORM_AUTOMATION_VARIABLES,
     stats: {
       totalFlows: flows.length,
@@ -874,8 +926,12 @@ function getEventRevenueGoal(eventType: string) {
   if (eventType === "manual_plan_activated") return "Confirmar liberacao manual e reduzir suporte apos ajuste do admin.";
   if (eventType === "manual_plan_renewed") return "Confirmar renovacao manual e reforcar a continuidade do plano.";
   if (eventType === "paid_plan_three_days_remaining") return "Antecipar renovacao antes de pausa operacional.";
+  if (eventType === "paid_plan_renewal_reminder") return "Cobrar clientes Pix diariamente dentro da janela definida.";
   if (eventType === "paid_plan_one_day_remaining") return "Ultima chamada para renovar sem interromper atendimentos.";
+  if (eventType === "paid_plan_due_today") return "Criar urgencia no dia do vencimento antes da pausa operacional.";
+  if (eventType === "paid_plan_grace_period") return "Recuperar cliente em carencia antes do bloqueio definitivo.";
   if (eventType === "paid_plan_expired") return "Avisar bloqueio por vencimento e levar o cliente para renovar.";
+  if (eventType === "payment_card_retry_failed") return "Resolver cartao recusado com troca de cartao ou Pix antes do vencimento.";
   if (eventType === "paid_low_credits_20") return "Estimular recarga antes do risco de parada dos agentes.";
   if (eventType === "paid_low_credits_10") return "Criar urgencia para recarga com saldo critico.";
   if (eventType === "paid_no_credits") return "Recuperar operacao parada por falta de creditos.";

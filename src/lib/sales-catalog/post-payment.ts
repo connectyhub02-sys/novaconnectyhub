@@ -2,6 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import {
+  readAgentResponsibleHuman,
+  readFirstResponsibleWhatsappPhone,
+} from "@/lib/agents/responsible-human";
 import { recordPlatformProductCommissionsForApprovedPayment } from "@/lib/platform-product-sales";
 import {
   buildSalesCatalogContent,
@@ -78,6 +82,13 @@ type LeadRow = {
   display_name: string | null;
 };
 
+type ResponsibleAgentRow = {
+  id: string;
+  name: string;
+  persona_name: string | null;
+  metadata: JsonRecord | null;
+};
+
 export async function handleSalesCatalogApprovedPayment(input: {
   client: SupabaseClient;
   organizationId: string;
@@ -89,7 +100,7 @@ export async function handleSalesCatalogApprovedPayment(input: {
 }) {
   const order = await loadOrder(input.client, input.organizationId, input.orderId);
   if (!order) {
-    return { inventoryDeducted: false, whatsappNotified: false };
+    return { inventoryDeducted: false, whatsappNotified: false, responsibleNotified: false };
   }
 
   const items = await loadOrderItems(input.client, input.organizationId, input.orderId);
@@ -111,6 +122,15 @@ export async function handleSalesCatalogApprovedPayment(input: {
     paymentMethodLabel: input.paymentMethodLabel,
     source: input.source,
   });
+  const responsibleNotified = await maybeNotifyResponsiblePaymentApproved({
+    client: input.client,
+    order,
+    items,
+    paymentSessionId: input.paymentSessionId,
+    providerPaymentId: input.providerPaymentId,
+    paymentMethodLabel: input.paymentMethodLabel,
+    source: input.source,
+  });
   const commissions = await recordPlatformProductCommissionsForApprovedPayment({
     client: input.client,
     organizationId: input.organizationId,
@@ -121,7 +141,7 @@ export async function handleSalesCatalogApprovedPayment(input: {
     source: input.source,
   });
 
-  return { inventoryDeducted, whatsappNotified, commissions };
+  return { inventoryDeducted, whatsappNotified, responsibleNotified, commissions };
 }
 
 async function maybeDeductInventory(input: {
@@ -478,6 +498,117 @@ async function maybeNotifyPaymentApproved(input: {
   return true;
 }
 
+async function maybeNotifyResponsiblePaymentApproved(input: {
+  client: SupabaseClient;
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentSessionId: string;
+  providerPaymentId: string | null;
+  paymentMethodLabel: string;
+  source: string;
+}) {
+  const orderMetadata = readRecord(input.order.metadata);
+  if (readString(orderMetadata.payment_responsible_whatsapp_notified_at)) return false;
+
+  const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
+  const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
+  const conversation = input.order.conversation_id ? await loadOrderConversation(input.client, input.order) : null;
+  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+
+  if (!whatsappInstanceId) return false;
+
+  const { data: instance } = await input.client
+    .from("whatsapp_instances")
+    .select("id, organization_id, phone_number, display_name, instance_token_encrypted, metadata")
+    .eq("id", whatsappInstanceId)
+    .eq("organization_id", input.order.organization_id)
+    .maybeSingle<WhatsappInstanceRow>();
+
+  const token = instance?.instance_token_encrypted ? decryptCredentialValue(instance.instance_token_encrypted) : null;
+  if (!instance || !token) return false;
+
+  const agent = await loadResponsiblePaymentAgent(input.client, input.order, instance);
+  const responsiblePhone = resolveResponsiblePaymentPhone(agent);
+  if (!responsiblePhone) return false;
+
+  const text = buildResponsiblePaymentApprovedMessage({
+    order: input.order,
+    items: input.items,
+    paymentMethod: input.paymentMethodLabel,
+    agent,
+  });
+  const credentials = await loadUazapiCredentials(input.client);
+  const providerResponse = await callUazapi(credentials, "/send/text", {
+    method: "POST",
+    token,
+    body: {
+      number: responsiblePhone,
+      text,
+      linkPreview: false,
+      readchat: true,
+      readmessages: true,
+      track_source: "connectyhub",
+      track_id: `sales_catalog_responsible_${input.order.id.slice(0, 8)}_${Date.now()}`,
+    },
+  });
+
+  const now = new Date().toISOString();
+  const { data: latestOrder } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", input.order.id)
+    .eq("organization_id", input.order.organization_id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const latestMetadata = readRecord(latestOrder?.metadata);
+
+  await input.client
+    .from("sales_catalog_orders")
+    .update({
+      metadata: {
+        ...latestMetadata,
+        payment_responsible_whatsapp_notified_at: now,
+        payment_responsible_whatsapp_notified_session_id: input.paymentSessionId,
+        payment_responsible_whatsapp_notified_provider_payment_id: input.providerPaymentId,
+        payment_responsible_whatsapp_notified_instance_id: instance.id,
+        payment_responsible_whatsapp_notified_agent_id: agent?.id ?? null,
+        payment_responsible_whatsapp_notified_phone: responsiblePhone,
+        payment_responsible_whatsapp_notified_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+      },
+    })
+    .eq("id", input.order.id)
+    .eq("organization_id", input.order.organization_id);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.order.organization_id,
+    source_type: "sales_catalog_order",
+    source_id: input.order.id,
+    event_type: "sales_catalog.payment_responsible_notification_sent",
+    title: "Responsavel do agente avisado sobre pagamento aprovado",
+    summary: preview(text, 500),
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "agent_responsible"],
+    payload: {
+      order_id: input.order.id,
+      lead_id: input.order.lead_id,
+      customer_phone: input.order.customer_phone,
+      payment_session_id: input.paymentSessionId,
+      provider_payment_id: input.providerPaymentId,
+      whatsapp_instance_id: instance.id,
+      conversation_id: input.order.conversation_id,
+      agent_id: agent?.id ?? null,
+      responsible_phone: responsiblePhone,
+      provider_message_id: findProviderMessageId(providerResponse),
+      provider_response: sanitizeProviderData(providerResponse),
+      delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
+      source: input.source,
+    },
+  });
+
+  return true;
+}
+
 function summarizePaymentConfirmationItems(items: OrderItemRow[]) {
   return items.map((item) => ({
     order_item_id: item.id,
@@ -498,6 +629,25 @@ async function loadOrderConversation(client: SupabaseClient, order: OrderRow) {
     .eq("id", order.conversation_id)
     .eq("organization_id", order.organization_id)
     .maybeSingle<ConversationRow>();
+
+  return data ?? null;
+}
+
+async function loadResponsiblePaymentAgent(client: SupabaseClient, order: OrderRow, instance: WhatsappInstanceRow) {
+  const orderMetadata = readRecord(order.metadata);
+  const instanceMetadata = readRecord(instance.metadata);
+  const agentId = resolveOrderAgentId(orderMetadata) ?? readString(instanceMetadata.agent_id);
+
+  if (!agentId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("agent_registry")
+    .select("id, name, persona_name, metadata")
+    .eq("id", agentId)
+    .eq("organization_id", order.organization_id)
+    .maybeSingle<ResponsibleAgentRow>();
 
   return data ?? null;
 }
@@ -536,8 +686,51 @@ function buildPaymentApprovedMessage(input: {
   ].join("\n");
 }
 
+function buildResponsiblePaymentApprovedMessage(input: {
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentMethod: string;
+  agent: ResponsibleAgentRow | null;
+}) {
+  const itemSummary = summarizeItemsForMessage(input.items);
+  const agentName = input.agent?.persona_name?.trim() || input.agent?.name || "agente";
+  const customerPhone = input.order.customer_phone ? ` (${input.order.customer_phone})` : "";
+  const total = formatOrderTotal(input.order.total);
+
+  return [
+    "Venda confirmada",
+    `O pagamento do pedido ${input.order.id.slice(0, 8)} foi aprovado via ${input.paymentMethod}.`,
+    `Agente: ${agentName}.`,
+    `Cliente: ${input.order.customer_name ?? "cliente"}${customerPhone}.`,
+    `Itens: ${itemSummary}.`,
+    total ? `Valor: ${total}.` : null,
+    "O agente pode seguir com a entrega ou proximo passo combinado no atendimento.",
+  ].filter(Boolean).join("\n");
+}
+
 function renderMessageTemplate(template: string, variables: Record<string, string>) {
   return template.replace(/\{([a-z0-9_]+)\}/gi, (match, key: string) => variables[key.toLowerCase()] ?? match);
+}
+
+function resolveResponsiblePaymentPhone(agent: ResponsibleAgentRow | null) {
+  if (!agent) return "";
+
+  const responsible = readAgentResponsibleHuman(agent.metadata);
+  if (responsible.phone && !responsible.notifySales) {
+    return "";
+  }
+
+  return responsible.phone
+    || readFirstResponsibleWhatsappPhone(readRecord(readRecord(agent.metadata).whatsapp_behavior_config).humanHandoffNotificationNumbers)
+    || "";
+}
+
+function resolveOrderAgentId(metadata: JsonRecord) {
+  return readString(metadata.agent_id)
+    ?? readString(metadata.whatsapp_agent_id)
+    ?? readString(metadata.producer_agent_id)
+    ?? readString(metadata.created_by_agent_id)
+    ?? readString(metadata.latest_agent_id);
 }
 
 async function loadOrder(client: SupabaseClient, organizationId: string, orderId: string) {
@@ -676,6 +869,29 @@ function normalizeStockStatus(value: string | null): SalesCatalogStockStatus {
 
 function normalizeQuantity(value: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.min(Math.round(value), 100000) : 1;
+}
+
+function summarizeItemsForMessage(items: OrderItemRow[]) {
+  return items.length > 0
+    ? items.slice(0, 4).map((item) => {
+        const quantity = normalizeQuantity(item.quantity);
+        const sku = item.sku_code ? ` (${item.sku_code})` : "";
+        return `${quantity}x ${item.title}${sku}`;
+      }).join(", ")
+    : "pedido";
+}
+
+function formatOrderTotal(value: string | null) {
+  const raw = readString(value);
+  if (!raw) return "";
+
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed)) {
+    return `R$ ${raw}`;
+  }
+
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parsed);
 }
 
 function preview(value: string, maxLength: number) {

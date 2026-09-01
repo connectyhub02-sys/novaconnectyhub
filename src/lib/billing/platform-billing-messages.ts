@@ -10,6 +10,8 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{creditos_usados}",
   "{marco_creditos}",
   "{dias_restantes}",
+  "{dias_atraso}",
+  "{dias_carencia}",
   "{data_vencimento}",
   "{trial_expira_em}",
   "{data_expiracao_trial}",
@@ -110,14 +112,34 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     description: "Cliente pago esta perto do vencimento do ciclo atual.",
   },
   {
+    eventType: "paid_plan_renewal_reminder",
+    label: "Renovacao Pix diaria",
+    description: "Cliente pago por Pix recebe aviso diario dentro da janela configurada.",
+  },
+  {
     eventType: "paid_plan_one_day_remaining",
     label: "Plano faltando 1 dia",
     description: "Ultimo aviso antes do vencimento do ciclo pago.",
   },
   {
+    eventType: "paid_plan_due_today",
+    label: "Plano vence hoje",
+    description: "Aviso do dia do vencimento para cliente pago.",
+  },
+  {
+    eventType: "paid_plan_grace_period",
+    label: "Plano em carencia",
+    description: "Cliente esta apos o vencimento, dentro da carencia operacional.",
+  },
+  {
     eventType: "paid_plan_expired",
     label: "Plano vencido",
     description: "Plano pago/manual venceu e precisa ser renovado.",
+  },
+  {
+    eventType: "payment_card_retry_failed",
+    label: "Cartao falhou D-3",
+    description: "Tentativa antecipada de cartao falhou e o cliente precisa atualizar o pagamento.",
   },
   {
     eventType: "paid_low_credits_20",
@@ -191,10 +213,18 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
     "{cliente}, seu plano {plano} foi renovado manualmente pela equipe ConnectyHub. O novo ciclo vence em {data_vencimento} e seus creditos disponiveis sao {creditos_restantes}.",
   paid_plan_three_days_remaining:
     "{cliente}, seu plano {plano} vence em 3 dias, em {data_vencimento}. Você ainda tem {creditos_restantes} créditos. Renove antes do vencimento para manter seus agentes atendendo sem pausa.",
+  paid_plan_renewal_reminder:
+    "{cliente}, seu plano {plano} vence em {dias_restantes} dia(s), em {data_vencimento}. Para manter painel e agentes ativos, renove por Pix ou cartao no painel: {checkout_url}.",
   paid_plan_one_day_remaining:
     "{cliente}, seu plano {plano} vence em 1 dia, em {data_vencimento}. Para evitar pausa nos atendimentos automaticos, renove pelo painel.",
+  paid_plan_due_today:
+    "{cliente}, seu plano {plano} vence hoje ({data_vencimento}). Renove ainda hoje para manter seus agentes e painel ativos: {checkout_url}.",
+  paid_plan_grace_period:
+    "{cliente}, seu plano {plano} venceu em {data_vencimento} e esta em carencia ha {dias_atraso} dia(s). Regularize para evitar bloqueio dos agentes: {checkout_url}.",
   paid_plan_expired:
     "{cliente}, seu plano {plano} venceu em {data_vencimento}. Seus dados continuam salvos, mas recursos pagos ficam pausados ate a renovacao.",
+  payment_card_retry_failed:
+    "{cliente}, tentamos renovar seu plano {plano} no cartao, mas o pagamento nao foi aprovado. Atualize o cartao ou pague por Pix antes de {data_vencimento}: {checkout_url}.",
   paid_low_credits_20:
     "{cliente}, seus creditos ConnectyHub chegaram a {percentual_creditos}% do ciclo. Restam {creditos_restantes}. Recarregue agora para seus agentes nao pararem no meio dos atendimentos.",
   paid_low_credits_10:

@@ -60,6 +60,17 @@ type AutomationDraft = {
   milestoneStepCredits: string;
 };
 
+type RenewalPolicyDraft = {
+  pixReminderStartDays: string;
+  cardChargeAttemptDays: string;
+  gracePeriodDays: string;
+  suspendAfterDays: string;
+  dailyWhatsAppReminders: boolean;
+  cardChargeAttemptEnabled: boolean;
+  cardFailureUsesPixFallback: boolean;
+  notifyResponsibleHumans: boolean;
+};
+
 export function PlatformAutomationsCenter({
   catalog,
   userLabel = "CEO_HUMAN_ADM",
@@ -70,12 +81,17 @@ export function PlatformAutomationsCenter({
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [policyState, setPolicyState] = useState<ActionState>({ tone: "idle", message: "" });
   const [creating, setCreating] = useState(false);
   const firstFlow = catalog.flows[0] ?? null;
   const [selectedFlowId, setSelectedFlowId] = useState(firstFlow?.id ?? "");
   const selectedFlow = catalog.flows.find((flow) => flow.id === selectedFlowId) ?? firstFlow;
   const [draft, setDraft] = useState<AutomationDraft>(() =>
     selectedFlow ? draftFromFlow(selectedFlow) : draftFromEvent(catalog),
+  );
+  const [policyDraft, setPolicyDraft] = useState<RenewalPolicyDraft>(() =>
+    renewalPolicyDraftFromCatalog(catalog),
   );
   const connectedAgents = useMemo(
     () => catalog.agents.filter((agent) => agent.isConnected),
@@ -86,6 +102,7 @@ export function PlatformAutomationsCenter({
     ? catalog.agents.find((agent) => agent.id === draft.selectedAgentId) ?? null
     : null;
   const canSave = catalog.schemaReady && (!draft.selectedAgentId || Boolean(selectedAgent?.isConnected));
+  const policyChanged = !isRenewalPolicyDraftEqual(policyDraft, renewalPolicyDraftFromCatalog(catalog));
 
   function chooseFlow(flow: PlatformAutomationFlow) {
     setCreating(false);
@@ -142,6 +159,34 @@ export function PlatformAutomationsCenter({
     }
   }
 
+  async function saveRenewalPolicy() {
+    setSavingPolicy(true);
+    setPolicyState({ tone: "idle", message: "" });
+
+    try {
+      const response = await fetch("/api/admin/automations/renewal-policy", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ policy: buildRenewalPolicyPayload(policyDraft) }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar a regua financeira.");
+      }
+
+      setPolicyState({ tone: "success", message: "Regua financeira salva." });
+      router.refresh();
+    } catch (error) {
+      setPolicyState({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Falha ao salvar regua financeira.",
+      });
+    } finally {
+      setSavingPolicy(false);
+    }
+  }
+
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/automacoes">
       <PageHeader
@@ -185,6 +230,101 @@ export function PlatformAutomationsCenter({
         <AutomationMetric icon={Send} label="24h" value={formatNumber(catalog.stats.sent24h)} detail="mensagens enviadas" tone="green" />
         <AutomationMetric icon={Activity} label="Fila" value={formatNumber(catalog.stats.pendingNotifications)} detail="pendentes" tone="amber" />
       </div>
+
+      <Panel
+        className="mb-4"
+        title="Regua financeira"
+        eyebrow="planos / pix / cartao"
+        tone="amber"
+        action={
+          <button
+            type="button"
+            disabled={savingPolicy || !catalog.schemaReady || !policyChanged}
+            onClick={saveRenewalPolicy}
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-300 px-3 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {savingPolicy ? "Salvando" : "Salvar regua"}
+          </button>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Pix avisa antes">
+              <DaySelect
+                value={policyDraft.pixReminderStartDays}
+                min={1}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, pixReminderStartDays: value }))}
+              />
+            </Field>
+            <Field label="Cartao tenta antes">
+              <DaySelect
+                value={policyDraft.cardChargeAttemptDays}
+                min={1}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptDays: value }))}
+              />
+            </Field>
+            <Field label="Carencia">
+              <DaySelect
+                value={policyDraft.gracePeriodDays}
+                min={0}
+                max={15}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, gracePeriodDays: value }))}
+              />
+            </Field>
+            <Field label="Suspender apos">
+              <DaySelect
+                value={policyDraft.suspendAfterDays}
+                min={0}
+                max={30}
+                suffix="dia(s)"
+                onChange={(value) => setPolicyDraft((current) => ({ ...current, suspendAfterDays: value }))}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-2">
+            <RenewalToggle
+              label="Lembrete diario no WhatsApp"
+              checked={policyDraft.dailyWhatsAppReminders}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, dailyWhatsAppReminders: checked }))}
+            />
+            <RenewalToggle
+              label="Tentativa antecipada no cartao"
+              checked={policyDraft.cardChargeAttemptEnabled}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardChargeAttemptEnabled: checked }))}
+            />
+            <RenewalToggle
+              label="Falha no cartao oferece Pix"
+              checked={policyDraft.cardFailureUsesPixFallback}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, cardFailureUsesPixFallback: checked }))}
+            />
+            <RenewalToggle
+              label="Avisar responsaveis humanos"
+              checked={policyDraft.notifyResponsibleHumans}
+              onChange={(checked) => setPolicyDraft((current) => ({ ...current, notifyResponsibleHumans: checked }))}
+            />
+          </div>
+        </div>
+
+        {policyState.message ? (
+          <div
+            className={cn(
+              "mt-3 rounded-xl border px-3 py-2 text-[12px] leading-5",
+              policyState.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+              policyState.tone === "error" && "border-rose-200 bg-rose-50 text-rose-700",
+              policyState.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
+            )}
+          >
+            {policyState.message}
+          </div>
+        ) : null}
+      </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <Panel
@@ -565,6 +705,58 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <label className="grid gap-1.5">
       <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
       {children}
+    </label>
+  );
+}
+
+function DaySelect({
+  value,
+  min,
+  max,
+  suffix,
+  onChange,
+}: {
+  value: string;
+  min: number;
+  max: number;
+  suffix: string;
+  onChange: (value: string) => void;
+}) {
+  const options = Array.from({ length: max - min + 1 }, (_, index) => min + index);
+
+  return (
+    <select
+      className="ch-input"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option} value={String(option)}>
+          {option} {suffix}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function RenewalToggle({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-10 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-700">
+      <span className="font-semibold">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+        onChange={(event) => onChange(event.target.checked)}
+      />
     </label>
   );
 }
@@ -1037,6 +1229,43 @@ function buildPayload(draft: AutomationDraft, creating: boolean) {
     priority: parseInteger(draft.priority, 100),
     labels: splitList(draft.labelsText),
   };
+}
+
+function renewalPolicyDraftFromCatalog(catalog: PlatformAutomationsCatalog): RenewalPolicyDraft {
+  return {
+    pixReminderStartDays: String(catalog.renewalPolicy.pixReminderStartDays),
+    cardChargeAttemptDays: String(catalog.renewalPolicy.cardChargeAttemptDays),
+    gracePeriodDays: String(catalog.renewalPolicy.gracePeriodDays),
+    suspendAfterDays: String(catalog.renewalPolicy.suspendAfterDays),
+    dailyWhatsAppReminders: catalog.renewalPolicy.dailyWhatsAppReminders,
+    cardChargeAttemptEnabled: catalog.renewalPolicy.cardChargeAttemptEnabled,
+    cardFailureUsesPixFallback: catalog.renewalPolicy.cardFailureUsesPixFallback,
+    notifyResponsibleHumans: catalog.renewalPolicy.notifyResponsibleHumans,
+  };
+}
+
+function buildRenewalPolicyPayload(draft: RenewalPolicyDraft) {
+  return {
+    pixReminderStartDays: parseInteger(draft.pixReminderStartDays, 3),
+    cardChargeAttemptDays: parseInteger(draft.cardChargeAttemptDays, 3),
+    gracePeriodDays: parseInteger(draft.gracePeriodDays, 3),
+    suspendAfterDays: parseInteger(draft.suspendAfterDays, 3),
+    dailyWhatsAppReminders: draft.dailyWhatsAppReminders,
+    cardChargeAttemptEnabled: draft.cardChargeAttemptEnabled,
+    cardFailureUsesPixFallback: draft.cardFailureUsesPixFallback,
+    notifyResponsibleHumans: draft.notifyResponsibleHumans,
+  };
+}
+
+function isRenewalPolicyDraftEqual(left: RenewalPolicyDraft, right: RenewalPolicyDraft) {
+  return left.pixReminderStartDays === right.pixReminderStartDays
+    && left.cardChargeAttemptDays === right.cardChargeAttemptDays
+    && left.gracePeriodDays === right.gracePeriodDays
+    && left.suspendAfterDays === right.suspendAfterDays
+    && left.dailyWhatsAppReminders === right.dailyWhatsAppReminders
+    && left.cardChargeAttemptEnabled === right.cardChargeAttemptEnabled
+    && left.cardFailureUsesPixFallback === right.cardFailureUsesPixFallback
+    && left.notifyResponsibleHumans === right.notifyResponsibleHumans;
 }
 
 function buildConditions(draft: AutomationDraft) {

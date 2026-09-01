@@ -17,6 +17,14 @@ import {
   renderPlatformBillingMessageTemplate,
   type PlatformBillingMessageTemplates,
 } from "@/lib/billing/platform-billing-messages";
+import {
+  normalizePlatformBillingRenewalPolicy,
+  platformBillingRenewalPolicyMetadataKey,
+} from "@/lib/billing/renewal-policy";
+import {
+  readAgentResponsibleHuman,
+  readFirstResponsibleWhatsappPhone,
+} from "@/lib/agents/responsible-human";
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
 import { getAppBaseUrl, getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
@@ -124,8 +132,12 @@ export type PlatformBillingLifecycleNotificationType =
   | "manual_plan_activated"
   | "manual_plan_renewed"
   | "paid_plan_three_days_remaining"
+  | "paid_plan_renewal_reminder"
   | "paid_plan_one_day_remaining"
+  | "paid_plan_due_today"
+  | "paid_plan_grace_period"
   | "paid_plan_expired"
+  | "payment_card_retry_failed"
   | "paid_low_credits_20"
   | "paid_low_credits_10"
   | "paid_no_credits";
@@ -258,6 +270,20 @@ type PendingBillingNotificationRow = {
   metadata: JsonRecord | null;
 };
 
+type BillingResponsibleAgentRow = {
+  id: string;
+  name: string;
+  persona_name: string | null;
+  metadata: JsonRecord | null;
+};
+
+type BillingResponsibleRecipient = {
+  agentId: string;
+  agentName: string;
+  name: string;
+  phone: string;
+};
+
 const activePaymentStatuses = new Set(["approved", "authorized"]);
 const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation"]);
 const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "expired", "charged_back", "refunded"]);
@@ -278,8 +304,12 @@ const checkoutButtonEventTypes = new Set([
   "manual_plan_activated",
   "manual_plan_renewed",
   "paid_plan_three_days_remaining",
+  "paid_plan_renewal_reminder",
   "paid_plan_one_day_remaining",
+  "paid_plan_due_today",
+  "paid_plan_grace_period",
   "paid_plan_expired",
+  "payment_card_retry_failed",
   "paid_low_credits_20",
   "paid_low_credits_10",
   "paid_no_credits",
@@ -1369,6 +1399,29 @@ async function enqueuePlatformBillingNotification(
   }
 
   const event = insert.data;
+  await enqueueResponsibleBillingNotifications(client, {
+    organizationId: input.organizationId,
+    basePayload: insertPayload,
+    selectedAgentId,
+    ownerPhone: recipientPhone,
+    message,
+    delayMinutes,
+    initialError,
+    settingsMetadata: settings?.metadata ?? null,
+    originalDedupeKey: input.dedupeKey,
+  }).catch(async (error) => {
+    if (!event?.id) return;
+
+    await client
+      .from("billing_notification_events")
+      .update({
+        metadata: {
+          ...readRecord(insertPayload.metadata),
+          responsible_notification_error: error instanceof Error ? error.message : "Falha ao criar aviso para responsaveis.",
+        },
+      })
+      .eq("id", event.id);
+  });
 
   if (!event || initialError || !selectedAgentId || !recipientPhone || delayMinutes > 0) {
     return event ?? null;
@@ -1383,6 +1436,129 @@ async function enqueuePlatformBillingNotification(
   });
 
   return event;
+}
+
+async function enqueueResponsibleBillingNotifications(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    basePayload: JsonRecord;
+    selectedAgentId: string | null;
+    ownerPhone: string | null;
+    message: string;
+    delayMinutes: number;
+    initialError: string | null;
+    settingsMetadata: JsonRecord | null;
+    originalDedupeKey: string;
+  },
+) {
+  const policy = normalizePlatformBillingRenewalPolicy(
+    readRecord(input.settingsMetadata)?.[platformBillingRenewalPolicyMetadataKey],
+  );
+
+  if (!policy.notifyResponsibleHumans) {
+    return;
+  }
+
+  const recipients = await loadBillingResponsibleRecipients(client, input.organizationId, input.ownerPhone);
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const responsibleInitialError = input.initialError === "Cliente sem telefone no perfil." ? null : input.initialError;
+
+  for (const recipient of recipients) {
+    const insertPayload: JsonRecord = {
+      ...input.basePayload,
+      dedupe_key: `${input.originalDedupeKey}:responsible:${recipient.phone}`,
+      status: responsibleInitialError ? "skipped" : "pending",
+      recipient_phone: recipient.phone,
+      selected_agent_id: input.selectedAgentId,
+      error_message: responsibleInitialError,
+      metadata: {
+        ...readRecord(input.basePayload.metadata),
+        recipient_kind: "agent_responsible",
+        responsible_agent_id: recipient.agentId,
+        responsible_agent_name: recipient.agentName,
+        responsible_name: recipient.name,
+        original_dedupe_key: input.originalDedupeKey,
+      },
+    };
+
+    const insert = await client
+      .from("billing_notification_events")
+      .insert(insertPayload)
+      .select("id, status")
+      .maybeSingle<{ id: string; status: string }>();
+
+    if (insert.error) {
+      if (insert.error.code === "23505") {
+        continue;
+      }
+
+      throw new Error(`Nao foi possivel registrar aviso financeiro para responsavel: ${insert.error.message}`);
+    }
+
+    if (!insert.data?.id || responsibleInitialError || !input.selectedAgentId || input.delayMinutes > 0) {
+      continue;
+    }
+
+    await sendBillingNotificationNow(client, {
+      eventId: insert.data.id,
+      agentId: input.selectedAgentId,
+      phone: recipient.phone,
+      message: input.message,
+      attempts: 0,
+    });
+  }
+}
+
+async function loadBillingResponsibleRecipients(
+  client: SupabaseClient,
+  organizationId: string,
+  ownerPhone: string | null,
+) {
+  const { data, error } = await client
+    .from("agent_registry")
+    .select("id, name, persona_name, metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("metadata", { agent_kind: "whatsapp" })
+    .returns<BillingResponsibleAgentRow[]>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar responsaveis dos agentes: ${error.message}`);
+  }
+
+  const recipients = new Map<string, BillingResponsibleRecipient>();
+  const normalizedOwnerPhone = normalizePhone(ownerPhone);
+
+  for (const agent of data ?? []) {
+    const responsible = readAgentResponsibleHuman(agent.metadata);
+    const fallbackPhone = readFirstResponsibleWhatsappPhone(
+      readRecord(readRecord(agent.metadata).whatsapp_behavior_config).humanHandoffNotificationNumbers,
+    );
+    const phone = normalizePhone(responsible.phone || fallbackPhone);
+
+    if (!phone || phone === normalizedOwnerPhone) {
+      continue;
+    }
+
+    if (responsible.phone && !responsible.notifyPayments && !responsible.notifyOperational) {
+      continue;
+    }
+
+    if (!recipients.has(phone)) {
+      recipients.set(phone, {
+        agentId: agent.id,
+        agentName: agent.persona_name?.trim() || agent.name,
+        name: responsible.name || agent.persona_name?.trim() || agent.name,
+        phone,
+      });
+    }
+  }
+
+  return Array.from(recipients.values());
 }
 
 export async function processPendingPlatformBillingNotifications(
@@ -1988,6 +2164,8 @@ function buildBillingMessage(input: {
     creditos_usados: formatCredits(input.usedCredits ?? 0),
     marco_creditos: formatCredits(input.milestoneCredits ?? input.usedCredits ?? 0),
     dias_restantes: input.trialDaysRemaining ?? "--",
+    dias_atraso: toNumberLike(input.metadata.days_past_due ?? input.metadata.daysPastDue) ?? "--",
+    dias_carencia: toNumberLike(input.metadata.grace_period_days ?? input.metadata.gracePeriodDays) ?? "--",
     data_vencimento: formatMetadataDate(input.metadata.period_ends_at)
       ?? formatMetadataDate(input.metadata.current_period_end)
       ?? formatMetadataDate(input.metadata.next_billing_at)
@@ -2085,6 +2263,10 @@ function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function readRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
 function readStringList(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
@@ -2114,6 +2296,13 @@ function addMonths(date: Date, months: number) {
 function toNumber(value: number | string | null | undefined) {
   const number = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+function toNumberLike(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function isUuid(value: string | undefined) {

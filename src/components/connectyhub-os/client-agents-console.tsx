@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoadingPanel } from "./infinity-loader";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,13 @@ type ClientAgent = {
   roleTitle: string;
   description: string | null;
   prompt: string;
+  responsibleHuman: {
+    name: string;
+    phone: string;
+    notifySales: boolean;
+    notifyPayments: boolean;
+    notifyOperational: boolean;
+  };
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -57,12 +64,16 @@ export function ClientAgentsConsole() {
   const [sectorName, setSectorName] = useState("Atendimento WhatsApp");
   const [name, setName] = useState("");
   const [roleTitle, setRoleTitle] = useState("Agente de WhatsApp");
+  const [responsibleHumanName, setResponsibleHumanName] = useState("");
+  const [responsibleHumanPhone, setResponsibleHumanPhone] = useState("");
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editCompanyId, setEditCompanyId] = useState("");
   const [editSectorName, setEditSectorName] = useState("");
   const [editName, setEditName] = useState("");
   const [editRoleTitle, setEditRoleTitle] = useState("");
+  const [editResponsibleHumanName, setEditResponsibleHumanName] = useState("");
+  const [editResponsibleHumanPhone, setEditResponsibleHumanPhone] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [cloneSourceAgentId, setCloneSourceAgentId] = useState<string | null>(null);
@@ -70,6 +81,8 @@ export function ClientAgentsConsole() {
   const [cloneSectorName, setCloneSectorName] = useState("");
   const [cloneName, setCloneName] = useState("");
   const [cloneRoleTitle, setCloneRoleTitle] = useState("");
+  const [cloneResponsibleHumanName, setCloneResponsibleHumanName] = useState("");
+  const [cloneResponsibleHumanPhone, setCloneResponsibleHumanPhone] = useState("");
   const [clonePrompt, setClonePrompt] = useState("");
   const [cloning, setCloning] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -129,7 +142,15 @@ export function ClientAgentsConsole() {
       const response = await fetch("/api/dashboard/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, sectorName, name, roleTitle, prompt }),
+        body: JSON.stringify({
+          companyId,
+          sectorName,
+          name,
+          roleTitle,
+          responsibleHumanName,
+          responsibleHumanPhone,
+          prompt,
+        }),
       });
       const data = (await response.json().catch(() => null)) as { agent?: ClientAgent; error?: string } | null;
 
@@ -141,6 +162,8 @@ export function ClientAgentsConsole() {
       setSectorName("Atendimento WhatsApp");
       setName("");
       setRoleTitle("Agente de WhatsApp");
+      setResponsibleHumanName("");
+      setResponsibleHumanPhone("");
       setPrompt(defaultPrompt);
       setShowForm(false);
       setNotice({ tone: "success", message: "Agente criado." });
@@ -169,6 +192,8 @@ export function ClientAgentsConsole() {
           sectorName: editSectorName,
           name: editName,
           roleTitle: editRoleTitle,
+          responsibleHumanName: editResponsibleHumanName,
+          responsibleHumanPhone: editResponsibleHumanPhone,
           prompt: editPrompt,
         }),
       });
@@ -207,6 +232,8 @@ export function ClientAgentsConsole() {
           sectorName: cloneSectorName,
           name: cloneName,
           roleTitle: cloneRoleTitle,
+          responsibleHumanName: cloneResponsibleHumanName,
+          responsibleHumanPhone: cloneResponsibleHumanPhone,
           prompt: clonePrompt,
         }),
       });
@@ -263,6 +290,8 @@ export function ClientAgentsConsole() {
     setEditSectorName(agent.sectorName);
     setEditName(agent.name);
     setEditRoleTitle(agent.roleTitle);
+    setEditResponsibleHumanName(agent.responsibleHuman.name);
+    setEditResponsibleHumanPhone(agent.responsibleHuman.phone);
     setEditPrompt(agent.prompt);
     setCloneSourceAgentId(null);
     setConfirmDeleteId(null);
@@ -275,6 +304,8 @@ export function ClientAgentsConsole() {
     setEditSectorName("");
     setEditName("");
     setEditRoleTitle("");
+    setEditResponsibleHumanName("");
+    setEditResponsibleHumanPhone("");
     setEditPrompt("");
   }
 
@@ -284,6 +315,8 @@ export function ClientAgentsConsole() {
     setCloneSectorName(agent.sectorName);
     setCloneName(`Copia de ${agent.name}`);
     setCloneRoleTitle(agent.roleTitle);
+    setCloneResponsibleHumanName(agent.responsibleHuman.name);
+    setCloneResponsibleHumanPhone(agent.responsibleHuman.phone);
     setClonePrompt(agent.prompt);
     setEditingAgentId(null);
     setConfirmDeleteId(null);
@@ -296,6 +329,8 @@ export function ClientAgentsConsole() {
     setCloneSectorName("");
     setCloneName("");
     setCloneRoleTitle("");
+    setCloneResponsibleHumanName("");
+    setCloneResponsibleHumanPhone("");
     setClonePrompt("");
   }
 
@@ -380,6 +415,27 @@ export function ClientAgentsConsole() {
                 />
               </label>
 
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
+                  <input
+                    value={responsibleHumanName}
+                    onChange={(event) => setResponsibleHumanName(event.target.value)}
+                    placeholder="Ex: Leo do BuffaloMass"
+                    className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
+                  <input
+                    value={responsibleHumanPhone}
+                    onChange={(event) => setResponsibleHumanPhone(event.target.value)}
+                    placeholder="Ex: 5599999999999"
+                    className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  />
+                </label>
+              </div>
+
               {selectedCompany ? (
                 <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
                   <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Atende</p>
@@ -413,7 +469,7 @@ export function ClientAgentsConsole() {
                 ) : null}
                 <button
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={creating}
+                  disabled={creating || !responsibleHumanPhone.trim()}
                   type="button"
                   onClick={createAgent}
                 >
@@ -462,6 +518,8 @@ export function ClientAgentsConsole() {
                       mode="edit"
                       name={editName}
                       prompt={editPrompt}
+                      responsibleHumanName={editResponsibleHumanName}
+                      responsibleHumanPhone={editResponsibleHumanPhone}
                       roleTitle={editRoleTitle}
                       sectorName={editSectorName}
                       sectors={listSectorsForCompany(agents, editCompanyId)}
@@ -469,6 +527,8 @@ export function ClientAgentsConsole() {
                       onCompanyChange={setEditCompanyId}
                       onNameChange={setEditName}
                       onPromptChange={setEditPrompt}
+                      onResponsibleHumanNameChange={setEditResponsibleHumanName}
+                      onResponsibleHumanPhoneChange={setEditResponsibleHumanPhone}
                       onRoleTitleChange={setEditRoleTitle}
                       onSave={updateAgent}
                       onSectorNameChange={setEditSectorName}
@@ -483,6 +543,8 @@ export function ClientAgentsConsole() {
                       mode="clone"
                       name={cloneName}
                       prompt={clonePrompt}
+                      responsibleHumanName={cloneResponsibleHumanName}
+                      responsibleHumanPhone={cloneResponsibleHumanPhone}
                       roleTitle={cloneRoleTitle}
                       sectorName={cloneSectorName}
                       sectors={listSectorsForCompany(agents, cloneCompanyId)}
@@ -490,6 +552,8 @@ export function ClientAgentsConsole() {
                       onCompanyChange={setCloneCompanyId}
                       onNameChange={setCloneName}
                       onPromptChange={setClonePrompt}
+                      onResponsibleHumanNameChange={setCloneResponsibleHumanName}
+                      onResponsibleHumanPhoneChange={setCloneResponsibleHumanPhone}
                       onRoleTitleChange={setCloneRoleTitle}
                       onSave={cloneAgent}
                       onSectorNameChange={setCloneSectorName}
@@ -596,6 +660,15 @@ function AgentCard({
         <InfoTile label="Setor" value={agent.sectorName} />
         <InfoTile label="Status" value={agent.status} />
       </div>
+      <div className="mt-3 rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+        <div className="flex items-center gap-2">
+          <UserRound className="h-3.5 w-3.5 text-cyan-300" />
+          <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Responsavel humano</p>
+        </div>
+        <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+          {agent.responsibleHuman.phone ? `${agent.responsibleHuman.name || "Responsavel"} / ${agent.responsibleHuman.phone}` : "Pendente"}
+        </p>
+      </div>
       <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-slate-500">{agent.prompt}</p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <button
@@ -641,6 +714,8 @@ function AgentMutationForm({
   mode,
   name,
   prompt,
+  responsibleHumanName,
+  responsibleHumanPhone,
   roleTitle,
   sectorName,
   sectors,
@@ -648,6 +723,8 @@ function AgentMutationForm({
   onCompanyChange,
   onNameChange,
   onPromptChange,
+  onResponsibleHumanNameChange,
+  onResponsibleHumanPhoneChange,
   onRoleTitleChange,
   onSave,
   onSectorNameChange,
@@ -659,6 +736,8 @@ function AgentMutationForm({
   mode: "edit" | "clone";
   name: string;
   prompt: string;
+  responsibleHumanName: string;
+  responsibleHumanPhone: string;
   roleTitle: string;
   sectorName: string;
   sectors: string[];
@@ -666,6 +745,8 @@ function AgentMutationForm({
   onCompanyChange: (value: string) => void;
   onNameChange: (value: string) => void;
   onPromptChange: (value: string) => void;
+  onResponsibleHumanNameChange: (value: string) => void;
+  onResponsibleHumanPhoneChange: (value: string) => void;
   onRoleTitleChange: (value: string) => void;
   onSave: () => void;
   onSectorNameChange: (value: string) => void;
@@ -754,6 +835,26 @@ function AgentMutationForm({
               className="h-10 w-full rounded-lg border px-3 text-[13px] outline-none"
             />
           </label>
+
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
+            <input
+              value={responsibleHumanName}
+              onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
+              placeholder="Ex: Gerente comercial"
+              className="h-10 w-full rounded-lg border px-3 text-[13px] outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
+            <input
+              value={responsibleHumanPhone}
+              onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
+              placeholder="Ex: 5599999999999"
+              className="h-10 w-full rounded-lg border px-3 text-[13px] outline-none"
+            />
+          </label>
         </div>
 
         <label className="block">
@@ -779,7 +880,7 @@ function AgentMutationForm({
         </button>
         <button
           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled}
+          disabled={disabled || !responsibleHumanPhone.trim()}
           type="button"
           onClick={onSave}
         >

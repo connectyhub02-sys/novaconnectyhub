@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.sql");
 const platformBillingMigrationSource = read("supabase/migrations/0069_pagbank_platform_billing.sql");
 const platformProductBillingCycleMigrationSource = read("supabase/migrations/0070_platform_product_billing_cycle.sql");
+const renewalAndResponsibleMigrationSource = read("supabase/migrations/0071_platform_renewal_and_agent_responsibles.sql");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
@@ -22,10 +23,20 @@ const salesCatalogConsoleSource = read("src/components/connectyhub-os/sales-cata
 const salesCatalogSharedSource = read("src/lib/sales-catalog/shared.ts");
 const commerceAgentSource = read("src/lib/commerce-agent/server.ts");
 const whatsappAgentRuntimeSource = read("src/lib/whatsapp/agent-runtime.ts");
+const whatsappConsoleSource = read("src/components/connectyhub-os/whatsapp-console.tsx");
 const platformProductsSource = read("src/lib/platform-products.ts");
 const platformProductsApiSource = read("src/app/api/admin/platform-products/route.ts");
 const platformProductsConsoleSource = read("src/components/connectyhub-os/platform-products-console.tsx");
 const planCheckoutSource = read("src/lib/billing/plan-checkout.ts");
+const renewalPolicySource = read("src/lib/billing/renewal-policy.ts");
+const platformAutomationsSource = read("src/lib/automations/platform-automations.ts");
+const platformAutomationsConsoleSource = read("src/components/connectyhub-os/platform-automations-center.tsx");
+const paidLifecycleSource = read("src/lib/billing/paid-lifecycle-notifications.ts");
+const responsibleHumanSource = read("src/lib/agents/responsible-human.ts");
+const clientAgentsSource = read("src/lib/client-os/agents.ts");
+const clientAgentsConsoleSource = read("src/components/connectyhub-os/client-agents-console.tsx");
+const whatsappWorkspaceSource = read("src/lib/whatsapp/client-workspace.ts");
+const postPaymentSource = read("src/lib/sales-catalog/post-payment.ts");
 
 function read(path: string) {
   return readFileSync(path, "utf8");
@@ -173,5 +184,44 @@ describe("PagBank gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle)))");
     expect(paymentSessionsSource).toContain("hasRecurringSalesCatalogOrderItem(orderMetadata, items)");
     expect(paymentSessionsSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
+  });
+
+  it("adds a configurable WhatsApp renewal policy for ConnectyHub billing", () => {
+    expect(renewalPolicySource).toContain("pixReminderStartDays: 3");
+    expect(renewalPolicySource).toContain("cardChargeAttemptDays: 3");
+    expect(platformAutomationsSource).toContain("renewalPolicy");
+    expect(platformAutomationsSource).toContain("paid_plan_renewal_reminder");
+    expect(platformAutomationsConsoleSource).toContain("Regua financeira");
+    expect(platformAutomationsConsoleSource).toContain("/api/admin/automations/renewal-policy");
+    expect(paidLifecycleSource).toContain("loadRenewalPolicy");
+    expect(paidLifecycleSource).toContain("payment_card_retry_failed");
+    expect(platformBillingWebhookSource).toContain("dias_carencia");
+    expect(platformBillingWebhookSource).toContain("enqueueResponsibleBillingNotifications");
+    expect(platformBillingWebhookSource).toContain("recipient_kind: \"agent_responsible\"");
+    expect(platformBillingWebhookSource).toContain("Cliente sem telefone no perfil.");
+    expect(renewalAndResponsibleMigrationSource).toContain("paid_plan_due_today");
+    expect(renewalAndResponsibleMigrationSource).toContain("renewal_policy");
+  });
+
+  it("requires a responsible human for client WhatsApp agents and syncs it into behavior", () => {
+    expect(responsibleHumanSource).toContain("agentResponsibleHumanMetadataKey");
+    expect(responsibleHumanSource).toContain("mergeResponsibleHumanIntoBehaviorConfig");
+    expect(clientAgentsSource).toContain("responsibleHumanPhone");
+    expect(clientAgentsSource).toContain("requirePhone: true");
+    expect(clientAgentsConsoleSource).toContain("WhatsApp responsavel");
+    expect(clientAgentsConsoleSource).toContain("Pendente");
+    expect(whatsappConsoleSource).toContain("responsibleHumanPhone");
+    expect(whatsappWorkspaceSource).toContain("readAgentResponsibleHuman");
+    expect(whatsappWorkspaceSource).toContain("syncResponsibleHumanFromBehavior");
+    expect(renewalAndResponsibleMigrationSource).toContain("responsible_human");
+  });
+
+  it("notifies the agent responsible human when a catalog payment is approved", () => {
+    expect(postPaymentSource).toContain("maybeNotifyResponsiblePaymentApproved");
+    expect(postPaymentSource).toContain("sales_catalog.payment_responsible_notification_sent");
+    expect(postPaymentSource).toContain("payment_responsible_whatsapp_notified_at");
+    expect(postPaymentSource).toContain("resolveResponsiblePaymentPhone");
+    expect(postPaymentSource).toContain("readAgentResponsibleHuman");
+    expect(postPaymentSource).toContain("loadResponsiblePaymentAgent");
   });
 });
