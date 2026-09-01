@@ -9,11 +9,14 @@ type CheckoutStatusPollerProps = {
   sessionId: string;
   initialStatus: string;
   initialOrderStatus: string | null;
+  initialProviderStatus: string | null;
+  providerLabel: string;
 };
 
 type StatusResponse = {
   session?: {
     status?: string | null;
+    provider?: string | null;
     providerStatus?: string | null;
     providerStatusDetail?: string | null;
     failureReason?: string | null;
@@ -32,12 +35,15 @@ export function CheckoutStatusPoller({
   sessionId,
   initialStatus,
   initialOrderStatus,
+  initialProviderStatus,
+  providerLabel,
 }: CheckoutStatusPollerProps) {
   const router = useRouter();
   const refreshedRef = useRef(false);
   const [status, setStatus] = useState(initialStatus);
   const [orderStatus, setOrderStatus] = useState(initialOrderStatus);
-  const [providerStatus, setProviderStatus] = useState<string | null>(null);
+  const [providerStatus, setProviderStatus] = useState<string | null>(initialProviderStatus);
+  const [currentProviderLabel, setCurrentProviderLabel] = useState(providerLabel);
   const [pollingStopped, setPollingStopped] = useState(false);
   const checking = !terminalStatuses.has(status) && !pollingStopped;
 
@@ -59,6 +65,7 @@ export function CheckoutStatusPoller({
         setStatus(nextStatus);
         setOrderStatus(nextOrderStatus);
         setProviderStatus(data?.session?.providerStatus ?? null);
+        setCurrentProviderLabel(formatProviderLabel(data?.session?.provider) ?? providerLabel);
 
         if (terminalStatuses.has(nextStatus)) {
           window.clearInterval(interval);
@@ -77,7 +84,7 @@ export function CheckoutStatusPoller({
       active = false;
       window.clearInterval(interval);
     };
-  }, [orderStatus, router, sessionId, status]);
+  }, [orderStatus, providerLabel, router, sessionId, status]);
 
   const tone = useMemo(() => {
     if (status === "approved") return "success";
@@ -100,12 +107,26 @@ export function CheckoutStatusPoller({
       <div>
         <p className="font-semibold">{formatStatus(status)}</p>
         <p className="mt-1 text-xs opacity-80">
-          {providerStatus ? `Mercado Pago: ${providerStatus}` : orderStatus ? `Pedido: ${formatOrderStatus(orderStatus)}` : "Aguardando retorno do pagamento"}
+          {providerStatus ? formatProviderStatusLine(currentProviderLabel, providerStatus) : orderStatus ? `Pedido: ${formatOrderStatus(orderStatus)}` : "Aguardando retorno do pagamento"}
         </p>
       </div>
       {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
     </div>
   );
+}
+
+function formatProviderLabel(provider: string | null | undefined) {
+  if (provider === "pagbank") return "PagBank";
+  if (provider === "mercado_pago") return "Mercado Pago";
+  return null;
+}
+
+function formatProviderStatusLine(providerLabel: string, providerStatus: string) {
+  if (providerStatus.toLowerCase() === "payment_deferred") {
+    return "Pagamento pausado: frete pendente";
+  }
+
+  return `${providerLabel}: ${providerStatus}`;
 }
 
 function formatStatus(status: string) {

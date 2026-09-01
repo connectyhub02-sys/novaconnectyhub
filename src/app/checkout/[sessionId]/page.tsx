@@ -168,12 +168,17 @@ type PublicPageStorefrontSettings = {
   headingFontFamily: string;
 };
 
+type CheckoutPageProps = {
+  params: Promise<{ sessionId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
 export default async function CheckoutPage({
   params,
-}: {
-  params: Promise<{ sessionId: string }>;
-}) {
+  searchParams,
+}: CheckoutPageProps) {
   const { sessionId } = await params;
+  const query = (await searchParams) ?? {};
   const client = createServiceClient();
   const { session, order, items, organization, integration, whatsapp, orderBumps } = await loadCheckoutData(client, sessionId);
 
@@ -206,6 +211,7 @@ export default async function CheckoutPage({
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const initialPaymentMethod = normalizeCheckoutInitialPaymentMethod(query.payment_method ?? query.method);
   const sessionMetadata = readRecord(session.metadata);
   const checkoutPaymentOwner = readString(session.payment_owner_type)
     ?? readString(sessionMetadata.payment_owner)
@@ -229,6 +235,7 @@ export default async function CheckoutPage({
     && (connectyHubOwned || integration?.status === "connected")
     && (connectyHubOwned || Boolean(catalogSettings?.pagBank.enabledMethods.includes("credit_card")));
   const canUseCard = canUseMercadoPagoCard || canUsePagBankCard;
+  const canUsePix = connectyHubOwned || session.provider !== "pagbank" || Boolean(catalogSettings?.pagBank.enabledMethods.includes("pix"));
   const commercialContext = resolveCheckoutCommercialContext(session, order);
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
@@ -324,6 +331,8 @@ export default async function CheckoutPage({
             sessionId={session.id}
             initialStatus={status}
             initialOrderStatus={order.status}
+            initialProviderStatus={session.provider_status}
+            providerLabel={paymentProviderLabel}
           />
 
           <div
@@ -400,12 +409,15 @@ export default async function CheckoutPage({
               payerEmail={session.payer_email}
               payerPhone={order.customer_phone}
               paymentProvider={paymentProvider}
+              canUsePix={canUsePix}
               canUseCard={canUseCard}
               cardPublicKey={integration?.public_key ?? null}
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}
               paymentProviderLabel={paymentProviderLabel}
+              initialPaymentMethod={initialPaymentMethod}
+              maxInstallments={connectyHubOwned ? 12 : catalogSettings?.pagBank.maxInstallments ?? 1}
               organizationName={branding.displayName}
               orderCode={order.id.slice(0, 8).toUpperCase()}
               items={items.map((item) => ({
@@ -982,6 +994,21 @@ function normalizePaymentSessionStatus(value: string | null) {
 
 function formatCheckoutPaymentProviderLabel(provider: string | null) {
   return provider === "pagbank" ? "PagBank" : "Mercado Pago";
+}
+
+function normalizeCheckoutInitialPaymentMethod(value: unknown): "pix" | "card" | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const normalized = readString(raw)?.toLowerCase();
+
+  if (normalized === "card" || normalized === "cartao" || normalized === "cartão") {
+    return "card";
+  }
+
+  if (normalized === "pix") {
+    return "pix";
+  }
+
+  return null;
 }
 
 function formatCurrency(value: string | number | null | undefined) {

@@ -240,6 +240,7 @@ type SalesCatalogPaymentLinkResult = {
   gatewayUnavailable?: boolean;
   paymentDeferred?: boolean;
   paymentDeferredReason?: string | null;
+  preferredMethod?: "pix" | "card" | null;
 };
 
 type SalesCatalogPaymentSessionLinkRow = {
@@ -654,6 +655,16 @@ export async function processWhatsappAgentRun(input: {
 
     if (refreshedSalesCatalogOrdersWithShipping) {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithShipping;
+    }
+
+    const refreshedSalesCatalogOrdersWithPickup = await maybeAttachSalesCatalogPickupToOrder({
+      client,
+      context,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithPickup) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithPickup;
     }
 
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
@@ -1684,6 +1695,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
       : "",
   ].filter(Boolean).join(" ");
   const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const updatedTotal = calculateRuntimeOrderTotalWithShipping(order, quote.price);
   const { data: current } = await input.client
     .from("sales_catalog_orders")
     .select("metadata")
@@ -1697,6 +1709,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
       destination_cep: cep,
       shipping_total: quote.price,
       shipping_method: quote.serviceName,
+      total: updatedTotal ?? order.total,
       internal_notes: internalNotes,
       metadata: {
         ...metadata,
@@ -1750,6 +1763,183 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
     leadId: input.context.lead?.id ?? null,
     conversationId: input.context.conversationId,
   });
+}
+
+async function maybeAttachSalesCatalogPickupToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  if (!hasSalesCatalogPickupSignal(input.userText)) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+  ));
+
+  if (!order) return null;
+
+  const now = new Date().toISOString();
+  const internalNotes = appendInternalOrderNote(
+    order.internalNotes,
+    `Retirada na loja confirmada pelo WhatsApp em ${formatRuntimeDate(now)}. Frete zerado automaticamente.`,
+  );
+  const { data: current } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(current?.metadata) ?? {};
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      shipping_total: "0,00",
+      shipping_method: "Retirada na loja",
+      total: order.subtotal ?? order.total,
+      internal_notes: internalNotes,
+      metadata: {
+        ...metadata,
+        pickup_confirmed_at: now,
+        pickup_confirmed_from: "whatsapp_agent_runtime",
+        shipping_quote: {
+          service_name: "Retirada na loja",
+          provider: "manual_pickup",
+          price: "0,00",
+          notes: "Retirada confirmada no WhatsApp pelo lead.",
+        },
+      },
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.pickup_saved",
+    title: "Retirada confirmada pelo WhatsApp",
+    summary: `Pedido ${order.id.slice(0, 8)} liberado para pagamento com retirada na loja.`,
+    confidence: 0.86,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "shipping", "pickup", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      shipping_method: "Retirada na loja",
+      shipping_total: "0,00",
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
+function calculateRuntimeOrderTotalWithShipping(order: RuntimeSalesCatalogOrder, shippingTotal: string | null) {
+  const subtotal = normalizeCurrencyAmount(order.subtotal) ?? normalizeCurrencyAmount(order.total);
+  const shipping = normalizeCurrencyAmount(shippingTotal);
+
+  if (typeof subtotal !== "number" || typeof shipping !== "number") {
+    return null;
+  }
+
+  return formatRuntimeOrderMoney(subtotal + shipping);
+}
+
+function resolveInitialSalesCatalogOrderShipping(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  selections: Array<{ item: RuntimeSalesCatalogItem }>;
+  intentText: string;
+}) {
+  const physicalItem = input.selections.find((selection) => selection.item.fulfillment.mode === "physical")?.item ?? null;
+
+  if (!physicalItem) {
+    return null;
+  }
+
+  if (hasSalesCatalogPickupSignal(input.intentText)) {
+    return {
+      destinationCep: null,
+      shippingTotal: "0,00",
+      shippingMethod: "Retirada na loja",
+      metadata: {
+        source: "whatsapp_agent_runtime",
+        mode: "pickup",
+        service_name: "Retirada na loja",
+        price: "0,00",
+      },
+    };
+  }
+
+  const cep = extractFirstBrazilianCep(input.intentText);
+  if (!cep || !input.context.salesCatalogShippingSettings?.configured) {
+    return null;
+  }
+
+  const result = calculateSalesCatalogShippingQuotes({
+    item: physicalItem,
+    settings: input.context.salesCatalogShippingSettings,
+    cep,
+  });
+  const quote = result.quotes[0];
+
+  if (result.error || !quote) {
+    return null;
+  }
+
+  return {
+    destinationCep: cep,
+    shippingTotal: quote.price,
+    shippingMethod: quote.serviceName,
+    metadata: {
+      source: "whatsapp_agent_runtime",
+      mode: "shipping_quote",
+      service_id: quote.serviceId,
+      service_name: quote.serviceName,
+      provider: quote.provider,
+      price: quote.price,
+      min_days: quote.minDays,
+      max_days: quote.maxDays,
+      cep: quote.cep,
+      uf: quote.uf,
+      state: quote.state,
+      weight_grams: quote.weightGrams,
+      notes: quote.notes,
+    },
+  };
+}
+
+function runtimeSalesCatalogOrderRequiresShippingBeforePayment(order: RuntimeSalesCatalogOrder) {
+  const hasPhysicalItem = order.items.some((item) => item.fulfillment.mode === "physical");
+
+  return hasPhysicalItem && !hasRuntimeShippingValue(order.shippingMethod) && !hasRuntimeShippingValue(order.shippingTotal);
+}
+
+function hasRuntimeShippingValue(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined;
+}
+
+function hasSalesCatalogPickupSignal(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) return false;
+
+  return [
+    /\b(?:vou|quero|prefiro|pode ser|fica|fechado|confirmo|confirmar)\s+(?:retirar|buscar|retirada|busca)\b/,
+    /\b(?:retirar|buscar|retirada|busca)\s+(?:na loja|no local|ai|a[ií]|com voces|com vcs)\b/,
+    /\bsem frete\b/,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function hasPaymentProofSignal(message: ConversationMessageRow | null, userText: string) {
@@ -3820,6 +4010,7 @@ function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | n
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
     `- Metodos PagBank habilitados: ${pagBankMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca CEP para entrega ou confirme retirada na loja.",
     pixEnabled
       ? "- Pix PagBank: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do PagBank, nao por comprovante manual."
       : "- Pix PagBank esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
@@ -7260,6 +7451,14 @@ async function recordSalesCatalogOrderIntent(input: {
       : "client_direct";
     const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
     const commissionEligible = items.some((item) => item.commissionEligible);
+    const initialShipping = resolveInitialSalesCatalogOrderShipping({
+      context: input.context,
+      selections: orderSelections,
+      intentText,
+    });
+    const payableTotal = initialShipping
+      ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total
+      : total;
     const now = new Date().toISOString();
     const { data: orderData, error: orderError } = await input.client
       .from("sales_catalog_orders")
@@ -7274,7 +7473,10 @@ async function recordSalesCatalogOrderIntent(input: {
         customer_name: customerName,
         customer_phone: customerPhone,
         subtotal: total,
-        total,
+        destination_cep: initialShipping?.destinationCep ?? null,
+        shipping_total: initialShipping?.shippingTotal ?? null,
+        shipping_method: initialShipping?.shippingMethod ?? null,
+        total: payableTotal,
         commercial_flow_type: commercialFlowType,
         revenue_owner_type: revenueOwnerType,
         contains_platform_products: containsPlatformProducts,
@@ -7304,6 +7506,7 @@ async function recordSalesCatalogOrderIntent(input: {
             mention_preview: selection.mentionText,
           })),
           billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle))),
+          initial_shipping: initialShipping?.metadata ?? null,
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
           commission_eligible: commissionEligible,
@@ -7438,7 +7641,8 @@ async function recordSalesCatalogOrderIntent(input: {
       client: input.client,
       context: input.context,
       orderId: order.id,
-      total,
+      total: payableTotal,
+      preferredMethod: detectSalesCatalogPreferredPaymentMethod(intentText),
     });
   } catch {
     return null;
@@ -7450,6 +7654,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   orderId: string;
   total: string | null;
+  preferredMethod?: "pix" | "card" | null;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
   if (!input.total) {
     return null;
@@ -7462,6 +7667,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       orderId: input.orderId,
       amount: input.total,
       payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
+      preferredMethod: input.preferredMethod ?? null,
       source: "whatsapp_agent",
       actorId: null,
     });
@@ -7478,6 +7684,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       gatewayUnavailable: result.gatewayUnavailable === true,
       paymentDeferred: result.paymentDeferred === true,
       paymentDeferredReason: result.paymentDeferredReason ?? null,
+      preferredMethod: input.preferredMethod ?? null,
     };
   } catch (error) {
     await input.client.from("intelligence_events").insert({
@@ -7543,8 +7750,70 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   const trackingUrl = asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
   const paymentDeferred = asString(data.provider_status)?.toLowerCase() === "payment_deferred"
     || metadata.payment_deferred === true;
+  const preferredMethod = detectSalesCatalogPreferredPaymentMethod(input.userText);
 
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+
+  if (paymentDeferred && runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)) {
+    return sendSalesCatalogPaymentDeferredWhatsapp({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      phone: input.phone,
+      payment: {
+        orderId: order.id,
+        amount: data.amount !== null && data.amount !== undefined ? String(data.amount) : order.total,
+        provider: asString(data.provider),
+        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(asString(data.provider)),
+        checkoutUrl,
+        trackingUrl,
+        pixQrCode: asString(data.pix_qr_code),
+        pixTicketUrl: asString(data.pix_ticket_url),
+        paymentDeferred,
+        paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
+        preferredMethod,
+      },
+    });
+  }
+
+  if (paymentDeferred) {
+    const refreshedPayment = await createSalesCatalogPixPaymentSession({
+      client: input.client,
+      organizationId: input.context.organization.id,
+      orderId: order.id,
+      amount: order.total ?? data.amount,
+      payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
+      preferredMethod,
+      source: "whatsapp_agent",
+      actorId: null,
+    })
+      .catch(() => null);
+
+    if (!refreshedPayment) {
+      return null;
+    }
+
+    return sendSalesCatalogPaymentLink({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      phone: input.phone,
+      payment: {
+        orderId: order.id,
+        amount: refreshedPayment.session.amount ?? order.total ?? (data.amount !== null && data.amount !== undefined ? String(data.amount) : null),
+        provider: refreshedPayment.session.provider,
+        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(refreshedPayment.session.provider),
+        checkoutUrl: refreshedPayment.checkoutUrl,
+        trackingUrl: refreshedPayment.trackingUrl ?? null,
+        pixQrCode: refreshedPayment.pixQrCode,
+        pixTicketUrl: refreshedPayment.pixTicketUrl,
+        gatewayUnavailable: refreshedPayment.gatewayUnavailable === true,
+        paymentDeferred: refreshedPayment.paymentDeferred === true,
+        paymentDeferredReason: refreshedPayment.paymentDeferredReason ?? null,
+        preferredMethod,
+      },
+    });
+  }
 
   return sendSalesCatalogPaymentLink({
     client: input.client,
@@ -7562,6 +7831,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       pixTicketUrl: asString(data.pix_ticket_url),
       paymentDeferred,
       paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
+      preferredMethod,
     },
   });
 }
@@ -7612,6 +7882,12 @@ function isSalesCatalogPaymentLinkFollowUp(
     return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
   }
 
+  const resolvesShippingForPayment = Boolean(extractFirstBrazilianCep(rawText)) || hasSalesCatalogPickupSignal(rawText);
+
+  if (resolvesShippingForPayment && hasRecentSalesCatalogCheckoutPromise(messages, latestInbound)) {
+    return true;
+  }
+
   const mentionsCheckout = /\b(?:link|checkout|pagamento|pagar|pix|pedido|finalizar)\b/.test(normalized);
   const asksForAction = /\b(?:cade|kd|manda|mandar|envia|enviar|gera|gerar|gerou|faz|fazer|pronto|concluir|finalizar)\b/.test(normalized);
 
@@ -7651,6 +7927,9 @@ function hasRecentSalesCatalogCheckoutPromise(
     const promisedCheckout = normalized.includes("checkout")
       || normalized.includes("link de pagamento")
       || normalized.includes("finalizar pedido")
+      || normalized.includes("gerar o pagamento")
+      || normalized.includes("confirmar entrega")
+      || normalized.includes("confirmar frete")
       || normalized.includes("pix copia")
       || normalized.includes("codigo pix")
       || normalized.includes("copia e cola");
@@ -7667,23 +7946,20 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (input.payment.paymentDeferred) {
+    return sendSalesCatalogPaymentDeferredWhatsapp(input);
+  }
+
   if (shouldSendSalesCatalogPixInsideWhatsapp(input.payment)) {
     return sendSalesCatalogPixDirectWhatsapp(input);
   }
 
-  const text = input.payment.paymentDeferred
-    ? "Perfeito, deixei seu checkout seguro separado. Ele abre com o pedido e confirma entrega/frete antes do pagamento."
-    : "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
+  const text = "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
   let providerResponse: unknown;
   let messageText = text;
   let interactiveButton = false;
   let buttonFallback = false;
-  const paymentUrl = appendLeadTrackingParams(input.payment.trackingUrl ?? input.payment.checkoutUrl, {
-    leadId: input.context.lead?.id,
-    leadPhone: normalizePhone(input.context.lead?.phone_number),
-    conversationId: input.context.conversationId,
-    agentId: input.context.agent.id,
-  });
+  const paymentUrl = buildSalesCatalogPaymentActionUrl(input.payment);
 
   try {
     providerResponse = await sendWhatsappInteractiveButtons({
@@ -7699,9 +7975,7 @@ async function sendSalesCatalogPaymentLink(input: {
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = input.payment.paymentDeferred
-      ? `Gerei o checkout seguro para confirmar entrega/frete e concluir seu pedido. Finalizar pedido: ${paymentUrl}`
-      : `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
+    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -7744,7 +8018,63 @@ async function sendSalesCatalogPaymentLink(input: {
 function shouldSendSalesCatalogPixInsideWhatsapp(payment: SalesCatalogPaymentLinkResult) {
   return !payment.paymentDeferred
     && !payment.gatewayUnavailable
+    && payment.preferredMethod !== "card"
     && Boolean(payment.pixQrCode?.trim());
+}
+
+function buildSalesCatalogPaymentActionUrl(payment: SalesCatalogPaymentLinkResult) {
+  const baseUrl = payment.trackingUrl ?? payment.checkoutUrl;
+
+  if (payment.preferredMethod !== "card") {
+    return baseUrl;
+  }
+
+  return appendCheckoutPaymentMethod(baseUrl, "card");
+}
+
+function appendCheckoutPaymentMethod(rawUrl: string, method: "card" | "pix") {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set("payment_method", method);
+    return url.toString();
+  } catch {
+    const separator = rawUrl.includes("?") ? "&" : "?";
+    return `${rawUrl}${separator}payment_method=${method}`;
+  }
+}
+
+async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  payment: SalesCatalogPaymentLinkResult;
+}): Promise<OutboundMessage> {
+  const messageText = [
+    "Antes de gerar o pagamento, preciso confirmar entrega ou retirada desse pedido.",
+    "Se for entrega, me envie o CEP para eu calcular o frete.",
+    "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero.",
+  ].join("\n");
+  const providerResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: messageText,
+    trackId: `agent_payment_deferred_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+    mentions: resolveGroupMentions(input.context),
+  });
+  const message: OutboundMessage = {
+    text: messageText,
+    mode: "text",
+    providerResponse,
+    interactiveButton: false,
+    buttonFallback: false,
+    persisted: true,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+
+  return message;
 }
 
 async function sendSalesCatalogPixDirectWhatsapp(input: {
@@ -8155,6 +8485,17 @@ function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
   return total > 0 ? formatRuntimeOrderMoney(total) : null;
 }
 
+function addRuntimeMoney(baseValue: string | null, incrementValue: string | null) {
+  const base = normalizeCurrencyAmount(baseValue);
+  const increment = normalizeCurrencyAmount(incrementValue);
+
+  if (typeof base !== "number" || typeof increment !== "number") {
+    return null;
+  }
+
+  return formatRuntimeOrderMoney(base + increment);
+}
+
 function formatRuntimeOrderMoney(value: number) {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -8270,6 +8611,22 @@ function hasSalesCatalogOrderIntent(text: string) {
     || /\b(quero esse|quero essa|quero um|quero uma|vou querer|pode mandar|manda pra mim|separa pra mim|fecha pra mim)\b/.test(normalized)
   )
     && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
+}
+
+function detectSalesCatalogPreferredPaymentMethod(text: string): "pix" | "card" | null {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) return null;
+
+  if (/\b(?:cartao|credito|debito|card)\b/.test(normalized)) {
+    return "card";
+  }
+
+  if (/\b(?:pix|copia e cola|qrcode|qr code)\b/.test(normalized)) {
+    return "pix";
+  }
+
+  return null;
 }
 
 function isSalesCatalogCartAdditionOnlyIntent(text: string) {
@@ -9166,7 +9523,7 @@ async function sendWhatsappInteractiveButtons(input: {
       number: input.phone,
       type: "button",
       text,
-      choices: input.choices.slice(0, 3),
+      choices: input.choices.slice(0, 3).map(normalizeInteractiveButtonChoice),
       footerText: input.footerText ?? "ConnectyHub",
       readchat: true,
       readmessages: true,
@@ -9176,6 +9533,16 @@ async function sendWhatsappInteractiveButtons(input: {
       track_id: input.trackId,
     },
   });
+}
+
+function normalizeInteractiveButtonChoice(choice: string) {
+  const [label, action] = choice.split("|");
+
+  if (!label || !action || !/^https?:\/\//i.test(action.trim())) {
+    return choice;
+  }
+
+  return `${label.trim()}|url:${action.trim()}`;
 }
 
 function resolveInteractiveButtonFooterText(organization: OrganizationRow | null | undefined) {

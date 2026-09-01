@@ -14,6 +14,7 @@ type PagBankCardFormProps = {
   payerPhone?: string | null;
   submitPath: string;
   cardSessionPath?: string;
+  maxInstallments?: number;
   extraPayload?: JsonRecord;
   successMessage?: string;
   pendingMessage?: string;
@@ -73,6 +74,7 @@ export function PagBankCardForm({
   payerPhone,
   submitPath,
   cardSessionPath,
+  maxInstallments = 12,
   extraPayload,
   successMessage = "Pagamento aprovado. Seu plano sera ativado agora.",
   pendingMessage = "Pagamento enviado. Assim que confirmar, os creditos serao liberados.",
@@ -95,6 +97,7 @@ export function PagBankCardForm({
   const [regionCode, setRegionCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
+  const installmentLimit = normalizeInstallmentLimit(maxInstallments);
   const amountCents = Math.max(100, Math.round(amount * 100));
   const currentYear = new Date().getFullYear();
   const yearOptions = useMemo(
@@ -342,7 +345,7 @@ export function PagBankCardForm({
           <InputField label="CVV" value={securityCode} autoComplete="cc-csc" inputMode="numeric" maxLength={4} onChange={(value) => setSecurityCode(digits(value).slice(0, 4))} />
         </div>
         <SelectField label="Parcelas" value={installments} onChange={setInstallments}>
-          {Array.from({ length: 12 }, (_, index) => index + 1).map((option) => (
+          {Array.from({ length: installmentLimit }, (_, index) => index + 1).map((option) => (
             <option key={option} value={String(option)}>
               {option}x de {formatMoney(amount / option)}
             </option>
@@ -408,6 +411,14 @@ type BillingAddress = {
   country: "BRA";
   postalCode: string;
 };
+
+function normalizeInstallmentLimit(value: number | null | undefined) {
+  if (!Number.isFinite(value ?? NaN)) {
+    return 12;
+  }
+
+  return Math.max(1, Math.min(12, Math.trunc(value as number)));
+}
 
 function normalizeDraft(input: {
   holderName: string;

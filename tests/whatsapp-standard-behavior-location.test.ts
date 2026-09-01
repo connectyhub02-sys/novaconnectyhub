@@ -188,12 +188,12 @@ describe("WhatsApp standard behavior and company location", () => {
 
     expect(behaviorPanel).toContain("Localizacao da empresa");
     expect(behaviorPanel).toContain("CompanyLocationsEditor");
-    expect(behaviorPanel).toContain("Intervencao humana");
-    expect(behaviorPanel).toContain("Avisar humano");
-    expect(behaviorPanel).toContain("Cooldown aviso");
-    expect(behaviorPanel).toContain("Numeros responsaveis");
-    expect(behaviorPanel).toContain("O agente nao responde esses numeros como lead.");
-    expect(behaviorPanel).toContain("Enviar teste");
+    expect(behaviorPanel).not.toContain("Intervencao humana");
+    expect(behaviorPanel).not.toContain("Avisar humano");
+    expect(behaviorPanel).not.toContain("Cooldown aviso");
+    expect(behaviorPanel).not.toContain("Numeros responsaveis");
+    expect(behaviorPanel).not.toContain("O agente nao responde esses numeros como lead.");
+    expect(behaviorPanel).not.toContain("Enviar teste");
     expect(behaviorPanel).toContain("Janela da IA ativa");
     expect(behaviorPanel).toContain("Reacoes emoji");
     expect(behaviorPanel).not.toContain("Erros intencionais");
@@ -201,18 +201,13 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("Midia proativa");
     expect(behaviorPanel).toContain("Small talk");
 
-    const securitySection = sourceBetween(
-      behaviorPanel,
-      '<BehaviorSection title="Seguranca e testes"',
-      '<BehaviorSection title="Citacoes do WhatsApp"',
-    );
     const aiWindowSection = sourceBetween(
       behaviorPanel,
       '<BehaviorSection title="Janela da IA"',
       "</BehaviorSection>",
     );
 
-    expect(securitySection).not.toContain("Janela da IA ativa");
+    expect(behaviorPanel).not.toContain('<BehaviorSection title="Seguranca e testes"');
     expect(aiWindowSection).toContain("Janela da IA ativa");
   });
 

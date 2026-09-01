@@ -19,12 +19,15 @@ type CheckoutPaymentOptionsProps = {
   payerEmail: string | null;
   payerPhone: string | null;
   paymentProvider: "mercado_pago" | "pagbank";
+  canUsePix: boolean;
   canUseCard: boolean;
   cardPublicKey: string | null;
   pixQrCode: string | null;
   pixQrCodeBase64: string | null;
   pixTicketUrl: string | null;
   paymentProviderLabel: string;
+  initialPaymentMethod: PaymentMethod | null;
+  maxInstallments: number;
   organizationName: string;
   orderCode: string;
   items: CheckoutPaymentFeedbackItem[];
@@ -50,25 +53,28 @@ export function CheckoutPaymentOptions({
   payerEmail,
   payerPhone,
   paymentProvider,
+  canUsePix,
   canUseCard,
   cardPublicKey,
   pixQrCode,
   pixQrCodeBase64,
   pixTicketUrl,
   paymentProviderLabel,
+  initialPaymentMethod,
+  maxInstallments,
   organizationName,
   orderCode,
   items,
   orderBumps,
   whatsappHref,
 }: CheckoutPaymentOptionsProps) {
-  const [method, setMethod] = useState<PaymentMethod>("pix");
+  const [method, setMethod] = useState<PaymentMethod>(initialPaymentMethod ?? "pix");
   const [feedback, setFeedback] = useState<CheckoutPaymentFeedbackPayload | null>(null);
   const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>([]);
   const [pixUpdating, setPixUpdating] = useState(false);
   const [pixUpdateError, setPixUpdateError] = useState<string | null>(null);
   const showCard = canUseCard && (paymentProvider === "pagbank" || Boolean(cardPublicKey));
-  const activeMethod = method === "card" && showCard ? "card" : "pix";
+  const activeMethod = method === "card" && showCard ? "card" : canUsePix ? "pix" : showCard ? "card" : "pix";
   const selectedOrderBumps = useMemo(
     () => orderBumps.filter((item) => selectedOrderBumpIds.includes(item.productId)),
     [orderBumps, selectedOrderBumpIds],
@@ -201,20 +207,27 @@ export function CheckoutPaymentOptions({
         />
       ) : null}
 
-      {showCard ? (
-        <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-blue-100 bg-blue-50 p-1">
-          <PaymentMethodButton
-            active={activeMethod === "pix"}
-            icon={<QrCode className="h-4 w-4" />}
-            label="Pix"
-            onClick={() => selectPaymentMethod("pix")}
-          />
-          <PaymentMethodButton
-            active={activeMethod === "card"}
-            icon={<CreditCard className="h-4 w-4" />}
-            label="Cartao"
-            onClick={() => selectPaymentMethod("card")}
-          />
+      {showCard || canUsePix ? (
+        <div className={cn(
+          "mt-5 grid gap-2 rounded-[8px] border border-blue-100 bg-blue-50 p-1",
+          showCard && canUsePix ? "grid-cols-2" : "grid-cols-1",
+        )}>
+          {canUsePix ? (
+            <PaymentMethodButton
+              active={activeMethod === "pix"}
+              icon={<QrCode className="h-4 w-4" />}
+              label="Pix"
+              onClick={() => selectPaymentMethod("pix")}
+            />
+          ) : null}
+          {showCard ? (
+            <PaymentMethodButton
+              active={activeMethod === "card"}
+              icon={<CreditCard className="h-4 w-4" />}
+              label="Cartao"
+              onClick={() => selectPaymentMethod("card")}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -236,11 +249,17 @@ export function CheckoutPaymentOptions({
           payerPhone={payerPhone}
           submitPath={`/api/checkout/${sessionId}/card`}
           cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}
+          maxInstallments={maxInstallments}
           extraPayload={cardExtraPayload}
           rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
           onPaymentStatusChange={handleCardPaymentStatusChange}
           onAlternativePaymentRequest={() => setMethod("pix")}
         />
+      ) : !canUsePix ? (
+        <div className="mt-5 rounded-[8px] border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-black text-slate-950">Pix desativado nesta loja</p>
+          <p className="mt-2 text-xs leading-5 text-slate-600">Escolha outra forma habilitada para concluir o pedido.</p>
+        </div>
       ) : selectedOrderBumpIds.length > 0 ? (
         <PixOrderBumpUpdatePanel
           totalLabel={totalAmountLabel}

@@ -97,7 +97,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("sendSalesCatalogPixDirectWhatsapp");
     expect(paymentSender).toContain("Pix copia e cola:");
     expect(paymentSender).toContain("agent_pix_payment");
-    expect(paymentSender).toContain("confirma entrega/frete antes do pagamento");
+    expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
   });
 
   it("resends existing checkout links before handing payment-link follow-ups to the model", () => {

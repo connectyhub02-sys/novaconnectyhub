@@ -20,6 +20,7 @@ import {
   type PagBankCardPaymentData,
   type PagBankCardPaymentMethodType,
 } from "@/lib/sales-catalog/pagbank";
+import { getOrganizationSalesCatalogSettings } from "@/lib/client-os/sales-catalog";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
@@ -605,6 +606,25 @@ async function processPagBankPublicCardPayment(input: {
       ?? readString(sourceMetadata.revenue_owner_type)
       ?? resolvedOwner.revenueOwnerType);
     const commissionEligible = readBoolean(sourceMetadata.commission_eligible) ?? resolvedOwner.commissionEligible;
+    const pagBankSettings = connectyHubOwned
+      ? null
+      : await getOrganizationSalesCatalogSettings(client, sourceSession.organization_id).catch(() => null);
+    const requiredMethod = paymentMethodType === "DEBIT_CARD" ? "debit_card" : "credit_card";
+
+    if (!connectyHubOwned && !pagBankSettings?.pagBank.enabledMethods.includes(requiredMethod)) {
+      return NextResponse.json({
+        error: paymentMethodType === "DEBIT_CARD"
+          ? "Cartao de debito PagBank esta desativado nesta loja."
+          : "Cartao de credito PagBank esta desativado nesta loja.",
+      }, { status: 403 });
+    }
+
+    if (!connectyHubOwned && paymentMethodType !== "DEBIT_CARD" && installments > (pagBankSettings?.pagBank.maxInstallments ?? 1)) {
+      return NextResponse.json({
+        error: `Esta loja permite no maximo ${pagBankSettings?.pagBank.maxInstallments ?? 1} parcela(s).`,
+      }, { status: 400 });
+    }
+
     const sellerIntegration = connectyHubOwned
       ? null
       : await ensurePagBankAccessToken({

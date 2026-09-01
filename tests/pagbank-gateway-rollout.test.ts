@@ -46,6 +46,7 @@ const paidLifecycleSource = read("src/lib/billing/paid-lifecycle-notifications.t
 const responsibleHumanSource = read("src/lib/agents/responsible-human.ts");
 const clientAgentsSource = read("src/lib/client-os/agents.ts");
 const clientAgentsConsoleSource = read("src/components/connectyhub-os/client-agents-console.tsx");
+const agentResponsiblesEditorSource = read("src/components/connectyhub-os/agent-responsibles-editor.tsx");
 const whatsappWorkspaceSource = read("src/lib/whatsapp/client-workspace.ts");
 const postPaymentSource = read("src/lib/sales-catalog/post-payment.ts");
 
@@ -266,14 +267,19 @@ describe("PagBank gateway rollout", () => {
 
   it("requires a responsible human for client WhatsApp agents and syncs it into behavior", () => {
     expect(responsibleHumanSource).toContain("agentResponsibleHumanMetadataKey");
-    expect(responsibleHumanSource).toContain("mergeResponsibleHumanIntoBehaviorConfig");
+    expect(responsibleHumanSource).toContain("agentResponsibleHumansMetadataKey");
+    expect(responsibleHumanSource).toContain("mergeResponsibleHumansIntoBehaviorConfig");
     expect(clientAgentsSource).toContain("responsibleHumanPhone");
-    expect(clientAgentsSource).toContain("requirePhone: true");
-    expect(clientAgentsConsoleSource).toContain("WhatsApp responsavel");
-    expect(clientAgentsConsoleSource).toContain("Pendente");
+    expect(clientAgentsSource).toContain("requireAtLeastOne: true");
+    expect(clientAgentsConsoleSource).toContain("AgentResponsiblesEditor");
+    expect(agentResponsiblesEditorSource).toContain("Responsaveis humanos");
+    expect(agentResponsiblesEditorSource).toContain("Todos os campos sao obrigatorios");
+    expect(agentResponsiblesEditorSource).toContain("Responsavel pendente");
     expect(whatsappConsoleSource).toContain("responsibleHumanPhone");
+    expect(whatsappConsoleSource).toContain("AgentResponsiblesEditor");
     expect(whatsappWorkspaceSource).toContain("readAgentResponsibleHuman");
-    expect(whatsappWorkspaceSource).toContain("syncResponsibleHumanFromBehavior");
+    expect(whatsappWorkspaceSource).toContain("mergeResponsibleHumansIntoBehaviorConfig");
+    expect(whatsappWorkspaceSource).toContain("serializeAgentResponsibleHumans");
     expect(renewalAndResponsibleMigrationSource).toContain("responsible_human");
   });
 

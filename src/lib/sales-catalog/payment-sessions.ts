@@ -74,6 +74,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   orderId: string;
   amount?: string | number | null;
   payerEmail?: string | null;
+  preferredMethod?: "pix" | "card" | null;
   source: "dashboard" | "whatsapp_agent" | "checkout";
   actorId?: string | null;
 }) {
@@ -137,12 +138,17 @@ export async function createSalesCatalogPixPaymentSession(input: {
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
   const pagBankSettings = catalogSettings?.pagBank ?? null;
+  const preferredMethod = input.preferredMethod === "card" ? "card" : "pix";
   let integration: PaymentGatewayIntegration | null = null;
   let platformBilling: Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
 
-  if (paymentProvider === "pagbank" && pagBankSettings && !pagBankSettings.enabledMethods.includes("pix")) {
+  if (paymentProvider === "pagbank" && pagBankSettings && preferredMethod === "pix" && !pagBankSettings.enabledMethods.includes("pix")) {
     throw new Error("Pix PagBank esta desativado nas configuracoes do catalogo.");
+  }
+
+  if (paymentProvider === "pagbank" && pagBankSettings && preferredMethod === "card" && !pagBankSettings.enabledMethods.includes("credit_card")) {
+    throw new Error("Cartao de credito PagBank esta desativado nas configuracoes do catalogo.");
   }
 
   try {
@@ -223,6 +229,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         payment_gateway: paymentProvider,
         payment_gateway_label: paymentProviderLabel,
         payment_gateway_mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
+        preferred_payment_method: preferredMethod,
         pagbank_settings: pagBankSettings ? serializePagBankSessionSettings(pagBankSettings) : null,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
@@ -344,6 +351,91 @@ export async function createSalesCatalogPixPaymentSession(input: {
       pixQrCode: null,
       pixTicketUrl: null,
       gatewayUnavailable: true,
+      paymentDeferred: false,
+      paymentDeferredReason: null,
+      };
+  }
+
+  if (preferredMethod === "card") {
+    const { data: checkoutOnly, error: checkoutOnlyError } = await input.client
+      .from("sales_catalog_payment_sessions")
+      .update({
+        metadata: buildPaymentSessionMetadata({
+          sessionMetadata: inserted.metadata,
+          checkoutTracking,
+          paymentOwner,
+          connectyHubOwned,
+          paymentProvider,
+          gatewayAvailable: true,
+          extra: {
+            preferred_payment_method: "card",
+            checkout_ready_for_card: true,
+          },
+        }),
+      })
+      .eq("id", sessionId)
+      .eq("organization_id", input.organizationId)
+      .select(paymentSessionSelect)
+      .single<SalesCatalogPaymentSessionRow>();
+
+    if (checkoutOnlyError || !checkoutOnly) {
+      throw new Error(checkoutOnlyError?.message ?? "Checkout criado, mas nao foi possivel preparar o cartao.");
+    }
+
+    await persistCheckoutOrderReference({
+      client: input.client,
+      organizationId: input.organizationId,
+      order,
+      sessionId,
+      checkoutUrl,
+      checkoutTracking,
+      paymentOwner,
+      connectyHubOwned,
+      paymentProvider,
+      paymentStatus: "pending",
+      orderStatus: "pending_payment",
+      paymentMethod: "Checkout PagBank",
+    });
+
+    await input.client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: input.organizationId,
+      source_type: "sales_catalog_payment_session",
+      source_id: sessionId,
+      event_type: "sales_catalog.card_checkout_created",
+      title: "Checkout de cartao PagBank criado",
+      summary: `Checkout criado para pedido ${order.id.slice(0, 8)} sem gerar Pix automatico.`,
+      confidence: 1,
+      visibility: "organization",
+      tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "whatsapp_agent", "lead_tracking"],
+      payload: {
+        order_id: order.id,
+        payment_session_id: sessionId,
+        checkout_url: checkoutUrl,
+        tracking_url: checkoutTracking?.trackingUrl ?? null,
+        tracking_link_id: checkoutTracking?.id ?? null,
+        tracking_tag: checkoutTracking?.tag ?? null,
+        amount,
+        items: summarizePaymentItems(items),
+        lead_id: order.lead_id,
+        conversation_id: order.conversation_id,
+        agent_id: agentId,
+        lead_phone: order.customer_phone,
+        source: input.source,
+        payment_gateway: paymentProvider,
+        payment_owner: paymentOwner.owner,
+      },
+    });
+
+    return {
+      session: mapSalesCatalogPaymentSession(checkoutOnly),
+      checkoutUrl,
+      trackingUrl: checkoutTracking?.trackingUrl ?? null,
+      trackingLinkId: checkoutTracking?.id ?? null,
+      trackingTag: checkoutTracking?.tag ?? null,
+      pixQrCode: null,
+      pixTicketUrl: null,
+      gatewayUnavailable: false,
       paymentDeferred: false,
       paymentDeferredReason: null,
     };

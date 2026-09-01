@@ -9,6 +9,7 @@ type SessionRow = {
   organization_id: string;
   order_id: string;
   method: string | null;
+  provider: string | null;
   status: string | null;
   provider_status: string | null;
   provider_status_detail: string | null;
@@ -34,7 +35,7 @@ export async function GET(
   const client = createServiceClient();
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, method, status, provider_status, provider_status_detail, paid_at, failure_reason, updated_at")
+    .select("id, organization_id, order_id, method, provider, status, provider_status, provider_status_detail, paid_at, failure_reason, updated_at")
     .eq("id", sessionId)
     .maybeSingle<SessionRow>();
 
@@ -53,6 +54,7 @@ export async function GET(
     session: {
       id: session.id,
       method: session.method,
+      provider: session.provider,
       status: session.status,
       providerStatus: session.provider_status,
       providerStatusDetail: session.provider_status_detail,

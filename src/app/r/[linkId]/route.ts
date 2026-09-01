@@ -50,6 +50,7 @@ export async function GET(
     ?? readString(metadata.producer_agent_id);
   const orderId = request.nextUrl.searchParams.get("order_id") ?? readString(metadata.order_id);
   const paymentSessionId = request.nextUrl.searchParams.get("payment_session_id") ?? readString(metadata.payment_session_id);
+  const paymentMethod = normalizePaymentMethod(request.nextUrl.searchParams.get("payment_method") ?? request.nextUrl.searchParams.get("method"));
   const trackingToken = createPublicTrackingToken(link.organization_id);
   const utmUrl = applyTrackedLinkUtm(link.content, {
     campaign: link.organization_id ? `company_${link.organization_id.slice(0, 8)}` : "company",
@@ -69,6 +70,7 @@ export async function GET(
         trackingSource: "tracked_link_button",
       })
     : utmUrl;
+  const finalCheckoutUrl = appendCheckoutPaymentMethod(finalUrl, paymentMethod);
   const tracking = extractTrackingData(request);
   const cookieTracking = extractCookieTracking(request);
   const currentClicks = readNumber(metadata.click_count) ?? 0;
@@ -88,13 +90,14 @@ export async function GET(
       payload: {
         label: link.title,
         target_url: link.content,
-        final_url: finalUrl,
+        final_url: finalCheckoutUrl,
         lead_id: leadId,
         lead_phone: leadPhone,
         conversation_id: conversationId,
         agent_id: agentId,
         order_id: orderId,
         payment_session_id: paymentSessionId,
+        payment_method: paymentMethod,
         tracking_link_id: link.id,
         tracking_source: "tracked_link_button",
         items: Array.isArray(metadata.items) ? metadata.items : null,
@@ -116,7 +119,7 @@ export async function GET(
       .eq("id", link.id),
   ]);
 
-  return NextResponse.redirect(finalUrl);
+  return NextResponse.redirect(finalCheckoutUrl);
 }
 
 function createPublicTrackingToken(organizationId: string | null) {
@@ -134,6 +137,27 @@ function shouldAppendPublicTracking(rawUrl: string) {
     return new URL(rawUrl).origin === new URL(getPublicAppUrl()).origin;
   } catch {
     return false;
+  }
+}
+
+function normalizePaymentMethod(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "card" || normalized === "cartao" || normalized === "cartão") return "card";
+  if (normalized === "pix") return "pix";
+
+  return null;
+}
+
+function appendCheckoutPaymentMethod(rawUrl: string, method: "card" | "pix" | null) {
+  if (!method) return rawUrl;
+
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set("payment_method", method);
+    return url.toString();
+  } catch {
+    return rawUrl;
   }
 }
 

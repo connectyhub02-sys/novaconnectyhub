@@ -2389,6 +2389,7 @@ function buildPagBankCommercePolicyLines(settings: ClientSalesCatalogSettings) {
   return [
     `- Metodos PagBank habilitados: ${paymentMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca CEP para entrega ou confirme retirada na loja.",
     pixEnabled
       ? "- Pix PagBank: pode ser resolvido no WhatsApp quando a venda vier do atendimento; na loja/checkout, use o Pix exibido pela ConnectyHub."
       : "- Pix PagBank esta desativado; nao ofereca Pix.",
