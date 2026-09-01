@@ -5,10 +5,13 @@ import { revalidatePath } from "next/cache";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import {
   agentResponsibleHumanMetadataKey,
-  mergeResponsibleHumanIntoBehaviorConfig,
-  normalizeAgentResponsibleHuman,
+  agentResponsibleHumansMetadataKey,
+  mergeResponsibleHumansIntoBehaviorConfig,
+  normalizeAgentResponsibleHumans,
   readAgentResponsibleHuman,
+  readAgentResponsibleHumans,
   serializeAgentResponsibleHuman,
+  serializeAgentResponsibleHumans,
   type AgentResponsibleHuman,
 } from "@/lib/agents/responsible-human";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
@@ -42,6 +45,7 @@ export type ClientAgent = {
   prompt: string;
   promptTemplateConfig: AgentPromptBuilderConfig;
   responsibleHuman: AgentResponsibleHuman;
+  responsibleHumans: AgentResponsibleHuman[];
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -174,6 +178,7 @@ export async function createClientAgent(input: {
   roleTitle?: string;
   prompt?: string;
   promptTemplateConfig?: unknown;
+  responsibleHumans?: unknown;
   responsibleHumanName?: string;
   responsibleHumanPhone?: string;
   client?: SupabaseClient;
@@ -201,12 +206,13 @@ export async function createClientAgent(input: {
   });
   const prompt = normalizePrompt(typeof input.prompt === "string" ? input.prompt : generatedPrompt);
   const agentCode = createAgentCode(name);
-  const responsibleHuman = normalizeAgentResponsibleHuman({
+  const responsibleHumans = normalizeAgentResponsibleHumans(input.responsibleHumans ?? {
     name: input.responsibleHumanName,
     phone: input.responsibleHumanPhone,
     updatedAt: new Date().toISOString(),
-  }, { requirePhone: true });
-  const behaviorConfig = mergeResponsibleHumanIntoBehaviorConfig(defaultWhatsappBehaviorConfig, responsibleHuman);
+  }, { requireAtLeastOne: true, requireName: true });
+  const responsibleHuman = responsibleHumans[0] as AgentResponsibleHuman;
+  const behaviorConfig = mergeResponsibleHumansIntoBehaviorConfig(defaultWhatsappBehaviorConfig, responsibleHumans);
 
   const { data, error } = await client
     .from("agent_registry")
@@ -240,6 +246,7 @@ export async function createClientAgent(input: {
         sector_code: sectorCode,
         sector_name: sectorName,
         [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
+        [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
         whatsapp_behavior_config: behaviorConfig,
         whatsapp_clone_profile: defaultWhatsappCloneProfile,
         whatsapp_clone_memory: defaultWhatsappCloneMemory,
@@ -267,6 +274,7 @@ export async function updateClientAgent(input: {
   roleTitle?: string;
   prompt?: string;
   promptTemplateConfig?: unknown;
+  responsibleHumans?: unknown;
   responsibleHumanName?: string;
   responsibleHumanPhone?: string;
   client?: SupabaseClient;
@@ -295,19 +303,30 @@ export async function updateClientAgent(input: {
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
   const prompt = normalizePrompt(input.prompt);
-  const currentResponsibleHuman = readAgentResponsibleHuman(agent.metadata);
-  const responsibleHuman = normalizeAgentResponsibleHuman({
-    name: input.responsibleHumanName,
-    phone: input.responsibleHumanPhone,
-    updatedAt: new Date().toISOString(),
-  }, { requirePhone: true, fallback: currentResponsibleHuman });
+  const currentResponsibleHumans = readAgentResponsibleHumans(agent.metadata);
+  const responsibleInput = input.responsibleHumans !== undefined
+    ? input.responsibleHumans
+    : input.responsibleHumanName !== undefined || input.responsibleHumanPhone !== undefined
+      ? {
+          name: input.responsibleHumanName,
+          phone: input.responsibleHumanPhone,
+          updatedAt: new Date().toISOString(),
+        }
+      : undefined;
+  const responsibleHumans = normalizeAgentResponsibleHumans(responsibleInput, {
+    requireAtLeastOne: true,
+    requireName: true,
+    fallback: currentResponsibleHumans,
+  });
+  const responsibleHuman = responsibleHumans[0] as AgentResponsibleHuman;
   const promptTemplateConfig = input.promptTemplateConfig !== undefined
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]);
   const currentBehavior = normalizeWhatsappBehaviorConfig(agent.metadata?.whatsapp_behavior_config);
   const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName, {
     [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
-    whatsapp_behavior_config: mergeResponsibleHumanIntoBehaviorConfig(currentBehavior, responsibleHuman),
+    [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
+    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(currentBehavior, responsibleHumans),
     [promptBuilderMetadataKey]: promptTemplateConfig,
   });
 
@@ -349,6 +368,7 @@ export async function cloneClientAgent(input: {
   roleTitle?: string;
   prompt?: string;
   promptTemplateConfig?: unknown;
+  responsibleHumans?: unknown;
   responsibleHumanName?: string;
   responsibleHumanPhone?: string;
   client?: SupabaseClient;
@@ -377,12 +397,22 @@ export async function cloneClientAgent(input: {
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle || sourceAgent.role_title);
   const prompt = normalizePrompt(input.prompt || sourceAgent.prompt);
-  const sourceResponsibleHuman = readAgentResponsibleHuman(sourceAgent.metadata);
-  const responsibleHuman = normalizeAgentResponsibleHuman({
-    name: input.responsibleHumanName,
-    phone: input.responsibleHumanPhone,
-    updatedAt: new Date().toISOString(),
-  }, { requirePhone: true, fallback: sourceResponsibleHuman });
+  const sourceResponsibleHumans = readAgentResponsibleHumans(sourceAgent.metadata);
+  const responsibleInput = input.responsibleHumans !== undefined
+    ? input.responsibleHumans
+    : input.responsibleHumanName !== undefined || input.responsibleHumanPhone !== undefined
+      ? {
+          name: input.responsibleHumanName,
+          phone: input.responsibleHumanPhone,
+          updatedAt: new Date().toISOString(),
+        }
+      : undefined;
+  const responsibleHumans = normalizeAgentResponsibleHumans(responsibleInput, {
+    requireAtLeastOne: true,
+    requireName: true,
+    fallback: sourceResponsibleHumans,
+  });
+  const responsibleHuman = responsibleHumans[0] as AgentResponsibleHuman;
   const promptTemplateConfig = input.promptTemplateConfig !== undefined
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]);
@@ -392,7 +422,8 @@ export async function cloneClientAgent(input: {
     cloned_from_agent_name: sourceAgent.name,
     cloned_at: new Date().toISOString(),
     [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
-    whatsapp_behavior_config: mergeResponsibleHumanIntoBehaviorConfig(currentBehavior, responsibleHuman),
+    [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
+    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(currentBehavior, responsibleHumans),
     [promptBuilderMetadataKey]: promptTemplateConfig,
   });
   if (targetCompany.id !== sourceAgent.organization_id) {
@@ -642,6 +673,7 @@ async function assertClientCanCreateAgent(client: SupabaseClient, organizationId
 
 function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
   const company = companyById.get(agent.organization_id);
+  const responsibleHumans = readAgentResponsibleHumans(agent.metadata);
 
   return {
     id: agent.id,
@@ -656,7 +688,8 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     description: agent.description,
     prompt: agent.prompt,
     promptTemplateConfig: normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]),
-    responsibleHuman: readAgentResponsibleHuman(agent.metadata),
+    responsibleHuman: responsibleHumans[0] ?? readAgentResponsibleHuman(agent.metadata),
+    responsibleHumans,
     status: agent.status,
     autonomyLevel: agent.autonomy_level,
     updatedAt: agent.updated_at,

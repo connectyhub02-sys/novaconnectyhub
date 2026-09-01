@@ -22,8 +22,7 @@ import {
   platformBillingRenewalPolicyMetadataKey,
 } from "@/lib/billing/renewal-policy";
 import {
-  readAgentResponsibleHuman,
-  readFirstResponsibleWhatsappPhone,
+  readAgentResponsibleHumans,
 } from "@/lib/agents/responsible-human";
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
@@ -1570,27 +1569,27 @@ async function loadBillingResponsibleRecipients(
   const normalizedOwnerPhone = normalizePhone(ownerPhone);
 
   for (const agent of data ?? []) {
-    const responsible = readAgentResponsibleHuman(agent.metadata);
-    const fallbackPhone = readFirstResponsibleWhatsappPhone(
-      readRecord(readRecord(agent.metadata).whatsapp_behavior_config).humanHandoffNotificationNumbers,
-    );
-    const phone = normalizePhone(responsible.phone || fallbackPhone);
+    const agentName = agent.persona_name?.trim() || agent.name;
 
-    if (!phone || phone === normalizedOwnerPhone) {
-      continue;
-    }
+    for (const responsible of readAgentResponsibleHumans(agent.metadata)) {
+      const phone = normalizePhone(responsible.phone);
 
-    if (responsible.phone && !responsible.notifyPayments && !responsible.notifyOperational) {
-      continue;
-    }
+      if (!phone || phone === normalizedOwnerPhone) {
+        continue;
+      }
 
-    if (!recipients.has(phone)) {
-      recipients.set(phone, {
-        agentId: agent.id,
-        agentName: agent.persona_name?.trim() || agent.name,
-        name: responsible.name || agent.persona_name?.trim() || agent.name,
-        phone,
-      });
+      if (!responsible.notifyPayments && !responsible.notifyOperational) {
+        continue;
+      }
+
+      if (!recipients.has(phone)) {
+        recipients.set(phone, {
+          agentId: agent.id,
+          agentName,
+          name: responsible.name || agentName,
+          phone,
+        });
+      }
     }
   }
 

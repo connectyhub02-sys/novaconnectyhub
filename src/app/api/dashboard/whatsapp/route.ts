@@ -33,6 +33,7 @@ type ActionBody = {
   phone?: unknown;
   text?: unknown;
   behavior?: unknown;
+  responsibleHumans?: unknown;
   credential?: unknown;
   maxChats?: unknown;
   maxMessagesPerChat?: unknown;
@@ -179,6 +180,7 @@ export async function POST(request: NextRequest) {
         userId: context.userId,
         agentId: context.selectedAgentId,
         behavior: body?.behavior,
+        responsibleHumans: body?.responsibleHumans,
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));

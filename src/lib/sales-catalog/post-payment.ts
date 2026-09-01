@@ -3,8 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
-  readAgentResponsibleHuman,
-  readFirstResponsibleWhatsappPhone,
+  readAgentResponsibleHumans,
 } from "@/lib/agents/responsible-human";
 import { recordPlatformProductCommissionsForApprovedPayment } from "@/lib/platform-product-sales";
 import {
@@ -87,6 +86,11 @@ type ResponsibleAgentRow = {
   name: string;
   persona_name: string | null;
   metadata: JsonRecord | null;
+};
+
+type ResponsibleWhatsappDelivery = {
+  phone: string;
+  providerResponse: unknown;
 };
 
 type SalesCatalogPaymentStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
@@ -578,8 +582,8 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
   if (!instance || !token) return false;
 
   const agent = await loadResponsiblePaymentAgent(input.client, input.order, instance);
-  const responsiblePhone = resolveResponsiblePaymentPhone(agent, "approved");
-  if (!responsiblePhone) return false;
+  const responsiblePhones = resolveResponsiblePaymentPhones(agent, "approved");
+  if (responsiblePhones.length === 0) return false;
 
   const text = buildResponsiblePaymentApprovedMessage({
     order: input.order,
@@ -588,19 +592,15 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
     agent,
   });
   const credentials = await loadUazapiCredentials(input.client);
-  const providerResponse = await callUazapi(credentials, "/send/text", {
-    method: "POST",
+  const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    credentials,
     token,
-    body: {
-      number: responsiblePhone,
-      text,
-      linkPreview: false,
-      readchat: true,
-      readmessages: true,
-      track_source: "connectyhub",
-      track_id: `sales_catalog_responsible_${input.order.id.slice(0, 8)}_${Date.now()}`,
-    },
+    phones: responsiblePhones,
+    text,
+    trackIdPrefix: `sales_catalog_responsible_${input.order.id.slice(0, 8)}`,
   });
+
+  if (deliveries.length === 0) return false;
 
   const now = new Date().toISOString();
   const { data: latestOrder } = await input.client
@@ -621,7 +621,12 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
         payment_responsible_whatsapp_notified_provider_payment_id: input.providerPaymentId,
         payment_responsible_whatsapp_notified_instance_id: instance.id,
         payment_responsible_whatsapp_notified_agent_id: agent?.id ?? null,
-        payment_responsible_whatsapp_notified_phone: responsiblePhone,
+        payment_responsible_whatsapp_notified_phone: responsiblePhones[0],
+        payment_responsible_whatsapp_notified_phones: responsiblePhones,
+        payment_responsible_whatsapp_notified_deliveries: deliveries.map((delivery) => ({
+          phone: delivery.phone,
+          provider_message_id: findProviderMessageId(delivery.providerResponse),
+        })),
         payment_responsible_whatsapp_notified_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       },
     })
@@ -648,9 +653,15 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
       whatsapp_instance_id: instance.id,
       conversation_id: input.order.conversation_id,
       agent_id: agent?.id ?? null,
-      responsible_phone: responsiblePhone,
-      provider_message_id: findProviderMessageId(providerResponse),
-      provider_response: sanitizeProviderData(providerResponse),
+      responsible_phone: responsiblePhones[0],
+      responsible_phones: responsiblePhones,
+      provider_message_id: findProviderMessageId(deliveries[0]?.providerResponse),
+      provider_response: sanitizeProviderData(deliveries[0]?.providerResponse),
+      provider_responses: deliveries.map((delivery) => ({
+        phone: delivery.phone,
+        provider_message_id: findProviderMessageId(delivery.providerResponse),
+        provider_response: sanitizeProviderData(delivery.providerResponse),
+      })),
       delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       source: input.source,
     },
@@ -874,8 +885,8 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   if (!instance || !token) return false;
 
   const agent = await loadResponsiblePaymentAgent(input.client, input.order, instance);
-  const responsiblePhone = resolveResponsiblePaymentPhone(agent, input.status);
-  if (!responsiblePhone) return false;
+  const responsiblePhones = resolveResponsiblePaymentPhones(agent, input.status);
+  if (responsiblePhones.length === 0) return false;
 
   const text = buildResponsiblePaymentStatusMessage({
     order: input.order,
@@ -885,19 +896,15 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
     agent,
   });
   const credentials = await loadUazapiCredentials(input.client);
-  const providerResponse = await callUazapi(credentials, "/send/text", {
-    method: "POST",
+  const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    credentials,
     token,
-    body: {
-      number: responsiblePhone,
-      text,
-      linkPreview: false,
-      readchat: true,
-      readmessages: true,
-      track_source: "connectyhub",
-      track_id: `sales_catalog_responsible_${input.status}_${input.order.id.slice(0, 8)}_${Date.now()}`,
-    },
+    phones: responsiblePhones,
+    text,
+    trackIdPrefix: `sales_catalog_responsible_${input.status}_${input.order.id.slice(0, 8)}`,
   });
+
+  if (deliveries.length === 0) return false;
 
   const now = new Date().toISOString();
   const { data: latestOrder } = await input.client
@@ -918,7 +925,12 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
         [`${metadataPrefix}_provider_payment_id`]: input.providerPaymentId,
         [`${metadataPrefix}_instance_id`]: instance.id,
         [`${metadataPrefix}_agent_id`]: agent?.id ?? null,
-        [`${metadataPrefix}_phone`]: responsiblePhone,
+        [`${metadataPrefix}_phone`]: responsiblePhones[0],
+        [`${metadataPrefix}_phones`]: responsiblePhones,
+        [`${metadataPrefix}_deliveries`]: deliveries.map((delivery) => ({
+          phone: delivery.phone,
+          provider_message_id: findProviderMessageId(delivery.providerResponse),
+        })),
         [`${metadataPrefix}_source`]: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
         [`${metadataPrefix}_status`]: input.status,
       },
@@ -946,9 +958,15 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
       whatsapp_instance_id: instance.id,
       conversation_id: input.order.conversation_id,
       agent_id: agent?.id ?? null,
-      responsible_phone: responsiblePhone,
-      provider_message_id: findProviderMessageId(providerResponse),
-      provider_response: sanitizeProviderData(providerResponse),
+      responsible_phone: responsiblePhones[0],
+      responsible_phones: responsiblePhones,
+      provider_message_id: findProviderMessageId(deliveries[0]?.providerResponse),
+      provider_response: sanitizeProviderData(deliveries[0]?.providerResponse),
+      provider_responses: deliveries.map((delivery) => ({
+        phone: delivery.phone,
+        provider_message_id: findProviderMessageId(delivery.providerResponse),
+        provider_response: sanitizeProviderData(delivery.providerResponse),
+      })),
       payment_status: input.status,
       payment_method: input.paymentMethodLabel,
       delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
@@ -1142,21 +1160,50 @@ function renderMessageTemplate(template: string, variables: Record<string, strin
   return template.replace(/\{([a-z0-9_]+)\}/gi, (match, key: string) => variables[key.toLowerCase()] ?? match);
 }
 
-function resolveResponsiblePaymentPhone(agent: ResponsibleAgentRow | null, status: "approved" | SalesCatalogPaymentNotificationStatus) {
-  if (!agent) return "";
+async function sendResponsiblePaymentWhatsappMessages(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phones: string[];
+  text: string;
+  trackIdPrefix: string;
+}): Promise<ResponsibleWhatsappDelivery[]> {
+  const deliveries: ResponsibleWhatsappDelivery[] = [];
 
-  const responsible = readAgentResponsibleHuman(agent.metadata);
-  const wantsNotification = status === "approved"
-    ? responsible.notifySales || responsible.notifyPayments
-    : responsible.notifyPayments || responsible.notifyOperational;
+  for (const [index, phone] of input.phones.entries()) {
+    const providerResponse = await callUazapi(input.credentials, "/send/text", {
+      method: "POST",
+      token: input.token,
+      body: {
+        number: phone,
+        text: input.text,
+        linkPreview: false,
+        readchat: true,
+        readmessages: true,
+        track_source: "connectyhub",
+        track_id: `${input.trackIdPrefix}_${index + 1}_${Date.now()}`,
+      },
+    });
 
-  if (responsible.phone && !wantsNotification) {
-    return "";
+    deliveries.push({ phone, providerResponse });
   }
 
-  return responsible.phone
-    || readFirstResponsibleWhatsappPhone(readRecord(readRecord(agent.metadata).whatsapp_behavior_config).humanHandoffNotificationNumbers)
-    || "";
+  return deliveries;
+}
+
+function resolveResponsiblePaymentPhones(agent: ResponsibleAgentRow | null, status: "approved" | SalesCatalogPaymentNotificationStatus) {
+  if (!agent) return [];
+
+  const responsibles = readAgentResponsibleHumans(agent.metadata);
+  const phones = responsibles
+    .filter((responsible) => {
+      if (!responsible.phone) return false;
+      return status === "approved"
+        ? responsible.notifySales || responsible.notifyPayments
+        : responsible.notifyPayments || responsible.notifyOperational;
+    })
+    .map((responsible) => responsible.phone);
+
+  return Array.from(new Set(phones));
 }
 
 function normalizePaymentNotificationStatus(status: SalesCatalogPaymentStatus): SalesCatalogPaymentNotificationStatus | null {

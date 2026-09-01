@@ -10,10 +10,13 @@ import {
 } from "@/lib/agents/multichannel";
 import {
   agentResponsibleHumanMetadataKey,
-  normalizeAgentResponsibleHuman,
+  agentResponsibleHumansMetadataKey,
+  mergeResponsibleHumansIntoBehaviorConfig,
+  normalizeAgentResponsibleHumans,
   readAgentResponsibleHuman,
-  readFirstResponsibleWhatsappPhone,
+  readAgentResponsibleHumans,
   serializeAgentResponsibleHuman,
+  serializeAgentResponsibleHumans,
   type AgentResponsibleHuman,
 } from "@/lib/agents/responsible-human";
 import {
@@ -253,6 +256,7 @@ export type ClientWhatsappState = {
     channelConfig: AgentChannelConfig;
     automationRoles?: ClientWhatsappAgentAutomationRoles;
     responsibleHuman: AgentResponsibleHuman;
+    responsibleHumans: AgentResponsibleHuman[];
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -979,6 +983,7 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
   userId: string;
   agentId?: string | null;
   behavior?: unknown;
+  responsibleHumans?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
@@ -986,19 +991,23 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
   const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const globalAgent = await getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId);
   const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance, agent));
-  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(globalAgent, instance, agent), behaviorDraft);
+  const responsibleHumans = normalizeAgentResponsibleHumans(input.responsibleHumans, {
+    requireAtLeastOne: true,
+    requireName: true,
+    fallback: readAgentResponsibleHumans(agent.metadata),
+  });
+  const behavior = mergeResponsibleHumansIntoBehaviorConfig(
+    mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(globalAgent, instance, agent), behaviorDraft),
+    responsibleHumans,
+  );
   const token = decryptInstanceToken(instance);
 
   if (!token) {
     throw new Error("Conecte o WhatsApp antes de testar o aviso humano.");
   }
 
-  if (!behavior.humanHandoffNotifications) {
-    throw new Error("Ligue o controle Avisar humano no WhatsApp antes de testar.");
-  }
-
   if (!behavior.humanHandoffNotificationNumbers.trim()) {
-    throw new Error("Informe pelo menos um numero responsavel para receber o aviso.");
+    throw new Error("Cadastre pelo menos um responsavel humano com WhatsApp antes de testar.");
   }
 
   const requestedAt = new Date().toISOString();
@@ -1214,9 +1223,11 @@ export async function updateClientWhatsappPrompt(input: {
   }
 
   const now = new Date().toISOString();
-  const responsibleHuman = input.behavior !== undefined
-    ? syncResponsibleHumanFromBehavior(nextBehavior, readAgentResponsibleHuman(agent.metadata), now)
-    : readAgentResponsibleHuman(agent.metadata);
+  const responsibleHumans = readAgentResponsibleHumans(agent.metadata);
+  const responsibleHuman = responsibleHumans[0] ?? readAgentResponsibleHuman(agent.metadata);
+  const behaviorToSave = input.behavior !== undefined
+    ? mergeResponsibleHumansIntoBehaviorConfig(nextBehavior, responsibleHumans)
+    : nextBehavior;
 
   if (hasAgentName || hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig || hasPromptTemplateConfig) {
     const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
@@ -1235,10 +1246,11 @@ export async function updateClientWhatsappPrompt(input: {
         status: "needs_review",
         metadata: {
           ...(agent.metadata ?? {}),
-          whatsapp_behavior_config: nextBehavior,
+          whatsapp_behavior_config: behaviorToSave,
           ...(input.behavior !== undefined
             ? {
                 [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
+                [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
               }
             : {}),
           whatsapp_clone_profile: nextCloneProfile,
@@ -1315,7 +1327,7 @@ export async function updateClientWhatsappPrompt(input: {
         metadata: {
           ...(resolvedInstance.metadata ?? {}),
           ...buildAgentInstanceMetadata(input.organization, agentForMetadata),
-          behavior_config: nextBehavior,
+          behavior_config: behaviorToSave,
           behavior_updated_at: now,
           behavior_updated_by: input.userId,
         },
@@ -2555,6 +2567,7 @@ function buildState(
           qualification: getLeadQualificationConfig(agent),
           channelConfig: getAgentChannelConfig(agent),
           responsibleHuman: readAgentResponsibleHuman(agent.metadata),
+          responsibleHumans: readAgentResponsibleHumans(agent.metadata),
           updatedAt: agent.updated_at,
         }
       : null,
@@ -2631,25 +2644,6 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
 
   return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? globalConfig);
-}
-
-function syncResponsibleHumanFromBehavior(
-  behavior: WhatsappBehaviorConfig,
-  current: AgentResponsibleHuman,
-  now: string,
-) {
-  const phone = readFirstResponsibleWhatsappPhone(behavior.humanHandoffNotificationNumbers);
-
-  if (!phone) {
-    return current;
-  }
-
-  return normalizeAgentResponsibleHuman({
-    ...current,
-    phone,
-    source: current.source || "agent_behavior",
-    updatedAt: now,
-  }, { fallback: current });
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {

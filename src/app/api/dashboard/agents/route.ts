@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     roleTitle?: unknown;
     prompt?: unknown;
     promptTemplateConfig?: unknown;
+    responsibleHumans?: unknown;
     responsibleHumanName?: unknown;
     responsibleHumanPhone?: unknown;
     sourceAgentId?: unknown;
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
         prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
         promptTemplateConfig: body?.promptTemplateConfig,
+        responsibleHumans: body?.responsibleHumans,
         responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
         responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
       });
@@ -86,6 +88,7 @@ export async function POST(request: NextRequest) {
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
       promptTemplateConfig: body?.promptTemplateConfig,
+      responsibleHumans: body?.responsibleHumans,
       responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
       responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
     });
@@ -111,6 +114,7 @@ export async function PATCH(request: NextRequest) {
     roleTitle?: unknown;
     prompt?: unknown;
     promptTemplateConfig?: unknown;
+    responsibleHumans?: unknown;
     responsibleHumanName?: unknown;
     responsibleHumanPhone?: unknown;
   }>(request);
@@ -132,6 +136,7 @@ export async function PATCH(request: NextRequest) {
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
       promptTemplateConfig: body?.promptTemplateConfig,
+      responsibleHumans: body?.responsibleHumans,
       responsibleHumanName: typeof body?.responsibleHumanName === "string" ? body.responsibleHumanName : undefined,
       responsibleHumanPhone: typeof body?.responsibleHumanPhone === "string" ? body.responsibleHumanPhone : undefined,
     });

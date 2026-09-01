@@ -49,6 +49,17 @@ import {
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoader } from "./infinity-loader";
 import { useConnectyShellNotifications, type ConnectyShellNotification } from "./connecty-shell";
+import {
+  AgentResponsiblesEditor,
+  createResponsibleHumanDraft,
+  firstResponsibleHumanPayload,
+  isResponsibleHumansDraftComplete,
+  responsibleHumansToPayload,
+  summarizeResponsibleHumans,
+  toResponsibleHumanDrafts,
+  type AgentResponsibleHumanInput,
+  type ResponsibleHumanDraft,
+} from "./agent-responsibles-editor";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   defaultWhatsappBehaviorConfig,
@@ -224,13 +235,8 @@ type ClientWhatsappAgent = {
   description: string | null;
   prompt: string;
   promptTemplateConfig?: AgentPromptBuilderConfig;
-  responsibleHuman?: {
-    name: string;
-    phone: string;
-    notifySales?: boolean;
-    notifyPayments?: boolean;
-    notifyOperational?: boolean;
-  };
+  responsibleHuman?: AgentResponsibleHumanInput;
+  responsibleHumans?: AgentResponsibleHumanInput[];
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -272,6 +278,7 @@ type WhatsappState = {
     promptPreview: string;
     promptTemplateConfig?: AgentPromptBuilderConfig;
     responsibleHuman?: ClientWhatsappAgent["responsibleHuman"];
+    responsibleHumans?: AgentResponsibleHumanInput[];
     cloneProfile?: WhatsappCloneProfile;
     cloneMemory?: WhatsappCloneMemory;
     cloneProfileImport?: CloneProfileImportStatus;
@@ -598,10 +605,11 @@ export function WhatsAppConsole({
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentSectorName, setAgentSectorName] = useState(agentPromptTemplates[0].sectorName);
-  const [agentResponsibleHumanName, setAgentResponsibleHumanName] = useState("");
-  const [agentResponsibleHumanPhone, setAgentResponsibleHumanPhone] = useState("");
+  const [agentResponsibles, setAgentResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const [agentTemplateId, setAgentTemplateId] = useState<AgentPromptTemplateId>(defaultAgentPromptTemplateId);
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [updatingClientAgentId, setUpdatingClientAgentId] = useState<string | null>(null);
+  const [testingResponsibleAgentId, setTestingResponsibleAgentId] = useState<string | null>(null);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [showInternalAgentForm, setShowInternalAgentForm] = useState(false);
   const [internalSectorName, setInternalSectorName] = useState("");
@@ -1295,6 +1303,8 @@ export function WhatsAppConsole({
 
     try {
       const template = agentPromptTemplates.find((item) => item.id === agentTemplateId) ?? agentPromptTemplates[0];
+      const responsiblePayload = responsibleHumansToPayload(agentResponsibles);
+      const firstResponsible = firstResponsibleHumanPayload(agentResponsibles);
       const promptTemplateConfig = normalizeAgentPromptBuilderConfig({
         templateId: template.id,
         tone: template.defaultTone,
@@ -1314,8 +1324,9 @@ export function WhatsAppConsole({
           name: agentName.trim() || "Agente WhatsApp",
           sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
           roleTitle: template.roleTitle || variant.agentRoleTitle,
-          responsibleHumanName: agentResponsibleHumanName.trim(),
-          responsibleHumanPhone: agentResponsibleHumanPhone.trim(),
+          responsibleHumans: responsiblePayload,
+          responsibleHumanName: firstResponsible.name,
+          responsibleHumanPhone: firstResponsible.phone,
           promptTemplateConfig,
         }),
       });
@@ -1329,8 +1340,7 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setAgentName("");
       setAgentSectorName(agentPromptTemplates[0].sectorName);
-      setAgentResponsibleHumanName("");
-      setAgentResponsibleHumanPhone("");
+      setAgentResponsibles([createResponsibleHumanDraft()]);
       setAgentTemplateId(defaultAgentPromptTemplateId);
       setShowAgentForm(false);
       setNotice({ tone: "success", message: "Agente criado. Agora configure o prompt, comportamento e conexao." });
@@ -1378,6 +1388,71 @@ export function WhatsAppConsole({
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao clonar agente." });
     } finally {
       setCreatingAgent(false);
+    }
+  }
+
+  async function updateWhatsappAgent(agentId: string, input: {
+    companyId: string;
+    name: string;
+    sectorName: string;
+    roleTitle: string;
+    prompt: string;
+    responsibleHumans: ResponsibleHumanDraft[];
+  }) {
+    if (!agentId || !input.companyId) {
+      setNotice({ tone: "warning", message: "Escolha o agente e a empresa antes de salvar." });
+      return;
+    }
+
+    setUpdatingClientAgentId(agentId);
+    setNotice(null);
+
+    try {
+      const responsiblePayload = responsibleHumansToPayload(input.responsibleHumans);
+      const firstResponsible = firstResponsibleHumanPayload(input.responsibleHumans);
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          companyId: input.companyId,
+          name: input.name.trim(),
+          sectorName: input.sectorName.trim(),
+          roleTitle: input.roleTitle.trim(),
+          prompt: input.prompt,
+          responsibleHumans: responsiblePayload,
+          responsibleHumanName: firstResponsible.name,
+          responsibleHumanPhone: firstResponsible.phone,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
+
+      if (!response.ok || !data?.agent) {
+        throw new Error(data?.error ?? "Nao foi possivel editar o agente.");
+      }
+
+      const nextState = await fetchWhatsappState(variant, data.agent.id);
+      applyWhatsappState(nextState);
+      setNotice({ tone: "success", message: "Agente atualizado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao editar agente." });
+    } finally {
+      setUpdatingClientAgentId(null);
+    }
+  }
+
+  async function testWhatsappAgentResponsibles(agent: ClientWhatsappAgent, drafts?: ResponsibleHumanDraft[]) {
+    setTestingResponsibleAgentId(agent.id);
+
+    try {
+      const responsiblePayload = drafts ? responsibleHumansToPayload(drafts) : [];
+      await runAction("send_handoff_test", {
+        companyId: agent.companyId,
+        agentId: agent.id,
+        ...(responsiblePayload.length > 0 ? { responsibleHumans: responsiblePayload } : {}),
+      });
+    } finally {
+      setTestingResponsibleAgentId(null);
     }
   }
 
@@ -1700,11 +1775,12 @@ export function WhatsAppConsole({
           creating={creatingAgent}
           deletingAgentId={deletingAgentId}
           sectorName={agentSectorName}
-          responsibleHumanName={agentResponsibleHumanName}
-          responsibleHumanPhone={agentResponsibleHumanPhone}
+          responsibleHumans={agentResponsibles}
           selectedAgentId={selectedAgentId}
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
+          testingAgentId={testingResponsibleAgentId}
+          updatingAgentId={updatingClientAgentId}
           onAgentNameChange={setAgentName}
           onAgentTemplateChange={updateNewAgentTemplate}
           onCancel={() => setShowAgentForm(false)}
@@ -1712,11 +1788,12 @@ export function WhatsAppConsole({
           onCreate={createWhatsappAgent}
           onDelete={deleteWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
-          onResponsibleHumanNameChange={setAgentResponsibleHumanName}
-          onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
+          onResponsibleHumansChange={setAgentResponsibles}
           onSelectAgent={switchWhatsappAgent}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
+          onTestResponsibles={testWhatsappAgentResponsibles}
+          onUpdate={updateWhatsappAgent}
           variant={variant}
         />
       ) : !state?.agent ? (
@@ -1728,15 +1805,13 @@ export function WhatsAppConsole({
           selectedCompany={selectedCompany}
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
-          responsibleHumanName={agentResponsibleHumanName}
-          responsibleHumanPhone={agentResponsibleHumanPhone}
+          responsibleHumans={agentResponsibles}
           onAgentNameChange={setAgentName}
           onAgentTemplateChange={updateNewAgentTemplate}
           onCancel={() => setShowAgentForm(false)}
           onCreate={createWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
-          onResponsibleHumanNameChange={setAgentResponsibleHumanName}
-          onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
+          onResponsibleHumansChange={setAgentResponsibles}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
           sectorName={agentSectorName}
@@ -1753,11 +1828,12 @@ export function WhatsAppConsole({
             creating={creatingAgent}
             deletingAgentId={deletingAgentId}
             sectorName={agentSectorName}
-            responsibleHumanName={agentResponsibleHumanName}
-            responsibleHumanPhone={agentResponsibleHumanPhone}
+            responsibleHumans={agentResponsibles}
             selectedAgentId={selectedAgentId}
             selectedCompanyId={selectedCompanyId}
             showForm={showAgentForm}
+            testingAgentId={testingResponsibleAgentId}
+            updatingAgentId={updatingClientAgentId}
             onAgentNameChange={setAgentName}
             onAgentTemplateChange={updateNewAgentTemplate}
             onCancel={() => setShowAgentForm(false)}
@@ -1765,11 +1841,12 @@ export function WhatsAppConsole({
             onCreate={createWhatsappAgent}
             onDelete={deleteWhatsappAgent}
             onSectorNameChange={setAgentSectorName}
-            onResponsibleHumanNameChange={setAgentResponsibleHumanName}
-            onResponsibleHumanPhoneChange={setAgentResponsibleHumanPhone}
+            onResponsibleHumansChange={setAgentResponsibles}
             onSelectAgent={switchWhatsappAgent}
             onSelectCompany={setSelectedCompanyId}
             onStart={() => setShowAgentForm(true)}
+            onTestResponsibles={testWhatsappAgentResponsibles}
+            onUpdate={updateWhatsappAgent}
             variant={variant}
           />
         ) : null}
@@ -2128,35 +2205,6 @@ export function WhatsAppConsole({
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
                   <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
-                </div>
-              </BehaviorSection>
-
-              <BehaviorSection title="Seguranca e testes" description="Protecoes para evitar atendimento indevido, loops e conflitos com humanos.">
-                <div className="grid gap-3">
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    <ToggleTile icon={ShieldCheck} label="Intervencao humana" description="Pausa a IA quando um humano assume a conversa ou quando o lead pede atendimento humano." checked={behaviorDraft.humanIntervention} onChange={() => updateBehavior("humanIntervention", !behaviorDraft.humanIntervention)} />
-                    <ToggleTile icon={Bell} label="Avisar humano" description="Envia uma mensagem no WhatsApp para os numeros responsaveis quando o lead pede atendimento humano." checked={behaviorDraft.humanHandoffNotifications} onChange={() => updateBehavior("humanHandoffNotifications", !behaviorDraft.humanHandoffNotifications)} />
-                    <NumberField label="Cooldown aviso" description="Minutos minimos entre avisos do mesmo lead para evitar spam no numero responsavel." value={behaviorDraft.humanHandoffNotificationCooldownMinutes} min={1} max={1440} onChange={(value) => updateBehavior("humanHandoffNotificationCooldownMinutes", value)} />
-                    <SecondaryAction
-                      icon={Send}
-                      label="Enviar teste"
-                      description="Enfileira um aviso de teste para os numeros responsaveis usando o mesmo fluxo Inngest do handoff real."
-                      disabled={!state?.instance?.tokenReady || !behaviorDraft.humanHandoffNotifications || !behaviorDraft.humanHandoffNotificationNumbers.trim()}
-                      loading={running === "send_handoff_test"}
-                      onClick={() => runAction("send_handoff_test", { behavior: behaviorDraft })}
-                    />
-                  </div>
-                  <TextAreaField
-                    label="Numeros responsaveis"
-                    description="Um numero por linha ou separados por virgula. Quando o lead pedir humano, esses numeros recebem um aviso pelo WhatsApp conectado. Esses numeros sao contatos internos: por seguranca, o agente nao responde esses numeros como lead."
-                    value={behaviorDraft.humanHandoffNotificationNumbers}
-                    minHeight="96px"
-                    placeholder={"5599999999999\n5588888888888"}
-                    onChange={(value) => updateBehavior("humanHandoffNotificationNumbers", value)}
-                  />
-                  <div className="rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-950">
-                    <span className="font-semibold">Seguranca:</span> numeros cadastrados aqui recebem avisos internos e ficam protegidos. O agente nao responde esses numeros como lead.
-                  </div>
                 </div>
               </BehaviorSection>
 
@@ -3003,24 +3051,26 @@ function ClientAgentsManager({
   companies,
   creating,
   deletingAgentId,
-  responsibleHumanName,
-  responsibleHumanPhone,
+  responsibleHumans,
   sectorName,
   selectedAgentId,
   selectedCompanyId,
   showForm,
+  testingAgentId,
+  updatingAgentId,
   onAgentNameChange,
   onAgentTemplateChange,
   onCancel,
   onClone,
   onCreate,
   onDelete,
-  onResponsibleHumanNameChange,
-  onResponsibleHumanPhoneChange,
+  onResponsibleHumansChange,
   onSectorNameChange,
   onSelectAgent,
   onSelectCompany,
   onStart,
+  onTestResponsibles,
+  onUpdate,
   variant,
 }: {
   agentName: string;
@@ -3029,37 +3079,61 @@ function ClientAgentsManager({
   companies: ClientCompany[];
   creating: boolean;
   deletingAgentId: string | null;
-  responsibleHumanName: string;
-  responsibleHumanPhone: string;
+  responsibleHumans: ResponsibleHumanDraft[];
   sectorName: string;
   selectedAgentId: string;
   selectedCompanyId: string;
   showForm: boolean;
+  testingAgentId: string | null;
+  updatingAgentId: string | null;
   onAgentNameChange: (value: string) => void;
   onAgentTemplateChange: (value: string) => void;
   onCancel: () => void;
   onClone: (sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) => Promise<void>;
   onCreate: () => void;
   onDelete: (agent: ClientWhatsappAgent) => Promise<void>;
-  onResponsibleHumanNameChange: (value: string) => void;
-  onResponsibleHumanPhoneChange: (value: string) => void;
+  onResponsibleHumansChange: (drafts: ResponsibleHumanDraft[]) => void;
   onSectorNameChange: (value: string) => void;
   onSelectAgent: (value: string) => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
+  onTestResponsibles: (agent: ClientWhatsappAgent, drafts?: ResponsibleHumanDraft[]) => Promise<void>;
+  onUpdate: (agentId: string, input: {
+    companyId: string;
+    name: string;
+    sectorName: string;
+    roleTitle: string;
+    prompt: string;
+    responsibleHumans: ResponsibleHumanDraft[];
+  }) => Promise<void>;
   variant: WhatsappConsoleVariant;
 }) {
   const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
   const [cloneCompanyId, setCloneCompanyId] = useState(selectedCompanyId);
   const [cloneName, setCloneName] = useState("");
   const [cloneSectorName, setCloneSectorName] = useState("");
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [editCompanyId, setEditCompanyId] = useState(selectedCompanyId);
+  const [editName, setEditName] = useState("");
+  const [editRoleTitle, setEditRoleTitle] = useState("");
+  const [editSectorName, setEditSectorName] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editResponsibles, setEditResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const cloneSource = agents.find((agent) => agent.id === cloneSourceId) ?? null;
+  const editingAgent = agents.find((agent) => agent.id === editingAgentId) ?? null;
+  const createFormComplete = Boolean(
+    selectedCompanyId
+      && agentName.trim()
+      && sectorName.trim()
+      && isResponsibleHumansDraftComplete(responsibleHumans),
+  );
 
   function openClone(agent: ClientWhatsappAgent) {
     setCloneSourceId(agent.id);
     setCloneCompanyId(agent.companyId);
     setCloneName(`Copia de ${agent.name}`);
     setCloneSectorName(agent.sectorName);
+    setEditingAgentId(null);
   }
 
   async function submitClone() {
@@ -3071,6 +3145,31 @@ function ClientAgentsManager({
       sectorName: cloneSectorName || cloneSource.sectorName,
     });
     setCloneSourceId(null);
+  }
+
+  function openEdit(agent: ClientWhatsappAgent) {
+    setEditingAgentId(agent.id);
+    setEditCompanyId(agent.companyId);
+    setEditName(agent.name);
+    setEditRoleTitle(agent.roleTitle);
+    setEditSectorName(agent.sectorName);
+    setEditPrompt(agent.prompt);
+    setEditResponsibles(toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : agent.responsibleHuman ? [agent.responsibleHuman] : []));
+    setCloneSourceId(null);
+  }
+
+  async function submitEdit() {
+    if (!editingAgent) return;
+
+    await onUpdate(editingAgent.id, {
+      companyId: editCompanyId || editingAgent.companyId,
+      name: editName || editingAgent.name,
+      sectorName: editSectorName || editingAgent.sectorName,
+      roleTitle: editRoleTitle || editingAgent.roleTitle,
+      prompt: editPrompt || editingAgent.prompt,
+      responsibleHumans: editResponsibles,
+    });
+    setEditingAgentId(null);
   }
 
   return (
@@ -3085,56 +3184,92 @@ function ClientAgentsManager({
           {agents.length > 0 ? agents.map((agent) => {
             const active = agent.id === selectedAgentId;
             const deleting = deletingAgentId === agent.id;
+            const testing = testingAgentId === agent.id;
+            const updating = updatingAgentId === agent.id;
 
             return (
-              <div
-                key={agent.id}
-                className="rounded-xl border p-3 transition"
-                style={{
-                  background: active ? "rgba(var(--ch-accent-rgb),0.12)" : "var(--ch-panel-2)",
-                  borderColor: active ? "rgba(var(--ch-accent-rgb),0.58)" : "var(--ch-border)",
-                  boxShadow: active ? "0 0 24px rgba(var(--ch-accent-rgb),0.12)" : "none",
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                      {agent.name}
-                    </p>
-                    <p className="mt-1 truncate text-[11px] text-slate-400">
-                      {agent.companyName} / {agent.sectorName}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
-                      <UserRound className="h-3 w-3 shrink-0" />
-                      {agent.responsibleHuman?.phone
-                        ? `${agent.responsibleHuman.name || "Responsavel"} / ${agent.responsibleHuman.phone}`
-                        : "Responsavel pendente"}
-                    </p>
+              <div key={agent.id} className="grid gap-2">
+                <div
+                  className="rounded-xl border p-3 transition"
+                  style={{
+                    background: active ? "rgba(var(--ch-accent-rgb),0.12)" : "var(--ch-panel-2)",
+                    borderColor: active ? "rgba(var(--ch-accent-rgb),0.58)" : "var(--ch-border)",
+                    boxShadow: active ? "0 0 24px rgba(var(--ch-accent-rgb),0.12)" : "none",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                        {agent.name}
+                      </p>
+                      <p className="mt-1 truncate text-[11px] text-slate-400">
+                        {agent.companyName} / {agent.sectorName}
+                      </p>
+                      <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
+                        <UserRound className="h-3 w-3 shrink-0" />
+                        {summarizeResponsibleHumans(agent.responsibleHumans, agent.responsibleHuman)}
+                      </p>
+                    </div>
+                    <NeonBadge tone={active ? "green" : "amber"}>{active ? "aberto" : agent.status}</NeonBadge>
                   </div>
-                  <NeonBadge tone={active ? "green" : "amber"}>{active ? "aberto" : agent.status}</NeonBadge>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <SecondaryAction
+                      icon={Eye}
+                      label={active ? "Aberto" : "Abrir"}
+                      disabled={active || creating || deleting || updating}
+                      onClick={() => onSelectAgent(agent.id)}
+                    />
+                    <SecondaryAction
+                      icon={PenLine}
+                      label="Editar"
+                      disabled={creating || deleting || updating}
+                      loading={updating}
+                      onClick={() => openEdit(agent)}
+                    />
+                    <SecondaryAction
+                      icon={UserRound}
+                      label="Testar"
+                      disabled={creating || deleting || testing}
+                      loading={testing}
+                      onClick={() => onTestResponsibles(agent)}
+                    />
+                    <SecondaryAction
+                      icon={Copy}
+                      label="Clonar"
+                      disabled={creating || deleting || updating}
+                      onClick={() => openClone(agent)}
+                    />
+                    <SecondaryAction
+                      icon={Trash2}
+                      label={deleting ? "Excluindo" : "Excluir"}
+                      loading={deleting}
+                      disabled={creating || updating}
+                      tone="danger"
+                      onClick={() => onDelete(agent)}
+                    />
+                  </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <SecondaryAction
-                    icon={Eye}
-                    label={active ? "Aberto" : "Abrir"}
-                    disabled={active || creating || deleting}
-                    onClick={() => onSelectAgent(agent.id)}
+                {editingAgentId === agent.id && editingAgent ? (
+                  <ClientAgentInlineEditor
+                    agent={editingAgent}
+                    companies={companies}
+                    companyId={editCompanyId}
+                    disabled={creating || updating}
+                    name={editName}
+                    responsibleHumans={editResponsibles}
+                    roleTitle={editRoleTitle}
+                    sectorName={editSectorName}
+                    testing={testing}
+                    onCancel={() => setEditingAgentId(null)}
+                    onCompanyChange={setEditCompanyId}
+                    onNameChange={setEditName}
+                    onResponsibleHumansChange={setEditResponsibles}
+                    onRoleTitleChange={setEditRoleTitle}
+                    onSave={submitEdit}
+                    onSectorNameChange={setEditSectorName}
+                    onTest={() => onTestResponsibles(editingAgent, editResponsibles)}
                   />
-                  <SecondaryAction
-                    icon={Copy}
-                    label="Clonar"
-                    disabled={creating || deleting}
-                    onClick={() => openClone(agent)}
-                  />
-                  <SecondaryAction
-                    icon={Trash2}
-                    label={deleting ? "Excluindo" : "Excluir"}
-                    loading={deleting}
-                    disabled={creating}
-                    tone="danger"
-                    onClick={() => onDelete(agent)}
-                  />
-                </div>
+                ) : null}
               </div>
             );
           }) : (
@@ -3202,28 +3337,17 @@ function ClientAgentsManager({
                 onChange={(event) => onSectorNameChange(event.target.value)}
               />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
-              <input
-                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                placeholder="Ex: Gerente comercial"
-                value={responsibleHumanName}
-                onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
-              <input
-                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                placeholder="Ex: 5599999999999"
-                value={responsibleHumanPhone}
-                onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
-              />
-            </label>
+          </div>
+          <div className="mt-3">
+            <AgentResponsiblesEditor
+              drafts={responsibleHumans}
+              disabled={creating}
+              onChange={onResponsibleHumansChange}
+            />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
-            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId || !responsibleHumanPhone.trim()} loading={creating} tone="ai" onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
           </div>
         </div>
       ) : null}
@@ -3283,6 +3407,132 @@ function ClientAgentsManager({
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+function ClientAgentInlineEditor({
+  agent,
+  companies,
+  companyId,
+  disabled,
+  name,
+  responsibleHumans,
+  roleTitle,
+  sectorName,
+  testing,
+  onCancel,
+  onCompanyChange,
+  onNameChange,
+  onResponsibleHumansChange,
+  onRoleTitleChange,
+  onSave,
+  onSectorNameChange,
+  onTest,
+}: {
+  agent: ClientWhatsappAgent;
+  companies: ClientCompany[];
+  companyId: string;
+  disabled: boolean;
+  name: string;
+  responsibleHumans: ResponsibleHumanDraft[];
+  roleTitle: string;
+  sectorName: string;
+  testing: boolean;
+  onCancel: () => void;
+  onCompanyChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onResponsibleHumansChange: (drafts: ResponsibleHumanDraft[]) => void;
+  onRoleTitleChange: (value: string) => void;
+  onSave: () => void;
+  onSectorNameChange: (value: string) => void;
+  onTest: () => void;
+}) {
+  const formComplete = Boolean(
+    companyId
+      && name.trim()
+      && roleTitle.trim()
+      && sectorName.trim()
+      && isResponsibleHumansDraftComplete(responsibleHumans),
+  );
+
+  return (
+    <div
+      className="rounded-xl border p-3"
+      style={{ background: "rgba(var(--ch-accent-rgb),0.06)", borderColor: "rgba(var(--ch-accent-rgb),0.24)" }}
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Editar agente</p>
+          <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
+        </div>
+        <SecondaryAction icon={X} label="Fechar" disabled={disabled} onClick={onCancel} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa</span>
+          <select
+            className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+            disabled={disabled}
+            value={companyId}
+            onChange={(event) => onCompanyChange(event.target.value)}
+          >
+            {companies.map((company) => (
+              <option key={company.id} value={company.id}>
+                {company.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+          <input
+            className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+            disabled={disabled}
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+          <input
+            className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+            disabled={disabled}
+            value={sectorName}
+            onChange={(event) => onSectorNameChange(event.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+          <input
+            className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+            disabled={disabled}
+            value={roleTitle}
+            onChange={(event) => onRoleTitleChange(event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="mt-3">
+        <AgentResponsiblesEditor
+          drafts={responsibleHumans}
+          disabled={disabled}
+          testDisabled={!isResponsibleHumansDraftComplete(responsibleHumans)}
+          testing={testing}
+          onChange={onResponsibleHumansChange}
+          onTest={onTest}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <SecondaryAction icon={RefreshCcw} label="Cancelar" disabled={disabled} onClick={onCancel} />
+        <ActionButton
+          icon={Wand2}
+          label="Salvar edicao"
+          disabled={disabled || !formComplete}
+          loading={disabled}
+          tone="ai"
+          onClick={onSave}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -3606,8 +3856,7 @@ function AgentCreationGate({
   agentTemplateId,
   companies,
   creating,
-  responsibleHumanName,
-  responsibleHumanPhone,
+  responsibleHumans,
   sectorName,
   selectedCompany,
   selectedCompanyId,
@@ -3616,8 +3865,7 @@ function AgentCreationGate({
   onAgentTemplateChange,
   onCancel,
   onCreate,
-  onResponsibleHumanNameChange,
-  onResponsibleHumanPhoneChange,
+  onResponsibleHumansChange,
   onSectorNameChange,
   onSelectCompany,
   onStart,
@@ -3627,8 +3875,7 @@ function AgentCreationGate({
   agentTemplateId: AgentPromptTemplateId;
   companies: ClientCompany[];
   creating: boolean;
-  responsibleHumanName: string;
-  responsibleHumanPhone: string;
+  responsibleHumans: ResponsibleHumanDraft[];
   sectorName: string;
   selectedCompany: ClientCompany | null;
   selectedCompanyId: string;
@@ -3637,13 +3884,19 @@ function AgentCreationGate({
   onAgentTemplateChange: (value: string) => void;
   onCancel: () => void;
   onCreate: () => void;
-  onResponsibleHumanNameChange: (value: string) => void;
-  onResponsibleHumanPhoneChange: (value: string) => void;
+  onResponsibleHumansChange: (drafts: ResponsibleHumanDraft[]) => void;
   onSectorNameChange: (value: string) => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
   variant: WhatsappConsoleVariant;
 }) {
+  const formComplete = Boolean(
+    selectedCompanyId
+      && agentName.trim()
+      && sectorName.trim()
+      && isResponsibleHumansDraftComplete(responsibleHumans),
+  );
+
   return (
     <Panel
       title="Criar agente WhatsApp"
@@ -3735,29 +3988,16 @@ function AgentCreationGate({
                   onChange={(event) => onSectorNameChange(event.target.value)}
                 />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
-                <input
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  placeholder="Ex: Responsavel comercial"
-                  value={responsibleHumanName}
-                  onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
-                <input
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  placeholder="Ex: 5599999999999"
-                  value={responsibleHumanPhone}
-                  onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
-                />
-              </label>
+              <AgentResponsiblesEditor
+                drafts={responsibleHumans}
+                disabled={creating}
+                onChange={onResponsibleHumansChange}
+              />
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               <SecondaryAction icon={RefreshCcw} label="Cancelar" disabled={creating} onClick={onCancel} />
-              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !selectedCompanyId || !responsibleHumanPhone.trim()} loading={creating} tone="ai" onClick={onCreate} />
+              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !formComplete} loading={creating} tone="ai" onClick={onCreate} />
             </div>
           </div>
         ) : (
@@ -5667,8 +5907,6 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 6} />
         <PromptCheck label="Citacao inteligente" active={behavior.quoteReplyMode !== "off"} />
-        <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
-        <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>
       <div className="mt-4 grid gap-2">

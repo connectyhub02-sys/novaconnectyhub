@@ -2,9 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoadingPanel } from "./infinity-loader";
+import {
+  AgentResponsiblesEditor,
+  createResponsibleHumanDraft,
+  firstResponsibleHumanPayload,
+  isResponsibleHumansDraftComplete,
+  responsibleHumansToPayload,
+  summarizeResponsibleHumans,
+  toResponsibleHumanDrafts,
+  type AgentResponsibleHumanInput,
+  type ResponsibleHumanDraft,
+} from "./agent-responsibles-editor";
 import { cn } from "@/lib/utils";
 
 type ClientCompany = {
@@ -29,13 +40,8 @@ type ClientAgent = {
   roleTitle: string;
   description: string | null;
   prompt: string;
-  responsibleHuman: {
-    name: string;
-    phone: string;
-    notifySales: boolean;
-    notifyPayments: boolean;
-    notifyOperational: boolean;
-  };
+  responsibleHuman: AgentResponsibleHumanInput;
+  responsibleHumans?: AgentResponsibleHumanInput[];
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -64,16 +70,14 @@ export function ClientAgentsConsole() {
   const [sectorName, setSectorName] = useState("Atendimento WhatsApp");
   const [name, setName] = useState("");
   const [roleTitle, setRoleTitle] = useState("Agente de WhatsApp");
-  const [responsibleHumanName, setResponsibleHumanName] = useState("");
-  const [responsibleHumanPhone, setResponsibleHumanPhone] = useState("");
+  const [responsibleHumans, setResponsibleHumans] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editCompanyId, setEditCompanyId] = useState("");
   const [editSectorName, setEditSectorName] = useState("");
   const [editName, setEditName] = useState("");
   const [editRoleTitle, setEditRoleTitle] = useState("");
-  const [editResponsibleHumanName, setEditResponsibleHumanName] = useState("");
-  const [editResponsibleHumanPhone, setEditResponsibleHumanPhone] = useState("");
+  const [editResponsibleHumans, setEditResponsibleHumans] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const [editPrompt, setEditPrompt] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [cloneSourceAgentId, setCloneSourceAgentId] = useState<string | null>(null);
@@ -81,10 +85,10 @@ export function ClientAgentsConsole() {
   const [cloneSectorName, setCloneSectorName] = useState("");
   const [cloneName, setCloneName] = useState("");
   const [cloneRoleTitle, setCloneRoleTitle] = useState("");
-  const [cloneResponsibleHumanName, setCloneResponsibleHumanName] = useState("");
-  const [cloneResponsibleHumanPhone, setCloneResponsibleHumanPhone] = useState("");
+  const [cloneResponsibleHumans, setCloneResponsibleHumans] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const [clonePrompt, setClonePrompt] = useState("");
   const [cloning, setCloning] = useState(false);
+  const [testingAgentId, setTestingAgentId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -133,12 +137,22 @@ export function ClientAgentsConsole() {
 
   const selectedCompany = useMemo(() => companies.find((company) => company.id === companyId) ?? null, [companies, companyId]);
   const selectedCompanySectors = useMemo(() => listSectorsForCompany(agents, companyId), [agents, companyId]);
+  const createAgentFormComplete = Boolean(
+    companyId
+      && name.trim()
+      && sectorName.trim()
+      && roleTitle.trim()
+      && prompt.trim()
+      && isResponsibleHumansDraftComplete(responsibleHumans),
+  );
 
   async function createAgent() {
     setCreating(true);
     setNotice(null);
 
     try {
+      const responsiblePayload = responsibleHumansToPayload(responsibleHumans);
+      const firstResponsible = firstResponsibleHumanPayload(responsibleHumans);
       const response = await fetch("/api/dashboard/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -147,8 +161,9 @@ export function ClientAgentsConsole() {
           sectorName,
           name,
           roleTitle,
-          responsibleHumanName,
-          responsibleHumanPhone,
+          responsibleHumans: responsiblePayload,
+          responsibleHumanName: firstResponsible.name,
+          responsibleHumanPhone: firstResponsible.phone,
           prompt,
         }),
       });
@@ -162,8 +177,7 @@ export function ClientAgentsConsole() {
       setSectorName("Atendimento WhatsApp");
       setName("");
       setRoleTitle("Agente de WhatsApp");
-      setResponsibleHumanName("");
-      setResponsibleHumanPhone("");
+      setResponsibleHumans([createResponsibleHumanDraft()]);
       setPrompt(defaultPrompt);
       setShowForm(false);
       setNotice({ tone: "success", message: "Agente criado." });
@@ -183,6 +197,8 @@ export function ClientAgentsConsole() {
     setNotice(null);
 
     try {
+      const responsiblePayload = responsibleHumansToPayload(editResponsibleHumans);
+      const firstResponsible = firstResponsibleHumanPayload(editResponsibleHumans);
       const response = await fetch("/api/dashboard/agents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -192,8 +208,9 @@ export function ClientAgentsConsole() {
           sectorName: editSectorName,
           name: editName,
           roleTitle: editRoleTitle,
-          responsibleHumanName: editResponsibleHumanName,
-          responsibleHumanPhone: editResponsibleHumanPhone,
+          responsibleHumans: responsiblePayload,
+          responsibleHumanName: firstResponsible.name,
+          responsibleHumanPhone: firstResponsible.phone,
           prompt: editPrompt,
         }),
       });
@@ -222,6 +239,8 @@ export function ClientAgentsConsole() {
     setNotice(null);
 
     try {
+      const responsiblePayload = responsibleHumansToPayload(cloneResponsibleHumans);
+      const firstResponsible = firstResponsibleHumanPayload(cloneResponsibleHumans);
       const response = await fetch("/api/dashboard/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -232,8 +251,9 @@ export function ClientAgentsConsole() {
           sectorName: cloneSectorName,
           name: cloneName,
           roleTitle: cloneRoleTitle,
-          responsibleHumanName: cloneResponsibleHumanName,
-          responsibleHumanPhone: cloneResponsibleHumanPhone,
+          responsibleHumans: responsiblePayload,
+          responsibleHumanName: firstResponsible.name,
+          responsibleHumanPhone: firstResponsible.phone,
           prompt: clonePrompt,
         }),
       });
@@ -284,14 +304,43 @@ export function ClientAgentsConsole() {
     }
   }
 
+  async function testResponsibleHumans(agent: ClientAgent, drafts?: ResponsibleHumanDraft[]) {
+    setTestingAgentId(agent.id);
+    setNotice(null);
+
+    try {
+      const responsiblePayload = drafts ? responsibleHumansToPayload(drafts) : [];
+      const response = await fetch("/api/dashboard/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_handoff_test",
+          companyId: agent.companyId,
+          agentId: agent.id,
+          ...(responsiblePayload.length > 0 ? { responsibleHumans: responsiblePayload } : {}),
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { notice?: Notice; error?: string } | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Nao foi possivel testar os responsaveis.");
+      }
+
+      setNotice(data.notice ?? { tone: "success", message: "Aviso de teste enviado aos responsaveis." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao testar responsaveis." });
+    } finally {
+      setTestingAgentId(null);
+    }
+  }
+
   function openAgentEditor(agent: ClientAgent) {
     setEditingAgentId(agent.id);
     setEditCompanyId(agent.companyId);
     setEditSectorName(agent.sectorName);
     setEditName(agent.name);
     setEditRoleTitle(agent.roleTitle);
-    setEditResponsibleHumanName(agent.responsibleHuman.name);
-    setEditResponsibleHumanPhone(agent.responsibleHuman.phone);
+    setEditResponsibleHumans(toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : [agent.responsibleHuman]));
     setEditPrompt(agent.prompt);
     setCloneSourceAgentId(null);
     setConfirmDeleteId(null);
@@ -304,8 +353,7 @@ export function ClientAgentsConsole() {
     setEditSectorName("");
     setEditName("");
     setEditRoleTitle("");
-    setEditResponsibleHumanName("");
-    setEditResponsibleHumanPhone("");
+    setEditResponsibleHumans([createResponsibleHumanDraft()]);
     setEditPrompt("");
   }
 
@@ -315,8 +363,7 @@ export function ClientAgentsConsole() {
     setCloneSectorName(agent.sectorName);
     setCloneName(`Copia de ${agent.name}`);
     setCloneRoleTitle(agent.roleTitle);
-    setCloneResponsibleHumanName(agent.responsibleHuman.name);
-    setCloneResponsibleHumanPhone(agent.responsibleHuman.phone);
+    setCloneResponsibleHumans(toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : [agent.responsibleHuman]));
     setClonePrompt(agent.prompt);
     setEditingAgentId(null);
     setConfirmDeleteId(null);
@@ -329,8 +376,7 @@ export function ClientAgentsConsole() {
     setCloneSectorName("");
     setCloneName("");
     setCloneRoleTitle("");
-    setCloneResponsibleHumanName("");
-    setCloneResponsibleHumanPhone("");
+    setCloneResponsibleHumans([createResponsibleHumanDraft()]);
     setClonePrompt("");
   }
 
@@ -415,26 +461,11 @@ export function ClientAgentsConsole() {
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <label className="block">
-                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
-                  <input
-                    value={responsibleHumanName}
-                    onChange={(event) => setResponsibleHumanName(event.target.value)}
-                    placeholder="Ex: Leo do BuffaloMass"
-                    className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
-                  <input
-                    value={responsibleHumanPhone}
-                    onChange={(event) => setResponsibleHumanPhone(event.target.value)}
-                    placeholder="Ex: 5599999999999"
-                    className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  />
-                </label>
-              </div>
+              <AgentResponsiblesEditor
+                drafts={responsibleHumans}
+                disabled={creating}
+                onChange={setResponsibleHumans}
+              />
 
               {selectedCompany ? (
                 <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -469,7 +500,7 @@ export function ClientAgentsConsole() {
                 ) : null}
                 <button
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={creating || !responsibleHumanPhone.trim()}
+                  disabled={creating || !createAgentFormComplete}
                   type="button"
                   onClick={createAgent}
                 >
@@ -505,9 +536,11 @@ export function ClientAgentsConsole() {
                     agent={agent}
                     confirmDelete={confirmDeleteId === agent.id}
                     deleting={deletingId === agent.id}
+                    testing={testingAgentId === agent.id}
                     onClone={() => openCloneForm(agent)}
                     onDelete={() => deleteAgent(agent)}
                     onEdit={() => openAgentEditor(agent)}
+                    onTest={() => testResponsibleHumans(agent)}
                   />
                   {editingAgentId === agent.id ? (
                     <AgentMutationForm
@@ -518,20 +551,20 @@ export function ClientAgentsConsole() {
                       mode="edit"
                       name={editName}
                       prompt={editPrompt}
-                      responsibleHumanName={editResponsibleHumanName}
-                      responsibleHumanPhone={editResponsibleHumanPhone}
+                      responsibleHumans={editResponsibleHumans}
                       roleTitle={editRoleTitle}
                       sectorName={editSectorName}
                       sectors={listSectorsForCompany(agents, editCompanyId)}
+                      testing={testingAgentId === agent.id}
                       onCancel={closeAgentEditor}
                       onCompanyChange={setEditCompanyId}
                       onNameChange={setEditName}
                       onPromptChange={setEditPrompt}
-                      onResponsibleHumanNameChange={setEditResponsibleHumanName}
-                      onResponsibleHumanPhoneChange={setEditResponsibleHumanPhone}
+                      onResponsibleHumansChange={setEditResponsibleHumans}
                       onRoleTitleChange={setEditRoleTitle}
                       onSave={updateAgent}
                       onSectorNameChange={setEditSectorName}
+                      onTest={() => testResponsibleHumans(agent, editResponsibleHumans)}
                     />
                   ) : null}
                   {cloneSourceAgentId === agent.id ? (
@@ -543,8 +576,7 @@ export function ClientAgentsConsole() {
                       mode="clone"
                       name={cloneName}
                       prompt={clonePrompt}
-                      responsibleHumanName={cloneResponsibleHumanName}
-                      responsibleHumanPhone={cloneResponsibleHumanPhone}
+                      responsibleHumans={cloneResponsibleHumans}
                       roleTitle={cloneRoleTitle}
                       sectorName={cloneSectorName}
                       sectors={listSectorsForCompany(agents, cloneCompanyId)}
@@ -552,8 +584,7 @@ export function ClientAgentsConsole() {
                       onCompanyChange={setCloneCompanyId}
                       onNameChange={setCloneName}
                       onPromptChange={setClonePrompt}
-                      onResponsibleHumanNameChange={setCloneResponsibleHumanName}
-                      onResponsibleHumanPhoneChange={setCloneResponsibleHumanPhone}
+                      onResponsibleHumansChange={setCloneResponsibleHumans}
                       onRoleTitleChange={setCloneRoleTitle}
                       onSave={cloneAgent}
                       onSectorNameChange={setCloneSectorName}
@@ -633,16 +664,20 @@ function AgentCard({
   agent,
   confirmDelete,
   deleting,
+  testing,
   onClone,
   onDelete,
   onEdit,
+  onTest,
 }: {
   agent: ClientAgent;
   confirmDelete: boolean;
   deleting: boolean;
+  testing: boolean;
   onClone: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onTest: () => void;
 }) {
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -666,11 +701,20 @@ function AgentCard({
           <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Responsavel humano</p>
         </div>
         <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
-          {agent.responsibleHuman.phone ? `${agent.responsibleHuman.name || "Responsavel"} / ${agent.responsibleHuman.phone}` : "Pendente"}
+          {summarizeResponsibleHumans(agent.responsibleHumans, agent.responsibleHuman)}
         </p>
       </div>
       <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-slate-500">{agent.prompt}</p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <button
+          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={testing || deleting}
+          type="button"
+          onClick={onTest}
+        >
+          {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          Testar
+        </button>
         <button
           className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
           type="button"
@@ -714,20 +758,20 @@ function AgentMutationForm({
   mode,
   name,
   prompt,
-  responsibleHumanName,
-  responsibleHumanPhone,
+  responsibleHumans,
   roleTitle,
   sectorName,
   sectors,
+  testing = false,
   onCancel,
   onCompanyChange,
   onNameChange,
   onPromptChange,
-  onResponsibleHumanNameChange,
-  onResponsibleHumanPhoneChange,
+  onResponsibleHumansChange,
   onRoleTitleChange,
   onSave,
   onSectorNameChange,
+  onTest,
 }: {
   actionLabel: string;
   companies: ClientCompany[];
@@ -736,21 +780,30 @@ function AgentMutationForm({
   mode: "edit" | "clone";
   name: string;
   prompt: string;
-  responsibleHumanName: string;
-  responsibleHumanPhone: string;
+  responsibleHumans: ResponsibleHumanDraft[];
   roleTitle: string;
   sectorName: string;
   sectors: string[];
+  testing?: boolean;
   onCancel: () => void;
   onCompanyChange: (value: string) => void;
   onNameChange: (value: string) => void;
   onPromptChange: (value: string) => void;
-  onResponsibleHumanNameChange: (value: string) => void;
-  onResponsibleHumanPhoneChange: (value: string) => void;
+  onResponsibleHumansChange: (drafts: ResponsibleHumanDraft[]) => void;
   onRoleTitleChange: (value: string) => void;
   onSave: () => void;
   onSectorNameChange: (value: string) => void;
+  onTest?: () => void;
 }) {
+  const formComplete = Boolean(
+    companyId
+      && sectorName.trim()
+      && name.trim()
+      && roleTitle.trim()
+      && prompt.trim()
+      && isResponsibleHumansDraftComplete(responsibleHumans),
+  );
+
   return (
     <div
       className="rounded-xl border p-4"
@@ -836,25 +889,15 @@ function AgentMutationForm({
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Responsavel humano</span>
-            <input
-              value={responsibleHumanName}
-              onChange={(event) => onResponsibleHumanNameChange(event.target.value)}
-              placeholder="Ex: Gerente comercial"
-              className="h-10 w-full rounded-lg border px-3 text-[13px] outline-none"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">WhatsApp responsavel</span>
-            <input
-              value={responsibleHumanPhone}
-              onChange={(event) => onResponsibleHumanPhoneChange(event.target.value)}
-              placeholder="Ex: 5599999999999"
-              className="h-10 w-full rounded-lg border px-3 text-[13px] outline-none"
-            />
-          </label>
+          <AgentResponsiblesEditor
+            compact
+            drafts={responsibleHumans}
+            disabled={disabled}
+            testDisabled={mode !== "edit" || !isResponsibleHumansDraftComplete(responsibleHumans)}
+            testing={testing}
+            onChange={onResponsibleHumansChange}
+            onTest={mode === "edit" ? onTest : undefined}
+          />
         </div>
 
         <label className="block">
@@ -880,7 +923,7 @@ function AgentMutationForm({
         </button>
         <button
           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled || !responsibleHumanPhone.trim()}
+          disabled={disabled || !formComplete}
           type="button"
           onClick={onSave}
         >
