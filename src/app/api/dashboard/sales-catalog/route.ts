@@ -57,6 +57,9 @@ import {
   type SalesCatalogCommerceAgentSettings,
   type SalesCatalogCommerceAgentSurface,
   type SalesCatalogCommerceAgentVerticalPlaybook,
+  type SalesCatalogGeoPoint,
+  type SalesCatalogLocalDeliveryZone,
+  type SalesCatalogLocalDeliveryZoneShape,
   type SalesCatalogProductFulfillment,
   type SalesCatalogProductInventory,
   type SalesCatalogProductOffer,
@@ -1354,30 +1357,38 @@ async function saveShippingSettings(input: {
   });
   const rules = normalizeShippingRules(input.body?.rules);
   const shippingEnabled = readBoolean(input.body?.shippingEnabled) ?? false;
+  const localDeliveryEnabled = readBoolean(input.body?.localDeliveryEnabled) ?? false;
   const localPickup = readBoolean(input.body?.localPickup) ?? false;
   const originCep = normalizeSalesCatalogCep(readFormString(input.body?.originCep));
   const defaultHandlingDays = normalizeNullableInteger(input.body?.defaultHandlingDays, 0, 45);
+  const localDeliveryZones = normalizeLocalDeliveryZones(input.body?.localDeliveryZones);
   const activeRules = rules.filter((rule) => rule.active);
   const activeDeliveryRules = shippingEnabled ? activeRules : [];
+  const activeLocalDeliveryZones = localDeliveryEnabled ? localDeliveryZones.filter((zone) => zone.active) : [];
 
   assertShippingSettingsReady({
     shippingEnabled,
     activeRules,
+    localDeliveryEnabled,
+    activeLocalDeliveryZones,
   });
 
   const now = new Date().toISOString();
   const metadata = {
     configured: true,
     shipping_enabled: shippingEnabled,
+    local_delivery_enabled: localDeliveryEnabled,
     local_pickup: localPickup,
     origin_cep: originCep,
     default_handling_days: defaultHandlingDays,
     rules: rules.map(serializeShippingRule),
+    local_delivery_zones: localDeliveryZones.map(serializeLocalDeliveryZone),
     updated_by: input.userId,
     updated_from: "sales_catalog_shipping",
   };
   const content = [
     shippingEnabled ? "Frete por entrega: sim" : "Frete por entrega: nao",
+    localDeliveryEnabled ? "Entrega local: sim" : "Entrega local: nao",
     originCep ? `CEP de origem: ${originCep}` : "",
     localPickup ? "Retirada local: sim" : "Retirada local: nao",
     defaultHandlingDays !== null ? `Prazo de separacao: ${defaultHandlingDays} dia(s)` : "",
@@ -1385,6 +1396,10 @@ async function saveShippingSettings(input: {
       ? activeDeliveryRules.length ? "Estados atendidos:" : "Nenhum estado atendido foi marcado."
       : "Frete por entrega desativado.",
     ...activeDeliveryRules.map(formatShippingRuleContent),
+    localDeliveryEnabled
+      ? activeLocalDeliveryZones.length ? "Zonas locais atendidas:" : "Nenhuma zona local ativa foi marcada."
+      : "Entrega local desativada.",
+    ...activeLocalDeliveryZones.map(formatLocalDeliveryZoneContent),
   ].filter(Boolean).join("\n");
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
@@ -1431,14 +1446,18 @@ async function saveShippingSettings(input: {
     event_type: "sales_catalog.shipping_saved",
     title: "Entrega e frete do Catalogo de Vendas salvos",
     summary: shippingEnabled
-      ? `${activeDeliveryRules.length} estado(s) atendido(s) configurado(s).`
-      : "Frete por entrega desativado.",
+      ? `${activeDeliveryRules.length} estado(s) e ${activeLocalDeliveryZones.length} zona(s) local(is) configurados.`
+      : localDeliveryEnabled
+        ? `${activeLocalDeliveryZones.length} zona(s) local(is) configuradas.`
+        : "Frete por entrega desativado.",
     confidence: 1,
     visibility: "organization",
     tags: ["sales_catalog", "sales_catalog_shipping", "whatsapp_agent"],
     payload: {
       shipping_enabled: shippingEnabled,
       active_states_count: activeDeliveryRules.length,
+      local_delivery_enabled: localDeliveryEnabled,
+      local_delivery_zones_count: activeLocalDeliveryZones.length,
       local_pickup: localPickup,
       origin_cep: originCep,
       default_handling_days: defaultHandlingDays,
@@ -1531,17 +1550,15 @@ async function calculateShippingQuote(input: {
 function assertShippingSettingsReady(input: {
   shippingEnabled: boolean;
   activeRules: SalesCatalogShippingRule[];
+  localDeliveryEnabled: boolean;
+  activeLocalDeliveryZones: SalesCatalogLocalDeliveryZone[];
 }) {
-  if (!input.shippingEnabled) {
-    return;
-  }
-
-  if (input.activeRules.length === 0) {
+  if (input.shippingEnabled && input.activeRules.length === 0) {
     throw new Error("Marque ao menos um estado como Entrego ou desative o frete por entrega.");
   }
 
   const incompleteStates = input.activeRules
-    .filter((rule) => (
+    .filter((rule) => input.shippingEnabled && (
       !hasShippingMoneyValue(rule.price)
       || rule.minDays === null
       || rule.maxDays === null
@@ -1553,11 +1570,45 @@ function assertShippingSettingsReady(input: {
   }
 
   const partialCepStates = input.activeRules
-    .filter((rule) => Boolean(rule.cepStart) !== Boolean(rule.cepEnd))
+    .filter((rule) => input.shippingEnabled && Boolean(rule.cepStart) !== Boolean(rule.cepEnd))
     .map((rule) => rule.uf);
 
   if (partialCepStates.length > 0) {
     throw new Error(`Preencha CEP inicial e CEP final juntos, ou deixe os dois vazios para atender o estado inteiro: ${partialCepStates.join(", ")}.`);
+  }
+
+  if (!input.localDeliveryEnabled) {
+    return;
+  }
+
+  if (input.activeLocalDeliveryZones.length === 0) {
+    throw new Error("Crie ao menos uma zona local ativa ou desative a entrega local.");
+  }
+
+  const incompleteZones = input.activeLocalDeliveryZones
+    .filter((zone) => !hasShippingMoneyValue(zone.price) || zone.minDays === null || zone.maxDays === null)
+    .map((zone) => zone.name);
+
+  if (incompleteZones.length > 0) {
+    throw new Error(`Complete valor, prazo minimo e prazo maximo das zonas locais: ${incompleteZones.join(", ")}.`);
+  }
+
+  const invalidZones = input.activeLocalDeliveryZones
+    .filter((zone) => {
+      if (zone.shape === "radius") {
+        return !isValidGeoPoint(zone.baseLatitude, zone.baseLongitude) || zone.radiusKm === null || zone.radiusKm <= 0;
+      }
+
+      if (zone.shape === "neighborhoods") {
+        return zone.neighborhoods.length === 0 && zone.cities.length === 0;
+      }
+
+      return zone.polygon.length < 3;
+    })
+    .map((zone) => zone.name);
+
+  if (invalidZones.length > 0) {
+    throw new Error(`Complete a area atendida das zonas locais: ${invalidZones.join(", ")}.`);
   }
 }
 
@@ -4701,6 +4752,165 @@ function formatShippingRuleContent(rule: SalesCatalogShippingRule) {
   return `- ${rule.uf} (${rule.state}): ${parts.join(", ") || "atendido"}`;
 }
 
+function normalizeLocalDeliveryZones(value: unknown): SalesCatalogLocalDeliveryZone[] {
+  const source = Array.isArray(value) ? value : [];
+  const zones: SalesCatalogLocalDeliveryZone[] = [];
+
+  for (const item of source) {
+    const record = readRecord(item);
+    if (!record) continue;
+
+    const shape = normalizeLocalDeliveryZoneShape(readFormString(record.shape));
+    const minDays = normalizeNullableInteger(record.minDays ?? record.min_days, 0, 120);
+    const rawMaxDays = normalizeNullableInteger(record.maxDays ?? record.max_days, 0, 120);
+    const maxDays = minDays !== null && rawMaxDays !== null && rawMaxDays < minDays ? minDays : rawMaxDays;
+
+    zones.push({
+      id: normalizeOptionalText(readFormString(record.id), 80) ?? randomUUID(),
+      name: normalizeOptionalText(readFormString(record.name), 80) ?? `Zona local ${zones.length + 1}`,
+      active: readBoolean(record.active) ?? false,
+      shape,
+      baseAddress: normalizeOptionalText(readFormString(record.baseAddress ?? record.base_address), 220),
+      baseLatitude: normalizeNullableCoordinate(record.baseLatitude ?? record.base_latitude, -90, 90),
+      baseLongitude: normalizeNullableCoordinate(record.baseLongitude ?? record.base_longitude, -180, 180),
+      radiusKm: normalizeNullableDecimal(record.radiusKm ?? record.radius_km, 0.1, 200),
+      polygon: normalizeGeoPoints(record.polygon),
+      neighborhoods: readTextList(record.neighborhoods, 80),
+      cities: readTextList(record.cities, 80),
+      price: normalizeOptionalText(readFormString(record.price), 40),
+      minDays,
+      maxDays,
+      freeDeliveryThreshold: normalizeOptionalText(readFormString(record.freeDeliveryThreshold ?? record.free_delivery_threshold), 40),
+      orderMinimum: normalizeOptionalText(readFormString(record.orderMinimum ?? record.order_minimum), 40),
+      notes: normalizeOptionalText(readFormString(record.notes), 220),
+    });
+
+    if (zones.length >= 40) break;
+  }
+
+  return zones;
+}
+
+function serializeLocalDeliveryZone(zone: SalesCatalogLocalDeliveryZone) {
+  return {
+    id: zone.id,
+    name: zone.name,
+    active: zone.active,
+    shape: zone.shape,
+    base_address: zone.baseAddress,
+    base_latitude: zone.baseLatitude,
+    base_longitude: zone.baseLongitude,
+    radius_km: zone.radiusKm,
+    polygon: zone.polygon.map((point) => ({ lat: point.lat, lng: point.lng })),
+    neighborhoods: zone.neighborhoods,
+    cities: zone.cities,
+    price: zone.price,
+    min_days: zone.minDays,
+    max_days: zone.maxDays,
+    free_delivery_threshold: zone.freeDeliveryThreshold,
+    order_minimum: zone.orderMinimum,
+    notes: zone.notes,
+  };
+}
+
+function formatLocalDeliveryZoneContent(zone: SalesCatalogLocalDeliveryZone) {
+  const parts = [
+    `tipo ${formatLocalDeliveryShapeLabel(zone.shape)}`,
+    zone.price ? `taxa ${zone.price}` : "",
+    zone.minDays !== null || zone.maxDays !== null ? `prazo ${formatShippingDeadline(zone.minDays, zone.maxDays)}` : "",
+    zone.orderMinimum ? `pedido minimo ${zone.orderMinimum}` : "",
+    zone.freeDeliveryThreshold ? `gratis acima de ${zone.freeDeliveryThreshold}` : "",
+    formatLocalDeliveryScope(zone),
+    zone.notes ? `observacao ${zone.notes}` : "",
+  ].filter(Boolean);
+
+  return `- ${zone.name}: ${parts.join(", ")}`;
+}
+
+function formatLocalDeliveryScope(zone: SalesCatalogLocalDeliveryZone) {
+  if (zone.shape === "neighborhoods") {
+    const neighborhoods = zone.neighborhoods.length ? `bairros ${zone.neighborhoods.join(", ")}` : "";
+    const cities = zone.cities.length ? `cidades ${zone.cities.join(", ")}` : "";
+    return [neighborhoods, cities].filter(Boolean).join("; ") || "bairros/cidades pendentes";
+  }
+
+  if (zone.shape === "polygon") {
+    return zone.polygon.length >= 3 ? `${zone.polygon.length} pontos desenhados no mapa` : "area no mapa pendente";
+  }
+
+  const base = zone.baseAddress || (isValidGeoPoint(zone.baseLatitude, zone.baseLongitude)
+    ? `${zone.baseLatitude}, ${zone.baseLongitude}`
+    : "base pendente");
+
+  return zone.radiusKm ? `ate ${zone.radiusKm} km de ${base}` : `raio pendente de ${base}`;
+}
+
+function formatLocalDeliveryShapeLabel(shape: SalesCatalogLocalDeliveryZoneShape) {
+  if (shape === "neighborhoods") return "bairros";
+  if (shape === "polygon") return "mapa";
+  return "raio";
+}
+
+function normalizeLocalDeliveryZoneShape(value: string | null): SalesCatalogLocalDeliveryZoneShape {
+  if (value === "neighborhoods" || value === "polygon") return value;
+  return "radius";
+}
+
+function normalizeGeoPoints(value: unknown): SalesCatalogGeoPoint[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .slice(0, 80)
+    .map((item): SalesCatalogGeoPoint | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const lat = normalizeNullableCoordinate(record.lat ?? record.latitude, -90, 90);
+      const lng = normalizeNullableCoordinate(record.lng ?? record.longitude, -180, 180);
+
+      return toValidGeoPoint(lat, lng);
+    })
+    .filter((point): point is SalesCatalogGeoPoint => Boolean(point));
+}
+
+function readTextList(value: unknown, maxLength: number) {
+  const source = typeof value === "string"
+    ? value.split(/[\n,;]/g)
+    : Array.isArray(value)
+      ? value.map((item) => readFormString(item))
+      : [];
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const item of source) {
+    const text = normalizeOptionalText(readFormString(item), maxLength);
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    output.push(text);
+  }
+
+  return output;
+}
+
+function isValidGeoPoint(lat: number | null, lng: number | null) {
+  return toValidGeoPoint(lat, lng) !== null;
+}
+
+function toValidGeoPoint(lat: number | null, lng: number | null): SalesCatalogGeoPoint | null {
+  return typeof lat === "number"
+    && Number.isFinite(lat)
+    && Math.abs(lat) <= 90
+    && typeof lng === "number"
+    && Number.isFinite(lng)
+    && Math.abs(lng) <= 180
+      ? { lat, lng }
+      : null;
+}
+
 function normalizeShippingServices(value: unknown, fallback: SalesCatalogShippingService[]): SalesCatalogShippingService[] {
   const source = Array.isArray(value) ? value : [];
   const servicesById = new Map((fallback.length > 0 ? fallback : createDefaultSalesCatalogShippingServices()).map((service) => [service.id, cloneShippingService(service)]));
@@ -5021,6 +5231,13 @@ function normalizeNullableDecimal(value: unknown, min: number, max: number) {
   if (number === null || number < min || number > max) return null;
 
   return Math.round(number * 100) / 100;
+}
+
+function normalizeNullableCoordinate(value: unknown, min: number, max: number) {
+  const number = normalizeNumber(value);
+  if (number === null || number < min || number > max) return null;
+
+  return Math.round(number * 1_000_000) / 1_000_000;
 }
 
 function normalizeNumber(value: unknown) {

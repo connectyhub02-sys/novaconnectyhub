@@ -439,6 +439,45 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     ],
   },
   {
+    id: "google-maps",
+    name: "Google Maps / Entrega local",
+    sector: "Mapa, geocoding e entrega local",
+    owner: "Setor de Catalogo e Logistica",
+    description:
+      "Credenciais para mostrar mapa, desenhar zonas de entrega local, autocompletar endereco e validar distancia/regiao atendida.",
+    tone: "cyan",
+    modules: ["Maps JavaScript API", "Places API", "Geocoding API", "Routes API", "Address Validation"],
+    fields: [
+      {
+        label: "Browser API Key",
+        env: "GOOGLE_MAPS_BROWSER_API_KEY",
+        aliases: ["NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"],
+        kind: "public",
+        requirement: "required",
+        section: "Mapa no painel",
+        help: "Chave publica usada no navegador para renderizar o mapa e permitir desenho de zonas. Restrinja por HTTP referrer: connectyhub.com.br, www.connectyhub.com.br e ambiente local.",
+      },
+      {
+        label: "Server API Key",
+        env: "GOOGLE_MAPS_SERVER_API_KEY",
+        aliases: ["GOOGLE_MAPS_API_KEY"],
+        kind: "secret",
+        requirement: "recommended",
+        section: "Validacao servidor",
+        help: "Chave privada usada pelo servidor para Geocoding, Routes e Address Validation. Restrinja por API e, quando possivel, por IP/ambiente de servidor.",
+      },
+      {
+        label: "Map ID",
+        env: "GOOGLE_MAPS_MAP_ID",
+        aliases: ["NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID"],
+        kind: "identifier",
+        requirement: "optional",
+        section: "Mapa no painel",
+        help: "Opcional. ID de estilo do Google Maps para padronizar visual do mapa da ConnectyHub.",
+      },
+    ],
+  },
+  {
     id: "supabase",
     name: "Supabase / Banco e Auth",
     sector: "Dados, usuarios e auditoria",
@@ -920,6 +959,7 @@ function sortMaintenanceIntegrations(integrations: IntegrationSnapshot[]) {
   const priority = new Map([
     ["meta", 0],
     ["google-ads", 1],
+    ["google-maps", 2],
   ]);
 
   return [...integrations].sort((left, right) => {

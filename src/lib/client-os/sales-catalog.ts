@@ -50,7 +50,10 @@ import {
   type SalesCatalogReservationPolicy,
   type SalesCatalogMedia,
   type SalesCatalogFulfillmentMode,
+  type SalesCatalogGeoPoint,
   type SalesCatalogOrderStatus,
+  type SalesCatalogLocalDeliveryZone,
+  type SalesCatalogLocalDeliveryZoneShape,
   type SalesCatalogCommercialFlowType,
   type SalesCatalogProductOriginType,
   type SalesCatalogRevenueOwnerType,
@@ -1053,16 +1056,21 @@ export function mapSalesCatalogShippingSettings(row: SalesCatalogMemoryRow): Cli
   const rules = readShippingRules(metadata.rules);
   const shippingEnabled = readNullableBoolean(metadata.shipping_enabled ?? metadata.shippingEnabled)
     ?? rules.some((rule) => rule.active);
+  const localDeliveryZones = readLocalDeliveryZones(metadata.local_delivery_zones ?? metadata.localDeliveryZones);
+  const localDeliveryEnabled = readNullableBoolean(metadata.local_delivery_enabled ?? metadata.localDeliveryEnabled)
+    ?? localDeliveryZones.some((zone) => zone.active);
 
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
     configured: readBoolean(metadata.configured),
     shippingEnabled,
+    localDeliveryEnabled,
     localPickup: readBoolean(metadata.local_pickup),
     originCep: readString(metadata.origin_cep),
     defaultHandlingDays: readNumber(metadata.default_handling_days),
     rules,
+    localDeliveryZones,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1465,6 +1473,67 @@ function readShippingRules(value: unknown): SalesCatalogShippingRule[] {
   }
 
   return defaultSalesCatalogShippingRules.map((rule) => rulesByUf.get(rule.uf) ?? cloneShippingRule(rule));
+}
+
+function readLocalDeliveryZones(value: unknown): SalesCatalogLocalDeliveryZone[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .slice(0, 40)
+    .map((item, index): SalesCatalogLocalDeliveryZone | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const name = readString(record.name) ?? `Zona local ${index + 1}`;
+      const shape = normalizeLocalDeliveryZoneShape(readString(record.shape));
+      const minDays = readNumber(record.min_days) ?? readNumber(record.minDays);
+      const rawMaxDays = readNumber(record.max_days) ?? readNumber(record.maxDays);
+
+      return {
+        id: readString(record.id) ?? `local_zone_${index + 1}`,
+        name,
+        active: readNullableBoolean(record.active) ?? true,
+        shape,
+        baseAddress: readString(record.base_address) ?? readString(record.baseAddress),
+        baseLatitude: readNumber(record.base_latitude) ?? readNumber(record.baseLatitude),
+        baseLongitude: readNumber(record.base_longitude) ?? readNumber(record.baseLongitude),
+        radiusKm: readNumber(record.radius_km) ?? readNumber(record.radiusKm),
+        polygon: readGeoPoints(record.polygon),
+        neighborhoods: readTextList(record.neighborhoods),
+        cities: readTextList(record.cities),
+        price: readString(record.price),
+        minDays,
+        maxDays: minDays !== null && rawMaxDays !== null && rawMaxDays < minDays ? minDays : rawMaxDays,
+        freeDeliveryThreshold: readString(record.free_delivery_threshold) ?? readString(record.freeDeliveryThreshold),
+        orderMinimum: readString(record.order_minimum) ?? readString(record.orderMinimum),
+        notes: readString(record.notes),
+      };
+    })
+    .filter((item): item is SalesCatalogLocalDeliveryZone => Boolean(item));
+}
+
+function normalizeLocalDeliveryZoneShape(value: string | null): SalesCatalogLocalDeliveryZoneShape {
+  if (value === "neighborhoods" || value === "polygon") return value;
+  return "radius";
+}
+
+function readGeoPoints(value: unknown): SalesCatalogGeoPoint[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .slice(0, 80)
+    .map((item): SalesCatalogGeoPoint | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const lat = readNumber(record.lat) ?? readNumber(record.latitude);
+      const lng = readNumber(record.lng) ?? readNumber(record.longitude);
+
+      return lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+        ? { lat, lng }
+        : null;
+    })
+    .filter((item): item is SalesCatalogGeoPoint => Boolean(item));
 }
 
 function cloneShippingRule(rule: SalesCatalogShippingRule): SalesCatalogShippingRule {
@@ -2126,6 +2195,16 @@ function readStringList(value: unknown, fallback: string[]) {
     .filter((item): item is string => Boolean(item));
 
   return Array.from(new Set(values));
+}
+
+function readTextList(value: unknown) {
+  if (typeof value === "string") {
+    return uniqueStrings(value.split(/[\n,;]/g).map((item) => item.replace(/\s+/g, " ").trim().slice(0, 80)));
+  }
+
+  return Array.isArray(value)
+    ? uniqueStrings(value.map((item) => readString(item)?.slice(0, 80) ?? null))
+    : [];
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

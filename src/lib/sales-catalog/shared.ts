@@ -647,15 +647,44 @@ export type SalesCatalogShippingRule = {
   notes: string | null;
 };
 
+export type SalesCatalogGeoPoint = {
+  lat: number;
+  lng: number;
+};
+
+export type SalesCatalogLocalDeliveryZoneShape = "radius" | "neighborhoods" | "polygon";
+
+export type SalesCatalogLocalDeliveryZone = {
+  id: string;
+  name: string;
+  active: boolean;
+  shape: SalesCatalogLocalDeliveryZoneShape;
+  baseAddress: string | null;
+  baseLatitude: number | null;
+  baseLongitude: number | null;
+  radiusKm: number | null;
+  polygon: SalesCatalogGeoPoint[];
+  neighborhoods: string[];
+  cities: string[];
+  price: string | null;
+  minDays: number | null;
+  maxDays: number | null;
+  freeDeliveryThreshold: string | null;
+  orderMinimum: string | null;
+  notes: string | null;
+};
+
 export type ClientSalesCatalogShippingSettings = {
   id: string;
   companyId: string;
   configured: boolean;
   shippingEnabled: boolean;
+  localDeliveryEnabled: boolean;
   localPickup: boolean;
   originCep: string | null;
   defaultHandlingDays: number | null;
   rules: SalesCatalogShippingRule[];
+  localDeliveryZones: SalesCatalogLocalDeliveryZone[];
   createdAt: string | null;
   updatedAt: string | null;
 };

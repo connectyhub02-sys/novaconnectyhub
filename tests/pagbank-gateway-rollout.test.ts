@@ -27,6 +27,8 @@ const platformBillingAdminSource = read("src/lib/billing/platform-billing-admin.
 const dashboardSalesCatalogSource = read("src/app/api/dashboard/sales-catalog/route.ts");
 const salesCatalogConsoleSource = read("src/components/connectyhub-os/sales-catalog-console.tsx");
 const salesCatalogSharedSource = read("src/lib/sales-catalog/shared.ts");
+const googleMapsCredentialsSource = read("src/lib/google-maps/credentials.ts");
+const googleMapsConfigRouteSource = read("src/app/api/dashboard/sales-catalog/maps/config/route.ts");
 const commerceAgentSource = read("src/lib/commerce-agent/server.ts");
 const whatsappAgentRuntimeSource = read("src/lib/whatsapp/agent-runtime.ts");
 const whatsappConsoleSource = read("src/components/connectyhub-os/whatsapp-console.tsx");
@@ -267,6 +269,28 @@ describe("PagBank gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("Nao ofereca retirada local");
     expect(whatsappAgentRuntimeSource).toContain("const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled)");
     expect(whatsappAgentRuntimeSource).toContain("const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup)");
+  });
+
+  it("adds Google Maps powered local delivery zones for client catalog agents", () => {
+    expect(salesCatalogSharedSource).toContain("SalesCatalogLocalDeliveryZone");
+    expect(salesCatalogSharedSource).toContain("localDeliveryEnabled: boolean");
+    expect(maintenanceVaultSource).toContain("id: \"google-maps\"");
+    expect(maintenanceVaultSource).toContain("GOOGLE_MAPS_BROWSER_API_KEY");
+    expect(maintenanceVaultSource).toContain("GOOGLE_MAPS_SERVER_API_KEY");
+    expect(envExampleSource).toContain("GOOGLE_MAPS_BROWSER_API_KEY=");
+    expect(envExampleSource).toContain("GOOGLE_MAPS_SERVER_API_KEY=");
+    expect(googleMapsCredentialsSource).toContain("loadGoogleMapsCredentials");
+    expect(googleMapsConfigRouteSource).toContain("browserApiKey");
+    expect(googleMapsConfigRouteSource).toContain("serverConfigured");
+    expect(dashboardSalesCatalogSource).toContain("local_delivery_enabled: localDeliveryEnabled");
+    expect(dashboardSalesCatalogSource).toContain("normalizeLocalDeliveryZones");
+    expect(dashboardSalesCatalogSource).toContain("Complete a area atendida das zonas locais");
+    expect(salesCatalogConsoleSource).toContain("Entrega local por area");
+    expect(salesCatalogConsoleSource).toContain("LocalDeliveryMapEditor");
+    expect(salesCatalogConsoleSource).toContain("GOOGLE_MAPS_BROWSER_API_KEY");
+    expect(whatsappAgentRuntimeSource).toContain("maybeAttachSalesCatalogLocalDeliveryToOrder");
+    expect(whatsappAgentRuntimeSource).toContain("`- Entrega local: ${settings.localDeliveryEnabled");
+    expect(whatsappAgentRuntimeSource).toContain("zonas locais ativas");
   });
 
   it("adds a configurable WhatsApp renewal policy for ConnectyHub billing", () => {

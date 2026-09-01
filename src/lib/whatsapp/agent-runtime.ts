@@ -271,6 +271,13 @@ type RuntimeSalesCatalogShippingQuote = {
   error: string | null;
 };
 
+type RuntimeLocalDeliveryMatch = {
+  zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number];
+  source: "coordinates" | "text";
+  coordinates: { lat: number; lng: number } | null;
+  destinationAddress: string | null;
+};
+
 type InteractiveLinkMatch = {
   link: RuntimeLinkButton;
   trackingUrl: string;
@@ -661,6 +668,17 @@ export async function processWhatsappAgentRun(input: {
 
     if (refreshedSalesCatalogOrdersWithShipping) {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithShipping;
+    }
+
+    const refreshedSalesCatalogOrdersWithLocalDelivery = await maybeAttachSalesCatalogLocalDeliveryToOrder({
+      client,
+      context,
+      latestInbound,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithLocalDelivery) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithLocalDelivery;
     }
 
     const refreshedSalesCatalogOrdersWithPickup = await maybeAttachSalesCatalogPickupToOrder({
@@ -1774,6 +1792,122 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   });
 }
 
+async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  if (!shippingSettings?.configured || !shippingSettings.localDeliveryEnabled) return null;
+
+  const activeZones = shippingSettings.localDeliveryZones.filter((zone) => zone.active);
+  if (activeZones.length === 0) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+  ));
+
+  if (!order) return null;
+
+  const match = resolveRuntimeLocalDeliveryMatch({
+    latestInbound: input.latestInbound,
+    text: input.userText,
+    zones: activeZones,
+  });
+
+  if (!match || !match.zone.price) return null;
+
+  const now = new Date().toISOString();
+  const shippingMethod = `Entrega local - ${match.zone.name}`;
+  const deadline = formatLocalDeliveryZoneRuntimeDeadline(match.zone.minDays, match.zone.maxDays);
+  const destinationAddress = match.destinationAddress ?? order.destinationAddress ?? null;
+  const note = [
+    `Entrega local confirmada automaticamente em ${formatRuntimeDate(now)}.`,
+    `Zona: ${match.zone.name}.`,
+    `Taxa: ${match.zone.price}.`,
+    deadline ? `Prazo ${deadline}.` : "",
+    match.source === "coordinates" && match.coordinates
+      ? `Coordenadas ${match.coordinates.lat}, ${match.coordinates.lng}.`
+      : "",
+    destinationAddress ? `Endereco/local: ${destinationAddress}.` : "",
+  ].filter(Boolean).join(" ");
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const updatedTotal = calculateRuntimeOrderTotalWithShipping(order, match.zone.price);
+  const { data: current } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(current?.metadata) ?? {};
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      destination_address: destinationAddress,
+      shipping_total: match.zone.price,
+      shipping_method: shippingMethod,
+      total: updatedTotal ?? order.total,
+      internal_notes: internalNotes,
+      metadata: {
+        ...metadata,
+        local_delivery_confirmed_at: now,
+        local_delivery_confirmed_from: "whatsapp_agent_runtime",
+        shipping_quote: {
+          service_name: shippingMethod,
+          provider: "local_delivery",
+          price: match.zone.price,
+          min_days: match.zone.minDays,
+          max_days: match.zone.maxDays,
+          source: match.source,
+          coordinates: match.coordinates,
+          zone_id: match.zone.id,
+          zone_name: match.zone.name,
+          notes: match.zone.notes,
+        },
+      },
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.local_delivery_saved",
+    title: "Entrega local confirmada pelo WhatsApp",
+    summary: `${shippingMethod}: ${match.zone.price}.`,
+    confidence: match.source === "coordinates" ? 0.88 : 0.76,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "shipping", "local_delivery", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      shipping_method: shippingMethod,
+      shipping_total: match.zone.price,
+      source: match.source,
+      coordinates: match.coordinates,
+      zone_id: match.zone.id,
+      zone_name: match.zone.name,
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
 async function maybeAttachSalesCatalogPickupToOrder(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -1884,6 +2018,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   if (shippingSettings?.configured && shippingSettings.localPickup && hasSalesCatalogPickupSignal(input.intentText)) {
     return {
       destinationCep: null,
+      destinationAddress: null,
       shippingTotal: "0,00",
       shippingMethod: "Retirada na loja",
       metadata: {
@@ -1891,6 +2026,39 @@ function resolveInitialSalesCatalogOrderShipping(input: {
         mode: "pickup",
         service_name: "Retirada na loja",
         price: "0,00",
+      },
+    };
+  }
+
+  const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
+    latestInbound: null,
+    text: input.intentText,
+    zones: shippingSettings?.configured && shippingSettings.localDeliveryEnabled
+      ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
+      : [],
+  });
+
+  if (localDeliveryMatch?.zone.price) {
+    const shippingMethod = `Entrega local - ${localDeliveryMatch.zone.name}`;
+
+    return {
+      destinationCep: null,
+      destinationAddress: localDeliveryMatch.destinationAddress,
+      shippingTotal: localDeliveryMatch.zone.price,
+      shippingMethod,
+      metadata: {
+        source: "whatsapp_agent_runtime",
+        mode: "local_delivery",
+        service_name: shippingMethod,
+        provider: "local_delivery",
+        price: localDeliveryMatch.zone.price,
+        min_days: localDeliveryMatch.zone.minDays,
+        max_days: localDeliveryMatch.zone.maxDays,
+        match_source: localDeliveryMatch.source,
+        coordinates: localDeliveryMatch.coordinates,
+        zone_id: localDeliveryMatch.zone.id,
+        zone_name: localDeliveryMatch.zone.name,
+        notes: localDeliveryMatch.zone.notes,
       },
     };
   }
@@ -1913,6 +2081,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
 
   return {
     destinationCep: cep,
+    destinationAddress: null,
     shippingTotal: quote.price,
     shippingMethod: quote.serviceName,
     metadata: {
@@ -1931,6 +2100,172 @@ function resolveInitialSalesCatalogOrderShipping(input: {
       notes: quote.notes,
     },
   };
+}
+
+function resolveRuntimeLocalDeliveryMatch(input: {
+  latestInbound: ConversationMessageRow | null;
+  text: string;
+  zones: ClientSalesCatalogShippingSettings["localDeliveryZones"];
+}): RuntimeLocalDeliveryMatch | null {
+  if (input.zones.length === 0) return null;
+
+  const coordinates = extractRuntimeCoordinates(input.latestInbound, input.text);
+  const destinationAddress = extractRuntimeAddress(input.latestInbound, input.text);
+
+  if (coordinates) {
+    const coordinateMatch = input.zones.find((zone) => runtimeLocalDeliveryZoneContainsPoint(zone, coordinates));
+
+    if (coordinateMatch) {
+      return {
+        zone: coordinateMatch,
+        source: "coordinates",
+        coordinates,
+        destinationAddress,
+      };
+    }
+  }
+
+  const normalizedText = normalizeSearch([destinationAddress, input.text].filter(Boolean).join(" "));
+  if (!normalizedText) return null;
+
+  const textMatch = input.zones.find((zone) => runtimeLocalDeliveryZoneMatchesText(zone, normalizedText));
+  if (!textMatch) return null;
+
+  return {
+    zone: textMatch,
+    source: "text",
+    coordinates,
+    destinationAddress,
+  };
+}
+
+function runtimeLocalDeliveryZoneContainsPoint(
+  zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number],
+  point: { lat: number; lng: number },
+) {
+  if (zone.shape === "radius") {
+    const basePoint = toRuntimeCoordinatePoint(zone.baseLatitude, zone.baseLongitude);
+
+    return zone.radiusKm !== null
+      && zone.radiusKm > 0
+      && basePoint !== null
+      && calculateRuntimeDistanceKm(point, basePoint) <= zone.radiusKm;
+  }
+
+  if (zone.shape === "polygon") {
+    return zone.polygon.length >= 3 && isRuntimePointInsidePolygon(point, zone.polygon);
+  }
+
+  return false;
+}
+
+function runtimeLocalDeliveryZoneMatchesText(
+  zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number],
+  normalizedText: string,
+) {
+  const places = zone.shape === "neighborhoods"
+    ? [zone.name, ...zone.neighborhoods, ...zone.cities]
+    : [zone.name];
+  return places.some((place) => {
+    const normalizedPlace = normalizeSearch(place);
+    return normalizedPlace.length >= 3 && normalizedText.includes(normalizedPlace);
+  });
+}
+
+function extractRuntimeCoordinates(latestInbound: ConversationMessageRow | null, text: string) {
+  const payload = latestInbound?.payload ?? null;
+  const payloadLat = findCoordinateValue(payload, ["latitude", "lat"]);
+  const payloadLng = findCoordinateValue(payload, ["longitude", "lng", "lon"]);
+
+  const payloadPoint = toRuntimeCoordinatePoint(payloadLat, payloadLng);
+  if (payloadPoint) {
+    return payloadPoint;
+  }
+
+  const textMatch = text.match(/(-?\d{1,2}(?:[.,]\d{3,})?)\s*,\s*(-?\d{1,3}(?:[.,]\d{3,})?)/);
+  if (!textMatch) return null;
+
+  const lat = Number(textMatch[1].replace(",", "."));
+  const lng = Number(textMatch[2].replace(",", "."));
+
+  return toRuntimeCoordinatePoint(lat, lng);
+}
+
+function extractRuntimeAddress(latestInbound: ConversationMessageRow | null, text: string) {
+  const payloadAddress = findString(latestInbound?.payload, ["address", "endereco", "formattedAddress", "formatted_address"]);
+
+  return payloadAddress ?? (hasRuntimeAddressText(text) ? preview(text, 260) : null);
+}
+
+function hasRuntimeAddressText(text: string) {
+  const normalized = normalizeSearch(text);
+  return /\b(rua|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia)\b/.test(normalized);
+}
+
+function findCoordinateValue(value: unknown, keys: string[]) {
+  const lowerKeys = new Set(keys.map((key) => key.toLowerCase()));
+  const found = findValue(value, (key, item) => {
+    if (!lowerKeys.has(key.toLowerCase())) return false;
+    if (typeof item === "number") return Number.isFinite(item);
+    if (typeof item === "string") return Number.isFinite(Number(item.replace(",", ".")));
+    return false;
+  });
+
+  if (typeof found === "number") return found;
+  if (typeof found === "string") {
+    const parsed = Number(found.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function toRuntimeCoordinatePoint(lat: number | null | undefined, lng: number | null | undefined) {
+  return typeof lat === "number"
+    && Number.isFinite(lat)
+    && Math.abs(lat) <= 90
+    && typeof lng === "number"
+    && Number.isFinite(lng)
+    && Math.abs(lng) <= 180
+      ? { lat, lng }
+      : null;
+}
+
+function calculateRuntimeDistanceKm(
+  left: { lat: number; lng: number },
+  right: { lat: number; lng: number },
+) {
+  const earthRadiusKm = 6371;
+  const latDistance = toRadians(right.lat - left.lat);
+  const lngDistance = toRadians(right.lng - left.lng);
+  const leftLat = toRadians(left.lat);
+  const rightLat = toRadians(right.lat);
+  const halfChord = Math.sin(latDistance / 2) ** 2
+    + Math.cos(leftLat) * Math.cos(rightLat) * Math.sin(lngDistance / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(halfChord));
+}
+
+function toRadians(value: number) {
+  return value * (Math.PI / 180);
+}
+
+function isRuntimePointInsidePolygon(
+  point: { lat: number; lng: number },
+  polygon: Array<{ lat: number; lng: number }>,
+) {
+  let inside = false;
+
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const intersects = ((currentPoint.lng > point.lng) !== (previousPoint.lng > point.lng))
+      && (point.lat < ((previousPoint.lat - currentPoint.lat) * (point.lng - currentPoint.lng)) / (previousPoint.lng - currentPoint.lng) + currentPoint.lat);
+
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
 }
 
 function runtimeSalesCatalogOrderRequiresShippingBeforePayment(order: RuntimeSalesCatalogOrder) {
@@ -4080,19 +4415,30 @@ function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCata
     return "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao; como a loja ainda nao configurou isso, acione humano antes de cobrar.";
   }
 
-  if (settings.shippingEnabled && settings.localPickup) {
-    return "- Produto fisico precisa ter CEP/frete calculado ou retirada local confirmada antes de gerar Pix ou checkout de cartao.";
+  const hasLocalDelivery = settings.localDeliveryEnabled && settings.localDeliveryZones.some((zone) => zone.active);
+  const options = [
+    settings.shippingEnabled ? "CEP/frete calculado" : "",
+    hasLocalDelivery ? "entrega local dentro de zona ativa confirmada" : "",
+    settings.localPickup ? "retirada local confirmada" : "",
+  ].filter(Boolean);
+
+  if (options.length > 1) {
+    return `- Produto fisico precisa ter ${options.join(" ou ")} antes de gerar Pix ou checkout de cartao.`;
   }
 
   if (settings.shippingEnabled) {
     return "- Produto fisico precisa ter CEP/frete calculado antes de gerar Pix ou checkout de cartao. Nao ofereca retirada local.";
   }
 
+  if (hasLocalDelivery) {
+    return "- Produto fisico precisa ter bairro, endereco completo ou localizacao dentro de zona local ativa antes de gerar Pix ou checkout de cartao. Nao peca CEP para frete nacional.";
+  }
+
   if (settings.localPickup) {
     return "- Produto fisico precisa ter retirada local confirmada antes de gerar Pix ou checkout de cartao. Nao peca CEP para calcular frete.";
   }
 
-  return "- Produto fisico nao tem frete por entrega nem retirada local habilitados; acione humano antes de gerar Pix ou checkout de cartao.";
+  return "- Produto fisico nao tem frete por entrega, entrega local nem retirada local habilitados; acione humano antes de gerar Pix ou checkout de cartao.";
 }
 
 function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippingSettings | null) {
@@ -4107,22 +4453,71 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
   const activeRules = settings.shippingEnabled
     ? settings.rules.filter((rule) => rule.active)
     : [];
+  const activeLocalDeliveryZones = settings.localDeliveryEnabled
+    ? settings.localDeliveryZones.filter((zone) => zone.active)
+    : [];
 
   return [
     "",
     "REGRAS DE ENTREGA E FRETE:",
     `- Frete por entrega: ${settings.shippingEnabled ? "habilitado" : "desativado"}.`,
+    `- Entrega local: ${settings.localDeliveryEnabled ? "habilitada" : "desativada"}.`,
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     settings.shippingEnabled
       ? "- Quando precisar de entrega, peca CEP e use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
+    settings.localDeliveryEnabled
+      ? "- Para entrega local, peca bairro, endereco completo ou localizacao do WhatsApp e use somente zonas locais ativas. Fora dessas zonas, diga que a loja nao entrega naquela area e chame humano se necessario."
+      : "- Nao ofereca entrega local, motoboy, bairro atendido ou taxa por regiao.",
     settings.localPickup
       ? "- Retirada local pode ser oferecida quando fizer sentido e libera o pagamento com frete zero depois da confirmacao do lead."
       : "- Nao ofereca retirada local e nao aceite retirada na loja como forma de liberar pagamento.",
     activeRules.length > 0
       ? `- Estados com entrega ativa: ${activeRules.map((rule) => rule.uf).join(", ")}.`
       : "- Nenhum estado com entrega ativa.",
+    activeLocalDeliveryZones.length > 0
+      ? `- Zonas locais ativas: ${activeLocalDeliveryZones.map((zone) => zone.name).join(", ")}.`
+      : "- Nenhuma zona local ativa.",
+    ...activeLocalDeliveryZones.slice(0, 12).map(formatLocalDeliveryZoneRuntimeLine),
   ];
+}
+
+function formatLocalDeliveryZoneRuntimeLine(zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number]) {
+  const parts = [
+    formatLocalDeliveryZoneRuntimeScope(zone),
+    zone.price ? `taxa ${zone.price}` : "",
+    zone.minDays !== null || zone.maxDays !== null ? `prazo ${formatLocalDeliveryZoneRuntimeDeadline(zone.minDays, zone.maxDays)}` : "",
+    zone.orderMinimum ? `pedido minimo ${zone.orderMinimum}` : "",
+    zone.freeDeliveryThreshold ? `gratis acima de ${zone.freeDeliveryThreshold}` : "",
+    zone.notes ? `obs ${zone.notes}` : "",
+  ].filter(Boolean);
+
+  return `  - ${zone.name}: ${parts.join(", ")}.`;
+}
+
+function formatLocalDeliveryZoneRuntimeScope(zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number]) {
+  if (zone.shape === "neighborhoods") {
+    const neighborhoods = zone.neighborhoods.length > 0 ? `bairros ${zone.neighborhoods.join(", ")}` : "";
+    const cities = zone.cities.length > 0 ? `cidades ${zone.cities.join(", ")}` : "";
+    return [neighborhoods, cities].filter(Boolean).join("; ") || "bairros/cidades pendentes";
+  }
+
+  if (zone.shape === "polygon") {
+    return zone.polygon.length >= 3
+      ? `area desenhada com ${zone.polygon.length} pontos no mapa`
+      : "area desenhada pendente";
+  }
+
+  const base = zone.baseAddress
+    || (zone.baseLatitude !== null && zone.baseLongitude !== null ? `${zone.baseLatitude}, ${zone.baseLongitude}` : "base pendente");
+  return zone.radiusKm ? `ate ${zone.radiusKm} km de ${base}` : `raio pendente de ${base}`;
+}
+
+function formatLocalDeliveryZoneRuntimeDeadline(minDays: number | null, maxDays: number | null) {
+  if (minDays !== null && maxDays !== null) return `${minDays}-${maxDays} dia(s)`;
+  if (minDays !== null) return `a partir de ${minDays} dia(s)`;
+  if (maxDays !== null) return `ate ${maxDays} dia(s)`;
+  return "a combinar";
 }
 
 function buildSalesCatalogShippingQuoteLines(quotes: RuntimeSalesCatalogShippingQuote[]) {
@@ -7713,6 +8108,7 @@ async function recordSalesCatalogOrderIntent(input: {
         customer_phone: customerPhone,
         subtotal: total,
         destination_cep: initialShipping?.destinationCep ?? null,
+        destination_address: initialShipping?.destinationAddress ?? null,
         shipping_total: initialShipping?.shippingTotal ?? null,
         shipping_method: initialShipping?.shippingMethod ?? null,
         total: payableTotal,
@@ -8291,20 +8687,19 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
 }): Promise<OutboundMessage> {
   const shippingSettings = input.context.salesCatalogShippingSettings;
   const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled);
+  const canLocalDelivery = Boolean(shippingSettings?.configured && shippingSettings.localDeliveryEnabled && shippingSettings.localDeliveryZones.some((zone) => zone.active));
   const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup);
-  const intro = canShip && canPickup
-    ? "Antes de gerar o pagamento, preciso confirmar entrega ou retirada desse pedido."
-    : canShip
-      ? "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido."
-      : canPickup
-        ? "Antes de gerar o pagamento, preciso confirmar a retirada desse pedido."
-        : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
+  const canResolveDelivery = canShip || canLocalDelivery || canPickup;
+  const intro = canResolveDelivery
+    ? "Antes de gerar o pagamento, preciso confirmar a forma de entrega desse pedido."
+    : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
     intro,
     canShip ? "Se for entrega, me envie o CEP para eu calcular o frete." : "",
+    canLocalDelivery ? "Se for entrega local, me envie endereco completo, bairro ou localizacao do WhatsApp para eu conferir a area atendida e a taxa." : "",
     canPickup ? "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
-    !canShip && !canPickup
-      ? "A loja ainda nao habilitou frete ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
+    !canResolveDelivery
+      ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
       : "",
   ].filter(Boolean).join("\n");
   const providerResponse = await sendWhatsappText({

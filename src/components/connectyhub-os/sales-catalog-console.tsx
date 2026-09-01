@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -22,7 +22,9 @@ import {
   GripVertical,
   ImageIcon,
   Loader2,
+  MapPin,
   MessageSquareText,
+  Navigation,
   PackagePlus,
   PencilLine,
   Plus,
@@ -99,6 +101,9 @@ import {
   type SalesCatalogOrderBumpSettings,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
+  type SalesCatalogGeoPoint,
+  type SalesCatalogLocalDeliveryZone,
+  type SalesCatalogLocalDeliveryZoneShape,
   type SalesCatalogShippingQuote,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
@@ -376,11 +381,94 @@ type SettingsDraft = {
 
 type ShippingDraft = {
   shippingEnabled: boolean;
+  localDeliveryEnabled: boolean;
   localPickup: boolean;
   originCep: string;
   defaultHandlingDays: string;
   rules: SalesCatalogShippingRule[];
+  localDeliveryZones: SalesCatalogLocalDeliveryZone[];
 };
+
+type GoogleMapsConfig = {
+  browserApiKey: string;
+  mapId: string | null;
+  configured: boolean;
+  serverConfigured: boolean;
+  error?: string | null;
+};
+
+type GoogleMapsLatLng = {
+  lat: () => number;
+  lng: () => number;
+};
+
+type GoogleMapsPath = {
+  getLength: () => number;
+  getAt: (index: number) => GoogleMapsLatLng;
+};
+
+type GoogleMapsMap = {
+  fitBounds: (bounds: unknown) => void;
+  setCenter: (point: SalesCatalogGeoPoint) => void;
+  setZoom: (zoom: number) => void;
+};
+
+type GoogleMapsCircle = {
+  getCenter: () => GoogleMapsLatLng | null;
+  getRadius: () => number;
+  setMap: (map: GoogleMapsMap | null) => void;
+};
+
+type GoogleMapsPolygon = {
+  getPath: () => GoogleMapsPath;
+  setMap: (map: GoogleMapsMap | null) => void;
+};
+
+type GoogleMapsListener = {
+  remove: () => void;
+};
+
+type GoogleMapsPlace = {
+  formatted_address?: string;
+  name?: string;
+  geometry?: {
+    location?: GoogleMapsLatLng | null;
+  } | null;
+};
+
+type GoogleMapsAutocomplete = {
+  addListener: (eventName: string, handler: () => void) => GoogleMapsListener;
+  getPlace: () => GoogleMapsPlace;
+};
+
+type GoogleMapsApi = {
+  maps: {
+    Circle: new (options: Record<string, unknown>) => GoogleMapsCircle;
+    LatLngBounds: new () => { extend: (point: SalesCatalogGeoPoint) => void };
+    Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMapsMap;
+    Polygon: new (options: Record<string, unknown>) => GoogleMapsPolygon;
+    places?: {
+      Autocomplete: new (input: HTMLInputElement, options: Record<string, unknown>) => GoogleMapsAutocomplete;
+    };
+    event: {
+      addListener: (
+        target: GoogleMapsCircle | GoogleMapsMap | GoogleMapsPath,
+        eventName: string,
+        handler: (event: { latLng?: GoogleMapsLatLng }) => void,
+      ) => GoogleMapsListener;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    google?: GoogleMapsApi;
+    __connectyhubGoogleMapsLoaded?: () => void;
+  }
+}
+
+const googleMapsScriptPromises = new Map<string, Promise<GoogleMapsApi>>();
+const defaultLocalDeliveryMapCenter = { lat: -23.55052, lng: -46.633308 };
 
 type ShippingQuoteResult = {
   item?: {
@@ -623,6 +711,9 @@ export function SalesCatalogConsole({
   const [storefrontSettingsHighlighted, setStorefrontSettingsHighlighted] = useState(false);
   const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
+  const [selectedLocalDeliveryZoneId, setSelectedLocalDeliveryZoneId] = useState(() => resolveInitialLocalDeliveryZoneId(initialSelectedShippingSettings));
+  const [googleMapsConfig, setGoogleMapsConfig] = useState<GoogleMapsConfig | null>(null);
+  const [loadingGoogleMapsConfig, setLoadingGoogleMapsConfig] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingShipping, setSavingShipping] = useState(false);
   const [quoteItemId, setQuoteItemId] = useState("");
@@ -891,6 +982,9 @@ export function SalesCatalogConsole({
   const canExportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogExportInstance && selectedCatalogExportItems.length > 0 && !exportingWhatsappCatalog);
   const canCalculateQuote = Boolean(shippingDraft.shippingEnabled && selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
+  const selectedLocalDeliveryZone = shippingDraft.localDeliveryZones.find((zone) => zone.id === selectedLocalDeliveryZoneId)
+    ?? shippingDraft.localDeliveryZones[0]
+    ?? null;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -926,6 +1020,47 @@ export function SalesCatalogConsole({
     window.history.replaceState(null, "", nextUrl);
 
     return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/dashboard/sales-catalog/maps/config", { cache: "no-store" });
+        const data = await response.json().catch(() => null) as GoogleMapsConfig | null;
+
+        if (!active) return;
+
+        setGoogleMapsConfig(response.ok && data
+          ? data
+          : {
+              browserApiKey: "",
+              mapId: null,
+              configured: false,
+              serverConfigured: false,
+              error: "Nao foi possivel carregar a configuracao do Google Maps.",
+            });
+      } catch {
+        if (!active) return;
+
+        setGoogleMapsConfig({
+          browserApiKey: "",
+          mapId: null,
+          configured: false,
+          serverConfigured: false,
+          error: "Google Maps ainda nao configurado.",
+        });
+      } finally {
+        if (active) {
+          setLoadingGoogleMapsConfig(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -1018,6 +1153,7 @@ export function SalesCatalogConsole({
     setSettingsDraft(buildSettingsDraft(nextSettings));
     setShippingDraft(buildShippingDraft(nextShippingSettings));
     setSelectedShippingUf(nextShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
+    setSelectedLocalDeliveryZoneId(resolveInitialLocalDeliveryZoneId(nextShippingSettings));
     setSelectedAttributes({});
     setSkuDrafts([]);
     setEditingItemId(null);
@@ -1632,6 +1768,73 @@ export function SalesCatalogConsole({
     }));
   }
 
+  function setLocalDeliveryEnabled(enabled: boolean) {
+    let nextSelectedZoneId = selectedLocalDeliveryZoneId;
+
+    setShippingDraft((current) => {
+      if (!enabled) {
+        return { ...current, localDeliveryEnabled: false };
+      }
+
+      if (current.localDeliveryZones.length > 0) {
+        nextSelectedZoneId = nextSelectedZoneId || resolvePreferredLocalDeliveryZoneId(current.localDeliveryZones);
+        return { ...current, localDeliveryEnabled: true };
+      }
+
+      const zone = createLocalDeliveryZone("radius", 0);
+      nextSelectedZoneId = zone.id;
+
+      return {
+        ...current,
+        localDeliveryEnabled: true,
+        localDeliveryZones: [zone],
+      };
+    });
+
+    if (nextSelectedZoneId) {
+      setSelectedLocalDeliveryZoneId(nextSelectedZoneId);
+    }
+  }
+
+  function addLocalDeliveryZone(shape: SalesCatalogLocalDeliveryZoneShape) {
+    const zone = createLocalDeliveryZone(shape, shippingDraft.localDeliveryZones.length);
+
+    setShippingDraft((current) => ({
+      ...current,
+      localDeliveryEnabled: true,
+      localDeliveryZones: [...current.localDeliveryZones, zone],
+    }));
+    setSelectedLocalDeliveryZoneId(zone.id);
+  }
+
+  function updateLocalDeliveryZone(zoneId: string, patch: Partial<SalesCatalogLocalDeliveryZone>) {
+    setShippingDraft((current) => ({
+      ...current,
+      localDeliveryZones: current.localDeliveryZones.map((zone) => (
+        zone.id === zoneId ? { ...zone, ...patch } : zone
+      )),
+    }));
+  }
+
+  function changeLocalDeliveryZoneShape(zoneId: string, shape: SalesCatalogLocalDeliveryZoneShape) {
+    updateLocalDeliveryZone(zoneId, { shape });
+  }
+
+  function removeLocalDeliveryZone(zoneId: string) {
+    const nextZones = shippingDraft.localDeliveryZones.filter((zone) => zone.id !== zoneId);
+
+    setShippingDraft((current) => {
+      const zones = current.localDeliveryZones.filter((zone) => zone.id !== zoneId);
+
+      return {
+        ...current,
+        localDeliveryEnabled: zones.length > 0 ? current.localDeliveryEnabled : false,
+        localDeliveryZones: zones,
+      };
+    });
+    setSelectedLocalDeliveryZoneId(resolvePreferredLocalDeliveryZoneId(nextZones));
+  }
+
   async function calculateQuote() {
     if (!selectedCompanyId || !quoteItemId || calculatingQuote) return;
 
@@ -1678,6 +1881,7 @@ export function SalesCatalogConsole({
           action: "save_shipping_settings",
           companyId: selectedCompanyId,
           shippingEnabled: shippingDraft.shippingEnabled,
+          localDeliveryEnabled: shippingDraft.localDeliveryEnabled,
           localPickup: shippingDraft.localPickup,
           originCep: shippingDraft.originCep,
           defaultHandlingDays: parseOptionalNumber(shippingDraft.defaultHandlingDays),
@@ -1708,6 +1912,25 @@ export function SalesCatalogConsole({
             })),
             notes: cleanInput(rule.notes, 160),
           })),
+          localDeliveryZones: shippingDraft.localDeliveryZones.map((zone) => ({
+            id: zone.id,
+            name: cleanInput(zone.name, 80) ?? zone.name,
+            active: zone.active,
+            shape: zone.shape,
+            baseAddress: cleanInput(zone.baseAddress, 220),
+            baseLatitude: zone.baseLatitude,
+            baseLongitude: zone.baseLongitude,
+            radiusKm: zone.radiusKm,
+            polygon: zone.polygon.map((point) => ({ lat: point.lat, lng: point.lng })),
+            neighborhoods: zone.neighborhoods.map((item) => cleanInput(item, 80)).filter(Boolean),
+            cities: zone.cities.map((item) => cleanInput(item, 80)).filter(Boolean),
+            price: cleanInput(zone.price, 40),
+            minDays: zone.minDays,
+            maxDays: zone.maxDays,
+            freeDeliveryThreshold: cleanInput(zone.freeDeliveryThreshold, 40),
+            orderMinimum: cleanInput(zone.orderMinimum, 40),
+            notes: cleanInput(zone.notes, 220),
+          })),
         }),
       });
       const data = await response.json().catch(() => null) as { shippingSettings?: ClientSalesCatalogShippingSettings; error?: string } | null;
@@ -1721,6 +1944,7 @@ export function SalesCatalogConsole({
         ...current.filter((entry) => entry.companyId !== data.shippingSettings!.companyId),
       ]);
       setShippingDraft(buildShippingDraft(data.shippingSettings));
+      setSelectedLocalDeliveryZoneId(resolveInitialLocalDeliveryZoneId(data.shippingSettings));
       setNotice({ tone: "success", message: "Entrega e frete salvos para este catalogo." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar frete." });
@@ -3899,6 +4123,31 @@ export function SalesCatalogConsole({
 
               <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
                 <span className="flex items-center gap-1.5 text-slate-300">
+                  Entrega local
+                  <HelpHint title="Entrega local">Ative para lojas que entregam por bairro, raio ou area desenhada no mapa.</HelpHint>
+                </span>
+                <input
+                  checked={shippingDraft.localDeliveryEnabled}
+                  type="checkbox"
+                  onChange={(event) => setLocalDeliveryEnabled(event.target.checked)}
+                />
+              </label>
+
+              {shippingDraft.localDeliveryEnabled ? (
+                <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Zonas locais</p>
+                  <p className="mt-2 font-mono text-[24px] font-bold text-emerald-200">{shippingDraft.localDeliveryZones.filter((zone) => zone.active).length}</p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-500">O agente confere bairro, endereco ou localizacao antes de confirmar a entrega local.</p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed p-4" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                  <p className="text-[13px] font-semibold text-slate-200">Entrega local desativada</p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-500">O agente nao oferece taxa local, raio, bairro ou motoboy.</p>
+                </div>
+              )}
+
+              <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="flex items-center gap-1.5 text-slate-300">
                   Retirada local
                   <HelpHint title="Retirada local">Ative quando o cliente puder retirar o pedido no endereco combinado.</HelpHint>
                 </span>
@@ -4054,6 +4303,292 @@ export function SalesCatalogConsole({
                 </div>
               </div>
             )}
+
+            {shippingDraft.localDeliveryEnabled ? (
+              <AccordionSection icon={MapPin} title="Entrega local por area" tone="amber" className="xl:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <FieldLabel>Zonas locais</FieldLabel>
+                    <p className="text-[12px] leading-5 text-slate-400">
+                      Use raio, bairros/cidades ou desenho no mapa. O agente so oferece entrega onde existir zona ativa.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addLocalDeliveryZone("radius")}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <Navigation className="h-3.5 w-3.5" />
+                      Raio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addLocalDeliveryZone("neighborhoods")}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <Tags className="h-3.5 w-3.5" />
+                      Bairros
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addLocalDeliveryZone("polygon")}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <MapPin className="h-3.5 w-3.5" />
+                      Mapa
+                    </button>
+                  </div>
+                </div>
+
+                {shippingDraft.localDeliveryZones.length > 0 ? (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="space-y-2">
+                      {shippingDraft.localDeliveryZones.map((zone) => (
+                        <button
+                          key={zone.id}
+                          type="button"
+                          onClick={() => setSelectedLocalDeliveryZoneId(zone.id)}
+                          className={cn(
+                            "w-full rounded-xl border p-3 text-left transition",
+                            selectedLocalDeliveryZone?.id === zone.id ? "border-amber-300/60 bg-amber-300/15" : "hover:bg-amber-400/10",
+                          )}
+                          style={{ borderColor: selectedLocalDeliveryZone?.id === zone.id ? undefined : "var(--ch-border)" }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-[12px] font-semibold text-slate-100">{zone.name}</p>
+                            <NeonBadge tone={zone.active ? "green" : "rose"}>{zone.active ? "ativa" : "off"}</NeonBadge>
+                          </div>
+                          <p className="mt-1 text-[11px] text-slate-500">{formatLocalDeliveryZoneShape(zone.shape)}</p>
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{formatLocalDeliveryZoneScope(zone)}</p>
+                        </button>
+                      ))}
+                    </div>
+
+                    {selectedLocalDeliveryZone ? (
+                      <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <FieldLabel>Zona selecionada</FieldLabel>
+                            <p className="text-[13px] font-semibold text-slate-100">{selectedLocalDeliveryZone.name}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <label className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-slate-200" style={{ borderColor: "var(--ch-border)" }}>
+                              <input
+                                checked={selectedLocalDeliveryZone.active}
+                                type="checkbox"
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { active: event.target.checked })}
+                              />
+                              Zona ativa
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => removeLocalDeliveryZone(selectedLocalDeliveryZone.id)}
+                              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-rose-100 transition hover:bg-rose-400/10"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                          <label className="block">
+                            <FieldLabel>Nome da zona</FieldLabel>
+                            <input
+                              value={selectedLocalDeliveryZone.name}
+                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { name: event.target.value.slice(0, 80) })}
+                              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                              placeholder="Ex: Ate 5 km, Zona leste, Centro"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                          </label>
+
+                          <div>
+                            <FieldLabel>Tipo de area</FieldLabel>
+                            <div className="grid grid-cols-3 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
+                              {(["radius", "neighborhoods", "polygon"] as const).map((shape) => (
+                                <button
+                                  key={shape}
+                                  type="button"
+                                  onClick={() => changeLocalDeliveryZoneShape(selectedLocalDeliveryZone.id, shape)}
+                                  className={cn(
+                                    "min-h-9 rounded-md px-2 text-[11px] font-semibold transition",
+                                    selectedLocalDeliveryZone.shape === shape ? "bg-amber-300 text-slate-950" : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
+                                  )}
+                                >
+                                  {shape === "radius" ? "Raio" : shape === "neighborhoods" ? "Bairros" : "Mapa"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <label className="block lg:col-span-2">
+                            <FieldLabel>Endereco base</FieldLabel>
+                            <input
+                              value={selectedLocalDeliveryZone.baseAddress ?? ""}
+                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseAddress: event.target.value.slice(0, 220) })}
+                              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                              placeholder="Rua, numero, bairro, cidade"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                          </label>
+
+                          <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
+                            <label className="block">
+                              <FieldLabel>Latitude</FieldLabel>
+                              <input
+                                value={coordinateInput(selectedLocalDeliveryZone.baseLatitude)}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseLatitude: parseOptionalDecimal(event.target.value, -90, 90) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                inputMode="decimal"
+                                placeholder="-23.5505"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Longitude</FieldLabel>
+                              <input
+                                value={coordinateInput(selectedLocalDeliveryZone.baseLongitude)}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { baseLongitude: parseOptionalDecimal(event.target.value, -180, 180) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                inputMode="decimal"
+                                placeholder="-46.6333"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Raio km</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.radiusKm ?? ""}
+                                disabled={selectedLocalDeliveryZone.shape !== "radius"}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { radiusKm: parseOptionalDecimal(event.target.value, 0.1, 200) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                                inputMode="decimal"
+                                placeholder="5"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-5 lg:col-span-2">
+                            <label className="block">
+                              <FieldLabel>Valor</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.price ?? ""}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { price: event.target.value.slice(0, 40) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                placeholder="15,00"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Prazo min.</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.minDays ?? ""}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { minDays: parseOptionalNumber(event.target.value) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                inputMode="numeric"
+                                placeholder="0"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Prazo max.</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.maxDays ?? ""}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { maxDays: parseOptionalNumber(event.target.value) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                inputMode="numeric"
+                                placeholder="1"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Pedido min.</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.orderMinimum ?? ""}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { orderMinimum: event.target.value.slice(0, 40) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                placeholder="30,00"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                            <label className="block">
+                              <FieldLabel>Gratis acima</FieldLabel>
+                              <input
+                                value={selectedLocalDeliveryZone.freeDeliveryThreshold ?? ""}
+                                onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { freeDeliveryThreshold: event.target.value.slice(0, 40) })}
+                                className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                                placeholder="100,00"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                            </label>
+                          </div>
+
+                          {selectedLocalDeliveryZone.shape === "neighborhoods" ? (
+                            <div className="grid gap-3 lg:col-span-2 lg:grid-cols-2">
+                              <label className="block">
+                                <FieldLabel>Bairros atendidos</FieldLabel>
+                                <textarea
+                                  value={selectedLocalDeliveryZone.neighborhoods.join("\n")}
+                                  onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { neighborhoods: splitLocalDeliveryList(event.target.value) })}
+                                  className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                                  placeholder={"Centro\nMooca\nTatuape"}
+                                  style={{ borderColor: "var(--ch-border)" }}
+                                />
+                              </label>
+                              <label className="block">
+                                <FieldLabel>Cidades atendidas</FieldLabel>
+                                <textarea
+                                  value={selectedLocalDeliveryZone.cities.join("\n")}
+                                  onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { cities: splitLocalDeliveryList(event.target.value) })}
+                                  className="min-h-28 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                                  placeholder={"Sao Paulo\nSanto Andre"}
+                                  style={{ borderColor: "var(--ch-border)" }}
+                                />
+                              </label>
+                            </div>
+                          ) : null}
+
+                          <label className="block lg:col-span-2">
+                            <FieldLabel>Observacoes para o agente</FieldLabel>
+                            <textarea
+                              value={selectedLocalDeliveryZone.notes ?? ""}
+                              onChange={(event) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, { notes: event.target.value.slice(0, 220) })}
+                              className="min-h-20 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
+                              placeholder="Ex: confirmar portaria, taxa extra em condominio distante, nao entregar apos 23h"
+                              style={{ borderColor: "var(--ch-border)" }}
+                            />
+                          </label>
+
+                          <div className="lg:col-span-2">
+                            <LocalDeliveryMapEditor
+                              apiKey={googleMapsConfig?.browserApiKey ?? ""}
+                              configured={Boolean(googleMapsConfig?.configured)}
+                              loading={loadingGoogleMapsConfig}
+                              mapId={googleMapsConfig?.mapId ?? null}
+                              zone={selectedLocalDeliveryZone}
+                              onPatch={(patch) => updateLocalDeliveryZone(selectedLocalDeliveryZone.id, patch)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-dashed p-6 text-center" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                    <MapPin className="mx-auto h-8 w-8 text-slate-500" />
+                    <p className="mt-3 text-[13px] font-semibold text-slate-200">Nenhuma zona local criada</p>
+                    <p className="mt-1 text-[12px] leading-5 text-slate-500">Crie uma zona por raio, bairros ou mapa para o agente saber onde pode entregar.</p>
+                  </div>
+                )}
+              </AccordionSection>
+            ) : null}
 
             {shippingDraft.shippingEnabled && selectedShippingRule?.active ? (
               <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2">
@@ -8253,6 +8788,269 @@ function DestinationButton({
   );
 }
 
+function LocalDeliveryMapEditor({
+  apiKey,
+  configured,
+  loading,
+  mapId,
+  zone,
+  onPatch,
+}: {
+  apiKey: string;
+  configured: boolean;
+  loading: boolean;
+  mapId: string | null;
+  zone: SalesCatalogLocalDeliveryZone;
+  onPatch: (patch: Partial<SalesCatalogLocalDeliveryZone>) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const mapRef = useRef<GoogleMapsMap | null>(null);
+  const overlaysRef = useRef<{ circle: GoogleMapsCircle | null; polygon: GoogleMapsPolygon | null; listeners: GoogleMapsListener[] }>({
+    circle: null,
+    polygon: null,
+    listeners: [],
+  });
+  const [mapReadyVersion, setMapReadyVersion] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!configured || !apiKey.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+    const overlays = overlaysRef.current;
+
+    loadGoogleMapsScript(apiKey)
+      .then((google) => {
+        if (cancelled || !containerRef.current) return;
+
+        setLoadError(null);
+        mapRef.current = new google.maps.Map(containerRef.current, {
+          center: defaultLocalDeliveryMapCenter,
+          zoom: 12,
+          ...(mapId ? { mapId } : {}),
+          clickableIcons: false,
+          fullscreenControl: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+        });
+        setMapReadyVersion((current) => current + 1);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError("Nao foi possivel carregar o Google Maps. Confira a chave na manutencao.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      clearLocalDeliveryMapOverlays(overlays);
+    };
+  }, [apiKey, configured, mapId]);
+
+  useEffect(() => {
+    if (!configured || !mapReadyVersion || !mapRef.current || !searchInputRef.current || !window.google?.maps?.places?.Autocomplete) {
+      return;
+    }
+
+    const autocomplete = new window.google.maps.places.Autocomplete(searchInputRef.current, {
+      componentRestrictions: { country: "br" },
+      fields: ["formatted_address", "geometry", "name"],
+    });
+    const listener = autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace();
+      const location = place.geometry?.location;
+      if (!location) return;
+
+      const point = {
+        lat: roundCoordinate(location.lat()),
+        lng: roundCoordinate(location.lng()),
+      };
+      mapRef.current?.setCenter(point);
+      mapRef.current?.setZoom(14);
+      onPatch({
+        baseAddress: (place.formatted_address ?? place.name ?? searchInputRef.current?.value ?? "").slice(0, 220),
+        baseLatitude: point.lat,
+        baseLongitude: point.lng,
+      });
+    });
+
+    return () => listener.remove();
+  }, [configured, mapReadyVersion, onPatch]);
+
+  useEffect(() => {
+    if (!configured || !mapReadyVersion || !mapRef.current || !window.google?.maps) return;
+
+    const google = window.google;
+    const map = mapRef.current;
+    const center = getLocalDeliveryMapCenter(zone);
+    const overlays = overlaysRef.current;
+
+    clearLocalDeliveryMapOverlays(overlays);
+    map.setCenter(center);
+
+    if (zone.shape === "radius") {
+      map.setZoom(zone.radiusKm && zone.radiusKm > 12 ? 10 : 13);
+
+      if (isValidCoordinate(zone.baseLatitude, zone.baseLongitude)) {
+        const circle = new google.maps.Circle({
+          center: { lat: zone.baseLatitude, lng: zone.baseLongitude },
+          draggable: true,
+          editable: true,
+          fillColor: "#fbbf24",
+          fillOpacity: 0.16,
+          map,
+          radius: Math.max(0.1, zone.radiusKm ?? 5) * 1000,
+          strokeColor: "#f59e0b",
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+        });
+
+        overlays.circle = circle;
+        overlays.listeners.push(
+          google.maps.event.addListener(circle, "center_changed", () => {
+            const nextCenter = circle.getCenter();
+            if (!nextCenter) return;
+            onPatch({ baseLatitude: roundCoordinate(nextCenter.lat()), baseLongitude: roundCoordinate(nextCenter.lng()) });
+          }),
+          google.maps.event.addListener(circle, "radius_changed", () => {
+            onPatch({ radiusKm: roundDistanceKm(circle.getRadius() / 1000) });
+          }),
+        );
+      }
+    }
+
+    if (zone.shape === "polygon") {
+      if (zone.polygon.length > 1) {
+        const bounds = new google.maps.LatLngBounds();
+        zone.polygon.forEach((point) => bounds.extend(point));
+        map.fitBounds(bounds);
+      } else {
+        map.setZoom(13);
+      }
+
+      if (zone.polygon.length > 0) {
+        const polygon = new google.maps.Polygon({
+          draggable: true,
+          editable: true,
+          fillColor: "#22c55e",
+          fillOpacity: 0.14,
+          map,
+          paths: zone.polygon,
+          strokeColor: "#10b981",
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+        });
+        const path = polygon.getPath();
+        const syncPolygon = () => onPatch({ polygon: readGoogleMapsPolygonPath(path) });
+
+        overlays.polygon = polygon;
+        overlays.listeners.push(
+          google.maps.event.addListener(path, "set_at", syncPolygon),
+          google.maps.event.addListener(path, "insert_at", syncPolygon),
+          google.maps.event.addListener(path, "remove_at", syncPolygon),
+        );
+      }
+    }
+
+    overlays.listeners.push(
+      google.maps.event.addListener(map, "click", (event: { latLng?: { lat: () => number; lng: () => number } }) => {
+        if (!event.latLng) return;
+
+        const point = {
+          lat: roundCoordinate(event.latLng.lat()),
+          lng: roundCoordinate(event.latLng.lng()),
+        };
+
+        if (zone.shape === "polygon") {
+          onPatch({ polygon: [...zone.polygon, point] });
+          return;
+        }
+
+        onPatch({ baseLatitude: point.lat, baseLongitude: point.lng });
+      }),
+    );
+
+    return () => {
+      clearLocalDeliveryMapOverlays(overlays);
+    };
+  }, [configured, mapReadyVersion, zone, onPatch]);
+
+  if (loading) {
+    return (
+      <div className="grid min-h-[280px] place-items-center rounded-xl border border-dashed text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+        <Loader2 className="mb-2 h-5 w-5 animate-spin" />
+        Carregando mapa...
+      </div>
+    );
+  }
+
+  if (!configured) {
+    return (
+      <div className="rounded-xl border border-dashed p-4" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+        <div className="flex items-start gap-3">
+          <MapPin className="mt-0.5 h-5 w-5 text-amber-200" />
+          <div>
+            <p className="text-[13px] font-semibold text-slate-200">Mapa aguardando credencial Google</p>
+            <p className="mt-1 text-[12px] leading-5 text-slate-500">
+              Configure GOOGLE_MAPS_BROWSER_API_KEY na Sala de Manutencao para desenhar raio e poligono no mapa. Enquanto isso, bairros/cidades e coordenadas manuais continuam funcionando.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <label className="mb-3 block">
+        <FieldLabel>Buscar endereco no mapa</FieldLabel>
+        <div className="grid grid-cols-[40px_minmax(0,1fr)] rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+          <span className="grid place-items-center text-slate-500">
+            <Search className="h-4 w-4" />
+          </span>
+          <input
+            key={zone.id}
+            ref={searchInputRef}
+            defaultValue={zone.baseAddress ?? ""}
+            className="h-11 min-w-0 bg-transparent pr-3 text-[12px] outline-none"
+            placeholder="Digite o endereco da loja ou da base de entrega"
+          />
+        </div>
+      </label>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <FieldLabel>Mapa da area</FieldLabel>
+          <p className="text-[12px] leading-5 text-slate-500">
+            {zone.shape === "polygon"
+              ? "Clique no mapa para adicionar pontos. Arraste o desenho para ajustar a area."
+              : "Clique no mapa para definir o centro. Arraste ou redimensione o raio."}
+          </p>
+        </div>
+        {zone.shape === "polygon" ? (
+          <button
+            type="button"
+            onClick={() => onPatch({ polygon: [] })}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[12px] font-semibold text-slate-400 transition hover:bg-amber-400/10 hover:text-amber-100"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <X className="h-3.5 w-3.5" />
+            Limpar desenho
+          </button>
+        ) : null}
+      </div>
+      {loadError ? (
+        <div className="mb-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[12px] text-rose-100">
+          {loadError}
+        </div>
+      ) : null}
+      <div ref={containerRef} className="h-[360px] overflow-hidden rounded-lg border" style={{ borderColor: "var(--ch-border)" }} />
+    </div>
+  );
+}
+
 function FieldLabel({ children, help }: { children: string; help?: string }) {
   const helpText = help ?? salesCatalogHelpText[children];
 
@@ -8902,6 +9700,7 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
 
   return {
     shippingEnabled: settings?.shippingEnabled ?? Array.from(rulesByUf.values()).some((rule) => rule.active),
+    localDeliveryEnabled: settings?.localDeliveryEnabled ?? Boolean(settings?.localDeliveryZones?.some((zone) => zone.active)),
     localPickup: settings?.localPickup ?? false,
     originCep: settings?.originCep ?? "",
     defaultHandlingDays: settings?.defaultHandlingDays !== null && settings?.defaultHandlingDays !== undefined
@@ -8919,6 +9718,7 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
       services: [],
       notes: null,
     })),
+    localDeliveryZones: cloneLocalDeliveryZones(settings?.localDeliveryZones ?? []),
   };
 }
 
@@ -9129,6 +9929,201 @@ function cloneShippingServices(services: SalesCatalogShippingService[]) {
     ...service,
     tiers: service.tiers.map((tier) => ({ ...tier })),
   }));
+}
+
+function createLocalDeliveryZone(shape: SalesCatalogLocalDeliveryZoneShape, index: number): SalesCatalogLocalDeliveryZone {
+  const idSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  return {
+    id: `local_zone_${idSuffix}`,
+    name: shape === "radius"
+      ? `Raio ${index + 1}`
+      : shape === "neighborhoods"
+        ? `Bairros ${index + 1}`
+        : `Mapa ${index + 1}`,
+    active: true,
+    shape,
+    baseAddress: null,
+    baseLatitude: null,
+    baseLongitude: null,
+    radiusKm: shape === "radius" ? 5 : null,
+    polygon: [],
+    neighborhoods: [],
+    cities: [],
+    price: null,
+    minDays: null,
+    maxDays: null,
+    freeDeliveryThreshold: null,
+    orderMinimum: null,
+    notes: null,
+  };
+}
+
+function cloneLocalDeliveryZones(zones: SalesCatalogLocalDeliveryZone[]) {
+  return zones.map((zone) => ({
+    ...zone,
+    polygon: zone.polygon.map((point) => ({ ...point })),
+    neighborhoods: [...zone.neighborhoods],
+    cities: [...zone.cities],
+  }));
+}
+
+function resolveInitialLocalDeliveryZoneId(settings: ClientSalesCatalogShippingSettings | null) {
+  return resolvePreferredLocalDeliveryZoneId(settings?.localDeliveryZones ?? []);
+}
+
+function resolvePreferredLocalDeliveryZoneId(zones: SalesCatalogLocalDeliveryZone[]) {
+  return zones.find((zone) => zone.active)?.id ?? zones[0]?.id ?? "";
+}
+
+function formatLocalDeliveryZoneShape(shape: SalesCatalogLocalDeliveryZoneShape) {
+  if (shape === "neighborhoods") return "Bairros e cidades";
+  if (shape === "polygon") return "Area desenhada no mapa";
+  return "Raio da empresa";
+}
+
+function formatLocalDeliveryZoneScope(zone: SalesCatalogLocalDeliveryZone) {
+  const deadline = formatQuoteDeadline(zone.minDays, zone.maxDays).toLowerCase();
+  const price = zone.price ? `taxa ${zone.price}` : "taxa pendente";
+
+  if (zone.shape === "neighborhoods") {
+    const places = [...zone.neighborhoods, ...zone.cities].slice(0, 5);
+    const scope = places.length > 0 ? places.join(", ") : "bairros/cidades pendentes";
+    return `${scope}; ${price}; ${deadline}`;
+  }
+
+  if (zone.shape === "polygon") {
+    return `${zone.polygon.length} ponto(s) no mapa; ${price}; ${deadline}`;
+  }
+
+  const base = zone.baseAddress
+    || (isValidCoordinate(zone.baseLatitude, zone.baseLongitude) ? `${coordinateInput(zone.baseLatitude)}, ${coordinateInput(zone.baseLongitude)}` : "base pendente");
+
+  return `Ate ${zone.radiusKm ?? "?"} km de ${base}; ${price}; ${deadline}`;
+}
+
+function splitLocalDeliveryList(value: string) {
+  return sanitizeList(value.split(/[\n,;]/g));
+}
+
+function coordinateInput(value: number | null) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function parseOptionalDecimal(value: string, min: number, max: number) {
+  const normalized = value.replace(",", ".").trim();
+  if (!normalized) return null;
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function roundCoordinate(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function roundDistanceKm(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function isValidCoordinate(lat: number | null | undefined, lng: number | null | undefined) {
+  return typeof lat === "number"
+    && Number.isFinite(lat)
+    && Math.abs(lat) <= 90
+    && typeof lng === "number"
+    && Number.isFinite(lng)
+    && Math.abs(lng) <= 180;
+}
+
+function getLocalDeliveryMapCenter(zone: SalesCatalogLocalDeliveryZone): SalesCatalogGeoPoint {
+  if (isValidCoordinate(zone.baseLatitude, zone.baseLongitude)) {
+    return { lat: zone.baseLatitude!, lng: zone.baseLongitude! };
+  }
+
+  const firstPoint = zone.polygon.find((point) => isValidCoordinate(point.lat, point.lng));
+  if (firstPoint) return firstPoint;
+
+  return defaultLocalDeliveryMapCenter;
+}
+
+function readGoogleMapsPolygonPath(path: GoogleMapsPath) {
+  const points: SalesCatalogGeoPoint[] = [];
+  const length = path.getLength();
+
+  for (let index = 0; index < length; index += 1) {
+    const point = path.getAt(index);
+    points.push({ lat: roundCoordinate(point.lat()), lng: roundCoordinate(point.lng()) });
+  }
+
+  return points;
+}
+
+function clearLocalDeliveryMapOverlays(overlays: { circle: GoogleMapsCircle | null; polygon: GoogleMapsPolygon | null; listeners: GoogleMapsListener[] }) {
+  overlays.listeners.forEach((listener) => listener.remove());
+  overlays.listeners = [];
+
+  if (overlays.circle) {
+    overlays.circle.setMap(null);
+    overlays.circle = null;
+  }
+
+  if (overlays.polygon) {
+    overlays.polygon.setMap(null);
+    overlays.polygon = null;
+  }
+}
+
+function loadGoogleMapsScript(apiKey: string): Promise<GoogleMapsApi> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Google Maps indisponivel fora do navegador."));
+  }
+
+  if (window.google?.maps?.Map) {
+    return Promise.resolve(window.google);
+  }
+
+  const key = apiKey.trim();
+  const cached = googleMapsScriptPromises.get(key);
+  if (cached) return cached;
+
+  const promise = new Promise<GoogleMapsApi>((resolve, reject) => {
+    const scriptId = "connectyhub-google-maps-js";
+    const existing = document.getElementById(scriptId) as HTMLScriptElement | null;
+    const finish = () => {
+      if (window.google?.maps?.Map) {
+        resolve(window.google);
+      } else {
+        reject(new Error("Google Maps nao inicializou."));
+      }
+    };
+
+    window.__connectyhubGoogleMapsLoaded = finish;
+
+    if (existing) {
+      existing.addEventListener("load", finish, { once: true });
+      existing.addEventListener("error", () => reject(new Error("Google Maps nao carregou.")), { once: true });
+      return;
+    }
+
+    const url = new URL("https://maps.googleapis.com/maps/api/js");
+    url.searchParams.set("key", key);
+    url.searchParams.set("libraries", "places");
+    url.searchParams.set("v", "weekly");
+    url.searchParams.set("callback", "__connectyhubGoogleMapsLoaded");
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.async = true;
+    script.defer = true;
+    script.src = url.toString();
+    script.onerror = () => reject(new Error("Google Maps nao carregou."));
+    document.head.appendChild(script);
+  });
+
+  googleMapsScriptPromises.set(key, promise);
+  return promise;
 }
 
 function parseLines(value: string) {
