@@ -127,6 +127,8 @@ describe("PagBank gateway rollout", () => {
     expect(clientConsoleSource).toContain("Salvar preferencias PagBank");
     expect(clientConsoleSource).toContain("togglePagBankPreferenceMethod");
     expect(clientConsoleSource).toContain("Nome no extrato");
+    expect(clientConsoleSource).toContain("pagBankInstallmentOptions");
+    expect(clientConsoleSource).toContain("buildPagBankInterestFreeOptions");
     expect(salesCatalogConsoleSource).not.toContain("PagBank Checkout");
     expect(salesCatalogConsoleSource).not.toContain("togglePagBankPaymentMethod");
   });

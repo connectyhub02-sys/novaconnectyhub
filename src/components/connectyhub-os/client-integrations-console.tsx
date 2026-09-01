@@ -121,6 +121,8 @@ type MetaReviewSnapshot = {
   results: ReviewTestResult[];
 };
 
+const pagBankInstallmentOptions = Array.from({ length: 12 }, (_, index) => index + 1);
+
 type MetaWebhookSimulationScenario =
   | "facebook_comment"
   | "facebook_messenger"
@@ -2183,31 +2185,37 @@ function PagBankGuidedCard({
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <label className="block">
             <PaymentPreferenceLabel>Parcelas maximas</PaymentPreferenceLabel>
-            <input
+            <select
               value={pagBankSettings.maxInstallments}
               onChange={(event) => onPreferenceChange({
-                maxInstallments: clampNumber(parseOptionalNumber(event.target.value), 1, 12),
+                maxInstallments: clampNumber(Number(event.target.value), 1, 12),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              inputMode="numeric"
               style={{ borderColor: "var(--ch-border)" }}
-            />
+            >
+              {pagBankInstallmentOptions.map((option) => (
+                <option key={option} value={option}>{formatPagBankInstallmentOption(option)}</option>
+              ))}
+            </select>
           </label>
           <label className="block">
             <PaymentPreferenceLabel>Sem juros ate</PaymentPreferenceLabel>
-            <input
+            <select
               value={pagBankSettings.interestFreeInstallments}
               onChange={(event) => onPreferenceChange({
                 interestFreeInstallments: clampNumber(
-                  parseOptionalNumber(event.target.value),
+                  Number(event.target.value),
                   0,
                   pagBankSettings.maxInstallments,
                 ),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              inputMode="numeric"
               style={{ borderColor: "var(--ch-border)" }}
-            />
+            >
+              {buildPagBankInterestFreeOptions(pagBankSettings.maxInstallments).map((option) => (
+                <option key={option} value={option}>{formatPagBankInstallmentOption(option)}</option>
+              ))}
+            </select>
           </label>
           <label className="block">
             <PaymentPreferenceLabel>Nome no extrato</PaymentPreferenceLabel>
@@ -2314,6 +2322,17 @@ function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]
     .map((option) => option.label);
 
   return labels.length ? labels.join(", ") : "Pix";
+}
+
+function buildPagBankInterestFreeOptions(maxInstallments: number) {
+  const max = clampNumber(maxInstallments, 1, 12);
+
+  return Array.from({ length: max + 1 }, (_, index) => index);
+}
+
+function formatPagBankInstallmentOption(value: number) {
+  if (value <= 0) return "Nenhuma";
+  return `${value} ${value === 1 ? "parcela" : "parcelas"}`;
 }
 
 function formatPagBankCheckoutSummary(settings: SalesCatalogPagBankSettings) {
