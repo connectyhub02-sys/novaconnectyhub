@@ -2,6 +2,7 @@ export type OrganizationLocation = {
   id: string | null;
   organizationId: string | null;
   label: string;
+  serviceMode: OrganizationLocationServiceMode;
   address: string | null;
   cep: string | null;
   city: string | null;
@@ -15,8 +16,15 @@ export type OrganizationLocation = {
 };
 
 export type OrganizationLocationInput = Partial<Omit<OrganizationLocation, "organizationId" | "updatedAt">>;
+export type OrganizationLocationServiceMode = "public_storefront" | "private_headquarters" | "warehouse_dispatch" | "no_fixed_location";
 
 const maxOrganizationLocations = 8;
+const organizationLocationServiceModes = new Set<OrganizationLocationServiceMode>([
+  "public_storefront",
+  "private_headquarters",
+  "warehouse_dispatch",
+  "no_fixed_location",
+]);
 
 export function normalizeOrganizationLocations(value: unknown): OrganizationLocation[] {
   const items = Array.isArray(value) ? value : [];
@@ -41,6 +49,8 @@ export function hasUsableOrganizationLocation(location: OrganizationLocation) {
   return Boolean(
     location.address
       || location.mapsUrl
+      || location.notes
+      || location.serviceMode === "no_fixed_location"
       || (location.latitude !== null && location.longitude !== null),
   );
 }
@@ -50,6 +60,10 @@ export function hasOrganizationLocationCoordinates(location: OrganizationLocatio
 }
 
 export function formatOrganizationLocationAddress(location: OrganizationLocation) {
+  if (location.serviceMode === "no_fixed_location" && !location.address) {
+    return "Empresa sem sede fixa ou atendimento fisico";
+  }
+
   return [
     location.address,
     [location.city, location.region].filter(Boolean).join(" - "),
@@ -59,9 +73,18 @@ export function formatOrganizationLocationAddress(location: OrganizationLocation
     .join(", ");
 }
 
+export function formatOrganizationLocationServiceMode(mode: OrganizationLocationServiceMode) {
+  if (mode === "no_fixed_location") return "sem sede fixa";
+  if (mode === "private_headquarters") return "sede sem atendimento ao publico";
+  if (mode === "warehouse_dispatch") return "galpao/despacho sem atendimento ao publico";
+  return "loja/sede com atendimento";
+}
+
 function normalizeOrganizationLocation(value: unknown, index: number): OrganizationLocation | null {
   const input = isRecord(value) ? value : {};
+  const metadata = readRecord(input.metadata);
   const label = readLimitedString(input.label, 80) || (index === 0 ? "Unidade principal" : `Unidade ${index + 1}`);
+  const serviceMode = normalizeOrganizationLocationServiceMode(input.serviceMode ?? input.service_mode ?? metadata.service_mode);
   const address = readLimitedString(input.address, 240);
   const cep = normalizeCep(input.cep);
   const city = readLimitedString(input.city, 80);
@@ -75,6 +98,7 @@ function normalizeOrganizationLocation(value: unknown, index: number): Organizat
     id: readLimitedString(input.id, 80) || null,
     organizationId: null,
     label,
+    serviceMode,
     address: address || null,
     cep,
     city: city || null,
@@ -88,6 +112,12 @@ function normalizeOrganizationLocation(value: unknown, index: number): Organizat
   };
 
   return hasUsableOrganizationLocation(location) ? location : null;
+}
+
+function normalizeOrganizationLocationServiceMode(value: unknown): OrganizationLocationServiceMode {
+  return typeof value === "string" && organizationLocationServiceModes.has(value as OrganizationLocationServiceMode)
+    ? value as OrganizationLocationServiceMode
+    : "public_storefront";
 }
 
 function normalizeCep(value: unknown) {
@@ -145,4 +175,8 @@ function readBoolean(value: unknown, fallback: boolean) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
 }

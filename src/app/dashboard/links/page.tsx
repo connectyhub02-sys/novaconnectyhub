@@ -12,6 +12,7 @@ import {
   listClientSalesCatalogShippingSettings,
   listClientSalesCatalogWhatsappInstances,
 } from "@/lib/client-os/sales-catalog";
+import { listOrganizationLocations } from "@/lib/company-locations/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -40,6 +41,13 @@ export default async function DashboardLinksPage() {
     listClientSalesCatalogPaymentSessions({ userId: workspace.user.id, client }),
     listClientSalesCatalogWhatsappInstances({ userId: workspace.user.id, client }),
   ]);
+  const companyLocationEntries = await Promise.all(
+    companies.map(async (company) => [
+      company.id,
+      await listOrganizationLocations(client, company.id),
+    ] as const),
+  );
+  const companyLocations = Object.fromEntries(companyLocationEntries);
   const organization = workspace.organization;
 
   return (
@@ -53,6 +61,7 @@ export default async function DashboardLinksPage() {
     >
       <SalesCatalogConsole
         initialCompanies={companies}
+        initialCompanyLocations={companyLocations}
         initialCompanyId={organization?.id ?? companies[0]?.id ?? null}
         initialItems={items}
         initialOrders={orders}

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   formatOrganizationLocationAddress,
+  formatOrganizationLocationServiceMode,
   hasOrganizationLocationCoordinates,
   normalizeOrganizationLocations,
 } from "../src/lib/company-locations/shared";
@@ -10,6 +11,9 @@ import { normalizeWhatsappBehaviorConfig } from "../src/lib/whatsapp/agent-behav
 const runtimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const behaviorSource = readFileSync("src/lib/whatsapp/agent-behavior.ts", "utf8");
 const consoleSource = readFileSync("src/components/connectyhub-os/whatsapp-console.tsx", "utf8");
+const salesCatalogConsoleSource = readFileSync("src/components/connectyhub-os/sales-catalog-console.tsx", "utf8");
+const salesCatalogPageSource = readFileSync("src/app/dashboard/links/page.tsx", "utf8");
+const salesCatalogRouteSource = readFileSync("src/app/api/dashboard/sales-catalog/route.ts", "utf8");
 const globalsSource = readFileSync("src/app/globals.css", "utf8");
 const migrationSource = readFileSync("supabase/migrations/0061_organization_locations.sql", "utf8");
 
@@ -35,6 +39,7 @@ describe("WhatsApp standard behavior and company location", () => {
         mapsUrl: "https://maps.google.com/?q=-23.55,-46.63",
         latitude: "-23,55",
         longitude: "-46.63",
+        serviceMode: "warehouse_dispatch",
         isPrimary: false,
       },
       {
@@ -48,6 +53,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(locations[0].latitude).toBe(-23.55);
     expect(hasOrganizationLocationCoordinates(locations[0])).toBe(true);
     expect(formatOrganizationLocationAddress(locations[0])).toContain("Rua Teste, 100");
+    expect(formatOrganizationLocationServiceMode(locations[0].serviceMode)).toBe("galpao/despacho sem atendimento ao publico");
   });
 
   it("creates the Supabase table needed for organization locations", () => {
@@ -186,8 +192,8 @@ describe("WhatsApp standard behavior and company location", () => {
       "Turing benchmark",
     ].forEach((label) => expect(behaviorPanel).not.toContain(label));
 
-    expect(behaviorPanel).toContain("Localizacao da empresa");
-    expect(behaviorPanel).toContain("CompanyLocationsEditor");
+    expect(behaviorPanel).not.toContain("Localizacao da empresa");
+    expect(behaviorPanel).not.toContain("CompanyLocationsEditor");
     expect(behaviorPanel).not.toContain("Intervencao humana");
     expect(behaviorPanel).not.toContain("Avisar humano");
     expect(behaviorPanel).not.toContain("Cooldown aviso");
@@ -209,6 +215,19 @@ describe("WhatsApp standard behavior and company location", () => {
 
     expect(behaviorPanel).not.toContain('<BehaviorSection title="Seguranca e testes"');
     expect(aiWindowSection).toContain("Janela da IA ativa");
+  });
+
+  it("keeps company location maintenance inside the sales catalog delivery panel", () => {
+    expect(salesCatalogPageSource).toContain("listOrganizationLocations");
+    expect(salesCatalogPageSource).toContain("initialCompanyLocations");
+    expect(salesCatalogConsoleSource).toContain("CompanyLocationPolicyEditor");
+    expect(salesCatalogConsoleSource).toContain("Localizacao da empresa");
+    expect(salesCatalogConsoleSource).toContain("Tipo de sede");
+    expect(salesCatalogConsoleSource).toContain("Sem sede fixa");
+    expect(salesCatalogConsoleSource).toContain("Salvar entrega, frete e localizacao");
+    expect(salesCatalogConsoleSource).toContain("normalizeCompanyLocationDraftsForSave(companyLocationDrafts)");
+    expect(salesCatalogRouteSource).toContain("replaceOrganizationLocations");
+    expect(salesCatalogRouteSource).toContain("companyLocations");
   });
 
   it("keeps selected dashboard controls readable on dark accent backgrounds", () => {
@@ -245,6 +264,8 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(runtimeSource).toContain("listOrganizationLocations(client, run.organization_id)");
     expect(runtimeSource).toContain("buildOrganizationLocationLines(input.companyLocations)");
     expect(runtimeSource).toContain("resolveCompanyLocationMapUrl");
+    expect(runtimeSource).toContain("formatOrganizationLocationServiceMode(location.serviceMode)");
+    expect(runtimeSource).toContain("Se a localizacao estiver marcada como sem sede fixa");
     expect(runtimeSource).not.toContain('"/send/location"');
     expect(resolver).toContain('reason: "company_location_single"');
     expect(resolver).toContain('reason: "company_location_multiple"');

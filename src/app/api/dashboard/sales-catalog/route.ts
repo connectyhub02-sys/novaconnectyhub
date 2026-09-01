@@ -19,6 +19,7 @@ import {
   resolveDashboardCompanyId,
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
+import { replaceOrganizationLocations } from "@/lib/company-locations/server";
 import {
   brazilianStates,
   buildSalesCatalogContent,
@@ -766,7 +767,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
     }
 
     if (action === "save_shipping_settings") {
-      const shippingSettings = await saveShippingSettings({
+      const result = await saveShippingSettings({
         client,
         companyId,
         userId: workspace.user.id,
@@ -776,7 +777,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       revalidatePath("/dashboard/links");
       revalidatePath("/dashboard/whatsapp");
 
-      return NextResponse.json({ shippingSettings });
+      return NextResponse.json(result);
     }
 
     if (action === "calculate_shipping_quote") {
@@ -1365,6 +1366,7 @@ async function saveShippingSettings(input: {
   const activeRules = rules.filter((rule) => rule.active);
   const activeDeliveryRules = shippingEnabled ? activeRules : [];
   const activeLocalDeliveryZones = localDeliveryEnabled ? localDeliveryZones.filter((zone) => zone.active) : [];
+  const hasCompanyLocationsPayload = Boolean(input.body && Object.prototype.hasOwnProperty.call(input.body, "companyLocations"));
 
   assertShippingSettingsReady({
     shippingEnabled,
@@ -1372,6 +1374,15 @@ async function saveShippingSettings(input: {
     localDeliveryEnabled,
     activeLocalDeliveryZones,
   });
+
+  const companyLocations = hasCompanyLocationsPayload
+    ? await replaceOrganizationLocations({
+        client: input.client,
+        organizationId: company.id,
+        userId: input.userId,
+        locations: input.body?.companyLocations,
+      })
+    : undefined;
 
   const now = new Date().toISOString();
   const metadata = {
@@ -1465,7 +1476,10 @@ async function saveShippingSettings(input: {
     },
   });
 
-  return mapSalesCatalogShippingSettings(data);
+  return {
+    shippingSettings: mapSalesCatalogShippingSettings(data),
+    companyLocations,
+  };
 }
 
 async function calculateShippingQuote(input: {

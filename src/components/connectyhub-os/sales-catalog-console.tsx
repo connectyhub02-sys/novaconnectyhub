@@ -120,6 +120,12 @@ import {
   salesCatalogCategoryIconOptions,
   type SalesCatalogCategoryIconId,
 } from "@/lib/sales-catalog/category-icons";
+import {
+  formatOrganizationLocationServiceMode,
+  normalizeOrganizationLocations,
+  type OrganizationLocation,
+  type OrganizationLocationServiceMode,
+} from "@/lib/company-locations/shared";
 import type {
   ClientSalesCatalogImportEvent,
   ClientSalesCatalogImportJob,
@@ -172,6 +178,7 @@ function publishSalesCatalogItemDeleted(input: { companyId: string; itemId: stri
 
 type SalesCatalogConsoleProps = {
   initialCompanies: ClientCompany[];
+  initialCompanyLocations: Record<string, OrganizationLocation[]>;
   initialItems: ClientSalesCatalogItem[];
   initialOrders: ClientSalesCatalogOrder[];
   initialPaymentIntegrations: ClientSalesCatalogPaymentIntegration[];
@@ -389,6 +396,21 @@ type ShippingDraft = {
   localDeliveryZones: SalesCatalogLocalDeliveryZone[];
 };
 
+type CompanyLocationDraft = {
+  id: string | null;
+  label: string;
+  serviceMode: OrganizationLocationServiceMode;
+  address: string;
+  cep: string;
+  city: string;
+  region: string;
+  mapsUrl: string;
+  latitude: string;
+  longitude: string;
+  isPrimary: boolean;
+  notes: string;
+};
+
 type GoogleMapsConfig = {
   browserApiKey: string;
   mapId: string | null;
@@ -556,6 +578,33 @@ const salesCatalogProductFormTabs: Array<{ id: SalesCatalogProductFormTab; label
   { id: "delivery", label: "Entrega", icon: Truck },
 ];
 
+const companyLocationModeOptions: Array<{
+  value: OrganizationLocationServiceMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "public_storefront",
+    label: "Atende publico",
+    description: "Loja, clinica ou sede que pode receber clientes.",
+  },
+  {
+    value: "private_headquarters",
+    label: "Sede privada",
+    description: "Existe endereco, mas nao atende presencialmente.",
+  },
+  {
+    value: "warehouse_dispatch",
+    label: "Galpao/envio",
+    description: "Base usada para separar, despachar ou operar entregas.",
+  },
+  {
+    value: "no_fixed_location",
+    label: "Sem sede fixa",
+    description: "Operacao online, delivery, dropshipping ou atendimento remoto.",
+  },
+];
+
 const highlightLabelSuggestions = [
   "Mais vendido",
   "Mais procurado",
@@ -681,6 +730,7 @@ const salesCatalogHelpText: Record<string, string> = {
 
 export function SalesCatalogConsole({
   initialCompanies,
+  initialCompanyLocations,
   initialItems,
   initialOrders,
   initialPaymentSessions,
@@ -692,12 +742,14 @@ export function SalesCatalogConsole({
   const initialSelectedCompanyId = initialCompanyId ?? initialCompanies[0]?.id ?? "";
   const initialSelectedSettings = initialSettings.find((settings) => settings.companyId === initialSelectedCompanyId) ?? null;
   const initialSelectedShippingSettings = initialShippingSettings.find((settings) => settings.companyId === initialSelectedCompanyId) ?? null;
+  const initialSelectedCompanyLocations = initialCompanyLocations[initialSelectedCompanyId] ?? [];
   const [companies, setCompanies] = useState(initialCompanies);
   const [items, setItems] = useState(initialItems);
   const [orders, setOrders] = useState(initialOrders);
   const [paymentSessions, setPaymentSessions] = useState(initialPaymentSessions);
   const [settings, setSettings] = useState(initialSettings);
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
+  const [companyLocationsByCompanyId, setCompanyLocationsByCompanyId] = useState(initialCompanyLocations);
   const [whatsappInstances] = useState(initialWhatsappInstances);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
   const [activeTab, setActiveTab] = useState<CatalogTab>(initialSelectedSettings?.configured ? "products" : "setup");
@@ -708,6 +760,7 @@ export function SalesCatalogConsole({
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
   const [categoryIconPicker, setCategoryIconPicker] = useState<string | null>(null);
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
+  const [companyLocationDrafts, setCompanyLocationDrafts] = useState<CompanyLocationDraft[]>(() => toCompanyLocationDrafts(initialSelectedCompanyLocations));
   const [storefrontSettingsHighlighted, setStorefrontSettingsHighlighted] = useState(false);
   const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
@@ -1148,10 +1201,12 @@ export function SalesCatalogConsole({
   function changeCompany(companyId: string) {
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
     const nextShippingSettings = shippingSettings.find((entry) => entry.companyId === companyId) ?? null;
+    const nextCompanyLocations = companyLocationsByCompanyId[companyId] ?? [];
     setSelectedCompanyId(companyId);
     setCheckoutStageFilter("all");
     setSettingsDraft(buildSettingsDraft(nextSettings));
     setShippingDraft(buildShippingDraft(nextShippingSettings));
+    setCompanyLocationDrafts(toCompanyLocationDrafts(nextCompanyLocations));
     setSelectedShippingUf(nextShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
     setSelectedLocalDeliveryZoneId(resolveInitialLocalDeliveryZoneId(nextShippingSettings));
     setSelectedAttributes({});
@@ -1816,6 +1871,43 @@ export function SalesCatalogConsole({
     }));
   }
 
+  function updateCompanyLocationDraft(index: number, patch: Partial<CompanyLocationDraft>) {
+    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => (
+      locationIndex === index ? { ...location, ...patch } : location
+    )));
+  }
+
+  function addCompanyLocationDraft() {
+    setCompanyLocationDrafts((current) => [
+      ...current,
+      {
+        ...createEmptyCompanyLocationDraft(),
+        label: `Unidade ${current.length + 1}`,
+        isPrimary: current.length === 0,
+      },
+    ].slice(0, 8));
+  }
+
+  function removeCompanyLocationDraft(index: number) {
+    setCompanyLocationDrafts((current) => {
+      const next = current.filter((_, locationIndex) => locationIndex !== index);
+      if (next.length === 0) return [createEmptyCompanyLocationDraft()];
+
+      if (!next.some((location) => location.isPrimary)) {
+        next[0] = { ...next[0]!, isPrimary: true };
+      }
+
+      return next;
+    });
+  }
+
+  function markCompanyLocationPrimary(index: number) {
+    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => ({
+      ...location,
+      isPrimary: locationIndex === index,
+    })));
+  }
+
   function changeLocalDeliveryZoneShape(zoneId: string, shape: SalesCatalogLocalDeliveryZoneShape) {
     setShippingDraft((current) => ({
       ...current,
@@ -1896,6 +1988,7 @@ export function SalesCatalogConsole({
           localPickup: shippingDraft.localPickup,
           originCep: shippingDraft.originCep,
           defaultHandlingDays: parseOptionalNumber(shippingDraft.defaultHandlingDays),
+          companyLocations: normalizeCompanyLocationDraftsForSave(companyLocationDrafts),
           rules: shippingDraft.rules.map((rule) => ({
             uf: rule.uf,
             state: rule.state,
@@ -1944,7 +2037,11 @@ export function SalesCatalogConsole({
           })),
         }),
       });
-      const data = await response.json().catch(() => null) as { shippingSettings?: ClientSalesCatalogShippingSettings; error?: string } | null;
+      const data = await response.json().catch(() => null) as {
+        shippingSettings?: ClientSalesCatalogShippingSettings;
+        companyLocations?: OrganizationLocation[];
+        error?: string;
+      } | null;
 
       if (!response.ok || !data?.shippingSettings) {
         throw new Error(data?.error ?? "Nao foi possivel salvar o frete.");
@@ -1954,9 +2051,16 @@ export function SalesCatalogConsole({
         data.shippingSettings!,
         ...current.filter((entry) => entry.companyId !== data.shippingSettings!.companyId),
       ]);
+      if (data.companyLocations) {
+        setCompanyLocationsByCompanyId((current) => ({
+          ...current,
+          [data.shippingSettings!.companyId]: data.companyLocations!,
+        }));
+        setCompanyLocationDrafts(toCompanyLocationDrafts(data.companyLocations));
+      }
       setShippingDraft(buildShippingDraft(data.shippingSettings));
       setSelectedLocalDeliveryZoneId(resolveInitialLocalDeliveryZoneId(data.shippingSettings));
-      setNotice({ tone: "success", message: "Entrega e frete salvos para este catalogo." });
+      setNotice({ tone: "success", message: "Entrega, frete e localizacao salvos para este catalogo." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar frete." });
     } finally {
@@ -4176,11 +4280,21 @@ export function SalesCatalogConsole({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingShipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Salvar entrega e frete
+                Salvar entrega, frete e localizacao
               </button>
             </div>
 
             <div className="grid gap-4">
+              <CompanyLocationPolicyEditor
+                googleMapsConfig={googleMapsConfig}
+                loadingGoogleMapsConfig={loadingGoogleMapsConfig}
+                locations={companyLocationDrafts}
+                onAdd={addCompanyLocationDraft}
+                onChange={updateCompanyLocationDraft}
+                onPrimary={markCompanyLocationPrimary}
+                onRemove={removeCompanyLocationDraft}
+              />
+
               {shippingDraft.localDeliveryEnabled ? (
                 <LocalDeliveryZonesEditor
                   googleMapsConfig={googleMapsConfig}
@@ -8109,6 +8223,323 @@ type LocalDeliveryZonesEditorProps = {
   onUpdateZone: (zoneId: string, patch: Partial<SalesCatalogLocalDeliveryZone>) => void;
 };
 
+function CompanyLocationPolicyEditor({
+  googleMapsConfig,
+  loadingGoogleMapsConfig,
+  locations,
+  onAdd,
+  onChange,
+  onPrimary,
+  onRemove,
+}: {
+  googleMapsConfig: GoogleMapsConfig | null;
+  loadingGoogleMapsConfig: boolean;
+  locations: CompanyLocationDraft[];
+  onAdd: () => void;
+  onChange: (index: number, patch: Partial<CompanyLocationDraft>) => void;
+  onPrimary: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  const configuredCount = locations.filter(isCompanyLocationDraftMeaningful).length;
+
+  return (
+    <section className="rounded-xl border border-cyan-300/30 bg-cyan-300/5 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-cyan-300" />
+            <FieldLabel>Localizacao da empresa</FieldLabel>
+          </div>
+          <p className="text-[12px] leading-5 text-slate-400">
+            Defina se a empresa atende publico, so despacha pedidos ou nao tem sede fixa. Todos os agentes usam esta regra.
+          </p>
+        </div>
+        <NeonBadge tone={configuredCount > 0 ? "green" : "amber"}>
+          {configuredCount > 0 ? `${configuredCount} salva(s)` : "pendente"}
+        </NeonBadge>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {locations.map((location, index) => {
+          const noFixedLocation = location.serviceMode === "no_fixed_location";
+
+          return (
+            <div
+              key={`${location.id ?? "new"}-${index}`}
+              className="rounded-xl border p-3"
+              style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                    {location.isPrimary ? "referencia principal" : `referencia ${index + 1}`}
+                  </span>
+                  <p className="mt-1 text-[11px] font-semibold text-cyan-100">
+                    {formatOrganizationLocationServiceMode(location.serviceMode)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {!location.isPrimary ? (
+                    <button
+                      type="button"
+                      onClick={() => onPrimary(index)}
+                      className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Principal
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={locations.length === 1 && !isCompanyLocationDraftMeaningful(location)}
+                    onClick={() => onRemove(index)}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remover
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,1.26fr)]">
+                <label className="block">
+                  <FieldLabel>Nome da unidade</FieldLabel>
+                  <input
+                    value={location.label}
+                    onChange={(event) => onChange(index, { label: event.target.value.slice(0, 80) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Ex: Loja Centro, Galpao, Operacao online"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+
+                <div>
+                  <FieldLabel>Tipo de sede</FieldLabel>
+                  <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+                    {companyLocationModeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onChange(index, { serviceMode: option.value })}
+                        className={cn(
+                          "min-h-[74px] rounded-lg border p-3 text-left transition",
+                          location.serviceMode === option.value ? "border-cyan-300/65 bg-cyan-300/15 text-cyan-50" : "text-slate-300 hover:bg-cyan-400/10",
+                        )}
+                        style={{ borderColor: location.serviceMode === option.value ? undefined : "var(--ch-border)" }}
+                      >
+                        <span className="block text-[12px] font-bold">{option.label}</span>
+                        <span className="mt-1 block text-[11px] leading-4 text-slate-500">{option.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {noFixedLocation ? (
+                <div className="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-[12px] leading-5 text-amber-950 dark:text-amber-100">
+                  O agente vai informar que a empresa nao tem atendimento fisico nem sede fixa aberta ao publico. Frete e entrega local continuam funcionando pelas regras cadastradas abaixo.
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3">
+                    <CompanyLocationAddressSearch
+                      apiKey={googleMapsConfig?.browserApiKey ?? ""}
+                      configured={Boolean(googleMapsConfig?.configured)}
+                      loading={loadingGoogleMapsConfig}
+                      location={location}
+                      onPatch={(patch) => onChange(index, patch)}
+                    />
+                  </div>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <label className="block">
+                      <FieldLabel>CEP</FieldLabel>
+                      <input
+                        value={location.cep}
+                        onChange={(event) => onChange(index, { cep: cepInput(event.target.value) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        inputMode="numeric"
+                        placeholder="00000-000"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Cidade</FieldLabel>
+                      <input
+                        value={location.city}
+                        onChange={(event) => onChange(index, { city: event.target.value.slice(0, 80) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="Sao Paulo"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Estado</FieldLabel>
+                      <input
+                        value={location.region}
+                        onChange={(event) => onChange(index, { region: event.target.value.slice(0, 40) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="SP"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_140px_140px]">
+                    <label className="block">
+                      <FieldLabel>Link Google Maps</FieldLabel>
+                      <input
+                        value={location.mapsUrl}
+                        onChange={(event) => onChange(index, { mapsUrl: event.target.value.slice(0, 260) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="https://maps.google.com/..."
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Latitude</FieldLabel>
+                      <input
+                        value={location.latitude}
+                        onChange={(event) => onChange(index, { latitude: event.target.value.slice(0, 32) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="-23.5505"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                    <label className="block">
+                      <FieldLabel>Longitude</FieldLabel>
+                      <input
+                        value={location.longitude}
+                        onChange={(event) => onChange(index, { longitude: event.target.value.slice(0, 32) })}
+                        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="-46.6333"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+
+              <label className="mt-3 block">
+                <FieldLabel>Orientacao para o agente</FieldLabel>
+                <textarea
+                  value={location.notes}
+                  onChange={(event) => onChange(index, { notes: event.target.value.slice(0, 300) })}
+                  className="min-h-[82px] w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                  placeholder="Ex: nao atende presencialmente; retirada apenas combinada; galpao sem visita; empresa 100% online."
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        disabled={locations.length >= 8}
+        onClick={onAdd}
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Adicionar outra unidade ou base
+      </button>
+    </section>
+  );
+}
+
+function CompanyLocationAddressSearch({
+  apiKey,
+  configured,
+  loading,
+  location,
+  onPatch,
+}: {
+  apiKey: string;
+  configured: boolean;
+  loading: boolean;
+  location: CompanyLocationDraft;
+  onPatch: (patch: Partial<CompanyLocationDraft>) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const onPatchRef = useRef(onPatch);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onPatchRef.current = onPatch;
+  }, [onPatch]);
+
+  useEffect(() => {
+    if (!configured || loading || !apiKey.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+    let listener: GoogleMapsListener | null = null;
+
+    loadGoogleMapsScript(apiKey)
+      .then((google) => {
+        if (cancelled || !inputRef.current) return;
+
+        const autocomplete = google.maps.places?.Autocomplete;
+        if (!autocomplete) {
+          setLoadError("Busca de endereco indisponivel. Digite o endereco manualmente.");
+          return;
+        }
+
+        setLoadError(null);
+        const placesAutocomplete = new autocomplete(inputRef.current, {
+          componentRestrictions: { country: "br" },
+          fields: ["formatted_address", "geometry", "name"],
+        });
+
+        listener = placesAutocomplete.addListener("place_changed", () => {
+          const place = placesAutocomplete.getPlace();
+          const placeLocation = place.geometry?.location;
+          if (!placeLocation) return;
+
+          onPatchRef.current({
+            address: (place.formatted_address ?? place.name ?? inputRef.current?.value ?? "").slice(0, 240),
+            latitude: String(roundCoordinate(placeLocation.lat())),
+            longitude: String(roundCoordinate(placeLocation.lng())),
+          });
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError("Busca de endereco indisponivel. Digite o endereco manualmente.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      listener?.remove();
+    };
+  }, [apiKey, configured, loading, location.id]);
+
+  return (
+    <label className="block">
+      <FieldLabel>Endereco da sede/base</FieldLabel>
+      <div className="grid grid-cols-[40px_minmax(0,1fr)] rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        <span className="grid place-items-center text-slate-500">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+        </span>
+        <input
+          ref={inputRef}
+          value={location.address}
+          onChange={(event) => onPatch({ address: event.target.value.slice(0, 240) })}
+          className="h-11 min-w-0 bg-transparent pr-3 text-[12px] outline-none"
+          placeholder="Digite e selecione o endereco da empresa"
+        />
+      </div>
+      {loadError ? <p className="mt-1.5 text-[11px] text-amber-200">{loadError}</p> : null}
+    </label>
+  );
+}
+
 function LocalDeliveryZonesEditor({
   googleMapsConfig,
   loadingGoogleMapsConfig,
@@ -9788,6 +10219,72 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       surfaces: [...(settings?.commerceAgent?.surfaces ?? commerceDefaults.commerceAgent.surfaces)],
     },
   };
+}
+
+function createEmptyCompanyLocationDraft(): CompanyLocationDraft {
+  return {
+    id: null,
+    label: "Unidade principal",
+    serviceMode: "public_storefront",
+    address: "",
+    cep: "",
+    city: "",
+    region: "",
+    mapsUrl: "",
+    latitude: "",
+    longitude: "",
+    isPrimary: true,
+    notes: "",
+  };
+}
+
+function toCompanyLocationDrafts(locations: OrganizationLocation[]): CompanyLocationDraft[] {
+  if (locations.length === 0) {
+    return [createEmptyCompanyLocationDraft()];
+  }
+
+  return locations.map((location, index) => ({
+    id: location.id,
+    label: location.label || (index === 0 ? "Unidade principal" : `Unidade ${index + 1}`),
+    serviceMode: location.serviceMode,
+    address: location.address ?? "",
+    cep: location.cep ?? "",
+    city: location.city ?? "",
+    region: location.region ?? "",
+    mapsUrl: location.mapsUrl ?? "",
+    latitude: location.latitude === null ? "" : String(location.latitude),
+    longitude: location.longitude === null ? "" : String(location.longitude),
+    isPrimary: location.isPrimary || index === 0,
+    notes: location.notes ?? "",
+  }));
+}
+
+function normalizeCompanyLocationDraftsForSave(drafts: CompanyLocationDraft[]) {
+  return normalizeOrganizationLocations(drafts.map((draft) => ({
+    id: draft.id,
+    label: draft.label,
+    serviceMode: draft.serviceMode,
+    address: draft.address,
+    cep: draft.cep,
+    city: draft.city,
+    region: draft.region,
+    mapsUrl: draft.mapsUrl,
+    latitude: draft.latitude,
+    longitude: draft.longitude,
+    isPrimary: draft.isPrimary,
+    notes: draft.notes,
+  })));
+}
+
+function isCompanyLocationDraftMeaningful(location: CompanyLocationDraft) {
+  return Boolean(
+    location.address.trim()
+      || location.mapsUrl.trim()
+      || location.latitude.trim()
+      || location.longitude.trim()
+      || location.notes.trim()
+      || location.serviceMode === "no_fixed_location",
+  );
 }
 
 function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null): ShippingDraft {

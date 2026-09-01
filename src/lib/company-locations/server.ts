@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   normalizeOrganizationLocations,
   type OrganizationLocation,
+  type OrganizationLocationServiceMode,
 } from "./shared";
 
 type OrganizationLocationRow = {
@@ -19,6 +20,7 @@ type OrganizationLocationRow = {
   longitude: number | string | null;
   is_primary: boolean | null;
   notes: string | null;
+  metadata: Record<string, unknown> | null;
   updated_at: string | null;
 };
 
@@ -35,6 +37,7 @@ const selectColumns = [
   "longitude",
   "is_primary",
   "notes",
+  "metadata",
   "updated_at",
 ].join(", ");
 
@@ -99,6 +102,7 @@ export async function replaceOrganizationLocations(input: {
     updated_by: input.userId,
     metadata: {
       source: "client_dashboard",
+      service_mode: location.serviceMode,
     },
   }));
 
@@ -119,6 +123,7 @@ function mapOrganizationLocationRow(row: OrganizationLocationRow): OrganizationL
     id: row.id,
     organizationId: row.organization_id,
     label: row.label?.trim() || "Unidade principal",
+    serviceMode: readServiceMode(row.metadata?.service_mode),
     address: row.address?.trim() || null,
     cep: row.cep?.trim() || null,
     city: row.city?.trim() || null,
@@ -130,6 +135,12 @@ function mapOrganizationLocationRow(row: OrganizationLocationRow): OrganizationL
     notes: row.notes?.trim() || null,
     updatedAt: row.updated_at,
   };
+}
+
+function readServiceMode(value: unknown): OrganizationLocationServiceMode {
+  return value === "private_headquarters" || value === "warehouse_dispatch" || value === "no_fixed_location"
+    ? value
+    : "public_storefront";
 }
 
 function readNumber(value: number | string | null) {

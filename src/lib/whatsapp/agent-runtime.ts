@@ -35,6 +35,7 @@ import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/li
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   formatOrganizationLocationAddress,
+  formatOrganizationLocationServiceMode,
   hasOrganizationLocationCoordinates,
   hasUsableOrganizationLocation,
   type OrganizationLocation,
@@ -4235,6 +4236,7 @@ function buildOrganizationLocationLines(locations: RuntimeOrganizationLocation[]
       const address = formatOrganizationLocationAddress(location);
       const parts = [
         location.isPrimary ? "principal" : null,
+        formatOrganizationLocationServiceMode(location.serviceMode),
         address || null,
         location.mapsUrl ? `Maps: ${location.mapsUrl}` : null,
         resolveCompanyLocationMapUrl(location) ? "botao Google Maps disponivel" : null,
@@ -4243,7 +4245,7 @@ function buildOrganizationLocationLines(locations: RuntimeOrganizationLocation[]
 
       return `- ${location.label}: ${parts.join(" | ")}`;
     }),
-    "Quando o lead pedir onde fica, endereco, Maps ou localizacao da empresa, use somente uma das localizacoes cadastradas. Se houver varias e o lead nao especificar, pergunte qual unidade ele quer.",
+    "Quando o lead pedir onde fica, endereco, Maps ou localizacao da empresa, use somente uma das localizacoes cadastradas. Se a localizacao estiver marcada como sem sede fixa, sede sem atendimento ou galpao/despacho, explique isso claramente e nao ofereca atendimento presencial. Se houver varias e o lead nao especificar, pergunte qual unidade ele quer.",
   ];
 }
 
@@ -6550,7 +6552,9 @@ async function sendCompanyLocationReply(input: {
   reply: CompanyLocationReply;
 }): Promise<OutboundMessage[]> {
   const outbound: OutboundMessage[] = [];
-  const mapsUrl = input.reply.location ? resolveCompanyLocationMapUrl(input.reply.location) : null;
+  const mapsUrl = input.reply.location?.serviceMode === "public_storefront"
+    ? resolveCompanyLocationMapUrl(input.reply.location)
+    : null;
   let messageText = input.reply.text;
   let providerResponse: unknown;
   let interactiveButton = false;
@@ -6628,10 +6632,13 @@ async function sendCompanyLocationReply(input: {
 
 function buildSingleCompanyLocationText(organization: OrganizationRow, location: RuntimeOrganizationLocation) {
   const address = formatOrganizationLocationAddress(location);
+  const serviceMode = formatOrganizationLocationServiceMode(location.serviceMode);
   const lines = [
     `${location.label || organization.name}:`,
+    serviceMode,
     address || "localizacao cadastrada",
-    resolveCompanyLocationMapUrl(location) ? "toque no botao abaixo para abrir no Google Maps." : null,
+    location.notes ? location.notes : null,
+    resolveCompanyLocationMapUrl(location) && location.serviceMode === "public_storefront" ? "toque no botao abaixo para abrir no Google Maps." : null,
   ];
 
   return lines.filter(Boolean).join("\n");
@@ -6643,7 +6650,7 @@ function buildMultipleCompanyLocationsText(locations: RuntimeOrganizationLocatio
     "",
     ...locations.slice(0, 8).map((location, index) => {
       const address = formatOrganizationLocationAddress(location) || (resolveCompanyLocationMapUrl(location) ? "localizacao no Maps cadastrada" : "endereco nao detalhado");
-      return `${index + 1}. ${location.label}: ${address}`;
+      return `${index + 1}. ${location.label}: ${formatOrganizationLocationServiceMode(location.serviceMode)}; ${address}`;
     }),
     "",
     "qual delas você quer que eu te mande?",
@@ -6653,6 +6660,10 @@ function buildMultipleCompanyLocationsText(locations: RuntimeOrganizationLocatio
 }
 
 function resolveCompanyLocationMapUrl(location: RuntimeOrganizationLocation) {
+  if (location.serviceMode !== "public_storefront") {
+    return null;
+  }
+
   if (location.mapsUrl) {
     return location.mapsUrl;
   }

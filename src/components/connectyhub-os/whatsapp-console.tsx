@@ -76,10 +76,7 @@ import {
   type WhatsappRapportMode,
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
-import {
-  normalizeOrganizationLocations,
-  type OrganizationLocation,
-} from "@/lib/company-locations/shared";
+import type { OrganizationLocation } from "@/lib/company-locations/shared";
 import {
   agentPromptTemplates,
   buildAgentPromptFromTemplate,
@@ -206,20 +203,6 @@ type ClientCompany = {
   status: string;
   role: string;
   createdAt: string | null;
-};
-
-type CompanyLocationDraft = {
-  id: string | null;
-  label: string;
-  address: string;
-  cep: string;
-  city: string;
-  region: string;
-  mapsUrl: string;
-  latitude: string;
-  longitude: string;
-  isPrimary: boolean;
-  notes: string;
 };
 
 type ClientWhatsappAgent = {
@@ -596,7 +579,6 @@ export function WhatsAppConsole({
   const [promptTemplateDraft, setPromptTemplateDraft] = useState<AgentPromptBuilderConfig>(() => normalizeAgentPromptBuilderConfig(null));
   const [promptAssistantRunning, setPromptAssistantRunning] = useState(false);
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
-  const [companyLocationDrafts, setCompanyLocationDrafts] = useState<CompanyLocationDraft[]>(() => [createEmptyCompanyLocationDraft()]);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
   const [channelConfigDraft, setChannelConfigDraft] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
@@ -679,7 +661,6 @@ export function WhatsAppConsole({
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
-      setCompanyLocationDrafts(toCompanyLocationDrafts(nextState.companyLocations ?? []));
       setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
       setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
@@ -855,7 +836,6 @@ export function WhatsAppConsole({
     ? !isAgentPromptBuilderConfigEqual(promptTemplateDraft, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
     : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
-  const companyLocationsChanged = state ? !isCompanyLocationDraftsEqual(companyLocationDrafts, state.companyLocations ?? []) : false;
   const cloneProfileChanged = state?.agent
     ? !isCloneProfileEqual(cloneProfileDraft, normalizeWhatsappCloneProfile(state.agent.cloneProfile))
     : false;
@@ -865,7 +845,7 @@ export function WhatsAppConsole({
   const channelConfigChanged = state?.agent
     ? !isAgentChannelConfigEqual(channelConfigDraft, normalizeAgentChannelConfig(state.agent.channelConfig))
     : false;
-  const settingsChanged = agentNameChanged || promptChanged || promptTemplateChanged || behaviorChanged || companyLocationsChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
+  const settingsChanged = agentNameChanged || promptChanged || promptTemplateChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -881,41 +861,6 @@ export function WhatsAppConsole({
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
-  }
-
-  function updateCompanyLocationDraft(index: number, patch: Partial<CompanyLocationDraft>) {
-    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => (
-      locationIndex === index ? { ...location, ...patch } : location
-    )));
-  }
-
-  function addCompanyLocationDraft() {
-    setCompanyLocationDrafts((current) => [
-      ...current,
-      {
-        ...createEmptyCompanyLocationDraft(),
-        label: `Unidade ${current.length + 1}`,
-        isPrimary: current.length === 0,
-      },
-    ]);
-  }
-
-  function removeCompanyLocationDraft(index: number) {
-    setCompanyLocationDrafts((current) => {
-      const next = current.filter((_, locationIndex) => locationIndex !== index);
-      const fallback = next.length > 0 ? next : [createEmptyCompanyLocationDraft()];
-
-      return fallback.some((location) => location.isPrimary)
-        ? fallback
-        : fallback.map((location, locationIndex) => ({ ...location, isPrimary: locationIndex === 0 }));
-    });
-  }
-
-  function markCompanyLocationPrimary(index: number) {
-    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => ({
-      ...location,
-      isPrimary: locationIndex === index,
-    })));
   }
 
   function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
@@ -1237,7 +1182,6 @@ export function WhatsAppConsole({
           agentPrompt: promptDraft,
           promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
-          companyLocations: normalizeCompanyLocationDraftsForSave(companyLocationDrafts),
           cloneProfile: cloneProfileDraft,
           qualificationConfig: qualificationDraft,
           channelConfig: channelConfigDraft,
@@ -2110,7 +2054,7 @@ export function WhatsAppConsole({
         <Panel
           title="Comportamento do agente"
           eyebrow="controles do atendimento"
-          action={<NeonBadge tone={behaviorChanged || companyLocationsChanged ? "amber" : "green"}>{behaviorChanged || companyLocationsChanged ? "alterado" : "salvo"}</NeonBadge>}
+          action={<NeonBadge tone={behaviorChanged ? "amber" : "green"}>{behaviorChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
           <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
@@ -2187,16 +2131,6 @@ export function WhatsAppConsole({
                     />
                   </div>
                 </div>
-              </BehaviorSection>
-
-              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O botao abre o Google Maps quando houver link, coordenadas ou endereco completo.">
-                <CompanyLocationsEditor
-                  locations={companyLocationDrafts}
-                  onAdd={addCompanyLocationDraft}
-                  onChange={updateCompanyLocationDraft}
-                  onPrimary={markCompanyLocationPrimary}
-                  onRemove={removeCompanyLocationDraft}
-                />
               </BehaviorSection>
 
               <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
@@ -2282,7 +2216,7 @@ export function WhatsAppConsole({
               </BehaviorSection>
             </div>
 
-              <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged || companyLocationsChanged} />
+              <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged} />
 
             <div className="flex flex-wrap gap-2 2xl:col-start-2">
               <SecondaryAction
@@ -2402,62 +2336,6 @@ function normalizeAgentAutomationRoles(value: AgentAutomationRoles | null | unde
 
 function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorConfig) {
   return JSON.stringify(normalizeWhatsappBehaviorConfig(left)) === JSON.stringify(normalizeWhatsappBehaviorConfig(right));
-}
-
-function createEmptyCompanyLocationDraft(): CompanyLocationDraft {
-  return {
-    id: null,
-    label: "Unidade principal",
-    address: "",
-    cep: "",
-    city: "",
-    region: "",
-    mapsUrl: "",
-    latitude: "",
-    longitude: "",
-    isPrimary: true,
-    notes: "",
-  };
-}
-
-function toCompanyLocationDrafts(locations: OrganizationLocation[]): CompanyLocationDraft[] {
-  if (locations.length === 0) {
-    return [createEmptyCompanyLocationDraft()];
-  }
-
-  return locations.map((location, index) => ({
-    id: location.id,
-    label: location.label || (index === 0 ? "Unidade principal" : `Unidade ${index + 1}`),
-    address: location.address ?? "",
-    cep: location.cep ?? "",
-    city: location.city ?? "",
-    region: location.region ?? "",
-    mapsUrl: location.mapsUrl ?? "",
-    latitude: location.latitude === null ? "" : String(location.latitude),
-    longitude: location.longitude === null ? "" : String(location.longitude),
-    isPrimary: location.isPrimary || index === 0,
-    notes: location.notes ?? "",
-  }));
-}
-
-function normalizeCompanyLocationDraftsForSave(drafts: CompanyLocationDraft[]) {
-  return normalizeOrganizationLocations(drafts.map((draft) => ({
-    id: draft.id,
-    label: draft.label,
-    address: draft.address,
-    cep: draft.cep,
-    city: draft.city,
-    region: draft.region,
-    mapsUrl: draft.mapsUrl,
-    latitude: draft.latitude,
-    longitude: draft.longitude,
-    isPrimary: draft.isPrimary,
-    notes: draft.notes,
-  })));
-}
-
-function isCompanyLocationDraftsEqual(drafts: CompanyLocationDraft[], locations: OrganizationLocation[]) {
-  return JSON.stringify(normalizeCompanyLocationDraftsForSave(drafts)) === JSON.stringify(normalizeOrganizationLocations(locations));
 }
 
 function isAgentChannelConfigEqual(left: AgentChannelConfig, right: AgentChannelConfig) {
@@ -5508,118 +5386,6 @@ function TextAreaField({
         style={{ minHeight }}
       />
     </label>
-  );
-}
-
-function CompanyLocationsEditor({
-  locations,
-  onAdd,
-  onChange,
-  onPrimary,
-  onRemove,
-}: {
-  locations: CompanyLocationDraft[];
-  onAdd: () => void;
-  onChange: (index: number, patch: Partial<CompanyLocationDraft>) => void;
-  onPrimary: (index: number) => void;
-  onRemove: (index: number) => void;
-}) {
-  return (
-    <div className="grid gap-3">
-      <div className="grid gap-3">
-        {locations.map((location, index) => (
-          <div
-            key={`${location.id ?? "new"}-${index}`}
-            className="rounded-lg border p-3"
-            style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}
-          >
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                {location.isPrimary ? "unidade principal" : `unidade ${index + 1}`}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {!location.isPrimary ? (
-                  <SecondaryAction
-                    icon={ShieldCheck}
-                    label="Principal"
-                    description="Usar esta unidade quando o lead nao especificar qual local quer."
-                    onClick={() => onPrimary(index)}
-                  />
-                ) : null}
-                <SecondaryAction
-                  icon={Trash2}
-                  label="Remover"
-                  disabled={locations.length === 1 && !location.address && !location.mapsUrl && !location.latitude && !location.longitude}
-                  tone="danger"
-                  onClick={() => onRemove(index)}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-              <TextField
-                label="Nome da unidade"
-                description="Ex.: Loja Centro, Matriz, Unidade Sao Paulo."
-                value={location.label}
-                onChange={(label) => onChange(index, { label })}
-              />
-              <TextAreaField
-                label="Endereco completo"
-                description="Endereco que o agente pode enviar por texto."
-                minHeight="72px"
-                value={location.address}
-                onChange={(address) => onChange(index, { address })}
-              />
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <TextField label="CEP" value={location.cep} onChange={(cep) => onChange(index, { cep })} />
-              <TextField label="Cidade" value={location.city} onChange={(city) => onChange(index, { city })} />
-              <TextField label="Estado" value={location.region} onChange={(region) => onChange(index, { region })} />
-            </div>
-
-            <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_160px]">
-              <TextField
-                label="Link Google Maps"
-                description="Usado para montar o botao Abrir no Google Maps."
-                value={location.mapsUrl}
-                onChange={(mapsUrl) => onChange(index, { mapsUrl })}
-              />
-              <TextField
-                label="Latitude"
-                description="Ajuda a montar o botao do Google Maps quando nao houver link."
-                value={location.latitude}
-                onChange={(latitude) => onChange(index, { latitude })}
-              />
-              <TextField
-                label="Longitude"
-                description="Ajuda a montar o botao do Google Maps quando nao houver link."
-                value={location.longitude}
-                onChange={(longitude) => onChange(index, { longitude })}
-              />
-            </div>
-
-            <div className="mt-3">
-              <TextAreaField
-                label="Observacoes"
-                description="Ex.: estacionamento, horario de retirada, referencia de chegada."
-                minHeight="64px"
-                value={location.notes}
-                onChange={(notes) => onChange(index, { notes })}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <SecondaryAction
-        icon={Plus}
-        label="Adicionar unidade"
-        description="Use quando a empresa tiver mais de um endereco."
-        disabled={locations.length >= 8}
-        onClick={onAdd}
-      />
-    </div>
   );
 }
 
