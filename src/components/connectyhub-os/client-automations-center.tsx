@@ -324,24 +324,6 @@ export function ClientAutomationsCenter({
         </div>
       </Panel>
 
-      <Panel
-        title="Aumento de carrinho"
-        eyebrow="catalogo / produtos"
-        tone="amber"
-        action={<NeonBadge tone={selectedSettings?.orderBumps.enabled ? "amber" : "zinc"}>no catalogo</NeonBadge>}
-        collapsible
-      >
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] leading-5 text-slate-700">
-          <p className="font-semibold text-slate-900">A configuracao comercial agora fica em Catalogo de Vendas, na aba Produtos.</p>
-          <a
-            href="/dashboard/links"
-            className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-amber-700 transition hover:bg-amber-100"
-          >
-            <MessageSquareText className="h-4 w-4" />
-            Abrir catalogo
-          </a>
-        </div>
-      </Panel>
     </form>
   );
 }
