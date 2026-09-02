@@ -477,7 +477,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
     .limit(100);
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar produtos internos para order bump: ${error.message}`);
+    throw new Error(`Nao foi possivel carregar produtos internos para aumento de carrinho: ${error.message}`);
   }
 
   const selectedIds = new Set(settings.selectedProductIds);
@@ -543,7 +543,7 @@ async function loadBillingOrderBumpSettings(client: SupabaseClient) {
     .maybeSingle<{ metadata: JsonRecord | null }>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar configuracao de order bump: ${error.message}`);
+    throw new Error(`Nao foi possivel carregar configuracao de aumento de carrinho: ${error.message}`);
   }
 
   const metadata = data?.metadata ?? {};

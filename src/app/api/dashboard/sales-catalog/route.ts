@@ -1145,7 +1145,9 @@ async function saveCatalogSettings(input: {
     `CEP antes do frete: ${orderPolicy.askCepBeforeQuote ? "sim" : "nao"}`,
     leadDataPolicy.requiredFields.length ? `Dados do lead: ${leadDataPolicy.requiredFields.join(", ")}` : "",
     `Mensagem de resumo: ${messageTemplates.orderSummary}`,
-    orderBumps.enabled && orderBumps.items.length ? `Order bumps: ${orderBumps.items.length} oferta(s)` : "Order bumps: inativo",
+    orderBumps.enabled
+      ? `Aumento de carrinho: ${orderBumps.items.length} oferta(s) configurada(s); WhatsApp ${orderBumps.whatsappEnabled ? "ativo" : "inativo"}; automatico ${orderBumps.autoSuggestionsEnabled ? "ativo" : "inativo"}`
+      : "Aumento de carrinho: inativo",
     commerceAgent.enabled
       ? `Agente na loja: ${formatCommerceAgentMode(commerceAgent.mode)} em ${commerceAgent.surfaces.join(", ")}`
       : "Agente na loja: inativo",
@@ -3901,13 +3903,18 @@ function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSett
         badge: normalizeOptionalText(readFormString(itemRecord.badge), 32),
         title: normalizeOptionalText(readFormString(itemRecord.title), 80),
         description: normalizeOptionalText(readFormString(itemRecord.description), 180),
+        triggerText: normalizeOptionalText(readFormString(itemRecord.triggerText ?? itemRecord.trigger_text), 220),
       };
     })
     .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item))
     .slice(0, 12);
 
   return {
-    enabled: readBoolean(record.enabled) ?? false,
+    enabled: readBoolean(record.enabled) ?? fallback.enabled,
+    whatsappEnabled: readBoolean(record.whatsappEnabled ?? record.whatsapp_enabled) ?? fallback.whatsappEnabled,
+    checkoutEnabled: readBoolean(record.checkoutEnabled ?? record.checkout_enabled) ?? fallback.checkoutEnabled,
+    autoSuggestionsEnabled: readBoolean(record.autoSuggestionsEnabled ?? record.auto_suggestions_enabled) ?? fallback.autoSuggestionsEnabled,
+    maxOffersPerOrder: clampNumber(readFormNumber(record.maxOffersPerOrder ?? record.max_offers_per_order) ?? fallback.maxOffersPerOrder ?? 1, 1, 3),
     items,
   };
 }
@@ -4086,12 +4093,17 @@ function serializeAutomationSettings(settings: SalesCatalogAutomationSettings) {
 function serializeOrderBumps(settings: SalesCatalogOrderBumpSettings) {
   return {
     enabled: settings.enabled,
+    whatsapp_enabled: settings.whatsappEnabled,
+    checkout_enabled: settings.checkoutEnabled,
+    auto_suggestions_enabled: settings.autoSuggestionsEnabled,
+    max_offers_per_order: settings.maxOffersPerOrder,
     items: settings.items.map((item) => ({
       product_id: item.productId,
       active: item.active,
       badge: item.badge,
       title: item.title,
       description: item.description,
+      trigger_text: item.triggerText,
     })),
   };
 }
@@ -5308,6 +5320,21 @@ function statusForRouteError(error: unknown, fallback: number) {
 
 function readFormString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readFormNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function readStringArray(value: unknown) {

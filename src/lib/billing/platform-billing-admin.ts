@@ -373,7 +373,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
   const testCustomers = (testCustomersResult.data ?? []).map(mapTestCustomer);
   const webhookEvents = (webhookLogsResult.data ?? []).map(mapWebhookEvent);
   const orderBumpProducts = await loadBillingOrderBumpProductOptions(client).catch((error) => {
-    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar produtos internos para order bump.");
+    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar produtos internos para aumento de carrinho.");
     return [];
   });
 

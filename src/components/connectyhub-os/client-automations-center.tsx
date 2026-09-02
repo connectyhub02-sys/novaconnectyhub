@@ -5,7 +5,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bot,
   MessageSquareText,
-  PackagePlus,
   Save,
   Smartphone,
   ToggleLeft,
@@ -66,7 +65,7 @@ export function ClientAutomationsCenter({
   agents,
   companies,
   initialSettings,
-  products,
+  products: _products,
   whatsappInstances,
   initialCompanyId,
 }: ClientAutomationsCenterProps) {
@@ -77,16 +76,11 @@ export function ClientAutomationsCenter({
   const [notice, setNotice] = useState<Notice | null>(null);
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? null;
   const selectedSettings = findSettings(settings, selectedCompanyId);
-  const companyProducts = products.filter((product) => product.companyId === selectedCompanyId && product.status === "active");
-  const orderBumpProducts = companyProducts.filter((product) => (
-    product.salesDestination === "connectyhub_checkout" && Boolean(product.price)
-  ));
+  const companyProducts = _products.filter((product) => product.companyId === selectedCompanyId && product.status === "active");
   const companyWhatsappInstances = whatsappInstances.filter((instance) => instance.companyId === selectedCompanyId);
   const selectedWhatsapp = companyWhatsappInstances.find((instance) => instance.id === draft.automationSettings.defaultWhatsappInstanceId) ?? null;
-  const enabledOrderBumps = draft.orderBumps.items.filter((item) => item.active).length;
   const activeAutomations = [
     draft.automationSettings.paymentStatusNotifications,
-    draft.orderBumps.enabled && enabledOrderBumps > 0,
     Boolean(draft.automationSettings.defaultWhatsappInstanceId),
   ].filter(Boolean).length;
 
@@ -112,47 +106,6 @@ export function ClientAutomationsCenter({
       automationSettings: {
         ...current.automationSettings,
         ...patch,
-      },
-    }));
-  }
-
-  function toggleOrderBumpProduct(product: ClientSalesCatalogItem) {
-    setDraft((current) => {
-      const exists = current.orderBumps.items.find((item) => item.productId === product.id);
-      const items = exists
-        ? current.orderBumps.items.filter((item) => item.productId !== product.id)
-        : [
-            ...current.orderBumps.items,
-            {
-              productId: product.id,
-              active: true,
-              badge: product.highlightLabel ?? "Oferta extra",
-              title: product.title,
-              description: product.description.slice(0, 180),
-            },
-          ].slice(0, 12);
-
-      return {
-        ...current,
-        orderBumps: {
-          ...current.orderBumps,
-          items,
-        },
-      };
-    });
-  }
-
-  function updateOrderBumpItem(
-    productId: string,
-    patch: Partial<SalesCatalogOrderBumpSettings["items"][number]>,
-  ) {
-    setDraft((current) => ({
-      ...current,
-      orderBumps: {
-        ...current.orderBumps,
-        items: current.orderBumps.items.map((item) => (
-          item.productId === productId ? { ...item, ...patch } : item
-        )),
       },
     }));
   }
@@ -184,7 +137,7 @@ export function ClientAutomationsCenter({
           leadDataPolicy: source?.leadDataPolicy ?? defaults.leadDataPolicy,
           messageTemplates: draft.messageTemplates,
           automationSettings: draft.automationSettings,
-          orderBumps: draft.orderBumps,
+          orderBumps: source?.orderBumps ?? draft.orderBumps ?? defaults.orderBumps,
         }),
       });
       const data = await response.json().catch(() => null) as { settings?: ClientSalesCatalogSettings; error?: string } | null;
@@ -231,7 +184,7 @@ export function ClientAutomationsCenter({
       <PageHeader
         eyebrow="Workspace / automacoes"
         title="Automacoes"
-        description="Configure mensagens, agente WhatsApp e ofertas extras usadas pelo checkout e pelo agente de vendas."
+        description="Configure mensagens automaticas e o WhatsApp usado pelo atendimento."
         actions={
           <button
             type="submit"
@@ -372,87 +325,22 @@ export function ClientAutomationsCenter({
       </Panel>
 
       <Panel
-        title="Order bump"
-        eyebrow="checkout / ofertas extras"
+        title="Aumento de carrinho"
+        eyebrow="catalogo / produtos"
         tone="amber"
-        action={<NeonBadge tone={draft.orderBumps.enabled ? "amber" : "zinc"}>{enabledOrderBumps} ofertas</NeonBadge>}
+        action={<NeonBadge tone={selectedSettings?.orderBumps.enabled ? "amber" : "zinc"}>no catalogo</NeonBadge>}
+        collapsible
       >
-        <ToggleRow
-          checked={draft.orderBumps.enabled}
-          title="Mostrar ofertas extras no checkout"
-          description="Produtos marcados podem aparecer como oferta complementar antes do pagamento."
-          onClick={() => setDraft((current) => ({ ...current, orderBumps: { ...current.orderBumps, enabled: !current.orderBumps.enabled } }))}
-        />
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {orderBumpProducts.length ? orderBumpProducts.slice(0, 18).map((product) => {
-            const selected = draft.orderBumps.items.some((item) => item.productId === product.id);
-            return (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => toggleOrderBumpProduct(product)}
-                className={cn(
-                  "min-h-20 rounded-xl border p-3 text-left transition",
-                  selected ? "border-amber-300/50 bg-amber-300/12" : "border-slate-700/70 bg-slate-950/20 hover:border-amber-300/30",
-                )}
-              >
-                <span className="flex items-start gap-2">
-                  <PackagePlus className={cn("mt-0.5 h-4 w-4 shrink-0", selected ? "text-amber-200" : "text-slate-500")} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">{product.title}</span>
-                    <span className="mt-1 block text-[11px] text-slate-500">{product.price ? `R$ ${product.price}` : "sem preco"}</span>
-                  </span>
-                </span>
-              </button>
-            );
-          }) : (
-            <div className="rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">
-              Cadastre produtos ativos com preco para usar order bump.
-            </div>
-          )}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] leading-5 text-slate-700">
+          <p className="font-semibold text-slate-900">A configuracao comercial agora fica em Catalogo de Vendas, na aba Produtos.</p>
+          <a
+            href="/dashboard/links"
+            className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-amber-700 transition hover:bg-amber-100"
+          >
+            <MessageSquareText className="h-4 w-4" />
+            Abrir catalogo
+          </a>
         </div>
-        {draft.orderBumps.items.length ? (
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            {draft.orderBumps.items.map((item) => {
-              const product = companyProducts.find((entry) => entry.id === item.productId);
-
-              return (
-                <div
-                  key={item.productId}
-                  className="rounded-xl border border-amber-300/25 bg-amber-300/8 p-3"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-white">{product?.title ?? item.title ?? "Produto selecionado"}</p>
-                    <NeonBadge tone={item.active ? "amber" : "zinc"}>{item.active ? "ativo" : "pausado"}</NeonBadge>
-                  </div>
-                  <div className="grid gap-2">
-                    <input
-                      value={item.badge ?? ""}
-                      onChange={(event) => updateOrderBumpItem(item.productId, { badge: event.target.value.slice(0, 32) })}
-                      className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                      placeholder="Badge: Oferta especial"
-                      style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
-                    />
-                    <input
-                      value={item.title ?? ""}
-                      onChange={(event) => updateOrderBumpItem(item.productId, { title: event.target.value.slice(0, 80) })}
-                      className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                      placeholder="Titulo no checkout"
-                      style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
-                    />
-                    <textarea
-                      value={item.description ?? ""}
-                      onChange={(event) => updateOrderBumpItem(item.productId, { description: event.target.value.slice(0, 180) })}
-                      className="min-h-16 resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      placeholder="Descricao curta da oferta"
-                      style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
       </Panel>
     </form>
   );
@@ -512,8 +400,9 @@ function buildDraft(settings: ClientSalesCatalogSettings | null): AutomationsDra
     messageTemplates: { ...(settings?.messageTemplates ?? defaults.messageTemplates) },
     automationSettings: { ...(settings?.automationSettings ?? defaults.automationSettings) },
     orderBumps: {
-      enabled: settings?.orderBumps.enabled ?? false,
-      items: (settings?.orderBumps.items ?? []).map((item) => ({ ...item })),
+      ...defaults.orderBumps,
+      ...(settings?.orderBumps ?? {}),
+      items: (settings?.orderBumps.items ?? defaults.orderBumps.items).map((item) => ({ ...item })),
     },
   };
 }

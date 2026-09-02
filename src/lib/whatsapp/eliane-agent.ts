@@ -429,7 +429,7 @@ export function buildElianeOperationalManualContent() {
     "- Enviar atualizacoes de pagamento confirma pagamento aprovado para o cliente.",
     "- Priorizar WhatsApp da conversa faz o pedido responder pelo mesmo agente que atendeu o lead.",
     "- Mensagens automaticas ajusta templates de checkout/WhatsApp.",
-    "- Order bump mostra ofertas extras no checkout.",
+    "- Aumento de carrinho mostra ofertas extras no checkout.",
     "",
     "Integracoes",
     "- Caminho: Integracoes.",

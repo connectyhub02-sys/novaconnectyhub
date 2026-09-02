@@ -754,8 +754,8 @@ function formatCommerceEventLabel(eventType: string) {
     "commerce.checkout_started": "checkout iniciado",
     "commerce.checkout_idle": "checkout parado",
     "commerce.page_idle": "pagina parada",
-    "commerce.order_bump_shown": "order bump exibido",
-    "commerce.order_bump_accepted": "order bump aceito",
+    "commerce.order_bump_shown": "aumento de carrinho exibido",
+    "commerce.order_bump_accepted": "aumento de carrinho aceito",
     "commerce.whatsapp_return_clicked": "retorno ao WhatsApp clicado",
   };
 

@@ -1453,7 +1453,7 @@ function OrderBumpProductsEditor({
         <span className="min-w-0">
           <span className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
             <PackagePlus className="h-4 w-4 text-emerald-300" />
-            Order bumps do checkout
+            Aumentos de carrinho do checkout
           </span>
           <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
             Produtos internos do Produtos CH que aparecem como aumento de carrinho.

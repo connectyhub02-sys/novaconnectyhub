@@ -520,7 +520,7 @@ export function BillingPlanCheckout({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">
-                  Order bumps
+                  Aumento de carrinho
                 </div>
                 <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-100">
                   Oferta extra no checkout

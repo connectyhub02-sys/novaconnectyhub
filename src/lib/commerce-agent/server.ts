@@ -1796,7 +1796,12 @@ async function loadFallbackWhatsappInstance(client: SupabaseClient, organization
 
 async function resolveContextualOffer(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const settings = context.settings;
-  const manualBumps = settings.orderBumps.enabled
+  const orderBumps = settings.orderBumps;
+  if (!orderBumps.enabled || !orderBumps.checkoutEnabled) {
+    return null;
+  }
+
+  const manualBumps = orderBumps.enabled
     ? settings.orderBumps.items.filter((item) => item.active).map((item) => item.productId)
     : [];
   const candidateIds = [...manualBumps, context.productId].filter((id): id is string => Boolean(id));
@@ -1805,6 +1810,10 @@ async function resolveContextualOffer(context: Extract<CommerceAgentResolvedCont
   for (const bumpId of manualBumps) {
     const product = products.find((item) => item.id === bumpId);
     if (product) return product;
+  }
+
+  if (!orderBumps.autoSuggestionsEnabled) {
+    return null;
   }
 
   const categoryHints = getPlaybookCategoryHints(settings.commerceAgent.verticalPlaybook);
@@ -1928,7 +1937,7 @@ function buildCommerceAgentSystemInstruction(
     "- O produto atual da pagina sempre tem prioridade sobre produtos antigos do historico.",
     "- Se o lead abriu varios produtos sem comprar, trate como duvida/comparacao e ajude a escolher com uma pergunta curta.",
     "- Se estiver no checkout, ajude sem atrapalhar o pagamento. Seja curto e resolutivo.",
-    "- Faca upsell, cross-sell ou order bump somente quando combinar com o pedido, produto atual ou configuracao da loja.",
+    "- Faca aumento de carrinho somente quando combinar com o pedido, produto atual ou configuracao da loja.",
     "- Nunca force venda. Uma sugestao por vez. Se a pessoa ignorar ou recusar, siga ajudando no pedido principal.",
     "- Se nao houver complemento claro, nao invente. Ajude a escolher, revisar ou finalizar.",
     "",
@@ -1944,7 +1953,10 @@ function buildCommerceAgentSystemInstruction(
     `- Modo do agente na loja: ${context.settings.commerceAgent.mode}.`,
     `- Playbook: ${context.settings.commerceAgent.verticalPlaybook}.`,
     `- Maximo de ofertas por sessao: ${context.settings.commerceAgent.maxOffersPerSession ?? "sem limite definido"}.`,
-    `- Order bumps configurados: ${context.settings.orderBumps.enabled ? "ativos" : "inativos"}.`,
+    `- Aumento de carrinho: ${context.settings.orderBumps.enabled ? "ativo" : "inativo"}.`,
+    `- Aumento no WhatsApp: ${context.settings.orderBumps.whatsappEnabled ? "ativo" : "inativo"}.`,
+    `- Aumento no checkout: ${context.settings.orderBumps.checkoutEnabled ? "ativo" : "inativo"}.`,
+    `- Sugestao automatica por catalogo: ${context.settings.orderBumps.autoSuggestionsEnabled ? "ativa" : "inativa"}.`,
     `- Pre-adicionar ao carrinho: ${context.settings.commerceAgent.allowAutoAddToCart ? "permitido pela configuracao" : "nao permitido"}.`,
     `- Checkout silencioso: ${context.settings.commerceAgent.checkoutQuietMode ? "sim" : "nao"}.`,
     ...buildPagBankCommercePolicyLines(context.settings),
@@ -2354,7 +2366,7 @@ function formatOfferContext(
     offer.priceLabel ? `- Preco: ${offer.priceLabel}` : null,
     `- Cobranca: ${formatOfferProductBilling(offer)}`,
     offer.category ? `- Categoria: ${offer.category}` : null,
-    manualBump ? "- Origem: order bump configurado no painel." : "- Origem: sugestao pelo catalogo/playbook.",
+    manualBump ? "- Origem: aumento de carrinho configurado no painel." : "- Origem: sugestao pelo catalogo/playbook.",
     "- Use esta oferta so se combinar com o pedido ou a duvida atual. Nao repita se ja foi oferecida recentemente.",
   ].filter((line): line is string => Boolean(line)).join("\n");
 }

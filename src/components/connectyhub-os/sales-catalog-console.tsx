@@ -873,6 +873,14 @@ export function SalesCatalogConsole({
     () => items.filter((item) => !selectedCompanyId || item.companyId === selectedCompanyId),
     [items, selectedCompanyId],
   );
+  const cartIncreaseProducts = useMemo(
+    () => visibleItems.filter((item) => (
+      item.status === "active"
+      && item.salesDestination === "connectyhub_checkout"
+      && Boolean(item.price)
+    )),
+    [visibleItems],
+  );
   const visibleWhatsappCatalogItems = useMemo(
     () => visibleItems.filter((item) => item.source === "whatsapp_catalog"),
     [visibleItems],
@@ -960,6 +968,7 @@ export function SalesCatalogConsole({
     () => visibleItems.find((item) => item.storeFeatured && item.status === "active") ?? null,
     [visibleItems],
   );
+  const activeCartIncreaseCount = settingsDraft.orderBumps.items.filter((item) => item.active).length;
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
   const storefrontDisplayName = settingsDraft.storefront.publicDisplayName?.trim() || selectedCompany?.name || "sua loja";
@@ -1505,6 +1514,66 @@ export function SalesCatalogConsole({
     setSettingsDraft((current) => ({
       ...current,
       commerceAgent: { ...current.commerceAgent, ...patch },
+    }));
+  }
+
+  function updateOrderBumpSettings(patch: Partial<SalesCatalogOrderBumpSettings>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      orderBumps: { ...current.orderBumps, ...patch },
+    }));
+  }
+
+  function toggleCartIncreaseProduct(product: ClientSalesCatalogItem) {
+    setSettingsDraft((current) => {
+      const exists = current.orderBumps.items.some((item) => item.productId === product.id);
+      const items = exists
+        ? current.orderBumps.items.filter((item) => item.productId !== product.id)
+        : [
+            ...current.orderBumps.items,
+            {
+              productId: product.id,
+              active: true,
+              badge: product.highlightLabel ?? "Aumento de carrinho",
+              title: product.title,
+              description: product.description.slice(0, 180),
+              triggerText: null,
+            },
+          ].slice(0, 12);
+
+      return {
+        ...current,
+        orderBumps: {
+          ...current.orderBumps,
+          enabled: true,
+          items,
+        },
+      };
+    });
+  }
+
+  function updateCartIncreaseItem(
+    productId: string,
+    patch: Partial<SalesCatalogOrderBumpSettings["items"][number]>,
+  ) {
+    setSettingsDraft((current) => ({
+      ...current,
+      orderBumps: {
+        ...current.orderBumps,
+        items: current.orderBumps.items.map((item) => (
+          item.productId === productId ? { ...item, ...patch } : item
+        )),
+      },
+    }));
+  }
+
+  function removeCartIncreaseItem(productId: string) {
+    setSettingsDraft((current) => ({
+      ...current,
+      orderBumps: {
+        ...current.orderBumps,
+        items: current.orderBumps.items.filter((item) => item.productId !== productId),
+      },
     }));
   }
 
@@ -3779,10 +3848,10 @@ export function SalesCatalogConsole({
               <AccordionSection icon={MessageSquareText} title="Automacoes do checkout" tone="cyan">
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3">
                   <p className="text-[13px] font-semibold text-slate-100">
-                    Mensagens automaticas, WhatsApp de envio e Order Bump agora ficam em Automacoes.
+                    Mensagens automaticas ficam em Automacoes. Aumento de carrinho fica junto dos Produtos.
                   </p>
                   <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                    O catalogo fica responsavel por produtos, pagamento, frete e pedido. As mensagens que o agente envia ao lead ficam em um ambiente unico.
+                    O catalogo fica responsavel por produtos, aumento de carrinho, pagamento, frete e pedido. As mensagens que o agente envia ao lead ficam em um ambiente unico.
                   </p>
                   <Link
                     href="/dashboard/automacoes"
@@ -5031,7 +5100,7 @@ export function SalesCatalogConsole({
             />
           ) : null}
           <WhatsAppCatalogBridgePanel
-            className="order-2"
+            className="order-4 xl:col-span-2"
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
             canExport={canExportWhatsappCatalog}
@@ -5092,6 +5161,8 @@ export function SalesCatalogConsole({
             eyebrow={selectedCompany?.name ?? "empresa"}
             tone="cyan"
             compact
+            collapsible={!editingItemId}
+            defaultOpen={Boolean(editingItemId)}
           >
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
@@ -6006,6 +6077,18 @@ export function SalesCatalogConsole({
             </div>
             </div>
           </Panel>
+          <SalesCatalogCartIncreasePanel
+            className="order-2"
+            allProducts={visibleItems}
+            companyName={selectedCompany?.name ?? "empresa"}
+            products={cartIncreaseProducts}
+            settings={settingsDraft.orderBumps}
+            activeCount={activeCartIncreaseCount}
+            onPatchSettings={updateOrderBumpSettings}
+            onRemoveItem={removeCartIncreaseItem}
+            onToggleProduct={toggleCartIncreaseProduct}
+            onUpdateItem={updateCartIncreaseItem}
+          />
           </>
           ) : (
           <WhatsAppCatalogBridgePanel
@@ -6047,7 +6130,7 @@ export function SalesCatalogConsole({
           )}
         </div>
 
-        <Panel className={activeTab === "products" ? "order-3 xl:col-span-2" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact>
+        <Panel className={activeTab === "products" ? "order-3 xl:col-span-2" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact collapsible defaultOpen>
           {visibleItems.length > 0 ? (
             <div className="grid gap-3 xl:grid-cols-2">
               {visibleItems.map((item) => (
@@ -6204,6 +6287,241 @@ function CategoryIconPickerModal({
   );
 }
 
+function SalesCatalogCartIncreasePanel({
+  activeCount,
+  allProducts,
+  className,
+  companyName,
+  products,
+  settings,
+  onPatchSettings,
+  onRemoveItem,
+  onToggleProduct,
+  onUpdateItem,
+}: {
+  activeCount: number;
+  allProducts: ClientSalesCatalogItem[];
+  className?: string;
+  companyName: string;
+  products: ClientSalesCatalogItem[];
+  settings: SalesCatalogOrderBumpSettings;
+  onPatchSettings: (patch: Partial<SalesCatalogOrderBumpSettings>) => void;
+  onRemoveItem: (productId: string) => void;
+  onToggleProduct: (product: ClientSalesCatalogItem) => void;
+  onUpdateItem: (productId: string, patch: Partial<SalesCatalogOrderBumpSettings["items"][number]>) => void;
+}) {
+  const selectedIds = new Set(settings.items.map((item) => item.productId));
+  const selectedItems = settings.items.map((item) => ({
+    config: item,
+    product: allProducts.find((product) => product.id === item.productId) ?? null,
+  }));
+  const maxOffers = Math.max(1, Math.min(3, settings.maxOffersPerOrder ?? 1));
+
+  return (
+    <Panel
+      action={(
+        <NeonBadge tone={settings.enabled ? "amber" : "zinc"}>
+          {activeCount > 0 ? `${activeCount} ativo(s)` : settings.autoSuggestionsEnabled ? "IA ativa" : "0 ativo(s)"}
+        </NeonBadge>
+      )}
+      className={className}
+      title="Aumento de carrinho"
+      eyebrow={`${companyName} / produtos`}
+      tone="amber"
+      compact
+      collapsible
+      defaultOpen={settings.enabled && activeCount > 0}
+    >
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <CartIncreaseSwitch
+            checked={settings.enabled}
+            label="Ativo"
+            description="Libera ofertas antes do pagamento."
+            onChange={(checked) => onPatchSettings({ enabled: checked })}
+          />
+          <CartIncreaseSwitch
+            checked={settings.whatsappEnabled}
+            label="WhatsApp"
+            description="O agente oferece na conversa."
+            onChange={(checked) => onPatchSettings({ whatsappEnabled: checked })}
+          />
+          <CartIncreaseSwitch
+            checked={settings.checkoutEnabled}
+            label="Checkout"
+            description="Reforco opcional na pagina."
+            onChange={(checked) => onPatchSettings({ checkoutEnabled: checked })}
+          />
+          <CartIncreaseSwitch
+            checked={settings.autoSuggestionsEnabled}
+            label="Sugestao IA"
+            description="Usa catalogo quando nao ha regra."
+            onChange={(checked) => onPatchSettings({ autoSuggestionsEnabled: checked })}
+          />
+        </div>
+
+        <label className="block">
+          <FieldLabel>Limite por pedido</FieldLabel>
+          <input
+            value={maxOffers}
+            onChange={(event) => onPatchSettings({
+              maxOffersPerOrder: clampNumber(parseOptionalNumber(event.target.value) ?? 1, 1, 3),
+            })}
+            className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+            inputMode="numeric"
+            max={3}
+            min={1}
+            type="number"
+            style={{ borderColor: "var(--ch-border)" }}
+          />
+        </label>
+
+        <div>
+          <FieldLabel>Produtos para oferecer</FieldLabel>
+          {products.length > 0 ? (
+            <div className="mt-2 grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+              {products.slice(0, 28).map((product) => {
+                const selected = selectedIds.has(product.id);
+
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => onToggleProduct(product)}
+                    className={cn(
+                      "min-h-16 rounded-lg border p-2.5 text-left transition",
+                      selected ? "border-amber-400/45 bg-amber-300/15" : "hover:bg-amber-300/8",
+                    )}
+                    style={{ borderColor: selected ? undefined : "var(--ch-border)", background: selected ? undefined : "var(--ch-panel)" }}
+                  >
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{product.title}</span>
+                        <span className="mt-1 block truncate text-[11px] text-slate-500">
+                          {product.price ? `R$ ${product.price}` : "sem preco"}{product.category ? ` / ${product.category}` : ""}
+                        </span>
+                      </span>
+                      <span className={cn(
+                        "grid h-7 w-7 shrink-0 place-items-center rounded-lg border",
+                        selected ? "border-amber-400/40 bg-amber-300 text-slate-950" : "text-slate-500",
+                      )}>
+                        {selected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <PackagePlus className="h-3.5 w-3.5" />}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-2 rounded-lg border border-dashed px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Cadastre produtos ativos com preco e checkout ConnectyHub.
+            </div>
+          )}
+        </div>
+
+        {selectedItems.length > 0 ? (
+          <div className="grid gap-3">
+            {selectedItems.map(({ config, product }) => (
+              <div key={config.productId} className="rounded-xl border p-3" style={{ borderColor: "rgba(245, 158, 11, 0.32)", background: "rgba(245, 158, 11, 0.07)" }}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{product?.title ?? config.title ?? "Produto selecionado"}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{product?.price ? `R$ ${product.price}` : "preco pendente"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                      <input
+                        checked={config.active}
+                        type="checkbox"
+                        onChange={(event) => onUpdateItem(config.productId, { active: event.target.checked })}
+                      />
+                      Ativa
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveItem(config.productId)}
+                      className="grid h-8 w-8 place-items-center rounded-lg border text-rose-500 transition hover:bg-rose-500/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Remover"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <input
+                    value={config.badge ?? ""}
+                    onChange={(event) => onUpdateItem(config.productId, { badge: event.target.value.slice(0, 32) })}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Selo: leve junto, combina com seu pedido"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={config.title ?? ""}
+                    onChange={(event) => onUpdateItem(config.productId, { title: event.target.value.slice(0, 80) })}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Titulo da oferta"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <textarea
+                    value={config.triggerText ?? ""}
+                    onChange={(event) => onUpdateItem(config.productId, { triggerText: event.target.value.slice(0, 220) })}
+                    className="min-h-16 resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                    placeholder="Quando oferecer: ex. pizza sem bebida, produto de emagrecimento sem suplemento, compra acima de R$ 100"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <textarea
+                    value={config.description ?? ""}
+                    onChange={(event) => onUpdateItem(config.productId, { description: event.target.value.slice(0, 180) })}
+                    className="min-h-16 resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                    placeholder="Argumento curto para o agente"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function CartIncreaseSwitch({
+  checked,
+  description,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  description: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "flex min-h-16 items-start gap-2 rounded-lg border p-2.5 text-left transition",
+        checked ? "border-amber-400/45 bg-amber-300/15" : "hover:bg-slate-900/[0.025]",
+      )}
+      style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
+    >
+      <span className={cn(
+        "mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border",
+        checked ? "border-amber-400/40 bg-amber-300 text-slate-950" : "text-slate-500",
+      )}>
+        {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
+        <span className="mt-1 block text-[11px] leading-4 text-slate-500">{description}</span>
+      </span>
+    </button>
+  );
+}
+
 function WhatsAppCatalogBridgePanel({
   canExport,
   canImport,
@@ -6282,7 +6600,7 @@ function WhatsAppCatalogBridgePanel({
   const selectedExportInstance = connectedInstances.find((instance) => instance.id === selectedExportInstanceId) ?? null;
 
   return (
-    <Panel className={className} title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact>
+    <Panel className={className} title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact collapsible>
       <div className="space-y-3">
         <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-[11px] leading-5 text-slate-600">
           <p className="font-semibold text-slate-900">Esta area e somente para catalogo nativo do WhatsApp.</p>
@@ -10246,8 +10564,9 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     messageTemplates: { ...(settings?.messageTemplates ?? commerceDefaults.messageTemplates) },
     automationSettings: { ...(settings?.automationSettings ?? commerceDefaults.automationSettings) },
     orderBumps: {
-      enabled: settings?.orderBumps?.enabled ?? false,
-      items: (settings?.orderBumps?.items ?? []).map((item) => ({ ...item })),
+      ...commerceDefaults.orderBumps,
+      ...(settings?.orderBumps ?? {}),
+      items: (settings?.orderBumps?.items ?? commerceDefaults.orderBumps.items).map((item) => ({ ...item })),
     },
     commerceAgent: {
       ...(settings?.commerceAgent ?? commerceDefaults.commerceAgent),

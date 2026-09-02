@@ -155,10 +155,15 @@ export type SalesCatalogOrderBumpItem = {
   badge: string | null;
   title: string | null;
   description: string | null;
+  triggerText: string | null;
 };
 
 export type SalesCatalogOrderBumpSettings = {
   enabled: boolean;
+  whatsappEnabled: boolean;
+  checkoutEnabled: boolean;
+  autoSuggestionsEnabled: boolean;
+  maxOffersPerOrder: number | null;
   items: SalesCatalogOrderBumpItem[];
 };
 
@@ -758,7 +763,7 @@ export type SalesCatalogStorefrontSettings = {
 
 export type SalesCatalogCommerceSettings = Pick<
   ClientSalesCatalogSettings,
-  "paymentMethods" | "pagBank" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings" | "commerceAgent"
+  "paymentMethods" | "pagBank" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings" | "orderBumps" | "commerceAgent"
 >;
 
 export const salesCatalogCommerceAgentModeOptions: Array<{
@@ -907,7 +912,11 @@ export function createDefaultSalesCatalogAutomationSettings(): SalesCatalogAutom
 
 export function createDefaultSalesCatalogOrderBumps(): SalesCatalogOrderBumpSettings {
   return {
-    enabled: false,
+    enabled: true,
+    whatsappEnabled: true,
+    checkoutEnabled: true,
+    autoSuggestionsEnabled: true,
+    maxOffersPerOrder: 1,
     items: [],
   };
 }
@@ -938,6 +947,7 @@ export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerc
     leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
     messageTemplates: createDefaultSalesCatalogMessageTemplates(),
     automationSettings: createDefaultSalesCatalogAutomationSettings(),
+    orderBumps: createDefaultSalesCatalogOrderBumps(),
     commerceAgent: createDefaultSalesCatalogCommerceAgentSettings(),
   };
 }

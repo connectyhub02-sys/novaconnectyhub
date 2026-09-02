@@ -155,7 +155,7 @@ export async function applySalesCatalogCheckoutOrderBumps(input: {
 
 async function loadConfiguredOrderBumps(client: SupabaseClient, organizationId: string) {
   const settings = await getOrganizationSalesCatalogSettings(client, organizationId);
-  if (!settings?.orderBumps.enabled) return [];
+  if (!settings?.orderBumps.enabled || !settings.orderBumps.checkoutEnabled) return [];
 
   return settings.orderBumps.items.filter((item) => item.active && item.productId);
 }

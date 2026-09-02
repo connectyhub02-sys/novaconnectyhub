@@ -2973,6 +2973,7 @@ function buildSystemInstruction(input: {
     ...buildLinkButtonLines(input.linkButtons, input),
     ...buildOrganizationLocationLines(input.companyLocations),
     ...buildSalesCatalogLines(input.salesCatalog),
+    ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
     ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
     ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
     ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
@@ -4320,6 +4321,59 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
         : "";
       return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
     }),
+  ];
+}
+
+function buildSalesCatalogCartIncreaseLines(
+  settings: ClientSalesCatalogSettings | null,
+  items: RuntimeSalesCatalogItem[],
+) {
+  if (!settings?.configured || !settings.orderBumps.enabled || !settings.orderBumps.whatsappEnabled) {
+    return [];
+  }
+
+  const sellableItems = items
+    .filter((item) => isSalesCatalogItemSellable(item) && item.salesDestination === "connectyhub_checkout")
+    .slice(0, 40);
+  const productById = new Map(sellableItems.map((item) => [item.id, item]));
+  const configuredOffers = settings.orderBumps.items
+    .filter((item) => item.active && productById.has(item.productId))
+    .slice(0, 12);
+  const maxOffers = Math.max(1, Math.min(3, settings.orderBumps.maxOffersPerOrder ?? 1));
+
+  return [
+    "",
+    "AUMENTO DE CARRINHO NO WHATSAPP:",
+    "- Regra global: antes de gerar Pix, checkout de cartao, boleto ou link de pagamento, avalie uma oportunidade curta de aumentar o carrinho dentro da conversa.",
+    "- Prioridade: primeiro use ofertas configuradas pela loja; se nenhuma combinar e a sugestao automatica estiver ativa, use um complemento coerente do catalogo.",
+    "- Sugestao automatica permitida: produto da mesma categoria, adicional natural, item complementar, bebida/acessorio/servico ligado ao pedido, ou produto que combine com objetivo declarado pelo lead.",
+    "- Quando o lead pede uma recomendacao completa, monte a cesta ideal e confirme o pedido; nesse caso nao trate cada item como insistencia de aumento.",
+    `- Limite de oferta complementar: no maximo ${maxOffers} por pedido antes do pagamento.`,
+    "- Nunca adicione produto extra sem aceite explicito do lead. Se ele ignorar, recusar ou parecer indeciso, siga com o pedido principal.",
+    "- Ao oferecer, use uma frase curta e mencione o produto pelo nome/preco. Ao receber aceite claro, inclua esse item na proxima previa do pedido antes de cobrar.",
+    "- Nao diga ao lead 'order bump', 'upsell', 'cross-sell', 'regra automatica', 'catalogo interno' ou qualquer termo tecnico.",
+    settings.orderBumps.autoSuggestionsEnabled
+      ? "- Sugestao automatica pelo catalogo: ativa quando nao houver regra configurada que combine."
+      : "- Sugestao automatica pelo catalogo: desativada; use somente ofertas configuradas abaixo.",
+    configuredOffers.length > 0
+      ? "- Ofertas configuradas pela loja:"
+      : "- Nenhuma oferta manual configurada; use somente a sugestao automatica quando ela estiver ativa e fizer sentido.",
+    ...configuredOffers.map((offer) => {
+      const product = productById.get(offer.productId);
+      if (!product) return "";
+
+      const parts = [
+        `${offer.title?.trim() || product.title}`,
+        product.price ? `preco ${product.price} ${product.currency}` : "",
+        offer.badge ? `selo ${offer.badge}` : "",
+        product.category ? `categoria ${product.category}` : "",
+        offer.triggerText ? `oferecer quando ${offer.triggerText}` : "oferecer quando complementar o pedido atual",
+        offer.description ? `argumento ${preview(offer.description, 160)}` : "",
+        `tag ${product.tag}`,
+      ].filter(Boolean);
+
+      return `  - ${parts.join(" | ")}.`;
+    }).filter(Boolean),
   ];
 }
 

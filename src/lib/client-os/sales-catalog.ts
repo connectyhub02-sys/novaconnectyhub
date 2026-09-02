@@ -2025,12 +2025,17 @@ function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings)
         badge: readString(itemRecord.badge),
         title: readString(itemRecord.title),
         description: readString(itemRecord.description),
+        triggerText: readString(itemRecord.trigger_text) ?? readString(itemRecord.triggerText),
       };
     })
     .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item));
 
   return {
     enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
+    whatsappEnabled: readNullableBoolean(record.whatsapp_enabled ?? record.whatsappEnabled) ?? fallback.whatsappEnabled,
+    checkoutEnabled: readNullableBoolean(record.checkout_enabled ?? record.checkoutEnabled) ?? fallback.checkoutEnabled,
+    autoSuggestionsEnabled: readNullableBoolean(record.auto_suggestions_enabled ?? record.autoSuggestionsEnabled) ?? fallback.autoSuggestionsEnabled,
+    maxOffersPerOrder: readNumber(record.max_offers_per_order ?? record.maxOffersPerOrder) ?? fallback.maxOffersPerOrder,
     items,
   };
 }
