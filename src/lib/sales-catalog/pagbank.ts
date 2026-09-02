@@ -43,6 +43,7 @@ type IntegrationSecrets = {
   organizationId: string;
   accessToken: string;
   refreshToken: string | null;
+  tokenScope: string | null;
   tokenExpiresAt: string | null;
   webhookSecret: string | null;
   mode: "production" | "sandbox";
@@ -226,7 +227,7 @@ export type PagBankCardPaymentData = {
 
 const pagBankPlatformIntegrationId = "pagbank";
 const pagBankPlatformBillingIntegrationId = "pagbank-billing";
-const pagBankDefaultScopes = [
+const pagBankDefaultScopeList = [
   "payments.read",
   "payments.create",
   "payments.refund",
@@ -235,7 +236,13 @@ const pagBankDefaultScopes = [
   "checkout.view",
   "checkout.update",
   // URLSearchParams serializes spaces as raw plus signs, which PagBank expects between scopes.
-].join(" ");
+] as const;
+const pagBankRuntimeRequiredScopeList = [
+  "payments.create",
+  "payments.read",
+  "accounts.read",
+] as const;
+const pagBankDefaultScopes = pagBankDefaultScopeList.join(" ");
 const pagBankCredentialNames = [
   "PAGBANK_CLIENT_ID",
   "PAGBANK_CLIENT_SECRET",
@@ -292,6 +299,39 @@ export class PagBankOAuthRequestError extends Error {
     this.code = options.code ?? null;
     this.httpStatus = options.httpStatus ?? null;
   }
+}
+
+export function getPagBankRequestedSellerScopes() {
+  return [...pagBankDefaultScopeList];
+}
+
+export function listMissingPagBankRequestedScopes(scope: string | null | undefined) {
+  return listMissingPagBankScopes(scope, pagBankDefaultScopeList);
+}
+
+export function listMissingPagBankRuntimeScopes(scope: string | null | undefined) {
+  return listMissingPagBankScopes(scope, pagBankRuntimeRequiredScopeList);
+}
+
+export function buildPagBankScopeReconnectMessage(missingScopes: readonly string[]) {
+  return `Reconecte o PagBank para autorizar as permissoes atuais da ConnectyHub: ${missingScopes.join(", ")}.`;
+}
+
+function listMissingPagBankScopes(scope: string | null | undefined, requiredScopes: readonly string[]) {
+  const rawScope = scope?.trim();
+
+  if (!rawScope) {
+    return [];
+  }
+
+  const granted = new Set(
+    rawScope
+      .split(/[\s,]+/)
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  return requiredScopes.filter((requiredScope) => !granted.has(requiredScope.toLowerCase()));
 }
 
 export function getPagBankOAuthConfig() {
@@ -480,7 +520,7 @@ export async function loadPagBankIntegrationSecrets(
 ): Promise<IntegrationSecrets | null> {
   const { data, error } = await client
     .from("sales_catalog_payment_integrations")
-    .select("id, organization_id, mode, status, access_token_encrypted, refresh_token_encrypted, token_expires_at, webhook_secret_encrypted")
+    .select("id, organization_id, mode, status, access_token_encrypted, refresh_token_encrypted, token_scope, token_expires_at, webhook_secret_encrypted")
     .eq("organization_id", organizationId)
     .eq("provider", "pagbank")
     .maybeSingle<{
@@ -490,6 +530,7 @@ export async function loadPagBankIntegrationSecrets(
       status: string | null;
       access_token_encrypted: string | null;
       refresh_token_encrypted: string | null;
+      token_scope: string | null;
       token_expires_at: string | null;
       webhook_secret_encrypted: string | null;
     }>();
@@ -503,6 +544,7 @@ export async function loadPagBankIntegrationSecrets(
     organizationId: data.organization_id,
     accessToken: decryptCredentialValue(data.access_token_encrypted),
     refreshToken: data.refresh_token_encrypted ? decryptCredentialValue(data.refresh_token_encrypted) : null,
+    tokenScope: data.token_scope,
     tokenExpiresAt: data.token_expires_at,
     webhookSecret: data.webhook_secret_encrypted ? decryptCredentialValue(data.webhook_secret_encrypted) : null,
     mode: data.mode === "sandbox" ? "sandbox" : "production",
@@ -517,6 +559,11 @@ export async function ensurePagBankAccessToken(input: {
 
   if (!secrets) {
     throw new Error("Conecte uma conta PagBank para gerar Pix automatico.");
+  }
+
+  const missingRuntimeScopes = listMissingPagBankRuntimeScopes(secrets.tokenScope);
+  if (missingRuntimeScopes.length > 0) {
+    throw new Error(buildPagBankScopeReconnectMessage(missingRuntimeScopes));
   }
 
   if (!secrets.refreshToken || !isTokenNearExpiry(secrets.tokenExpiresAt)) {
@@ -534,7 +581,7 @@ export async function ensurePagBankAccessToken(input: {
     .update({
       access_token_encrypted: encryptCredentialValue(refreshed.access_token!),
       refresh_token_encrypted: refreshed.refresh_token ? encryptCredentialValue(refreshed.refresh_token) : null,
-      token_scope: refreshed.scope ?? null,
+      token_scope: refreshed.scope ?? secrets.tokenScope,
       token_expires_at: expiresAt,
       last_error: null,
       updated_at: new Date().toISOString(),
@@ -546,6 +593,7 @@ export async function ensurePagBankAccessToken(input: {
     ...secrets,
     accessToken: refreshed.access_token!,
     refreshToken: refreshed.refresh_token ?? secrets.refreshToken,
+    tokenScope: refreshed.scope ?? secrets.tokenScope,
     tokenExpiresAt: expiresAt,
   };
 }
@@ -1041,22 +1089,31 @@ function getPagBankRuntimeConfig(modeOverride?: "production" | "sandbox" | null,
 }
 
 function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
-  const amountCents = Math.max(1, Math.round(input.amount * 100));
+  const amountCents = Math.max(100, Math.round(input.amount * 100));
   const orderReference = sanitizePagBankReferenceId(input.externalReference, 200)
     ?? sanitizePagBankText(input.externalReference, 200)
     ?? input.externalReference;
+  const description = sanitizePagBankText(input.description, 255) ?? "Pedido ConnectyHub";
   const expirationMinutes = normalizePagBankExpirationMinutes(input.pixExpirationMinutes, 1440);
 
   return {
     reference_id: orderReference,
     customer: buildPagBankCustomer(input),
     items: buildPagBankOrderItems(input.items ?? [], amountCents),
-    qr_codes: [
+    charges: [
       {
+        reference_id: orderReference,
+        description,
         amount: {
           value: amountCents,
+          currency: "BRL",
         },
-        expiration_date: new Date(Date.now() + expirationMinutes * 60 * 1000).toISOString(),
+        payment_method: {
+          type: "PIX",
+          pix: {
+            expiration_date: new Date(Date.now() + expirationMinutes * 60 * 1000).toISOString(),
+          },
+        },
       },
     ],
     notification_urls: input.notificationUrl ? [input.notificationUrl] : undefined,
@@ -1368,13 +1425,31 @@ function createPagBankOAuthError(
 }
 
 function readPagBankErrorMessage(body: (PagBankOrderResponse & PagBankOAuthErrorResponse) | null) {
-  return readOptionalString(body?.message)
+  const message = readOptionalString(body?.message)
     ?? readOptionalString(body?.description)
     ?? readOptionalString(body?.error_description)
     ?? readOptionalString(body?.error)
     ?? readPagBankCauseMessage(body?.cause)
     ?? readPagBankCauseMessage(body?.errors)
     ?? readPagBankCauseMessage(body?.error_messages);
+
+  return normalizePagBankGatewayErrorMessage(message);
+}
+
+function normalizePagBankGatewayErrorMessage(message: string | null) {
+  if (!message) return null;
+
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("whitelist access required")) {
+    return "O aplicativo PagBank da ConnectyHub ainda precisa de liberacao/whitelist no PagBank para criar pagamentos nesta conta.";
+  }
+
+  if (normalized.includes("pix") && normalized.includes("habilitado")) {
+    return "Pix nao esta habilitado no PagBank para esta conta ou aplicativo.";
+  }
+
+  return message;
 }
 
 function readPagBankCauseMessage(value: unknown): string | null {

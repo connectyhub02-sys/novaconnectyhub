@@ -189,7 +189,7 @@ const salesCatalogOrderSelect = [
 ].join(", ");
 
 const salesCatalogOrderItemSelect = "id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, revenue_owner_type, commission_eligible, platform_product_id, metadata, created_at";
-const salesCatalogPaymentIntegrationSelect = "id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at";
+const salesCatalogPaymentIntegrationSelect = "id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_scope, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at";
 
 export async function POST(request: NextRequest) {
   const workspace = await getCurrentWorkspace();

@@ -79,10 +79,11 @@ describe("PagBank gateway rollout", () => {
     expect(paymentSessionsSource).toContain("createPagBankPixOrder");
     expect(paymentSessionsSource).toContain("extractPagBankPixData");
     expect(paymentSessionsSource).toContain("createMercadoPagoPixPayment");
-    expect(pagBankGatewaySource).toContain("qr_codes");
+    expect(pagBankGatewaySource).toContain("charges: [");
+    expect(pagBankGatewaySource).toContain("type: \"PIX\"");
     expect(pagBankGatewaySource).toContain("Frete e ajustes");
     expect(pagBankGatewaySource).toContain("sanitizePagBankReferenceId");
-    expect(pagBankGatewaySource).not.toContain("payment_method: {\n          type: \"PIX\"");
+    expect(pagBankGatewaySource).toContain("charge?.qr_code");
   });
 
   it("shows one active PagBank connect action in the client integrations panel", () => {
@@ -99,8 +100,10 @@ describe("PagBank gateway rollout", () => {
   });
 
   it("encodes PagBank OAuth scopes as plus-separated values for the provider", () => {
+    expect(pagBankGatewaySource).toContain("pagBankDefaultScopeList");
+    expect(pagBankGatewaySource).toContain("listMissingPagBankRequestedScopes");
     expect(pagBankGatewaySource).toContain("PagBank expects between scopes");
-    expect(pagBankGatewaySource).toContain("].join(\" \");");
+    expect(pagBankGatewaySource).toContain(".join(\" \");");
     expect(pagBankGatewaySource).not.toContain("].join(\"+\");");
   });
 

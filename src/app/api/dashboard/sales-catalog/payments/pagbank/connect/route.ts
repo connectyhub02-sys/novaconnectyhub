@@ -6,6 +6,7 @@ import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope
 import {
   buildPagBankSellerConnectUrl,
   buildPagBankWebhookUrl,
+  getPagBankRequestedSellerScopes,
   isPagBankSandboxMode,
 } from "@/lib/sales-catalog/pagbank";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
           oauth_requested_by: workspace.user.id,
           oauth_requested_at: now,
           oauth_started_from: returnTo === "integrations" ? "integrations_hub" : "guided_connect_route",
+          requested_scopes: getPagBankRequestedSellerScopes(),
           affiliate_url_used: connect.affiliateUrlUsed,
           affiliate_url_available: connect.affiliateUrlAvailable,
           authorization_url: connect.authorizationUrl,

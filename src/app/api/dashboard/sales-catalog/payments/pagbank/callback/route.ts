@@ -5,11 +5,15 @@ import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import { encryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
+  buildPagBankScopeReconnectMessage,
   buildPagBankWebhookUrl,
   calculatePagBankTokenExpiration,
   exchangePagBankAuthorizationCode,
   formatPagBankOAuthError,
+  getPagBankRequestedSellerScopes,
   isPagBankInvalidClientError,
+  listMissingPagBankRequestedScopes,
+  listMissingPagBankRuntimeScopes,
   readPagBankProviderAccountId,
   serializePagBankOAuthTokens,
 } from "@/lib/sales-catalog/pagbank";
@@ -78,6 +82,15 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangePagBankAuthorizationCode({ code, client });
     const now = new Date().toISOString();
     const providerAccountId = readPagBankProviderAccountId(tokens);
+    const requestedScopes = getPagBankRequestedSellerScopes();
+    const missingRequestedScopes = listMissingPagBankRequestedScopes(tokens.scope);
+    const missingRuntimeScopes = listMissingPagBankRuntimeScopes(tokens.scope);
+    const scopeWarning = missingRequestedScopes.length > 0
+      ? buildPagBankScopeReconnectMessage(missingRequestedScopes)
+      : null;
+    const scopeError = missingRuntimeScopes.length > 0
+      ? buildPagBankScopeReconnectMessage(missingRuntimeScopes)
+      : null;
 
     await client
       .from("sales_catalog_payment_integrations")
@@ -92,11 +105,16 @@ export async function GET(request: NextRequest) {
         token_scope: tokens.scope ?? null,
         token_expires_at: calculatePagBankTokenExpiration(tokens.expires_in),
         connected_at: now,
-        last_error: null,
+        last_error: scopeError,
         webhook_url: buildPagBankWebhookUrl(),
         metadata: {
           ...readRecord(integration.metadata),
           ...serializePagBankOAuthTokens(tokens),
+          requested_scopes: requestedScopes,
+          missing_requested_scopes: missingRequestedScopes,
+          missing_runtime_scopes: missingRuntimeScopes,
+          scope_warning: scopeWarning,
+          scope_error: scopeError,
           oauth_state: null,
           connected_by: workspace.user.id,
           connected_at: now,

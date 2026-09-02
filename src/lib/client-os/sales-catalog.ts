@@ -3,6 +3,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireClientCompanyAccess, listClientCompanies } from "@/lib/client-os/companies";
+import {
+  buildPagBankScopeReconnectMessage,
+  listMissingPagBankRequestedScopes,
+} from "@/lib/sales-catalog/pagbank";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   buildSalesCatalogContent,
@@ -193,6 +197,7 @@ export type SalesCatalogPaymentIntegrationRow = {
   public_key: string | null;
   access_token_encrypted: string | null;
   refresh_token_encrypted: string | null;
+  token_scope: string | null;
   token_expires_at: string | null;
   connected_at: string | null;
   last_error: string | null;
@@ -545,7 +550,7 @@ export async function listClientSalesCatalogPaymentIntegrations(input: {
 
   const { data, error } = await client
     .from("sales_catalog_payment_integrations")
-    .select("id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at")
+    .select("id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_scope, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at")
     .in("organization_id", companyIds)
     .order("updated_at", { ascending: false });
 
@@ -1211,10 +1216,15 @@ export function mapSalesCatalogSku(row: SalesCatalogSkuRow): SalesCatalogSku {
 }
 
 export function mapSalesCatalogPaymentIntegration(row: SalesCatalogPaymentIntegrationRow): ClientSalesCatalogPaymentIntegration {
+  const provider = normalizePaymentProvider(readString(row.provider));
+  const missingPagBankScopes = provider === "pagbank"
+    ? listMissingPagBankRequestedScopes(row.token_scope)
+    : [];
+
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
-    provider: normalizePaymentProvider(readString(row.provider)),
+    provider,
     mode: normalizePaymentIntegrationMode(readString(row.mode)),
     status: normalizePaymentIntegrationStatus(readString(row.status)),
     accountLabel: readString(row.account_label),
@@ -1222,7 +1232,8 @@ export function mapSalesCatalogPaymentIntegration(row: SalesCatalogPaymentIntegr
     publicKey: readString(row.public_key),
     tokenExpiresAt: row.token_expires_at,
     connectedAt: row.connected_at,
-    lastError: readString(row.last_error),
+    lastError: readString(row.last_error)
+      ?? (missingPagBankScopes.length > 0 ? buildPagBankScopeReconnectMessage(missingPagBankScopes) : null),
     webhookUrl: readString(row.webhook_url),
     hasAccessToken: Boolean(row.access_token_encrypted),
     hasRefreshToken: Boolean(row.refresh_token_encrypted),

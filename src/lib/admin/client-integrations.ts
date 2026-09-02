@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  buildPagBankScopeReconnectMessage,
+  listMissingPagBankRequestedScopes,
+} from "@/lib/sales-catalog/pagbank";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const providerIds = ["meta-ads", "google-growth", "pagbank", "webhook-universal"] as const;
@@ -191,6 +195,7 @@ type PaymentIntegrationRow = {
   connected_at: string | null;
   last_error: string | null;
   webhook_url: string | null;
+  token_scope: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -507,7 +512,7 @@ async function loadPaymentIntegrations(
 ): Promise<QueryResult<PaymentIntegrationRow>> {
   const { data, error } = await client
     .from("sales_catalog_payment_integrations")
-    .select("id, organization_id, provider, status, account_label, provider_account_id, connected_at, last_error, webhook_url, created_at, updated_at")
+    .select("id, organization_id, provider, status, account_label, provider_account_id, connected_at, last_error, webhook_url, token_scope, created_at, updated_at")
     .in("organization_id", organizationIds)
     .eq("provider", "pagbank");
 
@@ -687,12 +692,17 @@ function buildPagBankStatus(payments: PaymentIntegrationRow[]): AdminClientProvi
     payment?.updated_at ?? null,
     payment?.created_at ?? null,
   ]);
+  const missingScopes = payment ? listMissingPagBankRequestedScopes(payment.token_scope) : [];
 
   if (payment?.last_error || payment?.status === "error") {
     return providerStatus("pagbank", "error", account, payment.last_error ?? "PagBank retornou erro.", lastActivityAt);
   }
 
   if (payment?.status === "connected") {
+    if (missingScopes.length > 0) {
+      return providerStatus("pagbank", "warning", account, buildPagBankScopeReconnectMessage(missingScopes), lastActivityAt);
+    }
+
     const detail = payment.webhook_url ? "Conta PagBank e webhook mapeados." : "Conta PagBank conectada. Webhook pendente.";
     const status = payment.webhook_url ? "connected" : "warning";
     return providerStatus("pagbank", status, account, detail, lastActivityAt);
