@@ -75,6 +75,32 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
   });
 
+  it("uses the confirmed order preview as the closed cart source", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const checkoutRuntime = sourceBetween(
+      "function resolveSalesCatalogOrderSelections",
+      "function isRuntimeCheckoutOrderSelection",
+    );
+
+    expect(delivery).toContain("const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0");
+    expect(delivery).toContain("items: deliveryCatalogItems");
+    expect(checkoutRuntime).toContain("const confirmationPreviewText = confirmedCheckoutIntent");
+    expect(checkoutRuntime).toContain("if (confirmationPreviewText)");
+    expect(checkoutRuntime).toContain("\"confirmation_preview\",");
+  });
+
+  it("does not treat package size as a purchased quantity", () => {
+    const quantityParser = sourceBetween(
+      "function parseRuntimeOrderQuantityFromText",
+      "function hasRuntimeOrderFractionSignal",
+    );
+
+    expect(quantityParser).toContain("const bareDigitBefore");
+    expect(quantityParser).toContain("\\d{1,2}");
+    expect(quantityParser).toContain("(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)");
+    expect(quantityParser).not.toContain("const digitBefore = before.match(/(?:^|\\s)(\\d{1,3})\\s*(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)?\\s*$/);");
+  });
+
   it("asks for the payment method before creating payment when multiple methods are enabled", () => {
     const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
     const checkoutRuntime = sourceBetween(

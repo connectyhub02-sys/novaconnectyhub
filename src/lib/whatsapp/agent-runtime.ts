@@ -6195,11 +6195,14 @@ async function sendAgentResponse(input: {
         selections: checkoutOrderSelections,
       });
   const shouldWaitForPaymentMethodChoice = Boolean(paymentMethodChoicePrompt);
+  const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
+    ? checkoutOrderSelections.map((selection) => selection.item)
+    : selectedCatalogItems;
   const deliveryText = shouldRequestCheckoutConfirmation
     ? buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)
     : paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText({
         text: cleanText,
-        items: selectedCatalogItems,
+        items: deliveryCatalogItems,
         hasOrderIntent,
       });
   const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
@@ -7296,6 +7299,23 @@ function resolveSalesCatalogOrderSelections(input: {
       fractionalQuantity: current.fractionalQuantity ?? selection.fractionalQuantity,
     });
   };
+  const latestInbound = findLatestInbound(input.context.messages);
+  const confirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(input.context, input.intentText);
+  const confirmationPreviewText = confirmedCheckoutIntent
+    ? buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, latestInbound)
+    : "";
+
+  if (confirmationPreviewText) {
+    for (const selection of selectSalesCatalogOrderSelectionsFromText(
+      input.context.salesCatalog,
+      confirmationPreviewText,
+      "confirmation_preview",
+    )) {
+      addSelection(selection);
+    }
+
+    return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+  }
 
   for (const item of input.currentItems) {
     const quantity = resolveSalesCatalogMentionQuantity([input.intentText, input.responseText].join(" "), item);
@@ -7309,14 +7329,12 @@ function resolveSalesCatalogOrderSelections(input: {
     });
   }
 
-  const confirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(input.context, input.intentText);
   const hasOrderIntent = hasSalesCatalogOrderIntent(input.intentText) || confirmedCheckoutIntent;
 
   if (!hasOrderIntent) {
     return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
   }
 
-  const latestInbound = findLatestInbound(input.context.messages);
   const currentIntentItems = selectSalesCatalogItemsFromText(input.context.salesCatalog, input.intentText);
   const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentItems.length);
   const cartBoundaryMs = resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders);
@@ -7349,20 +7367,6 @@ function resolveSalesCatalogOrderSelections(input: {
       input.context.salesCatalog,
       mentionText,
       "recent_lead_message",
-    )) {
-      addSelection(selection);
-    }
-  }
-
-  const confirmationPreviewText = confirmedCheckoutIntent
-    ? buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, latestInbound)
-    : "";
-
-  if (confirmationPreviewText) {
-    for (const selection of selectSalesCatalogOrderSelectionsFromText(
-      input.context.salesCatalog,
-      confirmationPreviewText,
-      "confirmation_preview",
     )) {
       addSelection(selection);
     }
@@ -7763,9 +7767,15 @@ function buildSalesCatalogOrderMentionCandidates(item: RuntimeSalesCatalogItem) 
 }
 
 function parseRuntimeOrderQuantityFromText(before: string, after: string) {
-  const digitBefore = before.match(/(?:^|\s)(\d{1,3})\s*(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)?\s*$/);
+  const digitBefore = before.match(/(?:^|\s)(\d{1,3})\s*(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)\s*$/);
   if (digitBefore) {
     const parsed = Number.parseInt(digitBefore[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  const bareDigitBefore = before.match(/(?:^|\s)(\d{1,2})\s*$/);
+  if (bareDigitBefore) {
+    const parsed = Number.parseInt(bareDigitBefore[1], 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
