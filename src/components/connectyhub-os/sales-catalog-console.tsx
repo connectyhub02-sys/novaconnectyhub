@@ -4284,7 +4284,7 @@ export function SalesCatalogConsole({
               </button>
             </div>
 
-            <div className="grid gap-4">
+            <div className="grid content-start gap-3">
               <CompanyLocationPolicyEditor
                 googleMapsConfig={googleMapsConfig}
                 loadingGoogleMapsConfig={loadingGoogleMapsConfig}
@@ -8253,20 +8253,20 @@ function CompanyLocationPolicyEditor({
     : "Sem referencia";
 
   return (
-    <section className="overflow-hidden rounded-xl border border-cyan-300/30 bg-cyan-300/5">
+    <section className="self-start overflow-hidden rounded-lg border border-cyan-300/30 bg-cyan-300/5">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-cyan-400/10"
+        className="flex min-h-10 w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left transition hover:bg-cyan-400/10"
       >
         <span className="flex min-w-0 items-center gap-2">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 text-cyan-200">
-            <Store className="h-4 w-4" />
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 text-cyan-200">
+            <Store className="h-3.5 w-3.5" />
           </span>
-          <span className="min-w-0">
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Localizacao da empresa</span>
-            <span className="mt-1 block truncate text-[12px] text-slate-400">
+            <span className="block truncate text-[11px] text-slate-400">
               {configuredCount > 0 ? primaryLocationSummary : "Configure se a empresa atende publico, despacha pedidos ou nao tem sede fixa."}
             </span>
           </span>
