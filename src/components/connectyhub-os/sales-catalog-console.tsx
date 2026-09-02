@@ -5019,7 +5019,7 @@ export function SalesCatalogConsole({
         <div className={cn(
           "grid gap-4",
           activeTab === "products"
-            ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"
+            ? "grid-cols-1"
             : "xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]",
         )}>
         <div className={activeTab === "products" ? "contents" : "space-y-4"}>
@@ -5100,7 +5100,7 @@ export function SalesCatalogConsole({
             />
           ) : null}
           <WhatsAppCatalogBridgePanel
-            className="order-4 xl:col-span-2"
+            className="order-2"
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
             canExport={canExportWhatsappCatalog}
@@ -6078,7 +6078,7 @@ export function SalesCatalogConsole({
             </div>
           </Panel>
           <SalesCatalogCartIncreasePanel
-            className="order-2"
+            className="order-4"
             allProducts={visibleItems}
             companyName={selectedCompany?.name ?? "empresa"}
             products={cartIncreaseProducts}
@@ -6130,7 +6130,7 @@ export function SalesCatalogConsole({
           )}
         </div>
 
-        <Panel className={activeTab === "products" ? "order-3 xl:col-span-2" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact collapsible defaultOpen>
+        <Panel className={activeTab === "products" ? "order-3" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact collapsible defaultOpen={activeTab !== "products"}>
           {visibleItems.length > 0 ? (
             <div className="grid gap-3 xl:grid-cols-2">
               {visibleItems.map((item) => (
@@ -6330,7 +6330,7 @@ function SalesCatalogCartIncreasePanel({
       tone="amber"
       compact
       collapsible
-      defaultOpen={settings.enabled && activeCount > 0}
+      defaultOpen={false}
     >
       <div className="space-y-3">
         <div className="grid gap-2 sm:grid-cols-2">
