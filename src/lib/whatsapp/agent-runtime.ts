@@ -10170,37 +10170,71 @@ async function sendWhatsappInteractiveButtons(input: {
   trackId: string;
   replyId?: string;
   mentions?: string;
+  urlChoiceFormat?: "plain" | "prefixed";
 }) {
   const text = normalizeOutboundLanguageText(input.text);
+  const urlChoiceFormat = input.urlChoiceFormat ?? "plain";
+  const requestBody = {
+    number: input.phone,
+    type: "button",
+    text,
+    choices: input.choices.slice(0, 3).map((choice) => normalizeInteractiveButtonChoice(choice, urlChoiceFormat)),
+    footerText: input.footerText ?? "ConnectyHub",
+    readchat: true,
+    readmessages: true,
+    ...(input.replyId ? { replyid: input.replyId } : {}),
+    ...(input.mentions ? { mentions: input.mentions } : {}),
+    track_source: "connectyhub",
+    track_id: input.trackId,
+  };
 
-  return callUazapi(input.credentials, "/send/menu", {
-    method: "POST",
-    token: input.token,
-    timeoutMs: outboundTextDeliveryTimeoutMs,
-    body: {
-      number: input.phone,
-      type: "button",
-      text,
-      choices: input.choices.slice(0, 3).map(normalizeInteractiveButtonChoice),
-      footerText: input.footerText ?? "ConnectyHub",
-      readchat: true,
-      readmessages: true,
-      ...(input.replyId ? { replyid: input.replyId } : {}),
-      ...(input.mentions ? { mentions: input.mentions } : {}),
-      track_source: "connectyhub",
-      track_id: input.trackId,
-    },
-  });
+  try {
+    return await callUazapi(input.credentials, "/send/menu", {
+      method: "POST",
+      token: input.token,
+      timeoutMs: outboundTextDeliveryTimeoutMs,
+      body: requestBody,
+    });
+  } catch (error) {
+    if (urlChoiceFormat !== "plain" || !input.choices.some(isInteractiveButtonUrlChoice) || !shouldRetryInteractiveButtonUrlFormat(error)) {
+      throw error;
+    }
+
+    return callUazapi(input.credentials, "/send/menu", {
+      method: "POST",
+      token: input.token,
+      timeoutMs: outboundTextDeliveryTimeoutMs,
+      body: {
+        ...requestBody,
+        choices: input.choices.slice(0, 3).map((choice) => normalizeInteractiveButtonChoice(choice, "prefixed")),
+        track_id: `${input.trackId}_url`,
+      },
+    });
+  }
 }
 
-function normalizeInteractiveButtonChoice(choice: string) {
+function normalizeInteractiveButtonChoice(choice: string, urlChoiceFormat: "plain" | "prefixed" = "plain") {
   const [label, action] = choice.split("|");
 
   if (!label || !action || !/^https?:\/\//i.test(action.trim())) {
     return choice;
   }
 
-  return `${label.trim()}|url:${action.trim()}`;
+  return urlChoiceFormat === "prefixed"
+    ? `${label.trim()}|url:${action.trim()}`
+    : `${label.trim()}|${action.trim()}`;
+}
+
+function isInteractiveButtonUrlChoice(choice: string) {
+  const [, action] = choice.split("|");
+
+  return Boolean(action && /^https?:\/\//i.test(action.trim()));
+}
+
+function shouldRetryInteractiveButtonUrlFormat(error: unknown) {
+  const message = describeRuntimeError(error, "");
+
+  return /(?:server error 479|respondeu status 4\d\d|respondeu status 5\d\d|button|botao|menu)/i.test(message);
 }
 
 function resolveInteractiveButtonFooterText(organization: OrganizationRow | null | undefined) {
@@ -14397,8 +14431,30 @@ function normalizeAssistantText(value: string) {
     .replace(/^\s+$/gm, "")
     .trim();
 
-  return normalizeOutboundLanguageText(cleaned)
-    .slice(0, assistantResponseMaxLength);
+  return repairIncompleteAssistantEnding(
+    normalizeOutboundLanguageText(cleaned)
+      .slice(0, assistantResponseMaxLength),
+  );
+}
+
+function repairIncompleteAssistantEnding(value: string) {
+  const text = value.trim();
+
+  if (!text) return "";
+
+  const normalizedLastLine = text.split(/\n+/).pop()?.replace(/[)"'\]]+$/g, "").trim() ?? "";
+
+  if (!/\b(?:a|ao|aos|as|com|contra|da|das|de|do|dos|e|em|entre|na|nas|no|nos|o|os|para|pela|pelas|pelo|pelos|por|que|se|sem|sobre|um|uma|uns|umas)$/i.test(normalizedLastLine)) {
+    return text;
+  }
+
+  const repaired = text.replace(/\s+\S+[\s)"'\]]*$/, "").trimEnd();
+
+  if (!repaired) {
+    return text;
+  }
+
+  return /[.!?]$/.test(repaired) ? repaired : `${repaired}.`;
 }
 
 function sanitizeTextForTts(value: string) {

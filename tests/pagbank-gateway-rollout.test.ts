@@ -79,6 +79,10 @@ describe("PagBank gateway rollout", () => {
     expect(paymentSessionsSource).toContain("createPagBankPixOrder");
     expect(paymentSessionsSource).toContain("extractPagBankPixData");
     expect(paymentSessionsSource).toContain("createMercadoPagoPixPayment");
+    expect(pagBankGatewaySource).toContain("qr_codes");
+    expect(pagBankGatewaySource).toContain("Frete e ajustes");
+    expect(pagBankGatewaySource).toContain("sanitizePagBankReferenceId");
+    expect(pagBankGatewaySource).not.toContain("payment_method: {\n          type: \"PIX\"");
   });
 
   it("shows one active PagBank connect action in the client integrations panel", () => {

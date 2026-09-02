@@ -121,6 +121,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("Pix copia e cola:");
     expect(paymentSender).toContain("agent_pix_payment");
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
+    expect(runtimeSource).toContain("urlChoiceFormat ?? \"plain\"");
+    expect(runtimeSource).toContain("normalizeInteractiveButtonChoice(choice, \"prefixed\")");
+    expect(runtimeSource).toContain("repairIncompleteAssistantEnding");
   });
 
   it("resends existing checkout links before handing payment-link follow-ups to the model", () => {

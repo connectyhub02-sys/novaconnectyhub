@@ -67,6 +67,8 @@ type PagBankOAuthErrorResponse = {
   message?: string;
   description?: string;
   cause?: unknown;
+  errors?: unknown;
+  error_messages?: unknown;
 };
 
 export type PagBankOrderResponse = {
@@ -83,6 +85,8 @@ export type PagBankOrderResponse = {
   error_description?: string;
   description?: string;
   cause?: unknown;
+  errors?: unknown;
+  error_messages?: unknown;
 };
 
 type PagBankChargeResponse = {
@@ -1038,28 +1042,21 @@ function getPagBankRuntimeConfig(modeOverride?: "production" | "sandbox" | null,
 
 function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
   const amountCents = Math.max(1, Math.round(input.amount * 100));
-  const description = sanitizePagBankText(input.description, 255) ?? "Pedido ConnectyHub";
-  const chargeReference = sanitizePagBankText(input.externalReference, 200) ?? input.externalReference;
+  const orderReference = sanitizePagBankReferenceId(input.externalReference, 200)
+    ?? sanitizePagBankText(input.externalReference, 200)
+    ?? input.externalReference;
   const expirationMinutes = normalizePagBankExpirationMinutes(input.pixExpirationMinutes, 1440);
 
   return {
-    reference_id: chargeReference,
+    reference_id: orderReference,
     customer: buildPagBankCustomer(input),
     items: buildPagBankOrderItems(input.items ?? [], amountCents),
-    charges: [
+    qr_codes: [
       {
-        reference_id: chargeReference,
-        description,
         amount: {
           value: amountCents,
-          currency: "BRL",
         },
-        payment_method: {
-          type: "PIX",
-          pix: {
-            expiration_date: new Date(Date.now() + expirationMinutes * 60 * 1000).toISOString(),
-          },
-        },
+        expiration_date: new Date(Date.now() + expirationMinutes * 60 * 1000).toISOString(),
       },
     ],
     notification_urls: input.notificationUrl ? [input.notificationUrl] : undefined,
@@ -1069,7 +1066,9 @@ function buildPagBankPixOrderPayload(input: PagBankPixOrderInput) {
 function buildPagBankCardOrderPayload(input: PagBankCardOrderInput) {
   const amountCents = Math.max(100, Math.round(input.amount * 100));
   const description = sanitizePagBankText(input.description, 255) ?? "Pedido ConnectyHub";
-  const chargeReference = sanitizePagBankText(input.externalReference, 200) ?? input.externalReference;
+  const chargeReference = sanitizePagBankReferenceId(input.externalReference, 200)
+    ?? sanitizePagBankText(input.externalReference, 200)
+    ?? input.externalReference;
   const paymentMethodType = input.paymentMethodType === "DEBIT_CARD" ? "DEBIT_CARD" : "CREDIT_CARD";
   const installments = paymentMethodType === "DEBIT_CARD" ? 1 : normalizePagBankInstallments(input.installments);
   const paymentMethod: JsonRecord = {
@@ -1170,6 +1169,13 @@ function buildPagBankCustomer(input: PagBankPixOrderInput) {
   return customer;
 }
 
+type PagBankOrderItemPayload = {
+  reference_id: string;
+  name: string;
+  quantity: number;
+  unit_amount: number;
+};
+
 function buildPagBankOrderItems(items: NonNullable<PagBankPixOrderInput["items"]>, fallbackAmountCents: number) {
   const mapped = items.flatMap((item, index) => {
     const quantity = normalizePagBankQuantity(item.quantity);
@@ -1181,14 +1187,41 @@ function buildPagBankOrderItems(items: NonNullable<PagBankPixOrderInput["items"]
     }
 
     return [{
-      reference_id: sanitizePagBankText(item.skuCode ?? item.id ?? `item-${index + 1}`, 60) ?? `item-${index + 1}`,
+      reference_id: sanitizePagBankReferenceId(item.skuCode ?? item.id ?? `item-${index + 1}`, 60) ?? `item-${index + 1}`,
       name,
       quantity,
       unit_amount: unitAmount,
     }];
-  });
+  }) satisfies PagBankOrderItemPayload[];
 
   if (mapped.length > 0) {
+    const mappedTotal = mapped.reduce((total, item) => total + item.quantity * item.unit_amount, 0);
+
+    if (mappedTotal === fallbackAmountCents) {
+      return mapped;
+    }
+
+    if (mappedTotal > 0 && mappedTotal < fallbackAmountCents) {
+      return [
+        ...mapped,
+        {
+          reference_id: "frete-ajustes",
+          name: "Frete e ajustes",
+          quantity: 1,
+          unit_amount: fallbackAmountCents - mappedTotal,
+        },
+      ];
+    }
+
+    if (mappedTotal > fallbackAmountCents) {
+      return [{
+        reference_id: "pedido",
+        name: "Pedido ConnectyHub",
+        quantity: 1,
+        unit_amount: fallbackAmountCents,
+      }];
+    }
+
     return mapped;
   }
 
@@ -1339,7 +1372,9 @@ function readPagBankErrorMessage(body: (PagBankOrderResponse & PagBankOAuthError
     ?? readOptionalString(body?.description)
     ?? readOptionalString(body?.error_description)
     ?? readOptionalString(body?.error)
-    ?? readPagBankCauseMessage(body?.cause);
+    ?? readPagBankCauseMessage(body?.cause)
+    ?? readPagBankCauseMessage(body?.errors)
+    ?? readPagBankCauseMessage(body?.error_messages);
 }
 
 function readPagBankCauseMessage(value: unknown): string | null {
@@ -1448,6 +1483,19 @@ function normalizeCurrencyAmount(value: string | number | null | undefined) {
 
 function sanitizePagBankText(value: string | null | undefined, maxLength: number) {
   const text = value?.replace(/\s+/g, " ").trim() ?? "";
+
+  if (!text) return null;
+
+  return text.slice(0, maxLength);
+}
+
+function sanitizePagBankReferenceId(value: string | null | undefined, maxLength: number) {
+  const text = value
+    ?.replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9_.-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .trim() ?? "";
 
   if (!text) return null;
 
