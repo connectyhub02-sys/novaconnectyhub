@@ -8241,25 +8241,46 @@ function CompanyLocationPolicyEditor({
   onRemove: (index: number) => void;
 }) {
   const configuredCount = locations.filter(isCompanyLocationDraftMeaningful).length;
+  const [open, setOpen] = useState(false);
+  const primaryLocation = locations.find((location) => location.isPrimary) ?? locations[0] ?? null;
+  const primaryLocationSummary = primaryLocation
+    ? [
+        formatOrganizationLocationServiceMode(primaryLocation.serviceMode),
+        primaryLocation.city ? `${primaryLocation.city}${primaryLocation.region ? `/${primaryLocation.region}` : ""}` : null,
+      ]
+        .filter(Boolean)
+        .join(" - ")
+    : "Sem referencia";
 
   return (
-    <section className="rounded-xl border border-cyan-300/30 bg-cyan-300/5 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Store className="h-4 w-4 text-cyan-300" />
-            <FieldLabel>Localizacao da empresa</FieldLabel>
-          </div>
-          <p className="text-[12px] leading-5 text-slate-400">
-            Defina se a empresa atende publico, so despacha pedidos ou nao tem sede fixa. Todos os agentes usam esta regra.
-          </p>
-        </div>
-        <NeonBadge tone={configuredCount > 0 ? "green" : "amber"}>
-          {configuredCount > 0 ? `${configuredCount} salva(s)` : "pendente"}
-        </NeonBadge>
-      </div>
+    <section className="overflow-hidden rounded-xl border border-cyan-300/30 bg-cyan-300/5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-cyan-400/10"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 text-cyan-200">
+            <Store className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Localizacao da empresa</span>
+            <span className="mt-1 block truncate text-[12px] text-slate-400">
+              {configuredCount > 0 ? primaryLocationSummary : "Configure se a empresa atende publico, despacha pedidos ou nao tem sede fixa."}
+            </span>
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <NeonBadge tone={configuredCount > 0 ? "green" : "amber"}>
+            {configuredCount > 0 ? `${configuredCount} salva(s)` : "pendente"}
+          </NeonBadge>
+          <ChevronDown className={cn("h-4 w-4 text-cyan-200 transition", open ? "rotate-180" : "")} />
+        </span>
+      </button>
 
-      <div className="mt-4 grid gap-3">
+      {open ? (
+        <div className="grid gap-3 border-t p-3" style={{ borderColor: "rgba(34, 211, 238, 0.22)" }}>
         {locations.map((location, index) => {
           const noFixedLocation = location.serviceMode === "no_fixed_location";
 
@@ -8442,7 +8463,6 @@ function CompanyLocationPolicyEditor({
             </div>
           );
         })}
-      </div>
 
       <button
         type="button"
@@ -8454,6 +8474,8 @@ function CompanyLocationPolicyEditor({
         <Plus className="h-3.5 w-3.5" />
         Adicionar outra unidade ou base
       </button>
+        </div>
+      ) : null}
     </section>
   );
 }
