@@ -8394,9 +8394,15 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   const metadata = readRecord(data.metadata) ?? {};
   const trackingUrl = asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
-  const paymentDeferred = asString(data.provider_status)?.toLowerCase() === "payment_deferred"
+  const providerStatus = asString(data.provider_status)?.toLowerCase();
+  const paymentDeferred = providerStatus === "payment_deferred"
     || metadata.payment_deferred === true;
-  const preferredMethod = detectSalesCatalogPreferredPaymentMethod(input.userText);
+  const gatewayUnavailable = providerStatus === "gateway_unavailable"
+    || providerStatus === "gateway_error"
+    || metadata.gateway_available === false;
+  const preferredMethod = detectSalesCatalogPreferredPaymentMethod(input.userText)
+    ?? readStoredSalesCatalogPaymentPreference(metadata)
+    ?? (asString(data.pix_qr_code) ? "pix" : null);
 
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
@@ -8415,6 +8421,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
         trackingUrl,
         pixQrCode: asString(data.pix_qr_code),
         pixTicketUrl: asString(data.pix_ticket_url),
+        gatewayUnavailable,
         paymentDeferred,
         paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
         preferredMethod,
@@ -8475,11 +8482,18 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       trackingUrl,
       pixQrCode: asString(data.pix_qr_code),
       pixTicketUrl: asString(data.pix_ticket_url),
+      gatewayUnavailable,
       paymentDeferred,
       paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
       preferredMethod,
     },
   });
+}
+
+function readStoredSalesCatalogPaymentPreference(metadata: JsonRecord): SalesCatalogRuntimePaymentPreference | null {
+  const value = asString(metadata.preferred_payment_method);
+
+  return value === "pix" || value === "card" ? value : null;
 }
 
 function findRecentPendingSalesCatalogCheckoutOrder(
@@ -8600,8 +8614,14 @@ async function sendSalesCatalogPaymentLink(input: {
     return sendSalesCatalogPaymentUnavailableWhatsapp(input);
   }
 
-  if (shouldSendSalesCatalogPixInsideWhatsapp(input.payment)) {
-    return sendSalesCatalogPixDirectWhatsapp(input);
+  if (shouldResolveSalesCatalogPixInsideWhatsapp(input.payment)) {
+    if (shouldSendSalesCatalogPixInsideWhatsapp(input.payment)) {
+      return sendSalesCatalogPixDirectWhatsapp(input);
+    }
+
+    return sendSalesCatalogPaymentUnavailableWhatsapp(input, {
+      reason: "pix_code_missing",
+    });
   }
 
   const text = "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
@@ -8666,10 +8686,14 @@ async function sendSalesCatalogPaymentLink(input: {
 }
 
 function shouldSendSalesCatalogPixInsideWhatsapp(payment: SalesCatalogPaymentLinkResult) {
+  return shouldResolveSalesCatalogPixInsideWhatsapp(payment)
+    && Boolean(payment.pixQrCode?.trim());
+}
+
+function shouldResolveSalesCatalogPixInsideWhatsapp(payment: SalesCatalogPaymentLinkResult) {
   return !payment.paymentDeferred
     && !payment.gatewayUnavailable
-    && payment.preferredMethod !== "card"
-    && Boolean(payment.pixQrCode?.trim());
+    && payment.preferredMethod !== "card";
 }
 
 function buildSalesCatalogPaymentActionUrl(payment: SalesCatalogPaymentLinkResult) {
@@ -8745,9 +8769,12 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   token: string;
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
-}): Promise<OutboundMessage> {
+}, options: { reason?: "gateway_unavailable" | "pix_code_missing" } = {}): Promise<OutboundMessage> {
+  const isPixCodeMissing = options.reason === "pix_code_missing";
   const messageText = [
-    "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
+    isPixCodeMissing
+      ? "Pedido registrado, mas nao consegui gerar o codigo Pix agora."
+      : "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
     "Vou chamar uma pessoa do time para ajustar o PagBank e te passar o proximo passo por aqui.",
   ].join("\n");
   const textProviderResponse = await sendWhatsappText({
@@ -8759,10 +8786,11 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
     mentions: resolveGroupMentions(input.context),
   });
   const providerResponse = {
-    delivery: "payment_gateway_unavailable",
+    delivery: isPixCodeMissing ? "whatsapp_pix_code_missing" : "payment_gateway_unavailable",
     provider: input.payment.provider,
     providerLabel: input.payment.providerLabel,
     orderId: input.payment.orderId,
+    reason: options.reason ?? "gateway_unavailable",
     checkoutUrl: input.payment.checkoutUrl,
     trackingUrl: input.payment.trackingUrl,
     textProviderResponse,

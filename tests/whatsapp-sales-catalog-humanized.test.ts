@@ -123,6 +123,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
     expect(paymentSender).toContain("sendSalesCatalogPaymentUnavailableWhatsapp");
     expect(paymentSender).toContain("gatewayUnavailable");
+    expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
+    expect(paymentSender).toContain("pix_code_missing");
     expect(runtimeSource).toContain("urlChoiceFormat ?? \"plain\"");
     expect(runtimeSource).toContain("normalizeInteractiveButtonChoice(choice, \"prefixed\")");
     expect(runtimeSource).toContain("repairIncompleteAssistantEnding");
@@ -148,6 +150,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(followUpDetection).toContain("codigo pix");
     expect(followUpDetection).toContain("nao abriu");
     expect(followUpDetection).toContain("ainda nao");
+    expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
+    expect(checkoutRecovery).toContain("gatewayUnavailable");
   });
 
   it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
