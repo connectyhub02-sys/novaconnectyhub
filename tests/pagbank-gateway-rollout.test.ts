@@ -102,6 +102,7 @@ describe("PagBank gateway rollout", () => {
   it("encodes PagBank OAuth scopes as plus-separated values for the provider", () => {
     expect(pagBankGatewaySource).toContain("pagBankDefaultScopeList");
     expect(pagBankGatewaySource).toContain("listMissingPagBankRequestedScopes");
+    expect(pagBankGatewaySource).toContain("payments.split.read");
     expect(pagBankGatewaySource).toContain("PagBank expects between scopes");
     expect(pagBankGatewaySource).toContain(".join(\" \");");
     expect(pagBankGatewaySource).not.toContain("].join(\"+\");");

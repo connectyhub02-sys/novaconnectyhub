@@ -232,6 +232,7 @@ const pagBankDefaultScopeList = [
   "payments.create",
   "payments.refund",
   "accounts.read",
+  "payments.split.read",
   "checkout.create",
   "checkout.view",
   "checkout.update",
