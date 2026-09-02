@@ -33,7 +33,7 @@ export function ProductPageCartController({
   const [cartLoaded, setCartLoaded] = useState(false);
   const [customerName, setCustomerName] = useState(tracking.leadName ?? "");
   const [customerPhone, setCustomerPhone] = useState(tracking.leadPhone ?? "");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerEmail, setCustomerEmail] = useState(tracking.leadEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,8 +80,12 @@ export function ProductPageCartController({
   }, [readStoredCart, tracking.organizationId]);
 
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
+  const customerContactReady = Boolean(customerName.trim())
+    && isValidCustomerPhone(customerPhone)
+    && isValidCustomerEmail(customerEmail);
   const checkoutReady = cart.length > 0
-    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
+    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number")
+    && customerContactReady;
 
   function updateQuantity(productId: string, quantity: number) {
     const currentLine = cart.find((line) => line.product.id === productId);
@@ -115,7 +119,12 @@ export function ProductPageCartController({
   }
 
   async function createCheckout() {
-    if (busy || !checkoutReady) return;
+    if (busy) return;
+
+    if (!checkoutReady) {
+      setError("Informe nome, WhatsApp e e-mail valido para finalizar.");
+      return;
+    }
 
     setBusy(true);
     setError(null);
@@ -184,7 +193,7 @@ export function ProductPageCartController({
       customerName={customerName}
       customerPhone={customerPhone}
       error={error}
-      leadContactPrefilled={Boolean(tracking.leadName && tracking.leadPhone)}
+      leadContactPrefilled={Boolean(tracking.leadId || tracking.leadName || tracking.leadPhone)}
       open={cartOpen}
       setCustomerEmail={setCustomerEmail}
       setCustomerName={setCustomerName}
@@ -235,4 +244,12 @@ function clampQuantity(value: number) {
   if (!Number.isFinite(value)) return 1;
 
   return Math.min(20, Math.max(1, Math.round(value)));
+}
+
+function isValidCustomerPhone(value: string) {
+  return value.replace(/\D/g, "").length >= 8;
+}
+
+function isValidCustomerEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }

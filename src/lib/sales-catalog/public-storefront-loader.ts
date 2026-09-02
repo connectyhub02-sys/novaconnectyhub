@@ -60,6 +60,7 @@ export type PublicStorefrontLeadContext = {
   leadId: string | null;
   leadName: string | null;
   leadPhone: string | null;
+  leadEmail: string | null;
   conversationId: string | null;
 };
 
@@ -100,6 +101,7 @@ export async function loadPublicStorefrontPageData(input: {
     leadId: leadContext.leadId ?? leadId,
     leadName: leadContext.leadName,
     leadPhone: leadContext.leadPhone ?? leadPhone,
+    leadEmail: leadContext.leadEmail,
     conversationId: leadContext.conversationId ?? conversationId,
     agentId,
     trackingLinkId,
@@ -231,6 +233,7 @@ export async function loadPublicStorefrontLeadContext(
   let leadId: string | null = requestedLeadId;
   let leadName: string | null = null;
   let leadPhone: string | null = normalizeWhatsappPhone(input.leadPhone);
+  let leadEmail: string | null = null;
   let lead: StorefrontLeadRow | null = null;
 
   if (requestedConversationId) {
@@ -247,6 +250,7 @@ export async function loadPublicStorefrontLeadContext(
       conversationId = conversation.id;
       leadId = leadId ?? normalizeUuid(conversation.lead_id);
       leadName = resolveLeadPersonalName({ metadata: conversationMetadata });
+      leadEmail = resolveLeadEmail(conversationMetadata);
       leadPhone = leadPhone
         ?? normalizeWhatsappPhone(readString(conversationMetadata.lead_phone))
         ?? normalizeWhatsappPhone(readString(conversationMetadata.phone_number))
@@ -266,12 +270,14 @@ export async function loadPublicStorefrontLeadContext(
     leadId = lead.id;
     leadName = resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata }) ?? leadName;
     leadPhone = normalizeWhatsappPhone(lead.phone_number) ?? leadPhone;
+    leadEmail = resolveLeadEmail(readRecord(lead.metadata)) ?? leadEmail;
   }
 
   return {
     leadId,
     leadName,
     leadPhone,
+    leadEmail,
     conversationId,
   };
 }
@@ -518,6 +524,22 @@ function readRecord(value: unknown): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveLeadEmail(metadata: JsonRecord | null) {
+  const record = readRecord(metadata);
+
+  return normalizeEmail(readString(record.email))
+    ?? normalizeEmail(readString(record.customer_email))
+    ?? normalizeEmail(readString(record.lead_email))
+    ?? normalizeEmail(readString(record.checkout_email))
+    ?? normalizeEmail(readString(record.contact_email));
+}
+
+function normalizeEmail(value: string | null) {
+  const normalized = value?.replace(/\s+/g, "").trim().toLowerCase().slice(0, 160);
+
+  return normalized && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : null;
 }
 
 function normalizeWhatsappPhone(value: string | null) {

@@ -76,7 +76,13 @@ export async function POST(
   const agentId = normalizeUuid(readString(body.agentId));
   const trackingLinkId = normalizeUuid(readString(body.trackingLinkId));
   const leadPhone = normalizePhone(readString(body.leadPhone));
-  const lead = leadId ? await loadLead(client, organization.id, leadId) : null;
+  let lead = leadId ? await loadLead(client, organization.id, leadId) : null;
+
+  if (!lead && leadPhone) {
+    lead = await loadLeadByPhone(client, organization.id, leadPhone);
+  }
+
+  const leadMetadata = readRecord(lead?.metadata);
   const customerName = normalizeText(readString(body.customerName), 140)
     ?? readString(lead?.display_name)
     ?? null;
@@ -84,12 +90,21 @@ export async function POST(
     ?? normalizePhone(lead?.phone_number)
     ?? leadPhone;
   const customerEmail = normalizeEmail(readString(body.customerEmail))
-    ?? normalizeEmail(readString(readRecord(lead?.metadata).email))
-    ?? normalizeEmail(readString(readRecord(lead?.metadata).customer_email));
+    ?? normalizeEmail(readString(leadMetadata.email))
+    ?? normalizeEmail(readString(leadMetadata.customer_email))
+    ?? normalizeEmail(readString(leadMetadata.lead_email));
   const cartItems = readPublicCartItems(body.items);
 
-  if (!customerName && !customerPhone) {
-    return NextResponse.json({ error: "Informe seu nome ou WhatsApp para acompanhar o pedido." }, { status: 422 });
+  if (!customerName) {
+    return NextResponse.json({ error: "Informe seu nome para acompanhar o pedido." }, { status: 422 });
+  }
+
+  if (!customerPhone) {
+    return NextResponse.json({ error: "Informe seu WhatsApp para acompanhar o pedido." }, { status: 422 });
+  }
+
+  if (!customerEmail) {
+    return NextResponse.json({ error: "Informe um e-mail valido para finalizar o pedido." }, { status: 422 });
   }
 
   if (cartItems.length === 0) {
@@ -166,6 +181,29 @@ export async function POST(
   const subtotalCents = resolvedItems.reduce((total, entry) => total + entry.totalCents, 0);
   const subtotal = formatMoneyCents(subtotalCents);
   const total = subtotal;
+  const now = new Date().toISOString();
+  let savedLead: LeadRow | null = null;
+
+  try {
+    savedLead = await upsertCheckoutLeadContact(client, {
+      organizationId: organization.id,
+      organizationName: organization.name,
+      lead,
+      customerName,
+      customerPhone,
+      customerEmail,
+      conversationId,
+      agentId,
+      trackingLinkId,
+      now,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : "Nao foi possivel salvar os dados do lead.",
+    }, { status: 500 });
+  }
+
+  const orderLeadId = savedLead?.id ?? lead?.id ?? leadId;
   const checkoutIntentKey = createPublicCheckoutIntentKey([
     "sales_catalog_public_store",
     organization.id,
@@ -174,9 +212,11 @@ export async function POST(
       quantity: entry.quantity,
       unitPriceCents: entry.unitPriceCents,
     })).sort((left, right) => left.productId.localeCompare(right.productId)),
-    lead?.id ?? leadId,
+    orderLeadId,
     conversationId,
+    customerName,
     customerPhone,
+    customerEmail,
     agentId,
     trackingLinkId,
   ]);
@@ -197,7 +237,6 @@ export async function POST(
     });
   }
 
-  const now = new Date().toISOString();
   const orderId = randomUUID();
   const firstItem = resolvedItems[0]?.item;
   const orderCommercialFlowType = hasPlatformItems ? firstItem?.commercialFlowType ?? "connectyhub_resale" : "client_direct";
@@ -209,7 +248,7 @@ export async function POST(
     .insert({
       id: orderId,
       organization_id: organization.id,
-      lead_id: lead?.id ?? leadId,
+      lead_id: orderLeadId,
       conversation_id: conversationId,
       source: "public_store_page",
       status: "pending_payment",
@@ -239,8 +278,10 @@ export async function POST(
         currency: "BRL",
         agent_id: agentId,
         tracking_link_id: trackingLinkId,
+        lead_id: orderLeadId,
         lead_phone: customerPhone,
         lead_name: customerName,
+        customer_email: customerEmail,
         billing_cycles: uniqueStrings(resolvedItems.map((entry) => entry.item.billingCycle)),
         commercial_flow_type: orderCommercialFlowType,
         revenue_owner_type: orderRevenueOwnerType,
@@ -319,7 +360,7 @@ export async function POST(
     actorId: null,
   });
   const checkoutUrl = appendLeadTrackingParams(payment.trackingUrl ?? payment.checkoutUrl, {
-    leadId: lead?.id ?? leadId,
+    leadId: orderLeadId,
     leadPhone: customerPhone,
     conversationId,
     agentId,
@@ -345,7 +386,7 @@ export async function POST(
       payment_session_id: payment.session.id,
       checkout_url: payment.checkoutUrl,
       tracking_url: checkoutUrl,
-      lead_id: lead?.id ?? leadId,
+      lead_id: orderLeadId,
       conversation_id: conversationId,
       agent_id: agentId,
       lead_phone: customerPhone,
@@ -396,6 +437,170 @@ async function loadLead(
     .maybeSingle<LeadRow>();
 
   return data ?? null;
+}
+
+async function loadLeadByPhone(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  phoneNumber: string,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("id, display_name, phone_number, metadata")
+    .eq("organization_id", organizationId)
+    .eq("phone_number", phoneNumber)
+    .limit(1)
+    .maybeSingle<LeadRow>();
+
+  return data ?? null;
+}
+
+async function upsertCheckoutLeadContact(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    organizationName: string;
+    lead: LeadRow | null;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    conversationId: string | null;
+    agentId: string | null;
+    trackingLinkId: string | null;
+    now: string;
+  },
+): Promise<LeadRow> {
+  const existing = input.lead ?? await loadLeadByPhone(client, input.organizationId, input.customerPhone);
+
+  if (existing) {
+    const metadata = buildCheckoutLeadMetadata(existing.metadata, input);
+    const updatePayload: JsonRecord = {
+      display_name: input.customerName,
+      phone_number: input.customerPhone,
+      status: "active",
+      last_event_summary: "Lead iniciou checkout na loja publica.",
+      metadata,
+      updated_at: input.now,
+    };
+
+    const { data, error } = await client
+      .from("leads")
+      .update(updatePayload)
+      .eq("id", existing.id)
+      .eq("organization_id", input.organizationId)
+      .select("id, display_name, phone_number, metadata")
+      .single<LeadRow>();
+
+    if (error) {
+      throw new Error(`Nao foi possivel atualizar o lead no CRM: ${error.message}`);
+    }
+
+    await recordCheckoutLeadContactSaved(client, input.organizationId, data, input);
+
+    return data;
+  }
+
+  const metadata = buildCheckoutLeadMetadata(null, input);
+  const { data, error } = await client
+    .from("leads")
+    .insert({
+      organization_id: input.organizationId,
+      channel: "whatsapp",
+      phone_number: input.customerPhone,
+      display_name: input.customerName,
+      status: "active",
+      source: "sales_catalog_public_store_checkout",
+      last_event_summary: "Lead iniciou checkout na loja publica.",
+      metadata: {
+        ...metadata,
+        organization_name: input.organizationName,
+      },
+      created_at: input.now,
+      updated_at: input.now,
+    })
+    .select("id, display_name, phone_number, metadata")
+    .single<LeadRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel criar o lead no CRM: ${error.message}`);
+  }
+
+  await recordCheckoutLeadContactSaved(client, input.organizationId, data, input);
+
+  return data;
+}
+
+async function recordCheckoutLeadContactSaved(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  lead: LeadRow,
+  input: {
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    conversationId: string | null;
+    agentId: string | null;
+    trackingLinkId: string | null;
+  },
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: organizationId,
+    source_type: "lead",
+    source_id: lead.id,
+    event_type: "sales_catalog.checkout_contact_saved",
+    title: "Contato do lead salvo no checkout",
+    summary: "Nome, WhatsApp e e-mail confirmados na loja publica.",
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "storefront", "checkout", "lead_tracking"],
+    payload: {
+      lead_id: lead.id,
+      lead_name: input.customerName,
+      lead_phone: input.customerPhone,
+      customer_email: input.customerEmail,
+      conversation_id: input.conversationId,
+      agent_id: input.agentId,
+      tracking_link_id: input.trackingLinkId,
+      source: "sales_catalog_public_store_checkout",
+    },
+  });
+}
+
+function buildCheckoutLeadMetadata(
+  current: JsonRecord | null,
+  input: {
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    conversationId: string | null;
+    agentId: string | null;
+    trackingLinkId: string | null;
+    now: string;
+  },
+) {
+  return {
+    ...(current ?? {}),
+    name: input.customerName,
+    customer_name: input.customerName,
+    lead_name: input.customerName,
+    phone: input.customerPhone,
+    customer_phone: input.customerPhone,
+    lead_phone: input.customerPhone,
+    email: input.customerEmail,
+    customer_email: input.customerEmail,
+    lead_email: input.customerEmail,
+    checkout_email: input.customerEmail,
+    storefront_checkout: {
+      ...readRecord(current?.storefront_checkout),
+      last_contact_saved_at: input.now,
+      source: "sales_catalog_public_store_checkout",
+      conversation_id: input.conversationId,
+      agent_id: input.agentId,
+      tracking_link_id: input.trackingLinkId,
+    },
+    last_source: "sales_catalog_public_store_checkout",
+  };
 }
 
 function readPublicCartItems(value: unknown): PublicCartItem[] {

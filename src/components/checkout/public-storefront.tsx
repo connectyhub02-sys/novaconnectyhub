@@ -72,6 +72,7 @@ export type PublicStorefrontTrackingParams = {
   leadId: string | null;
   leadName: string | null;
   leadPhone: string | null;
+  leadEmail: string | null;
   conversationId: string | null;
   agentId: string | null;
   trackingLinkId: string | null;
@@ -152,7 +153,7 @@ export function PublicStorefront({
   const [cartOpen, setCartOpen] = useState(initialCartOpen);
   const [customerName, setCustomerName] = useState(tracking.leadName ?? "");
   const [customerPhone, setCustomerPhone] = useState(tracking.leadPhone ?? "");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerEmail, setCustomerEmail] = useState(tracking.leadEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
@@ -399,8 +400,12 @@ export function PublicStorefront({
   ]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
+  const customerContactReady = Boolean(customerName.trim())
+    && isValidStorefrontPhone(customerPhone)
+    && isValidStorefrontEmail(customerEmail);
   const checkoutReady = cart.length > 0
-    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
+    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number")
+    && customerContactReady;
   const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
   const textColor = normalizeStorefrontTextColor(storefront.textColor) ?? "#111111";
   const accentColor = getReadableAccentColor(primaryColor, textColor);
@@ -502,7 +507,12 @@ export function PublicStorefront({
   }
 
   async function createCheckout() {
-    if (busy || !checkoutReady) return;
+    if (busy) return;
+
+    if (!checkoutReady) {
+      setError("Informe nome, WhatsApp e e-mail valido para finalizar.");
+      return;
+    }
 
     setBusy(true);
     setError(null);
@@ -678,7 +688,7 @@ export function PublicStorefront({
         customerName={customerName}
         customerPhone={customerPhone}
         error={error}
-        leadContactPrefilled={Boolean(tracking.leadName && tracking.leadPhone)}
+        leadContactPrefilled={Boolean(tracking.leadId || tracking.leadName || tracking.leadPhone)}
         open={cartOpen}
         setCustomerEmail={setCustomerEmail}
         setCustomerName={setCustomerName}
@@ -1633,7 +1643,10 @@ export function CartDrawer({
   onCheckout: () => void;
 }) {
   const [editingLeadContact, setEditingLeadContact] = useState(false);
-  const hasLeadContact = leadContactPrefilled && Boolean(customerName.trim()) && Boolean(customerPhone.trim());
+  const hasPrefilledPhone = leadContactPrefilled && Boolean(customerPhone.trim());
+  const needsCustomerName = !customerName.trim();
+  const emailReady = isValidStorefrontEmail(customerEmail);
+  const showEmailHint = !emailReady;
 
   function closeCartDrawer() {
     setEditingLeadContact(false);
@@ -1699,19 +1712,57 @@ export function CartDrawer({
             <div className="mt-4 rounded-[8px] border border-[#e5e2d8] bg-white p-4">
               <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>
               <div className="mt-3 grid gap-3">
-                {hasLeadContact && !editingLeadContact ? (
-                  <CartLeadContactSummary
-                    customerName={customerName}
-                    customerPhone={customerPhone}
-                    onEdit={() => setEditingLeadContact(true)}
-                  />
+                {hasPrefilledPhone && !editingLeadContact ? (
+                  <>
+                    <CartLeadContactSummary
+                      customerName={customerName}
+                      customerPhone={customerPhone}
+                      onEdit={() => setEditingLeadContact(true)}
+                    />
+                    {needsCustomerName ? (
+                      <input
+                        className={inputClassName}
+                        onChange={(event) => setCustomerName(event.target.value)}
+                        placeholder="Seu nome"
+                        required
+                        value={customerName}
+                      />
+                    ) : null}
+                  </>
                 ) : (
                   <>
-                    <input className={inputClassName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" value={customerName} />
-                    <input className={inputClassName} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="WhatsApp com DDD" value={customerPhone} />
+                    <input
+                      className={inputClassName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      placeholder="Seu nome"
+                      required
+                      value={customerName}
+                    />
+                    <input
+                      className={inputClassName}
+                      inputMode="tel"
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      placeholder="WhatsApp com DDD"
+                      required
+                      type="tel"
+                      value={customerPhone}
+                    />
                   </>
                 )}
-                <input className={inputClassName} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="E-mail opcional" value={customerEmail} />
+                <input
+                  className={inputClassName}
+                  inputMode="email"
+                  onChange={(event) => setCustomerEmail(event.target.value)}
+                  placeholder="E-mail obrigatório"
+                  required
+                  type="email"
+                  value={customerEmail}
+                />
+                {showEmailHint ? (
+                  <p className="text-[11px] font-semibold leading-4 text-[color:var(--store-text-muted)]">
+                    Informe um e-mail valido para finalizar e acompanhar o pedido.
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1766,7 +1817,9 @@ function CartLeadContactSummary({
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-[color:var(--store-accent)]">
             Dados do WhatsApp
           </p>
-          <p className="mt-1 truncate text-sm font-semibold text-[color:var(--store-text)]">{customerName}</p>
+          <p className="mt-1 truncate text-sm font-semibold text-[color:var(--store-text)]">
+            {customerName.trim() || "Nome ainda nao informado"}
+          </p>
           <p className="mt-0.5 text-sm font-medium text-[color:var(--store-text-muted)]">{formatCustomerPhone(customerPhone)}</p>
         </div>
         <button
@@ -1972,6 +2025,14 @@ function formatCustomerPhone(value: string) {
   }
 
   return value;
+}
+
+function isValidStorefrontPhone(value: string) {
+  return value.replace(/\D/g, "").length >= 8;
+}
+
+function isValidStorefrontEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[color:var(--store-text)] outline-none transition placeholder:text-[#8b918c] focus:border-[color:var(--store-accent)] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";

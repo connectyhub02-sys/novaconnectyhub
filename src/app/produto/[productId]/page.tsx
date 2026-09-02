@@ -220,6 +220,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const leadId = leadContext.leadId ?? requestedLeadId;
   const leadName = leadContext.leadName;
   const leadPhone = leadContext.leadPhone ?? requestedLeadPhone;
+  const leadEmail = leadContext.leadEmail;
   const conversationId = leadContext.conversationId ?? requestedConversationId;
   const storefrontProductContext = {
     storeSlug,
@@ -566,6 +567,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           leadId,
           leadName,
           leadPhone,
+          leadEmail,
           conversationId,
           agentId,
           trackingLinkId,
