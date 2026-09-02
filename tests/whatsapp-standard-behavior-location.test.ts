@@ -225,8 +225,11 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(salesCatalogConsoleSource).toContain("Tipo de sede");
     expect(salesCatalogConsoleSource).toContain("Sem sede fixa");
     expect(salesCatalogConsoleSource).toContain("Salvar entrega, frete e localizacao");
+    expect(salesCatalogConsoleSource).toContain("Localizacao da empresa obrigatoria");
+    expect(salesCatalogConsoleSource).toContain("Obrigatorio: informe uma sede/base ou marque Sem sede fixa.");
     expect(salesCatalogConsoleSource).toContain("normalizeCompanyLocationDraftsForSave(companyLocationDrafts)");
     expect(salesCatalogRouteSource).toContain("replaceOrganizationLocations");
+    expect(salesCatalogRouteSource).toContain("normalizedCompanyLocations.length === 0");
     expect(salesCatalogRouteSource).toContain("companyLocations");
   });
 

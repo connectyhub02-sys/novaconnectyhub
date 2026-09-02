@@ -1973,6 +1973,12 @@ export function SalesCatalogConsole({
   async function saveShippingSettings() {
     if (!selectedCompanyId || savingShipping) return;
 
+    const normalizedCompanyLocations = normalizeCompanyLocationDraftsForSave(companyLocationDrafts);
+    if (normalizedCompanyLocations.length === 0) {
+      setNotice({ tone: "error", message: "Localizacao da empresa obrigatoria. Informe uma sede/base ou marque Sem sede fixa." });
+      return;
+    }
+
     setSavingShipping(true);
     setNotice(null);
 
@@ -1988,7 +1994,7 @@ export function SalesCatalogConsole({
           localPickup: shippingDraft.localPickup,
           originCep: shippingDraft.originCep,
           defaultHandlingDays: parseOptionalNumber(shippingDraft.defaultHandlingDays),
-          companyLocations: normalizeCompanyLocationDraftsForSave(companyLocationDrafts),
+          companyLocations: normalizedCompanyLocations,
           rules: shippingDraft.rules.map((rule) => ({
             uf: rule.uf,
             state: rule.state,
@@ -8267,13 +8273,13 @@ function CompanyLocationPolicyEditor({
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Localizacao da empresa</span>
             <span className="block truncate text-[11px] text-slate-400">
-              {configuredCount > 0 ? primaryLocationSummary : "Configure se a empresa atende publico, despacha pedidos ou nao tem sede fixa."}
+              {configuredCount > 0 ? primaryLocationSummary : "Obrigatorio: informe uma sede/base ou marque Sem sede fixa."}
             </span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          <NeonBadge tone={configuredCount > 0 ? "green" : "amber"}>
-            {configuredCount > 0 ? `${configuredCount} salva(s)` : "pendente"}
+          <NeonBadge tone={configuredCount > 0 ? "green" : "rose"}>
+            {configuredCount > 0 ? `${configuredCount} salva(s)` : "obrigatorio"}
           </NeonBadge>
           <ChevronDown className={cn("h-4 w-4 text-cyan-200 transition", open ? "rotate-180" : "")} />
         </span>

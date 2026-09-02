@@ -20,6 +20,7 @@ import {
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
 import { replaceOrganizationLocations } from "@/lib/company-locations/server";
+import { normalizeOrganizationLocations } from "@/lib/company-locations/shared";
 import {
   brazilianStates,
   buildSalesCatalogContent,
@@ -1366,7 +1367,7 @@ async function saveShippingSettings(input: {
   const activeRules = rules.filter((rule) => rule.active);
   const activeDeliveryRules = shippingEnabled ? activeRules : [];
   const activeLocalDeliveryZones = localDeliveryEnabled ? localDeliveryZones.filter((zone) => zone.active) : [];
-  const hasCompanyLocationsPayload = Boolean(input.body && Object.prototype.hasOwnProperty.call(input.body, "companyLocations"));
+  const normalizedCompanyLocations = normalizeOrganizationLocations(input.body?.companyLocations);
 
   assertShippingSettingsReady({
     shippingEnabled,
@@ -1375,14 +1376,16 @@ async function saveShippingSettings(input: {
     activeLocalDeliveryZones,
   });
 
-  const companyLocations = hasCompanyLocationsPayload
-    ? await replaceOrganizationLocations({
-        client: input.client,
-        organizationId: company.id,
-        userId: input.userId,
-        locations: input.body?.companyLocations,
-      })
-    : undefined;
+  if (normalizedCompanyLocations.length === 0) {
+    throw new Error("Localizacao da empresa obrigatoria. Informe uma sede/base ou marque Sem sede fixa.");
+  }
+
+  const companyLocations = await replaceOrganizationLocations({
+    client: input.client,
+    organizationId: company.id,
+    userId: input.userId,
+    locations: normalizedCompanyLocations,
+  });
 
   const now = new Date().toISOString();
   const metadata = {
