@@ -8596,6 +8596,10 @@ async function sendSalesCatalogPaymentLink(input: {
     return sendSalesCatalogPaymentDeferredWhatsapp(input);
   }
 
+  if (input.payment.gatewayUnavailable) {
+    return sendSalesCatalogPaymentUnavailableWhatsapp(input);
+  }
+
   if (shouldSendSalesCatalogPixInsideWhatsapp(input.payment)) {
     return sendSalesCatalogPixDirectWhatsapp(input);
   }
@@ -8721,6 +8725,48 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     trackId: `agent_payment_deferred_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
     mentions: resolveGroupMentions(input.context),
   });
+  const message: OutboundMessage = {
+    text: messageText,
+    mode: "text",
+    providerResponse,
+    interactiveButton: false,
+    buttonFallback: false,
+    persisted: true,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+
+  return message;
+}
+
+async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  payment: SalesCatalogPaymentLinkResult;
+}): Promise<OutboundMessage> {
+  const messageText = [
+    "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
+    "Vou chamar uma pessoa do time para ajustar o PagBank e te passar o proximo passo por aqui.",
+  ].join("\n");
+  const textProviderResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: messageText,
+    trackId: `agent_payment_unavailable_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+    mentions: resolveGroupMentions(input.context),
+  });
+  const providerResponse = {
+    delivery: "payment_gateway_unavailable",
+    provider: input.payment.provider,
+    providerLabel: input.payment.providerLabel,
+    orderId: input.payment.orderId,
+    checkoutUrl: input.payment.checkoutUrl,
+    trackingUrl: input.payment.trackingUrl,
+    textProviderResponse,
+  };
   const message: OutboundMessage = {
     text: messageText,
     mode: "text",
