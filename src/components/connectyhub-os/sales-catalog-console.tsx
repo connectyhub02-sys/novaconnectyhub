@@ -8338,7 +8338,14 @@ function CompanyLocationPolicyEditor({
               </div>
 
               {noFixedLocation ? (
-                <div className="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-[12px] leading-5 text-amber-950 dark:text-amber-100">
+                <div
+                  className="mt-3 rounded-lg border p-3 text-[12px] font-semibold leading-5"
+                  style={{
+                    backgroundColor: "rgba(254, 243, 199, 0.96)",
+                    borderColor: "rgba(245, 158, 11, 0.45)",
+                    color: "#78350f",
+                  }}
+                >
                   O agente vai informar que a empresa nao tem atendimento fisico nem sede fixa aberta ao publico. Frete e entrega local continuam funcionando pelas regras cadastradas abaixo.
                 </div>
               ) : (
