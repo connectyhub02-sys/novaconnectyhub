@@ -8429,7 +8429,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     });
   }
 
-  if (paymentDeferred) {
+  if (paymentDeferred || gatewayUnavailable) {
     const refreshedPayment = await createSalesCatalogPixPaymentSession({
       client: input.client,
       organizationId: input.context.organization.id,

@@ -152,6 +152,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(followUpDetection).toContain("ainda nao");
     expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
     expect(checkoutRecovery).toContain("gatewayUnavailable");
+    expect(checkoutRecovery).toContain("if (paymentDeferred || gatewayUnavailable)");
   });
 
   it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
