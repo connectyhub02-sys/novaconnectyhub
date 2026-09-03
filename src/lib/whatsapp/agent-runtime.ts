@@ -250,6 +250,7 @@ type SalesCatalogPaymentLinkResult = {
   paymentDeferred?: boolean;
   paymentDeferredReason?: string | null;
   preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
+  failureReason?: string | null;
 };
 
 type SalesCatalogPaymentSessionLinkRow = {
@@ -262,6 +263,7 @@ type SalesCatalogPaymentSessionLinkRow = {
   pix_ticket_url: string | null;
   provider_status: string | null;
   provider_status_detail: string | null;
+  failure_reason: string | null;
   metadata: JsonRecord | null;
 };
 type RuntimeSalesCatalogShippingQuote = {
@@ -694,6 +696,17 @@ export async function processWhatsappAgentRun(input: {
 
     if (refreshedSalesCatalogOrdersWithLocalDelivery) {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithLocalDelivery;
+    }
+
+    const refreshedSalesCatalogOrdersWithSavedDelivery = await maybeAttachSavedSalesCatalogDeliveryToOrder({
+      client,
+      context,
+      latestInbound,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithSavedDelivery) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithSavedDelivery;
     }
 
     const refreshedSalesCatalogOrdersWithPickup = await maybeAttachSalesCatalogPickupToOrder({
@@ -2035,6 +2048,179 @@ async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
   });
 }
 
+async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const savedAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
+
+  if (!savedAddress || !isRuntimeSavedDeliveryAffirmation(input.userText)) {
+    return null;
+  }
+
+  if (!hasRecentSavedDeliveryConfirmationPrompt(input.context.messages, input.latestInbound)) {
+    return null;
+  }
+
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  if (!shippingSettings?.configured) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && (runtimeSalesCatalogOrderRequiresShippingBeforePayment(item) || runtimeSalesCatalogOrderNeedsDeliveryAddress(item))
+  ));
+
+  if (!order) return null;
+
+  const activeZones = shippingSettings.localDeliveryEnabled
+    ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
+    : [];
+  const localMatch = resolveRuntimeLocalDeliveryMatch({
+    latestInbound: null,
+    text: savedAddress.address,
+    zones: activeZones,
+  });
+  const orderItem = order.items.find((item) => item.catalogItemId);
+  const catalogItem = input.context.salesCatalog.find((item) => item.id === orderItem?.catalogItemId) ?? null;
+  const nationalQuote = shippingSettings.shippingEnabled && savedAddress.cep && catalogItem
+    ? calculateSalesCatalogShippingQuotes({
+        item: catalogItem,
+        settings: shippingSettings,
+        cep: savedAddress.cep,
+      })
+    : null;
+  const quote = localMatch?.zone.price
+    ? {
+        serviceName: `Entrega local - ${localMatch.zone.name}`,
+        provider: "local_delivery",
+        price: localMatch.zone.price,
+        minDays: localMatch.zone.minDays,
+        maxDays: localMatch.zone.maxDays,
+        metadata: {
+          mode: "local_delivery",
+          source: localMatch.source,
+          coordinates: localMatch.coordinates,
+          zone_id: localMatch.zone.id,
+          zone_name: localMatch.zone.name,
+          notes: localMatch.zone.notes,
+        },
+      }
+    : nationalQuote && !nationalQuote.error && nationalQuote.quotes[0]
+      ? {
+          serviceName: nationalQuote.quotes[0].serviceName,
+          provider: nationalQuote.quotes[0].provider,
+          price: nationalQuote.quotes[0].price,
+          minDays: nationalQuote.quotes[0].minDays,
+          maxDays: nationalQuote.quotes[0].maxDays,
+          metadata: {
+            mode: "shipping_quote",
+            service_id: nationalQuote.quotes[0].serviceId,
+            uf: nationalQuote.quotes[0].uf,
+            state: nationalQuote.quotes[0].state,
+            weight_grams: nationalQuote.quotes[0].weightGrams,
+            notes: nationalQuote.quotes[0].notes,
+          },
+        }
+      : null;
+
+  if (runtimeSalesCatalogOrderRequiresShippingBeforePayment(order) && !quote) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const updatedTotal = quote ? calculateRuntimeOrderTotalWithShipping(order, quote.price) : null;
+  const note = [
+    `Endereco salvo do lead reutilizado em ${formatRuntimeDate(now)}.`,
+    `Endereco: ${savedAddress.address}.`,
+    savedAddress.cep ? `CEP ${savedAddress.cep}.` : "",
+    quote ? `${quote.serviceName}: ${quote.price}.` : "",
+  ].filter(Boolean).join(" ");
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const { data: current } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(current?.metadata) ?? {};
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      destination_cep: savedAddress.cep ?? order.destinationCep ?? null,
+      destination_address: savedAddress.address,
+      shipping_total: quote?.price ?? order.shippingTotal ?? null,
+      shipping_method: quote?.serviceName ?? order.shippingMethod ?? null,
+      total: updatedTotal ?? order.total,
+      internal_notes: internalNotes,
+      metadata: {
+        ...metadata,
+        saved_delivery_address_confirmed_at: now,
+        saved_delivery_address_confirmed_from: "whatsapp_agent_runtime",
+        delivery_address: savedAddress.address,
+        shipping_quote: quote
+          ? {
+              ...(readRecord(quote.metadata) ?? {}),
+              service_name: quote.serviceName,
+              provider: quote.provider,
+              price: quote.price,
+              min_days: quote.minDays,
+              max_days: quote.maxDays,
+              destination_address: savedAddress.address,
+              cep: savedAddress.cep,
+            }
+          : readRecord(metadata.shipping_quote) ?? null,
+      },
+      updated_at: now,
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await persistLeadDeliveryAddressSnapshot({
+    client: input.client,
+    context: input.context,
+    orderId: order.id,
+    destinationAddress: savedAddress.address,
+    destinationCep: savedAddress.cep,
+    source: quote ? quote.provider === "local_delivery" ? "local_delivery" : "shipping_quote" : "delivery_address",
+  }).catch(() => {});
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.saved_delivery_address_reused",
+    title: "Endereco salvo reutilizado pelo WhatsApp",
+    summary: preview(savedAddress.address, 180),
+    confidence: 0.86,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "shipping", "address", "lead_memory", "whatsapp"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      destination_address: savedAddress.address,
+      destination_cep: savedAddress.cep,
+      shipping_method: quote?.serviceName ?? order.shippingMethod ?? null,
+      shipping_total: quote?.price ?? order.shippingTotal ?? null,
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
 async function maybeAttachSalesCatalogPickupToOrder(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -2368,14 +2554,145 @@ function extractRuntimeCoordinates(latestInbound: ConversationMessageRow | null,
 }
 
 function extractRuntimeAddress(latestInbound: ConversationMessageRow | null, text: string) {
-  const payloadAddress = findString(latestInbound?.payload, ["address", "endereco", "formattedAddress", "formatted_address"]);
+  const payloadAddress = sanitizeRuntimeDeliveryAddress(
+    findString(latestInbound?.payload, ["address", "endereco", "formattedAddress", "formatted_address"]),
+  );
 
-  return payloadAddress ?? (hasRuntimeAddressText(text) ? preview(text, 260) : null);
+  return payloadAddress ?? sanitizeRuntimeDeliveryAddress(text);
 }
 
 function hasRuntimeAddressText(text: string) {
   const normalized = normalizeSearch(text);
   return /\b(rua|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia)\b/.test(normalized);
+}
+
+type LeadSavedDeliveryAddress = {
+  address: string;
+  cep: string | null;
+};
+
+function readLeadSavedDeliveryAddress(metadata: JsonRecord | null | undefined): LeadSavedDeliveryAddress | null {
+  const record = readRecord(metadata);
+
+  if (!record) {
+    return null;
+  }
+
+  const directAddress = sanitizeRuntimeDeliveryAddress(
+    findString(record, ["delivery_address", "destination_address", "address"]),
+  );
+  const directCep = normalizeRuntimeDeliveryCep(
+    findString(record, ["delivery_cep", "destination_cep", "cep"]),
+  );
+  const history = Array.isArray(record.delivery_addresses)
+    ? record.delivery_addresses
+        .map((entry) => readRecord(entry))
+        .filter((entry): entry is JsonRecord => Boolean(entry))
+    : [];
+  const latestHistory = history[history.length - 1] ?? null;
+  const historyAddress = sanitizeRuntimeDeliveryAddress(findString(latestHistory, ["address", "delivery_address", "destination_address"]));
+  const historyCep = normalizeRuntimeDeliveryCep(findString(latestHistory, ["cep", "delivery_cep", "destination_cep"]));
+  const address = directAddress ?? historyAddress;
+
+  if (!address) {
+    return null;
+  }
+
+  return {
+    address,
+    cep: directCep ?? historyCep ?? extractFirstBrazilianCep(address),
+  };
+}
+
+function formatLeadSavedDeliveryAddress(address: LeadSavedDeliveryAddress) {
+  return address.cep && !address.address.includes(address.cep)
+    ? `${address.address} (CEP ${address.cep})`
+    : address.address;
+}
+
+function normalizeRuntimeDeliveryCep(value: string | null | undefined) {
+  return value ? extractFirstBrazilianCep(value) : null;
+}
+
+function sanitizeRuntimeDeliveryAddress(value: string | null | undefined) {
+  const raw = value?.trim();
+
+  if (!raw || !hasRuntimeAddressText(raw)) {
+    return null;
+  }
+
+  const lines = raw
+    .split(/\r?\n+/)
+    .map(cleanRuntimeDeliveryAddressLine)
+    .filter((line) => line && (hasRuntimeAddressText(line) || Boolean(extractFirstBrazilianCep(line))));
+  const candidate = (lines.length > 0 ? lines.join(", ") : cleanRuntimeDeliveryAddressLine(raw))
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/[.,;:\s-]+$/, "")
+    .trim();
+
+  return candidate && hasRuntimeAddressText(candidate) ? preview(candidate, 260) : null;
+}
+
+function cleanRuntimeDeliveryAddressLine(value: string) {
+  let cleaned = value.trim();
+  const marker = cleaned.search(/\b(?:rua|r\.?|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia|cep)\b/i);
+
+  if (marker > 0 && marker <= 80) {
+    cleaned = cleaned.slice(marker);
+  }
+
+  const normalized = normalizeSearch(cleaned);
+  if (/^(?:pix|cartao|credito|debito|boleto|dinheiro|sim|ok|top|beleza|fechado|perfeito|pode fechar|vamos nessa|gostei)$/.test(normalized)) {
+    return "";
+  }
+
+  return cleaned
+    .replace(/\b(?:pagamento|pagar|vou pagar|cart[aã]o|pix|boleto)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, "")
+    .trim();
+}
+
+function isRuntimeSavedDeliveryAffirmation(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized || /\b(?:nao|não|troca|trocar|muda|mudar|outro|outra|novo|nova)\b/.test(normalized)) {
+    return false;
+  }
+
+  return /^(?:sim|s|ok|okay|pode|pode sim|isso|isso mesmo|confirmo|correto|certo|ta certo|esta certo|esse mesmo|e esse|é esse|fechado|perfeito)\b/.test(normalized)
+    || /\b(?:pode usar|usa esse|usar esse|mesmo endereco|mesmo endereço|entrega ai|entrega aí)\b/.test(normalized);
+}
+
+function hasRecentSavedDeliveryConfirmationPrompt(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!latestInbound) {
+    return false;
+  }
+
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+  if (!Number.isFinite(latestInboundMs)) {
+    return false;
+  }
+
+  return messages.some((message) => {
+    if (message.direction !== "outbound" || !message.text_content?.trim()) {
+      return false;
+    }
+
+    const occurredAt = Date.parse(message.occurred_at);
+    if (!Number.isFinite(occurredAt) || occurredAt >= latestInboundMs || latestInboundMs - occurredAt > salesCatalogCheckoutConfirmationWindowMs) {
+      return false;
+    }
+
+    const normalized = normalizeSearch(message.text_content);
+    return normalized.includes("endereco de entrega salvo")
+      && normalized.includes("mesmo endereco");
+  });
 }
 
 function findCoordinateValue(value: unknown, keys: string[]) {
@@ -3479,9 +3796,13 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
   const metadata = readRecord(lead.metadata);
   const memory = normalizeLeadMemory(readRecord(metadata?.lead_memory));
   const qualification = readRecord(metadata?.lead_qualification);
+  const savedDeliveryAddress = readLeadSavedDeliveryAddress(metadata);
   const lines: string[] = [];
 
   if (memory.personName) lines.push(`- Nome pessoal informado pelo lead: ${memory.personName}`);
+  if (savedDeliveryAddress) {
+    lines.push(`- Endereco de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`);
+  }
   if (memory.summary) lines.push(`- Resumo do lead: ${memory.summary}`);
   if (memory.goals.length) lines.push(`- Objetivos declarados: ${memory.goals.join("; ")}`);
   if (memory.pains.length) lines.push(`- Dores/problemas: ${memory.pains.join("; ")}`);
@@ -3500,6 +3821,7 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
     "MEMORIA INDIVIDUAL DO LEAD:",
     ...lines,
     "- Use esses detalhes so quando parecer natural. Nao diga que consultou memoria, registro, sistema ou banco de dados.",
+    "- Se houver endereco de entrega salvo e o lead fizer novo pedido com entrega, confirme se pode usar esse mesmo endereco antes de pedir rua/CEP novamente.",
     "- Se uma informacao da memoria conflitar com a mensagem atual do lead, confie na mensagem atual.",
   ];
 }
@@ -4717,6 +5039,7 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
       "",
       "REGRAS DE ENTREGA E FRETE:",
       "- Entrega/frete ainda nao configurados. Nao prometa retirada local, frete, prazo ou entrega automatica; se o produto fisico precisar disso, acione humano antes de cobrar.",
+      "- Se existir endereco salvo no arquivo do lead, confirme esse endereco antes de pedir os dados novamente.",
     ];
   }
 
@@ -4733,6 +5056,7 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     `- Frete por entrega: ${settings.shippingEnabled ? "habilitado" : "desativado"}.`,
     `- Entrega local: ${settings.localDeliveryEnabled ? "habilitada" : "desativada"}.`,
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
+    "- Se o arquivo do lead ja tiver endereco/CEP salvos e o lead fizer novo pedido, primeiro pergunte se pode entregar no mesmo endereco. Se ele confirmar, use o endereco salvo; se ele corrigir, grave o novo endereco.",
     settings.shippingEnabled
       ? "- Quando precisar de entrega por frete, peca CEP e endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
@@ -8690,6 +9014,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       paymentDeferred: result.paymentDeferred === true,
       paymentDeferredReason: result.paymentDeferredReason ?? null,
       preferredMethod: input.preferredMethod ?? null,
+      failureReason: result.session.failureReason ?? null,
     };
   } catch (error) {
     await input.client.from("intelligence_events").insert({
@@ -8736,7 +9061,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   const { data, error } = await input.client
     .from("sales_catalog_payment_sessions")
-    .select("id, order_id, provider, amount, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, metadata")
+    .select("id, order_id, provider, amount, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, failure_reason, metadata")
     .eq("id", paymentSessionId)
     .eq("organization_id", input.context.organization.id)
     .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
@@ -8784,6 +9109,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
         paymentDeferred,
         paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
         preferredMethod,
+        failureReason: asString(data.failure_reason),
       },
     });
   }
@@ -8823,6 +9149,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
         paymentDeferred: refreshedPayment.paymentDeferred === true,
         paymentDeferredReason: refreshedPayment.paymentDeferredReason ?? null,
         preferredMethod,
+        failureReason: refreshedPayment.session.failureReason ?? null,
       },
     });
   }
@@ -8845,6 +9172,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       paymentDeferred,
       paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
       preferredMethod,
+      failureReason: asString(data.failure_reason),
     },
   });
 }
@@ -9090,13 +9418,24 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   const canLocalDelivery = Boolean(shippingSettings?.configured && shippingSettings.localDeliveryEnabled && shippingSettings.localDeliveryZones.some((zone) => zone.active));
   const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup);
   const canResolveDelivery = canShip || canLocalDelivery || canPickup;
+  const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
+  const deliveryDataLabel = canShip
+    ? "CEP e endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver"
+    : "endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver";
+  const savedDeliveryLines = savedDeliveryAddress && (canShip || canLocalDelivery)
+    ? [
+        `Tenho um endereco de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,
+        `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie ${deliveryDataLabel}.`,
+      ]
+    : [];
   const intro = canResolveDelivery
     ? "Antes de gerar o pagamento, preciso confirmar a forma de entrega desse pedido."
     : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
     intro,
-    canShip ? "Se for entrega por frete, me envie o CEP e o endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver." : "",
-    canLocalDelivery ? "Se for entrega local, me envie o endereco completo. Bairro ou localizacao do WhatsApp ajudam a conferir a area atendida e a taxa, mas eu preciso deixar o endereco registrado." : "",
+    ...savedDeliveryLines,
+    savedDeliveryLines.length === 0 && canShip ? "Se for entrega por frete, me envie o CEP e o endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver." : "",
+    savedDeliveryLines.length === 0 && canLocalDelivery ? "Se for entrega local, me envie o endereco completo. Bairro ou localizacao do WhatsApp ajudam a conferir a area atendida e a taxa, mas eu preciso deixar o endereco registrado." : "",
     canPickup ? "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     !canResolveDelivery
       ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
@@ -9146,6 +9485,15 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
     trackId: `agent_payment_unavailable_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
     mentions: resolveGroupMentions(input.context),
   });
+  const handoffNotification = await notifyResponsibleHumanAboutPaymentIssue({
+    client: input.client,
+    context: input.context,
+    payment: input.payment,
+    reason: options.reason ?? "gateway_unavailable",
+  }).catch(async (error: unknown) => {
+    await persistPaymentIssueHumanHandoffFailure(input.client, input.context, input.payment, error);
+    return { status: "failed", reason: "payment_handoff_failed" } as const;
+  });
   const providerResponse = {
     delivery: isPixCodeMissing ? "whatsapp_pix_code_missing" : "payment_gateway_unavailable",
     provider: input.payment.provider,
@@ -9155,6 +9503,7 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
     checkoutUrl: input.payment.checkoutUrl,
     trackingUrl: input.payment.trackingUrl,
     textProviderResponse,
+    handoffNotification,
   };
   const message: OutboundMessage = {
     text: messageText,
@@ -9168,6 +9517,141 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   await saveOutboundMessage(input.client, input.context, message);
 
   return message;
+}
+
+async function notifyResponsibleHumanAboutPaymentIssue(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  payment: SalesCatalogPaymentLinkResult;
+  reason: "gateway_unavailable" | "pix_code_missing";
+}) {
+  const requestedAt = new Date().toISOString();
+  const latestInbound = findLatestInbound(input.context.messages);
+  const handoffReason = input.reason === "pix_code_missing"
+    ? "payment_pix_code_missing"
+    : "payment_gateway_unavailable";
+  const requestText = buildPaymentIssueHumanRequestText(input.payment, input.reason);
+  const pausedUntil = await pauseConversationForHuman(input.client, input.context.conversationId, input.context.behavior, handoffReason, {
+    source: "sales_catalog_payment",
+    status: "awaiting_human",
+    requested_at: requestedAt,
+    requested_text: preview(requestText, 700),
+    request_message_id: latestInbound?.id ?? null,
+    provider_message_id: latestInbound?.provider_message_id ?? null,
+    lead_id: input.context.lead?.id ?? null,
+    agent_run_id: input.context.run.id,
+    order_id: input.payment.orderId,
+    payment_gateway: input.payment.provider,
+    payment_provider_label: input.payment.providerLabel,
+    payment_method: input.payment.preferredMethod ?? "pix",
+    checkout_url: input.payment.checkoutUrl,
+    tracking_url: input.payment.trackingUrl,
+    issue_reason: input.reason,
+  });
+
+  await persistLeadHumanHandoff(input.client, input.context, {
+    requestedAt,
+    pausedUntil,
+    requestText,
+    latestInbound,
+    handoffReason,
+    handoffSource: "sales_catalog_payment",
+    leadSummary: "Pagamento automatico falhou e o responsavel humano precisa assumir o atendimento.",
+  });
+
+  await persistHumanHandoffEvent(input.client, input.context, {
+    requestedAt,
+    pausedUntil,
+    requestText,
+    latestInbound,
+    eventType: "whatsapp.handoff.payment_issue_requested",
+    eventTitle: "Responsavel humano chamado por falha de pagamento",
+    eventSummary: requestText,
+    eventTags: ["whatsapp", "handoff", "human", "payment", "sales_catalog"],
+    eventPayload: {
+      orderId: input.payment.orderId,
+      paymentGateway: input.payment.provider,
+      paymentProviderLabel: input.payment.providerLabel,
+      paymentMethod: input.payment.preferredMethod ?? "pix",
+      reason: input.reason,
+      checkoutUrl: input.payment.checkoutUrl,
+      trackingUrl: input.payment.trackingUrl,
+    },
+  });
+
+  const notificationData: WhatsappHandoffNotificationEventData = {
+    organizationId: input.context.organization.id,
+    whatsappInstanceId: input.context.instance.id,
+    conversationId: input.context.conversationId,
+    leadId: input.context.lead?.id ?? null,
+    agentId: input.context.agent.id,
+    agentRunId: input.context.run.id,
+    leadName: input.context.lead
+      ? resolveLeadPersonalName({
+          displayName: input.context.lead.display_name,
+          metadata: input.context.lead.metadata,
+        })
+      : null,
+    leadPhone: input.context.lead?.phone_number ?? null,
+    requestText,
+    requestedAt,
+    pausedUntil,
+    notificationNumbers: input.context.behavior.humanHandoffNotifications
+      ? input.context.behavior.humanHandoffNotificationNumbers
+      : null,
+    notificationCooldownMinutes: input.context.behavior.humanHandoffNotificationCooldownMinutes,
+    source: handoffReason,
+  };
+
+  return sendHumanHandoffNotificationNowOrQueue(input.client, input.context, notificationData);
+}
+
+function buildPaymentIssueHumanRequestText(
+  payment: SalesCatalogPaymentLinkResult,
+  reason: "gateway_unavailable" | "pix_code_missing",
+) {
+  const methodLabel = payment.preferredMethod === "card" ? "cartao" : "Pix";
+  const shortOrderId = payment.orderId.slice(0, 8).toUpperCase();
+  const issue = reason === "pix_code_missing"
+    ? "o gateway criou a sessao, mas nao retornou o codigo Pix copia e cola"
+    : payment.failureReason ?? "o gateway nao conseguiu gerar a cobranca online";
+
+  return [
+    `Falha automatica ao gerar pagamento ${methodLabel} do pedido ${shortOrderId}.`,
+    payment.amount ? `Valor: R$ ${payment.amount}.` : "",
+    `Gateway: ${payment.providerLabel}.`,
+    `Motivo: ${issue}.`,
+    "Assuma a conversa e combine o proximo passo com o lead.",
+  ].filter(Boolean).join("\n");
+}
+
+async function persistPaymentIssueHumanHandoffFailure(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  payment: SalesCatalogPaymentLinkResult,
+  error: unknown,
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: payment.orderId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.handoff.payment_issue_failed",
+    title: "Falha ao chamar responsavel humano",
+    summary: error instanceof Error ? preview(error.message, 500) : "Erro desconhecido ao acionar humano por falha de pagamento.",
+    confidence: 0.36,
+    visibility: "organization",
+    tags: ["whatsapp", "handoff", "payment", "error", "sales_catalog"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      orderId: payment.orderId,
+      paymentGateway: payment.provider,
+      paymentProviderLabel: payment.providerLabel,
+    },
+  });
 }
 
 async function sendSalesCatalogPixDirectWhatsapp(input: {
@@ -11730,6 +12214,9 @@ async function persistLeadHumanHandoff(
     requestText: string;
     latestInbound: ConversationMessageRow | null;
     detection?: HumanHandoffIntent;
+    handoffReason?: string;
+    handoffSource?: string;
+    leadSummary?: string;
   },
 ) {
   if (!context.lead?.id) {
@@ -11743,8 +12230,8 @@ async function persistLeadHumanHandoff(
   const handoffSnapshot = {
     active: true,
     status: "awaiting_human",
-    reason: "lead_requested_human",
-    source: "lead_request",
+    reason: input.handoffReason ?? "lead_requested_human",
+    source: input.handoffSource ?? "lead_request",
     requested_at: input.requestedAt,
     paused_until: input.pausedUntil,
     conversation_id: context.conversationId,
@@ -11760,7 +12247,7 @@ async function persistLeadHumanHandoff(
   await client
     .from("leads")
     .update({
-      last_event_summary: "Lead pediu atendimento humano no WhatsApp.",
+      last_event_summary: input.leadSummary ?? "Lead pediu atendimento humano no WhatsApp.",
       last_message_at: input.requestedAt,
       metadata: {
         ...currentMetadata,
@@ -11783,6 +12270,11 @@ async function persistHumanHandoffEvent(
     requestText: string;
     latestInbound: ConversationMessageRow | null;
     detection?: HumanHandoffIntent;
+    eventType?: string;
+    eventTitle?: string;
+    eventSummary?: string;
+    eventTags?: string[];
+    eventPayload?: JsonRecord;
   },
 ) {
   await client.from("intelligence_events").insert({
@@ -11791,13 +12283,14 @@ async function persistHumanHandoffEvent(
     source_type: "whatsapp",
     source_id: context.conversationId,
     producer_agent_id: context.agent.id,
-    event_type: "whatsapp.handoff.requested",
-    title: "Lead pediu atendimento humano",
-    summary: preview(input.requestText || "Lead pediu para falar com alguem da equipe.", 500),
+    event_type: input.eventType ?? "whatsapp.handoff.requested",
+    title: input.eventTitle ?? "Lead pediu atendimento humano",
+    summary: preview(input.eventSummary ?? input.requestText ?? "Lead pediu para falar com alguem da equipe.", 500),
     confidence: 0.96,
     visibility: "organization",
-    tags: ["whatsapp", "handoff", "human", "lead"],
+    tags: input.eventTags ?? ["whatsapp", "handoff", "human", "lead"],
     payload: {
+      ...(input.eventPayload ?? {}),
       leadId: context.lead?.id ?? null,
       conversationId: context.conversationId,
       agentRunId: context.run.id,

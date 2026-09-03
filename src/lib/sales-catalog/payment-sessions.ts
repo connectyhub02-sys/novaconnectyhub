@@ -107,6 +107,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const orderMetadata = readRecord(order.metadata);
   const agentId = resolveOrderAgentId(orderMetadata);
   const preferredMethod = input.preferredMethod === "card" ? "card" : "pix";
+  const sessionMethod = preferredMethod === "card" ? "card" : "pix";
 
   if (!amount) {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
@@ -137,7 +138,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const paymentProvider = resolvePaymentGatewayProvider();
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
-  const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, "pix");
+  const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, sessionMethod);
   const catalogSettings = paymentProvider === "pagbank" && !connectyHubOwned
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
@@ -209,7 +210,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       order_id: order.id,
       integration_id: integration?.id ?? null,
       provider: paymentProvider,
-      method: "pix",
+      method: sessionMethod,
       status: accessToken ? "created" : "error",
       amount,
       currency: "BRL",
@@ -310,6 +311,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentOwner,
       connectyHubOwned,
       paymentProvider,
+      paymentMethodType: sessionMethod,
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       failureReason,
@@ -400,6 +402,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentOwner,
       connectyHubOwned,
       paymentProvider,
+      paymentMethodType: "card",
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       paymentMethod: "Checkout PagBank",
@@ -531,6 +534,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentOwner,
       connectyHubOwned,
       paymentProvider,
+      paymentMethodType: "pix",
       paymentStatus: pixData.status === "approved" ? "confirmed" : "pending",
       orderStatus: pixData.status === "approved" ? "paid" : "pending_payment",
       providerPaymentId: pixData.providerPaymentId,
@@ -617,6 +621,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentOwner,
       connectyHubOwned,
       paymentProvider,
+      paymentMethodType: sessionMethod,
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       failureReason: message,
@@ -712,7 +717,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
       order_id: input.order.id,
       integration_id: null,
       provider: paymentProvider,
-      method: "pix",
+      method: input.preferredMethod === "card" ? "card" : "pix",
       status: "created",
       amount: input.amount,
       currency: "BRL",
@@ -812,6 +817,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     paymentOwner,
     connectyHubOwned,
     paymentProvider,
+    paymentMethodType: input.preferredMethod,
     paymentStatus: "pending",
     orderStatus: "pending_payment",
     paymentMethod: "Checkout pendente",
@@ -877,6 +883,7 @@ async function persistCheckoutOrderReference(input: {
   paymentOwner: Awaited<ReturnType<typeof resolveSalesCatalogOrderPaymentOwner>>;
   connectyHubOwned: boolean;
   paymentProvider: PaymentGatewayProvider;
+  paymentMethodType?: "pix" | "card";
   paymentStatus: "pending" | "confirmed";
   orderStatus: "pending_payment" | "paid";
   paymentMethod?: string;
@@ -888,7 +895,7 @@ async function persistCheckoutOrderReference(input: {
     .from("sales_catalog_orders")
     .update({
       latest_payment_session_id: input.sessionId,
-      payment_method: input.paymentMethod ?? formatPaymentMethodLabel(input.paymentProvider, "pix"),
+      payment_method: input.paymentMethod ?? formatPaymentMethodLabel(input.paymentProvider, input.paymentMethodType ?? "pix"),
       payment_status: input.paymentStatus,
       status: input.orderStatus,
       metadata: {
@@ -901,7 +908,7 @@ async function persistCheckoutOrderReference(input: {
         latest_checkout_tracking_tag: input.checkoutTracking?.tag ?? null,
         latest_payment_session_id: input.sessionId,
         latest_payment_provider: input.paymentProvider,
-        latest_payment_method: "pix",
+        latest_payment_method: input.paymentMethodType ?? "pix",
         latest_provider_payment_id: input.providerPaymentId ?? null,
         latest_payment_failure_reason: input.failureReason ?? null,
         latest_payment_deferred_reason: input.paymentDeferredReason ?? null,

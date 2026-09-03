@@ -174,6 +174,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("agent_pix_payment");
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
     expect(paymentSender).toContain("sendSalesCatalogPaymentUnavailableWhatsapp");
+    expect(paymentSender).toContain("notifyResponsibleHumanAboutPaymentIssue");
+    expect(paymentSender).toContain("payment_gateway_unavailable");
     expect(paymentSender).toContain("gatewayUnavailable");
     expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
     expect(paymentSender).toContain("pix_code_missing");
@@ -209,10 +211,36 @@ describe("WhatsApp sales catalog humanized replies", () => {
 
   it("preserves the preferred payment method while delivery data is pending", () => {
     expect(paymentSessionsSource).toContain("const preferredMethod = input.preferredMethod === \"card\" ? \"card\" : \"pix\";");
+    expect(paymentSessionsSource).toContain("const sessionMethod = preferredMethod === \"card\" ? \"card\" : \"pix\";");
+    expect(paymentSessionsSource).toContain("method: sessionMethod");
+    expect(paymentSessionsSource).toContain("paymentMethodType: \"card\"");
+    expect(paymentSessionsSource).toContain("latest_payment_method: input.paymentMethodType ?? \"pix\"");
     expect(paymentSessionsSource).toContain("preferredMethod,");
     expect(paymentSessionsSource).toContain("preferred_payment_method: input.preferredMethod");
     expect(runtimeSource).toContain("readStoredSalesCatalogPaymentPreference(metadata)");
     expect(runtimeSource).toContain("appendCheckoutPaymentMethod(baseUrl, \"card\")");
+  });
+
+  it("stores clean delivery addresses and confirms saved addresses on future orders", () => {
+    const shippingRuntime = sourceBetween(
+      "async function maybeAttachSalesCatalogShippingQuoteToOrder",
+      "async function maybeAttachSalesCatalogPickupToOrder",
+    );
+    const leadMemory = sourceBetween(
+      "function buildLeadMemoryLines",
+      "function buildCrossAgentConversationLines",
+    );
+
+    expect(runtimeSource).toContain("sanitizeRuntimeDeliveryAddress");
+    expect(runtimeSource).toContain("cleanRuntimeDeliveryAddressLine");
+    expect(runtimeSource).toContain("readLeadSavedDeliveryAddress");
+    expect(runtimeSource).toContain("Tenho um endereco de entrega salvo");
+    expect(runtimeSource).toContain("maybeAttachSavedSalesCatalogDeliveryToOrder");
+    expect(runtimeSource).toContain("sales_catalog.saved_delivery_address_reused");
+    expect(shippingRuntime).toContain("isRuntimeSavedDeliveryAffirmation");
+    expect(shippingRuntime).toContain("hasRecentSavedDeliveryConfirmationPrompt");
+    expect(leadMemory).toContain("Endereco de entrega salvo");
+    expect(leadMemory).toContain("confirme se pode usar esse mesmo endereco");
   });
 
   it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
