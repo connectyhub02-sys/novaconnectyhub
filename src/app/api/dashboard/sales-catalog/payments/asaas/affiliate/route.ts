@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { buildAsaasAffiliateLandingUrl } from "@/lib/sales-catalog/asaas";
+import { buildAsaasAffiliateLandingUrl, resolveAsaasAffiliateLandingUrl } from "@/lib/sales-catalog/asaas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,7 +17,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.redirect(buildAsaasAffiliateLandingUrl({ companyId }));
+  try {
+    const client = createServiceClient();
+    return NextResponse.redirect(await resolveAsaasAffiliateLandingUrl({ client, companyId }));
+  } catch (error) {
+    console.error("[sales-catalog] failed to load Asaas affiliate URL from vault", error);
+    return NextResponse.redirect(buildAsaasAffiliateLandingUrl({ companyId }));
+  }
 }
 
 function getAppBaseUrl() {

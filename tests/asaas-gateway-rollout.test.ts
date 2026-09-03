@@ -15,6 +15,7 @@ const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
 const maintenanceVaultSource = read("src/lib/maintenance-vault.ts");
 const credentialVaultFormSource = read("src/components/connectyhub-os/credential-vault-form.tsx");
 const adminIntegrationTestRouteSource = read("src/app/api/admin/integrations/[integrationId]/test/route.ts");
+const asaasAffiliateRouteSource = read("src/app/api/dashboard/sales-catalog/payments/asaas/affiliate/route.ts");
 const envExampleSource = read(".env.example");
 
 function read(path: string) {
@@ -133,5 +134,11 @@ describe("Asaas gateway rollout", () => {
     expect(envExampleSource).toContain("ASAAS_PLATFORM_ACCOUNT_ID=");
     expect(envExampleSource).toContain("ASAAS_AFFILIATE_URL=");
     expect(envExampleSource).toContain("ASAAS_WEBHOOK_ALERT_EMAIL=");
+    expect(asaasGatewaySource).toContain("resolveAsaasAffiliateLandingUrl");
+    expect(asaasGatewaySource).toContain("loadAsaasPlatformCredential");
+    expect(asaasGatewaySource).toContain(".eq(\"integration_id\", asaasPlatformIntegrationId)");
+    expect(asaasGatewaySource).toContain("configuredUrl");
+    expect(asaasAffiliateRouteSource).toContain("createServiceClient");
+    expect(asaasAffiliateRouteSource).toContain("resolveAsaasAffiliateLandingUrl");
   });
 });

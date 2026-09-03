@@ -14,6 +14,11 @@ type JsonRecord = Record<string, unknown>;
 
 export type AsaasMode = "production" | "sandbox";
 
+type PlatformCredentialRow = {
+  env_name: string;
+  encrypted_value: string | null;
+};
+
 type AsaasIntegrationSecrets = {
   id: string;
   organizationId: string;
@@ -182,16 +187,19 @@ export type AsaasCheckoutInput = Omit<AsaasPixPaymentInput, "dueDate"> & {
 };
 
 const asaasProviderId = "asaas";
+const asaasPlatformIntegrationId = "asaas";
+const asaasAffiliateCredentialNames = ["ASAAS_AFFILIATE_URL", "NEXT_PUBLIC_ASAAS_AFFILIATE_URL"];
 
 export function buildAsaasWebhookUrl() {
   return `${getAppBaseUrl()}/api/webhooks/asaas`;
 }
 
-export function buildAsaasAffiliateLandingUrl(input: { companyId?: string | null } = {}) {
-  const configured = process.env.ASAAS_AFFILIATE_URL?.trim()
+export function buildAsaasAffiliateLandingUrl(input: { companyId?: string | null; configuredUrl?: string | null } = {}) {
+  const configured = input.configuredUrl?.trim()
+    || process.env.ASAAS_AFFILIATE_URL?.trim()
     || process.env.NEXT_PUBLIC_ASAAS_AFFILIATE_URL?.trim()
     || "https://www.asaas.com/";
-  const url = new URL(configured);
+  const url = createSafeAsaasAffiliateUrl(configured);
 
   url.searchParams.set("utm_source", url.searchParams.get("utm_source") ?? "connectyhub");
   url.searchParams.set("utm_medium", url.searchParams.get("utm_medium") ?? "integration");
@@ -201,6 +209,17 @@ export function buildAsaasAffiliateLandingUrl(input: { companyId?: string | null
   }
 
   return url.toString();
+}
+
+export async function resolveAsaasAffiliateLandingUrl(input: {
+  client?: SupabaseClient;
+  companyId?: string | null;
+} = {}) {
+  const configuredUrl = await loadAsaasPlatformCredential(input.client, asaasAffiliateCredentialNames);
+  return buildAsaasAffiliateLandingUrl({
+    companyId: input.companyId,
+    configuredUrl,
+  });
 }
 
 export async function saveAsaasPaymentIntegration(input: {
@@ -822,6 +841,53 @@ function getAsaasApiBaseUrl(mode?: AsaasMode | null) {
     : "https://api.asaas.com/v3");
 
   return baseUrl.replace(/\/+$/, "");
+}
+
+async function loadAsaasPlatformCredential(client: SupabaseClient | undefined, envNames: string[]) {
+  const credentials = new Map<string, string>();
+
+  if (client) {
+    const { data, error } = await client
+      .from("integration_credentials")
+      .select("env_name, encrypted_value")
+      .eq("scope", "platform")
+      .eq("integration_id", asaasPlatformIntegrationId)
+      .is("organization_id", null)
+      .in("env_name", envNames)
+      .order("updated_at", { ascending: false });
+
+    if (!error) {
+      for (const credential of (data ?? []) as PlatformCredentialRow[]) {
+        if (!credential.env_name || !credential.encrypted_value || credentials.has(credential.env_name)) {
+          continue;
+        }
+
+        try {
+          credentials.set(credential.env_name, decryptCredentialValue(credential.encrypted_value));
+        } catch {
+          // Environment variables below keep the redirect usable during key rotation.
+        }
+      }
+    }
+  }
+
+  for (const envName of envNames) {
+    const value = credentials.get(envName)?.trim() || process.env[envName]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function createSafeAsaasAffiliateUrl(value: string) {
+  try {
+    return new URL(value);
+  } catch {
+    return new URL("https://www.asaas.com/");
+  }
 }
 
 function buildAsaasCheckoutCustomerData(input: AsaasCheckoutInput) {
