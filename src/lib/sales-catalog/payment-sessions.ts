@@ -106,6 +106,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
     ?? normalizeCurrencyAmount(order.subtotal);
   const orderMetadata = readRecord(order.metadata);
   const agentId = resolveOrderAgentId(orderMetadata);
+  const preferredMethod = input.preferredMethod === "card" ? "card" : "pix";
 
   if (!amount) {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
@@ -117,6 +118,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       order,
       items,
       amount,
+      preferredMethod,
       reason: "shipping_required",
       reasonLabel: "Frete pendente",
     });
@@ -140,7 +142,6 @@ export async function createSalesCatalogPixPaymentSession(input: {
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
   const pagBankSettings = catalogSettings?.pagBank ?? null;
-  const preferredMethod = input.preferredMethod === "card" ? "card" : "pix";
   let integration: PaymentGatewayIntegration | null = null;
   let platformBilling: Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
@@ -681,6 +682,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
   actorId?: string | null;
   order: OrderRow;
   items: OrderItemRow[];
+  preferredMethod: "pix" | "card";
   reason: "shipping_required";
   reasonLabel: string;
 }) {
@@ -748,6 +750,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
         payment_deferred: true,
         payment_deferred_reason: input.reason,
         payment_deferred_label: input.reasonLabel,
+        preferred_payment_method: input.preferredMethod,
       },
       created_at: now,
       updated_at: now,

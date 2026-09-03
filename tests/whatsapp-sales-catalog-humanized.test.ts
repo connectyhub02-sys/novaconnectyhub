@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const runtimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
+const paymentSessionsSource = readFileSync("src/lib/sales-catalog/payment-sessions.ts", "utf8");
 
 function sourceBetween(start: string, end: string) {
   const startIndex = runtimeSource.indexOf(start);
@@ -204,6 +205,14 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
     expect(checkoutRecovery).toContain("gatewayUnavailable");
     expect(checkoutRecovery).toContain("if (paymentDeferred || gatewayUnavailable)");
+  });
+
+  it("preserves the preferred payment method while delivery data is pending", () => {
+    expect(paymentSessionsSource).toContain("const preferredMethod = input.preferredMethod === \"card\" ? \"card\" : \"pix\";");
+    expect(paymentSessionsSource).toContain("preferredMethod,");
+    expect(paymentSessionsSource).toContain("preferred_payment_method: input.preferredMethod");
+    expect(runtimeSource).toContain("readStoredSalesCatalogPaymentPreference(metadata)");
+    expect(runtimeSource).toContain("appendCheckoutPaymentMethod(baseUrl, \"card\")");
   });
 
   it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
