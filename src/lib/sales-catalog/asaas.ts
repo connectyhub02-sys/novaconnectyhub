@@ -53,6 +53,15 @@ type AsaasWebhookResponse = {
   errors?: AsaasErrorItem[];
 };
 
+type AsaasWebhookListResponse = {
+  data?: AsaasWebhookResponse[];
+  totalCount?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+  errors?: AsaasErrorItem[];
+};
+
 export type AsaasPaymentResponse = {
   object?: string;
   id?: string;
@@ -212,7 +221,7 @@ export async function saveAsaasPaymentIntegration(input: {
   const now = new Date().toISOString();
   const webhookSecret = createAsaasWebhookSecret();
   const webhookUrl = buildAsaasWebhookUrl();
-  const webhookProvisioning = await createAsaasPaymentWebhook({
+  const webhookProvisioning = await ensureAsaasPaymentWebhook({
     accessToken,
     mode,
     url: webhookUrl,
@@ -224,6 +233,7 @@ export async function saveAsaasPaymentIntegration(input: {
       id: webhook.id ?? null,
       name: webhook.name ?? null,
       events: webhook.events ?? null,
+      reused: Boolean(webhook.reused),
       error: null,
     }))
     .catch((error: unknown) => ({
@@ -231,6 +241,7 @@ export async function saveAsaasPaymentIntegration(input: {
       id: null,
       name: null,
       events: null,
+      reused: false,
       error: error instanceof Error ? error.message : "Nao foi possivel criar webhook Asaas automaticamente.",
     }));
   const accountLabel = account.label ?? previewCredentialValue(accessToken);
@@ -268,6 +279,7 @@ export async function saveAsaasPaymentIntegration(input: {
         pix_without_key_supported_but_transitional: true,
         webhook_provider_id: webhookProvisioning.id,
         webhook_provisioned: webhookProvisioning.ok,
+        webhook_reused: webhookProvisioning.reused,
         webhook_provision_error: webhookProvisioning.error,
         webhook_events: webhookProvisioning.events,
         provider_docs: "https://docs.asaas.com/docs/cobrancas-via-pix",
@@ -482,33 +494,138 @@ async function createAsaasPaymentWebhook(input: {
     mode: input.mode,
     endpoint: "/webhooks",
     method: "POST",
-    payload: {
-      name: "ConnectyHub - Pagamentos",
-      url: input.url,
-      email: normalizeAsaasWebhookEmail(input.email),
-      enabled: true,
-      interrupted: false,
-      apiVersion: 3,
-      authToken: input.authToken,
-      sendType: "SEQUENTIALLY",
-      events: [
-        "PAYMENT_CREATED",
-        "PAYMENT_UPDATED",
-        "PAYMENT_CONFIRMED",
-        "PAYMENT_RECEIVED",
-        "PAYMENT_OVERDUE",
-        "PAYMENT_DELETED",
-        "PAYMENT_RESTORED",
-        "PAYMENT_REFUNDED",
-        "PAYMENT_CHARGEBACK_REQUESTED",
-        "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
-        "PAYMENT_AWAITING_RISK_ANALYSIS",
-        "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
-        "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
-      ],
-    },
+    payload: buildAsaasPaymentWebhookPayload(input),
     fallbackMessage: "Nao foi possivel criar webhook Asaas automaticamente.",
   });
+}
+
+async function ensureAsaasPaymentWebhook(input: {
+  accessToken: string;
+  mode: AsaasMode;
+  url: string;
+  authToken: string;
+  email?: string | null;
+}): Promise<AsaasWebhookResponse & { reused?: boolean }> {
+  try {
+    const webhook = await createAsaasPaymentWebhook(input);
+    return { ...webhook, reused: false };
+  } catch (error) {
+    if (!isAsaasDuplicateWebhookError(error)) {
+      throw error;
+    }
+
+    const existing = await findAsaasPaymentWebhook(input);
+    if (!existing?.id) {
+      throw error;
+    }
+
+    const updated = await updateAsaasPaymentWebhook({
+      ...input,
+      webhookId: existing.id,
+    });
+
+    return {
+      ...existing,
+      ...updated,
+      id: updated.id ?? existing.id,
+      reused: true,
+    };
+  }
+}
+
+async function updateAsaasPaymentWebhook(input: {
+  accessToken: string;
+  mode: AsaasMode;
+  webhookId: string;
+  url: string;
+  authToken: string;
+  email?: string | null;
+}) {
+  return requestAsaas<AsaasWebhookResponse>({
+    accessToken: input.accessToken,
+    mode: input.mode,
+    endpoint: `/webhooks/${encodeURIComponent(input.webhookId)}`,
+    method: "PUT",
+    payload: buildAsaasPaymentWebhookPayload(input),
+    fallbackMessage: "Nao foi possivel atualizar o webhook Asaas existente.",
+  });
+}
+
+async function findAsaasPaymentWebhook(input: {
+  accessToken: string;
+  mode: AsaasMode;
+  url: string;
+}) {
+  const expectedUrl = normalizeAsaasWebhookUrl(input.url);
+  let offset = 0;
+
+  for (let page = 0; page < 5; page += 1) {
+    const webhooks = await requestAsaas<AsaasWebhookListResponse>({
+      accessToken: input.accessToken,
+      mode: input.mode,
+      endpoint: `/webhooks?limit=100&offset=${offset}`,
+      method: "GET",
+      fallbackMessage: "Nao foi possivel listar webhooks Asaas.",
+    });
+    const entries = webhooks.data ?? [];
+    const matchingByUrl = entries.find((webhook) => normalizeAsaasWebhookUrl(webhook.url) === expectedUrl);
+    if (matchingByUrl) return matchingByUrl;
+
+    const matchingByName = entries.find((webhook) => webhook.name?.trim().toLowerCase() === "connectyhub - pagamentos");
+    if (matchingByName) return matchingByName;
+
+    if (!webhooks.hasMore || entries.length === 0) break;
+    offset += 100;
+  }
+
+  return null;
+}
+
+function buildAsaasPaymentWebhookPayload(input: {
+  url: string;
+  authToken: string;
+  email?: string | null;
+}): JsonRecord {
+  return {
+    name: "ConnectyHub - Pagamentos",
+    url: input.url,
+    email: normalizeAsaasWebhookEmail(input.email),
+    enabled: true,
+    interrupted: false,
+    apiVersion: 3,
+    authToken: input.authToken,
+    sendType: "SEQUENTIALLY",
+    events: [
+      "PAYMENT_CREATED",
+      "PAYMENT_UPDATED",
+      "PAYMENT_CONFIRMED",
+      "PAYMENT_RECEIVED",
+      "PAYMENT_OVERDUE",
+      "PAYMENT_DELETED",
+      "PAYMENT_RESTORED",
+      "PAYMENT_REFUNDED",
+      "PAYMENT_CHARGEBACK_REQUESTED",
+      "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+      "PAYMENT_AWAITING_RISK_ANALYSIS",
+      "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
+      "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+    ],
+  };
+}
+
+function isAsaasDuplicateWebhookError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return (normalized.includes("ja existe") && normalized.includes("mesmos atributos"))
+    || (normalized.includes("already") && normalized.includes("webhook"));
+}
+
+function normalizeAsaasWebhookUrl(url?: string | null) {
+  return url?.trim().replace(/\/+$/, "").toLowerCase() ?? "";
 }
 
 export function extractAsaasPaymentData(payment: AsaasPaymentResponse, qrCode?: AsaasPixQrCodeResponse | null): AsaasPaymentData {
@@ -657,7 +774,7 @@ async function requestAsaas<T>(input: {
   accessToken: string;
   mode?: AsaasMode | null;
   endpoint: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT";
   payload?: JsonRecord;
   idempotencyKey?: string | null;
   fallbackMessage: string;
@@ -671,7 +788,7 @@ async function requestAsaas<T>(input: {
       access_token: input.accessToken,
       ...(input.idempotencyKey ? { "asaas-idempotency-key": input.idempotencyKey } : {}),
     },
-    body: input.method === "POST" ? JSON.stringify(compactObject(input.payload ?? {})) : undefined,
+    body: input.method === "POST" || input.method === "PUT" ? JSON.stringify(compactObject(input.payload ?? {})) : undefined,
   });
   const body = await response.json().catch(() => null) as (T & { errors?: AsaasErrorItem[]; error?: string; message?: string }) | null;
 

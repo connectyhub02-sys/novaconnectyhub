@@ -39,10 +39,14 @@ describe("Asaas gateway rollout", () => {
     expect(asaasGatewaySource).toContain("/pixQrCode");
     expect(asaasGatewaySource).toContain("endpoint: \"/checkouts\"");
     expect(asaasGatewaySource).toContain("endpoint: \"/webhooks\"");
+    expect(asaasGatewaySource).toContain("/webhooks?limit=100&offset=");
+    expect(asaasGatewaySource).toContain("method: \"PUT\"");
     expect(asaasGatewaySource).toContain("access_token: input.accessToken");
     expect(asaasGatewaySource).toContain("\"User-Agent\": buildAsaasUserAgent(input.mode)");
     expect(asaasGatewaySource).toContain("ConnectyHub/1.0");
-    expect(asaasGatewaySource).toContain("createAsaasPaymentWebhook");
+    expect(asaasGatewaySource).toContain("ensureAsaasPaymentWebhook");
+    expect(asaasGatewaySource).toContain("isAsaasDuplicateWebhookError");
+    expect(asaasGatewaySource).toContain("webhook_reused");
   });
 
   it("uses Asaas for client-owned Pix sessions and hosted card checkout", () => {
