@@ -38,6 +38,9 @@ describe("Asaas gateway rollout", () => {
     expect(asaasGatewaySource).toContain("endpoint: \"/payments\"");
     expect(asaasGatewaySource).toContain("/pixQrCode");
     expect(asaasGatewaySource).toContain("endpoint: \"/checkouts\"");
+    expect(asaasGatewaySource).toContain("maxInstallmentCount");
+    expect(asaasGatewaySource).toContain("chargeTypes: maxInstallmentCount > 1 ? [\"DETACHED\", \"INSTALLMENT\"] : [\"DETACHED\"]");
+    expect(asaasGatewaySource).toContain("installment: { maxInstallmentCount }");
     expect(asaasGatewaySource).toContain("endpoint: \"/webhooks\"");
     expect(asaasGatewaySource).toContain("/webhooks?limit=100&offset=");
     expect(asaasGatewaySource).toContain("method: \"PUT\"");
@@ -54,6 +57,9 @@ describe("Asaas gateway rollout", () => {
     expect(paymentSessionsSource).toContain("createAsaasPixPayment");
     expect(paymentSessionsSource).toContain("extractAsaasPaymentData");
     expect(paymentSessionsSource).toContain("createAsaasCheckout");
+    expect(paymentSessionsSource).toContain("asaas_settings");
+    expect(paymentSessionsSource).toContain("dueDate: resolveAsaasPaymentDueDate");
+    expect(paymentSessionsSource).toContain("maxInstallmentCount: asaasSettings?.maxInstallments");
     expect(paymentSessionsSource).toContain("customer_email_required");
     expect(paymentSessionsSource).toContain("customer_document_required");
     expect(paymentSessionsSource).toContain("return \"pagbank\"");
@@ -64,11 +70,17 @@ describe("Asaas gateway rollout", () => {
     expect(existsSync("src/app/api/dashboard/sales-catalog/payments/asaas/affiliate/route.ts")).toBe(true);
     expect(integrationsSource).toContain("id: \"asaas\"");
     expect(integrationsSource).toContain("buildAsaasConnections");
+    expect(integrationsSource).toContain("asaasPreferences");
     expect(clientConsoleSource).toContain("function AsaasGuidedCard");
     expect(clientConsoleSource).toContain("API Key Asaas");
     expect(clientConsoleSource).toContain("Ja tenho conta");
     expect(clientConsoleSource).toContain("Nao tenho conta");
     expect(clientConsoleSource).toContain("buildAsaasAffiliateUrl");
+    expect(clientConsoleSource).toContain("Salvar preferencias Asaas");
+    expect(clientConsoleSource).toContain("save_asaas_settings");
+    expect(clientConsoleSource).toContain("Pix expira em dias");
+    expect(clientConsoleSource).toContain("Maximo de parcelas");
+    expect(clientConsoleSource).toContain("Boleto vence em dias");
   });
 
   it("processes Asaas payment webhooks and feeds post-payment automation", () => {
@@ -87,7 +99,18 @@ describe("Asaas gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("formatRuntimeDataList");
     expect(whatsappAgentRuntimeSource).toContain("Posso usar esse mesmo endereco");
     expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
-    expect(whatsappAgentRuntimeSource).toContain("gateway de pagamento desta empresa");
+    expect(whatsappAgentRuntimeSource).toContain("gateway Asaas desta empresa");
+    expect(whatsappAgentRuntimeSource).toContain("Me confirme seu endereco completo");
+  });
+
+  it("stores configurable Asaas payment preferences with sales catalog settings", () => {
+    expect(sharedSource).toContain("SalesCatalogAsaasSettings");
+    expect(sharedSource).toContain("salesCatalogAsaasPaymentMethodOptions");
+    expect(sharedSource).toContain("createDefaultSalesCatalogAsaasSettings");
+    expect(sharedSource).toContain("pixExpirationDays");
+    expect(sharedSource).toContain("checkoutExpirationMinutes");
+    expect(sharedSource).toContain("boletoDueDays");
+    expect(sharedSource).toContain("boletoAutoCancelDays");
   });
 
   it("exposes Asaas operational env and admin monitoring", () => {

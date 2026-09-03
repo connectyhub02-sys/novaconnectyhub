@@ -23,6 +23,7 @@ import {
   getSalesCatalogReadiness,
   normalizeSalesCatalogStorefrontFontPreset,
   resolveSalesCatalogMediaKind,
+  salesCatalogAsaasPaymentMethodOptions,
   salesCatalogLeadDataFields,
   salesCatalogPagBankPaymentMethodOptions,
   salesCatalogPaymentMethodTemplates,
@@ -43,6 +44,8 @@ import {
   type SalesCatalogLeadDataField,
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
+  type SalesCatalogAsaasPaymentMethod,
+  type SalesCatalogAsaasSettings,
   type SalesCatalogPagBankPaymentMethod,
   type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
@@ -1099,6 +1102,10 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
     pagBank: readPagBankSettings(metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank, commerceDefaults.pagBank),
+    asaas: readAsaasSettings(
+      metadata.asaas ?? metadata.asaas_settings ?? metadata.asaasSettings ?? metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank,
+      commerceDefaults.asaas,
+    ),
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
@@ -1915,6 +1922,55 @@ function readPagBankSettings(value: unknown, fallback: SalesCatalogPagBankSettin
   };
 }
 
+function readAsaasSettings(value: unknown, fallback: SalesCatalogAsaasSettings): SalesCatalogAsaasSettings {
+  const record = readRecord(value);
+  if (!record) return { ...fallback, enabledMethods: [...fallback.enabledMethods] };
+
+  const enabledMethods = normalizeAsaasPaymentMethods(
+    record.enabled_methods ?? record.enabledMethods,
+    fallback.enabledMethods,
+  );
+  const maxInstallments = clampInteger(
+    readNumber(record.max_installments ?? record.maxInstallments) ?? fallback.maxInstallments,
+    1,
+    21,
+  );
+  const interestFreeInstallments = clampInteger(
+    readNumber(record.interest_free_installments ?? record.interestFreeInstallments) ?? fallback.interestFreeInstallments,
+    0,
+    maxInstallments,
+  );
+
+  return {
+    enabledMethods,
+    maxInstallments,
+    interestFreeInstallments,
+    softDescriptor: readString(record.soft_descriptor ?? record.softDescriptor) ?? fallback.softDescriptor,
+    pixExpirationDays: clampInteger(
+      readNumber(record.pix_expiration_days ?? record.pixExpirationDays) ?? fallback.pixExpirationDays,
+      1,
+      30,
+    ),
+    checkoutExpirationMinutes: clampInteger(
+      readNumber(record.checkout_expiration_minutes ?? record.checkoutExpirationMinutes) ?? fallback.checkoutExpirationMinutes,
+      10,
+      1440,
+    ),
+    boletoDueDays: clampInteger(
+      readNumber(record.boleto_due_days ?? record.boletoDueDays) ?? fallback.boletoDueDays,
+      1,
+      60,
+    ),
+    boletoAutoCancelDays: clampInteger(
+      readNumber(record.boleto_auto_cancel_days ?? record.boletoAutoCancelDays) ?? fallback.boletoAutoCancelDays,
+      0,
+      120,
+    ),
+    allowBuyerEdit: readNullableBoolean(record.allow_buyer_edit ?? record.allowBuyerEdit) ?? fallback.allowBuyerEdit,
+    recurringEnabled: readNullableBoolean(record.recurring_enabled ?? record.recurringEnabled) ?? fallback.recurringEnabled,
+  };
+}
+
 function normalizePagBankPaymentMethods(
   value: unknown,
   fallback: SalesCatalogPagBankPaymentMethod[],
@@ -1924,6 +1980,19 @@ function normalizePagBankPaymentMethods(
   const methods = source
     .map((item) => readString(item))
     .filter((method): method is SalesCatalogPagBankPaymentMethod => allowed.has(method as SalesCatalogPagBankPaymentMethod));
+
+  return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
+}
+
+function normalizeAsaasPaymentMethods(
+  value: unknown,
+  fallback: SalesCatalogAsaasPaymentMethod[],
+): SalesCatalogAsaasPaymentMethod[] {
+  const allowed = new Set(salesCatalogAsaasPaymentMethodOptions.map((method) => method.id));
+  const source = Array.isArray(value) ? value : fallback;
+  const methods = source
+    .map((item) => readString(item))
+    .filter((method): method is SalesCatalogAsaasPaymentMethod => allowed.has(method as SalesCatalogAsaasPaymentMethod));
 
   return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
 }

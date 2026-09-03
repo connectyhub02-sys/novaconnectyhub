@@ -32,7 +32,7 @@ import {
   ensureAsaasAccessToken,
   extractAsaasPaymentData,
 } from "./asaas";
-import type { SalesCatalogPagBankSettings } from "./shared";
+import type { SalesCatalogAsaasSettings, SalesCatalogPagBankSettings } from "./shared";
 import {
   buildTrackedLinkUrl,
   createTrackedLinkSlug,
@@ -187,10 +187,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
     });
   }
 
-  const catalogSettings = paymentProvider === "pagbank" && !connectyHubOwned
+  const catalogSettings = (paymentProvider === "pagbank" || paymentProvider === "asaas") && !connectyHubOwned
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
   const pagBankSettings = catalogSettings?.pagBank ?? null;
+  const asaasSettings = catalogSettings?.asaas ?? null;
   let integration: PaymentGatewayIntegration | null = null;
   let platformBilling: Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>> | null = null;
   let providerSetupError: string | null = null;
@@ -206,6 +207,19 @@ export async function createSalesCatalogPixPaymentSession(input: {
     && !pagBankSettings.enabledMethods.some((method) => method === "credit_card" || method === "debit_card")
   ) {
     throw new Error("Cartao PagBank esta desativado nas configuracoes do catalogo.");
+  }
+
+  if (paymentProvider === "asaas" && asaasSettings && preferredMethod === "pix" && !asaasSettings.enabledMethods.includes("pix")) {
+    throw new Error("Pix Asaas esta desativado nas configuracoes do catalogo.");
+  }
+
+  if (
+    paymentProvider === "asaas"
+    && asaasSettings
+    && preferredMethod === "card"
+    && !asaasSettings.enabledMethods.includes("credit_card")
+  ) {
+    throw new Error("Cartao de credito Asaas esta desativado nas configuracoes do catalogo.");
   }
 
   try {
@@ -307,6 +321,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         payment_gateway_mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
         preferred_payment_method: preferredMethod,
         pagbank_settings: pagBankSettings ? serializePagBankSessionSettings(pagBankSettings) : null,
+        asaas_settings: asaasSettings ? serializeAsaasSessionSettings(asaasSettings) : null,
         commercial_flow_type: paymentOwner.commercialFlowType,
         revenue_owner_type: paymentOwner.revenueOwnerType,
         commission_eligible: paymentOwner.commissionEligible,
@@ -459,7 +474,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
           payerZipCode: order.destination_cep,
           payerAddress: order.destination_address,
           billingTypes: ["CREDIT_CARD"],
-          minutesToExpire: pagBankSettings?.checkoutExpirationMinutes ?? null,
+          minutesToExpire: asaasSettings?.checkoutExpirationMinutes ?? null,
+          maxInstallmentCount: asaasSettings?.maxInstallments ?? null,
           successUrl: checkoutUrl,
           cancelUrl: checkoutUrl,
           expiredUrl: checkoutUrl,
@@ -686,6 +702,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         payerPhone: order.customer_phone,
         payerZipCode: order.destination_cep,
         payerAddress: order.destination_address,
+        dueDate: resolveAsaasPaymentDueDate(asaasSettings?.pixExpirationDays ?? null),
         idempotencyKey,
         items: gatewayItems,
       });
@@ -1345,6 +1362,29 @@ function serializePagBankSessionSettings(settings: SalesCatalogPagBankSettings):
     allow_buyer_edit: settings.allowBuyerEdit,
     recurring_enabled: settings.recurringEnabled,
   };
+}
+
+function serializeAsaasSessionSettings(settings: SalesCatalogAsaasSettings): JsonRecord {
+  return {
+    enabled_methods: settings.enabledMethods,
+    max_installments: settings.maxInstallments,
+    interest_free_installments: settings.interestFreeInstallments,
+    soft_descriptor: settings.softDescriptor,
+    pix_expiration_days: settings.pixExpirationDays,
+    checkout_expiration_minutes: settings.checkoutExpirationMinutes,
+    boleto_due_days: settings.boletoDueDays,
+    boleto_auto_cancel_days: settings.boletoAutoCancelDays,
+    allow_buyer_edit: settings.allowBuyerEdit,
+    recurring_enabled: settings.recurringEnabled,
+  };
+}
+
+function resolveAsaasPaymentDueDate(days: number | null | undefined) {
+  const parsedDays = typeof days === "number" && Number.isFinite(days) ? days : 1;
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + Math.max(0, Math.round(parsedDays)));
+
+  return dueDate.toISOString().slice(0, 10);
 }
 
 async function createPaymentSessionTrackedLink(input: {

@@ -175,6 +175,7 @@ export type AsaasPixPaymentInput = {
 export type AsaasCheckoutInput = Omit<AsaasPixPaymentInput, "dueDate"> & {
   billingTypes?: Array<"CREDIT_CARD" | "PIX"> | null;
   minutesToExpire?: number | null;
+  maxInstallmentCount?: number | null;
   successUrl?: string | null;
   cancelUrl?: string | null;
   expiredUrl?: string | null;
@@ -433,6 +434,7 @@ export async function createAsaasCheckout(input: AsaasCheckoutInput) {
   const amount = normalizeAsaasAmount(input.amount);
   const fallbackItemName = sanitizeAsaasText(input.description, 80) ?? "Pedido ConnectyHub";
   const items = buildAsaasCheckoutItems(input.items, amount, fallbackItemName);
+  const maxInstallmentCount = normalizeAsaasInstallmentCount(input.maxInstallmentCount);
   const checkout = await requestAsaas<AsaasCheckoutResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
@@ -441,10 +443,11 @@ export async function createAsaasCheckout(input: AsaasCheckoutInput) {
     idempotencyKey: input.idempotencyKey,
     payload: {
       billingTypes,
-      chargeTypes: ["DETACHED"],
+      chargeTypes: maxInstallmentCount > 1 ? ["DETACHED", "INSTALLMENT"] : ["DETACHED"],
       minutesToExpire: normalizeAsaasCheckoutExpiration(input.minutesToExpire),
       externalReference: input.externalReference,
       items,
+      ...(maxInstallmentCount > 1 ? { installment: { maxInstallmentCount } } : {}),
       customerData: buildAsaasCheckoutCustomerData(input),
       callback: buildAsaasCheckoutCallback(input),
     },
@@ -886,6 +889,12 @@ function normalizeAsaasCheckoutExpiration(value: number | null | undefined) {
   const parsed = typeof value === "number" && Number.isFinite(value) ? value : 60;
 
   return Math.min(1440, Math.max(10, Math.round(parsed)));
+}
+
+function normalizeAsaasInstallmentCount(value: number | null | undefined) {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? value : 1;
+
+  return Math.min(21, Math.max(1, Math.round(parsed)));
 }
 
 function normalizeAsaasQuantity(value: number | null | undefined) {

@@ -35,6 +35,7 @@ import {
   getSalesCatalogReadiness,
   normalizeSalesCatalogStorefrontFontPreset,
   resolveSalesCatalogMediaKind,
+  salesCatalogAsaasPaymentMethodOptions,
   salesCatalogLeadDataFields,
   salesCatalogPaymentMethodTemplates,
   salesCatalogPagBankPaymentMethodOptions,
@@ -51,6 +52,8 @@ import {
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
+  type SalesCatalogAsaasPaymentMethod,
+  type SalesCatalogAsaasSettings,
   type SalesCatalogPagBankPaymentMethod,
   type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
@@ -768,6 +771,22 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       return NextResponse.json(result);
     }
 
+    if (action === "save_asaas_settings") {
+      const result = await saveAsaasSettings({
+        client,
+        companyId,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard/integracoes");
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+      revalidatePath(`/loja/${company.slug ?? company.id}`);
+
+      return NextResponse.json(result);
+    }
+
     if (action === "save_shipping_settings") {
       const result = await saveShippingSettings({
         client,
@@ -1103,13 +1122,34 @@ async function saveCatalogSettings(input: {
   const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
     ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
   const categories = normalizeStringList(input.body?.categories, [], 30, 80);
+  const { data: existing, error: existingError } = await input.client
+    .from("intelligence_memory")
+    .select("id, metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", company.id)
+    .eq("memory_type", "sales_catalog_settings")
+    .limit(1)
+    .maybeSingle<{ id: string; metadata: JsonRecord | null }>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
+  }
+
+  const existingMetadata = readRecord(existing?.metadata) ?? {};
   const attributes = normalizeSettingsAttributes(input.body?.attributes, []);
   const storefront = normalizeStorefrontSettings(input.body?.storefront, categories);
   const trackInventory = readBoolean(input.body?.trackInventory) ?? false;
   const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
   const paymentMethods = normalizePaymentMethods(input.body?.paymentMethods, commerceDefaults.paymentMethods);
-  const pagBank = normalizePagBankSettings(input.body?.pagBank ?? input.body?.pagbank, commerceDefaults.pagBank);
+  const pagBank = normalizePagBankSettings(
+    input.body?.pagBank ?? input.body?.pagbank ?? existingMetadata.pagbank ?? existingMetadata.pag_bank ?? existingMetadata.pagBank,
+    commerceDefaults.pagBank,
+  );
+  const asaas = normalizeAsaasSettings(
+    input.body?.asaas ?? input.body?.asaasSettings ?? existingMetadata.asaas ?? existingMetadata.asaas_settings ?? existingMetadata.asaasSettings,
+    commerceDefaults.asaas,
+  );
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
   const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
@@ -1128,6 +1168,7 @@ async function saveCatalogSettings(input: {
     variation_media: variationMedia,
     payment_methods: paymentMethods.map(serializePaymentMethod),
     pagbank: serializePagBankSettings(pagBank),
+    asaas: serializeAsaasSettings(asaas),
     order_policy: serializeOrderPolicy(orderPolicy),
     lead_data_policy: serializeLeadDataPolicy(leadDataPolicy),
     message_templates: serializeMessageTemplates(messageTemplates),
@@ -1150,10 +1191,14 @@ async function saveCatalogSettings(input: {
     trackInventory ? "Controle de estoque por variacao: sim" : "Controle de estoque por variacao: nao",
     variationMedia ? "Midia por variacao: sim" : "Midia por variacao: nao",
     enabledPayments.length ? `Pagamentos: ${enabledPayments.map((method) => method.label).join(", ")}` : "Pagamentos: acionar humano",
-    `PagBank: ${pagBank.enabledMethods.join(", ")}`,
-    "PagBank regra do agente: ofereca somente os metodos habilitados nesta configuracao; nao ofereca Pix, cartao, debito ou boleto quando o metodo estiver desativado.",
-    `PagBank recorrencia: ${pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
-    pagBank.softDescriptor ? `PagBank descriptor: ${pagBank.softDescriptor}` : "",
+    `Asaas: ${asaas.enabledMethods.join(", ")}`,
+    "Asaas regra do agente: ofereca somente os metodos habilitados nesta configuracao; Pix fica no WhatsApp, cartao segue para checkout seguro e boleto usa cobranca/link Asaas quando o fluxo estiver disponivel.",
+    `Asaas recorrencia: ${asaas.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    `Asaas parcelas: maximo ${asaas.maxInstallments}, sem juros ate ${asaas.interestFreeInstallments}.`,
+    asaas.softDescriptor ? `Asaas descriptor: ${asaas.softDescriptor}` : "",
+    `Asaas Pix: vence em ${asaas.pixExpirationDays} dia(s).`,
+    `Asaas boleto: vence em ${asaas.boletoDueDays} dia(s), cancelamento apos ${asaas.boletoAutoCancelDays} dia(s).`,
+    `Asaas checkout: expira em ${asaas.checkoutExpirationMinutes} minuto(s).`,
     `Reserva do pedido: ${formatReservationPolicy(orderPolicy.reservationPolicy)}`,
     orderPolicy.minimumOrderValue ? `Pedido minimo: ${orderPolicy.minimumOrderValue}` : "",
     `CEP antes do frete: ${orderPolicy.askCepBeforeQuote ? "sim" : "nao"}`,
@@ -1166,20 +1211,7 @@ async function saveCatalogSettings(input: {
       ? `Agente na loja: ${formatCommerceAgentMode(commerceAgent.mode)} em ${commerceAgent.surfaces.join(", ")}`
       : "Agente na loja: inativo",
   ].filter(Boolean).join("\n");
-  const { data: existing, error: existingError } = await input.client
-    .from("intelligence_memory")
-    .select("id, metadata")
-    .eq("scope", "organization")
-    .eq("organization_id", company.id)
-    .eq("memory_type", "sales_catalog_settings")
-    .limit(1)
-    .maybeSingle<{ id: string; metadata: JsonRecord | null }>();
-
-  if (existingError) {
-    throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
-  }
-
-  const previousCategories = normalizeStringList(readRecord(existing?.metadata)?.categories, [], 30, 80);
+  const previousCategories = normalizeStringList(existingMetadata.categories, [], 30, 80);
   const categoryRenames = normalizeCategoryRenames(input.body?.categoryRenames ?? input.body?.category_renames, previousCategories, categories);
   const settingsId = existing?.id ?? randomUUID();
   const payload = {
@@ -1235,6 +1267,7 @@ async function saveCatalogSettings(input: {
       variation_media: variationMedia,
       payment_methods_count: enabledPayments.length,
       pagbank: serializePagBankSettings(pagBank),
+      asaas: serializeAsaasSettings(asaas),
       reservation_policy: orderPolicy.reservationPolicy,
       required_lead_fields: leadDataPolicy.requiredFields,
       commerce_agent: serializeCommerceAgentSettings(commerceAgent),
@@ -1337,6 +1370,96 @@ async function savePagBankSettings(input: {
   };
 }
 
+async function saveAsaasSettings(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
+  const asaas = normalizeAsaasSettings(input.body?.asaas ?? input.body?.asaasSettings, commerceDefaults.asaas);
+  const now = new Date().toISOString();
+  const { data: existing, error: existingError } = await input.client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", company.id)
+    .eq("memory_type", "sales_catalog_settings")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<SalesCatalogMemoryRow>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
+  }
+
+  const currentMetadata = readRecord(existing?.metadata) ?? {};
+  const metadata = {
+    ...currentMetadata,
+    configured: readBoolean(currentMetadata.configured) ?? false,
+    asaas: serializeAsaasSettings(asaas),
+    updated_by: input.userId,
+    updated_from: "asaas_integration_settings",
+  };
+  const settingsId = existing?.id ?? randomUUID();
+  const payload = {
+    id: settingsId,
+    scope: "organization",
+    organization_id: company.id,
+    memory_type: "sales_catalog_settings",
+    title: existing?.title ?? "Configuracao do Catalogo de Vendas",
+    content: mergeAsaasSettingsContent(existing?.content ?? "", asaas),
+    importance: 0.76,
+    tags: ["sales_catalog", "sales_catalog_settings", "asaas", "payment_preferences"],
+    metadata,
+    updated_at: now,
+  };
+  const query = existing
+    ? input.client.from("intelligence_memory").update(payload).eq("id", existing.id)
+    : input.client.from("intelligence_memory").insert({ ...payload, created_at: now });
+  const { data, error } = await query
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .single<SalesCatalogMemoryRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar as preferencias Asaas.");
+  }
+
+  const settings = mapSalesCatalogSettings(data);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: company.id,
+    source_type: "sales_catalog",
+    source_id: data.id,
+    event_type: "sales_catalog.asaas_settings_saved",
+    title: "Preferencias Asaas salvas",
+    summary: `Asaas configurado com ${asaas.enabledMethods.length} metodo(s) de pagamento.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "asaas", "payment_preferences"],
+    payload: {
+      asaas: serializeAsaasSettings(asaas),
+      updated_by: input.userId,
+    },
+  });
+
+  return {
+    settings,
+    asaasPreferences: {
+      companyId: settings.companyId,
+      settings: settings.asaas,
+      configured: settings.configured,
+      updatedAt: settings.updatedAt,
+    },
+  };
+}
+
 function mergePagBankSettingsContent(content: string, pagBank: SalesCatalogPagBankSettings) {
   const lines = content
     .split(/\r?\n/)
@@ -1358,6 +1481,35 @@ function mergePagBankSettingsContent(content: string, pagBank: SalesCatalogPagBa
     lines.push(`PagBank descriptor: ${pagBank.softDescriptor}`);
   }
   lines.push(`PagBank Pix: expira em ${pagBank.pixExpirationMinutes} minuto(s)`);
+
+  return lines.filter(Boolean).join("\n");
+}
+
+function mergeAsaasSettingsContent(content: string, asaas: SalesCatalogAsaasSettings) {
+  const lines = content
+    .split(/\r?\n/)
+    .filter((line) => {
+      const normalized = line.trim().toLowerCase();
+      return !normalized.startsWith("asaas:")
+        && !normalized.startsWith("asaas descriptor:")
+        && !normalized.startsWith("asaas parcelas:")
+        && !normalized.startsWith("asaas pix:")
+        && !normalized.startsWith("asaas boleto:")
+        && !normalized.startsWith("asaas checkout:")
+        && !normalized.startsWith("asaas recorrencia:")
+        && !normalized.startsWith("asaas regra do agente:");
+    });
+
+  lines.push(`Asaas: ${asaas.enabledMethods.join(", ")}`);
+  lines.push("Asaas regra do agente: ofereca somente os metodos habilitados nesta configuracao; Pix fica no WhatsApp, cartao segue para checkout seguro e boleto usa cobranca/link Asaas quando o fluxo estiver disponivel.");
+  lines.push(`Asaas recorrencia: ${asaas.recurringEnabled ? "habilitada" : "desabilitada"}.`);
+  lines.push(`Asaas parcelas: maximo ${asaas.maxInstallments}, sem juros ate ${asaas.interestFreeInstallments}.`);
+  if (asaas.softDescriptor) {
+    lines.push(`Asaas descriptor: ${asaas.softDescriptor}`);
+  }
+  lines.push(`Asaas Pix: vence em ${asaas.pixExpirationDays} dia(s).`);
+  lines.push(`Asaas boleto: vence em ${asaas.boletoDueDays} dia(s), cancelamento apos ${asaas.boletoAutoCancelDays} dia(s).`);
+  lines.push(`Asaas checkout: expira em ${asaas.checkoutExpirationMinutes} minuto(s).`);
 
   return lines.filter(Boolean).join("\n");
 }
@@ -3834,6 +3986,57 @@ function normalizePagBankSettings(value: unknown, fallback: SalesCatalogPagBankS
   };
 }
 
+function normalizeAsaasSettings(value: unknown, fallback: SalesCatalogAsaasSettings): SalesCatalogAsaasSettings {
+  const record = readRecord(value);
+  if (!record) {
+    return { ...fallback, enabledMethods: [...fallback.enabledMethods] };
+  }
+
+  const enabledMethods = normalizeAsaasPaymentMethods(
+    record.enabledMethods ?? record.enabled_methods,
+    fallback.enabledMethods,
+  );
+  const maxInstallments = normalizeNullableInteger(
+    record.maxInstallments ?? record.max_installments,
+    1,
+    21,
+  ) ?? fallback.maxInstallments;
+  const interestFreeInstallments = normalizeNullableInteger(
+    record.interestFreeInstallments ?? record.interest_free_installments,
+    0,
+    maxInstallments,
+  ) ?? Math.min(fallback.interestFreeInstallments, maxInstallments);
+
+  return {
+    enabledMethods,
+    maxInstallments,
+    interestFreeInstallments,
+    softDescriptor: normalizeOptionalText(readFormString(record.softDescriptor ?? record.soft_descriptor), 17),
+    pixExpirationDays: normalizeNullableInteger(
+      record.pixExpirationDays ?? record.pix_expiration_days,
+      1,
+      30,
+    ) ?? fallback.pixExpirationDays,
+    checkoutExpirationMinutes: normalizeNullableInteger(
+      record.checkoutExpirationMinutes ?? record.checkout_expiration_minutes,
+      10,
+      1440,
+    ) ?? fallback.checkoutExpirationMinutes,
+    boletoDueDays: normalizeNullableInteger(
+      record.boletoDueDays ?? record.boleto_due_days,
+      1,
+      60,
+    ) ?? fallback.boletoDueDays,
+    boletoAutoCancelDays: normalizeNullableInteger(
+      record.boletoAutoCancelDays ?? record.boleto_auto_cancel_days,
+      0,
+      120,
+    ) ?? fallback.boletoAutoCancelDays,
+    allowBuyerEdit: readBoolean(record.allowBuyerEdit ?? record.allow_buyer_edit) ?? fallback.allowBuyerEdit,
+    recurringEnabled: readBoolean(record.recurringEnabled ?? record.recurring_enabled) ?? fallback.recurringEnabled,
+  };
+}
+
 function normalizePagBankPaymentMethods(
   value: unknown,
   fallback: SalesCatalogPagBankPaymentMethod[],
@@ -3843,6 +4046,19 @@ function normalizePagBankPaymentMethods(
   const methods = source
     .map((item) => readFormString(item))
     .filter((method): method is SalesCatalogPagBankPaymentMethod => allowed.has(method as SalesCatalogPagBankPaymentMethod));
+
+  return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
+}
+
+function normalizeAsaasPaymentMethods(
+  value: unknown,
+  fallback: SalesCatalogAsaasPaymentMethod[],
+): SalesCatalogAsaasPaymentMethod[] {
+  const allowed = new Set(salesCatalogAsaasPaymentMethodOptions.map((method) => method.id));
+  const source = Array.isArray(value) ? value : fallback;
+  const methods = source
+    .map((item) => readFormString(item))
+    .filter((method): method is SalesCatalogAsaasPaymentMethod => allowed.has(method as SalesCatalogAsaasPaymentMethod));
 
   return methods.length > 0 ? Array.from(new Set(methods)) : [...fallback];
 }
@@ -4051,6 +4267,21 @@ function serializePagBankSettings(settings: SalesCatalogPagBankSettings) {
     soft_descriptor: settings.softDescriptor,
     pix_expiration_minutes: settings.pixExpirationMinutes,
     checkout_expiration_minutes: settings.checkoutExpirationMinutes,
+    allow_buyer_edit: settings.allowBuyerEdit,
+    recurring_enabled: settings.recurringEnabled,
+  };
+}
+
+function serializeAsaasSettings(settings: SalesCatalogAsaasSettings) {
+  return {
+    enabled_methods: settings.enabledMethods,
+    max_installments: settings.maxInstallments,
+    interest_free_installments: settings.interestFreeInstallments,
+    soft_descriptor: settings.softDescriptor,
+    pix_expiration_days: settings.pixExpirationDays,
+    checkout_expiration_minutes: settings.checkoutExpirationMinutes,
+    boleto_due_days: settings.boletoDueDays,
+    boleto_auto_cancel_days: settings.boletoAutoCancelDays,
     allow_buyer_edit: settings.allowBuyerEdit,
     recurring_enabled: settings.recurringEnabled,
   };

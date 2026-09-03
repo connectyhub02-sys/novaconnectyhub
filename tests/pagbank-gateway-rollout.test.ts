@@ -88,16 +88,21 @@ describe("PagBank gateway rollout", () => {
     expect(pagBankGatewaySource).toContain("charge?.qr_code");
   });
 
-  it("shows one active PagBank connect action in the client integrations panel", () => {
+  it("keeps PagBank code preserved but hides it from the client integrations panel", () => {
     expect(integrationsSource).toContain("id: \"pagbank\"");
     expect(integrationsSource).toContain("actionLabel: \"Conectar PagBank\"");
-    expect(integrationsSource).toContain("buildPagBankConnections");
-    expect(clientConsoleSource).toContain("function PagBankGuidedCard");
-    expect(clientConsoleSource).toContain("Conectar PagBank");
+    expect(integrationsSource).toContain("clientVisibleIntegrationProviders");
+    expect(integrationsSource).toContain("provider.id !== \"pagbank\"");
+    expect(integrationsSource).toContain("function buildPagBankConnections");
+    expect(integrationsSource).not.toContain("...buildPagBankConnections(companies, paymentIntegrations)");
+    expect(clientConsoleSource).not.toContain("function PagBankGuidedCard");
+    expect(clientConsoleSource).not.toContain("Conectar PagBank");
+    expect(clientConsoleSource).toContain("function AsaasGuidedCard");
+    expect(clientConsoleSource).toContain("Conectar Asaas");
     expect(clientConsoleSource).toContain("Ja tenho conta");
     expect(clientConsoleSource).toContain("Nao tenho conta");
-    expect(clientConsoleSource).toContain("Ja tenho conta abre a tela oficial de permissoes");
-    expect(clientConsoleSource).toContain("buildPagBankAffiliateUrl");
+    expect(clientConsoleSource).toContain("Ja tenho conta usa a API Key da propria conta Asaas");
+    expect(clientConsoleSource).toContain("buildAsaasAffiliateUrl");
     expect(clientConsoleSource).not.toContain("function MercadoPagoGuidedCard");
   });
 
@@ -196,7 +201,7 @@ describe("PagBank gateway rollout", () => {
     expect(publicCheckoutCardRouteSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente");
   });
 
-  it("exposes maintainable PagBank payment preferences for client stores", () => {
+  it("keeps PagBank preferences in code while exposing Asaas payment preferences for client stores", () => {
     expect(salesCatalogSharedSource).toContain("SalesCatalogPagBankSettings");
     expect(salesCatalogSharedSource).toContain("salesCatalogPagBankPaymentMethodOptions");
     expect(salesCatalogSharedSource).toContain("recurringEnabled: boolean");
@@ -205,19 +210,28 @@ describe("PagBank gateway rollout", () => {
     expect(dashboardSalesCatalogSource).toContain("normalizePagBankSettings");
     expect(dashboardSalesCatalogSource).toContain("serializePagBankSettings");
     expect(dashboardSalesCatalogSource).toContain("save_pagbank_settings");
-    expect(dashboardSalesCatalogSource).toContain("PagBank regra do agente");
+    expect(salesCatalogSharedSource).toContain("SalesCatalogAsaasSettings");
+    expect(salesCatalogSharedSource).toContain("salesCatalogAsaasPaymentMethodOptions");
+    expect(paymentSessionsSource).toContain("asaas_settings");
+    expect(paymentSessionsSource).toContain("resolveAsaasPaymentDueDate");
+    expect(paymentSessionsSource).toContain("maxInstallmentCount: asaasSettings?.maxInstallments");
+    expect(dashboardSalesCatalogSource).toContain("save_asaas_settings");
+    expect(dashboardSalesCatalogSource).toContain("Asaas regra do agente");
+    expect(dashboardSalesCatalogSource).toContain("Asaas parcelas");
     expect(dashboardSalesCatalogSource).toContain("recurring_enabled: settings.recurringEnabled");
-    expect(integrationsSource).toContain("pagBankPreferences");
+    expect(integrationsSource).toContain("asaasPreferences");
+    expect(integrationsSource).toContain("pagBankPreferences: []");
     expect(clientConsoleSource).toContain("Preferencias de pagamento");
     expect(clientConsoleSource).toContain("Pagamento recorrente");
-    expect(clientConsoleSource).toContain("Salvar preferencias PagBank");
-    expect(clientConsoleSource).toContain("togglePagBankPreferenceMethod");
+    expect(clientConsoleSource).toContain("Salvar preferencias Asaas");
+    expect(clientConsoleSource).toContain("toggleAsaasPreferenceMethod");
     expect(clientConsoleSource).toContain("Nome no extrato");
-    expect(clientConsoleSource).toContain("pagBankInstallmentOptions");
-    expect(clientConsoleSource).toContain("buildPagBankInterestFreeOptions");
+    expect(clientConsoleSource).toContain("asaasInstallmentOptions");
+    expect(clientConsoleSource).toContain("buildAsaasInterestFreeOptions");
     expect(salesCatalogConsoleSource).not.toContain("PagBank Checkout");
     expect(salesCatalogConsoleSource).not.toContain("togglePagBankPaymentMethod");
-    expect(salesCatalogConsoleSource).toContain("recurringEnabled: settingsDraft.pagBank.recurringEnabled");
+    expect(salesCatalogConsoleSource).toContain("recurringEnabled: settingsDraft.asaas.recurringEnabled");
+    expect(salesCatalogConsoleSource).toContain("Integracoes / Asaas");
   });
 
   it("separates recurring plans from one-time or recurring ConnectyHub products", () => {
@@ -242,7 +256,7 @@ describe("PagBank gateway rollout", () => {
     expect(salesCatalogConsoleSource).toContain("Modelo de cobranca");
     expect(salesCatalogConsoleSource).toContain("Pagamento unico");
     expect(salesCatalogConsoleSource).toContain("Recorrente");
-    expect(commerceAgentSource).toContain("Metodos PagBank habilitados");
+    expect(commerceAgentSource).toContain("Metodos Asaas habilitados");
     expect(commerceAgentSource).toContain("O agente so pode oferecer formas de pagamento habilitadas");
     expect(whatsappAgentRuntimeSource).toContain("Metodos de pagamento automatico habilitados");
     expect(whatsappAgentRuntimeSource).toContain("Pix: depois da confirmacao do pedido");
@@ -250,13 +264,15 @@ describe("PagBank gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("cobranca interna");
   });
 
-  it("delivers PagBank Pix directly in WhatsApp and blocks one-time Pix for recurring products", () => {
+  it("delivers Pix directly in WhatsApp and blocks one-time Pix for recurring products", () => {
     expect(whatsappAgentRuntimeSource).toContain("shouldSendSalesCatalogPixInsideWhatsapp");
     expect(whatsappAgentRuntimeSource).toContain("sendSalesCatalogPixDirectWhatsapp");
     expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code");
     expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment");
     expect(whatsappAgentRuntimeSource).toContain("billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle)))");
+    expect(paymentSessionsSource).toContain("createAsaasPixPayment");
+    expect(paymentSessionsSource).toContain("dueDate: resolveAsaasPaymentDueDate");
     expect(paymentSessionsSource).toContain("hasRecurringSalesCatalogOrderItem(orderMetadata, items)");
     expect(paymentSessionsSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
   });

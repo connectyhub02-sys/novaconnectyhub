@@ -9,9 +9,11 @@ import {
 } from "@/lib/client-os/sales-catalog";
 import { maintenanceIntegrations, type CredentialKind, type CredentialRequirement } from "@/lib/maintenance-vault";
 import {
+  createDefaultSalesCatalogAsaasSettings,
   createDefaultSalesCatalogPagBankSettings,
   type ClientSalesCatalogPaymentIntegration,
   type ClientSalesCatalogSettings,
+  type SalesCatalogAsaasSettings,
   type SalesCatalogPagBankSettings,
 } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -129,6 +131,13 @@ export type ClientIntegrationPagBankPreference = {
   updatedAt: string | null;
 };
 
+export type ClientIntegrationAsaasPreference = {
+  companyId: string;
+  settings: SalesCatalogAsaasSettings;
+  configured: boolean;
+  updatedAt: string | null;
+};
+
 export type ClientIntegrationHubState = {
   schemaReady: boolean;
   schemaMessage: string | null;
@@ -143,6 +152,7 @@ export type ClientIntegrationHubState = {
   webhookEndpoints: ClientIntegrationWebhookEndpoint[];
   growthAssets: ClientGrowthIntegrationAsset[];
   growthAssetsReady: boolean;
+  asaasPreferences: ClientIntegrationAsaasPreference[];
   pagBankPreferences: ClientIntegrationPagBankPreference[];
 };
 
@@ -326,6 +336,8 @@ const integrationProviders: ClientIntegrationProvider[] = [
   },
 ];
 
+const clientVisibleIntegrationProviders = integrationProviders.filter((provider) => provider.id !== "pagbank");
+
 export async function getClientIntegrationHub(input: {
   userId: string;
   preferredCompanyId?: string | null;
@@ -348,7 +360,6 @@ export async function getClientIntegrationHub(input: {
 
   const connections = attachGrowthAssetSummaries([
     ...buildAsaasConnections(companies, paymentIntegrations),
-    ...buildPagBankConnections(companies, paymentIntegrations),
     ...buildGenericConnections(companies, genericResult.rows),
     ...buildFallbackConnections(companies, genericResult.rows, webhookResult.rows),
   ], growthAssetResult.rows);
@@ -356,11 +367,11 @@ export async function getClientIntegrationHub(input: {
 
   return {
     schemaReady,
-    schemaMessage: schemaReady ? null : "As migrations 0028, 0045, 0068 e 0073 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal, PagBank, Asaas e assets Meta/Google normalizados.",
+    schemaMessage: schemaReady ? null : "As migrations 0028, 0045, 0068 e 0073 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal, Asaas e assets Meta/Google normalizados.",
     appBaseUrl: resolveAppBaseUrl(),
     companies,
     selectedCompanyId,
-    providers: integrationProviders,
+    providers: clientVisibleIntegrationProviders,
     connections,
     credentialDefinitions: clientCredentialDefinitions,
     credentialSnapshots: credentialResult.rows.map((row) => mapCredentialSnapshot(row)),
@@ -368,7 +379,8 @@ export async function getClientIntegrationHub(input: {
     webhookEndpoints: webhookResult.rows.map((row) => mapWebhookEndpoint(row)),
     growthAssets: growthAssetResult.rows,
     growthAssetsReady: growthAssetResult.ready,
-    pagBankPreferences: buildPagBankPreferences(companies, catalogSettings),
+    asaasPreferences: buildAsaasPreferences(companies, catalogSettings),
+    pagBankPreferences: [],
   };
 }
 
@@ -433,7 +445,7 @@ function buildAsaasConnections(
   });
 }
 
-function buildPagBankConnections(
+export function buildPagBankConnections(
   companies: ClientCompany[],
   integrations: ClientSalesCatalogPaymentIntegration[],
 ): ClientIntegrationConnection[] {
@@ -479,7 +491,7 @@ function buildPagBankConnections(
   });
 }
 
-function buildPagBankPreferences(
+export function buildPagBankPreferences(
   companies: ClientCompany[],
   settings: ClientSalesCatalogSettings[],
 ): ClientIntegrationPagBankPreference[] {
@@ -498,6 +510,31 @@ function buildPagBankPreferences(
 }
 
 function clonePagBankSettings(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+  return {
+    ...settings,
+    enabledMethods: [...settings.enabledMethods],
+  };
+}
+
+function buildAsaasPreferences(
+  companies: ClientCompany[],
+  settings: ClientSalesCatalogSettings[],
+): ClientIntegrationAsaasPreference[] {
+  const settingsByCompany = new Map(settings.map((item) => [item.companyId, item]));
+
+  return companies.map((company) => {
+    const companySettings = settingsByCompany.get(company.id);
+
+    return {
+      companyId: company.id,
+      settings: cloneAsaasSettings(companySettings?.asaas ?? createDefaultSalesCatalogAsaasSettings()),
+      configured: companySettings?.configured ?? false,
+      updatedAt: companySettings?.updatedAt ?? null,
+    };
+  });
+}
+
+function cloneAsaasSettings(settings: SalesCatalogAsaasSettings): SalesCatalogAsaasSettings {
   return {
     ...settings,
     enabledMethods: [...settings.enabledMethods],
@@ -536,10 +573,10 @@ function buildFallbackConnections(
   const connections: ClientIntegrationConnection[] = [];
 
   for (const company of companies) {
-    for (const provider of integrationProviders) {
+    for (const provider of clientVisibleIntegrationProviders) {
       const key = `${company.id}:${provider.id}`;
 
-      if (provider.id === "asaas" || provider.id === "pagbank" || existing.has(key)) {
+      if (provider.id === "asaas" || existing.has(key)) {
         continue;
       }
 

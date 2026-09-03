@@ -92,6 +92,7 @@ import {
   type SalesCatalogOrderStatus,
   type SalesCatalogOrderPolicy,
   type SalesCatalogPaymentMethod,
+  type SalesCatalogAsaasSettings,
   type SalesCatalogPagBankSettings,
   type SalesCatalogPaymentStatus,
   type SalesCatalogPaymentSessionStatus,
@@ -378,6 +379,7 @@ type SettingsDraft = {
   variationMedia: boolean;
   paymentMethods: SalesCatalogPaymentMethod[];
   pagBank: SalesCatalogPagBankSettings;
+  asaas: SalesCatalogAsaasSettings;
   orderPolicy: SalesCatalogOrderPolicy;
   leadDataPolicy: ClientSalesCatalogSettings["leadDataPolicy"];
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
@@ -1664,7 +1666,7 @@ export function SalesCatalogConsole({
       setPaymentSessions((current) => [data.session!, ...current.filter((session) => session.id !== data.session!.id)]);
       setOrders((current) => current.map((entry) => (
         entry.id === order.id
-          ? { ...entry, latestPaymentSessionId: data.session!.id, paymentMethod: data.session!.provider === "pagbank" ? "Pix PagBank" : "Pix Mercado Pago", paymentStatus: "pending", status: "pending_payment" }
+          ? { ...entry, latestPaymentSessionId: data.session!.id, paymentMethod: `Pix ${formatPaymentProviderLabel(data.session!.provider)}`, paymentStatus: "pending", status: "pending_payment" }
           : entry
       )));
       setNotice({ tone: "success", message: "Pix gerado. O link de checkout ja pode ser enviado no WhatsApp." });
@@ -1744,6 +1746,18 @@ export function SalesCatalogConsole({
             checkoutExpirationMinutes: clampNumber(settingsDraft.pagBank.checkoutExpirationMinutes, 5, 43200),
             allowBuyerEdit: settingsDraft.pagBank.allowBuyerEdit,
             recurringEnabled: settingsDraft.pagBank.recurringEnabled,
+          },
+          asaas: {
+            enabledMethods: settingsDraft.asaas.enabledMethods,
+            maxInstallments: clampNumber(settingsDraft.asaas.maxInstallments, 1, 21),
+            interestFreeInstallments: clampNumber(settingsDraft.asaas.interestFreeInstallments, 0, settingsDraft.asaas.maxInstallments),
+            softDescriptor: cleanInput(settingsDraft.asaas.softDescriptor, 17),
+            pixExpirationDays: clampNumber(settingsDraft.asaas.pixExpirationDays, 1, 30),
+            checkoutExpirationMinutes: clampNumber(settingsDraft.asaas.checkoutExpirationMinutes, 10, 1440),
+            boletoDueDays: clampNumber(settingsDraft.asaas.boletoDueDays, 1, 60),
+            boletoAutoCancelDays: clampNumber(settingsDraft.asaas.boletoAutoCancelDays, 0, 120),
+            allowBuyerEdit: settingsDraft.asaas.allowBuyerEdit,
+            recurringEnabled: settingsDraft.asaas.recurringEnabled,
           },
           orderPolicy: {
             minimumOrderValue: cleanInput(settingsDraft.orderPolicy.minimumOrderValue, 40),
@@ -5404,7 +5418,7 @@ export function SalesCatalogConsole({
                 </label>
               </div>
               <p className="mt-3 text-[11px] leading-4 text-slate-500">
-                A recorrencia tambem precisa estar habilitada em Integracoes / PagBank para o agente vender como assinatura.
+                A recorrencia tambem precisa estar habilitada em Integracoes / Asaas para o agente vender como assinatura.
               </p>
             </div>
 
@@ -10519,6 +10533,12 @@ function getPreviewColorLuminance(hex: string) {
   return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
+function formatPaymentProviderLabel(provider: string | null | undefined) {
+  if (provider === "asaas") return "Asaas";
+  if (provider === "pagbank") return "PagBank";
+  return "Mercado Pago";
+}
+
 function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): SettingsDraft {
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
@@ -10555,6 +10575,10 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     pagBank: {
       ...(settings?.pagBank ?? commerceDefaults.pagBank),
       enabledMethods: [...(settings?.pagBank?.enabledMethods ?? commerceDefaults.pagBank.enabledMethods)],
+    },
+    asaas: {
+      ...(settings?.asaas ?? commerceDefaults.asaas),
+      enabledMethods: [...(settings?.asaas?.enabledMethods ?? commerceDefaults.asaas.enabledMethods)],
     },
     orderPolicy: { ...(settings?.orderPolicy ?? commerceDefaults.orderPolicy) },
     leadDataPolicy: {

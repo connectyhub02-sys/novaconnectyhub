@@ -22,7 +22,6 @@ import {
   ShieldCheck,
   ShoppingBag,
   Truck,
-  WalletCards,
   X,
 } from "lucide-react";
 import type {
@@ -32,18 +31,18 @@ import type {
   ClientIntegrationCredentialSnapshot,
   ClientGrowthIntegrationAsset,
   ClientIntegrationHubState,
-  ClientIntegrationPagBankPreference,
+  ClientIntegrationAsaasPreference,
   ClientIntegrationProvider,
   ClientIntegrationWebhookEndpoint,
   IntegrationCategory,
   IntegrationConnectionStatus,
 } from "@/lib/client-os/integrations";
 import {
-  createDefaultSalesCatalogPagBankSettings,
-  salesCatalogPagBankPaymentMethodOptions,
+  createDefaultSalesCatalogAsaasSettings,
+  salesCatalogAsaasPaymentMethodOptions,
   type ClientSalesCatalogPaymentIntegration,
-  type SalesCatalogPagBankPaymentMethod,
-  type SalesCatalogPagBankSettings,
+  type SalesCatalogAsaasPaymentMethod,
+  type SalesCatalogAsaasSettings,
 } from "@/lib/sales-catalog/shared";
 import {
   metaFeatureComingSoonDetail,
@@ -72,8 +71,8 @@ type SavedCredentialsResponse = {
   error?: string;
 };
 
-type SavedPagBankPreferencesResponse = {
-  pagBankPreferences?: ClientIntegrationPagBankPreference;
+type SavedAsaasPreferencesResponse = {
+  asaasPreferences?: ClientIntegrationAsaasPreference;
   error?: string;
 };
 
@@ -128,7 +127,7 @@ type MetaReviewSnapshot = {
   results: ReviewTestResult[];
 };
 
-const pagBankInstallmentOptions = Array.from({ length: 12 }, (_, index) => index + 1);
+const asaasInstallmentOptions = Array.from({ length: 21 }, (_, index) => index + 1);
 
 type MetaWebhookSimulationScenario =
   | "facebook_comment"
@@ -387,7 +386,7 @@ const categoryIcons: Record<IntegrationCategory, LucideIcon> = {
   ads: BarChart3,
   calendar: CalendarDays,
   commerce: ShoppingBag,
-  payments: WalletCards,
+  payments: CreditCard,
   shipping: Truck,
   webhooks: PlugZap,
 };
@@ -429,11 +428,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [asaasMode, setAsaasMode] = useState<"production" | "sandbox">("production");
   const [connectingAsaas, setConnectingAsaas] = useState(false);
   const [disconnectingAsaas, setDisconnectingAsaas] = useState(false);
-  const [connectingPagBank, setConnectingPagBank] = useState(false);
-  const [disconnectingPagBank, setDisconnectingPagBank] = useState(false);
-  const [pagBankPreferences, setPagBankPreferences] = useState(state.pagBankPreferences);
-  const [pagBankSettingsDrafts, setPagBankSettingsDrafts] = useState<Record<string, SalesCatalogPagBankSettings>>({});
-  const [savingPagBankPreferences, setSavingPagBankPreferences] = useState(false);
+  const [asaasPreferences, setAsaasPreferences] = useState(state.asaasPreferences);
+  const [asaasSettingsDrafts, setAsaasSettingsDrafts] = useState<Record<string, SalesCatalogAsaasSettings>>({});
+  const [savingAsaasPreferences, setSavingAsaasPreferences] = useState(false);
   const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
@@ -485,19 +482,17 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }, [credentialSnapshots]);
   const asaasConnection = connectionByProvider.get("asaas");
   const asaasConnected = asaasConnection?.status === "connected";
-  const pagBankConnection = connectionByProvider.get("pagbank");
-  const pagBankConnected = pagBankConnection?.status === "connected";
-  const selectedPagBankPreference = useMemo(
-    () => pagBankPreferences.find((preference) => preference.companyId === selectedCompanyId) ?? null,
-    [pagBankPreferences, selectedCompanyId],
+  const selectedAsaasPreference = useMemo(
+    () => asaasPreferences.find((preference) => preference.companyId === selectedCompanyId) ?? null,
+    [asaasPreferences, selectedCompanyId],
   );
-  const pagBankSettingsDraft = useMemo(
-    () => clonePagBankSettings(
-      pagBankSettingsDrafts[selectedCompanyId]
-        ?? selectedPagBankPreference?.settings
-        ?? createDefaultSalesCatalogPagBankSettings(),
+  const asaasSettingsDraft = useMemo(
+    () => cloneAsaasSettings(
+      asaasSettingsDrafts[selectedCompanyId]
+        ?? selectedAsaasPreference?.settings
+        ?? createDefaultSalesCatalogAsaasSettings(),
     ),
-    [pagBankSettingsDrafts, selectedCompanyId, selectedPagBankPreference],
+    [asaasSettingsDrafts, selectedCompanyId, selectedAsaasPreference],
   );
   const metaConnection = connectionByProvider.get("meta-ads");
   const googleConnection = connectionByProvider.get("google-growth");
@@ -533,22 +528,11 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
     const reason = params.get("reason");
     const timeoutId = window.setTimeout(() => {
-      if (payment === "pagbank_connected") {
-        setNotice({
-          tone: "success",
-          message: "PagBank conectado. Agora esta empresa pode receber Pix no Catalogo de Vendas.",
-        });
-      }
-
       if (payment === "asaas_connected") {
         setNotice({
           tone: "success",
           message: "Asaas conectado. Agora esta empresa pode gerar Pix no WhatsApp e checkout de cartao.",
         });
-      }
-
-      if (payment === "pagbank_error") {
-        setNotice({ tone: "error", message: getPagBankConnectionErrorMessage(reason) });
       }
 
       if (payment === "asaas_error") {
@@ -736,20 +720,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
-  function handlePagBankConnectClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (!selectedCompanyId || connectingPagBank) {
-      event.preventDefault();
-      if (!selectedCompanyId) {
-        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o PagBank." });
-      }
-      return;
-    }
-
-    setConnectingPagBank(true);
-    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do PagBank..." });
-    window.setTimeout(() => setConnectingPagBank(false), 1500);
-  }
-
   async function connectAsaas() {
     if (!selectedCompanyId || connectingAsaas) {
       if (!selectedCompanyId) {
@@ -802,14 +772,14 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
-  function updatePagBankPreferenceDraft(patch: Partial<SalesCatalogPagBankSettings>) {
+  function updateAsaasPreferenceDraft(patch: Partial<SalesCatalogAsaasSettings>) {
     if (!selectedCompanyId) return;
 
-    setPagBankSettingsDrafts((currentDrafts) => {
-      const current = clonePagBankSettings(
+    setAsaasSettingsDrafts((currentDrafts) => {
+      const current = cloneAsaasSettings(
         currentDrafts[selectedCompanyId]
-          ?? selectedPagBankPreference?.settings
-          ?? createDefaultSalesCatalogPagBankSettings(),
+          ?? selectedAsaasPreference?.settings
+          ?? createDefaultSalesCatalogAsaasSettings(),
       );
       const next = { ...current, ...patch };
 
@@ -824,21 +794,21 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     });
   }
 
-  function togglePagBankPreferenceMethod(methodId: SalesCatalogPagBankPaymentMethod) {
+  function toggleAsaasPreferenceMethod(methodId: SalesCatalogAsaasPaymentMethod) {
     if (!selectedCompanyId) return;
 
-    setPagBankSettingsDrafts((currentDrafts) => {
-      const current = clonePagBankSettings(
+    setAsaasSettingsDrafts((currentDrafts) => {
+      const current = cloneAsaasSettings(
         currentDrafts[selectedCompanyId]
-          ?? selectedPagBankPreference?.settings
-          ?? createDefaultSalesCatalogPagBankSettings(),
+          ?? selectedAsaasPreference?.settings
+          ?? createDefaultSalesCatalogAsaasSettings(),
       );
       const exists = current.enabledMethods.includes(methodId);
       const enabledMethods = exists
         ? current.enabledMethods.filter((item) => item !== methodId)
         : [...current.enabledMethods, methodId];
 
-      const next: SalesCatalogPagBankSettings = {
+      const next: SalesCatalogAsaasSettings = {
         ...current,
         enabledMethods: enabledMethods.length > 0 ? enabledMethods : ["pix"],
       };
@@ -850,51 +820,51 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     });
   }
 
-  async function savePagBankPreferences() {
-    if (!selectedCompanyId || savingPagBankPreferences) {
+  async function saveAsaasPreferences() {
+    if (!selectedCompanyId || savingAsaasPreferences) {
       if (!selectedCompanyId) {
-        setNotice({ tone: "warning", message: "Escolha uma empresa antes de salvar o PagBank." });
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de salvar o Asaas." });
       }
       return;
     }
 
-    setSavingPagBankPreferences(true);
+    setSavingAsaasPreferences(true);
     setNotice(null);
 
     try {
-      const nextPagBank = normalizePagBankPreferenceDraft(pagBankSettingsDraft);
+      const nextAsaas = normalizeAsaasPreferenceDraft(asaasSettingsDraft);
       const response = await fetch("/api/dashboard/sales-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "save_pagbank_settings",
+          action: "save_asaas_settings",
           companyId: selectedCompanyId,
-          pagBank: nextPagBank,
+          asaas: nextAsaas,
         }),
       });
-      const data = (await response.json().catch(() => ({}))) as SavedPagBankPreferencesResponse;
+      const data = (await response.json().catch(() => ({}))) as SavedAsaasPreferencesResponse;
 
-      if (!response.ok || !data.pagBankPreferences) {
-        throw new Error(data.error ?? "Nao foi possivel salvar as preferencias PagBank.");
+      if (!response.ok || !data.asaasPreferences) {
+        throw new Error(data.error ?? "Nao foi possivel salvar as preferencias Asaas.");
       }
 
-      setPagBankPreferences((current) => [
-        data.pagBankPreferences!,
-        ...current.filter((preference) => preference.companyId !== data.pagBankPreferences!.companyId),
+      setAsaasPreferences((current) => [
+        data.asaasPreferences!,
+        ...current.filter((preference) => preference.companyId !== data.asaasPreferences!.companyId),
       ]);
-      setPagBankSettingsDrafts((current) => {
+      setAsaasSettingsDrafts((current) => {
         const next = { ...current };
-        delete next[data.pagBankPreferences!.companyId];
+        delete next[data.asaasPreferences!.companyId];
         return next;
       });
-      setNotice({ tone: "success", message: "Preferencias PagBank salvas para esta empresa." });
+      setNotice({ tone: "success", message: "Preferencias Asaas salvas para esta empresa." });
     } catch (error) {
       setNotice({
         tone: "error",
-        message: error instanceof Error ? error.message : "Erro ao salvar preferencias PagBank.",
+        message: error instanceof Error ? error.message : "Erro ao salvar preferencias Asaas.",
       });
     } finally {
-      setSavingPagBankPreferences(false);
+      setSavingAsaasPreferences(false);
     }
   }
 
@@ -1456,56 +1426,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
-  async function disconnectPagBank() {
-    if (!selectedCompanyId || disconnectingPagBank) return;
-
-    setDisconnectingPagBank(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/dashboard/sales-catalog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "disconnect_pagbank",
-          companyId: selectedCompanyId,
-        }),
-      });
-      const data = await response.json().catch(() => null) as { error?: string } | null;
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Nao foi possivel desconectar PagBank.");
-      }
-
-      setConnections((current) => {
-        const existing = current.find((connection) => connection.companyId === selectedCompanyId && connection.providerId === "pagbank");
-        const nextConnection: ClientIntegrationConnection = {
-          providerId: "pagbank",
-          companyId: selectedCompanyId,
-          companyName: selectedCompany?.name ?? existing?.companyName ?? "Empresa",
-          status: "disabled",
-          label: "Desativado",
-          detail: "PagBank desconectado desta empresa.",
-          accountLabel: null,
-          lastSyncAt: new Date().toISOString(),
-          lastError: null,
-          managementHref: "/dashboard/links",
-          metadata: {},
-        };
-
-        return [
-          nextConnection,
-          ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "pagbank")),
-        ];
-      });
-      setNotice({ tone: "success", message: "PagBank desconectado desta empresa." });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar PagBank." });
-    } finally {
-      setDisconnectingPagBank(false);
-    }
-  }
-
   async function disconnectAsaas() {
     if (!selectedCompanyId || disconnectingAsaas) return;
 
@@ -1619,7 +1539,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Asaas usa API Key da propria conta; PagBank e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
+          A Central organiza as conexoes por empresa. Asaas usa API Key da propria conta; Google usa autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
         </div>
       </div>
 
@@ -1633,29 +1553,17 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingAsaas}
             lastError={asaasConnection?.lastError ?? null}
             mode={asaasMode}
+            asaasSettings={asaasSettingsDraft}
+            savingPreferences={savingAsaasPreferences}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
             onApiKeyChange={setAsaasApiKeyDraft}
             onConnect={connectAsaas}
             onDisconnect={disconnectAsaas}
             onModeChange={setAsaasMode}
-          />
-
-          <PagBankGuidedCard
-            accountLabel={pagBankConnection?.accountLabel ?? null}
-            connected={pagBankConnected}
-            connecting={connectingPagBank}
-            disconnecting={disconnectingPagBank}
-            lastError={pagBankConnection?.lastError ?? null}
-            pagBankSettings={pagBankSettingsDraft}
-            savingPreferences={savingPagBankPreferences}
-            selectedCompanyId={selectedCompanyId}
-            selectedCompanyName={selectedCompany?.name ?? null}
-            onConnect={handlePagBankConnectClick}
-            onDisconnect={disconnectPagBank}
-            onPreferenceChange={updatePagBankPreferenceDraft}
-            onSavePreferences={savePagBankPreferences}
-            onTogglePaymentMethod={togglePagBankPreferenceMethod}
+            onPreferenceChange={updateAsaasPreferenceDraft}
+            onSavePreferences={saveAsaasPreferences}
+            onTogglePaymentMethod={toggleAsaasPreferenceMethod}
           />
 
           {metaFeatureLaunchPaused ? (
@@ -2174,12 +2082,17 @@ function AsaasGuidedCard({
   disconnecting,
   lastError,
   mode,
+  asaasSettings,
+  savingPreferences,
   selectedCompanyId,
   selectedCompanyName,
   onApiKeyChange,
   onConnect,
   onDisconnect,
   onModeChange,
+  onPreferenceChange,
+  onSavePreferences,
+  onTogglePaymentMethod,
 }: {
   accountLabel: string | null;
   apiKeyDraft: string;
@@ -2188,12 +2101,17 @@ function AsaasGuidedCard({
   disconnecting: boolean;
   lastError: string | null;
   mode: "production" | "sandbox";
+  asaasSettings: SalesCatalogAsaasSettings;
+  savingPreferences: boolean;
   selectedCompanyId: string;
   selectedCompanyName: string | null;
   onApiKeyChange: (value: string) => void;
   onConnect: () => void;
   onDisconnect: () => void;
   onModeChange: (value: "production" | "sandbox") => void;
+  onPreferenceChange: (patch: Partial<SalesCatalogAsaasSettings>) => void;
+  onSavePreferences: () => void;
+  onTogglePaymentMethod: (methodId: SalesCatalogAsaasPaymentMethod) => void;
 }) {
   return (
     <section id="asaas-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -2212,7 +2130,7 @@ function AsaasGuidedCard({
         <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
         <PaymentGuideStep done={connected || Boolean(apiKeyDraft.trim())} index="2" title="API Key" body={connected ? "Chave validada" : "Cole a chave"} />
         <PaymentGuideStep done={connected} index="3" title="Pix" body="Copia e cola" />
-        <PaymentGuideStep done={connected} index="4" title="Cartao" body="Checkout rastreado" />
+        <PaymentGuideStep done={connected && asaasSettings.enabledMethods.length > 0} index="4" title="Checkout" body={formatAsaasCheckoutSummary(asaasSettings)} />
       </div>
 
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -2296,139 +2214,22 @@ function AsaasGuidedCard({
         </div>
 
         <p className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-[11px] leading-5 text-emerald-100">
-          Ja tenho conta salva a API Key da loja. Nao tenho conta abre o cadastro indicado; depois copie a API Key do Asaas e volte para conectar.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function PagBankGuidedCard({
-  accountLabel,
-  connected,
-  connecting,
-  disconnecting,
-  lastError,
-  pagBankSettings,
-  savingPreferences,
-  selectedCompanyId,
-  selectedCompanyName,
-  onConnect,
-  onDisconnect,
-  onPreferenceChange,
-  onSavePreferences,
-  onTogglePaymentMethod,
-}: {
-  accountLabel: string | null;
-  connected: boolean;
-  connecting: boolean;
-  disconnecting: boolean;
-  lastError: string | null;
-  pagBankSettings: SalesCatalogPagBankSettings;
-  savingPreferences: boolean;
-  selectedCompanyId: string;
-  selectedCompanyName: string | null;
-  onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
-  onDisconnect: () => void;
-  onPreferenceChange: (patch: Partial<SalesCatalogPagBankSettings>) => void;
-  onSavePreferences: () => void;
-  onTogglePaymentMethod: (methodId: SalesCatalogPagBankPaymentMethod) => void;
-}) {
-  return (
-    <section id="pagbank-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
-          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">PagBank</h2>
-          <p className="mt-2 text-[12px] leading-5 text-slate-400">
-            Quem ja tem conta autoriza pelo fluxo oficial sem informar token manual. Quem nao tem conta abre pelo link indicado e depois volta para conectar.
-          </p>
-        </div>
-        <WalletCards className="h-5 w-5 shrink-0 text-emerald-300" />
-      </div>
-
-      <div className="mt-4 grid gap-2 sm:grid-cols-4">
-        <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
-        <PaymentGuideStep done={connected} index="2" title="PagBank" body="Login e autorizacao" />
-        <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
-        <PaymentGuideStep done={connected && pagBankSettings.enabledMethods.length > 0} index="4" title="Checkout" body={formatPagBankCheckoutSummary(pagBankSettings)} />
-      </div>
-
-      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-100">Conectar PagBank</p>
-            <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
-          </div>
-          <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
-        </div>
-
-        {lastError ? (
-          <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
-            {lastError}
-          </p>
-        ) : null}
-
-        <div className={cn("mt-3 grid gap-2", connected ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-          <a
-            href={buildPagBankConnectUrl(selectedCompanyId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-disabled={!selectedCompanyId || connecting}
-            onClick={onConnect}
-            className={cn(
-              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200",
-              !selectedCompanyId || connecting ? "cursor-not-allowed opacity-50" : "",
-            )}
-          >
-            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            {connected ? "Reconectar PagBank" : "Ja tenho conta"}
-          </a>
-          <a
-            href={buildPagBankAffiliateUrl(selectedCompanyId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-disabled={!selectedCompanyId}
-            className={cn(
-              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-emerald-300/10 hover:text-emerald-100",
-              !selectedCompanyId ? "cursor-not-allowed opacity-50" : "",
-            )}
-            style={{ borderColor: "var(--ch-border)" }}
-          >
-            <ExternalLink className="h-4 w-4" />
-            Nao tenho conta
-          </a>
-          {connected ? (
-            <button
-              type="button"
-              disabled={disconnecting}
-              onClick={onDisconnect}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ borderColor: "var(--ch-border)" }}
-            >
-              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-              Desconectar
-            </button>
-          ) : null}
-        </div>
-
-        <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
-          Ja tenho conta abre a tela oficial de permissoes. Nao tenho conta abre o cadastro indicado; depois volte e autorize a conta PagBank.
+          Ja tenho conta usa a API Key da propria conta Asaas da loja. Nao tenho conta abre o cadastro indicado; depois copie a API Key do Asaas e volte para conectar.
         </p>
       </div>
 
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">checkout PagBank</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">checkout Asaas</p>
             <p className="mt-1 text-[13px] font-semibold text-slate-100">Preferencias de pagamento</p>
           </div>
-          <QrCode className="h-4 w-4 shrink-0 text-amber-200" />
+          <QrCode className="h-4 w-4 shrink-0 text-emerald-200" />
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {salesCatalogPagBankPaymentMethodOptions.map((option) => {
-            const checked = pagBankSettings.enabledMethods.includes(option.id);
+          {salesCatalogAsaasPaymentMethodOptions.map((option) => {
+            const checked = asaasSettings.enabledMethods.includes(option.id);
 
             return (
               <button
@@ -2438,8 +2239,8 @@ function PagBankGuidedCard({
                 className={cn(
                   "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[11px] font-semibold transition",
                   checked
-                    ? "border-amber-300/55 bg-amber-300/12 text-amber-100"
-                    : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
+                    ? "border-emerald-300/55 bg-emerald-300/12 text-emerald-100"
+                    : "text-slate-400 hover:bg-emerald-400/10 hover:text-emerald-100",
                 )}
                 style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
               >
@@ -2450,13 +2251,17 @@ function PagBankGuidedCard({
           })}
         </div>
 
+        <p className="mt-3 rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2 text-[11px] leading-5 text-sky-100">
+          Pix e boleto dependem de habilitacao na propria conta Asaas. Cartao de debito fica oculto por enquanto porque o checkout hospedado atual trabalha com Pix e credito.
+        </p>
+
         <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
           <span className="min-w-0">
             <span className="block font-semibold text-slate-200">Pagamento recorrente</span>
             <span className="mt-1 block text-[11px] leading-4 text-slate-500">Permite que o agente trate produtos recorrentes como assinatura quando o produto tambem estiver marcado como recorrente.</span>
           </span>
           <input
-            checked={pagBankSettings.recurringEnabled}
+            checked={asaasSettings.recurringEnabled}
             type="checkbox"
             onChange={(event) => onPreferenceChange({ recurringEnabled: event.target.checked })}
           />
@@ -2464,43 +2269,43 @@ function PagBankGuidedCard({
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <label className="block">
-            <PaymentPreferenceLabel>Parcelas maximas</PaymentPreferenceLabel>
+            <PaymentPreferenceLabel>Maximo de parcelas</PaymentPreferenceLabel>
             <select
-              value={pagBankSettings.maxInstallments}
+              value={asaasSettings.maxInstallments}
               onChange={(event) => onPreferenceChange({
-                maxInstallments: clampNumber(Number(event.target.value), 1, 12),
+                maxInstallments: clampNumber(Number(event.target.value), 1, 21),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               style={{ borderColor: "var(--ch-border)" }}
             >
-              {pagBankInstallmentOptions.map((option) => (
-                <option key={option} value={option}>{formatPagBankInstallmentOption(option)}</option>
+              {asaasInstallmentOptions.map((option) => (
+                <option key={option} value={option}>{formatAsaasInstallmentOption(option)}</option>
               ))}
             </select>
           </label>
           <label className="block">
             <PaymentPreferenceLabel>Sem juros ate</PaymentPreferenceLabel>
             <select
-              value={pagBankSettings.interestFreeInstallments}
+              value={asaasSettings.interestFreeInstallments}
               onChange={(event) => onPreferenceChange({
                 interestFreeInstallments: clampNumber(
                   Number(event.target.value),
                   0,
-                  pagBankSettings.maxInstallments,
+                  asaasSettings.maxInstallments,
                 ),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               style={{ borderColor: "var(--ch-border)" }}
             >
-              {buildPagBankInterestFreeOptions(pagBankSettings.maxInstallments).map((option) => (
-                <option key={option} value={option}>{formatPagBankInstallmentOption(option)}</option>
+              {buildAsaasInterestFreeOptions(asaasSettings.maxInstallments).map((option) => (
+                <option key={option} value={option}>{formatAsaasInstallmentOption(option)}</option>
               ))}
             </select>
           </label>
           <label className="block">
             <PaymentPreferenceLabel>Nome no extrato</PaymentPreferenceLabel>
             <input
-              value={pagBankSettings.softDescriptor ?? ""}
+              value={asaasSettings.softDescriptor ?? ""}
               onChange={(event) => onPreferenceChange({ softDescriptor: event.target.value.slice(0, 17) })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               placeholder="Ate 17 caracteres"
@@ -2508,11 +2313,11 @@ function PagBankGuidedCard({
             />
           </label>
           <label className="block">
-            <PaymentPreferenceLabel>Pix expira em</PaymentPreferenceLabel>
+            <PaymentPreferenceLabel>Pix expira em dias</PaymentPreferenceLabel>
             <input
-              value={pagBankSettings.pixExpirationMinutes}
+              value={asaasSettings.pixExpirationDays}
               onChange={(event) => onPreferenceChange({
-                pixExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
+                pixExpirationDays: clampNumber(parseOptionalNumber(event.target.value), 1, 30),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               inputMode="numeric"
@@ -2520,11 +2325,35 @@ function PagBankGuidedCard({
             />
           </label>
           <label className="block">
-            <PaymentPreferenceLabel>Checkout expira em</PaymentPreferenceLabel>
+            <PaymentPreferenceLabel>Boleto vence em dias</PaymentPreferenceLabel>
             <input
-              value={pagBankSettings.checkoutExpirationMinutes}
+              value={asaasSettings.boletoDueDays}
               onChange={(event) => onPreferenceChange({
-                checkoutExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 5, 43200),
+                boletoDueDays: clampNumber(parseOptionalNumber(event.target.value), 1, 60),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Cancelar boleto apos dias</PaymentPreferenceLabel>
+            <input
+              value={asaasSettings.boletoAutoCancelDays}
+              onChange={(event) => onPreferenceChange({
+                boletoAutoCancelDays: clampNumber(parseOptionalNumber(event.target.value), 0, 120),
+              })}
+              className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              inputMode="numeric"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Checkout expira em min</PaymentPreferenceLabel>
+            <input
+              value={asaasSettings.checkoutExpirationMinutes}
+              onChange={(event) => onPreferenceChange({
+                checkoutExpirationMinutes: clampNumber(parseOptionalNumber(event.target.value), 10, 1440),
               })}
               className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               inputMode="numeric"
@@ -2534,7 +2363,7 @@ function PagBankGuidedCard({
           <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
             <span className="text-slate-300">Cliente edita dados</span>
             <input
-              checked={pagBankSettings.allowBuyerEdit}
+              checked={asaasSettings.allowBuyerEdit}
               type="checkbox"
               onChange={(event) => onPreferenceChange({ allowBuyerEdit: event.target.checked })}
             />
@@ -2545,10 +2374,10 @@ function PagBankGuidedCard({
           type="button"
           disabled={!selectedCompanyId || savingPreferences}
           onClick={onSavePreferences}
-          className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {savingPreferences ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar preferencias PagBank
+          Salvar preferencias Asaas
         </button>
       </div>
     </section>
@@ -2563,23 +2392,25 @@ function PaymentPreferenceLabel({ children }: { children: string }) {
   );
 }
 
-function clonePagBankSettings(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
+function cloneAsaasSettings(settings: SalesCatalogAsaasSettings): SalesCatalogAsaasSettings {
   return {
     ...settings,
     enabledMethods: [...settings.enabledMethods],
   };
 }
 
-function normalizePagBankPreferenceDraft(settings: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
-  const maxInstallments = clampNumber(settings.maxInstallments, 1, 12);
+function normalizeAsaasPreferenceDraft(settings: SalesCatalogAsaasSettings): SalesCatalogAsaasSettings {
+  const maxInstallments = clampNumber(settings.maxInstallments, 1, 21);
 
   return {
     enabledMethods: settings.enabledMethods.length > 0 ? [...settings.enabledMethods] : ["pix"],
     maxInstallments,
     interestFreeInstallments: clampNumber(settings.interestFreeInstallments, 0, maxInstallments),
     softDescriptor: settings.softDescriptor?.trim().slice(0, 17) || null,
-    pixExpirationMinutes: clampNumber(settings.pixExpirationMinutes, 5, 43200),
-    checkoutExpirationMinutes: clampNumber(settings.checkoutExpirationMinutes, 5, 43200),
+    pixExpirationDays: clampNumber(settings.pixExpirationDays, 1, 30),
+    checkoutExpirationMinutes: clampNumber(settings.checkoutExpirationMinutes, 10, 1440),
+    boletoDueDays: clampNumber(settings.boletoDueDays, 1, 60),
+    boletoAutoCancelDays: clampNumber(settings.boletoAutoCancelDays, 0, 120),
     allowBuyerEdit: settings.allowBuyerEdit,
     recurringEnabled: Boolean(settings.recurringEnabled),
   };
@@ -2596,27 +2427,27 @@ function clampNumber(value: number | null | undefined, min: number, max: number)
   return Math.min(max, Math.max(min, Math.round(normalized)));
 }
 
-function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
-  const labels = salesCatalogPagBankPaymentMethodOptions
+function formatAsaasPaymentMethods(methods: SalesCatalogAsaasPaymentMethod[]) {
+  const labels = salesCatalogAsaasPaymentMethodOptions
     .filter((option) => methods.includes(option.id))
     .map((option) => option.label);
 
   return labels.length ? labels.join(", ") : "Pix";
 }
 
-function buildPagBankInterestFreeOptions(maxInstallments: number) {
-  const max = clampNumber(maxInstallments, 1, 12);
+function buildAsaasInterestFreeOptions(maxInstallments: number) {
+  const max = clampNumber(maxInstallments, 1, 21);
 
   return Array.from({ length: max + 1 }, (_, index) => index);
 }
 
-function formatPagBankInstallmentOption(value: number) {
+function formatAsaasInstallmentOption(value: number) {
   if (value <= 0) return "Nenhuma";
   return `${value} ${value === 1 ? "parcela" : "parcelas"}`;
 }
 
-function formatPagBankCheckoutSummary(settings: SalesCatalogPagBankSettings) {
-  const paymentMethods = formatPagBankPaymentMethods(settings.enabledMethods);
+function formatAsaasCheckoutSummary(settings: SalesCatalogAsaasSettings) {
+  const paymentMethods = formatAsaasPaymentMethods(settings.enabledMethods);
 
   return settings.recurringEnabled ? `${paymentMethods}; recorrencia` : paymentMethods;
 }
@@ -3870,28 +3701,6 @@ function buildAsaasAffiliateUrl(companyId: string) {
   return `/api/dashboard/sales-catalog/payments/asaas/affiliate?${params.toString()}`;
 }
 
-function buildPagBankConnectUrl(companyId: string) {
-  if (!companyId) return "#";
-
-  const params = new URLSearchParams({
-    companyId,
-    returnTo: "integrations",
-  });
-
-  return `/api/dashboard/sales-catalog/payments/pagbank/connect?${params.toString()}`;
-}
-
-function buildPagBankAffiliateUrl(companyId: string) {
-  if (!companyId) return "#";
-
-  const params = new URLSearchParams({
-    companyId,
-    returnTo: "integrations",
-  });
-
-  return `/api/dashboard/sales-catalog/payments/pagbank/affiliate?${params.toString()}`;
-}
-
 function buildGuidedOAuthConnectUrl(kind: "meta" | "google", companyId: string) {
   if (!companyId) return "#";
 
@@ -4172,30 +3981,6 @@ function getAsaasConnectionErrorMessage(reason: string | null) {
   }
 
   return "Nao foi possivel conectar o Asaas. Confira a API Key e tente novamente.";
-}
-
-function getPagBankConnectionErrorMessage(reason: string | null) {
-  if (reason === "config") {
-    return "PagBank ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre o cadastro/login e a autorizacao oficial.";
-  }
-
-  if (reason === "invalid_oauth_credentials") {
-    return "As credenciais do aplicativo PagBank da ConnectyHub nao foram aceitas. Confira Client ID, Client Secret e token do app no PagBank.";
-  }
-
-  if (reason === "missing_company") {
-    return "Escolha uma empresa antes de conectar o PagBank.";
-  }
-
-  if (reason === "invalid_state") {
-    return "Nao conseguimos validar o retorno do PagBank. Tente conectar novamente.";
-  }
-
-  if (reason === "token_exchange") {
-    return "PagBank retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
-  }
-
-  return "Nao foi possivel abrir a conexao com PagBank agora. Tente novamente ou chame o suporte.";
 }
 
 function copyText(value: string) {

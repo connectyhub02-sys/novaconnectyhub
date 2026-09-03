@@ -25,6 +25,7 @@ export type SalesCatalogPaymentIntegrationMode = "production" | "sandbox";
 export type SalesCatalogPaymentSessionMethod = "pix" | "card" | "checkout_link";
 export type SalesCatalogPaymentSessionStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
 export type SalesCatalogPagBankPaymentMethod = "pix" | "credit_card" | "debit_card" | "boleto";
+export type SalesCatalogAsaasPaymentMethod = "pix" | "credit_card" | "boleto";
 export type SalesCatalogProductOriginType = "client" | "connectyhub" | "external_provider";
 export type SalesCatalogCommercialFlowType = "client_direct" | "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
 export type SalesCatalogRevenueOwnerType = "client" | "connectyhub" | "split" | "external_provider";
@@ -112,6 +113,19 @@ export type SalesCatalogPagBankSettings = {
   softDescriptor: string | null;
   pixExpirationMinutes: number;
   checkoutExpirationMinutes: number;
+  allowBuyerEdit: boolean;
+  recurringEnabled: boolean;
+};
+
+export type SalesCatalogAsaasSettings = {
+  enabledMethods: SalesCatalogAsaasPaymentMethod[];
+  maxInstallments: number;
+  interestFreeInstallments: number;
+  softDescriptor: string | null;
+  pixExpirationDays: number;
+  checkoutExpirationMinutes: number;
+  boletoDueDays: number;
+  boletoAutoCancelDays: number;
   allowBuyerEdit: boolean;
   recurringEnabled: boolean;
 };
@@ -727,6 +741,7 @@ export type ClientSalesCatalogSettings = {
   variationMedia: boolean;
   paymentMethods: SalesCatalogPaymentMethod[];
   pagBank: SalesCatalogPagBankSettings;
+  asaas: SalesCatalogAsaasSettings;
   orderPolicy: SalesCatalogOrderPolicy;
   leadDataPolicy: SalesCatalogLeadDataPolicy;
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
@@ -763,7 +778,7 @@ export type SalesCatalogStorefrontSettings = {
 
 export type SalesCatalogCommerceSettings = Pick<
   ClientSalesCatalogSettings,
-  "paymentMethods" | "pagBank" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings" | "orderBumps" | "commerceAgent"
+  "paymentMethods" | "pagBank" | "asaas" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings" | "orderBumps" | "commerceAgent"
 >;
 
 export const salesCatalogCommerceAgentModeOptions: Array<{
@@ -847,6 +862,15 @@ export const salesCatalogPagBankPaymentMethodOptions: Array<{
   { id: "boleto", label: "Boleto" },
 ];
 
+export const salesCatalogAsaasPaymentMethodOptions: Array<{
+  id: SalesCatalogAsaasPaymentMethod;
+  label: string;
+}> = [
+  { id: "pix", label: "Pix" },
+  { id: "credit_card", label: "Cartao de credito" },
+  { id: "boleto", label: "Boleto" },
+];
+
 export function createDefaultSalesCatalogPagBankSettings(): SalesCatalogPagBankSettings {
   return {
     enabledMethods: ["pix"],
@@ -855,6 +879,21 @@ export function createDefaultSalesCatalogPagBankSettings(): SalesCatalogPagBankS
     softDescriptor: null,
     pixExpirationMinutes: 1440,
     checkoutExpirationMinutes: 60,
+    allowBuyerEdit: true,
+    recurringEnabled: false,
+  };
+}
+
+export function createDefaultSalesCatalogAsaasSettings(): SalesCatalogAsaasSettings {
+  return {
+    enabledMethods: ["pix", "credit_card"],
+    maxInstallments: 1,
+    interestFreeInstallments: 1,
+    softDescriptor: null,
+    pixExpirationDays: 1,
+    checkoutExpirationMinutes: 60,
+    boletoDueDays: 3,
+    boletoAutoCancelDays: 1,
     allowBuyerEdit: true,
     recurringEnabled: false,
   };
@@ -943,6 +982,7 @@ export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerc
       requiresProof: false,
     })),
     pagBank: createDefaultSalesCatalogPagBankSettings(),
+    asaas: createDefaultSalesCatalogAsaasSettings(),
     orderPolicy: createDefaultSalesCatalogOrderPolicy(),
     leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
     messageTemplates: createDefaultSalesCatalogMessageTemplates(),

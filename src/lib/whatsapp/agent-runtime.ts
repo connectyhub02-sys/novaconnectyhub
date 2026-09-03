@@ -61,14 +61,14 @@ import {
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
   formatSalesCatalogStockStatus,
-  salesCatalogPagBankPaymentMethodOptions,
+  salesCatalogAsaasPaymentMethodOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogItemAttribute,
   type SalesCatalogMedia,
-  type SalesCatalogPagBankPaymentMethod,
+  type SalesCatalogAsaasPaymentMethod,
   type SalesCatalogShippingQuote,
 } from "@/lib/sales-catalog/shared";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
@@ -233,7 +233,7 @@ type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
 type RuntimeOrganizationLocation = OrganizationLocation;
 type SalesCatalogRuntimePaymentPreference = "pix" | "card";
 type SalesCatalogRuntimePaymentChoice = {
-  id: SalesCatalogPagBankPaymentMethod;
+  id: SalesCatalogAsaasPaymentMethod;
   preference: SalesCatalogRuntimePaymentPreference;
   label: string;
 };
@@ -5306,8 +5306,8 @@ function formatRuntimeSalesCatalogDestinationForPrompt(item: RuntimeSalesCatalog
   return "pagamento interno automatico";
 }
 
-function formatRuntimePagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
-  const labels = salesCatalogPagBankPaymentMethodOptions
+function formatRuntimeAsaasPaymentMethods(methods: SalesCatalogAsaasPaymentMethod[]) {
+  const labels = salesCatalogAsaasPaymentMethodOptions
     .filter((option) => methods.includes(option.id))
     .map((option) => option.label);
 
@@ -5328,11 +5328,10 @@ function buildSalesCatalogCommerceLines(
     && method.id !== "card_link"
     && method.id !== "boleto"
   ));
-  const pagBankMethods = formatRuntimePagBankPaymentMethods(settings.pagBank.enabledMethods);
-  const pixEnabled = settings.pagBank.enabledMethods.includes("pix");
-  const creditCardEnabled = settings.pagBank.enabledMethods.includes("credit_card");
-  const debitCardEnabled = settings.pagBank.enabledMethods.includes("debit_card");
-  const boletoEnabled = settings.pagBank.enabledMethods.includes("boleto");
+  const asaasMethods = formatRuntimeAsaasPaymentMethods(settings.asaas.enabledMethods);
+  const pixEnabled = settings.asaas.enabledMethods.includes("pix");
+  const creditCardEnabled = settings.asaas.enabledMethods.includes("credit_card");
+  const boletoEnabled = settings.asaas.enabledMethods.includes("boleto");
   const requiredFields = settings.leadDataPolicy.requiredFields.length > 0
     ? settings.leadDataPolicy.requiredFields.join(", ")
     : "somente os dados essenciais do pedido";
@@ -5342,8 +5341,8 @@ function buildSalesCatalogCommerceLines(
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
     "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
-    `- Metodos de pagamento automatico habilitados: ${pagBankMethods}.`,
-    "- O agente so pode oferecer formas de pagamento habilitadas no gateway de pagamento desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    `- Metodos de pagamento automatico habilitados no Asaas: ${asaasMethods}.`,
+    "- O agente so pode oferecer formas de pagamento habilitadas no gateway Asaas desta empresa. Se Pix, cartao de credito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
       ? "- Como ha mais de uma forma de pagamento habilitada, depois da confirmacao do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobranca."
       : "",
@@ -5354,11 +5353,8 @@ function buildSalesCatalogCommerceLines(
     creditCardEnabled
       ? "- Cartao de credito: use o checkout seguro da ConnectyHub. Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp."
       : "- Cartao de credito esta desativado; nao ofereca pagamento em credito.",
-    debitCardEnabled
-      ? "- Cartao de debito: use o checkout seguro da ConnectyHub com autenticacao 3DS quando solicitada. Nunca colete dados de debito pelo WhatsApp."
-      : "- Cartao de debito esta desativado; nao ofereca pagamento em debito.",
     boletoEnabled
-      ? "- Boleto: quando habilitado, direcione para o checkout da ConnectyHub; nao gaste a conversa tentando fechar boleto manual no WhatsApp."
+      ? "- Boleto: trate como alternativa de cobranca Asaas quando o fluxo retornar link ou linha digitavel; se o sistema nao gerar boleto automaticamente, chame humano."
       : "- Boleto esta desativado; nao ofereca boleto.",
     manualPaymentMethods.length > 0
       ? `- Regras complementares de atendimento: ${manualPaymentMethods.map((method) => method.label).join(", ")}.`
@@ -5366,8 +5362,8 @@ function buildSalesCatalogCommerceLines(
     ...manualPaymentMethods
       .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
       .filter(Boolean),
-    `- Recorrencia automatica: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
-    settings.pagBank.recurringEnabled
+    `- Recorrencia automatica: ${settings.asaas.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    settings.asaas.recurringEnabled
       ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
       : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
     settings.orderPolicy.minimumOrderValue ? `- Pedido minimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
@@ -5406,7 +5402,7 @@ function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCata
   }
 
   if (settings.shippingEnabled) {
-    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Nao ofereca retirada local.";
+    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Peca direto: \"Me confirme seu endereco completo, por favor, com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se houver.\" Nao ofereca retirada local.";
   }
 
   if (hasLocalDelivery) {
@@ -5445,7 +5441,7 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     "- Se o arquivo do lead ja tiver endereco/CEP salvos e o lead fizer novo pedido, primeiro pergunte se pode entregar no mesmo endereco. Se ele confirmar, use o endereco salvo; se ele corrigir, grave o novo endereco.",
     settings.shippingEnabled
-      ? "- Quando precisar de entrega por frete, peca CEP e endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
+      ? "- Quando a loja tiver entrega por frete, peca direto o endereco completo com CEP, rua, numero, bairro, cidade e complemento/ponto de referencia se houver; nao use pergunta condicional como \"se for entrega por frete\" quando o frete ja estiver habilitado; use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
     settings.localDeliveryEnabled
       ? "- Para entrega local, peca endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; bairro ou localizacao do WhatsApp servem para conferir a zona, mas o endereco completo ainda precisa ficar registrado. Fora dessas zonas, diga que a loja nao entrega naquela area e chame humano se necessario."
@@ -8480,8 +8476,8 @@ function shouldWaitForSalesCatalogPaymentMethodChoice(input: {
 function getEnabledSalesCatalogRuntimePaymentChoices(
   settings: ClientSalesCatalogSettings | null,
 ): SalesCatalogRuntimePaymentChoice[] {
-  const enabledMethods = new Set<SalesCatalogPagBankPaymentMethod>(
-    settings?.configured ? settings.pagBank.enabledMethods : ["pix"],
+  const enabledMethods = new Set<SalesCatalogAsaasPaymentMethod>(
+    settings?.configured ? settings.asaas.enabledMethods : ["pix"],
   );
   const choices: SalesCatalogRuntimePaymentChoice[] = [];
 
@@ -8491,10 +8487,6 @@ function getEnabledSalesCatalogRuntimePaymentChoices(
 
   if (enabledMethods.has("credit_card")) {
     choices.push({ id: "credit_card", preference: "card", label: "cartao de credito" });
-  }
-
-  if (enabledMethods.has("debit_card")) {
-    choices.push({ id: "debit_card", preference: "card", label: "cartao de debito" });
   }
 
   return choices;

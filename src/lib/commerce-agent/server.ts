@@ -9,13 +9,13 @@ import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogBillingCycleWithInterval,
   isSalesCatalogDisplayableProduct,
-  salesCatalogPagBankPaymentMethodOptions,
+  salesCatalogAsaasPaymentMethodOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogSettings,
   type SalesCatalogBillingCycle,
   type SalesCatalogBillingInterval,
   type SalesCatalogCommerceAgentSurface,
-  type SalesCatalogPagBankPaymentMethod,
+  type SalesCatalogAsaasPaymentMethod,
 } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
@@ -1959,7 +1959,7 @@ function buildCommerceAgentSystemInstruction(
     `- Sugestao automatica por catalogo: ${context.settings.orderBumps.autoSuggestionsEnabled ? "ativa" : "inativa"}.`,
     `- Pre-adicionar ao carrinho: ${context.settings.commerceAgent.allowAutoAddToCart ? "permitido pela configuracao" : "nao permitido"}.`,
     `- Checkout silencioso: ${context.settings.commerceAgent.checkoutQuietMode ? "sim" : "nao"}.`,
-    ...buildPagBankCommercePolicyLines(context.settings),
+    ...buildAsaasCommercePolicyLines(context.settings),
   ].join("\n");
 }
 
@@ -2391,38 +2391,34 @@ function formatCatalogContext(products: OfferProduct[], currentProductId: string
     .join("\n");
 }
 
-function buildPagBankCommercePolicyLines(settings: ClientSalesCatalogSettings) {
-  const paymentMethods = formatPagBankPaymentMethods(settings.pagBank.enabledMethods);
-  const pixEnabled = settings.pagBank.enabledMethods.includes("pix");
-  const creditCardEnabled = settings.pagBank.enabledMethods.includes("credit_card");
-  const debitCardEnabled = settings.pagBank.enabledMethods.includes("debit_card");
-  const boletoEnabled = settings.pagBank.enabledMethods.includes("boleto");
+function buildAsaasCommercePolicyLines(settings: ClientSalesCatalogSettings) {
+  const paymentMethods = formatAsaasPaymentMethods(settings.asaas.enabledMethods);
+  const pixEnabled = settings.asaas.enabledMethods.includes("pix");
+  const creditCardEnabled = settings.asaas.enabledMethods.includes("credit_card");
+  const boletoEnabled = settings.asaas.enabledMethods.includes("boleto");
 
   return [
-    `- Metodos PagBank habilitados: ${paymentMethods}.`,
-    "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
-    "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca CEP para entrega ou confirme retirada na loja.",
+    `- Metodos Asaas habilitados: ${paymentMethods}.`,
+    "- O agente so pode oferecer formas de pagamento habilitadas no Asaas desta empresa. Se Pix, cartao de credito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao. Se faltar esse dado, peca endereco completo com CEP para entrega ou confirme retirada na loja.",
     pixEnabled
-      ? "- Pix PagBank: pode ser resolvido no WhatsApp quando a venda vier do atendimento; na loja/checkout, use o Pix exibido pela ConnectyHub."
-      : "- Pix PagBank esta desativado; nao ofereca Pix.",
+      ? "- Pix Asaas: pode ser resolvido no WhatsApp quando a venda vier do atendimento; na loja/checkout, use o Pix exibido pela ConnectyHub."
+      : "- Pix Asaas esta desativado; nao ofereca Pix.",
     creditCardEnabled
       ? "- Cartao de credito: use sempre o checkout seguro da ConnectyHub, nunca colete dados sensiveis no chat."
       : "- Cartao de credito esta desativado; nao ofereca credito.",
-    debitCardEnabled
-      ? "- Cartao de debito: use sempre o checkout seguro da ConnectyHub com 3DS quando solicitado, nunca colete dados sensiveis no chat."
-      : "- Cartao de debito esta desativado; nao ofereca debito.",
     boletoEnabled
-      ? "- Boleto: quando habilitado, direcione para o checkout da ConnectyHub."
+      ? "- Boleto: trate como alternativa de cobranca Asaas quando o fluxo retornar link ou linha digitavel; se o sistema nao gerar boleto automaticamente, chame humano."
       : "- Boleto esta desativado; nao ofereca boleto.",
-    `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
-    settings.pagBank.recurringEnabled
+    `- Recorrencia Asaas: ${settings.asaas.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    settings.asaas.recurringEnabled
       ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
       : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
   ];
 }
 
-function formatPagBankPaymentMethods(methods: SalesCatalogPagBankPaymentMethod[]) {
-  const labels = salesCatalogPagBankPaymentMethodOptions
+function formatAsaasPaymentMethods(methods: SalesCatalogAsaasPaymentMethod[]) {
+  const labels = salesCatalogAsaasPaymentMethodOptions
     .filter((option) => methods.includes(option.id))
     .map((option) => option.label);
 
