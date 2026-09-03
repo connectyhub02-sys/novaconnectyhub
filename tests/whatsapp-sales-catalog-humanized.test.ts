@@ -177,6 +177,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("notifyResponsibleHumanAboutPaymentIssue");
     expect(paymentSender).toContain("resolveHumanHandoffNotificationNumbers(input.context, \"payment_issue\")");
     expect(paymentSender).toContain("payment_gateway_unavailable");
+    expect(paymentSender).toContain("delivery_unavailable");
+    expect(paymentSender).toContain("sales_catalog_delivery_unavailable");
     expect(paymentSender).toContain("gatewayUnavailable");
     expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
     expect(paymentSender).toContain("pix_code_missing");

@@ -267,6 +267,9 @@ type SalesCatalogPaymentSessionLinkRow = {
   failure_reason: string | null;
   metadata: JsonRecord | null;
 };
+
+type SalesCatalogHumanInterventionIssueReason = "gateway_unavailable" | "pix_code_missing" | "delivery_unavailable";
+
 type RuntimeSalesCatalogShippingQuote = {
   itemId: string;
   itemTitle: string;
@@ -9450,10 +9453,31 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     trackId: `agent_payment_deferred_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
     mentions: resolveGroupMentions(input.context),
   });
+  const handoffNotification = !canResolveDelivery
+    ? await notifyResponsibleHumanAboutPaymentIssue({
+        client: input.client,
+        context: input.context,
+        payment: input.payment,
+        reason: "delivery_unavailable",
+      }).catch(async (error: unknown) => {
+        await persistPaymentIssueHumanHandoffFailure(input.client, input.context, input.payment, error);
+        return { status: "failed", reason: "delivery_handoff_failed" } as const;
+      })
+    : null;
   const message: OutboundMessage = {
     text: messageText,
     mode: "text",
-    providerResponse,
+    providerResponse: handoffNotification
+      ? {
+          delivery: "sales_catalog_delivery_unavailable",
+          provider: input.payment.provider,
+          providerLabel: input.payment.providerLabel,
+          orderId: input.payment.orderId,
+          reason: "delivery_unavailable",
+          textProviderResponse: providerResponse,
+          handoffNotification,
+        }
+      : providerResponse,
     interactiveButton: false,
     buttonFallback: false,
     persisted: true,
@@ -9470,7 +9494,7 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   token: string;
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
-}, options: { reason?: "gateway_unavailable" | "pix_code_missing" } = {}): Promise<OutboundMessage> {
+}, options: { reason?: SalesCatalogHumanInterventionIssueReason } = {}): Promise<OutboundMessage> {
   const isPixCodeMissing = options.reason === "pix_code_missing";
   const messageText = [
     isPixCodeMissing
@@ -9524,13 +9548,15 @@ async function notifyResponsibleHumanAboutPaymentIssue(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   payment: SalesCatalogPaymentLinkResult;
-  reason: "gateway_unavailable" | "pix_code_missing";
+  reason: SalesCatalogHumanInterventionIssueReason;
 }) {
   const requestedAt = new Date().toISOString();
   const latestInbound = findLatestInbound(input.context.messages);
-  const handoffReason = input.reason === "pix_code_missing"
-    ? "payment_pix_code_missing"
-    : "payment_gateway_unavailable";
+  const handoffReason = input.reason === "delivery_unavailable"
+    ? "sales_catalog_delivery_unavailable"
+    : input.reason === "pix_code_missing"
+      ? "payment_pix_code_missing"
+      : "payment_gateway_unavailable";
   const requestText = buildPaymentIssueHumanRequestText(input.payment, input.reason);
   const pausedUntil = await pauseConversationForHuman(input.client, input.context.conversationId, input.context.behavior, handoffReason, {
     source: "sales_catalog_payment",
@@ -9607,16 +9633,20 @@ async function notifyResponsibleHumanAboutPaymentIssue(input: {
 
 function buildPaymentIssueHumanRequestText(
   payment: SalesCatalogPaymentLinkResult,
-  reason: "gateway_unavailable" | "pix_code_missing",
+  reason: SalesCatalogHumanInterventionIssueReason,
 ) {
   const methodLabel = payment.preferredMethod === "card" ? "cartao" : "Pix";
   const shortOrderId = payment.orderId.slice(0, 8).toUpperCase();
-  const issue = reason === "pix_code_missing"
-    ? "o gateway criou a sessao, mas nao retornou o codigo Pix copia e cola"
-    : payment.failureReason ?? "o gateway nao conseguiu gerar a cobranca online";
+  const issue = reason === "delivery_unavailable"
+    ? "a loja ainda nao tem frete, entrega local ou retirada configurados para fechar o pagamento automatico"
+    : reason === "pix_code_missing"
+      ? "o gateway criou a sessao, mas nao retornou o codigo Pix copia e cola"
+      : payment.failureReason ?? "o gateway nao conseguiu gerar a cobranca online";
 
   return [
-    `Falha automatica ao gerar pagamento ${methodLabel} do pedido ${shortOrderId}.`,
+    reason === "delivery_unavailable"
+      ? `Atendimento humano necessario para confirmar entrega do pedido ${shortOrderId}.`
+      : `Falha automatica ao gerar pagamento ${methodLabel} do pedido ${shortOrderId}.`,
     payment.amount ? `Valor: R$ ${payment.amount}.` : "",
     `Gateway: ${payment.providerLabel}.`,
     `Motivo: ${issue}.`,
