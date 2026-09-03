@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
+import { readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
 import {
   estimateTokensFromText,
   extractGeminiUsageMetadata,
@@ -9596,9 +9597,7 @@ async function notifyResponsibleHumanAboutPaymentIssue(input: {
     requestText,
     requestedAt,
     pausedUntil,
-    notificationNumbers: input.context.behavior.humanHandoffNotifications
-      ? input.context.behavior.humanHandoffNotificationNumbers
-      : null,
+    notificationNumbers: resolveHumanHandoffNotificationNumbers(input.context, "payment_issue"),
     notificationCooldownMinutes: input.context.behavior.humanHandoffNotificationCooldownMinutes,
     source: handoffReason,
   };
@@ -12093,9 +12092,7 @@ async function handleLeadHumanHandoffRequest(input: {
     requestText,
     requestedAt,
     pausedUntil,
-    notificationNumbers: context.behavior.humanHandoffNotifications
-      ? context.behavior.humanHandoffNotificationNumbers
-      : null,
+    notificationNumbers: resolveHumanHandoffNotificationNumbers(context, "handoff"),
     notificationCooldownMinutes: context.behavior.humanHandoffNotificationCooldownMinutes,
     source: "lead_requested_human",
   };
@@ -12121,6 +12118,28 @@ async function handleLeadHumanHandoffRequest(input: {
     pausedUntil,
     handoffNotification: notificationResult,
   });
+}
+
+function resolveHumanHandoffNotificationNumbers(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  purpose: "handoff" | "payment_issue",
+) {
+  const responsibles = readAgentResponsibleHumans(context.agent.metadata);
+
+  if (responsibles.length > 0) {
+    const phones = responsibles
+      .filter((responsible) => purpose === "payment_issue"
+        ? responsible.notifyPayments || responsible.notifyOperational
+        : responsible.notifyOperational)
+      .map((responsible) => responsible.phone)
+      .filter(Boolean);
+
+    return Array.from(new Set(phones)).join("\n") || null;
+  }
+
+  return context.behavior.humanHandoffNotifications
+    ? context.behavior.humanHandoffNotificationNumbers
+    : null;
 }
 
 async function sendHumanHandoffNotificationNowOrQueue(

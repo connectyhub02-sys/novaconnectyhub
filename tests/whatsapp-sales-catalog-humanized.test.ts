@@ -175,6 +175,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
     expect(paymentSender).toContain("sendSalesCatalogPaymentUnavailableWhatsapp");
     expect(paymentSender).toContain("notifyResponsibleHumanAboutPaymentIssue");
+    expect(paymentSender).toContain("resolveHumanHandoffNotificationNumbers(input.context, \"payment_issue\")");
     expect(paymentSender).toContain("payment_gateway_unavailable");
     expect(paymentSender).toContain("gatewayUnavailable");
     expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
@@ -241,6 +242,23 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(shippingRuntime).toContain("hasRecentSavedDeliveryConfirmationPrompt");
     expect(leadMemory).toContain("Endereco de entrega salvo");
     expect(leadMemory).toContain("confirme se pode usar esse mesmo endereco");
+  });
+
+  it("uses agent responsible humans for handoff notifications before legacy behavior numbers", () => {
+    const resolver = sourceBetween(
+      "function resolveHumanHandoffNotificationNumbers",
+      "async function sendHumanHandoffNotificationNowOrQueue",
+    );
+    const humanRequest = sourceBetween(
+      "async function handleLeadHumanHandoffRequest",
+      "async function sendHumanHandoffNotificationNowOrQueue",
+    );
+
+    expect(runtimeSource).toContain("readAgentResponsibleHumans");
+    expect(resolver).toContain("responsible.notifyPayments || responsible.notifyOperational");
+    expect(resolver).toContain("responsible.notifyOperational");
+    expect(resolver).toContain("context.behavior.humanHandoffNotificationNumbers");
+    expect(humanRequest).toContain("resolveHumanHandoffNotificationNumbers(context, \"handoff\")");
   });
 
   it("never lets internal checkout placeholders leak into WhatsApp messages", () => {
