@@ -11,6 +11,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  KeyRound,
   Link2,
   Loader2,
   PackageCheck,
@@ -40,6 +41,7 @@ import type {
 import {
   createDefaultSalesCatalogPagBankSettings,
   salesCatalogPagBankPaymentMethodOptions,
+  type ClientSalesCatalogPaymentIntegration,
   type SalesCatalogPagBankPaymentMethod,
   type SalesCatalogPagBankSettings,
 } from "@/lib/sales-catalog/shared";
@@ -72,6 +74,11 @@ type SavedCredentialsResponse = {
 
 type SavedPagBankPreferencesResponse = {
   pagBankPreferences?: ClientIntegrationPagBankPreference;
+  error?: string;
+};
+
+type SavedAsaasConnectionResponse = {
+  integration?: ClientSalesCatalogPaymentIntegration;
   error?: string;
 };
 
@@ -418,6 +425,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
   const [webhookEndpoints, setWebhookEndpoints] = useState(state.webhookEndpoints);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
+  const [asaasApiKeyDraft, setAsaasApiKeyDraft] = useState("");
+  const [asaasMode, setAsaasMode] = useState<"production" | "sandbox">("production");
+  const [connectingAsaas, setConnectingAsaas] = useState(false);
+  const [disconnectingAsaas, setDisconnectingAsaas] = useState(false);
   const [connectingPagBank, setConnectingPagBank] = useState(false);
   const [disconnectingPagBank, setDisconnectingPagBank] = useState(false);
   const [pagBankPreferences, setPagBankPreferences] = useState(state.pagBankPreferences);
@@ -472,6 +483,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
     return map;
   }, [credentialSnapshots]);
+  const asaasConnection = connectionByProvider.get("asaas");
+  const asaasConnected = asaasConnection?.status === "connected";
   const pagBankConnection = connectionByProvider.get("pagbank");
   const pagBankConnected = pagBankConnection?.status === "connected";
   const selectedPagBankPreference = useMemo(
@@ -527,8 +540,19 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         });
       }
 
+      if (payment === "asaas_connected") {
+        setNotice({
+          tone: "success",
+          message: "Asaas conectado. Agora esta empresa pode gerar Pix no WhatsApp e checkout de cartao.",
+        });
+      }
+
       if (payment === "pagbank_error") {
         setNotice({ tone: "error", message: getPagBankConnectionErrorMessage(reason) });
+      }
+
+      if (payment === "asaas_error") {
+        setNotice({ tone: "error", message: getAsaasConnectionErrorMessage(reason) });
       }
 
       if (integration === "meta_connected" || integration === "google_connected") {
@@ -724,6 +748,58 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     setConnectingPagBank(true);
     setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do PagBank..." });
     window.setTimeout(() => setConnectingPagBank(false), 1500);
+  }
+
+  async function connectAsaas() {
+    if (!selectedCompanyId || connectingAsaas) {
+      if (!selectedCompanyId) {
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o Asaas." });
+      }
+      return;
+    }
+
+    const accessToken = asaasApiKeyDraft.trim();
+
+    if (!accessToken) {
+      setNotice({ tone: "warning", message: "Cole a API Key do Asaas antes de conectar." });
+      return;
+    }
+
+    setConnectingAsaas(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog/payments/asaas/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          accessToken,
+          mode: asaasMode,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as SavedAsaasConnectionResponse;
+
+      if (!response.ok || !data.integration) {
+        throw new Error(data.error ?? "Nao foi possivel conectar o Asaas.");
+      }
+
+      const connection = buildAsaasConnectionFromIntegration(
+        data.integration,
+        selectedCompany?.name ?? "Empresa",
+      );
+
+      setConnections((current) => [
+        connection,
+        ...current.filter((item) => !(item.companyId === connection.companyId && item.providerId === "asaas")),
+      ]);
+      setAsaasApiKeyDraft("");
+      setNotice({ tone: "success", message: "Asaas conectado para esta empresa." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao conectar Asaas." });
+    } finally {
+      setConnectingAsaas(false);
+    }
   }
 
   function updatePagBankPreferenceDraft(patch: Partial<SalesCatalogPagBankSettings>) {
@@ -1430,6 +1506,56 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
+  async function disconnectAsaas() {
+    if (!selectedCompanyId || disconnectingAsaas) return;
+
+    setDisconnectingAsaas(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "disconnect_asaas",
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel desconectar Asaas.");
+      }
+
+      setConnections((current) => {
+        const existing = current.find((connection) => connection.companyId === selectedCompanyId && connection.providerId === "asaas");
+        const nextConnection: ClientIntegrationConnection = {
+          providerId: "asaas",
+          companyId: selectedCompanyId,
+          companyName: selectedCompany?.name ?? existing?.companyName ?? "Empresa",
+          status: "disabled",
+          label: "Desativado",
+          detail: "Asaas desconectado desta empresa.",
+          accountLabel: null,
+          lastSyncAt: new Date().toISOString(),
+          lastError: null,
+          managementHref: "/dashboard/integracoes",
+          metadata: {},
+        };
+
+        return [
+          nextConnection,
+          ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "asaas")),
+        ];
+      });
+      setNotice({ tone: "success", message: "Asaas desconectado desta empresa." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar Asaas." });
+    } finally {
+      setDisconnectingAsaas(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -1475,11 +1601,12 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onChange={(event) => {
               setSelectedCompanyId(event.target.value);
               setNotice(null);
-              setNewWebhookSecret(null);
-              setMetaWebhookAction(null);
-              setMetaWebhookMonitor(null);
-              setGuidedSelectionDrafts({});
-            }}
+          setNewWebhookSecret(null);
+          setMetaWebhookAction(null);
+          setMetaWebhookMonitor(null);
+          setGuidedSelectionDrafts({});
+          setAsaasApiKeyDraft("");
+        }}
             className="h-11 w-full rounded-xl px-3 text-[13px] outline-none"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
           >
@@ -1492,12 +1619,28 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. PagBank e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
+          A Central organiza as conexoes por empresa. Asaas usa API Key da propria conta; PagBank e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
         </div>
       </div>
 
       {state.companies.length > 0 ? (
         <div className="mb-5 grid gap-3 xl:grid-cols-2">
+          <AsaasGuidedCard
+            accountLabel={asaasConnection?.accountLabel ?? null}
+            apiKeyDraft={asaasApiKeyDraft}
+            connected={asaasConnected}
+            connecting={connectingAsaas}
+            disconnecting={disconnectingAsaas}
+            lastError={asaasConnection?.lastError ?? null}
+            mode={asaasMode}
+            selectedCompanyId={selectedCompanyId}
+            selectedCompanyName={selectedCompany?.name ?? null}
+            onApiKeyChange={setAsaasApiKeyDraft}
+            onConnect={connectAsaas}
+            onDisconnect={disconnectAsaas}
+            onModeChange={setAsaasMode}
+          />
+
           <PagBankGuidedCard
             accountLabel={pagBankConnection?.accountLabel ?? null}
             connected={pagBankConnected}
@@ -2018,6 +2161,143 @@ function MetaIntegrationComingSoonCard() {
           <PlugZap className="h-4 w-4" />
           Conectar Meta em breve
         </button>
+      </div>
+    </section>
+  );
+}
+
+function AsaasGuidedCard({
+  accountLabel,
+  apiKeyDraft,
+  connected,
+  connecting,
+  disconnecting,
+  lastError,
+  mode,
+  selectedCompanyId,
+  selectedCompanyName,
+  onApiKeyChange,
+  onConnect,
+  onDisconnect,
+  onModeChange,
+}: {
+  accountLabel: string | null;
+  apiKeyDraft: string;
+  connected: boolean;
+  connecting: boolean;
+  disconnecting: boolean;
+  lastError: string | null;
+  mode: "production" | "sandbox";
+  selectedCompanyId: string;
+  selectedCompanyName: string | null;
+  onApiKeyChange: (value: string) => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onModeChange: (value: "production" | "sandbox") => void;
+}) {
+  return (
+    <section id="asaas-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">gateway recomendado</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Asaas</h2>
+          <p className="mt-2 text-[12px] leading-5 text-slate-400">
+            Use a API Key da conta Asaas da loja. Pix fica no WhatsApp como copia e cola; cartao segue por checkout seguro rastreado.
+          </p>
+        </div>
+        <KeyRound className="h-5 w-5 shrink-0 text-emerald-300" />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
+        <PaymentGuideStep done={connected || Boolean(apiKeyDraft.trim())} index="2" title="API Key" body={connected ? "Chave validada" : "Cole a chave"} />
+        <PaymentGuideStep done={connected} index="3" title="Pix" body="Copia e cola" />
+        <PaymentGuideStep done={connected} index="4" title="Cartao" body="Checkout rastreado" />
+      </div>
+
+      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-100">Conectar Asaas</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
+          </div>
+          <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
+        </div>
+
+        {lastError ? (
+          <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+            {lastError}
+          </p>
+        ) : null}
+
+        <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_150px]">
+          <label className="block">
+            <PaymentPreferenceLabel>API Key Asaas</PaymentPreferenceLabel>
+            <input
+              value={apiKeyDraft}
+              onChange={(event) => onApiKeyChange(event.target.value)}
+              className="h-11 w-full rounded-xl border bg-transparent px-3 text-[12px] outline-none"
+              placeholder={connected ? "Cole nova API Key para reconectar" : "$aact_..."}
+              spellCheck={false}
+              style={{ borderColor: "var(--ch-border)" }}
+              type="password"
+            />
+          </label>
+          <label className="block">
+            <PaymentPreferenceLabel>Ambiente</PaymentPreferenceLabel>
+            <select
+              value={mode}
+              onChange={(event) => onModeChange(event.target.value === "sandbox" ? "sandbox" : "production")}
+              className="h-11 w-full rounded-xl border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <option value="production">Producao</option>
+              <option value="sandbox">Sandbox</option>
+            </select>
+          </label>
+        </div>
+
+        <div className={cn("mt-3 grid gap-2", connected ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+          <button
+            type="button"
+            disabled={!selectedCompanyId || connecting}
+            onClick={onConnect}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            {connected ? "Reconectar Asaas" : "Ja tenho conta"}
+          </button>
+          <a
+            href={buildAsaasAffiliateUrl(selectedCompanyId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={!selectedCompanyId}
+            className={cn(
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-emerald-300/10 hover:text-emerald-100",
+              !selectedCompanyId ? "cursor-not-allowed opacity-50" : "",
+            )}
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Nao tenho conta
+          </a>
+          {connected ? (
+            <button
+              type="button"
+              disabled={disconnecting}
+              onClick={onDisconnect}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              Desconectar
+            </button>
+          ) : null}
+        </div>
+
+        <p className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-[11px] leading-5 text-emerald-100">
+          Ja tenho conta salva a API Key da loja. Nao tenho conta abre o cadastro indicado; depois copie a API Key do Asaas e volte para conectar.
+        </p>
       </div>
     </section>
   );
@@ -3555,6 +3835,41 @@ function upsertWebhookConnection(
   ];
 }
 
+function buildAsaasConnectionFromIntegration(
+  integration: ClientSalesCatalogPaymentIntegration,
+  companyName: string,
+): ClientIntegrationConnection {
+  return {
+    providerId: "asaas",
+    companyId: integration.companyId,
+    companyName,
+    status: integration.status === "connected" ? "connected" : integration.status === "disabled" ? "disabled" : integration.status === "error" ? "error" : "pending",
+    label: integration.status === "connected" ? "Conectado" : integration.status === "disabled" ? "Desativado" : integration.status === "error" ? "Erro" : "Pendente",
+    detail: integration.connectedAt
+      ? `Conectado em ${formatShortDate(integration.connectedAt)}`
+      : "API Key Asaas registrada para esta empresa.",
+    accountLabel: integration.accountLabel ?? integration.providerAccountId,
+    lastSyncAt: integration.updatedAt ?? integration.connectedAt,
+    lastError: integration.lastError,
+    managementHref: "/dashboard/integracoes",
+    metadata: {
+      has_access_token: integration.hasAccessToken,
+      has_webhook_secret: integration.hasWebhookSecret,
+      webhook_url: integration.webhookUrl,
+    },
+  };
+}
+
+function buildAsaasAffiliateUrl(companyId: string) {
+  if (!companyId) return "#";
+
+  const params = new URLSearchParams({
+    companyId,
+  });
+
+  return `/api/dashboard/sales-catalog/payments/asaas/affiliate?${params.toString()}`;
+}
+
 function buildPagBankConnectUrl(companyId: string) {
   if (!companyId) return "#";
 
@@ -3798,7 +4113,7 @@ function buildGuidedReadinessText(
 }
 
 function isTopGuidedProvider(providerId: string) {
-  return providerId === "pagbank" || providerId === "meta-ads" || providerId === "google-growth" || providerId === "webhook-universal";
+  return providerId === "asaas" || providerId === "pagbank" || providerId === "meta-ads" || providerId === "google-growth" || providerId === "webhook-universal";
 }
 
 function guidedSelectionKey(companyId: string, providerId: string) {
@@ -3841,6 +4156,22 @@ function getGuidedOAuthErrorMessage(integration: string, reason: string | null) 
   }
 
   return `Nao foi possivel concluir a conexao com ${provider}. Tente novamente ou chame o suporte.`;
+}
+
+function getAsaasConnectionErrorMessage(reason: string | null) {
+  if (reason === "missing_company") {
+    return "Escolha uma empresa antes de conectar Asaas.";
+  }
+
+  if (reason === "permission") {
+    return "Somente dono ou admin da empresa pode conectar Asaas.";
+  }
+
+  if (reason === "api_key") {
+    return "Informe uma API Key valida do Asaas.";
+  }
+
+  return "Nao foi possivel conectar o Asaas. Confira a API Key e tente novamente.";
 }
 
 function getPagBankConnectionErrorMessage(reason: string | null) {

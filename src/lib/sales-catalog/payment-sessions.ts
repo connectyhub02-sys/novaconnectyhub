@@ -25,6 +25,13 @@ import {
   extractPagBankPixData,
   loadPagBankPlatformBillingConfig,
 } from "./pagbank";
+import {
+  buildAsaasCheckoutUrl,
+  createAsaasCheckout,
+  createAsaasPixPayment,
+  ensureAsaasAccessToken,
+  extractAsaasPaymentData,
+} from "./asaas";
 import type { SalesCatalogPagBankSettings } from "./shared";
 import {
   buildTrackedLinkUrl,
@@ -33,10 +40,15 @@ import {
 } from "@/lib/tracking/tracked-links";
 
 type JsonRecord = Record<string, unknown>;
-type PaymentGatewayProvider = "mercado_pago" | "pagbank";
+type PaymentGatewayProvider = "mercado_pago" | "pagbank" | "asaas";
 type PaymentGatewayIntegration =
   | Awaited<ReturnType<typeof ensureMercadoPagoAccessToken>>
-  | Awaited<ReturnType<typeof ensurePagBankAccessToken>>;
+  | Awaited<ReturnType<typeof ensurePagBankAccessToken>>
+  | Awaited<ReturnType<typeof ensureAsaasAccessToken>>;
+type PaymentGatewayPixData =
+  | ReturnType<typeof extractMercadoPagoPixData>
+  | ReturnType<typeof extractPagBankPixData>
+  | ReturnType<typeof extractAsaasPaymentData>;
 
 type OrderRow = {
   id: string;
@@ -67,6 +79,13 @@ type OrderItemRow = {
   fulfillment?: unknown;
   metadata?: JsonRecord | null;
 };
+
+type DeferredSalesCatalogPaymentReason =
+  | "shipping_required"
+  | "customer_name_required"
+  | "customer_email_required"
+  | "customer_document_required"
+  | "lead_details_required";
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
 
@@ -115,13 +134,17 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const needsShippingBeforePayment = requiresSalesCatalogShippingBeforePayment(order, items);
   const needsCustomerNameBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerName(order);
+  const needsCustomerEmailBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerEmail(order, input.payerEmail);
 
-  if (needsShippingBeforePayment || needsCustomerNameBeforePayment) {
-    const reason = needsShippingBeforePayment && needsCustomerNameBeforePayment
+  if (needsShippingBeforePayment || needsCustomerNameBeforePayment || needsCustomerEmailBeforePayment) {
+    const missingCount = [needsShippingBeforePayment, needsCustomerNameBeforePayment, needsCustomerEmailBeforePayment].filter(Boolean).length;
+    const reason: DeferredSalesCatalogPaymentReason = missingCount > 1
       ? "lead_details_required"
       : needsShippingBeforePayment
         ? "shipping_required"
-        : "customer_name_required";
+        : needsCustomerNameBeforePayment
+          ? "customer_name_required"
+          : "customer_email_required";
     return createDeferredSalesCatalogCheckoutSession({
       ...input,
       order,
@@ -143,10 +166,27 @@ export async function createSalesCatalogPixPaymentSession(input: {
     orderId: order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
-  const paymentProvider = resolvePaymentGatewayProvider();
+  const paymentProvider = await resolvePaymentGatewayProvider({
+    client: input.client,
+    organizationId: input.organizationId,
+    connectyHubOwned,
+  });
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const paymentMethodLabel = formatPaymentMethodLabel(paymentProvider, sessionMethod);
+
+  if (paymentProvider === "asaas" && input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerDocument(order)) {
+    return createDeferredSalesCatalogCheckoutSession({
+      ...input,
+      order,
+      items,
+      amount,
+      preferredMethod,
+      reason: "customer_document_required",
+      reasonLabel: formatDeferredSalesCatalogPaymentReason("customer_document_required"),
+    });
+  }
+
   const catalogSettings = paymentProvider === "pagbank" && !connectyHubOwned
     ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
     : null;
@@ -171,8 +211,18 @@ export async function createSalesCatalogPixPaymentSession(input: {
   try {
     if (connectyHubOwned) {
       platformBilling = await loadPagBankPlatformBillingConfig({ client: input.client });
-    } else {
+    } else if (paymentProvider === "asaas") {
+      integration = await ensureAsaasAccessToken({
+        client: input.client,
+        organizationId: input.organizationId,
+      });
+    } else if (paymentProvider === "pagbank") {
       integration = await ensurePagBankAccessToken({
+        client: input.client,
+        organizationId: input.organizationId,
+      });
+    } else {
+      integration = await ensureMercadoPagoAccessToken({
         client: input.client,
         organizationId: input.organizationId,
       });
@@ -186,7 +236,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
   const missingAccessTokenMessage = connectyHubOwned
     ? "Nao foi possivel localizar a conta PagBank da ConnectyHub para este pagamento."
-    : "Nao foi possivel localizar a conta PagBank para este pagamento.";
+    : `Nao foi possivel localizar a conta ${paymentProviderLabel} para este pagamento.`;
 
   const sessionId = randomUUID();
   const idempotencyKey = randomUUID();
@@ -208,6 +258,15 @@ export async function createSalesCatalogPixPaymentSession(input: {
       total: item.total,
     })),
   });
+  const gatewayItems = items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    skuCode: item.sku_code,
+    quantity: item.quantity,
+    unitPrice: item.unit_price,
+    salePrice: item.sale_price,
+    total: item.total,
+  }));
   const now = new Date().toISOString();
 
   const { data: inserted, error: insertError } = await input.client
@@ -375,94 +434,264 @@ export async function createSalesCatalogPixPaymentSession(input: {
   }
 
   if (preferredMethod === "card") {
-    const { data: checkoutOnly, error: checkoutOnlyError } = await input.client
-      .from("sales_catalog_payment_sessions")
-      .update({
-        metadata: buildPaymentSessionMetadata({
-          sessionMetadata: inserted.metadata,
-          checkoutTracking,
-          paymentOwner,
-          connectyHubOwned,
-          paymentProvider,
-          gatewayAvailable: true,
-          extra: {
-            preferred_payment_method: "card",
-            checkout_ready_for_card: true,
-          },
-        }),
-      })
-      .eq("id", sessionId)
-      .eq("organization_id", input.organizationId)
-      .select(paymentSessionSelect)
-      .single<SalesCatalogPaymentSessionRow>();
+    try {
+      let cardCheckoutUrl = checkoutUrl;
+      let cardCheckoutTracking = checkoutTracking;
+      let providerPaymentId: string | null = null;
+      let providerStatus: string | null = null;
+      let providerStatusDetail: string | null = null;
+      let cardMetadata: JsonRecord = {
+        preferred_payment_method: "card",
+        checkout_ready_for_card: true,
+      };
 
-    if (checkoutOnlyError || !checkoutOnly) {
-      throw new Error(checkoutOnlyError?.message ?? "Checkout criado, mas nao foi possivel preparar o cartao.");
+      if (paymentProvider === "asaas" && !connectyHubOwned) {
+        const asaasCheckout = await createAsaasCheckout({
+          accessToken,
+          mode: getPaymentIntegrationMode(integration),
+          amount,
+          description,
+          externalReference,
+          payerEmail,
+          payerName: order.customer_name,
+          payerDocument: order.customer_document,
+          payerPhone: order.customer_phone,
+          payerZipCode: order.destination_cep,
+          payerAddress: order.destination_address,
+          billingTypes: ["CREDIT_CARD"],
+          minutesToExpire: pagBankSettings?.checkoutExpirationMinutes ?? null,
+          successUrl: checkoutUrl,
+          cancelUrl: checkoutUrl,
+          expiredUrl: checkoutUrl,
+          idempotencyKey,
+          items: gatewayItems,
+        });
+        const asaasCheckoutUrl = buildAsaasCheckoutUrl(asaasCheckout);
+
+        if (!asaasCheckoutUrl) {
+          throw new Error("Asaas criou o checkout, mas nao retornou URL de pagamento.");
+        }
+
+        cardCheckoutUrl = asaasCheckoutUrl;
+        providerPaymentId = asaasCheckout.id ?? null;
+        providerStatus = asaasCheckout.status ?? "created";
+        providerStatusDetail = "asaas_checkout";
+        cardMetadata = {
+          ...cardMetadata,
+          asaas_checkout_id: asaasCheckout.id ?? null,
+          asaas_checkout_url: asaasCheckoutUrl,
+          asaas_checkout_status: asaasCheckout.status ?? null,
+        };
+        cardCheckoutTracking = await createPaymentSessionTrackedLink({
+          client: input.client,
+          organizationId: input.organizationId,
+          order,
+          items,
+          sessionId,
+          checkoutUrl: cardCheckoutUrl,
+          amount,
+          source: input.source,
+          actorId: input.actorId ?? null,
+          itemCount: items.length,
+        }).catch(() => checkoutTracking);
+      }
+
+      const { data: checkoutOnly, error: checkoutOnlyError } = await input.client
+        .from("sales_catalog_payment_sessions")
+        .update({
+          checkout_url: cardCheckoutUrl,
+          provider_payment_id: providerPaymentId,
+          provider_status: providerStatus,
+          provider_status_detail: providerStatusDetail,
+          metadata: buildPaymentSessionMetadata({
+            sessionMetadata: inserted.metadata,
+            checkoutTracking: cardCheckoutTracking,
+            paymentOwner,
+            connectyHubOwned,
+            paymentProvider,
+            gatewayAvailable: true,
+            providerPaymentId,
+            providerStatus,
+            extra: cardMetadata,
+          }),
+        })
+        .eq("id", sessionId)
+        .eq("organization_id", input.organizationId)
+        .select(paymentSessionSelect)
+        .single<SalesCatalogPaymentSessionRow>();
+
+      if (checkoutOnlyError || !checkoutOnly) {
+        throw new Error(checkoutOnlyError?.message ?? "Checkout criado, mas nao foi possivel preparar o cartao.");
+      }
+
+      await persistCheckoutOrderReference({
+        client: input.client,
+        organizationId: input.organizationId,
+        order,
+        sessionId,
+        checkoutUrl: cardCheckoutUrl,
+        checkoutTracking: cardCheckoutTracking,
+        paymentOwner,
+        connectyHubOwned,
+        paymentProvider,
+        paymentMethodType: "card",
+        paymentStatus: "pending",
+        orderStatus: "pending_payment",
+        paymentMethod: `Checkout ${paymentProviderLabel}`,
+        providerPaymentId,
+      });
+
+      await input.client.from("intelligence_events").insert({
+        scope: "organization",
+        organization_id: input.organizationId,
+        source_type: "sales_catalog_payment_session",
+        source_id: sessionId,
+        event_type: "sales_catalog.card_checkout_created",
+        title: `Checkout de cartao ${paymentProviderLabel} criado`,
+        summary: `Checkout criado para pedido ${order.id.slice(0, 8)} sem gerar Pix automatico.`,
+        confidence: 1,
+        visibility: "organization",
+        tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "whatsapp_agent", "lead_tracking"],
+        payload: {
+          order_id: order.id,
+          payment_session_id: sessionId,
+          provider_payment_id: providerPaymentId,
+          checkout_url: cardCheckoutUrl,
+          tracking_url: cardCheckoutTracking?.trackingUrl ?? null,
+          tracking_link_id: cardCheckoutTracking?.id ?? null,
+          tracking_tag: cardCheckoutTracking?.tag ?? null,
+          amount,
+          items: summarizePaymentItems(items),
+          lead_id: order.lead_id,
+          conversation_id: order.conversation_id,
+          agent_id: agentId,
+          lead_phone: order.customer_phone,
+          source: input.source,
+          payment_gateway: paymentProvider,
+          payment_owner: paymentOwner.owner,
+        },
+      });
+
+      return {
+        session: mapSalesCatalogPaymentSession(checkoutOnly),
+        checkoutUrl: cardCheckoutUrl,
+        trackingUrl: cardCheckoutTracking?.trackingUrl ?? null,
+        trackingLinkId: cardCheckoutTracking?.id ?? null,
+        trackingTag: cardCheckoutTracking?.tag ?? null,
+        pixQrCode: null,
+        pixTicketUrl: null,
+        gatewayUnavailable: false,
+        paymentDeferred: false,
+        paymentDeferredReason: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Erro ao criar checkout ${paymentProviderLabel}.`;
+
+      const { data: failed } = await input.client
+        .from("sales_catalog_payment_sessions")
+        .update({
+          status: "error",
+          failure_reason: message,
+          provider_status: "gateway_error",
+          metadata: buildPaymentSessionMetadata({
+            sessionMetadata: inserted.metadata,
+            checkoutTracking,
+            paymentOwner,
+            connectyHubOwned,
+            paymentProvider,
+            gatewayAvailable: false,
+            gatewayError: message,
+          }),
+        })
+        .eq("id", sessionId)
+        .eq("organization_id", input.organizationId)
+        .select(paymentSessionSelect)
+        .maybeSingle<SalesCatalogPaymentSessionRow>();
+
+      await persistCheckoutOrderReference({
+        client: input.client,
+        organizationId: input.organizationId,
+        order,
+        sessionId,
+        checkoutUrl,
+        checkoutTracking,
+        paymentOwner,
+        connectyHubOwned,
+        paymentProvider,
+        paymentMethodType: "card",
+        paymentStatus: "pending",
+        orderStatus: "pending_payment",
+        failureReason: message,
+      });
+
+      await input.client.from("intelligence_events").insert({
+        scope: "organization",
+        organization_id: input.organizationId,
+        source_type: "sales_catalog_payment_session",
+        source_id: sessionId,
+        event_type: "sales_catalog.payment_session_provider_failed",
+        title: "Checkout de cartao com falha no gateway",
+        summary: message,
+        confidence: 0.82,
+        visibility: "organization",
+        tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "lead_tracking"],
+        payload: {
+          order_id: order.id,
+          payment_session_id: sessionId,
+          checkout_url: checkoutUrl,
+          tracking_url: checkoutTracking?.trackingUrl ?? null,
+          tracking_link_id: checkoutTracking?.id ?? null,
+          tracking_tag: checkoutTracking?.tag ?? null,
+          amount,
+          items: summarizePaymentItems(items),
+          lead_id: order.lead_id,
+          conversation_id: order.conversation_id,
+          agent_id: agentId,
+          lead_phone: order.customer_phone,
+          source: input.source,
+          gateway_error: message,
+          payment_gateway: paymentProvider,
+          payment_owner: paymentOwner.owner,
+        },
+      });
+
+      return {
+        session: mapSalesCatalogPaymentSession(failed ?? inserted),
+        checkoutUrl,
+        trackingUrl: checkoutTracking?.trackingUrl ?? null,
+        trackingLinkId: checkoutTracking?.id ?? null,
+        trackingTag: checkoutTracking?.tag ?? null,
+        pixQrCode: null,
+        pixTicketUrl: null,
+        gatewayUnavailable: true,
+        paymentDeferred: false,
+        paymentDeferredReason: null,
+      };
     }
-
-    await persistCheckoutOrderReference({
-      client: input.client,
-      organizationId: input.organizationId,
-      order,
-      sessionId,
-      checkoutUrl,
-      checkoutTracking,
-      paymentOwner,
-      connectyHubOwned,
-      paymentProvider,
-      paymentMethodType: "card",
-      paymentStatus: "pending",
-      orderStatus: "pending_payment",
-      paymentMethod: "Checkout PagBank",
-    });
-
-    await input.client.from("intelligence_events").insert({
-      scope: "organization",
-      organization_id: input.organizationId,
-      source_type: "sales_catalog_payment_session",
-      source_id: sessionId,
-      event_type: "sales_catalog.card_checkout_created",
-      title: "Checkout de cartao PagBank criado",
-      summary: `Checkout criado para pedido ${order.id.slice(0, 8)} sem gerar Pix automatico.`,
-      confidence: 1,
-      visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "whatsapp_agent", "lead_tracking"],
-      payload: {
-        order_id: order.id,
-        payment_session_id: sessionId,
-        checkout_url: checkoutUrl,
-        tracking_url: checkoutTracking?.trackingUrl ?? null,
-        tracking_link_id: checkoutTracking?.id ?? null,
-        tracking_tag: checkoutTracking?.tag ?? null,
-        amount,
-        items: summarizePaymentItems(items),
-        lead_id: order.lead_id,
-        conversation_id: order.conversation_id,
-        agent_id: agentId,
-        lead_phone: order.customer_phone,
-        source: input.source,
-        payment_gateway: paymentProvider,
-        payment_owner: paymentOwner.owner,
-      },
-    });
-
-    return {
-      session: mapSalesCatalogPaymentSession(checkoutOnly),
-      checkoutUrl,
-      trackingUrl: checkoutTracking?.trackingUrl ?? null,
-      trackingLinkId: checkoutTracking?.id ?? null,
-      trackingTag: checkoutTracking?.tag ?? null,
-      pixQrCode: null,
-      pixTicketUrl: null,
-      gatewayUnavailable: false,
-      paymentDeferred: false,
-      paymentDeferredReason: null,
-    };
   }
 
   try {
-    const pixData = paymentProvider === "pagbank"
-      ? extractPagBankPixData((await createPagBankPixOrder({
+    let pixData: PaymentGatewayPixData;
+
+    if (paymentProvider === "asaas" && !connectyHubOwned) {
+      const asaasPix = await createAsaasPixPayment({
+        accessToken,
+        mode: getPaymentIntegrationMode(integration),
+        amount,
+        description,
+        externalReference,
+        payerEmail,
+        payerName: order.customer_name,
+        payerDocument: order.customer_document,
+        payerPhone: order.customer_phone,
+        payerZipCode: order.destination_cep,
+        payerAddress: order.destination_address,
+        idempotencyKey,
+        items: gatewayItems,
+      });
+      pixData = extractAsaasPaymentData(asaasPix.payment, asaasPix.pixQrCode);
+    } else if (paymentProvider === "pagbank") {
+      pixData = extractPagBankPixData((await createPagBankPixOrder({
           accessToken,
           mode: connectyHubOwned ? platformBilling?.mode ?? "production" : getPaymentIntegrationMode(integration),
           apiBaseUrl: connectyHubOwned ? platformBilling?.apiBaseUrl ?? null : null,
@@ -476,17 +705,10 @@ export async function createSalesCatalogPixPaymentSession(input: {
           notificationUrl: buildPagBankWebhookUrl(),
           idempotencyKey,
           pixExpirationMinutes: pagBankSettings?.pixExpirationMinutes ?? null,
-          items: items.map((item) => ({
-            id: item.id,
-            title: item.title,
-            skuCode: item.sku_code,
-            quantity: item.quantity,
-            unitPrice: item.unit_price,
-            salePrice: item.sale_price,
-            total: item.total,
-          })),
-        })).order)
-      : extractMercadoPagoPixData((await createMercadoPagoPixPayment({
+          items: gatewayItems,
+        })).order);
+    } else {
+      pixData = extractMercadoPagoPixData((await createMercadoPagoPixPayment({
           accessToken,
           amount,
           description,
@@ -499,6 +721,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
           idempotencyKey,
           additionalInfo,
         })).payment);
+    }
+
     const providerMetadata = buildProviderPaymentMetadata(paymentProvider, pixData);
     const { data: updated, error: updateError } = await input.client
       .from("sales_catalog_payment_sessions")
@@ -696,7 +920,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
   order: OrderRow;
   items: OrderItemRow[];
   preferredMethod: "pix" | "card";
-  reason: "shipping_required" | "customer_name_required" | "lead_details_required";
+  reason: DeferredSalesCatalogPaymentReason;
   reasonLabel: string;
 }) {
   const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
@@ -705,7 +929,11 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     orderId: input.order.id,
   });
   const connectyHubOwned = paymentOwner.owner === "connectyhub";
-  const paymentProvider = resolvePaymentGatewayProvider();
+  const paymentProvider = await resolvePaymentGatewayProvider({
+    client: input.client,
+    organizationId: input.organizationId,
+    connectyHubOwned,
+  });
   const paymentProviderLabel = formatPaymentGatewayProviderLabel(paymentProvider);
   const paymentProviderTag = formatPaymentGatewayProviderTag(paymentProvider);
   const sessionId = randomUUID();
@@ -885,9 +1113,27 @@ function hasSalesCatalogOrderCustomerName(order: OrderRow) {
   return Boolean(order.customer_name?.trim());
 }
 
-function formatDeferredSalesCatalogPaymentReason(reason: "shipping_required" | "customer_name_required" | "lead_details_required") {
+function hasSalesCatalogOrderCustomerEmail(order: OrderRow, payerEmail?: string | null) {
+  return Boolean(normalizeEmail(order.customer_email ?? payerEmail));
+}
+
+function hasSalesCatalogOrderCustomerDocument(order: OrderRow) {
+  const digits = order.customer_document?.replace(/\D/g, "") ?? "";
+
+  return digits.length === 11 || digits.length === 14;
+}
+
+function formatDeferredSalesCatalogPaymentReason(reason: DeferredSalesCatalogPaymentReason) {
   if (reason === "customer_name_required") {
     return "Nome do cliente pendente";
+  }
+
+  if (reason === "customer_email_required") {
+    return "E-mail do cliente pendente";
+  }
+
+  if (reason === "customer_document_required") {
+    return "CPF ou CNPJ do cliente pendente";
   }
 
   if (reason === "lead_details_required") {
@@ -897,13 +1143,21 @@ function formatDeferredSalesCatalogPaymentReason(reason: "shipping_required" | "
   return "Frete pendente";
 }
 
-function formatDeferredSalesCatalogPaymentSummary(reason: "shipping_required" | "customer_name_required" | "lead_details_required") {
+function formatDeferredSalesCatalogPaymentSummary(reason: DeferredSalesCatalogPaymentReason) {
   if (reason === "customer_name_required") {
     return "Pagamento adiado ate confirmar o nome do cliente.";
   }
 
+  if (reason === "customer_email_required") {
+    return "Pagamento adiado ate confirmar o e-mail do cliente.";
+  }
+
+  if (reason === "customer_document_required") {
+    return "Pagamento adiado ate confirmar CPF ou CNPJ do cliente.";
+  }
+
   if (reason === "lead_details_required") {
-    return "Pagamento adiado ate confirmar nome e entrega do cliente.";
+    return "Pagamento adiado ate confirmar dados obrigatorios do cliente.";
   }
 
   return "Pagamento adiado ate confirmar frete, retirada ou entrega.";
@@ -999,15 +1253,38 @@ function buildPaymentSessionMetadata(input: {
   };
 }
 
-function resolvePaymentGatewayProvider(): PaymentGatewayProvider {
-  return "pagbank";
+async function resolvePaymentGatewayProvider(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  connectyHubOwned?: boolean;
+}): Promise<PaymentGatewayProvider> {
+  if (input.connectyHubOwned) {
+    return "pagbank";
+  }
+
+  const { data } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .select("provider, status, updated_at")
+    .eq("organization_id", input.organizationId)
+    .in("provider", ["asaas", "pagbank", "mercado_pago"])
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false });
+  const providers = ((data ?? []) as Array<{ provider?: string | null }>).map((item) => item.provider);
+
+  if (providers.includes("asaas")) return "asaas";
+  if (providers.includes("pagbank")) return "pagbank";
+  if (providers.includes("mercado_pago")) return "mercado_pago";
+
+  return "asaas";
 }
 
 function formatPaymentGatewayProviderLabel(provider: PaymentGatewayProvider) {
+  if (provider === "asaas") return "Asaas";
   return provider === "pagbank" ? "PagBank" : "Mercado Pago";
 }
 
 function formatPaymentGatewayProviderTag(provider: PaymentGatewayProvider) {
+  if (provider === "asaas") return "asaas";
   return provider === "pagbank" ? "pagbank" : "mercado_pago";
 }
 
@@ -1023,8 +1300,20 @@ function getPaymentIntegrationMode(integration: PaymentGatewayIntegration | null
 
 function buildProviderPaymentMetadata(
   provider: PaymentGatewayProvider,
-  pixData: ReturnType<typeof extractMercadoPagoPixData> | ReturnType<typeof extractPagBankPixData>,
+  pixData: PaymentGatewayPixData,
 ): JsonRecord {
+  if (provider === "asaas") {
+    const providerCustomerId = "providerCustomerId" in pixData ? pixData.providerCustomerId : null;
+    const pixExpirationDate = "pixExpirationDate" in pixData ? pixData.pixExpirationDate : null;
+
+    return {
+      asaas_payment_id: pixData.providerPaymentId,
+      asaas_customer_id: providerCustomerId,
+      asaas_status: pixData.providerStatus,
+      asaas_pix_expiration_date: pixExpirationDate,
+    };
+  }
+
   if (provider === "pagbank") {
     const providerOrderId = "providerOrderId" in pixData ? pixData.providerOrderId : null;
     const pixQrCodePngUrl = "pixQrCodePngUrl" in pixData ? pixData.pixQrCodePngUrl : null;
@@ -1167,6 +1456,12 @@ function buildPaymentDescription(items: OrderItemRow[], orderId: string) {
     : [`Pedido ${orderId.slice(0, 8)}`];
 
   return titles.join(", ").slice(0, 220);
+}
+
+function normalizeEmail(email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase();
+
+  return normalized && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : null;
 }
 
 function normalizePayerEmail(email: string | null | undefined, orderId: string) {

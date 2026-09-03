@@ -83,7 +83,7 @@ export async function POST(
       summary: `Checkout ${sourceSession.id.slice(0, 8)} atualizado com ${orderBumpApplication.appliedBumps.length} oferta(s).`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "payment", result.session.provider === "pagbank" ? "pagbank" : "mercado_pago", "pix", "order_bump"],
+      tags: ["sales_catalog", "payment", formatPaymentProviderTag(result.session.provider), "pix", "order_bump"],
       payload: {
         source_payment_session_id: sourceSession.id,
         new_payment_session_id: result.session.id,
@@ -124,4 +124,9 @@ function readStringList(value: unknown) {
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function formatPaymentProviderTag(provider: string | null | undefined) {
+  if (provider === "asaas") return "asaas";
+  return provider === "pagbank" ? "pagbank" : "mercado_pago";
 }

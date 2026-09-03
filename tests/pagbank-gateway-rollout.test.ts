@@ -72,8 +72,10 @@ describe("PagBank gateway rollout", () => {
     expect(existsSync("src/lib/sales-catalog/pagbank.ts")).toBe(true);
   });
 
-  it("uses PagBank for client-owned Pix sessions and ConnectyHub-owned products", () => {
-    expect(paymentSessionsSource).toContain("function resolvePaymentGatewayProvider(): PaymentGatewayProvider");
+  it("keeps PagBank available while preferring connected gateways for client-owned Pix sessions", () => {
+    expect(paymentSessionsSource).toContain("async function resolvePaymentGatewayProvider");
+    expect(paymentSessionsSource).toContain("providers.includes(\"asaas\")");
+    expect(paymentSessionsSource).toContain("providers.includes(\"pagbank\")");
     expect(paymentSessionsSource).toContain("return \"pagbank\"");
     expect(paymentSessionsSource).toContain("loadPagBankPlatformBillingConfig");
     expect(paymentSessionsSource).toContain("createPagBankPixOrder");
@@ -116,8 +118,8 @@ describe("PagBank gateway rollout", () => {
   });
 
   it("moves admin monitoring and platform credentials to PagBank without deleting Mercado Pago standby credentials", () => {
-    expect(adminIntegrationsSource).toContain("[\"meta-ads\", \"google-growth\", \"pagbank\", \"webhook-universal\"]");
-    expect(adminIntegrationsSource).toContain(".eq(\"provider\", \"pagbank\")");
+    expect(adminIntegrationsSource).toContain("[\"meta-ads\", \"google-growth\", \"asaas\", \"pagbank\", \"webhook-universal\"]");
+    expect(adminIntegrationsSource).toContain(".in(\"provider\", [\"asaas\", \"pagbank\"])");
     expect(maintenanceVaultSource).toContain("id: \"pagbank\"");
     expect(maintenanceVaultSource).toContain("id: \"pagbank-billing\"");
     expect(maintenanceVaultSource).toContain("PAGBANK_AFFILIATE_CONNECT_URL");
@@ -242,8 +244,8 @@ describe("PagBank gateway rollout", () => {
     expect(salesCatalogConsoleSource).toContain("Recorrente");
     expect(commerceAgentSource).toContain("Metodos PagBank habilitados");
     expect(commerceAgentSource).toContain("O agente so pode oferecer formas de pagamento habilitadas");
-    expect(whatsappAgentRuntimeSource).toContain("Metodos PagBank habilitados");
-    expect(whatsappAgentRuntimeSource).toContain("Pix PagBank: depois da confirmacao do pedido");
+    expect(whatsappAgentRuntimeSource).toContain("Metodos de pagamento automatico habilitados");
+    expect(whatsappAgentRuntimeSource).toContain("Pix: depois da confirmacao do pedido");
     expect(whatsappAgentRuntimeSource).toContain("Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp");
     expect(whatsappAgentRuntimeSource).toContain("cobranca interna");
   });

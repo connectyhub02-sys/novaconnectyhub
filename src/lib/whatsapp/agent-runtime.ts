@@ -733,6 +733,16 @@ export async function processWhatsappAgentRun(input: {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithCustomerName;
     }
 
+    const refreshedSalesCatalogOrdersWithBillingDetails = await maybeAttachSalesCatalogCustomerBillingDetailsToOrder({
+      client,
+      context,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithBillingDetails) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithBillingDetails;
+    }
+
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
       await pauseConversationForHuman(client, context.conversationId, behavior, "bot_loop_protection");
       return await completeRun(client, run.id, "Protecao contra loop acionada.", { skipped: true, reason: "bot_loop_protection" });
@@ -2389,6 +2399,83 @@ async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
   });
 }
 
+async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const email = extractRuntimeEmail(input.userText);
+  const document = extractRuntimeCustomerDocument(input.userText);
+
+  if (!email && !document) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && ((!item.customerEmail && email) || (!item.customerDocument && document))
+  ));
+
+  if (!order) return null;
+
+  const now = new Date().toISOString();
+  const patch: JsonRecord = {
+    updated_at: now,
+  };
+
+  if (!order.customerEmail && email) {
+    patch.customer_email = email;
+  }
+
+  if (!order.customerDocument && document) {
+    patch.customer_document = document;
+  }
+
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update(patch)
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await persistLeadBillingDetailsSnapshot({
+    client: input.client,
+    context: input.context,
+    orderId: order.id,
+    email,
+    document,
+  }).catch(() => {});
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.customer_billing_details_saved",
+    title: "Dados de cobranca salvos pelo WhatsApp",
+    summary: [email ? "e-mail" : null, document ? "CPF/CNPJ" : null].filter(Boolean).join(", "),
+    confidence: 0.86,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "customer", "lead_memory", "whatsapp"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      customer_email: email,
+      customer_document_present: Boolean(document),
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
 async function persistLeadDeliveryAddressSnapshot(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -2431,6 +2518,49 @@ async function persistLeadDeliveryAddressSnapshot(input: {
             .slice(-4),
           snapshot,
         ],
+      },
+    })
+    .eq("id", input.context.lead.id);
+}
+
+async function persistLeadBillingDetailsSnapshot(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  orderId: string;
+  email: string | null;
+  document: string | null;
+}) {
+  if (!input.context.lead?.id || (!input.email && !input.document)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const currentMetadata = input.context.lead.metadata ?? {};
+  const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
+
+  await input.client
+    .from("leads")
+    .update({
+      metadata: {
+        ...currentMetadata,
+        email: input.email ?? currentMetadata.email ?? null,
+        customer_email: input.email ?? currentMetadata.customer_email ?? null,
+        cpf_cnpj: input.document ?? currentMetadata.cpf_cnpj ?? null,
+        customer_document: input.document ?? currentMetadata.customer_document ?? null,
+        last_billing_details_at: now,
+        lead_memory: {
+          ...currentLeadMemory,
+          email: input.email ?? currentLeadMemory.email ?? null,
+          cpfCnpj: input.document ?? currentLeadMemory.cpfCnpj ?? null,
+          updated_at: now,
+          source: "whatsapp_agent_runtime",
+        },
+        billing_details: {
+          email: input.email ?? currentMetadata.email ?? null,
+          document_present: Boolean(input.document ?? currentMetadata.customer_document ?? currentMetadata.cpf_cnpj),
+          order_id: input.orderId,
+          updated_at: now,
+        },
       },
     })
     .eq("id", input.context.lead.id);
@@ -2980,6 +3110,32 @@ function runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(
   return !resolveRuntimeSalesCatalogCustomerName(context, order);
 }
 
+function runtimeSalesCatalogOrderNeedsCustomerEmailBeforePayment(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder,
+) {
+  const email = order.customerEmail
+    ?? findString(context.lead?.metadata, ["email", "customer_email", "lead_email"]);
+
+  return !normalizeRuntimeEmail(email);
+}
+
+function runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder,
+  provider: string | null,
+) {
+  if (provider !== "asaas") {
+    return false;
+  }
+
+  const document = order.customerDocument
+    ?? findString(context.lead?.metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]);
+  const digits = document?.replace(/\D/g, "") ?? "";
+
+  return digits.length !== 11 && digits.length !== 14;
+}
+
 function resolveRuntimeSalesCatalogCustomerName(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   order: RuntimeSalesCatalogOrder | null,
@@ -2996,6 +3152,31 @@ function resolveRuntimeSalesCatalogCustomerName(
         metadata: context.lead.metadata,
       })
     : null;
+}
+
+function normalizeRuntimeEmail(value: string | null | undefined) {
+  const email = value?.trim().toLowerCase();
+
+  return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+function extractRuntimeEmail(value: string) {
+  const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+
+  return normalizeRuntimeEmail(match?.[0]);
+}
+
+function extractRuntimeCustomerDocument(value: string) {
+  const candidates = value.match(/\b\d[\d.\-/\s]{9,20}\d\b/g) ?? [];
+
+  for (const candidate of candidates) {
+    const digits = candidate.replace(/\D/g, "");
+    if (digits.length === 11 || digits.length === 14) {
+      return digits;
+    }
+  }
+
+  return null;
 }
 
 function isRuntimePickupShippingMethod(value: string | null | undefined) {
@@ -5161,15 +5342,15 @@ function buildSalesCatalogCommerceLines(
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
     "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
-    `- Metodos PagBank habilitados: ${pagBankMethods}.`,
-    "- O agente so pode oferecer formas de pagamento habilitadas no PagBank desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    `- Metodos de pagamento automatico habilitados: ${pagBankMethods}.`,
+    "- O agente so pode oferecer formas de pagamento habilitadas no gateway de pagamento desta empresa. Se Pix, cartao, debito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
       ? "- Como ha mais de uma forma de pagamento habilitada, depois da confirmacao do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobranca."
       : "",
     buildSalesCatalogPhysicalPaymentReadinessLine(shippingSettings),
     pixEnabled
-      ? "- Pix PagBank: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do PagBank, nao por comprovante manual."
-      : "- Pix PagBank esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
+      ? "- Pix: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do gateway, nao por comprovante manual."
+      : "- Pix esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
     creditCardEnabled
       ? "- Cartao de credito: use o checkout seguro da ConnectyHub. Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp."
       : "- Cartao de credito esta desativado; nao ofereca pagamento em credito.",
@@ -5185,7 +5366,7 @@ function buildSalesCatalogCommerceLines(
     ...manualPaymentMethods
       .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
       .filter(Boolean),
-    `- Recorrencia PagBank: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
+    `- Recorrencia automatica: ${settings.pagBank.recurringEnabled ? "habilitada" : "desabilitada"}.`,
     settings.pagBank.recurringEnabled
       ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
       : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
@@ -8329,6 +8510,16 @@ function formatSalesCatalogRuntimePaymentChoiceList(labels: string[]) {
   return `${uniqueLabels.slice(0, -1).join(", ")} ou ${uniqueLabels[uniqueLabels.length - 1]}`;
 }
 
+function formatRuntimeDataList(labels: string[]) {
+  const uniqueLabels = Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean)));
+
+  if (uniqueLabels.length <= 1) {
+    return uniqueLabels[0] ?? "dados do pedido";
+  }
+
+  return `${uniqueLabels.slice(0, -1).join(", ")} e ${uniqueLabels[uniqueLabels.length - 1]}`;
+}
+
 function resolveSalesCatalogConfirmedPaymentPreference(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   intentText: string,
@@ -9301,6 +9492,8 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     && (
       runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
       || runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, order)
+      || runtimeSalesCatalogOrderNeedsCustomerEmailBeforePayment(input.context, order)
+      || runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(input.context, order, asString(data.provider))
     )
   ) {
     return sendSalesCatalogPaymentDeferredWhatsapp({
@@ -9635,6 +9828,12 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   const needsCustomerName = order
     ? runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, order)
     : !resolveRuntimeSalesCatalogCustomerName(input.context, null);
+  const needsCustomerEmail = order
+    ? runtimeSalesCatalogOrderNeedsCustomerEmailBeforePayment(input.context, order)
+    : !normalizeRuntimeEmail(findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]));
+  const needsCustomerDocument = order
+    ? runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(input.context, order, input.payment.provider)
+    : input.payment.provider === "asaas";
   const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
   const deliveryDataLabel = "endereco completo com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se tiver";
@@ -9644,21 +9843,19 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
         `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie o ${deliveryDataLabel}.`,
       ]
     : [];
+  const missingDataLabels = [
+    needsCustomerName ? "nome completo" : null,
+    needsCustomerEmail ? "e-mail" : null,
+    needsCustomerDocument ? "CPF ou CNPJ" : null,
+    needsDeliveryAddress && savedDeliveryLines.length === 0 ? deliveryDataLabel : null,
+  ].filter((item): item is string => Boolean(item));
   const intro = !needsHumanForDelivery
     ? "Antes de gerar o pagamento, preciso confirmar seus dados do pedido."
     : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
     intro,
     ...savedDeliveryLines,
-    needsCustomerName && savedDeliveryLines.length > 0
-      ? "Me envie tambem seu nome completo para eu registrar o pedido corretamente."
-      : "",
-    needsDeliveryAddress && savedDeliveryLines.length === 0
-      ? `Me envie seu ${needsCustomerName ? "nome completo e o " : ""}${deliveryDataLabel}.`
-      : "",
-    needsCustomerName && !needsDeliveryAddress
-      ? "Me confirme seu nome completo, por favor, para eu registrar o pedido corretamente."
-      : "",
+    missingDataLabels.length > 0 ? `Me envie: ${formatRuntimeDataList(missingDataLabels)}.` : "",
     needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     needsHumanForDelivery
       ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
@@ -9715,11 +9912,12 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   payment: SalesCatalogPaymentLinkResult;
 }, options: { reason?: SalesCatalogHumanInterventionIssueReason } = {}): Promise<OutboundMessage> {
   const isPixCodeMissing = options.reason === "pix_code_missing";
+  const providerLabel = input.payment.providerLabel || "gateway de pagamento";
   const messageText = [
     isPixCodeMissing
       ? "Pedido registrado, mas nao consegui gerar o codigo Pix agora."
       : "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
-    "Vou chamar uma pessoa do time para ajustar o PagBank e te passar o proximo passo por aqui.",
+    `Vou chamar uma pessoa do time para ajustar o ${providerLabel} e te passar o proximo passo por aqui.`,
   ].join("\n");
   const textProviderResponse = await sendWhatsappText({
     credentials: input.context.credentials,
@@ -9969,6 +10167,7 @@ function formatSalesCatalogWhatsappPaymentAmount(value: string | number | null |
 }
 
 function formatSalesCatalogRuntimePaymentProviderLabel(provider: string | null | undefined) {
+  if (provider === "asaas") return "Asaas";
   return provider === "mercado_pago" ? "Mercado Pago" : "PagBank";
 }
 

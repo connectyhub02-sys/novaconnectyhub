@@ -631,6 +631,47 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     ],
   },
   {
+    id: "asaas",
+    name: "Asaas / Checkout WhatsApp",
+    sector: "Pagamentos no WhatsApp",
+    owner: "Setor Financeiro IA",
+    description:
+      "Gateway recomendado para contas PF ou PJ dos clientes. Cada empresa conecta sua propria API Key no painel; a ConnectyHub mantem somente link indicado e parametros operacionais.",
+    tone: "green",
+    modules: ["Link indicado", "API Key por empresa", "Pix WhatsApp", "Checkout cartao", "Webhooks"],
+    fields: [
+      {
+        label: "Link indicado Asaas",
+        env: "ASAAS_AFFILIATE_URL",
+        aliases: ["NEXT_PUBLIC_ASAAS_AFFILIATE_URL"],
+        kind: "endpoint",
+        requirement: "recommended",
+        help: "URL de indicacao/parceria usada no botao Nao tenho conta. Pode receber UTM e company_id.",
+      },
+      {
+        label: "E-mail de alerta webhook",
+        env: "ASAAS_WEBHOOK_ALERT_EMAIL",
+        kind: "identifier",
+        requirement: "recommended",
+        help: "E-mail usado ao provisionar webhooks Asaas nas contas dos clientes. Se vazio, usa o suporte padrao.",
+      },
+      {
+        label: "API base Asaas",
+        env: "ASAAS_API_BASE_URL",
+        kind: "endpoint",
+        requirement: "optional",
+        help: "Opcional. Sobrescreve a API Asaas de producao em homologacao ou ambiente especifico.",
+      },
+      {
+        label: "API base sandbox Asaas",
+        env: "ASAAS_SANDBOX_API_BASE_URL",
+        kind: "endpoint",
+        requirement: "optional",
+        help: "Opcional. Sobrescreve a API Asaas sandbox quando a conexao da empresa estiver em modo teste.",
+      },
+    ],
+  },
+  {
     id: "pagbank",
     name: "PagBank / Checkout WhatsApp",
     sector: "Pagamentos no WhatsApp",

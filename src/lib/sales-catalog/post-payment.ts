@@ -94,7 +94,7 @@ type ResponsibleWhatsappDelivery = {
 };
 
 type SalesCatalogPaymentStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
-type SalesCatalogPostPaymentSource = "mercado_pago_webhook" | "pagbank_webhook" | "checkout_card";
+type SalesCatalogPostPaymentSource = "mercado_pago_webhook" | "pagbank_webhook" | "asaas_webhook" | "checkout_card";
 type SalesCatalogPaymentNotificationStatus = "pending" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
 
 export async function handleSalesCatalogPaymentStatusChange(input: {

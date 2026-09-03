@@ -227,7 +227,7 @@ export default async function CheckoutPage({
         catalogSettings?.pagBank.enabledMethods.includes("credit_card") ? "CREDIT_CARD" : null,
         catalogSettings?.pagBank.enabledMethods.includes("debit_card") ? "DEBIT_CARD" : null,
       ].filter((method): method is "CREDIT_CARD" | "DEBIT_CARD" => Boolean(method));
-  const paymentProvider = session.provider === "pagbank" ? "pagbank" : "mercado_pago";
+  const paymentProvider = session.provider === "asaas" ? "asaas" : session.provider === "pagbank" ? "pagbank" : "mercado_pago";
   const canUseMercadoPagoCard = session.method !== "card"
     && session.provider === "mercado_pago"
     && !shippingBlocked
@@ -1004,6 +1004,7 @@ function normalizePaymentSessionStatus(value: string | null) {
 }
 
 function formatCheckoutPaymentProviderLabel(provider: string | null) {
+  if (provider === "asaas") return "Asaas";
   return provider === "pagbank" ? "PagBank" : "Mercado Pago";
 }
 
@@ -1253,8 +1254,9 @@ function CheckoutPaymentBadge({ label, tone }: { label: string; tone: CheckoutPa
         tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
         tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
         tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
+        tone === "provider" && label === "Asaas" && "border-emerald-200/70 bg-emerald-500 text-white",
         tone === "provider" && label === "PagBank" && "border-[#ffe082]/60 bg-[#f7c331] text-slate-950",
-        tone === "provider" && label !== "PagBank" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+        tone === "provider" && label !== "Asaas" && label !== "PagBank" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
       )}
     >
       {label}

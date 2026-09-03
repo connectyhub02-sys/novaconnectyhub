@@ -18,7 +18,7 @@ type CheckoutPaymentOptionsProps = {
   amount: number;
   payerEmail: string | null;
   payerPhone: string | null;
-  paymentProvider: "mercado_pago" | "pagbank";
+  paymentProvider: "mercado_pago" | "pagbank" | "asaas";
   canUsePix: boolean;
   canUseCard: boolean;
   cardPublicKey: string | null;

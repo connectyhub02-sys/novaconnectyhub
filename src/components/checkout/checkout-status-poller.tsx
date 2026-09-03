@@ -116,6 +116,7 @@ export function CheckoutStatusPoller({
 }
 
 function formatProviderLabel(provider: string | null | undefined) {
+  if (provider === "asaas") return "Asaas";
   if (provider === "pagbank") return "PagBank";
   if (provider === "mercado_pago") return "Mercado Pago";
   return null;

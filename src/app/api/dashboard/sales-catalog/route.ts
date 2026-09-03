@@ -88,6 +88,7 @@ import {
   buildMercadoPagoWebhookUrl,
   isMercadoPagoTestTokenEnabled,
 } from "@/lib/sales-catalog/mercado-pago";
+import { disconnectAsaasPaymentIntegration } from "@/lib/sales-catalog/asaas";
 import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/category-icons";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
@@ -829,6 +830,19 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
 
     if (action === "disconnect_pagbank") {
       const result = await disconnectPagBankIntegration({
+        client,
+        companyId,
+        userId: workspace.user.id,
+      });
+
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/integracoes");
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "disconnect_asaas") {
+      const result = await disconnectAsaasIntegration({
         client,
         companyId,
         userId: workspace.user.id,
@@ -1803,6 +1817,25 @@ async function disconnectPagBankIntegration(input: {
   }
 
   return { integration: mapSalesCatalogPaymentIntegration(data) };
+}
+
+async function disconnectAsaasIntegration(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const data = await disconnectAsaasPaymentIntegration({
+    client: input.client,
+    organizationId: company.id,
+    actorId: input.userId,
+  });
+
+  return { integration: mapSalesCatalogPaymentIntegration(data as SalesCatalogPaymentIntegrationRow) };
 }
 
 async function createPaymentSession(input: {

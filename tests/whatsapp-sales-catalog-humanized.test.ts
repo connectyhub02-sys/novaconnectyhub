@@ -183,8 +183,12 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
     expect(paymentSender).toContain("pix_code_missing");
     expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment");
+    expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerEmailBeforePayment");
+    expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment");
     expect(paymentSender).toContain("Antes de gerar o pagamento, preciso confirmar seus dados do pedido.");
-    expect(paymentSender).toContain("nome completo e o ");
+    expect(paymentSender).toContain("nome completo");
+    expect(paymentSender).toContain("e-mail");
+    expect(paymentSender).toContain("CPF ou CNPJ");
     expect(paymentSender).toContain("endereco completo com rua, numero, bairro, cidade, CEP");
     expect(paymentSender).not.toContain("Se for entrega por frete");
     expect(paymentSender).not.toContain("confirmar a forma de entrega desse pedido");

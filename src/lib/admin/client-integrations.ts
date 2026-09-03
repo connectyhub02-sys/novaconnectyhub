@@ -6,7 +6,7 @@ import {
 } from "@/lib/sales-catalog/pagbank";
 import { createServiceClient } from "@/lib/supabase/service";
 
-const providerIds = ["meta-ads", "google-growth", "pagbank", "webhook-universal"] as const;
+const providerIds = ["meta-ads", "google-growth", "asaas", "pagbank", "webhook-universal"] as const;
 
 export type AdminClientIntegrationProviderId = (typeof providerIds)[number];
 export type AdminClientIntegrationStatus = "connected" | "warning" | "error" | "not_configured";
@@ -219,6 +219,7 @@ type QueryResult<T> = {
 const providerLabels: Record<AdminClientIntegrationProviderId, string> = {
   "meta-ads": "Meta Ads",
   "google-growth": "Google Ads",
+  "asaas": "Asaas",
   "pagbank": "PagBank",
   "webhook-universal": "Webhook Universal",
 };
@@ -226,6 +227,7 @@ const providerLabels: Record<AdminClientIntegrationProviderId, string> = {
 const providerCustomerRoutes: Record<AdminClientIntegrationProviderId, { href: string; label: string }> = {
   "meta-ads": { href: "/dashboard/integracoes", label: "Rota do cliente" },
   "google-growth": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+  "asaas": { href: "/dashboard/integracoes", label: "Rota do cliente" },
   "pagbank": { href: "/dashboard/integracoes", label: "Rota do cliente" },
   "webhook-universal": { href: "/dashboard/integracoes", label: "Rota do cliente" },
 };
@@ -514,7 +516,7 @@ async function loadPaymentIntegrations(
     .from("sales_catalog_payment_integrations")
     .select("id, organization_id, provider, status, account_label, provider_account_id, connected_at, last_error, webhook_url, token_scope, created_at, updated_at")
     .in("organization_id", organizationIds)
-    .eq("provider", "pagbank");
+    .in("provider", ["asaas", "pagbank"]);
 
   if (error) {
     return { ready: false, rows: [], error: `sales_catalog_payment_integrations: ${error.message}` };
@@ -564,6 +566,10 @@ function buildProviderStatus({
 
   if (providerId === "pagbank") {
     return buildPagBankStatus(payments);
+  }
+
+  if (providerId === "asaas") {
+    return buildAsaasStatus(payments);
   }
 
   return buildWebhookStatus(integrations, webhooks);
@@ -685,7 +691,7 @@ function buildGoogleStatus(integrations: OrganizationIntegrationRow[], credentia
 }
 
 function buildPagBankStatus(payments: PaymentIntegrationRow[]): AdminClientProviderStatus {
-  const payment = latestPayment(payments);
+  const payment = latestPayment(payments.filter((item) => item.provider === "pagbank"));
   const account = payment?.account_label ?? payment?.provider_account_id ?? null;
   const lastActivityAt = mostRecentDate([
     payment?.connected_at ?? null,
@@ -713,6 +719,34 @@ function buildPagBankStatus(payments: PaymentIntegrationRow[]): AdminClientProvi
   }
 
   return providerStatus("pagbank", "not_configured", null, "Sem conta PagBank conectada.");
+}
+
+function buildAsaasStatus(payments: PaymentIntegrationRow[]): AdminClientProviderStatus {
+  const payment = latestPayment(payments.filter((item) => item.provider === "asaas"));
+  const account = payment?.account_label ?? payment?.provider_account_id ?? null;
+  const lastActivityAt = mostRecentDate([
+    payment?.connected_at ?? null,
+    payment?.updated_at ?? null,
+    payment?.created_at ?? null,
+  ]);
+
+  if (payment?.last_error || payment?.status === "error") {
+    return providerStatus("asaas", "error", account, payment.last_error ?? "Asaas retornou erro.", lastActivityAt);
+  }
+
+  if (payment?.status === "connected") {
+    const detail = payment.webhook_url
+      ? "Conta Asaas e webhook mapeados."
+      : "Conta Asaas conectada. Webhook pendente.";
+    const status = payment.webhook_url ? "connected" : "warning";
+    return providerStatus("asaas", status, account, detail, lastActivityAt);
+  }
+
+  if (payment) {
+    return providerStatus("asaas", "warning", account, `Status atual: ${payment.status ?? "pendente"}.`, lastActivityAt);
+  }
+
+  return providerStatus("asaas", "not_configured", null, "Sem conta Asaas conectada.");
 }
 
 function buildWebhookStatus(integrations: OrganizationIntegrationRow[], webhooks: WebhookEndpointRow[]): AdminClientProviderStatus {
@@ -1095,6 +1129,7 @@ function normalizeProviderId(
     if (isProviderId(candidate)) return candidate;
     if (candidate === "meta") return "meta-ads";
     if (candidate === "google-ads" || candidate === "google") return "google-growth";
+    if (candidate === "asaas") return "asaas";
     if (candidate === "pagbank" || candidate === "pag_bank") return "pagbank";
     if (candidate === "webhook") return "webhook-universal";
   }

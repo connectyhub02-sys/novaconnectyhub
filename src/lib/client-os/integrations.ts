@@ -205,6 +205,21 @@ const clientCredentialDefinitions = buildClientCredentialDefinitions();
 
 const integrationProviders: ClientIntegrationProvider[] = [
   {
+    id: "asaas",
+    name: "Asaas",
+    category: "payments",
+    status: "active",
+    mode: "external",
+    headline: "Pix no WhatsApp e checkout de cartao",
+    summary: "Conecte a API Key da conta Asaas da empresa; o link indicado fica separado para abertura de conta.",
+    phase: "Gateway recomendado",
+    primaryUse: "Gerar Pix copia e cola dentro do WhatsApp, enviar checkout rastreado para cartao e atualizar pedidos por webhook.",
+    actionLabel: "Conectar Asaas",
+    actionHref: null,
+    items: ["Pix WhatsApp", "API Key", "Checkout cartao", "Afiliado"],
+    metrics: ["pagamentos", "aprovados", "pendentes", "erros"],
+  },
+  {
     id: "pagbank",
     name: "PagBank",
     category: "payments",
@@ -332,6 +347,7 @@ export async function getClientIntegrationHub(input: {
   ]);
 
   const connections = attachGrowthAssetSummaries([
+    ...buildAsaasConnections(companies, paymentIntegrations),
     ...buildPagBankConnections(companies, paymentIntegrations),
     ...buildGenericConnections(companies, genericResult.rows),
     ...buildFallbackConnections(companies, genericResult.rows, webhookResult.rows),
@@ -340,7 +356,7 @@ export async function getClientIntegrationHub(input: {
 
   return {
     schemaReady,
-    schemaMessage: schemaReady ? null : "As migrations 0028, 0045 e 0068 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal, PagBank e assets Meta/Google normalizados.",
+    schemaMessage: schemaReady ? null : "As migrations 0028, 0045, 0068 e 0073 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal, PagBank, Asaas e assets Meta/Google normalizados.",
     appBaseUrl: resolveAppBaseUrl(),
     companies,
     selectedCompanyId,
@@ -370,6 +386,51 @@ function resolveSelectedCompanyId(companies: ClientCompany[], preferred?: string
   }
 
   return companies[0]?.id ?? null;
+}
+
+function buildAsaasConnections(
+  companies: ClientCompany[],
+  integrations: ClientSalesCatalogPaymentIntegration[],
+): ClientIntegrationConnection[] {
+  return companies.map((company) => {
+    const integration = integrations.find((item) => item.companyId === company.id && item.provider === "asaas");
+
+    if (!integration) {
+      return {
+        providerId: "asaas",
+        companyId: company.id,
+        companyName: company.name,
+        status: "not_configured",
+        label: "Aguardando conexao",
+        detail: "Conecte Asaas para liberar Pix no WhatsApp e checkout de cartao no Catalogo de Vendas.",
+        accountLabel: null,
+        lastSyncAt: null,
+        lastError: null,
+        managementHref: "/dashboard/integracoes",
+        metadata: {},
+      };
+    }
+
+    return {
+      providerId: "asaas",
+      companyId: company.id,
+      companyName: company.name,
+      status: mapPaymentStatus(integration.status),
+      label: formatPaymentStatus(integration.status),
+      detail: integration.connectedAt
+        ? `Conectado em ${formatDateTime(integration.connectedAt)}`
+        : "API Key Asaas registrada para esta empresa.",
+      accountLabel: integration.accountLabel ?? integration.providerAccountId,
+      lastSyncAt: integration.updatedAt ?? integration.connectedAt,
+      lastError: integration.lastError,
+      managementHref: "/dashboard/integracoes",
+      metadata: {
+        has_access_token: integration.hasAccessToken,
+        has_webhook_secret: integration.hasWebhookSecret,
+        webhook_url: integration.webhookUrl,
+      },
+    };
+  });
 }
 
 function buildPagBankConnections(
@@ -478,7 +539,7 @@ function buildFallbackConnections(
     for (const provider of integrationProviders) {
       const key = `${company.id}:${provider.id}`;
 
-      if (provider.id === "pagbank" || existing.has(key)) {
+      if (provider.id === "asaas" || provider.id === "pagbank" || existing.has(key)) {
         continue;
       }
 

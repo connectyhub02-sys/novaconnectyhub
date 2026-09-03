@@ -19,7 +19,7 @@ export type SalesCatalogFulfillmentStatus = "pending" | "scheduled" | "in_progre
 export type SalesCatalogSkuStatus = "active" | "draft" | "archived";
 export type SalesCatalogBillingCycle = "one_time" | "recurring";
 export type SalesCatalogBillingInterval = "week" | "month" | "quarter" | "year";
-export type SalesCatalogPaymentProvider = "mercado_pago" | "pagbank";
+export type SalesCatalogPaymentProvider = "mercado_pago" | "pagbank" | "asaas";
 export type SalesCatalogPaymentIntegrationStatus = "pending" | "connected" | "disabled" | "error";
 export type SalesCatalogPaymentIntegrationMode = "production" | "sandbox";
 export type SalesCatalogPaymentSessionMethod = "pix" | "card" | "checkout_link";
@@ -804,7 +804,7 @@ export const salesCatalogPaymentMethodTemplates: SalesCatalogPaymentMethod[] = [
     id: "pix",
     label: "Pix",
     enabled: true,
-    instructions: "Gerar Pix automatico PagBank, enviar copia-e-cola no WhatsApp e acompanhar confirmacao por webhook.",
+    instructions: "Gerar Pix automatico no gateway conectado, enviar copia-e-cola no WhatsApp e acompanhar confirmacao por webhook.",
     requiresProof: false,
   },
   {
