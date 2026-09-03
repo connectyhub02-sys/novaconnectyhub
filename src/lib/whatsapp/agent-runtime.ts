@@ -6268,16 +6268,27 @@ async function sendAgentResponse(input: {
         selections: checkoutOrderSelections,
       });
   const shouldWaitForPaymentMethodChoice = Boolean(paymentMethodChoicePrompt);
+  const shouldUseControlledPaymentStepText = shouldUseSalesCatalogControlledPaymentStepText({
+    hasOrderIntent,
+    hasConfirmedCheckoutIntent,
+    shouldRequestCheckoutConfirmation,
+    shouldWaitForPaymentMethodChoice,
+    selections: checkoutOrderSelections,
+  });
   const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
   const deliveryText = shouldRequestCheckoutConfirmation
     ? buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)
-    : paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText({
-        text: cleanText,
-        items: deliveryCatalogItems,
-        hasOrderIntent,
-      });
+    : paymentMethodChoicePrompt ?? (
+        shouldUseControlledPaymentStepText
+          ? buildSalesCatalogControlledPaymentStepText()
+          : prepareSalesCatalogDeliveryText({
+              text: cleanText,
+              items: deliveryCatalogItems,
+              hasOrderIntent,
+            })
+      );
   const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
     && !shouldWaitForPaymentMethodChoice
     && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
@@ -7508,6 +7519,24 @@ function buildSalesCatalogPaymentMethodChoicePrompt(input: {
   ].filter(Boolean).join("\n");
 }
 
+function shouldUseSalesCatalogControlledPaymentStepText(input: {
+  hasOrderIntent: boolean;
+  hasConfirmedCheckoutIntent: boolean;
+  shouldRequestCheckoutConfirmation: boolean;
+  shouldWaitForPaymentMethodChoice: boolean;
+  selections: RuntimeSalesCatalogOrderSelection[];
+}) {
+  return input.hasOrderIntent
+    && input.hasConfirmedCheckoutIntent
+    && input.selections.length > 0
+    && !input.shouldRequestCheckoutConfirmation
+    && !input.shouldWaitForPaymentMethodChoice;
+}
+
+function buildSalesCatalogControlledPaymentStepText() {
+  return "Perfeito, pedido confirmado. Vou seguir com o proximo passo do pagamento usando os dados do pedido.";
+}
+
 function shouldWaitForSalesCatalogPaymentMethodChoice(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   hasConfirmedCheckoutIntent: boolean;
@@ -7581,14 +7610,7 @@ function resolveSalesCatalogConfirmedPaymentPreference(
   return choices.length === 1 ? choices[0].preference : null;
 }
 
-function isSalesCatalogRuntimePaymentPreferenceEnabled(
-  choices: SalesCatalogRuntimePaymentChoice[],
-  preference: SalesCatalogRuntimePaymentPreference,
-) {
-  return choices.some((choice) => choice.preference === preference);
-}
-
-function buildRecentSalesCatalogPaymentMethodMemoryText(
+function buildRecentSalesCatalogCheckoutInboundMemoryText(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
@@ -7625,6 +7647,20 @@ function buildRecentSalesCatalogPaymentMethodMemoryText(
     .map((message) => message.text_content?.trim())
     .filter(Boolean)
     .join("\n");
+}
+
+function isSalesCatalogRuntimePaymentPreferenceEnabled(
+  choices: SalesCatalogRuntimePaymentChoice[],
+  preference: SalesCatalogRuntimePaymentPreference,
+) {
+  return choices.some((choice) => choice.preference === preference);
+}
+
+function buildRecentSalesCatalogPaymentMethodMemoryText(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return buildRecentSalesCatalogCheckoutInboundMemoryText(messages, latestInbound);
 }
 
 function buildSalesCatalogOrderPreviewItem(selection: RuntimeSalesCatalogOrderSelection) {
@@ -7737,7 +7773,7 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
   }
 
   return (
-    /^(?:sim|s|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos)\b/.test(normalized)
+    /^(?:sim|s|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
     || /\b(?:pode fechar|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
     || /^(?:pix|cartao|credito|debito|card)\b/.test(normalized)
     || /\b(?:vou pagar|quero pagar|pago|pagamento)\b.{0,40}\b(?:pix|cartao|credito|debito|card)\b/.test(normalized)
@@ -7755,6 +7791,10 @@ function isSalesCatalogCheckoutConfirmationPreviewText(text: string) {
     return false;
   }
 
+  if (isSalesCatalogOrderPreviewHeaderText(normalized)) {
+    return true;
+  }
+
   const asksToConfirm = (
     /\bantes de fechar\b.{0,80}\bpedido\b/.test(normalized)
     || /\bconfirma(?:r|cao)?\b.{0,80}\b(?:pedido|produto|produtos|itens|total)\b/.test(normalized)
@@ -7763,6 +7803,15 @@ function isSalesCatalogCheckoutConfirmationPreviewText(text: string) {
   const hasOrderPreview = /\b(?:pedido|produto|produtos|itens|total|valor|r\$)\b/.test(normalized);
 
   return asksToConfirm && hasOrderPreview;
+}
+
+function isSalesCatalogOrderPreviewHeaderText(normalizedText: string) {
+  return (
+    /\bprevia\b.{0,100}\bpedido\b/.test(normalizedText)
+    || /\bpedido\b.{0,80}\bficou assim\b/.test(normalizedText)
+    || /\bresumo\b.{0,100}\bpedido\b/.test(normalizedText)
+    || /\bpedido\b.{0,80}\batualizado\b.{0,80}\bficou assim\b/.test(normalizedText)
+  );
 }
 
 function isSalesCatalogMessageOutsideCartWindow(message: ConversationMessageRow, latestInboundMs: number) {
@@ -8179,10 +8228,15 @@ async function recordSalesCatalogOrderIntent(input: {
       : "client_direct";
     const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
     const commissionEligible = items.some((item) => item.commissionEligible);
+    const checkoutInboundMemoryText = buildRecentSalesCatalogCheckoutInboundMemoryText(
+      input.context.messages,
+      findLatestInbound(input.context.messages),
+    );
+    const shippingIntentText = [intentText, checkoutInboundMemoryText].filter(Boolean).join("\n");
     const initialShipping = resolveInitialSalesCatalogOrderShipping({
       context: input.context,
       selections: orderSelections,
-      intentText,
+      intentText: shippingIntentText,
     });
     const payableTotal = initialShipping
       ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total

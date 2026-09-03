@@ -102,6 +102,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("const confirmationPreviewText = confirmedCheckoutIntent");
     expect(checkoutRuntime).toContain("if (confirmationPreviewText)");
     expect(checkoutRuntime).toContain("\"confirmation_preview\",");
+    expect(runtimeSource).toContain("isSalesCatalogOrderPreviewHeaderText");
+    expect(runtimeSource).toContain("top|perfeito|show|beleza|blz|combinado");
+    expect(runtimeSource).toContain("\\bprevia\\b.{0,100}\\bpedido\\b");
   });
 
   it("does not treat package size as a purchased quantity", () => {
@@ -129,14 +132,21 @@ describe("WhatsApp sales catalog humanized replies", () => {
 
     expect(delivery).toContain("paymentMethodChoicePrompt");
     expect(delivery).toContain("shouldWaitForPaymentMethodChoice");
-    expect(delivery).toContain("paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText");
+    expect(delivery).toContain("shouldUseControlledPaymentStepText");
+    expect(delivery).toContain("paymentMethodChoicePrompt ?? (");
+    expect(delivery).toContain("buildSalesCatalogControlledPaymentStepText()");
     expect(delivery).toContain("shouldWaitForPaymentMethodChoice\n      ? null\n      : await recordSalesCatalogOrderIntent");
     expect(checkoutRuntime).toContain("function buildSalesCatalogPaymentMethodChoicePrompt");
+    expect(checkoutRuntime).toContain("function shouldUseSalesCatalogControlledPaymentStepText");
     expect(checkoutRuntime).toContain("Qual forma de pagamento voce prefere");
     expect(checkoutRuntime).toContain("No Pix eu gero o copia e cola por aqui");
+    expect(checkoutRuntime).toContain("Vou seguir com o proximo passo do pagamento usando os dados do pedido");
     expect(checkoutRuntime).toContain("getEnabledSalesCatalogRuntimePaymentChoices");
     expect(orderRecorder).toContain("resolveSalesCatalogConfirmedPaymentPreference");
     expect(orderRecorder).toContain("getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings).length > 1");
+    expect(orderRecorder).toContain("buildRecentSalesCatalogCheckoutInboundMemoryText");
+    expect(orderRecorder).toContain("shippingIntentText");
+    expect(orderRecorder).toContain("resolveInitialSalesCatalogOrderShipping");
   });
 
   it("sends checkout links only when payment needs the checkout surface", () => {
