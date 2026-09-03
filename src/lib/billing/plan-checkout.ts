@@ -5,7 +5,7 @@ import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/merc
 import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpMedia } from "./plan-checkout-catalog";
 
 export type JsonRecord = Record<string, unknown>;
-export type BillingCheckoutProvider = "mercado_pago" | "pagbank";
+export type BillingCheckoutProvider = "mercado_pago" | "pagbank" | "asaas";
 export type BillingCheckoutKind = "initial" | "renewal" | "plan_change";
 export type BillingProductBillingCycle = "one_time" | "recurring";
 export type BillingProductBillingInterval = "week" | "month" | "quarter" | "year";
@@ -435,7 +435,12 @@ function normalizeBillingCheckoutKind(value: unknown): BillingCheckoutKind {
 }
 
 function normalizeBillingCheckoutProvider(value: unknown): BillingCheckoutProvider {
-  return readString(value) === "mercado_pago" ? "mercado_pago" : "pagbank";
+  const provider = readString(value);
+  if (provider === "mercado_pago" || provider === "pagbank" || provider === "asaas") {
+    return provider;
+  }
+
+  return "asaas";
 }
 
 export function formatBillingCheckoutDescription(intent: BillingCheckoutIntent, selectedBumps: BillingCheckoutBump[]) {

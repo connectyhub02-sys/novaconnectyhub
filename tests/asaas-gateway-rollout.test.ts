@@ -2,9 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationSource = read("supabase/migrations/0073_asaas_payment_gateway.sql");
+const platformBillingMigrationSource = read("supabase/migrations/0075_asaas_platform_billing.sql");
 const tokenAuditMigrationSource = read("supabase/migrations/0074_sales_catalog_payment_integration_token_audit.sql");
 const asaasGatewaySource = read("src/lib/sales-catalog/asaas.ts");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
+const billingCardRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/card/route.ts");
+const platformBillingWebhookRouteSource = read("src/app/api/webhooks/asaas/platform-billing/route.ts");
+const platformBillingWebhookSource = read("src/lib/billing/platform-billing-webhook.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
 const webhookSource = read("src/app/api/webhooks/asaas/route.ts");
@@ -42,8 +46,11 @@ describe("Asaas gateway rollout", () => {
     expect(asaasGatewaySource).toContain("/pixQrCode");
     expect(asaasGatewaySource).toContain("endpoint: \"/checkouts\"");
     expect(asaasGatewaySource).toContain("maxInstallmentCount");
-    expect(asaasGatewaySource).toContain("chargeTypes: maxInstallmentCount > 1 ? [\"DETACHED\", \"INSTALLMENT\"] : [\"DETACHED\"]");
+    expect(asaasGatewaySource).toContain("normalizeAsaasCheckoutChargeTypes(input.chargeTypes, maxInstallmentCount)");
+    expect(asaasGatewaySource).toContain("chargeTypes.includes(\"INSTALLMENT\")");
+    expect(asaasGatewaySource).toContain("chargeTypes.includes(\"RECURRENT\")");
     expect(asaasGatewaySource).toContain("installment: { maxInstallmentCount }");
+    expect(asaasGatewaySource).toContain("subscription: buildAsaasCheckoutSubscription(input.subscription)");
     expect(asaasGatewaySource).toContain("endpoint: \"/webhooks\"");
     expect(asaasGatewaySource).toContain("/webhooks?limit=100&offset=");
     expect(asaasGatewaySource).toContain("method: \"PUT\"");
@@ -134,11 +141,31 @@ describe("Asaas gateway rollout", () => {
     expect(envExampleSource).toContain("ASAAS_PLATFORM_ACCOUNT_ID=");
     expect(envExampleSource).toContain("ASAAS_AFFILIATE_URL=");
     expect(envExampleSource).toContain("ASAAS_WEBHOOK_ALERT_EMAIL=");
+    expect(envExampleSource).toContain("ASAAS_PLATFORM_WEBHOOK_URL=");
+    expect(envExampleSource).toContain("ASAAS_PLATFORM_WEBHOOK_TOKEN=");
     expect(asaasGatewaySource).toContain("resolveAsaasAffiliateLandingUrl");
     expect(asaasGatewaySource).toContain("loadAsaasPlatformCredential");
     expect(asaasGatewaySource).toContain(".eq(\"integration_id\", asaasPlatformIntegrationId)");
     expect(asaasGatewaySource).toContain("configuredUrl");
     expect(asaasAffiliateRouteSource).toContain("createServiceClient");
     expect(asaasAffiliateRouteSource).toContain("resolveAsaasAffiliateLandingUrl");
+  });
+
+  it("uses Asaas as the default ConnectyHub plan billing provider with recurring checkout webhooks", () => {
+    expect(platformBillingMigrationSource).toContain("recurring_provider in ('mercado_pago', 'pagbank', 'asaas')");
+    expect(platformBillingMigrationSource).toContain("recurring_provider = 'asaas'");
+    expect(platformBillingMigrationSource).toContain("alter column billing_provider set default 'asaas'");
+    expect(platformBillingMigrationSource).toContain("'asaas-billing'");
+    expect(asaasGatewaySource).toContain("ensureAsaasPlatformBillingWebhook");
+    expect(asaasGatewaySource).toContain("asaasPlatformBillingWebhookEvents");
+    expect(asaasGatewaySource).toContain("ASAAS_PLATFORM_WEBHOOK_TOKEN");
+    expect(billingCardRouteSource).toContain("chargeTypes: [\"RECURRENT\"]");
+    expect(billingCardRouteSource).toContain("buildAsaasPlatformBillingReturnUrl");
+    expect(billingCardRouteSource).toContain("asaas_recurring_checkout");
+    expect(platformBillingWebhookSource).toContain("processPlatformBillingAsaasWebhook");
+    expect(platformBillingWebhookSource).toContain("provider: \"asaas\"");
+    expect(existsSync("src/app/api/webhooks/asaas/platform-billing/route.ts")).toBe(true);
+    expect(platformBillingWebhookRouteSource).toContain("asaas-access-token");
+    expect(platformBillingWebhookRouteSource).toContain("billing.asaas.webhook");
   });
 });

@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendPlatformBillingOperationalTest } from "@/lib/billing/platform-billing-webhook";
+import { loadAsaasPlatformBillingConfig } from "@/lib/sales-catalog/asaas";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { loadPagBankPlatformBillingConfig } from "@/lib/sales-catalog/pagbank";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
@@ -137,7 +138,7 @@ async function getPlatformBillingOperationalHealth(client: SupabaseClient) {
       key: "settings",
       label: "Configuracao de cobranca",
       status: "ok",
-      detail: `Checkout ${settingsResult.data.checkout_mode ?? "subscription"} com Pix Automatico ${settingsResult.data.pix_automatic_required === false ? "opcional" : "obrigatorio"}.`,
+      detail: `Checkout ${settingsResult.data.checkout_mode ?? "subscription"} com provedor ${formatBillingProviderLabel(settingsResult.data.recurring_provider)}.`,
     });
   }
 
@@ -178,21 +179,31 @@ async function getPlatformBillingOperationalHealth(client: SupabaseClient) {
     }
   }
 
-  const billingProvider = settings?.recurring_provider === "mercado_pago" ? "mercado_pago" : "pagbank";
+  const billingProvider = settings?.recurring_provider === "mercado_pago"
+    ? "mercado_pago"
+    : settings?.recurring_provider === "pagbank"
+      ? "pagbank"
+      : "asaas";
 
   try {
-    const config = billingProvider === "pagbank"
+    const config = billingProvider === "asaas"
+      ? await loadAsaasPlatformBillingConfig({ client })
+      : billingProvider === "pagbank"
       ? await loadPagBankPlatformBillingConfig({ client })
       : await loadMercadoPagoPlatformBillingConfig({ client });
-    const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
+    const providerLabel = formatBillingProviderLabel(billingProvider);
+    const asaasWebhookReady = billingProvider !== "asaas"
+      || Boolean((config as { webhookSecret?: string | null }).webhookSecret);
     checks.push({
       key: billingProvider,
       label: `${providerLabel} billing`,
-      status: "ok",
-      detail: `Credenciais carregadas em modo ${config.mode}.`,
+      status: asaasWebhookReady ? "ok" : "warning",
+      detail: billingProvider === "asaas" && !asaasWebhookReady
+        ? `Credenciais carregadas em modo ${config.mode}, mas falta ASAAS_PLATFORM_WEBHOOK_TOKEN para confirmar assinaturas automaticamente.`
+        : `Credenciais carregadas em modo ${config.mode}.`,
     });
   } catch (error) {
-    const providerLabel = billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
+    const providerLabel = formatBillingProviderLabel(billingProvider);
     checks.push({
       key: billingProvider,
       label: `${providerLabel} billing`,
@@ -263,6 +274,12 @@ async function loadSelectedAgentInstance(client: SupabaseClient, agentId: string
   }
 
   return { ok: true as const, instance: data ?? null };
+}
+
+function formatBillingProviderLabel(provider: string | null | undefined) {
+  if (provider === "asaas") return "Asaas";
+  if (provider === "pagbank") return "PagBank";
+  return "Mercado Pago";
 }
 
 function readRecord(value: unknown): JsonRecord | null {

@@ -183,7 +183,11 @@ async function loadCurrentSettingsState(client: SupabaseClient) {
 
   return {
     metadata: data?.metadata ?? {},
-    recurringProvider: data?.recurring_provider === "pagbank" ? "pagbank" : "mercado_pago",
+    recurringProvider: data?.recurring_provider === "mercado_pago"
+      ? "mercado_pago"
+      : data?.recurring_provider === "pagbank"
+        ? "pagbank"
+        : "asaas",
   };
 }
 

@@ -8,6 +8,7 @@ import {
   type BillingCheckoutIntent,
 } from "@/lib/billing/plan-checkout";
 import {
+  processPlatformBillingAsaasWebhook,
   processPlatformBillingMercadoPagoWebhook,
   processPlatformBillingPagBankWebhook,
 } from "@/lib/billing/platform-billing-webhook";
@@ -47,9 +48,11 @@ export async function GET(
       reason: string | null;
     } | null = null;
 
-    if (providerPaymentId && shouldReconcileProviderPayment(intent)) {
+    if (providerPaymentId && shouldReconcileProviderPayment(intent) && !shouldSkipHostedAsaasCheckoutPoll(intent, providerPaymentId)) {
       const provider = resolveBillingCheckoutProvider(intent);
-      const processor = provider === "pagbank"
+      const processor = provider === "asaas"
+        ? processPlatformBillingAsaasWebhook
+        : provider === "pagbank"
         ? processPlatformBillingPagBankWebhook
         : processPlatformBillingMercadoPagoWebhook;
       const result = await processor(client, {
@@ -109,10 +112,27 @@ export async function GET(
 
 function shouldReconcileProviderPayment(intent: BillingCheckoutIntent) {
   if (isCheckoutConfirmed(intent)) return false;
+  const providerStatus = intent.payment.provider_status?.trim() ?? "";
+  const upperProviderStatus = providerStatus.toUpperCase();
 
   return isBillingCheckoutPayable(intent)
     || ["pending", "in_process", "rejected"].includes(intent.payment.status)
-    || ["pending", "in_process", "approved", "authorized"].includes(intent.payment.provider_status ?? "");
+    || ["pending", "in_process", "approved", "authorized"].includes(providerStatus)
+    || ["PENDING", "RECEIVED", "CONFIRMED", "CHECKOUT_PAID", "CHECKOUT_CREATED"].includes(upperProviderStatus);
+}
+
+function shouldSkipHostedAsaasCheckoutPoll(intent: BillingCheckoutIntent, providerPaymentId: string) {
+  if (resolveBillingCheckoutProvider(intent) !== "asaas") return false;
+  const asaasPaymentId = readString(intent.payment.payload?.asaas_payment_id)
+    ?? readString(intent.invoice.metadata?.asaas_payment_id)
+    ?? readString(intent.subscription.metadata?.asaas_payment_id);
+  if (asaasPaymentId) return false;
+
+  const checkoutId = readString(intent.payment.payload?.asaas_checkout_id)
+    ?? readString(intent.invoice.metadata?.asaas_checkout_id)
+    ?? readString(intent.subscription.metadata?.asaas_checkout_id);
+
+  return Boolean(checkoutId && checkoutId === providerPaymentId);
 }
 
 function isCheckoutConfirmed(intent: BillingCheckoutIntent) {
@@ -121,6 +141,17 @@ function isCheckoutConfirmed(intent: BillingCheckoutIntent) {
 }
 
 function readProviderPaymentId(intent: BillingCheckoutIntent) {
+  if (resolveBillingCheckoutProvider(intent) === "asaas") {
+    return readString(intent.payment.payload?.asaas_payment_id)
+      ?? readString(intent.invoice.metadata?.asaas_payment_id)
+      ?? readString(intent.subscription.metadata?.asaas_payment_id)
+      ?? intent.payment.provider_payment_id
+      ?? readString(intent.payment.payload?.provider_payment_id)
+      ?? readString(intent.payment.payload?.asaas_checkout_id)
+      ?? readString(intent.invoice.metadata?.asaas_checkout_id)
+      ?? readString(intent.subscription.metadata?.asaas_checkout_id);
+  }
+
   if (resolveBillingCheckoutProvider(intent) === "pagbank") {
     return readString(intent.payment.payload?.pagbank_order_id)
       ?? readString(intent.payment.payload?.provider_order_id)

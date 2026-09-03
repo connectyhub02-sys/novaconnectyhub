@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  processPlatformBillingAsaasWebhook,
   processPlatformBillingMercadoPagoWebhook,
   processPlatformBillingPagBankWebhook,
 } from "@/lib/billing/platform-billing-webhook";
@@ -16,8 +17,9 @@ type JsonRecord = Record<string, unknown>;
 type ReconcileTarget = {
   subscriptionId: string;
   organizationId: string;
-  provider: "mercado_pago" | "pagbank";
+  provider: "mercado_pago" | "pagbank" | "asaas";
   providerReferenceId: string;
+  eventType: string;
 };
 
 type SubscriptionTargetRow = {
@@ -60,12 +62,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Registro de billing nao encontrado para reconciliacao." }, { status: 404 });
     }
 
-    const processor = target.provider === "pagbank"
+    const processor = target.provider === "asaas"
+      ? processPlatformBillingAsaasWebhook
+      : target.provider === "pagbank"
       ? processPlatformBillingPagBankWebhook
       : processPlatformBillingMercadoPagoWebhook;
     const result = await processor(client, {
       dataId: target.providerReferenceId,
-      eventType: target.provider === "pagbank" ? "payment" : "subscription_preapproval",
+      eventType: target.eventType,
       action: "admin.manual_reconcile",
       providerEventId: null,
       requestId: `admin-reconcile-${Date.now()}`,
@@ -170,21 +174,35 @@ async function loadSubscriptionTarget(
     return null;
   }
 
-  const provider = payment?.provider === "mercado_pago" || data.billing_provider === "mercado_pago"
-    ? "mercado_pago"
-    : "pagbank";
-  const providerReferenceId = provider === "pagbank"
-    ? readString(payment?.payload?.pagbank_order_id)
-      ?? readString(payment?.payload?.provider_order_id)
-      ?? payment?.provider_payment_id
-      ?? readString(data.metadata?.pagbank_order_id)
-      ?? readString(data.metadata?.provider_order_id)
-    : data.provider_subscription_id;
+  const provider = normalizeBillingProvider(payment?.provider ?? data.billing_provider);
+  const asaasCheckoutId = readString(payment?.payload?.asaas_checkout_id)
+    ?? readString(data.metadata?.asaas_checkout_id);
+  const asaasPaymentId = readString(payment?.payload?.asaas_payment_id)
+    ?? (
+      provider === "asaas" && payment?.provider_payment_id && payment.provider_payment_id !== asaasCheckoutId
+        ? payment.provider_payment_id
+        : null
+    )
+    ?? readString(data.metadata?.asaas_payment_id);
+  const providerReferenceId = provider === "asaas"
+    ? asaasPaymentId
+      ?? asaasCheckoutId
+      ?? data.provider_subscription_id
+      ?? readString(data.metadata?.asaas_subscription_id)
+    : provider === "pagbank"
+      ? readString(payment?.payload?.pagbank_order_id)
+        ?? readString(payment?.payload?.provider_order_id)
+        ?? payment?.provider_payment_id
+        ?? readString(data.metadata?.pagbank_order_id)
+        ?? readString(data.metadata?.provider_order_id)
+      : data.provider_subscription_id;
 
   if (!providerReferenceId) {
-    throw new Error(provider === "pagbank"
-      ? "Pagamento sem order_id PagBank para reconciliar."
-      : "Assinatura sem provider_subscription_id do Mercado Pago.");
+    throw new Error(provider === "asaas"
+      ? "Pagamento sem payment_id, checkout_id ou subscription_id Asaas para reconciliar."
+      : provider === "pagbank"
+        ? "Pagamento sem order_id PagBank para reconciliar."
+        : "Assinatura sem provider_subscription_id do Mercado Pago.");
   }
 
   return {
@@ -192,7 +210,21 @@ async function loadSubscriptionTarget(
     organizationId: data.organization_id,
     provider,
     providerReferenceId,
+    eventType: provider === "asaas"
+      ? asaasPaymentId
+        ? "PAYMENT_UPDATED"
+        : asaasCheckoutId
+          ? "CHECKOUT_CREATED"
+          : "SUBSCRIPTION_UPDATED"
+      : provider === "pagbank"
+        ? "payment"
+        : "subscription_preapproval",
   };
+}
+
+function normalizeBillingProvider(value: string | null | undefined): ReconcileTarget["provider"] {
+  if (value === "mercado_pago" || value === "pagbank" || value === "asaas") return value;
+  return "asaas";
 }
 
 function readRecord(value: unknown): JsonRecord | null {

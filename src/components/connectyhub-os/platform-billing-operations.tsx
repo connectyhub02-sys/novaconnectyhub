@@ -99,6 +99,7 @@ export function PlatformBillingOperations({
   const selectedTestOrganizationId = testCustomers.some((customer) => customer.id === testOrganizationId)
     ? testOrganizationId
     : testCustomers[0]?.id ?? "";
+  const activeProviderLabel = catalog.mercadoPagoConnection.providerLabel;
   const canSave =
     catalog.settings.schemaReady &&
     (!draft.notificationWhatsappEnabled || Boolean(selectedAgent?.isConnected));
@@ -260,7 +261,7 @@ export function PlatformBillingOperations({
     const targetId = input.subscriptionId ?? input.paymentId ?? null;
 
     if (!targetId) {
-      setState({ tone: "error", message: "Registro sem assinatura para sincronizar com o Mercado Pago." });
+      setState({ tone: "error", message: `Registro sem assinatura para sincronizar com ${activeProviderLabel}.` });
       return;
     }
 
@@ -289,7 +290,7 @@ export function PlatformBillingOperations({
       } | null;
 
       if (!response.ok) {
-        throw new Error(data?.error ?? "Nao foi possivel sincronizar Mercado Pago.");
+        throw new Error(data?.error ?? `Nao foi possivel sincronizar ${activeProviderLabel}.`);
       }
 
       const result = data?.result;
@@ -301,15 +302,15 @@ export function PlatformBillingOperations({
         tone: activated ? "success" : result?.processingStatus === "processed" ? "warning" : "error",
         message: activated
           ? alreadyGranted
-            ? `Mercado Pago retornou ${providerStatus}. Plano ja estava creditado; registros sincronizados.`
-            : `Mercado Pago retornou ${providerStatus}. Plano ativado e creditos liberados.`
-          : result?.reason ?? `Mercado Pago retornou ${providerStatus}. Ainda nao houve ativacao do plano.`,
+            ? `${activeProviderLabel} retornou ${providerStatus}. Plano ja estava creditado; registros sincronizados.`
+            : `${activeProviderLabel} retornou ${providerStatus}. Plano ativado e creditos liberados.`
+          : result?.reason ?? `${activeProviderLabel} retornou ${providerStatus}. Ainda nao houve ativacao do plano.`,
       });
       router.refresh();
     } catch (error) {
       setState({
         tone: "error",
-        message: error instanceof Error ? error.message : "Falha ao sincronizar Mercado Pago.",
+        message: error instanceof Error ? error.message : `Falha ao sincronizar ${activeProviderLabel}.`,
       });
     } finally {
       setReconcilingId(null);
@@ -318,7 +319,7 @@ export function PlatformBillingOperations({
 
   function refundBillingPayment(payment: PlatformBillingPaymentItem) {
     if (!canRefundPayment(payment)) {
-      setState({ tone: "error", message: "Somente pagamentos aprovados com ID Mercado Pago podem ser estornados." });
+      setState({ tone: "error", message: "Somente pagamentos aprovados com ID de provedor e suporte de estorno podem ser estornados por aqui." });
       return;
     }
 
@@ -466,7 +467,7 @@ export function PlatformBillingOperations({
       <div className="mb-4 space-y-3">
         <Panel
           title="Cobranca ConnectyHub"
-          eyebrow={`${catalog.mercadoPagoConnection.providerLabel} / Pix Automatico / WhatsApp`}
+          eyebrow={`${catalog.mercadoPagoConnection.providerLabel} / Assinaturas / WhatsApp`}
           tone="amber"
           compact
           collapsible
@@ -479,7 +480,7 @@ export function PlatformBillingOperations({
                 {connectedAgents.length} agente{connectedAgents.length === 1 ? "" : "s"} online
               </NeonBadge>
               <NeonBadge tone={catalog.settings.pixAutomaticRequired ? "cyan" : "amber"}>
-                Pix Automatico
+                Checkout recorrente
               </NeonBadge>
             </div>
           }
@@ -784,8 +785,8 @@ export function PlatformBillingOperations({
 
 function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatalog }) {
   const billingProvider = catalog.mercadoPagoConnection.provider;
-  const isPagBankBilling = billingProvider === "pagbank";
-  const mappedLabel = isPagBankBilling
+  const isDirectBilling = billingProvider === "pagbank" || billingProvider === "asaas";
+  const mappedLabel = isDirectBilling
     ? `${catalog.stats.mappedPaidPlans}/3 ativos`
     : `${catalog.stats.mappedPaidPlans}/3 MP`;
 
@@ -798,11 +799,11 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
     >
       <div className="grid gap-2 md:grid-cols-3">
         {catalog.plans.map((plan) => {
-          const mapped = isPagBankBilling
+          const mapped = isDirectBilling
             ? plan.status === "active" && plan.monthlyPriceBrl > 0
             : Boolean(plan.mercadoPagoPreapprovalPlanId);
-          const providerDetail = isPagBankBilling
-            ? `${catalog.mercadoPagoConnection.providerLabel} Pix ativo`
+          const providerDetail = isDirectBilling
+            ? `${catalog.mercadoPagoConnection.providerLabel} billing ativo`
             : plan.mercadoPagoPreapprovalPlanId ?? "Sem preapproval_plan_id";
 
           return (
@@ -884,7 +885,7 @@ function MercadoPagoBillingConnectionCard({
           <ExternalLink className="h-3.5 w-3.5" />
           {connection.provider === "mercado_pago"
             ? connection.connected ? "Reconectar" : "Conectar Mercado Pago"
-            : "Abrir cofre PagBank"}
+            : `Abrir cofre ${connection.providerLabel}`}
         </a>
 
         {connection.provider === "mercado_pago" && connection.connected ? (
@@ -1036,7 +1037,7 @@ function HistoryPanels({
       </div>
 
       <Panel
-        title="Eventos Mercado Pago"
+        title={`Eventos ${catalog.mercadoPagoConnection.providerLabel}`}
         eyebrow="endpoint / webhook"
         compact
         action={<StatusBadge status={catalog.stats.receivedWebhooks > 0 ? "online" : "idle"} label={`${catalog.stats.receivedWebhooks} recebidos`} />}

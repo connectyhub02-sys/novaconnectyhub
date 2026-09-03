@@ -679,6 +679,21 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         help: "E-mail usado ao provisionar webhooks Asaas nas contas dos clientes. Se vazio, usa o suporte padrao.",
       },
       {
+        label: "Webhook billing Asaas",
+        env: "ASAAS_PLATFORM_WEBHOOK_URL",
+        kind: "endpoint",
+        requirement: "recommended",
+        help: "URL dedicada aos webhooks de cobranca da ConnectyHub: /api/webhooks/asaas/platform-billing.",
+      },
+      {
+        label: "Webhook token billing Asaas",
+        env: "ASAAS_PLATFORM_WEBHOOK_TOKEN",
+        aliases: ["ASAAS_WEBHOOK_TOKEN"],
+        kind: "secret",
+        requirement: "recommended",
+        help: "Token configurado no webhook Asaas para validar eventos de planos e assinaturas da ConnectyHub.",
+      },
+      {
         label: "API base Asaas",
         env: "ASAAS_API_BASE_URL",
         kind: "endpoint",

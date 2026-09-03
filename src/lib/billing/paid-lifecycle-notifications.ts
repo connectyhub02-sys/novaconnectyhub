@@ -1164,7 +1164,12 @@ function addMonths(date: Date, months: number) {
 }
 
 function normalizeLifecycleBillingProvider(value: unknown) {
-  return readString(value) === "mercado_pago" ? "mercado_pago" : "pagbank";
+  const provider = readString(value);
+  if (provider === "mercado_pago" || provider === "pagbank" || provider === "asaas") {
+    return provider;
+  }
+
+  return "asaas";
 }
 
 function normalizeLifecyclePaymentStatus(value: string) {

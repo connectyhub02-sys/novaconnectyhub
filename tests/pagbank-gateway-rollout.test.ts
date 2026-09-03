@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const migrationSource = read("supabase/migrations/0068_pagbank_payment_gateway.sql");
 const platformBillingMigrationSource = read("supabase/migrations/0069_pagbank_platform_billing.sql");
+const asaasPlatformBillingMigrationSource = read("supabase/migrations/0075_asaas_platform_billing.sql");
 const platformProductBillingCycleMigrationSource = read("supabase/migrations/0070_platform_product_billing_cycle.sql");
 const renewalAndResponsibleMigrationSource = read("supabase/migrations/0071_platform_renewal_and_agent_responsibles.sql");
 const pagBankBillingCardMethodsMigrationSource = read("supabase/migrations/0072_pagbank_billing_card_methods.sql");
@@ -140,17 +141,27 @@ describe("PagBank gateway rollout", () => {
     expect(envExampleSource).toContain("MERCADO_PAGO_CLIENT_ID=");
   });
 
-  it("uses PagBank as the default ConnectyHub plan billing provider", () => {
+  it("preserves PagBank platform billing while Asaas is the default ConnectyHub plan billing provider", () => {
     expect(platformBillingMigrationSource).toContain("recurring_provider = 'pagbank'");
     expect(platformBillingMigrationSource).toContain("alter column billing_provider set default 'pagbank'");
     expect(platformBillingMigrationSource).toContain("'pagbank-billing'");
+    expect(asaasPlatformBillingMigrationSource).toContain("recurring_provider = 'asaas'");
+    expect(asaasPlatformBillingMigrationSource).toContain("alter column billing_provider set default 'asaas'");
+    expect(asaasPlatformBillingMigrationSource).toContain("'asaas-billing'");
     expect(planIntentSource).toContain("loadPlatformBillingProvider");
     expect(planIntentSource).toContain(".select(\"recurring_provider\")");
+    expect(planIntentSource).toContain("return \"asaas\"");
+    expect(billingPixRouteSource).toContain("createAsaasBillingPix");
     expect(billingPixRouteSource).toContain("createPagBankBillingPix");
+    expect(billingPixRouteSource).toContain("processPlatformBillingAsaasWebhook");
     expect(billingPixRouteSource).toContain("processPlatformBillingPagBankWebhook");
     expect(existsSync("src/app/api/webhooks/pagbank/platform-billing/route.ts")).toBe(true);
+    expect(existsSync("src/app/api/webhooks/asaas/platform-billing/route.ts")).toBe(true);
+    expect(platformBillingWebhookSource).toContain("processPlatformBillingAsaasWebhook");
     expect(platformBillingWebhookSource).toContain("processPlatformBillingPagBankWebhook");
+    expect(platformBillingWebhookSource).toContain("provider: \"asaas\"");
     expect(platformBillingWebhookSource).toContain("provider: \"pagbank\"");
+    expect(platformBillingAdminSource).toContain("providerLabel: \"Asaas\"");
     expect(platformBillingAdminSource).toContain("providerLabel: \"PagBank\"");
   });
 

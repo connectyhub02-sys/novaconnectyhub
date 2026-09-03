@@ -430,10 +430,14 @@ async function loadPlatformBillingProvider(client: ReturnType<typeof createServi
     .maybeSingle<PlatformBillingProviderRow>();
 
   if (error) {
-    return "mercado_pago";
+    return "asaas";
   }
 
-  return data?.recurring_provider === "pagbank" ? "pagbank" : "mercado_pago";
+  if (data?.recurring_provider === "mercado_pago" || data?.recurring_provider === "pagbank" || data?.recurring_provider === "asaas") {
+    return data.recurring_provider;
+  }
+
+  return "asaas";
 }
 
 async function createCheckoutForExistingSubscription(

@@ -9,7 +9,6 @@ import {
   getMercadoPagoBillingSubscription,
   isMercadoPagoPreapprovalActive,
   mapMercadoPagoPreapprovalStatus,
-  type MercadoPagoBillingSubscriptionDetails,
 } from "@/lib/billing/mercado-pago-subscriptions";
 import {
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS,
@@ -27,6 +26,12 @@ import {
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
 import { getAppBaseUrl, getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
+import {
+  getAsaasPayment,
+  loadAsaasPlatformBillingConfig,
+  type AsaasPaymentResponse,
+  type AsaasSubscriptionResponse,
+} from "@/lib/sales-catalog/asaas";
 import {
   extractPagBankPixData,
   getPagBankOrder,
@@ -47,7 +52,16 @@ type BillingWebhookInput = {
   payload: JsonRecord;
 };
 
-type BillingPaymentProvider = "mercado_pago" | "pagbank";
+type BillingPaymentProvider = "mercado_pago" | "pagbank" | "asaas";
+
+type BillingProviderSubscriptionDetails = {
+  id: string;
+  status: string | null;
+  payerEmail: string | null;
+  nextPaymentDate: string | null;
+  externalReference: string | null;
+  raw: JsonRecord;
+};
 
 export type PlatformBillingWebhookProcessingResult = {
   processingStatus: "processed" | "ignored" | "deferred" | "failed";
@@ -283,9 +297,23 @@ type BillingResponsibleRecipient = {
   phone: string;
 };
 
-const activePaymentStatuses = new Set(["approved", "authorized"]);
-const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation"]);
-const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "expired", "charged_back", "refunded"]);
+const activePaymentStatuses = new Set(["approved", "authorized", "received", "confirmed", "received_in_cash", "checkout_paid"]);
+const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation", "overdue", "awaiting_risk_analysis", "checkout_created"]);
+const rejectedPaymentStatuses = new Set([
+  "rejected",
+  "cancelled",
+  "canceled",
+  "expired",
+  "charged_back",
+  "refunded",
+  "partially_refunded",
+  "deleted",
+  "payment_refused",
+  "failed",
+  "reproved_by_risk_analysis",
+  "checkout_canceled",
+  "checkout_expired",
+]);
 const knownBillingMessageTemplateKeys: ReadonlySet<string> = new Set(
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => definition.eventType),
 );
@@ -351,6 +379,34 @@ export async function processPlatformBillingPagBankWebhook(
   });
 
   return processPagBankPaymentWebhook(client, input, order);
+}
+
+export async function processPlatformBillingAsaasWebhook(
+  client: SupabaseClient,
+  input: BillingWebhookInput,
+): Promise<PlatformBillingWebhookProcessingResult> {
+  if (isAsaasCheckoutTopic(input)) {
+    return processAsaasCheckoutWebhook(client, input);
+  }
+
+  if (isAsaasSubscriptionTopic(input)) {
+    return processAsaasSubscriptionWebhook(client, input);
+  }
+
+  if (isAsaasPaymentTopic(input)) {
+    return processAsaasPaymentWebhook(client, input);
+  }
+
+  return buildResult({
+    processingStatus: "ignored",
+    reason: "Topico Asaas sem reconciliacao de billing.",
+    providerStatus: null,
+    metadata: {
+      eventType: input.eventType,
+      action: input.action,
+      dataId: input.dataId,
+    },
+  });
 }
 
 export async function sendPlatformBillingOperationalTest(
@@ -568,6 +624,7 @@ async function processSubscriptionWebhook(client: SupabaseClient, input: Billing
   const subscriptionStatus = mapMercadoPagoPreapprovalStatus(providerStatus);
 
   await updateSubscriptionProviderState(client, record, {
+    provider: "mercado_pago",
     providerSubscription,
     subscriptionStatus,
     source: "mercado_pago_subscription_webhook",
@@ -659,7 +716,7 @@ async function processPaymentWebhook(client: SupabaseClient, input: BillingWebho
     source: "mercado_pago_payment_webhook",
   });
 
-  if (activePaymentStatuses.has(providerStatus)) {
+  if (isActivePaymentStatus(providerStatus)) {
     return activateBillingPlan(client, record, {
       provider: "mercado_pago",
       providerStatus,
@@ -725,7 +782,7 @@ async function processPagBankPaymentWebhook(
     status_detail: paymentData.providerStatusDetail ?? paymentData.providerStatus ?? undefined,
     external_reference: externalReference ?? undefined,
     transaction_amount: readPagBankOrderAmount(order) ?? undefined,
-    date_approved: paymentData.paidAt ?? (activePaymentStatuses.has(providerStatus) ? new Date().toISOString() : undefined),
+    date_approved: paymentData.paidAt ?? (isActivePaymentStatus(providerStatus) ? new Date().toISOString() : undefined),
     date_created: order.created_at ?? undefined,
     payment_method_id: "pix",
   };
@@ -758,7 +815,7 @@ async function processPagBankPaymentWebhook(
     source: "pagbank_payment_webhook",
   });
 
-  if (activePaymentStatuses.has(providerStatus)) {
+  if (isActivePaymentStatus(providerStatus)) {
     return activateBillingPlan(client, record, {
       provider: "pagbank",
       providerStatus,
@@ -814,13 +871,324 @@ async function processPagBankPaymentWebhook(
   });
 }
 
+async function processAsaasPaymentWebhook(client: SupabaseClient, input: BillingWebhookInput) {
+  const payloadPayment = readAsaasPaymentPayload(input);
+  let rawPayment: JsonRecord | null = payloadPayment;
+  let providerPayment = normalizeAsaasPaymentLike(payloadPayment ?? {}, input.dataId);
+
+  if (!providerPayment.id || !providerPayment.status || !providerPayment.external_reference) {
+    const config = await loadAsaasPlatformBillingConfig({ client });
+    const remotePayment = await getAsaasPayment({
+      accessToken: config.accessToken,
+      mode: config.mode,
+      apiBaseUrl: config.apiBaseUrl,
+      paymentId: providerPayment.id ? String(providerPayment.id) : input.dataId,
+    });
+
+    rawPayment = remotePayment as JsonRecord;
+    providerPayment = normalizeAsaasPaymentLike(remotePayment, input.dataId);
+  }
+
+  const providerStatus = readString(providerPayment.status) ?? readAsaasEventName(input) ?? "PENDING";
+  const externalReference = readString(providerPayment.external_reference)
+    ?? readString(rawPayment?.externalReference)
+    ?? readString(rawPayment?.external_reference);
+  const parsedReference = parsePlatformBillingExternalReference(externalReference);
+  const providerSubscription = buildAsaasSubscriptionDetails(rawPayment?.subscription, rawPayment ?? {}, externalReference);
+  const record = await loadBillingRecord(client, {
+    paymentId: parsedReference?.paymentId ?? null,
+    invoiceId: parsedReference?.invoiceId ?? null,
+    subscriptionId: parsedReference?.subscriptionId ?? null,
+    providerPaymentId: providerPayment.id ? String(providerPayment.id) : input.dataId,
+    providerSubscriptionId: providerSubscription?.id ?? null,
+    externalReference,
+    parsedReference,
+  });
+
+  if (!record.payment && !record.subscription) {
+    return buildResult({
+      processingStatus: "ignored",
+      reason: "Pagamento ConnectyHub nao encontrado para este evento Asaas.",
+      providerStatus,
+      metadata: {
+        asaasPaymentId: String(providerPayment.id ?? input.dataId),
+        asaasSubscriptionId: providerSubscription?.id ?? null,
+        externalReference,
+      },
+    });
+  }
+
+  await updatePaymentProviderState(client, record, {
+    provider: "asaas",
+    providerPayment,
+    providerStatus,
+    source: "asaas_payment_webhook",
+  });
+
+  if (providerSubscription && record.subscription) {
+    await updateSubscriptionProviderState(client, record, {
+      provider: "asaas",
+      providerSubscription,
+      subscriptionStatus: mapAsaasSubscriptionStatus(providerSubscription.status, record.subscription.status),
+      source: "asaas_payment_webhook",
+    });
+  }
+
+  if (isActivePaymentStatus(providerStatus)) {
+    return activateBillingPlan(client, record, {
+      provider: "asaas",
+      providerStatus,
+      providerSubscription,
+      providerPayment,
+      source: "asaas_payment_webhook",
+      webhook: input,
+    });
+  }
+
+  const paymentStatus = mapPaymentStatus(providerStatus);
+  const subscription = record.subscription;
+  const notification = subscription
+    ? await enqueuePlatformBillingNotification(client, {
+        organizationId: subscription.organization_id,
+        subscriptionId: subscription.id,
+        invoiceId: record.invoice?.id ?? null,
+        paymentId: record.payment?.id ?? null,
+        planCode: subscription.plan_code,
+        planName: record.plan?.name ?? subscription.plan_code,
+        amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
+        includedCredits: toNumber(record.plan?.included_credits),
+        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        dedupeKey: `billing:${subscription.id}:payment:${providerStatus}:${String(providerPayment.id ?? input.dataId)}`,
+        providerStatus,
+        providerReference: String(providerPayment.id ?? input.dataId),
+        metadata: {
+          source: "asaas_payment_webhook",
+          asaasPayment: sanitizePayment(providerPayment),
+          asaasSubscriptionId: providerSubscription?.id ?? null,
+        },
+      })
+    : null;
+
+  return buildResult({
+    processingStatus: "processed",
+    reason: paymentStatus === "pending" ? "Pagamento Asaas ainda pendente." : "Pagamento Asaas nao aprovado.",
+    organizationId: subscription?.organization_id ?? record.payment?.organization_id ?? null,
+    subscriptionId: subscription?.id ?? null,
+    invoiceId: record.invoice?.id ?? null,
+    paymentId: record.payment?.id ?? null,
+    providerStatus,
+    notificationId: notification?.id ?? null,
+    metadata: {
+      paymentStatus,
+      asaasPayment: sanitizePayment(providerPayment),
+      asaasSubscriptionId: providerSubscription?.id ?? null,
+    },
+  });
+}
+
+async function processAsaasCheckoutWebhook(client: SupabaseClient, input: BillingWebhookInput) {
+  const checkout = readAsaasCheckoutPayload(input) ?? {};
+  const eventName = readAsaasEventName(input);
+  const checkoutId = readString(checkout.id) ?? input.dataId;
+  const providerStatus = eventName?.startsWith("CHECKOUT_")
+    ? eventName
+    : readString(checkout.status) ?? "CHECKOUT_CREATED";
+  const externalReference = readString(checkout.externalReference)
+    ?? readString(checkout.external_reference)
+    ?? readString(input.payload.externalReference)
+    ?? readString(input.payload.external_reference);
+  const parsedReference = parsePlatformBillingExternalReference(externalReference);
+  const paymentPayload = readAsaasPaymentPayload(input);
+  const providerPayment = normalizeAsaasPaymentLike(paymentPayload ?? checkout, checkoutId, {
+    fallbackStatus: providerStatus,
+    externalReference,
+    paymentMethodId: "credit_card",
+  });
+  const providerSubscription = buildAsaasSubscriptionDetails(
+    checkout.subscription ?? input.payload.subscription,
+    checkout,
+    externalReference,
+  );
+  const record = await loadBillingRecord(client, {
+    paymentId: parsedReference?.paymentId ?? null,
+    invoiceId: parsedReference?.invoiceId ?? null,
+    subscriptionId: parsedReference?.subscriptionId ?? null,
+    providerPaymentId: checkoutId,
+    providerSubscriptionId: providerSubscription?.id ?? null,
+    externalReference,
+    parsedReference,
+  });
+
+  if (!record.payment && !record.subscription) {
+    return buildResult({
+      processingStatus: "ignored",
+      reason: "Checkout ConnectyHub nao encontrado para este evento Asaas.",
+      providerStatus,
+      metadata: {
+        asaasCheckoutId: checkoutId,
+        asaasSubscriptionId: providerSubscription?.id ?? null,
+        externalReference,
+      },
+    });
+  }
+
+  await updatePaymentProviderState(client, record, {
+    provider: "asaas",
+    providerPayment,
+    providerStatus,
+    source: "asaas_checkout_webhook",
+  });
+
+  if (providerSubscription && record.subscription) {
+    await updateSubscriptionProviderState(client, record, {
+      provider: "asaas",
+      providerSubscription,
+      subscriptionStatus: mapAsaasSubscriptionStatus(providerSubscription.status, record.subscription.status),
+      source: "asaas_checkout_webhook",
+    });
+  }
+
+  if (isActivePaymentStatus(providerStatus)) {
+    return activateBillingPlan(client, record, {
+      provider: "asaas",
+      providerStatus,
+      providerSubscription,
+      providerPayment,
+      source: "asaas_checkout_webhook",
+      webhook: input,
+    });
+  }
+
+  const paymentStatus = mapPaymentStatus(providerStatus);
+  const subscription = record.subscription;
+  const notification = subscription
+    ? await enqueuePlatformBillingNotification(client, {
+        organizationId: subscription.organization_id,
+        subscriptionId: subscription.id,
+        invoiceId: record.invoice?.id ?? null,
+        paymentId: record.payment?.id ?? null,
+        planCode: subscription.plan_code,
+        planName: record.plan?.name ?? subscription.plan_code,
+        amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
+        includedCredits: toNumber(record.plan?.included_credits),
+        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        dedupeKey: `billing:${subscription.id}:checkout:${providerStatus}:${checkoutId}`,
+        providerStatus,
+        providerReference: checkoutId,
+        metadata: {
+          source: "asaas_checkout_webhook",
+          asaasCheckoutId: checkoutId,
+          asaasPayment: sanitizePayment(providerPayment),
+          asaasSubscriptionId: providerSubscription?.id ?? null,
+        },
+      })
+    : null;
+
+  return buildResult({
+    processingStatus: "processed",
+    reason: paymentStatus === "pending" ? "Checkout Asaas ainda pendente." : "Checkout Asaas nao aprovado.",
+    organizationId: subscription?.organization_id ?? record.payment?.organization_id ?? null,
+    subscriptionId: subscription?.id ?? null,
+    invoiceId: record.invoice?.id ?? null,
+    paymentId: record.payment?.id ?? null,
+    providerStatus,
+    notificationId: notification?.id ?? null,
+    metadata: {
+      paymentStatus,
+      asaasCheckoutId: checkoutId,
+      asaasPayment: sanitizePayment(providerPayment),
+      asaasSubscriptionId: providerSubscription?.id ?? null,
+    },
+  });
+}
+
+async function processAsaasSubscriptionWebhook(client: SupabaseClient, input: BillingWebhookInput) {
+  const subscriptionPayload = readAsaasSubscriptionPayload(input) ?? {};
+  const externalReference = readString(subscriptionPayload.externalReference)
+    ?? readString(subscriptionPayload.external_reference)
+    ?? readString(input.payload.externalReference)
+    ?? readString(input.payload.external_reference);
+  const providerSubscription = buildAsaasSubscriptionDetails(subscriptionPayload, subscriptionPayload, externalReference)
+    ?? {
+      id: input.dataId,
+      status: readAsaasEventName(input) ?? readString(subscriptionPayload.status),
+      payerEmail: null,
+      nextPaymentDate: readString(subscriptionPayload.nextDueDate),
+      externalReference,
+      raw: subscriptionPayload,
+    };
+  const parsedReference = parsePlatformBillingExternalReference(providerSubscription.externalReference);
+  const record = await loadBillingRecord(client, {
+    paymentId: parsedReference?.paymentId ?? null,
+    invoiceId: parsedReference?.invoiceId ?? null,
+    subscriptionId: parsedReference?.subscriptionId ?? null,
+    providerSubscriptionId: providerSubscription.id,
+    externalReference: providerSubscription.externalReference,
+    parsedReference,
+  });
+
+  if (!record.subscription) {
+    return buildResult({
+      processingStatus: "ignored",
+      reason: "Assinatura ConnectyHub nao encontrada para este evento Asaas.",
+      providerStatus: providerSubscription.status,
+      metadata: {
+        asaasSubscriptionId: providerSubscription.id,
+        externalReference: providerSubscription.externalReference,
+      },
+    });
+  }
+
+  const subscriptionStatus = mapAsaasSubscriptionStatus(providerSubscription.status, record.subscription.status);
+  await updateSubscriptionProviderState(client, record, {
+    provider: "asaas",
+    providerSubscription,
+    subscriptionStatus,
+    source: "asaas_subscription_webhook",
+  });
+
+  const notification = await enqueuePlatformBillingNotification(client, {
+    organizationId: record.subscription.organization_id,
+    subscriptionId: record.subscription.id,
+    invoiceId: record.invoice?.id ?? null,
+    paymentId: record.payment?.id ?? null,
+    planCode: record.subscription.plan_code,
+    planName: record.plan?.name ?? record.subscription.plan_code,
+    amountBrl: toNumber(record.invoice?.total_brl ?? record.payment?.amount_brl ?? record.plan?.monthly_price_brl),
+    includedCredits: toNumber(record.plan?.included_credits),
+    eventType: subscriptionStatus === "canceled" ? "subscription_canceled" : "subscription_pending",
+    dedupeKey: `billing:${record.subscription.id}:asaas_subscription:${subscriptionStatus}:${providerSubscription.id}`,
+    providerStatus: providerSubscription.status,
+    providerReference: providerSubscription.id,
+    metadata: {
+      source: "asaas_subscription_webhook",
+      asaasSubscription: providerSubscription.raw,
+    },
+  });
+
+  return buildResult({
+    processingStatus: "processed",
+    reason: subscriptionStatus === "active" ? null : "Assinatura Asaas sincronizada sem novo pagamento confirmado.",
+    organizationId: record.subscription.organization_id,
+    subscriptionId: record.subscription.id,
+    invoiceId: record.invoice?.id ?? null,
+    paymentId: record.payment?.id ?? null,
+    providerStatus: providerSubscription.status,
+    notificationId: notification?.id ?? null,
+    metadata: {
+      subscriptionStatus,
+      asaasSubscription: providerSubscription.raw,
+    },
+  });
+}
+
 async function activateBillingPlan(
   client: SupabaseClient,
   record: BillingRecord,
   input: {
     provider: BillingPaymentProvider;
     providerStatus: string;
-    providerSubscription: MercadoPagoBillingSubscriptionDetails | null;
+    providerSubscription: BillingProviderSubscriptionDetails | null;
     providerPayment: MercadoPagoPaymentLike | null;
     source: string;
     webhook: BillingWebhookInput;
@@ -863,6 +1231,7 @@ async function activateBillingPlan(
     ?? readDate(invoiceMetadata?.cycle_start_at)
     ?? readDate(input.providerPayment?.date_approved)
     ?? readDate(input.providerSubscription?.raw.date_created)
+    ?? readDate(input.providerSubscription?.raw.dateCreated)
     ?? now;
   const cycleEnd = readDate(paymentPayload?.cycle_end_at)
     ?? readDate(invoiceMetadata?.cycle_end_at)
@@ -938,6 +1307,8 @@ async function activateBillingPlan(
     mercado_pago_subscription: input.provider === "mercado_pago" ? input.providerSubscription?.raw ?? null : null,
     mercado_pago_payment: input.provider === "mercado_pago" ? providerPaymentSnapshot : null,
     pagbank_payment: input.provider === "pagbank" ? providerPaymentSnapshot : null,
+    asaas_subscription: input.provider === "asaas" ? input.providerSubscription?.raw ?? null : null,
+    asaas_payment: input.provider === "asaas" ? providerPaymentSnapshot : null,
   };
 
   const [subscriptionUpdate, invoiceUpdate, paymentUpdate] = await Promise.all([
@@ -1056,7 +1427,8 @@ async function updateSubscriptionProviderState(
   client: SupabaseClient,
   record: BillingRecord,
   input: {
-    providerSubscription: MercadoPagoBillingSubscriptionDetails;
+    provider: BillingPaymentProvider;
+    providerSubscription: BillingProviderSubscriptionDetails;
     subscriptionStatus: string;
     source: string;
   },
@@ -1075,7 +1447,8 @@ async function updateSubscriptionProviderState(
         last_provider_sync_source: input.source,
         provider_status: input.providerSubscription.status,
         provider_subscription_id: input.providerSubscription.id,
-        mercado_pago_subscription: input.providerSubscription.raw,
+        mercado_pago_subscription: input.provider === "mercado_pago" ? input.providerSubscription.raw : null,
+        asaas_subscription: input.provider === "asaas" ? input.providerSubscription.raw : null,
       },
     })
     .eq("id", record.subscription.id)
@@ -1093,7 +1466,7 @@ async function updatePaymentProviderState(
   },
 ) {
   const paymentStatus = mapPaymentStatus(input.providerStatus);
-  const paidAt = activePaymentStatuses.has(input.providerStatus)
+  const paidAt = isActivePaymentStatus(input.providerStatus)
     ? input.providerPayment.date_approved ?? new Date().toISOString()
     : null;
   const paymentId = input.providerPayment.id ? String(input.providerPayment.id) : null;
@@ -1104,6 +1477,8 @@ async function updatePaymentProviderState(
     provider_payment_id: paymentId,
     mercado_pago_payment: input.provider === "mercado_pago" ? sanitizePayment(input.providerPayment) : null,
     pagbank_payment: input.provider === "pagbank" ? sanitizePayment(input.providerPayment) : null,
+    asaas_payment: input.provider === "asaas" ? sanitizePayment(input.providerPayment) : null,
+    asaas_payment_id: input.provider === "asaas" ? paymentId : null,
   };
 
   await Promise.all([
@@ -1149,6 +1524,7 @@ async function loadBillingRecord(
     subscriptionId?: string | null;
     invoiceId?: string | null;
     paymentId?: string | null;
+    providerPaymentId?: string | null;
     providerSubscriptionId?: string | null;
     externalReference?: string | null;
     parsedReference?: ParsedExternalReference | null;
@@ -1176,6 +1552,10 @@ async function loadBillingRecord(
 
   if (!payment && input.externalReference) {
     payment = await loadPaymentByExternalReference(client, input.externalReference);
+  }
+
+  if (!payment && input.providerPaymentId) {
+    payment = await loadPaymentByProviderPaymentId(client, input.providerPaymentId);
   }
 
   if (!subscription && payment?.subscription_id) {
@@ -1222,7 +1602,7 @@ async function loadSubscriptionByProviderId(client: SupabaseClient, providerSubs
     .eq("provider_subscription_id", providerSubscriptionId)
     .maybeSingle<SubscriptionRow>();
 
-  if (error) throw new Error(`Nao foi possivel carregar assinatura Mercado Pago: ${error.message}`);
+  if (error) throw new Error(`Nao foi possivel carregar assinatura do provedor: ${error.message}`);
   return data ?? null;
 }
 
@@ -1274,6 +1654,19 @@ async function loadPaymentByExternalReference(client: SupabaseClient, externalRe
     .maybeSingle<PaymentRow>();
 
   if (error) throw new Error(`Nao foi possivel localizar pagamento por referencia: ${error.message}`);
+  return data ?? null;
+}
+
+async function loadPaymentByProviderPaymentId(client: SupabaseClient, providerPaymentId: string) {
+  const { data, error } = await client
+    .from("billing_payments")
+    .select("id, organization_id, invoice_id, subscription_id, provider_payment_id, provider_status, status, amount_brl, paid_at, payload")
+    .eq("provider_payment_id", providerPaymentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<PaymentRow>();
+
+  if (error) throw new Error(`Nao foi possivel localizar pagamento por id do provedor: ${error.message}`);
   return data ?? null;
 }
 
@@ -2113,6 +2506,197 @@ function isPaymentTopic(eventType: string | null, action: string | null) {
   return text.includes("payment");
 }
 
+function isAsaasPaymentTopic(input: BillingWebhookInput) {
+  const eventName = readAsaasEventName(input);
+  return Boolean(eventName?.startsWith("PAYMENT_"))
+    || isPaymentTopic(input.eventType, input.action)
+    || Boolean(readAsaasPaymentPayload(input));
+}
+
+function isAsaasCheckoutTopic(input: BillingWebhookInput) {
+  const eventName = readAsaasEventName(input);
+  return Boolean(eventName?.startsWith("CHECKOUT_"))
+    || Boolean(readAsaasCheckoutPayload(input));
+}
+
+function isAsaasSubscriptionTopic(input: BillingWebhookInput) {
+  const eventName = readAsaasEventName(input);
+  return Boolean(eventName?.startsWith("SUBSCRIPTION_"))
+    || Boolean(readAsaasSubscriptionPayload(input));
+}
+
+function readAsaasEventName(input: BillingWebhookInput) {
+  return readString(input.payload.event)
+    ?? readString(input.payload.type)
+    ?? readString(input.eventType)
+    ?? readString(input.action);
+}
+
+function readAsaasPaymentPayload(input: BillingWebhookInput): JsonRecord | null {
+  const directPayment = readOptionalRecord(input.payload.payment);
+  if (directPayment) return directPayment;
+
+  const data = readOptionalRecord(input.payload.data);
+  const dataPayment = readOptionalRecord(data?.payment);
+  if (dataPayment) return dataPayment;
+
+  if (looksLikeAsaasPayment(data)) return data;
+  if (looksLikeAsaasPayment(input.payload)) return input.payload;
+
+  return null;
+}
+
+function readAsaasCheckoutPayload(input: BillingWebhookInput): JsonRecord | null {
+  const directCheckout = readOptionalRecord(input.payload.checkout);
+  if (directCheckout) return directCheckout;
+
+  const data = readOptionalRecord(input.payload.data);
+  const dataCheckout = readOptionalRecord(data?.checkout);
+  if (dataCheckout) return dataCheckout;
+
+  if (looksLikeAsaasCheckout(data)) return data;
+  if (looksLikeAsaasCheckout(input.payload)) return input.payload;
+
+  return null;
+}
+
+function readAsaasSubscriptionPayload(input: BillingWebhookInput): JsonRecord | null {
+  const directSubscription = readOptionalRecord(input.payload.subscription);
+  if (directSubscription) return directSubscription;
+
+  const data = readOptionalRecord(input.payload.data);
+  const dataSubscription = readOptionalRecord(data?.subscription);
+  if (dataSubscription) return dataSubscription;
+
+  if (looksLikeAsaasSubscription(data)) return data;
+  if (looksLikeAsaasSubscription(input.payload)) return input.payload;
+
+  return null;
+}
+
+function looksLikeAsaasPayment(value: JsonRecord | null | undefined) {
+  if (!value) return false;
+  return Boolean(readString(value.id) && (
+    readString(value.billingType)
+    || readString(value.status)
+    || typeof value.value === "number"
+    || typeof value.value === "string"
+  ));
+}
+
+function looksLikeAsaasCheckout(value: JsonRecord | null | undefined) {
+  if (!value) return false;
+  return Boolean(readString(value.id) && (
+    readString(value.url)
+    || readString(value.checkoutUrl)
+    || readString(value.status)?.startsWith("CHECKOUT_")
+    || Array.isArray(value.chargeTypes)
+  ));
+}
+
+function looksLikeAsaasSubscription(value: JsonRecord | null | undefined) {
+  if (!value) return false;
+  return Boolean(readString(value.id) && (
+    readString(value.cycle)
+    || readString(value.nextDueDate)
+    || readString(value.billingType)
+    || readString(value.status)?.toUpperCase().startsWith("SUBSCRIPTION_")
+  ));
+}
+
+function normalizeAsaasPaymentLike(
+  payment: JsonRecord | AsaasPaymentResponse,
+  fallbackId: string,
+  fallback: {
+    fallbackStatus?: string | null;
+    externalReference?: string | null;
+    paymentMethodId?: string | null;
+  } = {},
+): MercadoPagoPaymentLike {
+  const record = payment as JsonRecord;
+  const status = readString(record.status) ?? fallback.fallbackStatus ?? "PENDING";
+  const externalReference = readString(record.externalReference)
+    ?? readString(record.external_reference)
+    ?? fallback.externalReference
+    ?? undefined;
+  const paymentDate = readString(record.confirmedDate)
+    ?? readString(record.paymentDate)
+    ?? readString(record.clientPaymentDate)
+    ?? readString(record.creditDate);
+  const dateCreated = readString(record.dateCreated) ?? readString(record.date_created);
+
+  return {
+    id: readString(record.id) ?? fallbackId,
+    status,
+    status_detail: readString(record.status_detail) ?? status,
+    external_reference: externalReference,
+    transaction_amount: toNumberLike(record.value) ?? toNumberLike(record.netValue) ?? undefined,
+    date_approved: paymentDate ?? (isActivePaymentStatus(status) ? new Date().toISOString() : undefined),
+    date_created: dateCreated ?? undefined,
+    payment_method_id: fallback.paymentMethodId ?? normalizeAsaasPaymentMethod(readString(record.billingType)),
+  };
+}
+
+function buildAsaasSubscriptionDetails(
+  value: unknown,
+  fallbackRaw: JsonRecord,
+  externalReference: string | null | undefined,
+): BillingProviderSubscriptionDetails | null {
+  if (typeof value === "string" && value.trim()) {
+    return {
+      id: value.trim(),
+      status: null,
+      payerEmail: null,
+      nextPaymentDate: null,
+      externalReference: externalReference ?? null,
+      raw: { id: value.trim() },
+    };
+  }
+
+  const record = readOptionalRecord(value) as (AsaasSubscriptionResponse & JsonRecord) | null;
+
+  if (!record?.id) {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    status: readString(record.status),
+    payerEmail: readString(record.email) ?? readString(record.payerEmail),
+    nextPaymentDate: readString(record.nextDueDate) ?? readString(record.next_due_date),
+    externalReference: readString(record.externalReference)
+      ?? readString(record.external_reference)
+      ?? externalReference
+      ?? null,
+    raw: {
+      ...fallbackRaw,
+      ...record,
+    },
+  };
+}
+
+function mapAsaasSubscriptionStatus(providerStatus: string | null | undefined, fallbackStatus?: string | null) {
+  const normalized = providerStatus?.trim().toUpperCase() ?? "";
+
+  if (normalized === "ACTIVE" || normalized === "SUBSCRIPTION_CREATED" || normalized === "SUBSCRIPTION_UPDATED") {
+    return fallbackStatus === "active" ? "active" : "pending";
+  }
+
+  if (normalized === "INACTIVE" || normalized === "DELETED" || normalized === "CANCELLED" || normalized === "CANCELED" || normalized === "SUBSCRIPTION_INACTIVATED" || normalized === "SUBSCRIPTION_DELETED") {
+    return "canceled";
+  }
+
+  return fallbackStatus && fallbackStatus !== "pending" ? fallbackStatus : "pending";
+}
+
+function normalizeAsaasPaymentMethod(billingType: string | null) {
+  const normalized = billingType?.trim().toUpperCase();
+  if (normalized === "PIX") return "pix";
+  if (normalized === "BOLETO") return "boleto";
+  if (normalized === "CREDIT_CARD") return "credit_card";
+  return "asaas";
+}
+
 function parsePlatformBillingExternalReference(value: string | null | undefined): ParsedExternalReference | null {
   const parts = value?.split(":") ?? [];
 
@@ -2130,15 +2714,25 @@ function parsePlatformBillingExternalReference(value: string | null | undefined)
 }
 
 function mapPaymentStatus(providerStatus: string) {
-  if (activePaymentStatuses.has(providerStatus)) return "approved";
-  if (pendingPaymentStatuses.has(providerStatus)) return "pending";
-  if (rejectedPaymentStatuses.has(providerStatus)) {
-    if (providerStatus === "refunded" || providerStatus === "charged_back") return "refunded";
-    if (providerStatus === "cancelled" || providerStatus === "canceled" || providerStatus === "expired") return "canceled";
+  const normalizedStatus = normalizeProviderStatus(providerStatus);
+
+  if (activePaymentStatuses.has(normalizedStatus)) return "approved";
+  if (pendingPaymentStatuses.has(normalizedStatus)) return "pending";
+  if (rejectedPaymentStatuses.has(normalizedStatus)) {
+    if (normalizedStatus === "refunded" || normalizedStatus === "charged_back" || normalizedStatus === "partially_refunded") return "refunded";
+    if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "expired" || normalizedStatus === "deleted" || normalizedStatus === "checkout_canceled" || normalizedStatus === "checkout_expired") return "canceled";
     return "rejected";
   }
 
   return "in_process";
+}
+
+function isActivePaymentStatus(providerStatus: string | null | undefined) {
+  return activePaymentStatuses.has(normalizeProviderStatus(providerStatus));
+}
+
+function normalizeProviderStatus(providerStatus: string | null | undefined) {
+  return providerStatus?.trim().toLowerCase() ?? "";
 }
 
 function readPagBankOrderAmount(order: PagBankOrderResponse) {
@@ -2151,10 +2745,12 @@ function readPagBankOrderAmount(order: PagBankOrderResponse) {
 }
 
 function formatBillingPaymentProviderLabel(provider: BillingPaymentProvider) {
+  if (provider === "asaas") return "Asaas";
   return provider === "pagbank" ? "PagBank" : "Mercado Pago";
 }
 
 function formatBillingPaymentProviderTag(provider: BillingPaymentProvider) {
+  if (provider === "asaas") return "asaas";
   return provider === "pagbank" ? "pagbank" : "mercado_pago";
 }
 
@@ -2305,6 +2901,10 @@ function normalizePlanCode(value: unknown) {
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function readOptionalRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
 
 function readStringList(value: unknown) {

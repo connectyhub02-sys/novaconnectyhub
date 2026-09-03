@@ -3,8 +3,14 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   assertAccountComplete,
   formatAccountCompletionError,
+  loadAccountDocument,
   statusForAccountCompletionError,
 } from "@/lib/account/signup-completion";
+import {
+  createAsaasPixPayment,
+  extractAsaasPaymentData,
+  loadAsaasPlatformBillingConfig,
+} from "@/lib/sales-catalog/asaas";
 import {
   buildMercadoPagoAdditionalInfo,
   buildMercadoPagoPlatformBillingWebhookUrl,
@@ -28,6 +34,7 @@ import {
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
 import {
+  processPlatformBillingAsaasWebhook,
   processPlatformBillingMercadoPagoWebhook,
   processPlatformBillingPagBankWebhook,
   sendPlatformPlanInteractionNotification,
@@ -39,7 +46,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type JsonRecord = Record<string, unknown>;
-type BillingPixProvider = "mercado_pago" | "pagbank";
+type BillingPixProvider = "mercado_pago" | "pagbank" | "asaas";
 type BillingCheckoutItem = {
   id: string;
   title: string;
@@ -48,8 +55,10 @@ type BillingCheckoutItem = {
   total: number;
 };
 type BillingPixData =
+  | ReturnType<typeof extractAsaasPaymentData>
   | ReturnType<typeof extractMercadoPagoPixData>
   | ReturnType<typeof extractPagBankPixData>;
+type AsaasBillingPixData = ReturnType<typeof extractAsaasPaymentData>;
 
 export async function POST(
   request: NextRequest,
@@ -130,7 +139,22 @@ export async function POST(
         total: bump.priceBrl,
       })),
     ];
-    const paymentData = billingProvider === "pagbank"
+    const fallbackDocument = billingProvider === "asaas"
+      ? await loadAccountDocument({ userId: workspace.user.id, client })
+      : null;
+    const paymentData = billingProvider === "asaas"
+      ? await createAsaasBillingPix({
+          client,
+          amount: cart.totalAmount,
+          description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
+          externalReference: cart.externalReference,
+          payerEmail,
+          payerName: workspace.profile.fullName ?? workspace.organization.name,
+          payerDocument: fallbackDocument?.number ?? null,
+          payerPhone: workspace.profile.phone,
+          items: checkoutItems,
+        })
+      : billingProvider === "pagbank"
       ? await createPagBankBillingPix({
           client,
           amount: cart.totalAmount,
@@ -152,7 +176,9 @@ export async function POST(
     const providerPaymentId = readProviderPaymentId(paymentData);
 
     if (paymentData.status === "approved" && providerPaymentId) {
-      const processor = billingProvider === "pagbank"
+      const processor = billingProvider === "asaas"
+        ? processPlatformBillingAsaasWebhook
+        : billingProvider === "pagbank"
         ? processPlatformBillingPagBankWebhook
         : processPlatformBillingMercadoPagoWebhook;
 
@@ -221,12 +247,50 @@ function normalizeEmail(value: string | null) {
 }
 
 function normalizeBillingPaymentStatus(value: string) {
-  if (value === "approved") return "approved";
-  if (value === "rejected") return "rejected";
-  if (value === "cancelled" || value === "canceled" || value === "expired") return "canceled";
-  if (value === "refunded") return "refunded";
-  if (value === "pending") return "pending";
+  const lower = value.trim().toLowerCase();
+  const upper = value.trim().toUpperCase();
+
+  if (lower === "approved" || upper === "RECEIVED" || upper === "CONFIRMED" || upper === "RECEIVED_IN_CASH") return "approved";
+  if (lower === "rejected" || upper === "PAYMENT_REFUSED" || upper === "FAILED" || upper === "REPROVED_BY_RISK_ANALYSIS") return "rejected";
+  if (lower === "cancelled" || lower === "canceled" || lower === "expired" || upper === "DELETED" || upper === "CANCELLED" || upper === "CANCELED") return "canceled";
+  if (lower === "refunded" || upper === "REFUNDED" || upper === "PARTIALLY_REFUNDED" || upper.includes("CHARGEBACK")) return "refunded";
+  if (lower === "pending" || upper === "PENDING" || upper === "OVERDUE" || upper === "AWAITING_RISK_ANALYSIS") return "pending";
   return "in_process";
+}
+
+async function createAsaasBillingPix(input: {
+  client: ReturnType<typeof createServiceClient>;
+  amount: number;
+  description: string;
+  externalReference: string;
+  payerEmail: string;
+  payerName: string | null;
+  payerDocument: string | null;
+  payerPhone: string | null;
+  items: BillingCheckoutItem[];
+}) {
+  if (!input.payerDocument) {
+    throw new Error("Informe CPF ou CNPJ no cadastro da conta para gerar Pix pelo Asaas.");
+  }
+
+  const config = await loadAsaasPlatformBillingConfig({ client: input.client });
+  const payment = await createAsaasPixPayment({
+    accessToken: config.accessToken,
+    mode: config.mode,
+    apiBaseUrl: config.apiBaseUrl,
+    amount: input.amount,
+    description: input.description,
+    externalReference: input.externalReference,
+    payerEmail: input.payerEmail,
+    payerName: input.payerName,
+    payerDocument: input.payerDocument,
+    payerPhone: input.payerPhone,
+    dueDate: formatAsaasDueDate(addDays(new Date(), 1)),
+    idempotencyKey: randomUUID(),
+    items: input.items,
+  });
+
+  return extractAsaasPaymentData(payment.payment, payment.pixQrCode);
 }
 
 async function createPagBankBillingPix(input: {
@@ -293,6 +357,21 @@ function readProviderPaymentId(paymentData: BillingPixData) {
 }
 
 function buildBillingPixProviderPayload(provider: BillingPixProvider, paymentData: BillingPixData): JsonRecord {
+  if (provider === "asaas") {
+    const asaasPaymentData = paymentData as AsaasBillingPixData;
+
+    return {
+      asaas_payment_id: asaasPaymentData.providerPaymentId,
+      asaas_customer_id: asaasPaymentData.providerCustomerId,
+      asaas_payment: {
+        id: asaasPaymentData.providerPaymentId,
+        customer_id: asaasPaymentData.providerCustomerId,
+        status: asaasPaymentData.providerStatus,
+        status_detail: asaasPaymentData.providerStatusDetail,
+      },
+    };
+  }
+
   if (provider === "pagbank") {
     const providerOrderId = "providerOrderId" in paymentData ? paymentData.providerOrderId : null;
 
@@ -388,4 +467,14 @@ async function notifyPaymentStartedSafely(
 function toNumber(value: number | string | null | undefined) {
   const number = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function formatAsaasDueDate(date: Date) {
+  return date.toISOString().slice(0, 10);
 }

@@ -7,6 +7,7 @@ import {
   buildMercadoPagoPlatformBillingRedirectUrl,
   buildMercadoPagoPlatformBillingWebhookUrl,
 } from "@/lib/sales-catalog/mercado-pago";
+import { buildAsaasPlatformBillingWebhookUrl } from "@/lib/sales-catalog/asaas";
 import { buildPagBankPlatformBillingWebhookUrl } from "@/lib/sales-catalog/pagbank";
 import {
   normalizePlatformBillingMessageTemplates,
@@ -26,7 +27,7 @@ export type PlatformBillingSettings = {
   notificationWhatsappEnabled: boolean;
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
-  recurringProvider: "mercado_pago" | "pagbank";
+  recurringProvider: "mercado_pago" | "pagbank" | "asaas";
   billingMessageTemplates: PlatformBillingMessageTemplates;
   billingOrderBumpProductIds: string[];
   updatedAt: string | null;
@@ -119,7 +120,7 @@ export type PlatformBillingOperationsCatalog = {
   settings: PlatformBillingSettings;
   credentials: CredentialSnapshot[];
   mercadoPagoConnection: {
-    provider: "mercado_pago" | "pagbank";
+    provider: "mercado_pago" | "pagbank" | "asaas";
     providerLabel: string;
     connected: boolean;
     mode: string | null;
@@ -251,7 +252,7 @@ const defaultSettings: PlatformBillingSettings = {
   notificationWhatsappEnabled: true,
   pixAutomaticRequired: true,
   checkoutMode: "subscription",
-  recurringProvider: "pagbank",
+  recurringProvider: "asaas",
   billingMessageTemplates: normalizePlatformBillingMessageTemplates(null),
   billingOrderBumpProductIds: [],
   updatedAt: null,
@@ -332,7 +333,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
     client
       .from("maintenance_audit_logs")
       .select("id, metadata, created_at")
-      .in("event_type", ["billing.mercado_pago.webhook", "billing.pagbank.webhook"])
+      .in("event_type", ["billing.mercado_pago.webhook", "billing.pagbank.webhook", "billing.asaas.webhook"])
       .order("created_at", { ascending: false })
       .limit(12)
       .returns<WebhookAuditRow[]>(),
@@ -395,9 +396,9 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
       configuredCredentialFields: credentials.filter((field) => field.configured).length,
       requiredCredentialFields: credentials.filter((field) => field.requirement === "required").length,
       connectedAgents: agents.filter((agent) => agent.isConnected).length,
-      mappedPaidPlans: settings.recurringProvider === "pagbank"
-        ? plans.filter((plan) => plan.status === "active" && plan.monthlyPriceBrl > 0).length
-        : plans.filter((plan) => Boolean(plan.mercadoPagoPreapprovalPlanId)).length,
+      mappedPaidPlans: settings.recurringProvider === "mercado_pago"
+        ? plans.filter((plan) => Boolean(plan.mercadoPagoPreapprovalPlanId)).length
+        : plans.filter((plan) => plan.status === "active" && plan.monthlyPriceBrl > 0).length,
       pendingPayments: payments.filter((payment) => payment.status === "pending" || payment.status === "in_process").length,
       activeSubscriptions: subscriptions.filter((subscription) => subscription.status === "active").length,
       pendingNotifications: notifications.filter((notification) => notification.status === "pending").length,
@@ -413,12 +414,20 @@ function buildBillingCredentialSnapshots(
   recurringProvider: PlatformBillingSettings["recurringProvider"],
 ) {
   const vault = getMaintenanceVaultSnapshot({ storedCredentials });
-  const integrationId = recurringProvider === "pagbank" ? "pagbank-billing" : "mercado-pago-billing";
+  const integrationId = recurringProvider === "asaas"
+    ? "asaas"
+    : recurringProvider === "pagbank"
+      ? "pagbank-billing"
+      : "mercado-pago-billing";
   const integration = vault.integrations.find((item) => item.id === integrationId);
   return integration?.fields ?? [];
 }
 
 function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings: PlatformBillingSettings) {
+  if (settings.recurringProvider === "asaas") {
+    return buildAsaasBillingConnection(credentials, settings);
+  }
+
   if (settings.recurringProvider === "pagbank") {
     return buildPagBankBillingConnection(credentials, settings);
   }
@@ -441,6 +450,27 @@ function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings:
     webhookUrl,
     redirectUrl: readString(settings.metadata.mercado_pago_billing_redirect_url) ?? buildMercadoPagoPlatformBillingRedirectUrl(),
     lastError: readString(settings.metadata.mercado_pago_billing_last_error),
+  };
+}
+
+function buildAsaasBillingConnection(credentials: CredentialSnapshot[], settings: PlatformBillingSettings) {
+  const fieldByEnv = new Map(credentials.map((field) => [field.env, field]));
+  const accessToken = fieldByEnv.get("ASAAS_PLATFORM_API_KEY");
+  const mode = readConfiguredDisplayValue(fieldByEnv.get("ASAAS_PLATFORM_MODE")) ?? "production";
+  const accountId = readConfiguredDisplayValue(fieldByEnv.get("ASAAS_PLATFORM_ACCOUNT_ID"));
+  const webhookUrl = readConfiguredDisplayValue(fieldByEnv.get("ASAAS_PLATFORM_WEBHOOK_URL"))
+    ?? buildAsaasPlatformBillingWebhookUrl();
+
+  return {
+    provider: "asaas" as const,
+    providerLabel: "Asaas",
+    connected: Boolean(accessToken?.configured),
+    mode,
+    accountId,
+    tokenExpiresAt: null,
+    webhookUrl,
+    redirectUrl: "/admin/maintenance#credenciais-do-sistema",
+    lastError: readString(settings.metadata.asaas_billing_last_error),
   };
 }
 
@@ -478,7 +508,11 @@ function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSet
     notificationWhatsappEnabled: row.notification_whatsapp_enabled !== false,
     pixAutomaticRequired: row.pix_automatic_required !== false,
     checkoutMode: row.checkout_mode === "manual_review" ? "manual_review" : "subscription",
-    recurringProvider: row.recurring_provider === "mercado_pago" ? "mercado_pago" : "pagbank",
+    recurringProvider: row.recurring_provider === "mercado_pago"
+      ? "mercado_pago"
+      : row.recurring_provider === "pagbank"
+        ? "pagbank"
+        : "asaas",
     billingMessageTemplates: normalizePlatformBillingMessageTemplates(row.metadata?.billing_message_templates),
     billingOrderBumpProductIds: readUuidList(row.metadata?.billing_order_bump_product_ids),
     updatedAt: row.updated_at,

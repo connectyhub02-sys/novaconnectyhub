@@ -105,6 +105,25 @@ export type AsaasCheckoutResponse = {
   link?: string;
   checkoutUrl?: string;
   status?: string;
+  externalReference?: string | null;
+  subscription?: string | AsaasSubscriptionResponse | null;
+  errors?: AsaasErrorItem[];
+};
+
+export type AsaasSubscriptionResponse = {
+  object?: string;
+  id?: string;
+  dateCreated?: string;
+  customer?: string;
+  paymentLink?: string | null;
+  value?: number;
+  nextDueDate?: string | null;
+  cycle?: string | null;
+  description?: string | null;
+  billingType?: string | null;
+  deleted?: boolean;
+  status?: string | null;
+  externalReference?: string | null;
   errors?: AsaasErrorItem[];
 };
 
@@ -138,6 +157,7 @@ export type AsaasPaymentData = {
 export type AsaasCustomerInput = {
   accessToken: string;
   mode?: AsaasMode | null;
+  apiBaseUrl?: string | null;
   name?: string | null;
   cpfCnpj?: string | null;
   email?: string | null;
@@ -155,6 +175,7 @@ export type AsaasCustomerInput = {
 export type AsaasPixPaymentInput = {
   accessToken: string;
   mode?: AsaasMode | null;
+  apiBaseUrl?: string | null;
   amount: number;
   description: string;
   externalReference: string;
@@ -177,8 +198,18 @@ export type AsaasPixPaymentInput = {
   }>;
 };
 
+export type AsaasCheckoutBillingType = "CREDIT_CARD" | "PIX" | "BOLETO";
+export type AsaasCheckoutChargeType = "DETACHED" | "INSTALLMENT" | "RECURRENT";
+export type AsaasSubscriptionCycle = "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUALLY" | "YEARLY";
+
 export type AsaasCheckoutInput = Omit<AsaasPixPaymentInput, "dueDate"> & {
-  billingTypes?: Array<"CREDIT_CARD" | "PIX"> | null;
+  billingTypes?: AsaasCheckoutBillingType[] | null;
+  chargeTypes?: AsaasCheckoutChargeType[] | null;
+  subscription?: {
+    cycle: AsaasSubscriptionCycle;
+    nextDueDate?: string | null;
+    endDate?: string | null;
+  } | null;
   minutesToExpire?: number | null;
   maxInstallmentCount?: number | null;
   successUrl?: string | null;
@@ -186,12 +217,72 @@ export type AsaasCheckoutInput = Omit<AsaasPixPaymentInput, "dueDate"> & {
   expiredUrl?: string | null;
 };
 
+export type AsaasPlatformBillingConfig = {
+  accessToken: string;
+  mode: AsaasMode;
+  accountId: string | null;
+  webhookSecret: string | null;
+  webhookUrl: string;
+  webhookEmail: string | null;
+  apiBaseUrl: string | null;
+};
+
 const asaasProviderId = "asaas";
 const asaasPlatformIntegrationId = "asaas";
 const asaasAffiliateCredentialNames = ["ASAAS_AFFILIATE_URL", "NEXT_PUBLIC_ASAAS_AFFILIATE_URL"];
+const asaasPlatformBillingWebhookTokenNames = ["ASAAS_PLATFORM_WEBHOOK_TOKEN", "ASAAS_WEBHOOK_TOKEN"];
+const asaasPaymentWebhookEvents = [
+  "PAYMENT_CREATED",
+  "PAYMENT_UPDATED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_RECEIVED",
+  "PAYMENT_AUTHORIZED",
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+  "PAYMENT_RESTORED",
+  "PAYMENT_REFUNDED",
+  "PAYMENT_PARTIALLY_REFUNDED",
+  "PAYMENT_REFUND_IN_PROGRESS",
+  "PAYMENT_REFUND_DENIED",
+  "PAYMENT_CHARGEBACK_REQUESTED",
+  "PAYMENT_CHARGEBACK_DISPUTE",
+  "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+  "PAYMENT_AWAITING_RISK_ANALYSIS",
+  "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
+  "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+  "PAYMENT_BANK_SLIP_CANCELLED",
+  "PAYMENT_DUNNING_REQUESTED",
+  "PAYMENT_DUNNING_RECEIVED",
+  "PAYMENT_SPLIT_CANCELLED",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED",
+  "PAYMENT_SPLIT_DONE",
+];
+const asaasPlatformBillingWebhookEvents = [
+  "CHECKOUT_CREATED",
+  "CHECKOUT_PAID",
+  "CHECKOUT_CANCELED",
+  "CHECKOUT_EXPIRED",
+  "SUBSCRIPTION_CREATED",
+  "SUBSCRIPTION_UPDATED",
+  "SUBSCRIPTION_INACTIVATED",
+  "SUBSCRIPTION_DELETED",
+  ...asaasPaymentWebhookEvents,
+];
 
 export function buildAsaasWebhookUrl() {
   return `${getAppBaseUrl()}/api/webhooks/asaas`;
+}
+
+export function buildAsaasPlatformBillingWebhookUrl() {
+  return `${getAppBaseUrl()}/api/webhooks/asaas/platform-billing`;
+}
+
+export function buildAsaasPlatformBillingReturnUrl(subscriptionId: string, status: "success" | "cancel" | "expired") {
+  const url = new URL(`${getAppBaseUrl()}/dashboard/planos/checkout/${encodeURIComponent(subscriptionId)}`);
+  url.searchParams.set("billing", `asaas_${status}`);
+  return url.toString();
 }
 
 export function buildAsaasAffiliateLandingUrl(input: { companyId?: string | null; configuredUrl?: string | null } = {}) {
@@ -219,6 +310,71 @@ export async function resolveAsaasAffiliateLandingUrl(input: {
   return buildAsaasAffiliateLandingUrl({
     companyId: input.companyId,
     configuredUrl,
+  });
+}
+
+export async function loadAsaasPlatformBillingConfig(input: {
+  client?: SupabaseClient;
+} = {}): Promise<AsaasPlatformBillingConfig> {
+  const [
+    accessToken,
+    modeValue,
+    accountId,
+    webhookSecret,
+    webhookUrl,
+    webhookEmail,
+    apiBaseUrl,
+  ] = await Promise.all([
+    loadAsaasPlatformCredential(input.client, ["ASAAS_PLATFORM_API_KEY", "ASAAS_API_KEY", "ASAAS_ACCESS_TOKEN"]),
+    loadAsaasPlatformCredential(input.client, ["ASAAS_PLATFORM_MODE", "ASAAS_ENVIRONMENT"]),
+    loadAsaasPlatformCredential(input.client, ["ASAAS_PLATFORM_ACCOUNT_ID"]),
+    loadAsaasPlatformCredential(input.client, asaasPlatformBillingWebhookTokenNames),
+    loadAsaasPlatformCredential(input.client, ["ASAAS_PLATFORM_WEBHOOK_URL"]),
+    loadAsaasPlatformCredential(input.client, ["ASAAS_WEBHOOK_ALERT_EMAIL"]),
+    loadAsaasPlatformCredential(input.client, ["ASAAS_API_BASE_URL"]),
+  ]);
+  const normalizedAccessToken = normalizeAsaasAccessToken(accessToken);
+
+  if (!normalizedAccessToken) {
+    throw new Error("Configure a API Key Asaas da ConnectyHub para cobrar planos.");
+  }
+
+  return {
+    accessToken: normalizedAccessToken,
+    mode: modeValue === "sandbox" ? "sandbox" : "production",
+    accountId: accountId || null,
+    webhookSecret: webhookSecret || null,
+    webhookUrl: webhookUrl || buildAsaasPlatformBillingWebhookUrl(),
+    webhookEmail: webhookEmail || null,
+    apiBaseUrl: apiBaseUrl || null,
+  };
+}
+
+export async function loadAsaasPlatformBillingWebhookToken(input: {
+  client?: SupabaseClient;
+} = {}) {
+  const config = await loadAsaasPlatformBillingConfig(input);
+  return config.webhookSecret;
+}
+
+export async function ensureAsaasPlatformBillingWebhook(input: {
+  client?: SupabaseClient;
+} = {}) {
+  const config = await loadAsaasPlatformBillingConfig(input);
+
+  if (!config.webhookSecret) {
+    throw new Error("Configure ASAAS_PLATFORM_WEBHOOK_TOKEN para validar webhooks de billing Asaas.");
+  }
+
+  return ensureAsaasPaymentWebhook({
+    accessToken: config.accessToken,
+    mode: config.mode,
+    apiBaseUrl: config.apiBaseUrl,
+    url: config.webhookUrl,
+    authToken: config.webhookSecret,
+    email: config.webhookEmail,
+    name: "ConnectyHub - Billing",
+    events: asaasPlatformBillingWebhookEvents,
   });
 }
 
@@ -411,6 +567,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
   const customer = await createAsaasCustomer({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     name: input.payerName,
     cpfCnpj: input.payerDocument,
     email: input.payerEmail,
@@ -424,6 +581,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
   const payment = await requestAsaas<AsaasPaymentResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: "/payments",
     method: "POST",
     idempotencyKey: input.idempotencyKey,
@@ -441,6 +599,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
     ? await getAsaasPixQrCode({
         accessToken: input.accessToken,
         mode: input.mode,
+        apiBaseUrl: input.apiBaseUrl,
         paymentId: payment.id,
       })
     : null;
@@ -454,19 +613,22 @@ export async function createAsaasCheckout(input: AsaasCheckoutInput) {
   const fallbackItemName = sanitizeAsaasText(input.description, 80) ?? "Pedido ConnectyHub";
   const items = buildAsaasCheckoutItems(input.items, amount, fallbackItemName);
   const maxInstallmentCount = normalizeAsaasInstallmentCount(input.maxInstallmentCount);
+  const chargeTypes = normalizeAsaasCheckoutChargeTypes(input.chargeTypes, maxInstallmentCount);
   const checkout = await requestAsaas<AsaasCheckoutResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: "/checkouts",
     method: "POST",
     idempotencyKey: input.idempotencyKey,
     payload: {
       billingTypes,
-      chargeTypes: maxInstallmentCount > 1 ? ["DETACHED", "INSTALLMENT"] : ["DETACHED"],
+      chargeTypes,
       minutesToExpire: normalizeAsaasCheckoutExpiration(input.minutesToExpire),
       externalReference: input.externalReference,
       items,
-      ...(maxInstallmentCount > 1 ? { installment: { maxInstallmentCount } } : {}),
+      ...(chargeTypes.includes("INSTALLMENT") ? { installment: { maxInstallmentCount } } : {}),
+      ...(chargeTypes.includes("RECURRENT") ? { subscription: buildAsaasCheckoutSubscription(input.subscription) } : {}),
       customerData: buildAsaasCheckoutCustomerData(input),
       callback: buildAsaasCheckoutCallback(input),
     },
@@ -479,11 +641,13 @@ export async function createAsaasCheckout(input: AsaasCheckoutInput) {
 export async function getAsaasPayment(input: {
   accessToken: string;
   mode?: AsaasMode | null;
+  apiBaseUrl?: string | null;
   paymentId: string;
 }) {
   return requestAsaas<AsaasPaymentResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: `/payments/${encodeURIComponent(input.paymentId)}`,
     method: "GET",
     fallbackMessage: "Nao foi possivel consultar a cobranca Asaas.",
@@ -493,11 +657,13 @@ export async function getAsaasPayment(input: {
 export async function getAsaasPixQrCode(input: {
   accessToken: string;
   mode?: AsaasMode | null;
+  apiBaseUrl?: string | null;
   paymentId: string;
 }) {
   return requestAsaas<AsaasPixQrCodeResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: `/payments/${encodeURIComponent(input.paymentId)}/pixQrCode`,
     method: "GET",
     fallbackMessage: "Nao foi possivel obter o Pix copia e cola no Asaas.",
@@ -507,13 +673,17 @@ export async function getAsaasPixQrCode(input: {
 async function createAsaasPaymentWebhook(input: {
   accessToken: string;
   mode: AsaasMode;
+  apiBaseUrl?: string | null;
   url: string;
   authToken: string;
   email?: string | null;
+  name?: string | null;
+  events?: string[] | null;
 }) {
   return requestAsaas<AsaasWebhookResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: "/webhooks",
     method: "POST",
     payload: buildAsaasPaymentWebhookPayload(input),
@@ -524,9 +694,12 @@ async function createAsaasPaymentWebhook(input: {
 async function ensureAsaasPaymentWebhook(input: {
   accessToken: string;
   mode: AsaasMode;
+  apiBaseUrl?: string | null;
   url: string;
   authToken: string;
   email?: string | null;
+  name?: string | null;
+  events?: string[] | null;
 }): Promise<AsaasWebhookResponse & { reused?: boolean }> {
   try {
     const webhook = await createAsaasPaymentWebhook(input);
@@ -558,14 +731,18 @@ async function ensureAsaasPaymentWebhook(input: {
 async function updateAsaasPaymentWebhook(input: {
   accessToken: string;
   mode: AsaasMode;
+  apiBaseUrl?: string | null;
   webhookId: string;
   url: string;
   authToken: string;
   email?: string | null;
+  name?: string | null;
+  events?: string[] | null;
 }) {
   return requestAsaas<AsaasWebhookResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: `/webhooks/${encodeURIComponent(input.webhookId)}`,
     method: "PUT",
     payload: buildAsaasPaymentWebhookPayload(input),
@@ -576,15 +753,19 @@ async function updateAsaasPaymentWebhook(input: {
 async function findAsaasPaymentWebhook(input: {
   accessToken: string;
   mode: AsaasMode;
+  apiBaseUrl?: string | null;
   url: string;
+  name?: string | null;
 }) {
   const expectedUrl = normalizeAsaasWebhookUrl(input.url);
+  const expectedName = (input.name?.trim() || "ConnectyHub - Pagamentos").toLowerCase();
   let offset = 0;
 
   for (let page = 0; page < 5; page += 1) {
     const webhooks = await requestAsaas<AsaasWebhookListResponse>({
       accessToken: input.accessToken,
       mode: input.mode,
+      apiBaseUrl: input.apiBaseUrl,
       endpoint: `/webhooks?limit=100&offset=${offset}`,
       method: "GET",
       fallbackMessage: "Nao foi possivel listar webhooks Asaas.",
@@ -593,7 +774,7 @@ async function findAsaasPaymentWebhook(input: {
     const matchingByUrl = entries.find((webhook) => normalizeAsaasWebhookUrl(webhook.url) === expectedUrl);
     if (matchingByUrl) return matchingByUrl;
 
-    const matchingByName = entries.find((webhook) => webhook.name?.trim().toLowerCase() === "connectyhub - pagamentos");
+    const matchingByName = entries.find((webhook) => webhook.name?.trim().toLowerCase() === expectedName);
     if (matchingByName) return matchingByName;
 
     if (!webhooks.hasMore || entries.length === 0) break;
@@ -607,9 +788,11 @@ function buildAsaasPaymentWebhookPayload(input: {
   url: string;
   authToken: string;
   email?: string | null;
+  name?: string | null;
+  events?: string[] | null;
 }): JsonRecord {
   return {
-    name: "ConnectyHub - Pagamentos",
+    name: input.name?.trim() || "ConnectyHub - Pagamentos",
     url: input.url,
     email: normalizeAsaasWebhookEmail(input.email),
     enabled: true,
@@ -617,21 +800,7 @@ function buildAsaasPaymentWebhookPayload(input: {
     apiVersion: 3,
     authToken: input.authToken,
     sendType: "SEQUENTIALLY",
-    events: [
-      "PAYMENT_CREATED",
-      "PAYMENT_UPDATED",
-      "PAYMENT_CONFIRMED",
-      "PAYMENT_RECEIVED",
-      "PAYMENT_OVERDUE",
-      "PAYMENT_DELETED",
-      "PAYMENT_RESTORED",
-      "PAYMENT_REFUNDED",
-      "PAYMENT_CHARGEBACK_REQUESTED",
-      "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
-      "PAYMENT_AWAITING_RISK_ANALYSIS",
-      "PAYMENT_APPROVED_BY_RISK_ANALYSIS",
-      "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
-    ],
+    events: input.events?.length ? input.events : asaasPaymentWebhookEvents,
   };
 }
 
@@ -722,6 +891,7 @@ async function createAsaasCustomer(input: AsaasCustomerInput) {
   const customer = await requestAsaas<AsaasCustomerResponse>({
     accessToken: input.accessToken,
     mode: input.mode,
+    apiBaseUrl: input.apiBaseUrl,
     endpoint: "/customers",
     method: "POST",
     payload: {
@@ -795,13 +965,14 @@ export async function validateAsaasAccessToken(input: { accessToken: string; mod
 async function requestAsaas<T>(input: {
   accessToken: string;
   mode?: AsaasMode | null;
+  apiBaseUrl?: string | null;
   endpoint: string;
   method: "GET" | "POST" | "PUT";
   payload?: JsonRecord;
   idempotencyKey?: string | null;
   fallbackMessage: string;
 }): Promise<T> {
-  const response = await fetch(`${getAsaasApiBaseUrl(input.mode)}${input.endpoint}`, {
+  const response = await fetch(`${getAsaasApiBaseUrl(input.mode, input.apiBaseUrl)}${input.endpoint}`, {
     method: input.method,
     headers: {
       Accept: "application/json",
@@ -831,11 +1002,11 @@ function buildAsaasUserAgent(mode?: AsaasMode | null) {
   return `ConnectyHub/1.0 (Next.js; ${normalizedMode})`;
 }
 
-function getAsaasApiBaseUrl(mode?: AsaasMode | null) {
+function getAsaasApiBaseUrl(mode?: AsaasMode | null, apiBaseUrl?: string | null) {
   const normalizedMode = mode === "sandbox" ? "sandbox" : "production";
-  const configured = normalizedMode === "sandbox"
+  const configured = apiBaseUrl?.trim() || (normalizedMode === "sandbox"
     ? process.env.ASAAS_SANDBOX_API_BASE_URL?.trim()
-    : process.env.ASAAS_API_BASE_URL?.trim();
+    : process.env.ASAAS_API_BASE_URL?.trim());
   const baseUrl = configured || (normalizedMode === "sandbox"
     ? "https://api-sandbox.asaas.com/v3"
     : "https://api.asaas.com/v3");
@@ -963,6 +1134,28 @@ function normalizeAsaasInstallmentCount(value: number | null | undefined) {
   return Math.min(21, Math.max(1, Math.round(parsed)));
 }
 
+function normalizeAsaasCheckoutChargeTypes(
+  value: AsaasCheckoutChargeType[] | null | undefined,
+  maxInstallmentCount: number,
+): AsaasCheckoutChargeType[] {
+  const allowed = new Set<AsaasCheckoutChargeType>(["DETACHED", "INSTALLMENT", "RECURRENT"]);
+  const explicit = (value ?? []).filter((item): item is AsaasCheckoutChargeType => allowed.has(item));
+
+  if (explicit.length > 0) {
+    return Array.from(new Set(explicit));
+  }
+
+  return maxInstallmentCount > 1 ? ["DETACHED", "INSTALLMENT"] : ["DETACHED"];
+}
+
+function buildAsaasCheckoutSubscription(value: AsaasCheckoutInput["subscription"]) {
+  return compactObject({
+    cycle: value?.cycle ?? "MONTHLY",
+    nextDueDate: value?.nextDueDate ?? formatAsaasDateTime(new Date()),
+    endDate: value?.endDate ?? undefined,
+  });
+}
+
 function normalizeAsaasQuantity(value: number | null | undefined) {
   const parsed = typeof value === "number" && Number.isFinite(value) ? value : 1;
 
@@ -1055,6 +1248,10 @@ function compactObject(record: JsonRecord) {
 
 function formatAsaasDueDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function formatAsaasDateTime(date: Date) {
+  return date.toISOString().replace("T", " ").slice(0, 19);
 }
 
 function readAsaasErrorMessage(value: unknown) {
