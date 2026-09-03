@@ -299,7 +299,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
     router.refresh();
 
     if (isTestableIntegration(integration.id)) {
-      await handleTestConnection(integration);
+      await runConnectionTest(integration.id);
     }
   }
 
@@ -333,6 +333,10 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
       return;
     }
 
+    await runConnectionTest(integrationId);
+  }
+
+  async function runConnectionTest(integrationId: string) {
     setConnectionTests((cur) => ({
       ...cur,
       [integrationId]: { status: "testing", message: "Testando conexao..." },
