@@ -36,10 +36,25 @@ describe("WhatsApp sales catalog humanized replies", () => {
 
     expect(renderer).toContain("formatSalesCatalogCustomerMention(item)");
     expect(renderer).toContain("referencesSalesCatalogItem(normalizedOriginalText, item)");
+    expect(renderer).toContain("sanitizeCustomerVisibleInternalTags(rendered)");
     expect(renderer).toContain("function sanitizeSalesCatalogCustomerText");
     expect(renderer).toContain("destino da venda");
     expect(renderer).toContain("estoque e disponibilidade");
     expect(renderer).not.toContain("formatSalesCatalogInline(item)");
+  });
+
+  it("strips complete and dangling internal tags before WhatsApp delivery", () => {
+    const sanitizer = sourceBetween(
+      "function sanitizeCustomerVisibleInternalTags",
+      "function buildLeadAwareTrackingUrl",
+    );
+
+    expect(runtimeSource).toContain("const completeCustomerVisibleInternalTagRegex");
+    expect(runtimeSource).toContain("const danglingCustomerVisibleInternalTagRegex");
+    expect(runtimeSource).toContain("link|checkout|produto");
+    expect(sanitizer).toContain(".replace(completeCustomerVisibleInternalTagRegex, \"\")");
+    expect(sanitizer).toContain(".replace(danglingCustomerVisibleInternalTagRegex, \"\")");
+    expect(sanitizer).toContain(".trimEnd()");
   });
 
   it("gates catalog media and checks lead purchase intent before checkout", () => {

@@ -148,6 +148,8 @@ const whatsappReactionTimeoutMs = 8000;
 const geminiAgentResponseTimeoutMs = 60000;
 const geminiMediaAcknowledgementTimeoutMs = 20000;
 const linkButtonTagRegex = /\{\{\s*(?:link|checkout)_[^{}]+?\s*\}\}/gi;
+const completeCustomerVisibleInternalTagRegex = /\{\{\s*(?:link|checkout|produto)_[^{}]*?\s*\}\}/gi;
+const danglingCustomerVisibleInternalTagRegex = /[ \t]*\{\{\s*(?:link|checkout|produto)_[^\r\n{}]*$/i;
 
 type AgentRunRow = {
   id: string;
@@ -4273,6 +4275,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheca naturalmente como fracionamento/combinacao e confirme antes de inventar regra de preco.",
     "- Se o lead pedir variacao, sabor, tamanho, combo ou adicional cadastrado, use exatamente o que existe no catalogo/SKUs/atributos. Se houver preco explicito do adicional, o sistema pode somar no pedido.",
     "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto com a previa do pedido; o sistema so registra pedido e gera Pix/checkout depois da confirmacao clara do lead.",
+    "- Tags como {{produto_nome_id}} sao marcadores internos para o sistema identificar o item. Nunca mostre uma tag literal, completa ou parcial, para o lead.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
@@ -4807,6 +4810,22 @@ function replaceLooseLinkButtonTags(
   linkButtonTagRegex.lastIndex = 0;
 
   return rendered;
+}
+
+function sanitizeCustomerVisibleInternalTags(text: string) {
+  return text
+    .replace(completeCustomerVisibleInternalTagRegex, "")
+    .split(/\r?\n/)
+    .map((line) => (
+      line
+        .replace(danglingCustomerVisibleInternalTagRegex, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .trimEnd()
+    ))
+    .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildLeadAwareTrackingUrl(
@@ -7140,7 +7159,7 @@ function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) 
   }
 
   return {
-    text: rendered,
+    text: sanitizeCustomerVisibleInternalTags(rendered),
     items: Array.from(selected.values()),
   };
 }
