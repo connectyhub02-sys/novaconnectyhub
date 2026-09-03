@@ -11,6 +11,7 @@ import {
   MercadoPagoOAuthRequestError,
   validateMercadoPagoOAuthCredentials,
 } from "@/lib/sales-catalog/mercado-pago";
+import { validateAsaasAccessToken } from "@/lib/sales-catalog/asaas";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -211,6 +212,8 @@ async function testIntegration(integrationId: string, credentials: CredentialBag
       return testVapid(credentials);
     case "payments":
       return testStripe(credentials);
+    case "asaas":
+      return testAsaas(credentials);
     case "pagbank":
       return testPagBank(credentials);
     case "pagbank-billing":
@@ -637,6 +640,61 @@ async function testMercadoPago(credentials: CredentialBag): Promise<ConnectionTe
   }
 }
 
+async function testAsaas(credentials: CredentialBag): Promise<ConnectionTestResult> {
+  const accessToken = getCredential(credentials, ["ASAAS_PLATFORM_API_KEY", "ASAAS_API_KEY", "ASAAS_ACCESS_TOKEN"]);
+  const mode = normalizeAsaasMode(getCredential(credentials, ["ASAAS_PLATFORM_MODE", "ASAAS_ENVIRONMENT"]));
+  const configuredAccountId = getCredential(credentials, ["ASAAS_PLATFORM_ACCOUNT_ID"]);
+  const affiliateUrl = getCredential(credentials, ["ASAAS_AFFILIATE_URL", "NEXT_PUBLIC_ASAAS_AFFILIATE_URL"]);
+  const webhookAlertEmail = getCredential(credentials, ["ASAAS_WEBHOOK_ALERT_EMAIL"]);
+  const details = [
+    `Ambiente: ${mode}.`,
+    affiliateUrl
+      ? "Link indicado Asaas configurado para abertura de conta."
+      : "Link indicado Asaas ainda ausente; o botao Nao tenho conta usara o site padrao do Asaas.",
+    webhookAlertEmail
+      ? "E-mail de alerta webhook configurado."
+      : "E-mail de alerta webhook ausente; o provisionamento usa o contato padrao do suporte.",
+  ];
+
+  if (!accessToken) {
+    return offline("Preencha a API Key ConnectyHub do Asaas antes de testar a credencial da plataforma.", { details });
+  }
+
+  try {
+    const account = await validateAsaasAccessToken({ accessToken, mode });
+    const accountId = account.id ?? account.walletId ?? configuredAccountId;
+
+    if (account.label) {
+      details.push(`Conta validada: ${account.label}.`);
+    }
+
+    if (accountId) {
+      details.push(`Identificador: ${accountId}.`);
+    }
+
+    details.push(
+      account.hasActivePixKey
+        ? `${account.pixKeyCount} chave(s) Pix ativa(s) localizada(s).`
+        : "API Key validada, mas nenhuma chave Pix ativa foi localizada para esta conta.",
+    );
+
+    return online("Asaas online. API Key da ConnectyHub validada para manutencao e homologacao.", {
+      details,
+      responseData: {
+        accountId,
+        accountStatus: account.status,
+        hasActivePixKey: account.hasActivePixKey,
+        mode,
+        pixKeyCount: account.pixKeyCount,
+      },
+    });
+  } catch (error) {
+    return offline(error instanceof Error ? error.message : "Nao foi possivel validar a API Key ConnectyHub do Asaas.", {
+      details,
+    });
+  }
+}
+
 async function testPagBank(credentials: CredentialBag): Promise<ConnectionTestResult> {
   const clientId = getCredential(credentials, ["PAGBANK_CLIENT_ID", "PAGSEGURO_CLIENT_ID"]);
   const clientSecret = getCredential(credentials, ["PAGBANK_CLIENT_SECRET", "PAGSEGURO_CLIENT_SECRET"]);
@@ -829,6 +887,10 @@ function normalizeGoogleAdsApiVersion(value: string) {
 
 function readEnabledFlag(value: string) {
   return value.trim().toLowerCase() === "true";
+}
+
+function normalizeAsaasMode(value: string): "production" | "sandbox" {
+  return value.trim().toLowerCase() === "sandbox" ? "sandbox" : "production";
 }
 
 function resolveAppBaseUrlForTest() {

@@ -12,7 +12,7 @@ import type { SalesCatalogPaymentSessionStatus } from "./shared";
 
 type JsonRecord = Record<string, unknown>;
 
-type AsaasMode = "production" | "sandbox";
+export type AsaasMode = "production" | "sandbox";
 
 type AsaasIntegrationSecrets = {
   id: string;
@@ -729,7 +729,7 @@ async function createAsaasCustomer(input: AsaasCustomerInput) {
   return customer;
 }
 
-async function validateAsaasAccessToken(input: { accessToken: string; mode: AsaasMode }) {
+export async function validateAsaasAccessToken(input: { accessToken: string; mode: AsaasMode }) {
   const [account, pixKeys] = await Promise.all([
     requestAsaas<JsonRecord>({
       accessToken: input.accessToken,

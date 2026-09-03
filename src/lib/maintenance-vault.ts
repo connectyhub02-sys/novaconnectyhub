@@ -636,10 +636,33 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     sector: "Pagamentos no WhatsApp",
     owner: "Setor Financeiro IA",
     description:
-      "Gateway recomendado para contas PF ou PJ dos clientes. Cada empresa conecta sua propria API Key no painel; a ConnectyHub mantem somente link indicado e parametros operacionais.",
+      "Gateway recomendado para contas PF ou PJ dos clientes. A credencial da ConnectyHub valida a plataforma; cada empresa conecta sua propria API Key no painel para receber vendas.",
     tone: "green",
-    modules: ["Link indicado", "API Key por empresa", "Pix WhatsApp", "Checkout cartao", "Webhooks"],
+    modules: ["Credencial ConnectyHub", "Link indicado", "API Key por empresa", "Pix WhatsApp", "Checkout cartao", "Webhooks"],
     fields: [
+      {
+        label: "API Key ConnectyHub",
+        env: "ASAAS_PLATFORM_API_KEY",
+        aliases: ["ASAAS_API_KEY", "ASAAS_ACCESS_TOKEN"],
+        kind: "secret",
+        requirement: "recommended",
+        help: "API Key da conta Asaas da ConnectyHub usada somente para homologacao, teste tecnico e monitoramento do gateway. Clientes recebem por API Key propria no painel deles.",
+      },
+      {
+        label: "Modo API Key ConnectyHub",
+        env: "ASAAS_PLATFORM_MODE",
+        aliases: ["ASAAS_ENVIRONMENT"],
+        kind: "identifier",
+        requirement: "optional",
+        help: "Use production para a conta real da ConnectyHub ou sandbox para ambiente de teste. Se vazio, o teste usa production.",
+      },
+      {
+        label: "Conta Asaas ConnectyHub",
+        env: "ASAAS_PLATFORM_ACCOUNT_ID",
+        kind: "identifier",
+        requirement: "optional",
+        help: "ID, wallet ou identificador da conta Asaas da ConnectyHub para conferencia administrativa.",
+      },
       {
         label: "Link indicado Asaas",
         env: "ASAAS_AFFILIATE_URL",
@@ -1001,6 +1024,7 @@ function sortMaintenanceIntegrations(integrations: IntegrationSnapshot[]) {
     ["meta", 0],
     ["google-ads", 1],
     ["google-maps", 2],
+    ["asaas", 3],
   ]);
 
   return [...integrations].sort((left, right) => {

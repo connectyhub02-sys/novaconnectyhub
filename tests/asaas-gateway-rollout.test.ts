@@ -13,6 +13,7 @@ const sharedSource = read("src/lib/sales-catalog/shared.ts");
 const postPaymentSource = read("src/lib/sales-catalog/post-payment.ts");
 const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
 const maintenanceVaultSource = read("src/lib/maintenance-vault.ts");
+const adminIntegrationTestRouteSource = read("src/app/api/admin/integrations/[integrationId]/test/route.ts");
 const envExampleSource = read(".env.example");
 
 function read(path: string) {
@@ -117,6 +118,14 @@ describe("Asaas gateway rollout", () => {
     expect(adminIntegrationsSource).toContain("[\"meta-ads\", \"google-growth\", \"asaas\", \"pagbank\", \"webhook-universal\"]");
     expect(adminIntegrationsSource).toContain("function buildAsaasStatus");
     expect(maintenanceVaultSource).toContain("id: \"asaas\"");
+    expect(maintenanceVaultSource).toContain("ASAAS_PLATFORM_API_KEY");
+    expect(maintenanceVaultSource).toContain("Credencial ConnectyHub");
+    expect(adminIntegrationTestRouteSource).toContain("case \"asaas\"");
+    expect(adminIntegrationTestRouteSource).toContain("validateAsaasAccessToken");
+    expect(adminIntegrationTestRouteSource).toContain("hasActivePixKey");
+    expect(envExampleSource).toContain("ASAAS_PLATFORM_API_KEY=");
+    expect(envExampleSource).toContain("ASAAS_PLATFORM_MODE=production");
+    expect(envExampleSource).toContain("ASAAS_PLATFORM_ACCOUNT_ID=");
     expect(envExampleSource).toContain("ASAAS_AFFILIATE_URL=");
     expect(envExampleSource).toContain("ASAAS_WEBHOOK_ALERT_EMAIL=");
   });
