@@ -217,6 +217,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(followUpDetection).toContain("codigo pix");
     expect(followUpDetection).toContain("nao abriu");
     expect(followUpDetection).toContain("ainda nao");
+    expect(followUpDetection).toContain("resolvesCustomerDataForPayment");
+    expect(followUpDetection).toContain("extractRuntimeCustomerNameFromStructuredReply");
     expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
     expect(checkoutRecovery).toContain("gatewayUnavailable");
     expect(checkoutRecovery).toContain("if (paymentDeferred || gatewayUnavailable)");
@@ -255,6 +257,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("maybeAttachSalesCatalogCustomerNameToOrder");
     expect(runtimeSource).toContain("persistLeadCustomerNameSnapshot");
     expect(runtimeSource).toContain("extractRuntimeCustomerName");
+    expect(runtimeSource).toContain("extractRuntimeCustomerNameFromStructuredReply");
+    expect(runtimeSource).toContain("loadLatestLeadMetadataForRuntimeUpdate");
     expect(runtimeSource).toContain("sales_catalog.customer_name_saved");
     expect(runtimeSource).toContain("sales_catalog.saved_delivery_address_reused");
     expect(shippingRuntime).toContain("isRuntimeSavedDeliveryAffirmation");

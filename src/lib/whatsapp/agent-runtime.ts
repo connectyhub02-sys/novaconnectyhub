@@ -2344,7 +2344,8 @@ async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
   if (!order) return null;
 
   const customerName = resolveRuntimeSalesCatalogCustomerName(input.context, null)
-    ?? extractRuntimeCustomerName(input.userText);
+    ?? extractRuntimeCustomerName(input.userText)
+    ?? extractRuntimeCustomerNameFromStructuredReply(input.userText);
 
   if (!customerName) return null;
 
@@ -2489,7 +2490,11 @@ async function persistLeadDeliveryAddressSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = input.context.lead.metadata ?? {};
+  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
+    input.client,
+    input.context.lead.id,
+    input.context.lead.metadata,
+  );
   const history = Array.isArray(currentMetadata.delivery_addresses)
     ? currentMetadata.delivery_addresses.filter((entry) => readRecord(entry))
     : [];
@@ -2535,7 +2540,11 @@ async function persistLeadBillingDetailsSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = input.context.lead.metadata ?? {};
+  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
+    input.client,
+    input.context.lead.id,
+    input.context.lead.metadata,
+  );
   const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
 
   await input.client
@@ -2576,7 +2585,11 @@ async function persistLeadCustomerNameSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = input.context.lead.metadata ?? {};
+  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
+    input.client,
+    input.context.lead.id,
+    input.context.lead.metadata,
+  );
   const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
 
   await input.client
@@ -2834,6 +2847,22 @@ function extractRuntimeCustomerName(text: string) {
   return null;
 }
 
+function extractRuntimeCustomerNameFromStructuredReply(text: string) {
+  const raw = text.replace(/\s+/g, " ").trim();
+
+  if (!raw) return null;
+
+  const withoutEmail = raw.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, " ");
+  const withoutDocument = withoutEmail.replace(/\b\d[\d.\-/\s]{9,20}\d\b/g, " ");
+  const cleaned = withoutDocument
+    .replace(/\b(?:nome(?: completo)?|cpf|cnpj|documento|e[-\s]?mail|email|telefone|celular|whats(?:app)?)\b\s*[:\-]?/gi, " ")
+    .replace(/\b\d{2,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return sanitizeRuntimeCustomerNameCandidate(cleaned, { allowSingleName: false });
+}
+
 function sanitizeRuntimeCustomerNameCandidate(
   value: string | null | undefined,
   options: { allowSingleName: boolean },
@@ -2865,7 +2894,7 @@ function sanitizeRuntimeCustomerNameCandidate(
     return null;
   }
 
-  if (/\b(?:pix|cartao|credito|debito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar|sim|ok|top|beleza|perfeito|pode|quero|rua|avenida|bairro|cep|numero)\b/.test(normalized)) {
+  if (/\b(?:pix|cartao|credito|debito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar|sim|ok|top|beleza|perfeito|pode|quero|rua|avenida|bairro|cep|numero|cpf|cnpj|email|e mail|porque|precisa|preciso|sistema|seguro|dados)\b/.test(normalized)) {
     return null;
   }
 
@@ -3101,6 +3130,20 @@ function runtimeSalesCatalogOrderNeedsDeliveryAddress(order: RuntimeSalesCatalog
   return hasPhysicalItem
     && !isRuntimePickupShippingMethod(order.shippingMethod)
     && !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
+}
+
+async function loadLatestLeadMetadataForRuntimeUpdate(
+  client: SupabaseClient,
+  leadId: string,
+  fallback: JsonRecord | null | undefined,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("metadata")
+    .eq("id", leadId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return readRecord(data?.metadata) ?? fallback ?? {};
 }
 
 function runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(
@@ -9629,8 +9672,18 @@ function isSalesCatalogPaymentLinkFollowUp(
   const resolvesShippingForPayment = Boolean(extractFirstBrazilianCep(rawText))
     || hasRuntimeAddressText(rawText)
     || hasSalesCatalogPickupSignal(rawText);
+  const resolvesCustomerDataForPayment = Boolean(
+    extractRuntimeEmail(rawText)
+    || extractRuntimeCustomerDocument(rawText)
+    || extractRuntimeCustomerName(rawText)
+    || extractRuntimeCustomerNameFromStructuredReply(rawText),
+  );
 
   if (resolvesShippingForPayment && hasRecentSalesCatalogCheckoutPromise(messages, latestInbound)) {
+    return true;
+  }
+
+  if (resolvesCustomerDataForPayment && hasRecentSalesCatalogCheckoutPromise(messages, latestInbound)) {
     return true;
   }
 
