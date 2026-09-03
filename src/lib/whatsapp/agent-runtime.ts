@@ -723,6 +723,16 @@ export async function processWhatsappAgentRun(input: {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithPickup;
     }
 
+    const refreshedSalesCatalogOrdersWithCustomerName = await maybeAttachSalesCatalogCustomerNameToOrder({
+      client,
+      context,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithCustomerName) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithCustomerName;
+    }
+
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
       await pauseConversationForHuman(client, context.conversationId, behavior, "bot_loop_protection");
       return await completeRun(client, run.id, "Protecao contra loop acionada.", { skipped: true, reason: "bot_loop_protection" });
@@ -2309,6 +2319,76 @@ async function maybeAttachSalesCatalogPickupToOrder(input: {
   });
 }
 
+async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, item)
+  ));
+
+  if (!order) return null;
+
+  const customerName = resolveRuntimeSalesCatalogCustomerName(input.context, null)
+    ?? extractRuntimeCustomerName(input.userText);
+
+  if (!customerName) return null;
+
+  const now = new Date().toISOString();
+  const note = `Nome do cliente confirmado pelo WhatsApp em ${formatRuntimeDate(now)}: ${customerName}.`;
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      customer_name: customerName,
+      internal_notes: internalNotes,
+      updated_at: now,
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  if (input.context.lead?.id) {
+    await persistLeadCustomerNameSnapshot({
+      client: input.client,
+      context: input.context,
+      customerName,
+    }).catch(() => {});
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.customer_name_saved",
+    title: "Nome do cliente salvo pelo WhatsApp",
+    summary: customerName,
+    confidence: 0.82,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "customer", "lead_memory", "whatsapp"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      customer_name: customerName,
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
 async function persistLeadDeliveryAddressSnapshot(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -2351,6 +2431,40 @@ async function persistLeadDeliveryAddressSnapshot(input: {
             .slice(-4),
           snapshot,
         ],
+      },
+    })
+    .eq("id", input.context.lead.id);
+}
+
+async function persistLeadCustomerNameSnapshot(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  customerName: string;
+}) {
+  if (!input.context.lead?.id) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const currentMetadata = input.context.lead.metadata ?? {};
+  const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
+
+  await input.client
+    .from("leads")
+    .update({
+      display_name: input.customerName,
+      metadata: {
+        ...currentMetadata,
+        person_name: input.customerName,
+        personal_name: input.customerName,
+        name: input.customerName,
+        lead_name: input.customerName,
+        lead_memory: {
+          ...currentLeadMemory,
+          personName: input.customerName,
+          updated_at: now,
+          source: "whatsapp_agent_runtime",
+        },
       },
     })
     .eq("id", input.context.lead.id);
@@ -2563,6 +2677,69 @@ function extractRuntimeAddress(latestInbound: ConversationMessageRow | null, tex
   );
 
   return payloadAddress ?? sanitizeRuntimeDeliveryAddress(text);
+}
+
+function extractRuntimeCustomerName(text: string) {
+  const raw = text.replace(/\s+/g, " ").trim();
+
+  if (!raw) return null;
+
+  const explicitPatterns = [
+    /\b(?:meu nome(?: completo)?\s*(?:e|eh|é|:)?|nome(?: completo)?\s*[:\-]?|me chamo|eu me chamo|sou|eu sou|aqui e|aqui é)\s+([^,.;\n]{2,120})/i,
+  ];
+
+  for (const pattern of explicitPatterns) {
+    const match = raw.match(pattern);
+    const candidate = sanitizeRuntimeCustomerNameCandidate(match?.[1], { allowSingleName: true });
+    if (candidate) return candidate;
+  }
+
+  const addressMarker = raw.search(/\b(?:rua|r\.?|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia|cep)\b/i);
+  if (addressMarker > 0 && addressMarker <= 80) {
+    const beforeAddress = raw.slice(0, addressMarker);
+    const candidate = sanitizeRuntimeCustomerNameCandidate(beforeAddress, { allowSingleName: false });
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
+
+function sanitizeRuntimeCustomerNameCandidate(
+  value: string | null | undefined,
+  options: { allowSingleName: boolean },
+) {
+  const raw = value?.trim();
+
+  if (!raw) return null;
+
+  const addressMarker = raw.search(/\b(?:rua|r\.?|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia|cep)\b/i);
+  const paymentMarker = raw.search(/\b(?:pix|cart[aã]o|credito|cr[eé]dito|debito|d[eé]bito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar)\b/i);
+  const marker = [addressMarker, paymentMarker]
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0];
+  const trimmed = (marker !== undefined ? raw.slice(0, marker) : raw)
+    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, "")
+    .trim();
+  const candidate = normalizeLeadNameCandidate(trimmed, 90);
+
+  if (!candidate) return null;
+
+  const normalized = normalizeSearch(candidate);
+  const words = normalized.split(" ").filter(Boolean);
+
+  if (/^(?:de|do|da|dos|das|em|no|na|nos|nas)\s+/.test(normalized)) {
+    return null;
+  }
+
+  if (!options.allowSingleName && words.length < 2) {
+    return null;
+  }
+
+  if (/\b(?:pix|cartao|credito|debito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar|sim|ok|top|beleza|perfeito|pode|quero|rua|avenida|bairro|cep|numero)\b/.test(normalized)) {
+    return null;
+  }
+
+  return isLikelyPersonalLeadName(candidate) ? candidate : null;
 }
 
 function hasRuntimeAddressText(text: string) {
@@ -2794,6 +2971,31 @@ function runtimeSalesCatalogOrderNeedsDeliveryAddress(order: RuntimeSalesCatalog
   return hasPhysicalItem
     && !isRuntimePickupShippingMethod(order.shippingMethod)
     && !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
+}
+
+function runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder,
+) {
+  return !resolveRuntimeSalesCatalogCustomerName(context, order);
+}
+
+function resolveRuntimeSalesCatalogCustomerName(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder | null,
+) {
+  const orderName = normalizeLeadNameCandidate(order?.customerName);
+
+  if (orderName && isLikelyPersonalLeadName(orderName)) {
+    return orderName;
+  }
+
+  return context.lead
+    ? resolveLeadPersonalName({
+        displayName: context.lead.display_name,
+        metadata: context.lead.metadata,
+      })
+    : null;
 }
 
 function isRuntimePickupShippingMethod(value: string | null | undefined) {
@@ -9094,7 +9296,13 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
-  if (paymentDeferred && runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)) {
+  if (
+    paymentDeferred
+    && (
+      runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
+      || runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, order)
+    )
+  ) {
     return sendSalesCatalogPaymentDeferredWhatsapp({
       client: input.client,
       context: input.context,
@@ -9417,31 +9625,42 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  const order = input.context.salesCatalogOrders.find((item) => item.id === input.payment.orderId) ?? null;
   const shippingSettings = input.context.salesCatalogShippingSettings;
   const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled);
   const canLocalDelivery = Boolean(shippingSettings?.configured && shippingSettings.localDeliveryEnabled && shippingSettings.localDeliveryZones.some((zone) => zone.active));
   const canPickup = Boolean(shippingSettings?.configured && shippingSettings.localPickup);
   const canResolveDelivery = canShip || canLocalDelivery || canPickup;
+  const needsDeliveryAddress = order ? runtimeSalesCatalogOrderNeedsDeliveryAddress(order) : false;
+  const needsCustomerName = order
+    ? runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, order)
+    : !resolveRuntimeSalesCatalogCustomerName(input.context, null);
+  const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
-  const deliveryDataLabel = canShip
-    ? "CEP e endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver"
-    : "endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver";
-  const savedDeliveryLines = savedDeliveryAddress && (canShip || canLocalDelivery)
+  const deliveryDataLabel = "endereco completo com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se tiver";
+  const savedDeliveryLines = needsDeliveryAddress && savedDeliveryAddress && (canShip || canLocalDelivery)
     ? [
         `Tenho um endereco de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,
-        `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie ${deliveryDataLabel}.`,
+        `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie o ${deliveryDataLabel}.`,
       ]
     : [];
-  const intro = canResolveDelivery
-    ? "Antes de gerar o pagamento, preciso confirmar a forma de entrega desse pedido."
+  const intro = !needsHumanForDelivery
+    ? "Antes de gerar o pagamento, preciso confirmar seus dados do pedido."
     : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
     intro,
     ...savedDeliveryLines,
-    savedDeliveryLines.length === 0 && canShip ? "Se for entrega por frete, me envie o CEP e o endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver." : "",
-    savedDeliveryLines.length === 0 && canLocalDelivery ? "Se for entrega local, me envie o endereco completo. Bairro ou localizacao do WhatsApp ajudam a conferir a area atendida e a taxa, mas eu preciso deixar o endereco registrado." : "",
-    canPickup ? "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
-    !canResolveDelivery
+    needsCustomerName && savedDeliveryLines.length > 0
+      ? "Me envie tambem seu nome completo para eu registrar o pedido corretamente."
+      : "",
+    needsDeliveryAddress && savedDeliveryLines.length === 0
+      ? `Me envie seu ${needsCustomerName ? "nome completo e o " : ""}${deliveryDataLabel}.`
+      : "",
+    needsCustomerName && !needsDeliveryAddress
+      ? "Me confirme seu nome completo, por favor, para eu registrar o pedido corretamente."
+      : "",
+    needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
+    needsHumanForDelivery
       ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
       : "",
   ].filter(Boolean).join("\n");
@@ -9453,7 +9672,7 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     trackId: `agent_payment_deferred_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
     mentions: resolveGroupMentions(input.context),
   });
-  const handoffNotification = !canResolveDelivery
+  const handoffNotification = needsHumanForDelivery
     ? await notifyResponsibleHumanAboutPaymentIssue({
         client: input.client,
         context: input.context,

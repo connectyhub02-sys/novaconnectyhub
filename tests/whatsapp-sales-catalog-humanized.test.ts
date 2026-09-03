@@ -182,6 +182,12 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("gatewayUnavailable");
     expect(paymentSender).toContain("shouldResolveSalesCatalogPixInsideWhatsapp");
     expect(paymentSender).toContain("pix_code_missing");
+    expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment");
+    expect(paymentSender).toContain("Antes de gerar o pagamento, preciso confirmar seus dados do pedido.");
+    expect(paymentSender).toContain("nome completo e o ");
+    expect(paymentSender).toContain("endereco completo com rua, numero, bairro, cidade, CEP");
+    expect(paymentSender).not.toContain("Se for entrega por frete");
+    expect(paymentSender).not.toContain("confirmar a forma de entrega desse pedido");
     expect(runtimeSource).toContain("urlChoiceFormat ?? \"plain\"");
     expect(runtimeSource).toContain("normalizeInteractiveButtonChoice(choice, \"prefixed\")");
     expect(runtimeSource).toContain("repairIncompleteAssistantEnding");
@@ -216,6 +222,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSessionsSource).toContain("const preferredMethod = input.preferredMethod === \"card\" ? \"card\" : \"pix\";");
     expect(paymentSessionsSource).toContain("const sessionMethod = preferredMethod === \"card\" ? \"card\" : \"pix\";");
     expect(paymentSessionsSource).toContain("method: sessionMethod");
+    expect(paymentSessionsSource).toContain("needsCustomerNameBeforePayment");
+    expect(paymentSessionsSource).toContain("customer_name_required");
+    expect(paymentSessionsSource).toContain("lead_details_required");
     expect(paymentSessionsSource).toContain("paymentMethodType: \"card\"");
     expect(paymentSessionsSource).toContain("latest_payment_method: input.paymentMethodType ?? \"pix\"");
     expect(paymentSessionsSource).toContain("preferredMethod,");
@@ -239,6 +248,10 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("readLeadSavedDeliveryAddress");
     expect(runtimeSource).toContain("Tenho um endereco de entrega salvo");
     expect(runtimeSource).toContain("maybeAttachSavedSalesCatalogDeliveryToOrder");
+    expect(runtimeSource).toContain("maybeAttachSalesCatalogCustomerNameToOrder");
+    expect(runtimeSource).toContain("persistLeadCustomerNameSnapshot");
+    expect(runtimeSource).toContain("extractRuntimeCustomerName");
+    expect(runtimeSource).toContain("sales_catalog.customer_name_saved");
     expect(runtimeSource).toContain("sales_catalog.saved_delivery_address_reused");
     expect(shippingRuntime).toContain("isRuntimeSavedDeliveryAffirmation");
     expect(shippingRuntime).toContain("hasRecentSavedDeliveryConfirmationPrompt");

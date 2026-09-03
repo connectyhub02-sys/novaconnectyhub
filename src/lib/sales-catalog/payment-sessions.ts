@@ -113,15 +113,23 @@ export async function createSalesCatalogPixPaymentSession(input: {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
   }
 
-  if (requiresSalesCatalogShippingBeforePayment(order, items)) {
+  const needsShippingBeforePayment = requiresSalesCatalogShippingBeforePayment(order, items);
+  const needsCustomerNameBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerName(order);
+
+  if (needsShippingBeforePayment || needsCustomerNameBeforePayment) {
+    const reason = needsShippingBeforePayment && needsCustomerNameBeforePayment
+      ? "lead_details_required"
+      : needsShippingBeforePayment
+        ? "shipping_required"
+        : "customer_name_required";
     return createDeferredSalesCatalogCheckoutSession({
       ...input,
       order,
       items,
       amount,
       preferredMethod,
-      reason: "shipping_required",
-      reasonLabel: "Frete pendente",
+      reason,
+      reasonLabel: formatDeferredSalesCatalogPaymentReason(reason),
     });
   }
 
@@ -688,7 +696,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
   order: OrderRow;
   items: OrderItemRow[];
   preferredMethod: "pix" | "card";
-  reason: "shipping_required";
+  reason: "shipping_required" | "customer_name_required" | "lead_details_required";
   reasonLabel: string;
 }) {
   const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
@@ -830,11 +838,11 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     source_type: "sales_catalog_payment_session",
     source_id: sessionId,
     event_type: "sales_catalog.payment_session_deferred",
-    title: "Checkout aguardando frete",
-    summary: "Pagamento adiado ate confirmar frete, retirada ou entrega.",
+    title: `Checkout aguardando dados: ${input.reasonLabel}`,
+    summary: formatDeferredSalesCatalogPaymentSummary(input.reason),
     confidence: 0.92,
     visibility: "organization",
-    tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "shipping", "lead_tracking"],
+    tags: ["sales_catalog", "sales_catalog_order", "payment", paymentProviderTag, "checkout", "lead_tracking", input.reason],
     payload: {
       order_id: input.order.id,
       payment_session_id: sessionId,
@@ -871,6 +879,34 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
     paymentDeferred: true,
     paymentDeferredReason: input.reason,
   };
+}
+
+function hasSalesCatalogOrderCustomerName(order: OrderRow) {
+  return Boolean(order.customer_name?.trim());
+}
+
+function formatDeferredSalesCatalogPaymentReason(reason: "shipping_required" | "customer_name_required" | "lead_details_required") {
+  if (reason === "customer_name_required") {
+    return "Nome do cliente pendente";
+  }
+
+  if (reason === "lead_details_required") {
+    return "Dados do cliente pendentes";
+  }
+
+  return "Frete pendente";
+}
+
+function formatDeferredSalesCatalogPaymentSummary(reason: "shipping_required" | "customer_name_required" | "lead_details_required") {
+  if (reason === "customer_name_required") {
+    return "Pagamento adiado ate confirmar o nome do cliente.";
+  }
+
+  if (reason === "lead_details_required") {
+    return "Pagamento adiado ate confirmar nome e entrega do cliente.";
+  }
+
+  return "Pagamento adiado ate confirmar frete, retirada ou entrega.";
 }
 
 async function persistCheckoutOrderReference(input: {
