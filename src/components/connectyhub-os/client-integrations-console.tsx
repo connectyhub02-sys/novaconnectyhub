@@ -2188,7 +2188,7 @@ function AsaasGuidedCard({
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200"
           >
             <ExternalLink className="h-4 w-4" />
-            Ja tenho conta
+            Conectar API Key
           </a>
           <button
             type="button"
@@ -2198,7 +2198,7 @@ function AsaasGuidedCard({
             style={{ borderColor: "var(--ch-border)" }}
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-            {connected ? "Atualizar API Key" : "Conectar API Key"}
+            {connected ? "Atualizar conexao" : "Salvar conexao"}
           </button>
           <a
             href={buildAsaasAffiliateUrl(selectedCompanyId)}
@@ -2229,7 +2229,7 @@ function AsaasGuidedCard({
         </div>
 
         <p className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-[11px] leading-5 text-emerald-100">
-          Ja tenho conta usa a API Key da propria conta Asaas da loja: abra o Asaas, copie a chave, cole no campo acima e clique em Conectar API Key. Nao tenho conta abre o cadastro indicado.
+          Conectar API Key abre o Asaas para copiar a chave da loja. Depois cole a API Key no campo acima, escolha o ambiente e salve a conexao. Nao tenho conta abre o cadastro indicado.
         </p>
       </div>
 
@@ -2264,10 +2264,23 @@ function AsaasGuidedCard({
               </button>
             );
           })}
+          <button
+            type="button"
+            disabled
+            className="inline-flex min-h-9 cursor-not-allowed items-center gap-2 rounded-lg border px-3 text-[11px] font-semibold text-slate-500 opacity-70"
+            style={{ borderColor: "var(--ch-border)" }}
+            title="Cartao de debito depende de fluxo por fatura/invoiceUrl do Asaas e ainda nao esta liberado no checkout hospedado atual."
+          >
+            <CreditCard className="h-3.5 w-3.5" />
+            Cartao de debito
+            <span className="rounded-full border px-1.5 py-0.5 text-[9px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              em validacao
+            </span>
+          </button>
         </div>
 
         <p className="mt-3 rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2 text-[11px] leading-5 text-sky-100">
-          Pix e boleto dependem de habilitacao na propria conta Asaas. Cartao de debito fica oculto por enquanto porque o checkout hospedado atual trabalha com Pix e credito.
+          Pix e boleto dependem de habilitacao na propria conta Asaas. Debito fica bloqueado por enquanto porque exige um fluxo separado por fatura do Asaas antes de liberar para venda.
         </p>
 
         <label className="mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>

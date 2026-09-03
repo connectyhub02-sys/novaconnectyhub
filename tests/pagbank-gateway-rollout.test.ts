@@ -99,9 +99,10 @@ describe("PagBank gateway rollout", () => {
     expect(clientConsoleSource).not.toContain("Conectar PagBank");
     expect(clientConsoleSource).toContain("function AsaasGuidedCard");
     expect(clientConsoleSource).toContain("Conectar Asaas");
-    expect(clientConsoleSource).toContain("Ja tenho conta");
+    expect(clientConsoleSource).toContain("Conectar API Key");
+    expect(clientConsoleSource).toContain("Salvar conexao");
     expect(clientConsoleSource).toContain("Nao tenho conta");
-    expect(clientConsoleSource).toContain("Ja tenho conta usa a API Key da propria conta Asaas");
+    expect(clientConsoleSource).toContain("Conectar API Key abre o Asaas para copiar a chave da loja");
     expect(clientConsoleSource).toContain("buildAsaasAffiliateUrl");
     expect(clientConsoleSource).not.toContain("function MercadoPagoGuidedCard");
   });
@@ -228,6 +229,8 @@ describe("PagBank gateway rollout", () => {
     expect(clientConsoleSource).toContain("Nome no extrato");
     expect(clientConsoleSource).toContain("asaasInstallmentOptions");
     expect(clientConsoleSource).toContain("buildAsaasInterestFreeOptions");
+    expect(clientConsoleSource).toContain("Cartao de debito");
+    expect(clientConsoleSource).toContain("em validacao");
     expect(salesCatalogConsoleSource).not.toContain("PagBank Checkout");
     expect(salesCatalogConsoleSource).not.toContain("togglePagBankPaymentMethod");
     expect(salesCatalogConsoleSource).toContain("recurringEnabled: settingsDraft.asaas.recurringEnabled");

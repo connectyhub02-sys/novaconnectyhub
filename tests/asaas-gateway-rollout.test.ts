@@ -75,7 +75,8 @@ describe("Asaas gateway rollout", () => {
     expect(integrationsSource).toContain("asaasPreferences");
     expect(clientConsoleSource).toContain("function AsaasGuidedCard");
     expect(clientConsoleSource).toContain("API Key Asaas");
-    expect(clientConsoleSource).toContain("Ja tenho conta");
+    expect(clientConsoleSource).toContain("Conectar API Key");
+    expect(clientConsoleSource).toContain("Salvar conexao");
     expect(clientConsoleSource).toContain("Nao tenho conta");
     expect(clientConsoleSource).toContain("buildAsaasAffiliateUrl");
     expect(clientConsoleSource).toContain("Salvar preferencias Asaas");
