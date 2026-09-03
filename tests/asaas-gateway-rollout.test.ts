@@ -13,6 +13,7 @@ const sharedSource = read("src/lib/sales-catalog/shared.ts");
 const postPaymentSource = read("src/lib/sales-catalog/post-payment.ts");
 const adminIntegrationsSource = read("src/lib/admin/client-integrations.ts");
 const maintenanceVaultSource = read("src/lib/maintenance-vault.ts");
+const credentialVaultFormSource = read("src/components/connectyhub-os/credential-vault-form.tsx");
 const adminIntegrationTestRouteSource = read("src/app/api/admin/integrations/[integrationId]/test/route.ts");
 const envExampleSource = read(".env.example");
 
@@ -123,6 +124,9 @@ describe("Asaas gateway rollout", () => {
     expect(adminIntegrationTestRouteSource).toContain("case \"asaas\"");
     expect(adminIntegrationTestRouteSource).toContain("validateAsaasAccessToken");
     expect(adminIntegrationTestRouteSource).toContain("hasActivePixKey");
+    expect(credentialVaultFormSource).toContain("hasUnsavedIntegrationDraft");
+    expect(credentialVaultFormSource).toContain("Salve as credenciais preenchidas antes de testar a conexao");
+    expect(credentialVaultFormSource).toContain("new-password");
     expect(envExampleSource).toContain("ASAAS_PLATFORM_API_KEY=");
     expect(envExampleSource).toContain("ASAAS_PLATFORM_MODE=production");
     expect(envExampleSource).toContain("ASAAS_PLATFORM_ACCOUNT_ID=");

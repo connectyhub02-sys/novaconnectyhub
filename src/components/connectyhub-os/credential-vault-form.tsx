@@ -299,7 +299,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
     router.refresh();
 
     if (isTestableIntegration(integration.id)) {
-      await handleTestConnection(integration.id);
+      await handleTestConnection(integration);
     }
   }
 
@@ -319,7 +319,20 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
     router.refresh();
   }
 
-  async function handleTestConnection(integrationId: string) {
+  async function handleTestConnection(integration: VaultIntegration) {
+    const integrationId = integration.id;
+
+    if (hasUnsavedIntegrationDraft(integration, editingFields, values)) {
+      setConnectionTests((cur) => ({
+        ...cur,
+        [integrationId]: {
+          status: "offline",
+          message: "Salve as credenciais preenchidas antes de testar a conexao. O teste le apenas valores ja gravados no cofre.",
+        },
+      }));
+      return;
+    }
+
     setConnectionTests((cur) => ({
       ...cur,
       [integrationId]: { status: "testing", message: "Testando conexao..." },
@@ -459,7 +472,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                     )}
                     <button
                       type="button"
-                      onClick={() => void handleTestConnection(integration.id)}
+                      onClick={() => void handleTestConnection(integration)}
                       disabled={connectionTest.status === "testing"}
                       className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-60"
                       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
@@ -686,7 +699,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                               <input
                                 id={fieldKey}
                                 type={field.kind === "secret" && isSecretVisible ? "text" : getInputType(field)}
-                                autoComplete="off"
+                                autoComplete={getAutocomplete(field)}
                                 value={value}
                                 onFocus={() => beginEdit(fieldKey, saved)}
                                 onBlur={() => resetEmptyEdit(fieldKey)}
@@ -1187,6 +1200,12 @@ function getInputType(field: VaultField) {
   return "text";
 }
 
+function getAutocomplete(field: VaultField) {
+  if (field.kind === "secret") return "new-password";
+  if (field.env.includes("EMAIL")) return "email";
+  return "off";
+}
+
 function getPlaceholder(field: VaultField) {
   if (field.multiline) return "Cole uma lista separada por virgulas ou uma permissao por linha.";
   if (field.env.includes("STATUS")) return "Ex: teste, em revisao, aprovado.";
@@ -1195,6 +1214,17 @@ function getPlaceholder(field: VaultField) {
   if (field.env.includes("EMAIL"))  return "Digite o email da conta.";
   if (field.kind === "secret")      return "Cole a chave, senha ou token.";
   return "Digite o usuario, ID ou identificador.";
+}
+
+function hasUnsavedIntegrationDraft(
+  integration: VaultIntegration,
+  editingFields: Record<string, boolean>,
+  values: Record<string, string>,
+) {
+  return integration.fields.some((field) => {
+    const fieldKey = credKey(integration.id, field.env);
+    return editingFields[fieldKey] && Boolean(values[fieldKey]?.trim());
+  });
 }
 
 function getKindLabel(kind: CredentialKind) {
