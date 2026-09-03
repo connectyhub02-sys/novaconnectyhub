@@ -60,6 +60,7 @@ type OrderRow = {
   customer_email: string | null;
   customer_phone: string | null;
   destination_cep: string | null;
+  destination_address: string | null;
   shipping_total: string | null;
   shipping_method: string | null;
   total: string | null;
@@ -138,7 +139,7 @@ export async function POST(
 
   const { data: order, error: orderError } = await client
     .from("sales_catalog_orders")
-    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
+    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
     .eq("id", sourceSession.order_id)
     .eq("organization_id", sourceSession.organization_id)
     .maybeSingle<OrderRow>();
@@ -500,7 +501,7 @@ async function processPagBankPublicCardPayment(input: {
 
   const { data: order, error: orderError } = await client
     .from("sales_catalog_orders")
-    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
+    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
     .eq("id", sourceSession.order_id)
     .eq("organization_id", sourceSession.organization_id)
     .maybeSingle<OrderRow>();

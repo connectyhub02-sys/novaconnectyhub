@@ -48,8 +48,10 @@ type OrderRow = {
   customer_email: string | null;
   customer_phone: string | null;
   destination_cep: string | null;
+  destination_address: string | null;
   subtotal: string | null;
   shipping_total: string | null;
+  shipping_method: string | null;
   total: string | null;
   metadata: JsonRecord | null;
 };
@@ -80,7 +82,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 }) {
   const { data: order, error: orderError } = await input.client
     .from("sales_catalog_orders")
-    .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, subtotal, shipping_total, total, metadata")
+    .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, metadata")
     .eq("id", input.orderId)
     .eq("organization_id", input.organizationId)
     .maybeSingle<OrderRow>();

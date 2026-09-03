@@ -81,6 +81,7 @@ type CheckoutOrderRow = {
   conversation_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  destination_address: string | null;
   subtotal: string | null;
   shipping_total: string | null;
   total: string | null;
@@ -789,7 +790,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, lead_id, conversation_id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
+      .select("id, lead_id, conversation_id, customer_name, customer_phone, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),

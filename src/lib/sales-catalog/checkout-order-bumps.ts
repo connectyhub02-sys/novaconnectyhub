@@ -27,6 +27,7 @@ type SalesCatalogOrderRow = {
   payment_status: string | null;
   subtotal: string | number | null;
   discount_total: string | number | null;
+  destination_address: string | null;
   shipping_total: string | number | null;
   shipping_method: string | null;
   total: string | number | null;
@@ -215,7 +216,7 @@ async function loadCatalogItems(client: SupabaseClient, organizationId: string, 
 async function loadOrder(client: SupabaseClient, organizationId: string, orderId: string) {
   const { data, error } = await client
     .from("sales_catalog_orders")
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, shipping_method, total, metadata")
+    .select("id, organization_id, status, payment_status, subtotal, discount_total, destination_address, shipping_total, shipping_method, total, metadata")
     .eq("id", orderId)
     .eq("organization_id", organizationId)
     .maybeSingle<SalesCatalogOrderRow>();
@@ -354,7 +355,7 @@ async function updateOrderTotals(input: {
     })
     .eq("id", input.order.id)
     .eq("organization_id", input.organizationId)
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, shipping_method, total, metadata")
+    .select("id, organization_id, status, payment_status, subtotal, discount_total, destination_address, shipping_total, shipping_method, total, metadata")
     .single<SalesCatalogOrderRow>();
 
   if (error || !data) {

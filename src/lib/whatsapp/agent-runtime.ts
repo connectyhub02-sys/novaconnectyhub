@@ -666,11 +666,23 @@ export async function processWhatsappAgentRun(input: {
     const refreshedSalesCatalogOrdersWithShipping = await maybeAttachSalesCatalogShippingQuoteToOrder({
       client,
       context,
+      latestInbound,
       userText,
     }).catch(() => null);
 
     if (refreshedSalesCatalogOrdersWithShipping) {
       context.salesCatalogOrders = refreshedSalesCatalogOrdersWithShipping;
+    }
+
+    const refreshedSalesCatalogOrdersWithAddress = await maybeAttachSalesCatalogDeliveryAddressToOrder({
+      client,
+      context,
+      latestInbound,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithAddress) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithAddress;
     }
 
     const refreshedSalesCatalogOrdersWithLocalDelivery = await maybeAttachSalesCatalogLocalDeliveryToOrder({
@@ -1686,17 +1698,19 @@ async function maybeMarkSalesCatalogPaymentProof(input: {
 async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
   const cep = extractFirstBrazilianCep(input.userText);
   const shippingSettings = input.context.salesCatalogShippingSettings;
   if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) return null;
+  const destinationAddress = extractRuntimeAddress(input.latestInbound, input.userText);
 
   const order = input.context.salesCatalogOrders.find((item) => (
     item.status !== "cancelled"
     && item.status !== "delivered"
     && item.fulfillmentStatus !== "fulfilled"
-    && !item.shippingTotal
+    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
     && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
   ));
 
@@ -1719,6 +1733,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   const note = [
     `Frete calculado automaticamente em ${formatRuntimeDate(now)}.`,
     `CEP ${cep}.`,
+    destinationAddress ? `Endereco: ${destinationAddress}.` : "",
     `${quote.serviceName}: ${quote.price}.`,
     formatRuntimeShippingDeadline(quote.minDays, quote.maxDays)
       ? `Prazo ${formatRuntimeShippingDeadline(quote.minDays, quote.maxDays)}.`
@@ -1737,6 +1752,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
     .from("sales_catalog_orders")
     .update({
       destination_cep: cep,
+      destination_address: destinationAddress ?? order.destinationAddress ?? null,
       shipping_total: quote.price,
       shipping_method: quote.serviceName,
       total: updatedTotal ?? order.total,
@@ -1752,6 +1768,7 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
           price: quote.price,
           min_days: quote.minDays,
           max_days: quote.maxDays,
+          destination_address: destinationAddress ?? order.destinationAddress ?? null,
           cep: quote.cep,
           uf: quote.uf,
           state: quote.state,
@@ -1764,6 +1781,17 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
     .eq("organization_id", input.context.organization.id);
 
   if (error) return null;
+
+  if (destinationAddress && hasRuntimeCompleteDeliveryAddress(destinationAddress)) {
+    await persistLeadDeliveryAddressSnapshot({
+      client: input.client,
+      context: input.context,
+      orderId: order.id,
+      destinationAddress,
+      destinationCep: cep,
+      source: "shipping_quote",
+    }).catch(() => {});
+  }
 
   await input.client.from("intelligence_events").insert({
     scope: "organization",
@@ -1784,7 +1812,92 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
       agent_run_id: input.context.run.id,
       product_id: catalogItem.id,
       cep,
+      destination_address: destinationAddress ?? order.destinationAddress ?? null,
       quote,
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
+async function maybeAttachSalesCatalogDeliveryAddressToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const destinationAddress = extractRuntimeAddress(input.latestInbound, input.userText);
+  if (!destinationAddress || !hasRuntimeCompleteDeliveryAddress(destinationAddress)) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && runtimeSalesCatalogOrderNeedsDeliveryAddress(item)
+    && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
+  ));
+
+  if (!order) return null;
+
+  const now = new Date().toISOString();
+  const note = `Endereco de entrega confirmado automaticamente em ${formatRuntimeDate(now)}: ${destinationAddress}.`;
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const { data: current } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(current?.metadata) ?? {};
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      destination_address: destinationAddress,
+      internal_notes: internalNotes,
+      metadata: {
+        ...metadata,
+        delivery_address_collected_at: now,
+        delivery_address_collected_from: "whatsapp_agent_runtime",
+        delivery_address: destinationAddress,
+      },
+      updated_at: now,
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await persistLeadDeliveryAddressSnapshot({
+    client: input.client,
+    context: input.context,
+    orderId: order.id,
+    destinationAddress,
+    destinationCep: order.destinationCep,
+    source: "delivery_address",
+  }).catch(() => {});
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.delivery_address_saved",
+    title: "Endereco de entrega salvo pelo WhatsApp",
+    summary: preview(destinationAddress, 180),
+    confidence: 0.84,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "shipping", "address", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      destination_address: destinationAddress,
     },
   });
 
@@ -1877,6 +1990,17 @@ async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
     .eq("organization_id", input.context.organization.id);
 
   if (error) return null;
+
+  if (destinationAddress && hasRuntimeCompleteDeliveryAddress(destinationAddress)) {
+    await persistLeadDeliveryAddressSnapshot({
+      client: input.client,
+      context: input.context,
+      orderId: order.id,
+      destinationAddress,
+      destinationCep: order.destinationCep,
+      source: "local_delivery",
+    }).catch(() => {});
+  }
 
   await input.client.from("intelligence_events").insert({
     scope: "organization",
@@ -1995,6 +2119,53 @@ async function maybeAttachSalesCatalogPickupToOrder(input: {
   });
 }
 
+async function persistLeadDeliveryAddressSnapshot(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  orderId: string;
+  destinationAddress: string;
+  destinationCep: string | null | undefined;
+  source: "shipping_quote" | "delivery_address" | "local_delivery" | "initial_order";
+}) {
+  if (!input.context.lead?.id) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const currentMetadata = input.context.lead.metadata ?? {};
+  const history = Array.isArray(currentMetadata.delivery_addresses)
+    ? currentMetadata.delivery_addresses.filter((entry) => readRecord(entry))
+    : [];
+  const snapshot = {
+    address: input.destinationAddress,
+    cep: input.destinationCep ?? null,
+    order_id: input.orderId,
+    source: input.source,
+    updated_at: now,
+  };
+
+  await input.client
+    .from("leads")
+    .update({
+      metadata: {
+        ...currentMetadata,
+        address: input.destinationAddress,
+        delivery_address: input.destinationAddress,
+        destination_address: input.destinationAddress,
+        cep: input.destinationCep ?? currentMetadata.cep ?? null,
+        delivery_cep: input.destinationCep ?? currentMetadata.delivery_cep ?? null,
+        last_delivery_address_at: now,
+        delivery_addresses: [
+          ...history
+            .filter((entry) => readRecord(entry)?.address !== input.destinationAddress)
+            .slice(-4),
+          snapshot,
+        ],
+      },
+    })
+    .eq("id", input.context.lead.id);
+}
+
 function calculateRuntimeOrderTotalWithShipping(order: RuntimeSalesCatalogOrder, shippingTotal: string | null) {
   const subtotal = normalizeCurrencyAmount(order.subtotal) ?? normalizeCurrencyAmount(order.total);
   const shipping = normalizeCurrencyAmount(shippingTotal);
@@ -2070,6 +2241,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) {
     return null;
   }
+  const destinationAddress = extractRuntimeAddress(null, input.intentText);
 
   const result = calculateSalesCatalogShippingQuotes({
     item: physicalItem,
@@ -2084,7 +2256,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
 
   return {
     destinationCep: cep,
-    destinationAddress: null,
+    destinationAddress,
     shippingTotal: quote.price,
     shippingMethod: quote.serviceName,
     metadata: {
@@ -2096,6 +2268,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
       price: quote.price,
       min_days: quote.minDays,
       max_days: quote.maxDays,
+      destination_address: destinationAddress,
       cep: quote.cep,
       uf: quote.uf,
       state: quote.state,
@@ -2274,11 +2447,49 @@ function isRuntimePointInsidePolygon(
 function runtimeSalesCatalogOrderRequiresShippingBeforePayment(order: RuntimeSalesCatalogOrder) {
   const hasPhysicalItem = order.items.some((item) => item.fulfillment.mode === "physical");
 
-  return hasPhysicalItem && !hasRuntimeShippingValue(order.shippingMethod) && !hasRuntimeShippingValue(order.shippingTotal);
+  if (!hasPhysicalItem) {
+    return false;
+  }
+
+  const hasResolvedShipping = hasRuntimeShippingValue(order.shippingMethod) || hasRuntimeShippingValue(order.shippingTotal);
+  if (!hasResolvedShipping) {
+    return true;
+  }
+
+  if (isRuntimePickupShippingMethod(order.shippingMethod)) {
+    return false;
+  }
+
+  return !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
 }
 
 function hasRuntimeShippingValue(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined;
+}
+
+function runtimeSalesCatalogOrderNeedsDeliveryAddress(order: RuntimeSalesCatalogOrder) {
+  const hasPhysicalItem = order.items.some((item) => item.fulfillment.mode === "physical");
+
+  return hasPhysicalItem
+    && !isRuntimePickupShippingMethod(order.shippingMethod)
+    && !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
+}
+
+function isRuntimePickupShippingMethod(value: string | null | undefined) {
+  return Boolean(value && /\b(?:retirada|retirar|pickup)\b/.test(normalizeSearch(value)));
+}
+
+function hasRuntimeCompleteDeliveryAddress(value: string | null | undefined) {
+  const normalized = normalizeSearch(value ?? "");
+
+  if (normalized.length < 12) {
+    return false;
+  }
+
+  const hasAddressAnchor = /\b(?:rua|r|avenida|av|alameda|travessa|estrada|rodovia|praca|largo|condominio|residencial|casa|apto|apartamento)\b/.test(normalized);
+  const hasNumber = /\b\d{1,6}\b/.test(normalized) || /\b(?:sem numero|s n)\b/.test(normalized);
+
+  return hasAddressAnchor && hasNumber;
 }
 
 function hasSalesCatalogPickupSignal(text: string) {
@@ -4476,8 +4687,8 @@ function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCata
 
   const hasLocalDelivery = settings.localDeliveryEnabled && settings.localDeliveryZones.some((zone) => zone.active);
   const options = [
-    settings.shippingEnabled ? "CEP/frete calculado" : "",
-    hasLocalDelivery ? "entrega local dentro de zona ativa confirmada" : "",
+    settings.shippingEnabled ? "CEP, endereco completo e frete calculado" : "",
+    hasLocalDelivery ? "endereco completo dentro de zona local ativa confirmada" : "",
     settings.localPickup ? "retirada local confirmada" : "",
   ].filter(Boolean);
 
@@ -4486,11 +4697,11 @@ function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCata
   }
 
   if (settings.shippingEnabled) {
-    return "- Produto fisico precisa ter CEP/frete calculado antes de gerar Pix ou checkout de cartao. Nao ofereca retirada local.";
+    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Nao ofereca retirada local.";
   }
 
   if (hasLocalDelivery) {
-    return "- Produto fisico precisa ter bairro, endereco completo ou localizacao dentro de zona local ativa antes de gerar Pix ou checkout de cartao. Nao peca CEP para frete nacional.";
+    return "- Produto fisico precisa ter endereco completo dentro de zonas locais ativas antes de gerar Pix ou checkout de cartao. Bairro ou localizacao ajudam a conferir a area, mas nao substituem o endereco completo. Nao peca CEP para frete nacional.";
   }
 
   if (settings.localPickup) {
@@ -4523,10 +4734,10 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     `- Entrega local: ${settings.localDeliveryEnabled ? "habilitada" : "desativada"}.`,
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     settings.shippingEnabled
-      ? "- Quando precisar de entrega, peca CEP e use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
+      ? "- Quando precisar de entrega por frete, peca CEP e endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
     settings.localDeliveryEnabled
-      ? "- Para entrega local, peca bairro, endereco completo ou localizacao do WhatsApp e use somente zonas locais ativas. Fora dessas zonas, diga que a loja nao entrega naquela area e chame humano se necessario."
+      ? "- Para entrega local, peca endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; bairro ou localizacao do WhatsApp servem para conferir a zona, mas o endereco completo ainda precisa ficar registrado. Fora dessas zonas, diga que a loja nao entrega naquela area e chame humano se necessario."
       : "- Nao ofereca entrega local, motoboy, bairro atendido ou taxa por regiao.",
     settings.localPickup
       ? "- Retirada local pode ser oferecida quando fizer sentido e libera o pagamento com frete zero depois da confirmacao do lead."
@@ -8306,6 +8517,17 @@ async function recordSalesCatalogOrderIntent(input: {
       return null;
     }
 
+    if (initialShipping?.destinationAddress && hasRuntimeCompleteDeliveryAddress(initialShipping.destinationAddress)) {
+      await persistLeadDeliveryAddressSnapshot({
+        client: input.client,
+        context: input.context,
+        orderId: order.id,
+        destinationAddress: initialShipping.destinationAddress,
+        destinationCep: initialShipping.destinationCep,
+        source: "initial_order",
+      }).catch(() => {});
+    }
+
     const orderItems = orderSelections.map(({
       item,
       sku,
@@ -8679,7 +8901,9 @@ function isSalesCatalogPaymentLinkFollowUp(
     return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
   }
 
-  const resolvesShippingForPayment = Boolean(extractFirstBrazilianCep(rawText)) || hasSalesCatalogPickupSignal(rawText);
+  const resolvesShippingForPayment = Boolean(extractFirstBrazilianCep(rawText))
+    || hasRuntimeAddressText(rawText)
+    || hasSalesCatalogPickupSignal(rawText);
 
   if (resolvesShippingForPayment && hasRecentSalesCatalogCheckoutPromise(messages, latestInbound)) {
     return true;
@@ -8871,8 +9095,8 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
   const messageText = [
     intro,
-    canShip ? "Se for entrega, me envie o CEP para eu calcular o frete." : "",
-    canLocalDelivery ? "Se for entrega local, me envie endereco completo, bairro ou localizacao do WhatsApp para eu conferir a area atendida e a taxa." : "",
+    canShip ? "Se for entrega por frete, me envie o CEP e o endereco completo: rua, numero, bairro, cidade e complemento ou ponto de referencia se tiver." : "",
+    canLocalDelivery ? "Se for entrega local, me envie o endereco completo. Bairro ou localizacao do WhatsApp ajudam a conferir a area atendida e a taxa, mas eu preciso deixar o endereco registrado." : "",
     canPickup ? "Se for retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     !canResolveDelivery
       ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
