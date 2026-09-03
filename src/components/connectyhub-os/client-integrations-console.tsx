@@ -128,6 +128,8 @@ type MetaReviewSnapshot = {
 };
 
 const asaasInstallmentOptions = Array.from({ length: 21 }, (_, index) => index + 1);
+const asaasProductionApiKeyUrl = "https://www.asaas.com/customerApiAccessToken/index";
+const asaasSandboxApiKeyUrl = "https://sandbox.asaas.com/customerApiAccessToken/index";
 
 type MetaWebhookSimulationScenario =
   | "facebook_comment"
@@ -2113,6 +2115,9 @@ function AsaasGuidedCard({
   onSavePreferences: () => void;
   onTogglePaymentMethod: (methodId: SalesCatalogAsaasPaymentMethod) => void;
 }) {
+  const hasApiKeyDraft = Boolean(apiKeyDraft.trim());
+  const asaasApiKeyUrl = mode === "sandbox" ? asaasSandboxApiKeyUrl : asaasProductionApiKeyUrl;
+
   return (
     <section id="asaas-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
@@ -2175,15 +2180,25 @@ function AsaasGuidedCard({
           </label>
         </div>
 
-        <div className={cn("mt-3 grid gap-2", connected ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+        <div className={cn("mt-3 grid gap-2", connected ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
+          <a
+            href={asaasApiKeyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Ja tenho conta
+          </a>
           <button
             type="button"
-            disabled={!selectedCompanyId || connecting}
+            disabled={!selectedCompanyId || connecting || !hasApiKeyDraft}
             onClick={onConnect}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-emerald-300/10 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-            {connected ? "Reconectar Asaas" : "Ja tenho conta"}
+            {connected ? "Atualizar API Key" : "Conectar API Key"}
           </button>
           <a
             href={buildAsaasAffiliateUrl(selectedCompanyId)}
@@ -2214,7 +2229,7 @@ function AsaasGuidedCard({
         </div>
 
         <p className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-[11px] leading-5 text-emerald-100">
-          Ja tenho conta usa a API Key da propria conta Asaas da loja. Nao tenho conta abre o cadastro indicado; depois copie a API Key do Asaas e volte para conectar.
+          Ja tenho conta usa a API Key da propria conta Asaas da loja: abra o Asaas, copie a chave, cole no campo acima e clique em Conectar API Key. Nao tenho conta abre o cadastro indicado.
         </p>
       </div>
 
