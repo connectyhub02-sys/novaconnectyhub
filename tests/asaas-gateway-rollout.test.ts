@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migrationSource = read("supabase/migrations/0073_asaas_payment_gateway.sql");
+const tokenAuditMigrationSource = read("supabase/migrations/0074_sales_catalog_payment_integration_token_audit.sql");
 const asaasGatewaySource = read("src/lib/sales-catalog/asaas.ts");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
@@ -23,6 +24,11 @@ describe("Asaas gateway rollout", () => {
     expect(migrationSource).toContain("check (provider in ('mercado_pago', 'pagbank', 'asaas'))");
     expect(migrationSource).toContain("'asaas'");
     expect(migrationSource).toContain("\"api_key_connect\": true");
+    expect(tokenAuditMigrationSource).toContain("access_token_hash");
+    expect(tokenAuditMigrationSource).toContain("refresh_token_hash");
+    expect(tokenAuditMigrationSource).toContain("token_type");
+    expect(tokenAuditMigrationSource).toContain("webhook_secret_hash");
+    expect(tokenAuditMigrationSource).toContain("notify pgrst");
     expect(sharedSource).toContain("\"mercado_pago\" | \"pagbank\" | \"asaas\"");
   });
 
