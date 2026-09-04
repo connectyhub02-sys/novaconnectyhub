@@ -1,6 +1,6 @@
 const protectedTokenPrefix = "__CONNECTYHUB_PROTECTED_TEXT_";
 
-const portugueseSignalPattern = /\b(?:voce|voces|vc|vcs|nao|tambem|tbm|tb|pq|qnd|oq|cmg|dps|td|mto|qto|vdd|pra|manda|mande|mandar|envia|enviar|quero|preciso|produto|agente|atendimento|cliente)\b/i;
+const portugueseSignalPattern = /\b(?:voce|você|voces|vocês|vc|vcs|nao|não|tambem|também|tbm|tb|pq|qnd|oq|cmg|dps|td|mto|qto|vdd|pra|manda|mande|mandar|envia|enviar|quero|preciso|produto|agente|atendimento|cliente|pagamento|pix|cartao|cartão|credito|crédito|debito|débito|codigo|código|endereco|endereço|numero|número|confirmacao|confirmação|proximo|próximo|opcao|opção|opcoes|opções|preco|preço|orcamento|orçamento|duvida|dúvida)\b/i;
 const englishSignalPattern = /\b(?:u|ur|pls|plz|thx|idk|btw)\b/i;
 const spanishSignalPattern = /\b(?:xq|tmb|dnd|q)\b/i;
 
@@ -17,6 +17,25 @@ const portugueseAbbreviationRules: Array<[RegExp, string]> = [
   [/\bmidia\b/gi, "mídia"],
   [/\bbotao\b/gi, "botão"],
   [/\bbotoes\b/gi, "botões"],
+  [/\bcartao\b/gi, "cartão"],
+  [/\bcartoes\b/gi, "cartões"],
+  [/\bcredito\b/gi, "crédito"],
+  [/\bcreditos\b/gi, "créditos"],
+  [/\bdebito\b/gi, "débito"],
+  [/\bdebitos\b/gi, "débitos"],
+  [/\bcodigo\b/gi, "código"],
+  [/\bcodigos\b/gi, "códigos"],
+  [/\bendereco\b/gi, "endereço"],
+  [/\benderecos\b/gi, "endereços"],
+  [/\breferencia\b/gi, "referência"],
+  [/\breferencias\b/gi, "referências"],
+  [/\bconfirmacao\b/gi, "confirmação"],
+  [/\bintencao\b/gi, "intenção"],
+  [/\bobjecao\b/gi, "objeção"],
+  [/\bobjecoes\b/gi, "objeções"],
+  [/\borcamento\b/gi, "orçamento"],
+  [/\bmetodo\b/gi, "método"],
+  [/\bmetodos\b/gi, "métodos"],
   [/\bopcoes\b/gi, "opções"],
   [/\bopcao\b/gi, "opção"],
   [/\bpagina\b/gi, "página"],
@@ -58,6 +77,9 @@ const portugueseAbbreviationRules: Array<[RegExp, string]> = [
   [/\bpra\b/gi, "para"],
 ];
 
+const brazilianCurrencyWithCodePattern = /(?<![\p{L}\p{N}/])(?:R\$\s*)?((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{1,2})?)\s*BRL\b/giu;
+const brazilianCurrencyDisplayPattern = /R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{1,2})?)/giu;
+
 const englishAbbreviationRules: Array<[RegExp, string]> = [
   [/\bu\b/g, "you"],
   [/\bU\b/g, "you"],
@@ -84,7 +106,7 @@ export const outboundLanguageQualityPromptLines = [
   "ORTOGRAFIA E IDIOMA",
   "Responda no mesmo idioma principal do lead quando ele escrever em português, inglês ou espanhol.",
   "Use ortografia correta, acentos e pontuação natural do idioma escolhido. Texto e áudio devem sair prontos para o cliente, sem aparência de rascunho.",
-  "Português: escreva você, vocês, também, não, já, só, até, aí, áudio, mídia, botão, botões, opção, opções, página, informações, porque, quando, comigo, depois, tudo, muito, quanto e para. Nunca use voce, voces, vc, vcs, tb, tbm, pq, qnd, oq, cmg, dps, td, mto, qto ou pra.",
+  "Português: escreva você, vocês, também, não, já, só, até, aí, áudio, mídia, botão, botões, cartão, crédito, débito, código, endereço, número, opção, opções, preço, orçamento, página, informações, porque, quando, comigo, depois, tudo, muito, quanto e para. Nunca use voce, voces, vc, vcs, tb, tbm, pq, qnd, oq, cmg, dps, td, mto, qto ou pra.",
   "English: use standard spelling such as you, your, please, thanks and I don't know. Never use u, ur, pls, plz, thx, idk or btw.",
   "Español: use escritura completa y tildes cuando correspondan, como tú, usted, ustedes, también, porque, cuándo, cómo, dónde, información y opción. Nunca use xq, q, tmb, dnd o abreviaturas de chat.",
   "Não simule erro de digitação, autocorreção, palavra sem acento ou abreviação para parecer humano. Naturalidade não pode sacrificar clareza.",
@@ -105,10 +127,73 @@ export function normalizeOutboundLanguageText(value: string) {
     current.replace(pattern, (match) => matchCase(match, replacement))
   ), text);
 
-  return restoreOutboundFragments(expanded, protectedValues)
+  return restoreOutboundFragments(normalizeBrazilianCurrencyDisplay(expanded), protectedValues)
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
+}
+
+export function normalizeOutboundSpeechText(value: string) {
+  return normalizeOutboundLanguageText(value)
+    .replace(brazilianCurrencyDisplayPattern, (_match, amount: string) => (
+      formatBrazilianCurrencyForSpeech(amount) ?? `R$ ${amount}`
+    ));
+}
+
+function normalizeBrazilianCurrencyDisplay(value: string) {
+  return value.replace(brazilianCurrencyWithCodePattern, (_match, amount: string) => {
+    return `R$ ${normalizeBrazilianCurrencyAmount(amount)}`;
+  });
+}
+
+function normalizeBrazilianCurrencyAmount(value: string) {
+  const trimmed = value.trim();
+  const decimalMatch = trimmed.match(/^(.+)[,.](\d{1,2})$/);
+
+  if (!decimalMatch) {
+    return trimmed;
+  }
+
+  const whole = decimalMatch[1].replace(/[^\d.]/g, "") || "0";
+  const cents = decimalMatch[2].padEnd(2, "0").slice(0, 2);
+
+  return `${whole},${cents}`;
+}
+
+function formatBrazilianCurrencyForSpeech(value: string) {
+  const amount = parseBrazilianCurrency(value);
+
+  if (!amount) {
+    return null;
+  }
+
+  const realLabel = amount.reais === 1 ? "real" : "reais";
+  const centLabel = amount.centavos === 1 ? "centavo" : "centavos";
+
+  if (amount.centavos <= 0) {
+    return `${amount.reais} ${realLabel}`;
+  }
+
+  if (amount.reais <= 0) {
+    return `${amount.centavos} ${centLabel}`;
+  }
+
+  return `${amount.reais} ${realLabel} e ${amount.centavos} ${centLabel}`;
+}
+
+function parseBrazilianCurrency(value: string) {
+  const normalized = normalizeBrazilianCurrencyAmount(value);
+  const numeric = Number(normalized.replace(/\./g, "").replace(",", "."));
+
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return null;
+  }
+
+  const centsTotal = Math.round(numeric * 100);
+  return {
+    reais: Math.floor(centsTotal / 100),
+    centavos: centsTotal % 100,
+  };
 }
 
 function protectOutboundFragments(value: string) {

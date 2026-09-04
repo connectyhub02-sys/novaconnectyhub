@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const runtimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
+const inngestFunctionsSource = readFileSync("src/lib/inngest/functions.ts", "utf8");
 
 function sourceBetween(start: string, end: string) {
   const startIndex = runtimeSource.indexOf(start);
@@ -53,6 +54,12 @@ describe("WhatsApp runtime external call timeouts", () => {
     expect(available).toContain("timeoutMs: whatsappPresenceTimeoutMs");
     expect(reaction).toContain("try {");
     expect(reaction).toContain("timeoutMs: whatsappReactionTimeoutMs");
+  });
+
+  it("sweeps queued WhatsApp runs every minute as a fallback for delayed event dispatch", () => {
+    expect(inngestFunctionsSource).toContain("connectyhub-whatsapp-agent-sweep");
+    expect(inngestFunctionsSource).toContain('triggers: [{ cron: "* * * * *" }]');
+    expect(inngestFunctionsSource).toContain("processQueuedWhatsappAgentRuns({ limit: 10 })");
   });
 
   it("does not classify quoted replies as edit/delete or reaction just because payload keys exist", () => {

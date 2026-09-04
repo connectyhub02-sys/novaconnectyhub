@@ -86,6 +86,7 @@ import {
 } from "./eliane-agent";
 import {
   normalizeOutboundLanguageText,
+  normalizeOutboundSpeechText,
   outboundLanguageQualityPromptLines,
 } from "./outbound-language";
 import {
@@ -595,6 +596,29 @@ export async function processWhatsappAgentRun(input: {
         reason: "inbound_already_handled",
         duplicate_message_id: latestInbound?.id ?? null,
         duplicate_provider_message_id: latestInbound?.provider_message_id ?? null,
+      });
+    }
+
+    const viewOnceReply = await maybeHandleViewOnceInboundMessage({
+      client,
+      context,
+      token,
+      phone,
+      latestInbound,
+    });
+
+    if (viewOnceReply) {
+      if (behavior.markAsRead) {
+        await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
+      }
+
+      await maybeSetInstanceAvailable(context, token, "after");
+
+      return await completeRun(client, run.id, preview(viewOnceReply.text, 500), {
+        sent: true,
+        reason: "view_once_message_requires_resend",
+        messages: 1,
+        mode: viewOnceReply.mode,
       });
     }
 
@@ -4215,7 +4239,7 @@ function buildMediaDrivenQualificationInstruction(behavior: WhatsappBehaviorConf
     "",
     "MIDIA COMO CONTEXTO COMERCIAL:",
     "- Quando houver analise de foto, video ou documento, responda como humano que realmente olhou: cite pelo menos um detalhe concreto antes de avancar.",
-    "- Nunca trate midia como interrupcao do atendimento. Use a midia para entender melhor intencao, urgencia, preferencia, dor, produto desejado ou proximo passo.",
+    "- Nunca trate mídia como interrupção do atendimento. Use a mídia para entender melhor intenção, urgência, preferência, dor, produto desejado ou próximo passo.",
     qualificationActive
       ? "- Como a qualificacao esta ativa, conecte a midia ao playbook de qualificacao e faca no maximo uma pergunta natural baseada no que apareceu."
       : "- Como a qualificacao esta desativada, use a midia para resolver ou vender sem puxar perguntas de qualificacao desnecessarias.",
@@ -4234,7 +4258,7 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
 
   if (memory.personName) lines.push(`- Nome pessoal informado pelo lead: ${memory.personName}`);
   if (savedDeliveryAddress) {
-    lines.push(`- Endereco de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`);
+    lines.push(`- Endereço de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`);
   }
   if (memory.summary) lines.push(`- Resumo do lead: ${memory.summary}`);
   if (memory.goals.length) lines.push(`- Objetivos declarados: ${memory.goals.join("; ")}`);
@@ -4254,7 +4278,7 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
     "MEMORIA INDIVIDUAL DO LEAD:",
     ...lines,
     "- Use esses detalhes so quando parecer natural. Nao diga que consultou memoria, registro, sistema ou banco de dados.",
-    "- Se houver endereco de entrega salvo e o lead fizer novo pedido com entrega, confirme se pode usar esse mesmo endereco antes de pedir rua/CEP novamente.",
+    "- Se houver endereço de entrega salvo e o lead fizer novo pedido com entrega, confirme se pode usar esse mesmo endereço antes de pedir rua/CEP novamente.",
     "- Se uma informacao da memoria conflitar com a mensagem atual do lead, confie na mensagem atual.",
   ];
 }
@@ -5266,21 +5290,22 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
 
   return [
     "",
-    "CATALOGO DE VENDAS DISPONIVEL:",
-    "- Use o catalogo como memoria interna para conversar como uma pessoa real. Nunca copie a ficha tecnica completa para o lead.",
-    "- Quando o lead perguntar se tem um produto, responda em ate 2 mensagens curtas, confirme que tem e apresente no maximo 3 opcoes com nome, preco e uma frase simples de contexto.",
-    "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
-    "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
-    "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartao ou link de pagamento, nunca gere pagamento direto na primeira intencao.",
-    "- Antes do pagamento, envie uma previa curta do pedido com itens, quantidades e total quando houver preco. Pergunte claramente: Posso fechar seu pedido e gerar o pagamento?",
-    "- Se ainda faltarem dados para cobrar, organize em duas fases: primeiro nome completo, CPF/CNPJ e e-mail; depois endereco completo com CEP quando houver entrega. Se algum dado ja estiver no arquivo do lead ou na conversa recente, confirme ou aproveite em vez de pedir de novo.",
-    "- Somente depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, gere Pix direto ou checkout/link conforme a forma habilitada.",
-    "- Se o lead corrigir item, quantidade, sabor, variacao, endereco ou forma de pagamento, ajuste a previa e peca nova confirmacao antes do pagamento.",
-    "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; depois da confirmacao do lead, o sistema deve criar um unico checkout com todos os itens somados.",
-    "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate apenas os produtos recentes da intencao atual como um carrinho unico. Resuma o carrinho em uma frase curta, sem repetir ficha tecnica.",
-    "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheca naturalmente como fracionamento/combinacao e confirme antes de inventar regra de preco.",
-    "- Se o lead pedir variacao, sabor, tamanho, combo ou adicional cadastrado, use exatamente o que existe no catalogo/SKUs/atributos. Se houver preco explicito do adicional, o sistema pode somar no pedido.",
-    "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto com a previa do pedido; o sistema so registra pedido e gera Pix/checkout depois da confirmacao clara do lead.",
+    "CATÁLOGO DE VENDAS DISPONÍVEL:",
+    "- Use o catálogo como memória interna para conversar como uma pessoa real. Nunca copie a ficha técnica completa para o lead.",
+    "- Quando o lead perguntar se tem um produto, responda em até 2 mensagens curtas, confirme que tem e apresente no máximo 3 opções com nome, preço e uma frase simples de contexto.",
+    "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Não despeje descrição, benefícios, estoque, arquivos ou dados técnicos de uma vez.",
+    "- Para produto de checkout ConnectyHub, deixe detalhes longos para a página de produto; o sistema pode enviar automaticamente o botão Ver produto.",
+    "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartão ou link de pagamento, nunca gere pagamento direto na primeira intenção.",
+    "- Antes do pagamento, envie uma prévia curta do pedido com itens, quantidades e total quando houver preço. Pergunte claramente: Posso fechar seu pedido e gerar o pagamento?",
+    "- Se ainda faltarem dados para cobrar, organize em duas fases: primeiro nome completo, CPF/CNPJ e e-mail; depois endereço completo com CEP quando houver entrega. Se algum dado já estiver no arquivo do lead ou na conversa recente, confirme ou aproveite em vez de pedir de novo.",
+    "- Para produto físico com entrega ou frete, não informe total final e não gere pagamento antes de endereço completo, frete/taxa ou retirada estarem definidos.",
+    "- Somente depois de confirmação clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, gere Pix direto ou checkout/link conforme a forma habilitada.",
+    "- Se o lead corrigir item, quantidade, sabor, variação, endereço ou forma de pagamento, ajuste a prévia e peça nova confirmação antes do pagamento.",
+    "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; depois da confirmação do lead, o sistema deve criar um único checkout com todos os itens somados.",
+    "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate apenas os produtos recentes da intenção atual como um carrinho único. Resuma o carrinho em uma frase curta, sem repetir ficha técnica.",
+    "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheça naturalmente como fracionamento/combinação e confirme antes de inventar regra de preço.",
+    "- Se o lead pedir variação, sabor, tamanho, combo ou adicional cadastrado, use exatamente o que existe no catálogo/SKUs/atributos. Se houver preço explícito do adicional, o sistema pode somar no pedido.",
+    "- Quando o lead escolher uma opção ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto com a prévia do pedido; o sistema só registra pedido e gera Pix/checkout depois da confirmação clara do lead.",
     "- Tags como {{produto_nome_id}} sao marcadores internos para o sistema identificar o item. Nunca mostre uma tag literal, completa ou parcial, para o lead.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
@@ -5435,24 +5460,24 @@ function buildSalesCatalogCommerceLines(
   return [
     "",
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
-    "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
-    "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
-    "- Dados de cobranca e entrega devem ser coletados com pouco atrito: primeiro nome completo, CPF/CNPJ e e-mail; depois endereco completo com CEP quando entrega/frete for necessario. Nao repita pergunta por dados que ja apareceram claramente na conversa.",
-    `- Metodos de pagamento automatico habilitados no Asaas: ${asaasMethods}.`,
-    "- O agente so pode oferecer formas de pagamento habilitadas no gateway Asaas desta empresa. Se Pix, cartao de credito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
+    "- Use estas regras para conduzir orçamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
+    "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e próximo passo; o sistema registra a intenção de pedido no painel.",
+    "- Dados de cobrança e entrega devem ser coletados com pouco atrito: primeiro nome completo, CPF/CNPJ e e-mail; depois endereço completo com CEP quando entrega/frete for necessário. Não repita pergunta por dados que já apareceram claramente na conversa.",
+    `- Métodos de pagamento automático habilitados no Asaas: ${asaasMethods}.`,
+    "- O agente só pode oferecer formas de pagamento habilitadas no gateway Asaas desta empresa. Se Pix, cartão de crédito ou boleto estiver desativado, não ofereça essa forma ao lead.",
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
-      ? "- Como ha mais de uma forma de pagamento habilitada, depois da confirmacao do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobranca."
+      ? "- Como há mais de uma forma de pagamento habilitada, depois da confirmação do pedido pergunte obrigatoriamente qual forma o lead prefere antes de gerar a cobrança."
       : "",
     buildSalesCatalogPhysicalPaymentReadinessLine(shippingSettings),
     pixEnabled
-      ? "- Pix: depois da confirmacao do pedido, o sistema gera Pix automatico e envia um botao para copiar o codigo no WhatsApp quando o provedor aceitar; a confirmacao principal vem pelo webhook do gateway, nao por comprovante manual."
-      : "- Pix esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
+      ? "- Pix: depois da confirmação do pedido, o sistema gera Pix automático e envia um botão para copiar o código no WhatsApp quando o provedor aceitar; a confirmação principal vem pelo webhook do gateway, não por comprovante manual."
+      : "- Pix está desativado; não prometa Pix, copia-e-cola ou QR Code.",
     creditCardEnabled
-      ? "- Cartao de credito: use o checkout seguro da ConnectyHub. Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp."
-      : "- Cartao de credito esta desativado; nao ofereca pagamento em credito.",
+      ? "- Cartão de crédito: use o checkout seguro da ConnectyHub. Nunca peça número, validade, CVV ou dados sensíveis de cartão pelo WhatsApp."
+      : "- Cartão de crédito está desativado; não ofereça pagamento em crédito.",
     boletoEnabled
-      ? "- Boleto: trate como alternativa de cobranca Asaas quando o fluxo retornar link ou linha digitavel; se o sistema nao gerar boleto automaticamente, chame humano."
-      : "- Boleto esta desativado; nao ofereca boleto.",
+      ? "- Boleto: trate como alternativa de cobrança Asaas quando o fluxo retornar link ou linha digitável; se o sistema não gerar boleto automaticamente, chame humano."
+      : "- Boleto está desativado; não ofereça boleto.",
     manualPaymentMethods.length > 0
       ? `- Regras complementares de atendimento: ${manualPaymentMethods.map((method) => method.label).join(", ")}.`
       : "",
@@ -5461,19 +5486,19 @@ function buildSalesCatalogCommerceLines(
       .filter(Boolean),
     `- Recorrencia automatica: ${settings.asaas.recurringEnabled ? "habilitada" : "desabilitada"}.`,
     settings.asaas.recurringEnabled
-      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto tambem estiver marcado como recorrente; nao transforme assinatura em Pix unico."
-      : "- Nao ofereca assinatura ou cobranca recorrente automatica; se o produto estiver marcado como recorrente, explique que precisa de confirmacao humana.",
-    settings.orderPolicy.minimumOrderValue ? `- Pedido minimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
+      ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto também estiver marcado como recorrente; não transforme assinatura em Pix único."
+      : "- Não ofereça assinatura ou cobrança recorrente automática; se o produto estiver marcado como recorrente, explique que precisa de confirmação humana.",
+    settings.orderPolicy.minimumOrderValue ? `- Pedido mínimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
     `- Reserva do pedido: ${formatRuntimeReservationPolicy(settings.orderPolicy.reservationPolicy)}.`,
-    `- Pode fechar sem pagamento: ${settings.orderPolicy.allowOrderWithoutPayment ? "sim" : "nao"}.`,
-    `- Confirmacao humana antes de finalizar: ${settings.orderPolicy.requireHumanConfirmation ? "sim" : "nao"}.`,
-    `- Pedir CEP antes de informar frete: ${settings.orderPolicy.askCepBeforeQuote ? "sim" : "nao"}.`,
-    settings.orderPolicy.abandonedCartMinutes !== null ? `- Retomar conversa parada apos ${settings.orderPolicy.abandonedCartMinutes} minuto(s), se a automacao estiver ativa.` : "",
-    settings.orderPolicy.followUpDays !== null ? `- Pos-venda em ${settings.orderPolicy.followUpDays} dia(s), se a automacao estiver ativa.` : "",
+    `- Pode fechar sem pagamento: ${settings.orderPolicy.allowOrderWithoutPayment ? "sim" : "não"}.`,
+    `- Confirmação humana antes de finalizar: ${settings.orderPolicy.requireHumanConfirmation ? "sim" : "não"}.`,
+    `- Pedir CEP antes de informar frete: ${settings.orderPolicy.askCepBeforeQuote ? "sim" : "não"}.`,
+    settings.orderPolicy.abandonedCartMinutes !== null ? `- Retomar conversa parada após ${settings.orderPolicy.abandonedCartMinutes} minuto(s), se a automação estiver ativa.` : "",
+    settings.orderPolicy.followUpDays !== null ? `- Pós-venda em ${settings.orderPolicy.followUpDays} dia(s), se a automação estiver ativa.` : "",
     `- Dados para fechar pedido: ${requiredFields}.`,
     settings.leadDataPolicy.consentMessage ? `- Consentimento de dados: ${settings.leadDataPolicy.consentMessage}` : "",
-    settings.leadDataPolicy.retentionDays !== null ? `- Retencao de dados configurada: ${settings.leadDataPolicy.retentionDays} dia(s).` : "",
-    "- Templates disponiveis para adaptar sem repetir mecanicamente:",
+    settings.leadDataPolicy.retentionDays !== null ? `- Retenção de dados configurada: ${settings.leadDataPolicy.retentionDays} dia(s).` : "",
+    "- Templates disponíveis para adaptar sem repetir mecanicamente:",
     `  Resumo: ${settings.messageTemplates.orderSummary}`,
     `  Pagamento: ${settings.messageTemplates.paymentRequest}`,
     `  Pago: ${settings.messageTemplates.paymentConfirmed}`,
@@ -5484,33 +5509,33 @@ function buildSalesCatalogCommerceLines(
 
 function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCatalogShippingSettings | null) {
   if (!settings?.configured) {
-    return "- Produto fisico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartao; como a loja ainda nao configurou isso, acione humano antes de cobrar.";
+    return "- Produto físico precisa ter entrega, frete ou retirada definidos antes de gerar Pix ou checkout de cartão; como a loja ainda não configurou isso, acione humano antes de cobrar.";
   }
 
   const hasLocalDelivery = settings.localDeliveryEnabled && settings.localDeliveryZones.some((zone) => zone.active);
   const options = [
-    settings.shippingEnabled ? "CEP, endereco completo e frete calculado" : "",
-    hasLocalDelivery ? "endereco completo dentro de zona local ativa confirmada" : "",
+    settings.shippingEnabled ? "CEP, endereço completo e frete calculado" : "",
+    hasLocalDelivery ? "endereço completo dentro de zona local ativa confirmada" : "",
     settings.localPickup ? "retirada local confirmada" : "",
   ].filter(Boolean);
 
   if (options.length > 1) {
-    return `- Produto fisico precisa ter ${options.join(" ou ")} antes de gerar Pix ou checkout de cartao.`;
+    return `- Produto físico precisa ter ${options.join(" ou ")} antes de gerar Pix ou checkout de cartão.`;
   }
 
   if (settings.shippingEnabled) {
-    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Depois dos dados de cobranca, peca direto: \"Me confirme seu endereco completo, por favor, com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se houver.\" Nao ofereca retirada local.";
+    return "- Produto físico precisa ter CEP, endereço completo e frete calculado antes de gerar Pix ou checkout de cartão. Depois dos dados de cobrança, peça direto: \"Me confirme seu endereço completo, por favor, com rua, número, bairro, cidade, CEP e complemento ou ponto de referência se houver.\" Não ofereça retirada local.";
   }
 
   if (hasLocalDelivery) {
-    return "- Produto fisico precisa ter endereco completo dentro de zonas locais ativas antes de gerar Pix ou checkout de cartao. Bairro ou localizacao ajudam a conferir a area, mas nao substituem o endereco completo. Nao peca CEP para frete nacional.";
+    return "- Produto físico precisa ter endereço completo dentro de zonas locais ativas antes de gerar Pix ou checkout de cartão. Bairro ou localização ajudam a conferir a área, mas não substituem o endereço completo. Não peça CEP para frete nacional.";
   }
 
   if (settings.localPickup) {
-    return "- Produto fisico precisa ter retirada local confirmada antes de gerar Pix ou checkout de cartao. Nao peca CEP para calcular frete.";
+    return "- Produto físico precisa ter retirada local confirmada antes de gerar Pix ou checkout de cartão. Não peça CEP para calcular frete.";
   }
 
-  return "- Produto fisico nao tem frete por entrega, entrega local nem retirada local habilitados; acione humano antes de gerar Pix ou checkout de cartao.";
+  return "- Produto físico não tem frete por entrega, entrega local nem retirada local habilitados; acione humano antes de gerar Pix ou checkout de cartão.";
 }
 
 function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippingSettings | null) {
@@ -5538,10 +5563,10 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     "- Se o arquivo do lead ja tiver endereco/CEP salvos e o lead fizer novo pedido, primeiro pergunte se pode entregar no mesmo endereco. Se ele confirmar, use o endereco salvo; se ele corrigir, grave o novo endereco.",
     settings.shippingEnabled
-      ? "- Quando a loja tiver entrega por frete, peca direto o endereco completo com CEP, rua, numero, bairro, cidade e complemento/ponto de referencia se houver; nao use pergunta condicional como \"se for entrega por frete\" quando o frete ja estiver habilitado; use somente estados/faixas cadastrados; se o estado nao estiver ativo, diga que a loja nao entrega naquela regiao e chame humano se necessario."
+      ? "- Quando a loja tiver entrega por frete, peça direto o endereço completo com CEP, rua, número, bairro, cidade e complemento/ponto de referência se houver; não use pergunta condicional como \"se for entrega por frete\" quando o frete já estiver habilitado; use somente estados/faixas cadastrados; se o estado não estiver ativo, diga que a loja não entrega naquela região e chame humano se necessário."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
     settings.localDeliveryEnabled
-      ? "- Para entrega local, peca endereco completo com rua, numero, bairro, cidade e complemento/ponto de referencia se houver; bairro ou localizacao do WhatsApp servem para conferir a zona, mas o endereco completo ainda precisa ficar registrado. Fora dessas zonas, diga que a loja nao entrega naquela area e chame humano se necessario."
+      ? "- Para entrega local, peça endereço completo com rua, número, bairro, cidade e complemento/ponto de referência se houver; bairro ou localização do WhatsApp servem para conferir a zona, mas o endereço completo ainda precisa ficar registrado. Fora dessas zonas, diga que a loja não entrega naquela área e chame humano se necessário."
       : "- Nao ofereca entrega local, motoboy, bairro atendido ou taxa por regiao.",
     settings.localPickup
       ? "- Retirada local pode ser oferecida quando fizer sentido e libera o pagamento com frete zero depois da confirmacao do lead."
@@ -6662,6 +6687,34 @@ async function persistMediaAcknowledgementFailure(
   });
 }
 
+async function maybeHandleViewOnceInboundMessage(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow | null;
+}) {
+  if (!isViewOnceInboundMessage(input.latestInbound)) {
+    return null;
+  }
+
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  await setChatPresence(input.context.credentials, input.token, input.phone, "composing", 8000).catch(() => {});
+
+  return sendTextOutboundChunk({
+    client: input.client,
+    context: input.context,
+    token: input.token,
+    phone: input.phone,
+    text: "Recebi uma mídia de visualização única, mas por aqui eu não consigo abrir esse tipo de mensagem. Me envia de novo como mídia normal ou me descreve rapidinho o que era?",
+    chunkIndex: 1,
+    chunksTotal: 1,
+    replyId: input.latestInbound?.provider_message_id ?? undefined,
+    mentionMessage: input.latestInbound,
+    trackIdPrefix: "agent_view_once_resend",
+  });
+}
+
 async function resolveInboundUserText(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -7254,7 +7307,9 @@ async function sendAgentResponse(input: {
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
-  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText) || hasConfirmedCheckoutIntent;
+  const hasPendingDeliveryDetailsIntent = hasRecentSalesCatalogDeliveryDetailsPrompt(context.messages, latestInbound)
+    && resolvesSalesCatalogPaymentPrerequisiteText(orderIntentText, latestInbound);
+  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText) || hasConfirmedCheckoutIntent || hasPendingDeliveryDetailsIntent;
   const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
   const assistantCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
@@ -7279,13 +7334,21 @@ async function sendAgentResponse(input: {
   })
     .filter(isRuntimeCheckoutOrderSelection)
     .slice(0, salesCatalogCheckoutItemLimit);
-  const shouldRequestCheckoutConfirmation = shouldRequestSalesCatalogCheckoutConfirmation({
+  const deliveryDetailsPrompt = buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt({
+    context,
+    latestInbound,
+    selections: checkoutOrderSelections,
+    intentText: orderIntentText,
+    hasOrderIntent,
+  });
+  const shouldWaitForDeliveryDetails = Boolean(deliveryDetailsPrompt);
+  const shouldRequestCheckoutConfirmation = !shouldWaitForDeliveryDetails && shouldRequestSalesCatalogCheckoutConfirmation({
     hasOrderIntent,
     hasConfirmedCheckoutIntent,
     intentText: orderIntentText,
     selections: checkoutOrderSelections,
   });
-  const paymentMethodChoicePrompt = shouldRequestCheckoutConfirmation
+  const paymentMethodChoicePrompt = shouldWaitForDeliveryDetails || shouldRequestCheckoutConfirmation
     ? null
     : buildSalesCatalogPaymentMethodChoicePrompt({
         context,
@@ -7294,7 +7357,7 @@ async function sendAgentResponse(input: {
         selections: checkoutOrderSelections,
       });
   const shouldWaitForPaymentMethodChoice = Boolean(paymentMethodChoicePrompt);
-  const shouldUseControlledPaymentStepText = shouldUseSalesCatalogControlledPaymentStepText({
+  const shouldUseControlledPaymentStepText = !shouldWaitForDeliveryDetails && shouldUseSalesCatalogControlledPaymentStepText({
     hasOrderIntent,
     hasConfirmedCheckoutIntent,
     shouldRequestCheckoutConfirmation,
@@ -7304,31 +7367,35 @@ async function sendAgentResponse(input: {
   const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
-  const rawDeliveryText = shouldRequestCheckoutConfirmation
-    ? buildSalesCatalogOrderConfirmationPrompt({
-        context,
-        latestInbound,
-        selections: checkoutOrderSelections,
-        intentText: orderIntentText,
-      })
-    : paymentMethodChoicePrompt ?? (
-        shouldUseControlledPaymentStepText
-          ? buildSalesCatalogControlledPaymentStepText()
-          : prepareSalesCatalogDeliveryText({
-              text: cleanText,
-              items: deliveryCatalogItems,
-              hasOrderIntent,
-            })
-      );
+  const rawDeliveryText = deliveryDetailsPrompt ?? (
+    shouldRequestCheckoutConfirmation
+      ? buildSalesCatalogOrderConfirmationPrompt({
+          context,
+          latestInbound,
+          selections: checkoutOrderSelections,
+          intentText: orderIntentText,
+        })
+      : paymentMethodChoicePrompt ?? (
+          shouldUseControlledPaymentStepText
+            ? buildSalesCatalogControlledPaymentStepText()
+            : prepareSalesCatalogDeliveryText({
+                text: cleanText,
+                items: deliveryCatalogItems,
+                hasOrderIntent,
+              })
+        )
+  );
   const deliveryText = normalizeTemporalGreetingInOutboundText(
     suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems),
     context.behavior,
   );
   const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
+    && !shouldWaitForDeliveryDetails
     && !shouldWaitForPaymentMethodChoice
     && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
   const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
     && !shouldRequestCheckoutConfirmation
+    && !shouldWaitForDeliveryDetails
     ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
   const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;
@@ -7472,7 +7539,7 @@ async function sendAgentResponse(input: {
       outbound.push(message);
     }
 
-    const paymentLink = shouldWaitForPaymentMethodChoice
+    const paymentLink = shouldWaitForPaymentMethodChoice || shouldWaitForDeliveryDetails
       ? null
       : await recordSalesCatalogOrderIntent({
           client: input.client,
@@ -7578,7 +7645,7 @@ async function sendAgentResponse(input: {
     outbound.push(...mediaOutbound);
   }
 
-  const paymentLink = shouldWaitForPaymentMethodChoice
+  const paymentLink = shouldWaitForPaymentMethodChoice || shouldWaitForDeliveryDetails
     ? null
     : await recordSalesCatalogOrderIntent({
         client: input.client,
@@ -8232,7 +8299,7 @@ function prepareSalesCatalogDeliveryText(input: {
   }
 
   if (!input.hasOrderIntent && hasSubstantiveSalesCatalogAnswer(input.text)) {
-    return input.text;
+    return ensureSalesCatalogConsultativeContinuation(input.text, items);
   }
 
   const intro = resolveSalesCatalogDeliveryIntro(input.text, input.hasOrderIntent);
@@ -8241,9 +8308,39 @@ function prepareSalesCatalogDeliveryText(input: {
     ? ""
     : "Qual dessas opções faz mais sentido para você?";
 
-  return [intro, itemLines.join("\n"), closing]
+  const rendered = [intro, itemLines.join("\n"), closing]
     .filter(Boolean)
     .join("\n\n");
+
+  return input.hasOrderIntent ? rendered : ensureSalesCatalogConsultativeContinuation(rendered, items);
+}
+
+function ensureSalesCatalogConsultativeContinuation(text: string, items: RuntimeSalesCatalogItem[]) {
+  const trimmed = text.trim();
+
+  if (!trimmed || salesCatalogTextHasNaturalNextStep(trimmed)) {
+    return trimmed;
+  }
+
+  const item = items.find((candidate) => isSalesCatalogItemSellable(candidate));
+  const itemName = item ? preview(item.title, 70) : "essa opção";
+
+  return `${trimmed}\n\nQuer que eu separe ${itemName} para você?`;
+}
+
+function salesCatalogTextHasNaturalNextStep(text: string) {
+  const lastBlock = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .pop() ?? "";
+  const normalized = normalizeSearch(lastBlock);
+
+  if (!lastBlock || /[?]$/.test(lastBlock)) {
+    return true;
+  }
+
+  return /\b(?:quer|prefere|posso|pode|me chama|me manda|me mande|me envia|me envie|me confirma|separo|separar|fechar|finalizar|checkout|pix|cartao|pagamento|proximo passo)\b/.test(normalized);
 }
 
 function hasSubstantiveSalesCatalogAnswer(text: string) {
@@ -8509,6 +8606,22 @@ function resolveSalesCatalogOrderSelections(input: {
   const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentSelections.length);
 
   if (selected.size === 0 && !isSalesCatalogCartAdditionOnlyIntent(input.intentText)) {
+    const deliveryDetailsPromptText = buildRecentSalesCatalogDeliveryDetailsPromptText(input.context.messages, latestInbound);
+
+    if (deliveryDetailsPromptText) {
+      for (const selection of selectSalesCatalogOrderSelectionsFromText(
+        input.context.salesCatalog,
+        deliveryDetailsPromptText,
+        "cart_draft",
+      )) {
+        addSelection(selection);
+      }
+
+      if (selected.size > 0) {
+        return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+      }
+    }
+
     const cartDraftText = buildRecentSalesCatalogCartDraftPreviewText(input.context.messages, latestInbound);
 
     if (cartDraftText) {
@@ -8593,6 +8706,95 @@ function isRuntimeCheckoutOrderSelection(selection: RuntimeSalesCatalogOrderSele
   );
 }
 
+function buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  selections: RuntimeSalesCatalogOrderSelection[];
+  intentText: string;
+  hasOrderIntent: boolean;
+}) {
+  if (!shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input)) {
+    return null;
+  }
+
+  const itemLines = input.selections.map((selection) => buildSalesCatalogOrderPreviewItem(selection).line);
+  const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
+  const canUseSavedDelivery = Boolean(savedDeliveryAddress && canResolveSalesCatalogDeliveryForSelections(input.context, input.selections));
+
+  if (canUseSavedDelivery && savedDeliveryAddress) {
+    return [
+      "Antes de fechar e calcular o total final, preciso confirmar a entrega desse pedido:",
+      itemLines.join("\n"),
+      `Tenho um endereço salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,
+      "Posso usar esse mesmo endereço? Se mudou, me envia rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver.",
+    ].filter(Boolean).join("\n\n");
+  }
+
+  return [
+    "Antes de fechar e calcular o total final, preciso do endereço de entrega desse pedido:",
+    itemLines.join("\n"),
+    "Me envia rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver.",
+  ].filter(Boolean).join("\n\n");
+}
+
+function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  selections: RuntimeSalesCatalogOrderSelection[];
+  intentText: string;
+  hasOrderIntent: boolean;
+}) {
+  if (!input.hasOrderIntent || input.selections.length === 0 || !hasPhysicalSalesCatalogSelection(input.selections)) {
+    return false;
+  }
+
+  const shippingIntentText = [
+    input.intentText,
+    buildRecentSalesCatalogCheckoutInboundMemoryText(input.context.messages, input.latestInbound),
+  ].filter(Boolean).join("\n");
+  const shipping = resolveInitialSalesCatalogOrderShipping({
+    context: input.context,
+    selections: input.selections,
+    intentText: shippingIntentText,
+  });
+
+  if (shipping) {
+    return false;
+  }
+
+  const hasDeliverySignal = Boolean(
+    extractRuntimeAddress(input.latestInbound, shippingIntentText)
+    || extractFirstBrazilianCep(shippingIntentText)
+    || hasSalesCatalogPickupSignal(shippingIntentText),
+  );
+
+  return !hasDeliverySignal && canResolveSalesCatalogDeliveryForSelections(input.context, input.selections);
+}
+
+function hasPhysicalSalesCatalogSelection(selections: Array<{ item: RuntimeSalesCatalogItem }>) {
+  return selections.some((selection) => selection.item.fulfillment.mode === "physical");
+}
+
+function canResolveSalesCatalogDeliveryForSelections(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  selections: Array<{ item: RuntimeSalesCatalogItem }>,
+) {
+  if (!hasPhysicalSalesCatalogSelection(selections)) {
+    return false;
+  }
+
+  const settings = context.salesCatalogShippingSettings;
+  if (!settings?.configured) {
+    return false;
+  }
+
+  return Boolean(
+    settings.shippingEnabled
+    || (settings.localDeliveryEnabled && settings.localDeliveryZones.some((zone) => zone.active))
+    || settings.localPickup,
+  );
+}
+
 function shouldRequestSalesCatalogCheckoutConfirmation(input: {
   hasOrderIntent: boolean;
   hasConfirmedCheckoutIntent: boolean;
@@ -8626,16 +8828,20 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     intentText: shippingIntentText,
   });
   const shippingLine = buildSalesCatalogOrderConfirmationShippingLine(shipping);
+  const shouldHoldFinalTotal = hasPhysicalSalesCatalogSelection(selections)
+    && canResolveSalesCatalogDeliveryForSelections(input.context, selections)
+    && !shipping;
   const total = shipping
     ? addRuntimeMoney(subtotal, shipping.shippingTotal) ?? subtotal
     : subtotal;
   const lines = previewItems.map((item) => item.line);
-  const totalLine = total ? `Total: R$ ${total}.` : "";
+  const totalLine = !shouldHoldFinalTotal && total ? `Total: R$ ${total}.` : "";
 
   return [
     "Antes de fechar, confirma se o pedido ficou assim:",
     lines.join("\n"),
     shippingLine,
+    shouldHoldFinalTotal ? "Ainda preciso calcular a entrega antes do total final." : "",
     totalLine,
     "Posso fechar seu pedido e gerar o pagamento?",
   ].filter(Boolean).join("\n\n");
@@ -8683,9 +8889,9 @@ function buildSalesCatalogPaymentMethodChoicePrompt(input: {
 
   return [
     "Perfeito, pedido confirmado.",
-    `Qual forma de pagamento voce prefere: ${choiceText}?`,
+    `Qual forma de pagamento você prefere: ${choiceText}?`,
     hasPix && hasCardCheckout
-      ? "No Pix eu envio o codigo para copiar por aqui. No cartao eu abro um checkout seguro."
+      ? "No Pix eu envio o código para copiar por aqui. No cartão eu abro um checkout seguro."
       : "",
   ].filter(Boolean).join("\n");
 }
@@ -8705,7 +8911,7 @@ function shouldUseSalesCatalogControlledPaymentStepText(input: {
 }
 
 function buildSalesCatalogControlledPaymentStepText() {
-  return "Perfeito, pedido confirmado. Vou seguir com o proximo passo do pagamento usando os dados do pedido.";
+  return "Perfeito, pedido confirmado. Vou seguir com o próximo passo do pagamento usando os dados do pedido.";
 }
 
 function shouldWaitForSalesCatalogPaymentMethodChoice(input: {
@@ -8739,7 +8945,7 @@ function getEnabledSalesCatalogRuntimePaymentChoices(
   }
 
   if (enabledMethods.has("credit_card")) {
-    choices.push({ id: "credit_card", preference: "card", label: "cartao de credito" });
+    choices.push({ id: "credit_card", preference: "card", label: "cartão de crédito" });
   }
 
   return choices;
@@ -8784,7 +8990,51 @@ function resolveSalesCatalogConfirmedPaymentPreference(
     return recentPreference;
   }
 
+  const rememberedPreference = detectRecentSalesCatalogPaymentPreference(context.messages, findLatestInbound(context.messages));
+  if (rememberedPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, rememberedPreference)) {
+    return rememberedPreference;
+  }
+
   return choices.length === 1 ? choices[0].preference : null;
+}
+
+function detectRecentSalesCatalogPaymentPreference(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+): SalesCatalogRuntimePaymentPreference | null {
+  if (!latestInbound) {
+    return null;
+  }
+
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+  if (!Number.isFinite(latestInboundMs)) {
+    return null;
+  }
+
+  const paymentPromptMs = buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .filter((messageBlock) => hasSalesCatalogPaymentMethodChoiceText(messageBlock.text))
+    .map((messageBlock) => Date.parse(messageBlock.firstMessage.occurred_at))
+    .filter((occurredAt) => Number.isFinite(occurredAt))
+    .sort((left, right) => right - left)[0];
+
+  if (!Number.isFinite(paymentPromptMs)) {
+    return null;
+  }
+
+  const recentPreferences = messages
+    .filter((message) => {
+      if (message.direction !== "inbound" || !message.text_content?.trim()) return false;
+
+      const occurredAt = Date.parse(message.occurred_at);
+      return Number.isFinite(occurredAt)
+        && occurredAt > paymentPromptMs
+        && occurredAt <= latestInboundMs
+        && latestInboundMs - occurredAt <= salesCatalogCheckoutConfirmationWindowMs;
+    })
+    .map((message) => detectSalesCatalogPreferredPaymentMethod(message.text_content ?? ""))
+    .filter((preference): preference is SalesCatalogRuntimePaymentPreference => Boolean(preference));
+
+  return recentPreferences[recentPreferences.length - 1] ?? null;
 }
 
 function buildRecentSalesCatalogCheckoutInboundMemoryText(
@@ -8947,6 +9197,39 @@ function buildRecentSalesCatalogCartDraftPreviewText(
     .find((candidate) => isSalesCatalogCartDraftPreviewText(candidate.text))
     ?.text
     .trim() ?? "";
+}
+
+function buildRecentSalesCatalogDeliveryDetailsPromptText(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .find((candidate) => isSalesCatalogDeliveryDetailsPromptText(candidate.text))
+    ?.text
+    .trim() ?? "";
+}
+
+function hasRecentSalesCatalogDeliveryDetailsPrompt(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return Boolean(buildRecentSalesCatalogDeliveryDetailsPromptText(messages, latestInbound));
+}
+
+function isSalesCatalogDeliveryDetailsPromptText(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) {
+    return false;
+  }
+
+  const requestsDeliveryBeforeClosing = (
+    /\bantes de fechar\b.{0,120}\b(?:endereco|entrega|frete|total final)\b/.test(normalized)
+    || /\bantes de gerar\b.{0,120}\b(?:endereco|entrega|frete)\b/.test(normalized)
+  );
+  const hasDeliveryFields = /\b(?:rua|numero|bairro|cidade|cep)\b/.test(normalized);
+
+  return requestsDeliveryBeforeClosing && hasDeliveryFields;
 }
 
 function selectRecentSingleSalesCatalogAssistantRecommendation(
@@ -9667,6 +9950,15 @@ async function recordSalesCatalogOrderIntent(input: {
       selections: orderSelections,
       intentText: shippingIntentText,
     });
+
+    if (
+      hasPhysicalSalesCatalogSelection(orderSelections)
+      && canResolveSalesCatalogDeliveryForSelections(input.context, orderSelections)
+      && !initialShipping
+    ) {
+      return null;
+    }
+
     const payableTotal = initialShipping
       ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total
       : total;
@@ -9950,6 +10242,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   if (
     resolvesSalesCatalogPaymentPrerequisiteText(input.userText, input.latestInbound)
     && !hasRecentSalesCatalogCheckoutConfirmation(input.context, input.userText)
+    && !runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
   ) {
     await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
@@ -10348,16 +10641,18 @@ function hasRecentSalesCatalogPaymentMethodChoicePrompt(
   latestInbound: ConversationMessageRow | null,
 ) {
   return buildRecentOutboundMessageBlocks(messages, latestInbound)
-    .some((messageBlock) => {
-      const normalized = normalizeSearch(messageBlock.text);
-      const asksPaymentMethod = /\bqual\b.{0,80}\bforma\b.{0,40}\bpagamento\b/.test(normalized)
-        || /\b(?:pix)\b.{0,80}\b(?:cartao|credito)\b/.test(normalized)
-        || /\b(?:cartao|credito)\b.{0,80}\b(?:pix)\b/.test(normalized);
-      const referencesConfirmedOrder = /\bpedido\b.{0,50}\bconfirmado\b/.test(normalized)
-        || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized);
+    .some((messageBlock) => hasSalesCatalogPaymentMethodChoiceText(messageBlock.text));
+}
 
-      return asksPaymentMethod && referencesConfirmedOrder;
-    });
+function hasSalesCatalogPaymentMethodChoiceText(text: string) {
+  const normalized = normalizeSearch(text);
+  const asksPaymentMethod = /\bqual\b.{0,80}\bforma\b.{0,40}\bpagamento\b/.test(normalized)
+    || /\b(?:pix)\b.{0,80}\b(?:cartao|credito)\b/.test(normalized)
+    || /\b(?:cartao|credito)\b.{0,80}\b(?:pix)\b/.test(normalized);
+  const referencesConfirmedOrder = /\bpedido\b.{0,50}\bconfirmado\b/.test(normalized)
+    || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized);
+
+  return asksPaymentMethod && referencesConfirmedOrder;
 }
 
 async function sendSalesCatalogPaymentLink(input: {
@@ -10503,11 +10798,11 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     : input.payment.provider === "asaas";
   const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
-  const deliveryDataLabel = "endereco completo com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se tiver";
+  const deliveryDataLabel = "endereço completo com rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver";
   const savedDeliveryLines = needsDeliveryAddress && savedDeliveryAddress && (canShip || canLocalDelivery)
     ? [
-        `Tenho um endereco de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,
-        `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie o ${deliveryDataLabel}.`,
+        `Tenho um endereço de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,
+        `Posso usar esse mesmo endereço para este pedido? Se mudou, me envie o ${deliveryDataLabel}.`,
       ]
     : [];
   const missingCustomerDataLabels = [
@@ -10515,14 +10810,9 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     needsCustomerEmail ? "e-mail" : null,
     needsCustomerDocument ? "CPF ou CNPJ" : null,
   ].filter((item): item is string => Boolean(item));
-  const shouldAskCustomerDataBeforeDelivery = (
-    missingCustomerDataLabels.length > 0
-    && needsDeliveryAddress
-    && savedDeliveryLines.length === 0
-  );
   const missingDataLabels = [
     ...missingCustomerDataLabels,
-    needsDeliveryAddress && savedDeliveryLines.length === 0 && !shouldAskCustomerDataBeforeDelivery ? deliveryDataLabel : null,
+    needsDeliveryAddress && savedDeliveryLines.length === 0 ? deliveryDataLabel : null,
   ].filter((item): item is string => Boolean(item));
   const intro = !needsHumanForDelivery
     ? "Antes de gerar o pagamento, preciso confirmar seus dados do pedido."
@@ -10531,12 +10821,9 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     intro,
     ...savedDeliveryLines,
     missingDataLabels.length > 0 ? `Me envie: ${formatRuntimeDataList(missingDataLabels)}.` : "",
-    shouldAskCustomerDataBeforeDelivery
-      ? "Depois disso, eu confirmo o endereco completo para calcular a entrega."
-      : "",
-    needsDeliveryAddress && canPickup && !shouldAskCustomerDataBeforeDelivery ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
+    needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     needsHumanForDelivery
-      ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
+      ? "A loja ainda não habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
       : "",
   ].filter(Boolean).join("\n");
   const providerResponse = await sendWhatsappText({
@@ -10592,9 +10879,9 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   const isPixCodeMissing = options.reason === "pix_code_missing";
   const messageText = [
     isPixCodeMissing
-      ? "Pedido registrado, mas nao consegui gerar o codigo Pix agora."
-      : "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
-    "Vou chamar uma pessoa do time para ajustar o pagamento e te passar o proximo passo por aqui.",
+      ? "Pedido registrado, mas não consegui gerar o código Pix agora."
+      : "Pedido registrado, mas não consegui gerar o pagamento online agora.",
+    "Vou chamar uma pessoa do time para ajustar o pagamento e te passar o próximo passo por aqui.",
   ].join("\n");
   const textProviderResponse = await sendWhatsappText({
     credentials: input.context.credentials,
@@ -10729,12 +11016,12 @@ function buildPaymentIssueHumanRequestText(
   payment: SalesCatalogPaymentLinkResult,
   reason: SalesCatalogHumanInterventionIssueReason,
 ) {
-  const methodLabel = payment.preferredMethod === "card" ? "cartao" : "Pix";
+  const methodLabel = payment.preferredMethod === "card" ? "cartão" : "Pix";
   const shortOrderId = payment.orderId.slice(0, 8).toUpperCase();
   const issue = reason === "delivery_unavailable"
     ? "a loja ainda nao tem frete, entrega local ou retirada configurados para fechar o pagamento automatico"
     : reason === "pix_code_missing"
-      ? "o gateway criou a sessao, mas nao retornou o codigo Pix copia e cola"
+      ? "o gateway criou a sessão, mas não retornou o código Pix copia e cola"
       : payment.failureReason ?? "o gateway nao conseguiu gerar a cobranca online";
 
   return [
@@ -10744,7 +11031,7 @@ function buildPaymentIssueHumanRequestText(
     payment.amount ? `Valor: R$ ${payment.amount}.` : "",
     `Gateway: ${payment.providerLabel}.`,
     `Motivo: ${issue}.`,
-    "Assuma a conversa e combine o proximo passo com o lead.",
+    "Assuma a conversa e combine o próximo passo com o lead.",
   ].filter(Boolean).join("\n");
 }
 
@@ -10795,7 +11082,7 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
 
   try {
     if (!pixCode) {
-      throw new Error("Pix sem codigo copia e cola para montar botao de copiar.");
+      throw new Error("Pix sem código copia e cola para montar botão de copiar.");
     }
 
     const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
@@ -10958,7 +11245,7 @@ function buildSalesCatalogPixPaymentRequestItemName(
 }
 
 function buildSalesCatalogPixCopyButtonChoice(pixCode: string) {
-  return `Copiar codigo Pix|copy:${pixCode}`;
+  return `Copiar código Pix|copy:${pixCode}`;
 }
 
 function normalizeSalesCatalogPixCopyCode(value: string | null | undefined) {
@@ -10976,12 +11263,12 @@ function buildSalesCatalogPixDirectWhatsappText(
   const amount = formatSalesCatalogWhatsappPaymentAmount(payment.amount);
 
   return [
-    "Pedido fechado. Gerei o Pix para voce pagar direto por aqui.",
+    "Pedido fechado. Gerei o Pix para você pagar direto por aqui.",
     amount ? `Valor: ${amount}` : "",
     options.textFallback
-      ? "Vou te mandar o codigo Pix sozinho na proxima mensagem para ficar facil copiar."
-      : "Toque no botao abaixo, revise o pagamento e copie o Pix para pagar no seu banco.",
-    "Assim que voce realizar o pagamento, eu te atualizo por aqui.",
+      ? "Vou te mandar o código Pix sozinho na próxima mensagem para ficar fácil copiar."
+      : "Toque no botão abaixo, revise o pagamento e copie o Pix para pagar no seu banco.",
+    "Assim que você realizar o pagamento, eu te atualizo por aqui.",
   ].filter(Boolean).join("\n");
 }
 
@@ -15377,6 +15664,41 @@ function readProviderMessageRecord(message: ConversationMessageRow) {
     ?? payload;
 }
 
+function isViewOnceInboundMessage(message: ConversationMessageRow | null) {
+  if (!message) {
+    return false;
+  }
+
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+
+  if (
+    providerMessage?.viewOnce === true
+    || providerMessage?.view_once === true
+    || providerMessage?.isViewOnce === true
+    || providerMessage?.once === true
+    || content?.viewOnce === true
+    || content?.view_once === true
+    || content?.isViewOnce === true
+    || content?.once === true
+  ) {
+    return true;
+  }
+
+  const signature = normalizeSearch([
+    message.message_type,
+    message.text_content,
+    asString(providerMessage?.messageType),
+    asString(providerMessage?.type),
+    asString(providerMessage?.mediaType),
+    asString(providerMessage?.text),
+    asString(providerMessage?.content),
+    buildProviderMessageKeySignature(providerMessage),
+  ].filter(Boolean).join(" "));
+
+  return /\b(?:view once|viewonce|visualizacao unica|visualização unica|one view)\b/.test(signature);
+}
+
 function detectInboundMediaKind(message: ConversationMessageRow | null): InboundMediaKind | null {
   if (!message || isAudioMessage(message)) {
     return null;
@@ -16752,7 +17074,7 @@ function repairIncompleteAssistantEnding(value: string) {
 }
 
 function sanitizeTextForTts(value: string) {
-  return normalizeOutboundLanguageText(value)
+  return normalizeOutboundSpeechText(value)
     .replace(linkButtonTagRegex, "")
     .replace(/https?:\/\/\S+/gi, "o link")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")

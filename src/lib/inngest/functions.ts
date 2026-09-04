@@ -194,11 +194,11 @@ export const connectyhubWhatsappAgentSweep = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-agent-sweep",
     name: "ConnectyHub WhatsApp Agent Queue Sweep",
-    triggers: [{ cron: "*/2 * * * *" }],
+    triggers: [{ cron: "* * * * *" }],
   },
   async ({ step }) => {
     const summary = await step.run("process-queued-whatsapp-agent-runs", () =>
-      processQueuedWhatsappAgentRuns({ limit: 5 }),
+      processQueuedWhatsappAgentRuns({ limit: 10 }),
     );
 
     return {

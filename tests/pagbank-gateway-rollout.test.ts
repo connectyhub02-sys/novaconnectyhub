@@ -281,9 +281,9 @@ describe("PagBank gateway rollout", () => {
     expect(salesCatalogConsoleSource).toContain("Recorrente");
     expect(commerceAgentSource).toContain("Metodos Asaas habilitados");
     expect(commerceAgentSource).toContain("O agente so pode oferecer formas de pagamento habilitadas");
-    expect(whatsappAgentRuntimeSource).toContain("Metodos de pagamento automatico habilitados");
-    expect(whatsappAgentRuntimeSource).toContain("Pix: depois da confirmacao do pedido");
-    expect(whatsappAgentRuntimeSource).toContain("Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp");
+    expect(whatsappAgentRuntimeSource).toContain("Métodos de pagamento automático habilitados");
+    expect(whatsappAgentRuntimeSource).toContain("Pix: depois da confirmação do pedido");
+    expect(whatsappAgentRuntimeSource).toContain("Nunca peça número, validade, CVV ou dados sensíveis de cartão pelo WhatsApp");
     expect(whatsappAgentRuntimeSource).toContain("cobranca interna");
   });
 
@@ -294,7 +294,7 @@ describe("PagBank gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("/send/request-payment");
     expect(whatsappAgentRuntimeSource).toContain("pixCode");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_payment_request");
-    expect(whatsappAgentRuntimeSource).toContain("Copiar codigo Pix|copy:");
+    expect(whatsappAgentRuntimeSource).toContain("Copiar código Pix|copy:");
     expect(whatsappAgentRuntimeSource).toContain("buildSalesCatalogPixCodeOnlyWhatsappText");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code_separate_message");
     expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment_fallback_intro");

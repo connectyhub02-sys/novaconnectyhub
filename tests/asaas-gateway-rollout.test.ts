@@ -113,7 +113,7 @@ describe("Asaas gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment");
     expect(whatsappAgentRuntimeSource).toContain("sales_catalog.customer_billing_details_saved");
     expect(whatsappAgentRuntimeSource).toContain("formatRuntimeDataList");
-    expect(whatsappAgentRuntimeSource).toContain("Posso usar esse mesmo endereco");
+    expect(whatsappAgentRuntimeSource).toContain("Posso usar esse mesmo endereço");
     expect(whatsappAgentRuntimeSource).toContain("/send/request-payment");
     expect(whatsappAgentRuntimeSource).toContain("pixCode");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_payment_request");
@@ -121,7 +121,7 @@ describe("Asaas gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code_separate_message");
     expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment_fallback_code");
     expect(whatsappAgentRuntimeSource).toContain("gateway Asaas desta empresa");
-    expect(whatsappAgentRuntimeSource).toContain("Me confirme seu endereco completo");
+    expect(whatsappAgentRuntimeSource).toContain("Me confirme seu endereço completo");
   });
 
   it("stores configurable Asaas payment preferences with sales catalog settings", () => {

@@ -44,6 +44,20 @@ describe("WhatsApp media followed by text or audio", () => {
     expect(antiRepeat).toContain("tokenSimilarity");
   });
 
+  it("asks the lead to resend view-once media instead of trying to analyze it", () => {
+    const processBody = sourceBetween("export async function processWhatsappAgentRun", "async function loadRunContext");
+    const handler = sourceBetween("async function maybeHandleViewOnceInboundMessage", "async function resolveInboundUserText");
+    const detector = sourceBetween("function isViewOnceInboundMessage", "function detectInboundMediaKind");
+
+    expect(processBody.indexOf("await maybeHandleViewOnceInboundMessage")).toBeGreaterThanOrEqual(0);
+    expect(processBody.indexOf("await maybeHandleViewOnceInboundMessage")).toBeLessThan(processBody.indexOf("await maybeSendMediaProcessingAcknowledgement"));
+    expect(processBody).toContain("view_once_message_requires_resend");
+    expect(handler).toContain("visualização única");
+    expect(handler).toContain("agent_view_once_resend");
+    expect(detector).toContain("view_once");
+    expect(detector).toContain("visualizacao unica");
+  });
+
   it("does not return plain text before checking recent visual media", () => {
     const body = sourceBetween("async function resolveInboundUserText", "async function buildTextWithRecentVisualMediaContext");
     const mediaDetectionIndex = body.indexOf("const mediaKind = detectInboundMediaKind(latestInbound);");
