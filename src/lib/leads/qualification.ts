@@ -40,8 +40,9 @@ export type LeadQualificationAnalysis = {
 export const leadQualificationConfigKey = "lead_qualification_config";
 
 const legacyDefaultCommercialObjective = "Entender a dor do lead, qualificar potencial de compra e conduzir para o proximo passo comercial.";
+const defaultGlobalCommercialObjective = "Entender necessidade, contexto, prazo e objecao para orientar o lead e conduzir o proximo passo comercial sem travar a venda.";
 
-export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
+const legacyImplicitDefaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
   {
     id: "main_need",
     label: "Necessidade",
@@ -108,15 +109,50 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
   },
 ];
 
+export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
+  {
+    id: "main_need",
+    label: "Necessidade",
+    question: "O que você está buscando resolver, comprar ou agendar hoje?",
+    crmField: "purpose",
+    weight: 30,
+    required: true,
+  },
+  {
+    id: "context",
+    label: "Contexto",
+    question: "Você já conhece esse produto ou serviço ou quer uma ajuda rápida para escolher?",
+    crmField: "volume_or_context",
+    weight: 25,
+    required: true,
+  },
+  {
+    id: "urgency",
+    label: "Prazo",
+    question: "Você pretende resolver isso hoje, nos próximos dias ou está apenas pesquisando?",
+    crmField: "timeframe",
+    weight: 25,
+    required: true,
+  },
+  {
+    id: "objection",
+    label: "Objecao",
+    question: "O que ainda falta para você decidir com segurança?",
+    crmField: "objections",
+    weight: 20,
+    required: false,
+  },
+];
+
 export const defaultLeadQualificationConfig: LeadQualificationConfig = {
-  enabled: false,
+  enabled: true,
   productName: "",
-  commercialObjective: legacyDefaultCommercialObjective,
+  commercialObjective: defaultGlobalCommercialObjective,
   qualifyThreshold: 70,
   vipThreshold: 85,
-  maxQuestionsPerConversation: 6,
+  maxQuestionsPerConversation: 4,
   askOneQuestionAtATime: true,
-  questions: [],
+  questions: defaultLeadQualificationQuestions,
   disqualifiers: [],
   handoffRules: [],
   configuredAt: null,
@@ -131,7 +167,9 @@ type NormalizeLeadQualificationConfigOptions = {
 
 export function normalizeLeadQualificationConfig(value: unknown, options: NormalizeLeadQualificationConfigOptions = {}): LeadQualificationConfig {
   const record = isRecord(value) ? value : {};
-  const questions = normalizeQuestions(record.questions);
+  const questions = Array.isArray(record.questions)
+    ? normalizeQuestions(record.questions)
+    : cloneLeadQualificationQuestions(defaultLeadQualificationQuestions);
 
   const normalized = {
     enabled: readBoolean(record.enabled, defaultLeadQualificationConfig.enabled),
@@ -147,8 +185,8 @@ export function normalizeLeadQualificationConfig(value: unknown, options: Normal
     configuredAt: readNullableText(record.configuredAt ?? record.configured_at, 80),
   };
 
-  if (options.persisted && isLegacyImplicitDefaultQualificationConfig(record, normalized)) {
-    return { ...defaultLeadQualificationConfig };
+  if (options.persisted && isPersistedUnconfiguredQualificationConfig(record, normalized)) {
+    return cloneLeadQualificationConfig(defaultLeadQualificationConfig);
   }
 
   return normalized;
@@ -220,7 +258,8 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
     `- Objetivo comercial: ${normalized.commercialObjective}.`,
     `- Lead qualificado a partir de ${normalized.qualifyThreshold} pontos; VIP a partir de ${normalized.vipThreshold} pontos.`,
     `- Limite de perguntas de qualificacao por conversa: ${normalized.maxQuestionsPerConversation}.`,
-    "- Use somente perguntas configuradas pelo cliente no painel. Nao invente checklist proprio de qualificacao.",
+    "- Use somente perguntas do playbook ativo: template global da ConnectyHub ou perguntas salvas pelo cliente no painel. Nao invente checklist proprio de qualificacao.",
+    "- Quando o cliente alterar, desligar ou adicionar perguntas no painel, essa configuracao explicita vira a fonte da verdade.",
     normalized.askOneQuestionAtATime
       ? "- Faca apenas uma pergunta de qualificacao por mensagem. Nao transforme a conversa em formulario."
       : "- Pode combinar perguntas quando o lead pedir objetividade, mas mantenha a conversa natural.",
@@ -228,7 +267,7 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
     "- Se o lead demonstrar intencao clara de comprar, nao bloqueie a venda por qualificacao. Colete apenas os dados necessarios para pedido, entrega e pagamento.",
     "- Primeiro entenda a dor e o contexto; depois fale de proposta, demonstracao ou preco.",
     "- Quando uma informacao for respondida, use-a no raciocinio e evite perguntar a mesma coisa de novo.",
-    "- Perguntas configuradas pelo cliente:",
+    "- Perguntas do playbook ativo:",
     ...normalized.questions.map((question, index) => {
       return `${index + 1}. [${question.id}] ${question.question} | campo CRM: ${question.crmField} | peso: ${question.weight} | obrigatoria: ${question.required ? "sim" : "nao"}`;
     }),
@@ -257,7 +296,7 @@ export function buildLeadQualificationAnalysisPrompt(input: {
   return [
     "Analise a conversa e atualize a qualificacao comercial do lead.",
     "Responda somente JSON valido, sem markdown e sem texto fora do JSON.",
-    "Use apenas o playbook configurado pelo cliente no painel. Nao crie perguntas ou criterios que nao existam na configuracao.",
+    "Use apenas o playbook ativo, seja o template global da ConnectyHub ou a configuracao salva pelo cliente no painel. Nao crie perguntas ou criterios que nao existam na configuracao.",
     "",
     `Empresa: ${input.organizationName}`,
     `Lead: ${input.leadName || "desconhecido"}`,
@@ -280,8 +319,7 @@ export function buildLeadQualificationAnalysisPrompt(input: {
       missingQuestionIds: ["urgency"],
       fields: {
         purpose: "texto curto",
-        main_pain: "texto curto",
-        budget: "texto curto",
+        volume_or_context: "texto curto",
         timeframe: "texto curto",
         objections: "texto curto",
       },
@@ -293,7 +331,7 @@ export function buildLeadQualificationAnalysisPrompt(input: {
     "Regras:",
     "- Use apenas informacoes presentes na conversa/metadados.",
     "- Marque uma pergunta como respondida quando a conversa trouxer resposta suficiente para aquele campo.",
-    "- Nao invente orcamento, prazo, autoridade ou dor.",
+    "- Nao invente necessidade, contexto, prazo, objecao, orcamento ou autoridade.",
     "- Se faltar contexto, reduza o score e informe a proxima pergunta.",
     "",
     "Metadados atuais do lead:",
@@ -344,7 +382,7 @@ function normalizeQuestion(value: unknown, index: number): LeadQualificationQues
 
 function normalizeTextList(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) {
-    return fallback;
+    return [...fallback];
   }
 
   const items = value
@@ -383,8 +421,8 @@ function calculateScoreFromAnswers(config: LeadQualificationConfig, answeredQues
   return clampScore(config.questions.reduce((total, question) => total + (answered.has(question.id) ? question.weight : 0), 0));
 }
 
-function isLegacyImplicitDefaultQualificationConfig(record: Record<string, unknown>, config: LeadQualificationConfig) {
-  if (config.configuredAt || record.enabled !== true) {
+function isPersistedUnconfiguredQualificationConfig(record: Record<string, unknown>, config: LeadQualificationConfig) {
+  if (config.configuredAt) {
     return false;
   }
 
@@ -392,10 +430,21 @@ function isLegacyImplicitDefaultQualificationConfig(record: Record<string, unkno
     return false;
   }
 
-  const objective = readText(record.commercialObjective, legacyDefaultCommercialObjective, maxTextLength);
+  const objective = readText(record.commercialObjective, "", maxTextLength);
+  const hasImplicitObjective = !objective
+    || objective === legacyDefaultCommercialObjective
+    || objective === defaultGlobalCommercialObjective;
 
-  return objective === legacyDefaultCommercialObjective
-    && areQualificationQuestionsEquivalent(config.questions, defaultLeadQualificationQuestions);
+  if (!hasImplicitObjective) {
+    return false;
+  }
+
+  if (record.enabled === false && config.questions.length === 0) {
+    return true;
+  }
+
+  return record.enabled === true
+    && areQualificationQuestionsEquivalent(config.questions, legacyImplicitDefaultLeadQualificationQuestions);
 }
 
 function areQualificationQuestionsEquivalent(left: LeadQualificationQuestion[], right: LeadQualificationQuestion[]) {
@@ -413,6 +462,19 @@ function areQualificationQuestionsEquivalent(left: LeadQualificationQuestion[], 
       && question.weight === other.weight
       && question.required === other.required;
   });
+}
+
+function cloneLeadQualificationConfig(config: LeadQualificationConfig): LeadQualificationConfig {
+  return {
+    ...config,
+    questions: cloneLeadQualificationQuestions(config.questions),
+    disqualifiers: [...config.disqualifiers],
+    handoffRules: [...config.handoffRules],
+  };
+}
+
+function cloneLeadQualificationQuestions(questions: LeadQualificationQuestion[]) {
+  return questions.map((question) => ({ ...question }));
 }
 
 function normalizeTemperature(value: unknown, fallback: LeadTemperature): LeadTemperature {

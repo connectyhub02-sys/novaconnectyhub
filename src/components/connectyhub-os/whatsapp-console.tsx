@@ -5411,13 +5411,13 @@ function LeadQualificationEditor({
     <div className="grid gap-3">
       <BehaviorSection
         title="Playbook comercial"
-        description={`Define como o agente qualifica leads do produto ou servico deste ${entityLabel.toLowerCase()}.`}
+        description={`Comeca com o template global da ConnectyHub e permite ajustar como o agente qualifica leads deste ${entityLabel.toLowerCase()}.`}
       >
         <div className="grid gap-3">
           <ToggleTile
             icon={ShieldCheck}
             label="Qualificacao ativa"
-            description="Quando ligado, o agente usa estas perguntas para qualificar o lead e alimentar o CRM."
+            description="Quando ligado, o agente usa o template global ou as perguntas salvas aqui para qualificar o lead e alimentar o CRM."
             checked={normalized.enabled}
             onChange={() => onChange({ enabled: !normalized.enabled })}
           />
