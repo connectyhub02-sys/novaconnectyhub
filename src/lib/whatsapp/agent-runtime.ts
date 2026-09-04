@@ -17372,11 +17372,34 @@ function sanitizeTextForTts(value: string) {
   return normalizeOutboundSpeechText(value)
     .replace(linkButtonTagRegex, "")
     .replace(/https?:\/\/\S+/gi, "o link")
+    .replace(/\bR\$\s*(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?(?:\s*BRL)?\b/gi, (_, reais: string, centavos: string | undefined) =>
+      formatCurrencyForTts(reais, centavos),
+    )
+    .replace(/\b(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{1,2}))?\s*BRL\b/gi, (_, reais: string, centavos: string | undefined) =>
+      formatCurrencyForTts(reais, centavos),
+    )
+    .replace(/\bBRL\b/gi, "reais")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
     .replace(/(?<![a-zA-ZÀ-ÿ])(?:rs+|k{2,}|ha{2,}|he{2,}|hi{2,}|hu{2,}|kkkk*|hahaha*|hehehe*|rsrs+)(?![a-zA-ZÀ-ÿ])/gi, "")
     .replace(/\.{2,}/g, ".")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function formatCurrencyForTts(reaisValue: string, centavosValue: string | undefined) {
+  const reais = Number.parseInt(reaisValue.replace(/\./g, ""), 10);
+  const centavos = Number.parseInt((centavosValue ?? "0").padEnd(2, "0").slice(0, 2), 10);
+
+  if (!Number.isFinite(reais) || reais < 0) return "reais";
+
+  const reaisText = reais === 1 ? "1 real" : `${reais} reais`;
+  const centavosText = centavos === 1 ? "1 centavo" : `${centavos} centavos`;
+
+  if (reais > 0 && centavos > 0) return `${reaisText} e ${centavosText}`;
+  if (reais > 0) return reaisText;
+  if (centavos > 0) return centavosText;
+
+  return "0 reais";
 }
 
 function normalizeSearch(value: string) {

@@ -58,6 +58,19 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(sanitizer).toContain(".trimEnd()");
   });
 
+  it("normalizes currency labels before generating WhatsApp audio", () => {
+    const ttsSanitizer = sourceBetween(
+      "function sanitizeTextForTts",
+      "function normalizeSearch",
+    );
+
+    expect(ttsSanitizer).toContain("formatCurrencyForTts");
+    expect(ttsSanitizer).toContain("\\s*BRL");
+    expect(ttsSanitizer).toContain(".replace(/\\bBRL\\b/gi, \"reais\")");
+    expect(ttsSanitizer).toContain("const centavosText = centavos === 1 ? \"1 centavo\"");
+    expect(ttsSanitizer).toContain("return `${reaisText} e ${centavosText}`");
+  });
+
   it("gates catalog media and checks lead purchase intent before checkout", () => {
     const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
     const catalogRuntime = sourceBetween(
