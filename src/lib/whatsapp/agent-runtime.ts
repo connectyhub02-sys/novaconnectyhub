@@ -18,6 +18,7 @@ import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/
 import {
   buildLeadQualificationAnalysisPrompt,
   buildLeadQualificationInstruction,
+  isLeadQualificationPlaybookActive,
   leadQualificationConfigKey,
   normalizeLeadQualificationAnalysis,
   normalizeLeadQualificationConfig,
@@ -813,7 +814,7 @@ export async function processWhatsappAgentRun(input: {
       });
     }
 
-    if (context.qualification.enabled && lead?.id) {
+    if (isLeadQualificationPlaybookActive(context.qualification) && lead?.id) {
       await analyzeAndPersistLeadQualification(client, context).catch(async (error: unknown) => {
         await persistQualificationError(client, context, error);
       });
@@ -1163,7 +1164,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     crossAgentContext,
     commerceStoreContext,
     behavior,
-    qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
+    qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true }),
     providerChatId: asString(metadata?.providerChatId),
     providerMessageId: asString(metadata?.providerMessageId),
     messageType: asString(metadata?.messageType) ?? "text",
@@ -3738,7 +3739,7 @@ function resolveMediaGroundingContext(
 
   return {
     kind,
-    qualificationEnabled: context.qualification.enabled,
+    qualificationEnabled: isLeadQualificationPlaybookActive(context.qualification),
     analysisText: extractMediaAnalysisForGrounding(userText),
   };
 }
@@ -4204,6 +4205,7 @@ function isSubstantiveLeadRequest(value: string) {
 
 function buildMediaDrivenQualificationInstruction(behavior: WhatsappBehaviorConfig, qualification: LeadQualificationConfig) {
   const mediaEnabled = behavior.mediaImage || behavior.mediaDocument || behavior.mediaVideo;
+  const qualificationActive = isLeadQualificationPlaybookActive(qualification);
 
   if (!mediaEnabled) {
     return [];
@@ -4214,7 +4216,7 @@ function buildMediaDrivenQualificationInstruction(behavior: WhatsappBehaviorConf
     "MIDIA COMO CONTEXTO COMERCIAL:",
     "- Quando houver analise de foto, video ou documento, responda como humano que realmente olhou: cite pelo menos um detalhe concreto antes de avancar.",
     "- Nunca trate midia como interrupcao do atendimento. Use a midia para entender melhor intencao, urgencia, preferencia, dor, produto desejado ou proximo passo.",
-    qualification.enabled
+    qualificationActive
       ? "- Como a qualificacao esta ativa, conecte a midia ao playbook de qualificacao e faca no maximo uma pergunta natural baseada no que apareceu."
       : "- Como a qualificacao esta desativada, use a midia para resolver ou vender sem puxar perguntas de qualificacao desnecessarias.",
     "- Evite resposta generica do tipo 'vi aqui'. Escreva algo que so faria sentido depois de olhar aquela midia.",
@@ -4866,7 +4868,7 @@ async function analyzeAndPersistLeadQualification(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!context.lead?.id || !context.qualification.enabled) {
+  if (!context.lead?.id || !isLeadQualificationPlaybookActive(context.qualification)) {
     return null;
   }
 
@@ -4928,7 +4930,7 @@ async function analyzeAndPersistLeadQualification(
     metadata: {
       source: "whatsapp_agent",
       channel: "whatsapp",
-      qualificationEnabled: context.qualification.enabled,
+      qualificationEnabled: isLeadQualificationPlaybookActive(context.qualification),
     },
   }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "lead_analysis", error instanceof Error ? error.message : "Falha ao medir analise de lead."));
 
@@ -5296,7 +5298,15 @@ function buildSalesCatalogCartIncreaseLines(
   settings: ClientSalesCatalogSettings | null,
   items: RuntimeSalesCatalogItem[],
 ) {
-  if (!settings?.configured || !settings.orderBumps.enabled || !settings.orderBumps.whatsappEnabled) {
+  const orderBumps = settings?.orderBumps ?? {
+    enabled: true,
+    whatsappEnabled: true,
+    autoSuggestionsEnabled: true,
+    maxOffersPerOrder: 1,
+    items: [],
+  };
+
+  if (!orderBumps.enabled || !orderBumps.whatsappEnabled) {
     return [];
   }
 
@@ -5304,23 +5314,25 @@ function buildSalesCatalogCartIncreaseLines(
     .filter((item) => isSalesCatalogItemSellable(item) && item.salesDestination === "connectyhub_checkout")
     .slice(0, 40);
   const productById = new Map(sellableItems.map((item) => [item.id, item]));
-  const configuredOffers = settings.orderBumps.items
+  const configuredOffers = orderBumps.items
     .filter((item) => item.active && productById.has(item.productId))
     .slice(0, 12);
-  const maxOffers = Math.max(1, Math.min(3, settings.orderBumps.maxOffersPerOrder ?? 1));
+  const maxOffers = Math.max(1, Math.min(3, orderBumps.maxOffersPerOrder ?? 1));
 
   return [
     "",
     "AUMENTO DE CARRINHO NO WHATSAPP:",
     "- Regra global: antes de gerar Pix, checkout de cartao, boleto ou link de pagamento, avalie uma oportunidade curta de aumentar o carrinho dentro da conversa.",
     "- Prioridade: primeiro use ofertas configuradas pela loja; se nenhuma combinar e a sugestao automatica estiver ativa, use um complemento coerente do catalogo.",
-    "- Sugestao automatica permitida: produto da mesma categoria, adicional natural, item complementar, bebida/acessorio/servico ligado ao pedido, ou produto que combine com objetivo declarado pelo lead.",
+    "- Sugestao automatica permitida: adicional natural, item complementar, bebida/acessorio/servico ligado ao pedido, ou produto que combine com objetivo declarado pelo lead.",
+    "- Produto parecido, substituto ou concorrente do mesmo objetivo nao e aumento de carrinho. Ofereca apenas se complementar o uso principal de forma clara.",
     "- Quando o lead pede uma recomendacao completa, monte a cesta ideal e confirme o pedido; nesse caso nao trate cada item como insistencia de aumento.",
     `- Limite de oferta complementar: no maximo ${maxOffers} por pedido antes do pagamento.`,
     "- Nunca adicione produto extra sem aceite explicito do lead. Se ele ignorar, recusar ou parecer indeciso, siga com o pedido principal.",
+    "- Nunca coloque oferta complementar na previa, resumo ou checkout como item comprado antes do aceite claro do lead.",
     "- Ao oferecer, use uma frase curta e mencione o produto pelo nome/preco. Ao receber aceite claro, inclua esse item na proxima previa do pedido antes de cobrar.",
     "- Nao diga ao lead 'order bump', 'upsell', 'cross-sell', 'regra automatica', 'catalogo interno' ou qualquer termo tecnico.",
-    settings.orderBumps.autoSuggestionsEnabled
+    orderBumps.autoSuggestionsEnabled
       ? "- Sugestao automatica pelo catalogo: ativa quando nao houver regra configurada que combine."
       : "- Sugestao automatica pelo catalogo: desativada; use somente ofertas configuradas abaixo.",
     configuredOffers.length > 0
@@ -6677,7 +6689,7 @@ async function resolveInboundUserText(input: {
           kind: mediaKind,
           analysis,
           disabled: false,
-          qualificationEnabled: input.context.qualification.enabled,
+          qualificationEnabled: isLeadQualificationPlaybookActive(input.context.qualification),
         });
         latestInbound.text_content = mediaUserText;
         return mediaUserText;
@@ -6689,7 +6701,7 @@ async function resolveInboundUserText(input: {
       kind: mediaKind,
       analysis: "",
       disabled: !isMediaAnalysisEnabled(input.context.behavior, mediaKind),
-      qualificationEnabled: input.context.qualification.enabled,
+      qualificationEnabled: isLeadQualificationPlaybookActive(input.context.qualification),
     });
     latestInbound.text_content = mediaUserText;
     return mediaUserText;
@@ -6785,7 +6797,7 @@ async function buildTextWithRecentVisualMediaContext(input: {
     "",
     "[ORIENTACAO INTERNA]",
     `Use a analise da midia junto com ${followUpReference} do lead.`,
-    ...buildMediaDrivenNextStepInstruction(input.context.qualification.enabled),
+    ...buildMediaDrivenNextStepInstruction(isLeadQualificationPlaybookActive(input.context.qualification)),
     "Nao diga que nao consegue ver a midia quando houver uma analise automatica disponivel.",
     "Se a analise nao for confiavel ou estiver desativada, peca uma descricao curta sem inventar detalhes.",
   ].join("\n");
@@ -6843,7 +6855,7 @@ async function buildMediaBatchUserText(input: {
     "",
     "[ORIENTACAO INTERNA]",
     "Use as midias como um conjunto. Responda uma unica vez, de forma curta, sem chutar conteudo que nao esteja claro.",
-    ...buildMediaDrivenNextStepInstruction(input.context.qualification.enabled),
+    ...buildMediaDrivenNextStepInstruction(isLeadQualificationPlaybookActive(input.context.qualification)),
     "Se alguma midia estiver sem legenda ou sem analise confiavel, peca contexto de forma natural.",
   ].join("\n");
 }
@@ -7209,9 +7221,16 @@ async function sendAgentResponse(input: {
     renderedCatalog.items,
     selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
   );
+  const shouldUseAssistantCatalogItems = shouldUseAssistantSalesCatalogItemsForOrderIntent({
+    hasOrderIntent,
+    intentText: orderIntentText,
+    latestInbound,
+    leadCatalogItems,
+    assistantCatalogItems,
+  });
   const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
     leadCatalogItems,
-    hasOrderIntent && assistantCatalogItems.length !== 1 ? [] : assistantCatalogItems,
+    hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
   );
   const checkoutOrderSelections = resolveSalesCatalogOrderSelections({
     context,
@@ -8302,6 +8321,39 @@ function selectSalesCatalogItemsFromText(items: RuntimeSalesCatalogItem[], text:
   });
 }
 
+function shouldUseAssistantSalesCatalogItemsForOrderIntent(input: {
+  hasOrderIntent: boolean;
+  intentText: string;
+  latestInbound: ConversationMessageRow | null;
+  leadCatalogItems: RuntimeSalesCatalogItem[];
+  assistantCatalogItems: RuntimeSalesCatalogItem[];
+}) {
+  if (!input.hasOrderIntent) {
+    return true;
+  }
+
+  if (input.assistantCatalogItems.length !== 1) {
+    return false;
+  }
+
+  if (input.leadCatalogItems.length > 0) {
+    return true;
+  }
+
+  if (resolvesSalesCatalogPaymentPrerequisiteText(input.intentText, input.latestInbound)) {
+    return false;
+  }
+
+  if (detectSalesCatalogPreferredPaymentMethod(input.intentText)) {
+    return false;
+  }
+
+  const normalized = normalizeSearch(input.intentText);
+
+  return hasSalesCatalogCheckoutClosingIntent(normalized)
+    || /\b(?:quero esse|quero essa|quero este|quero esta|vou querer|pode mandar|manda pra mim|manda para mim|separa pra mim|separa para mim|fica esse|fica essa|esse mesmo|essa mesma)\b/.test(normalized);
+}
+
 function mergeRuntimeSalesCatalogItems(...groups: RuntimeSalesCatalogItem[][]) {
   const merged = new Map<string, RuntimeSalesCatalogItem>();
 
@@ -9057,18 +9109,79 @@ function selectSalesCatalogOrderSelectionsFromText(
   text: string,
   source: RuntimeSalesCatalogOrderSelection["source"],
 ): RuntimeSalesCatalogOrderSelection[] {
-  return selectSalesCatalogItemsFromText(items, text).map((item) => {
-    const quantity = resolveSalesCatalogMentionQuantity(text, item);
+  const mentionText = source === "cart_draft" || source === "confirmation_preview"
+    ? extractSalesCatalogOrderItemLinesText(text)
+    : text;
+  const selectionText = mentionText || text;
+
+  return selectSalesCatalogItemsForOrderText(items, selectionText).map((item) => {
+    const quantity = resolveSalesCatalogMentionQuantity(selectionText, item);
 
     return {
       item,
       quantity: quantity.quantity,
       source,
-      mentionText: preview(text, 280),
+      mentionText: preview(selectionText, 280),
       quantitySignal: quantity.signal,
       fractionalQuantity: quantity.fractionalQuantity,
     };
   });
+}
+
+function extractSalesCatalogOrderItemLinesText(text: string) {
+  const itemLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => isSalesCatalogOrderItemLine(line));
+
+  return itemLines.join("\n");
+}
+
+function selectSalesCatalogItemsForOrderText(items: RuntimeSalesCatalogItem[], text: string) {
+  const normalizedText = normalizeSearch(text);
+
+  if (!normalizedText) {
+    return [];
+  }
+
+  const sellableItems = items.filter(isSalesCatalogItemSellable);
+  const tokenFrequency = buildSalesCatalogTokenFrequency(sellableItems);
+
+  return sellableItems.filter((item) => {
+    if (item.tag && text.includes(item.tag)) {
+      return true;
+    }
+
+    if (referencesSalesCatalogItemByExactCandidate(normalizedText, item)) {
+      return true;
+    }
+
+    const uniqueTokens = buildSalesCatalogSearchTokens(item)
+      .filter((token) => tokenFrequency.get(token) === 1)
+      .filter(isStrongSalesCatalogOrderToken);
+
+    return uniqueTokens.some((token) => normalizedTextHasToken(normalizedText, token));
+  });
+}
+
+function referencesSalesCatalogItemByExactCandidate(normalizedText: string, item: RuntimeSalesCatalogItem) {
+  const candidates = [
+    item.title,
+    ...item.skus.map((sku) => sku.title ?? ""),
+    item.platformProductCode ?? "",
+  ]
+    .map((value) => normalizeSearch(value))
+    .filter((value) => value.length >= 5);
+
+  return candidates.some((candidate) => normalizedText.includes(candidate));
+}
+
+function isStrongSalesCatalogOrderToken(token: string) {
+  return token.length >= 4 && !/^\d/.test(token) && !/^(?:mg|ml|kg|cm|und?|unid)$/.test(token);
+}
+
+function normalizedTextHasToken(normalizedText: string, token: string) {
+  return new RegExp(`(?:^|\\s)${escapeRegExp(token)}(?:\\s|$)`).test(normalizedText);
 }
 
 function resolveSalesCatalogMentionQuantity(text: string, item: RuntimeSalesCatalogItem) {

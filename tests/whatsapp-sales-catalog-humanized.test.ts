@@ -126,7 +126,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     );
 
     expect(delivery).toContain("const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText)");
-    expect(delivery).toContain("hasOrderIntent && assistantCatalogItems.length !== 1 ? [] : assistantCatalogItems");
+    expect(delivery).toContain("hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems");
     expect(delivery).toContain("suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems)");
     expect(checkoutRuntime).toContain("function buildRecentOutboundMessageBlocks");
     expect(checkoutRuntime).toContain("candidate.text");
@@ -137,6 +137,27 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentPrompt).toContain("normalizeSearch(messageBlock.text)");
     expect(runtimeSource).toContain("function suppressDuplicateSalesCatalogOrderProductMentions");
     expect(runtimeSource).toContain("isStandaloneSalesCatalogProductMentionLine");
+  });
+
+  it("does not let prerequisite replies introduce assistant-only checkout items", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const checkoutRuntime = sourceBetween(
+      "function selectSalesCatalogOrderSelectionsFromText",
+      "function resolveSalesCatalogMentionQuantity",
+    );
+    const assistantItemGuard = sourceBetween(
+      "function shouldUseAssistantSalesCatalogItemsForOrderIntent",
+      "function mergeRuntimeSalesCatalogItems",
+    );
+
+    expect(delivery).toContain("shouldUseAssistantSalesCatalogItems");
+    expect(delivery).toContain("hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems");
+    expect(assistantItemGuard).toContain("resolvesSalesCatalogPaymentPrerequisiteText(input.intentText, input.latestInbound)");
+    expect(assistantItemGuard).toContain("detectSalesCatalogPreferredPaymentMethod(input.intentText)");
+    expect(checkoutRuntime).toContain("extractSalesCatalogOrderItemLinesText(text)");
+    expect(checkoutRuntime).toContain("selectSalesCatalogItemsForOrderText(items, selectionText)");
+    expect(checkoutRuntime).toContain("referencesSalesCatalogItemByExactCandidate");
+    expect(checkoutRuntime).toContain("isStrongSalesCatalogOrderToken");
   });
 
   it("does not treat package size as a purchased quantity", () => {

@@ -9,6 +9,7 @@ import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/ag
 import { readAgentResponsibleHuman, readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
 import {
   leadQualificationConfigKey,
+  markLeadQualificationConfigConfigured,
   normalizeLeadQualificationConfig,
 } from "@/lib/leads/qualification";
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
@@ -352,13 +353,13 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   const nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
     : getCloneProfileConfig(agent);
+  const now = new Date().toISOString();
   const nextQualificationConfig = input.qualificationConfig !== undefined
-    ? normalizeLeadQualificationConfig(input.qualificationConfig)
-    : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]);
+    ? markLeadQualificationConfigConfigured(input.qualificationConfig, now)
+    : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true });
   const nextChannelConfig = input.channelConfig !== undefined
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
-  const now = new Date().toISOString();
   const nextPrompt = hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
   const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
   const metadata = {
@@ -1415,7 +1416,7 @@ function buildState(
           cloneProfile: getCloneProfileConfig(agent),
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),
-          qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
+          qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true }),
           channelConfig: getAgentChannelConfig(agent),
           automationRoles: readAutomationRoles(agent.metadata),
           responsibleHuman: readAgentResponsibleHuman(agent.metadata),

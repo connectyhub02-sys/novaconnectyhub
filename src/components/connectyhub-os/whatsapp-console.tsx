@@ -89,6 +89,7 @@ import {
 import {
   defaultLeadQualificationConfig,
   isLeadQualificationConfigEqual,
+  isLeadQualificationPlaybookActive,
   normalizeLeadQualificationConfig,
   type LeadQualificationConfig,
   type LeadQualificationQuestion,
@@ -1183,7 +1184,7 @@ export function WhatsAppConsole({
           promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
           cloneProfile: cloneProfileDraft,
-          qualificationConfig: qualificationDraft,
+          ...(qualificationChanged ? { qualificationConfig: qualificationDraft } : {}),
           channelConfig: channelConfigDraft,
         }),
       });
@@ -5620,6 +5621,7 @@ function LeadQualificationListEditor({
 
 function LeadQualificationSummary({ config, changed }: { config: LeadQualificationConfig; changed: boolean }) {
   const normalized = normalizeLeadQualificationConfig(config);
+  const playbookActive = isLeadQualificationPlaybookActive(normalized);
   const totalWeight = normalized.questions.reduce((total, question) => total + question.weight, 0);
   const required = normalized.questions.filter((question) => question.required).length;
 
@@ -5627,7 +5629,7 @@ function LeadQualificationSummary({ config, changed }: { config: LeadQualificati
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
-        <PromptCheck label={normalized.enabled ? "Qualificacao ativa" : "Qualificacao pausada"} active={normalized.enabled} />
+        <PromptCheck label={playbookActive ? "Qualificacao ativa" : normalized.enabled ? "Qualificacao sem perguntas" : "Qualificacao pausada"} active={playbookActive} />
         <PromptCheck label={`${normalized.questions.length} perguntas configuradas`} active={normalized.questions.length >= 4} />
         <PromptCheck label={`${required} obrigatorias`} active={required >= 2} />
         <PromptCheck label={`${totalWeight} pontos totais`} active={totalWeight >= normalized.qualifyThreshold} />

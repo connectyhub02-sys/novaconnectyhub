@@ -28,6 +28,7 @@ import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/ele
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
   leadQualificationConfigKey,
+  markLeadQualificationConfigConfigured,
   normalizeLeadQualificationConfig,
   type LeadQualificationConfig,
 } from "@/lib/leads/qualification";
@@ -1193,13 +1194,14 @@ export async function updateClientWhatsappPrompt(input: {
       behavior: nextBehavior,
     });
   }
+  const now = new Date().toISOString();
   const hasCloneProfile = input.cloneProfile !== undefined;
   const nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
     : getCloneProfileConfig(agent);
   const hasQualificationConfig = input.qualificationConfig !== undefined;
   const nextQualificationConfig = hasQualificationConfig
-    ? normalizeLeadQualificationConfig(input.qualificationConfig)
+    ? markLeadQualificationConfigConfigured(input.qualificationConfig, now)
     : getLeadQualificationConfig(agent);
   const hasChannelConfig = input.channelConfig !== undefined;
   let nextChannelConfig = hasChannelConfig
@@ -1222,7 +1224,6 @@ export async function updateClientWhatsappPrompt(input: {
     }
   }
 
-  const now = new Date().toISOString();
   const responsibleHumans = readAgentResponsibleHumans(agent.metadata);
   const responsibleHuman = responsibleHumans[0] ?? readAgentResponsibleHuman(agent.metadata);
   const behaviorToSave = input.behavior !== undefined
@@ -2647,7 +2648,7 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
-  return normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey]);
+  return normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey], { persisted: true });
 }
 
 function getAgentChannelConfig(agent: AgentRow | null) {

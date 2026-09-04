@@ -22,6 +22,7 @@ export type LeadQualificationConfig = {
   questions: LeadQualificationQuestion[];
   disqualifiers: string[];
   handoffRules: string[];
+  configuredAt?: string | null;
 };
 
 export type LeadQualificationAnalysis = {
@@ -37,6 +38,8 @@ export type LeadQualificationAnalysis = {
 };
 
 export const leadQualificationConfigKey = "lead_qualification_config";
+
+const legacyDefaultCommercialObjective = "Entender a dor do lead, qualificar potencial de compra e conduzir para o proximo passo comercial.";
 
 export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
   {
@@ -106,34 +109,31 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
 ];
 
 export const defaultLeadQualificationConfig: LeadQualificationConfig = {
-  enabled: true,
+  enabled: false,
   productName: "",
-  commercialObjective: "Entender a dor do lead, qualificar potencial de compra e conduzir para o proximo passo comercial.",
+  commercialObjective: legacyDefaultCommercialObjective,
   qualifyThreshold: 70,
   vipThreshold: 85,
   maxQuestionsPerConversation: 6,
   askOneQuestionAtATime: true,
-  questions: defaultLeadQualificationQuestions,
-  disqualifiers: [
-    "Lead nao tem dor clara nem objetivo definido.",
-    "Lead informa que nao tem autoridade para decidir e nao quer envolver o decisor.",
-    "Lead esta apenas pesquisando sem prazo, sem orcamento e sem interesse em proximo passo.",
-  ],
-  handoffRules: [
-    "Score acima do limite VIP.",
-    "Lead pediu proposta, demonstracao, contrato, preco final ou atendimento humano.",
-    "Lead tem urgencia real e autoridade de decisao.",
-  ],
+  questions: [],
+  disqualifiers: [],
+  handoffRules: [],
+  configuredAt: null,
 };
 
 const maxQuestions = 16;
 const maxTextLength = 600;
 
-export function normalizeLeadQualificationConfig(value: unknown): LeadQualificationConfig {
+type NormalizeLeadQualificationConfigOptions = {
+  persisted?: boolean;
+};
+
+export function normalizeLeadQualificationConfig(value: unknown, options: NormalizeLeadQualificationConfigOptions = {}): LeadQualificationConfig {
   const record = isRecord(value) ? value : {};
   const questions = normalizeQuestions(record.questions);
 
-  return {
+  const normalized = {
     enabled: readBoolean(record.enabled, defaultLeadQualificationConfig.enabled),
     productName: readText(record.productName, defaultLeadQualificationConfig.productName, 120),
     commercialObjective: readText(record.commercialObjective, defaultLeadQualificationConfig.commercialObjective, maxTextLength),
@@ -141,14 +141,33 @@ export function normalizeLeadQualificationConfig(value: unknown): LeadQualificat
     vipThreshold: clampNumber(record.vipThreshold, 30, 100, defaultLeadQualificationConfig.vipThreshold),
     maxQuestionsPerConversation: clampNumber(record.maxQuestionsPerConversation, 1, maxQuestions, defaultLeadQualificationConfig.maxQuestionsPerConversation),
     askOneQuestionAtATime: readBoolean(record.askOneQuestionAtATime, defaultLeadQualificationConfig.askOneQuestionAtATime),
-    questions: questions.length ? questions : defaultLeadQualificationQuestions,
+    questions,
     disqualifiers: normalizeTextList(record.disqualifiers, defaultLeadQualificationConfig.disqualifiers),
     handoffRules: normalizeTextList(record.handoffRules, defaultLeadQualificationConfig.handoffRules),
+    configuredAt: readNullableText(record.configuredAt ?? record.configured_at, 80),
   };
+
+  if (options.persisted && isLegacyImplicitDefaultQualificationConfig(record, normalized)) {
+    return { ...defaultLeadQualificationConfig };
+  }
+
+  return normalized;
 }
 
 export function isLeadQualificationConfigEqual(left: LeadQualificationConfig, right: LeadQualificationConfig) {
   return JSON.stringify(normalizeLeadQualificationConfig(left)) === JSON.stringify(normalizeLeadQualificationConfig(right));
+}
+
+export function markLeadQualificationConfigConfigured(config: unknown, configuredAt = new Date().toISOString()) {
+  return {
+    ...normalizeLeadQualificationConfig(config),
+    configuredAt,
+  };
+}
+
+export function isLeadQualificationPlaybookActive(config: LeadQualificationConfig) {
+  const normalized = normalizeLeadQualificationConfig(config);
+  return normalized.enabled && normalized.questions.length > 0;
 }
 
 export function getLeadTemperature(score: number, config: LeadQualificationConfig): LeadTemperature {
@@ -190,7 +209,7 @@ export function normalizeLeadQualificationAnalysis(value: unknown, config: LeadQ
 export function buildLeadQualificationInstruction(config: LeadQualificationConfig) {
   const normalized = normalizeLeadQualificationConfig(config);
 
-  if (!normalized.enabled) {
+  if (!isLeadQualificationPlaybookActive(normalized)) {
     return [];
   }
 
@@ -201,9 +220,12 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
     `- Objetivo comercial: ${normalized.commercialObjective}.`,
     `- Lead qualificado a partir de ${normalized.qualifyThreshold} pontos; VIP a partir de ${normalized.vipThreshold} pontos.`,
     `- Limite de perguntas de qualificacao por conversa: ${normalized.maxQuestionsPerConversation}.`,
+    "- Use somente perguntas configuradas pelo cliente no painel. Nao invente checklist proprio de qualificacao.",
     normalized.askOneQuestionAtATime
       ? "- Faca apenas uma pergunta de qualificacao por mensagem. Nao transforme a conversa em formulario."
       : "- Pode combinar perguntas quando o lead pedir objetividade, mas mantenha a conversa natural.",
+    "- Se o lead ignorar uma pergunta de qualificacao, nao repita imediatamente. Responda o assunto atual e retome depois somente se ficar natural.",
+    "- Se o lead demonstrar intencao clara de comprar, nao bloqueie a venda por qualificacao. Colete apenas os dados necessarios para pedido, entrega e pagamento.",
     "- Primeiro entenda a dor e o contexto; depois fale de proposta, demonstracao ou preco.",
     "- Quando uma informacao for respondida, use-a no raciocinio e evite perguntar a mesma coisa de novo.",
     "- Perguntas configuradas pelo cliente:",
@@ -235,6 +257,7 @@ export function buildLeadQualificationAnalysisPrompt(input: {
   return [
     "Analise a conversa e atualize a qualificacao comercial do lead.",
     "Responda somente JSON valido, sem markdown e sem texto fora do JSON.",
+    "Use apenas o playbook configurado pelo cliente no painel. Nao crie perguntas ou criterios que nao existam na configuracao.",
     "",
     `Empresa: ${input.organizationName}`,
     `Lead: ${input.leadName || "desconhecido"}`,
@@ -329,7 +352,7 @@ function normalizeTextList(value: unknown, fallback: string[]) {
     .filter(Boolean)
     .slice(0, 8);
 
-  return items.length ? items : fallback;
+  return items;
 }
 
 function normalizeIdList(value: unknown) {
@@ -358,6 +381,38 @@ function getMissingQuestionIds(config: LeadQualificationConfig, answeredQuestion
 function calculateScoreFromAnswers(config: LeadQualificationConfig, answeredQuestionIds: string[]) {
   const answered = new Set(answeredQuestionIds);
   return clampScore(config.questions.reduce((total, question) => total + (answered.has(question.id) ? question.weight : 0), 0));
+}
+
+function isLegacyImplicitDefaultQualificationConfig(record: Record<string, unknown>, config: LeadQualificationConfig) {
+  if (config.configuredAt || record.enabled !== true) {
+    return false;
+  }
+
+  if (readText(record.productName, "", 120)) {
+    return false;
+  }
+
+  const objective = readText(record.commercialObjective, legacyDefaultCommercialObjective, maxTextLength);
+
+  return objective === legacyDefaultCommercialObjective
+    && areQualificationQuestionsEquivalent(config.questions, defaultLeadQualificationQuestions);
+}
+
+function areQualificationQuestionsEquivalent(left: LeadQualificationQuestion[], right: LeadQualificationQuestion[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((question, index) => {
+    const other = right[index];
+    return other
+      && question.id === other.id
+      && question.label === other.label
+      && question.question === other.question
+      && question.crmField === other.crmField
+      && question.weight === other.weight
+      && question.required === other.required;
+  });
 }
 
 function normalizeTemperature(value: unknown, fallback: LeadTemperature): LeadTemperature {
