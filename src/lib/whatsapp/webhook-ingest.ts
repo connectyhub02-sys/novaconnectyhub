@@ -53,12 +53,16 @@ type WhatsappInstanceRow = {
 
 type LeadRow = {
   id: string;
+  phone_number: string | null;
   display_name: string | null;
+  status: string | null;
   metadata: JsonRecord | null;
 };
 
 type ConversationRow = {
   id: string;
+  provider_chat_id: string | null;
+  status: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -628,15 +632,24 @@ async function ensureLead(
     providerMessageId: string | null;
   },
 ) {
-  const { data: existing } = await client
+  let { data: existing } = await client
     .from("leads")
-    .select("id, display_name, metadata")
+    .select("id, phone_number, display_name, status, metadata")
     .eq("organization_id", input.organizationId)
     .eq("channel", "whatsapp")
     .eq("phone_number", input.phoneNumber)
     .maybeSingle<LeadRow>();
   const incomingDisplayName = normalizeLeadNameCandidate(input.displayName);
   const incomingDisplayNameIsPersonal = isLikelyPersonalLeadName(incomingDisplayName);
+
+  if (existing?.status === "archived") {
+    await releaseArchivedLeadPhone(client, {
+      organizationId: input.organizationId,
+      lead: existing,
+      phoneNumber: input.phoneNumber,
+    });
+    existing = null;
+  }
 
   if (existing) {
     const baseMetadata = readRecord(existing.metadata);
@@ -691,7 +704,7 @@ async function ensureLead(
       .from("leads")
       .update(updatePayload)
       .eq("id", existing.id)
-      .select("id, display_name, metadata")
+      .select("id, phone_number, display_name, status, metadata")
       .single<LeadRow>();
 
     if (error) {
@@ -721,7 +734,7 @@ async function ensureLead(
         providerMessageId: input.providerMessageId,
       }),
     })
-    .select("id, display_name, metadata")
+    .select("id, phone_number, display_name, status, metadata")
     .single<LeadRow>();
 
   if (error) {
@@ -729,6 +742,35 @@ async function ensureLead(
   }
 
   return data;
+}
+
+async function releaseArchivedLeadPhone(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    lead: LeadRow;
+    phoneNumber: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(input.lead.metadata ?? {}),
+    archived_reopened_at: now,
+    archived_reopened_original_phone: input.lead.phone_number ?? input.phoneNumber,
+  };
+  const { error } = await client
+    .from("leads")
+    .update({
+      phone_number: null,
+      metadata,
+      updated_at: now,
+    })
+    .eq("id", input.lead.id)
+    .eq("organization_id", input.organizationId);
+
+  if (error) {
+    throw new Error(`Nao foi possivel liberar lead arquivado para novo atendimento: ${error.message}`);
+  }
 }
 
 async function ensureConversation(
@@ -743,16 +785,25 @@ async function ensureConversation(
     lastMessageAt: string;
   },
 ) {
-  const { data: existing } = input.providerChatId
+  let { data: existing } = input.providerChatId
     ? await client
         .from("conversations")
-        .select("id, metadata")
+        .select("id, provider_chat_id, status, metadata")
         .eq("organization_id", input.organizationId)
         .eq("provider", "uazapi")
         .eq("provider_chat_id", input.providerChatId)
         .eq("whatsapp_instance_id", input.whatsappInstanceId)
         .maybeSingle<ConversationRow>()
     : { data: null };
+
+  if (existing?.status === "archived") {
+    await releaseArchivedConversationChatId(client, {
+      organizationId: input.organizationId,
+      conversation: existing,
+      providerChatId: input.providerChatId,
+    });
+    existing = null;
+  }
 
   if (existing) {
     const { data, error } = await client
@@ -770,7 +821,7 @@ async function ensureConversation(
         },
       })
       .eq("id", existing.id)
-      .select("id, metadata")
+      .select("id, provider_chat_id, status, metadata")
       .single<ConversationRow>();
 
     if (error) {
@@ -798,7 +849,7 @@ async function ensureConversation(
         chat_kind: input.isGroupChat ? "group" : "direct",
       },
     })
-    .select("id, metadata")
+    .select("id, provider_chat_id, status, metadata")
     .single<ConversationRow>();
 
   if (error) {
@@ -806,6 +857,36 @@ async function ensureConversation(
   }
 
   return data;
+}
+
+async function releaseArchivedConversationChatId(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    conversation: ConversationRow;
+    providerChatId: string | null;
+  },
+) {
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(input.conversation.metadata ?? {}),
+    archived_reopened_at: now,
+    archived_reopened_original_provider_chat_id: input.conversation.provider_chat_id ?? input.providerChatId,
+  };
+  const { error } = await client
+    .from("conversations")
+    .update({
+      lead_id: null,
+      provider_chat_id: null,
+      metadata,
+      updated_at: now,
+    })
+    .eq("id", input.conversation.id)
+    .eq("organization_id", input.organizationId);
+
+  if (error) {
+    throw new Error(`Nao foi possivel liberar conversa arquivada para novo atendimento: ${error.message}`);
+  }
 }
 
 async function insertConversationMessage(

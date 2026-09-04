@@ -427,6 +427,7 @@ async function loadPublicStorefrontLead(
     .select("id, display_name, phone_number, metadata")
     .eq("id", leadId)
     .eq("organization_id", organizationId)
+    .neq("status", "archived")
     .maybeSingle<StorefrontLeadRow>();
 
   return data ?? null;
@@ -442,6 +443,7 @@ async function loadPublicStorefrontLeadByPhone(
     .select("id, display_name, phone_number, metadata")
     .eq("organization_id", organizationId)
     .eq("phone_number", leadPhone)
+    .neq("status", "archived")
     .limit(1)
     .maybeSingle<StorefrontLeadRow>();
 

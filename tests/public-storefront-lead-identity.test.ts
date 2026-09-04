@@ -7,6 +7,9 @@ const storefrontLoaderSource = readFileSync("src/lib/sales-catalog/public-storef
 const publicTrackingContextSource = readFileSync("src/lib/tracking/public-context.ts", "utf8");
 const trackerSource = readFileSync("src/components/tracking/connecty-tracker.tsx", "utf8");
 const storeCheckoutRouteSource = readFileSync("src/app/api/public/sales-catalog/stores/[storeSlug]/checkout/route.ts", "utf8");
+const productCheckoutRouteSource = readFileSync("src/app/api/public/sales-catalog/products/[productId]/checkout/route.ts", "utf8");
+const leadContextSource = readFileSync("src/lib/tracking/lead-context.ts", "utf8");
+const whatsappWebhookSource = readFileSync("src/lib/whatsapp/webhook-ingest.ts", "utf8");
 
 describe("public storefront lead identity", () => {
   it("hydrates cart contact fields from the tracked lead context", () => {
@@ -48,5 +51,20 @@ describe("public storefront lead identity", () => {
     expect(storeCheckoutRouteSource).toContain("checkout_email: input.customerEmail");
     expect(storeCheckoutRouteSource).toContain("customer_email: customerEmail");
     expect(storeCheckoutRouteSource).toContain("payerEmail: customerEmail");
+  });
+
+  it("does not reuse archived leads when a WhatsApp contact restarts the funnel", () => {
+    expect(leadContextSource).toContain(".neq(\"status\", \"archived\")");
+    expect(storefrontLoaderSource).toContain(".neq(\"status\", \"archived\")");
+    expect(storeCheckoutRouteSource).toContain("if (data?.status === \"archived\")");
+    expect(storeCheckoutRouteSource).toContain("releaseArchivedLeadPhone(client");
+    expect(storeCheckoutRouteSource).toContain("archived_reopened_original_phone");
+    expect(productCheckoutRouteSource).toContain("if (data?.status === \"archived\")");
+    expect(productCheckoutRouteSource).toContain("releaseArchivedLeadPhone(client");
+    expect(productCheckoutRouteSource).toContain("archived_reopened_original_phone");
+    expect(whatsappWebhookSource).toContain("releaseArchivedLeadPhone(client");
+    expect(whatsappWebhookSource).toContain("releaseArchivedConversationChatId(client");
+    expect(whatsappWebhookSource).toContain("archived_reopened_original_provider_chat_id");
+    expect(whatsappWebhookSource).toContain("provider_chat_id: null");
   });
 });

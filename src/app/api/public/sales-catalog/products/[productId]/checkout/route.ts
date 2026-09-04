@@ -28,6 +28,7 @@ type LeadRow = {
   id: string;
   display_name: string | null;
   phone_number: string | null;
+  status: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -310,10 +311,19 @@ async function loadLead(
 ) {
   const { data } = await client
     .from("leads")
-    .select("id, display_name, phone_number, metadata")
+    .select("id, display_name, phone_number, status, metadata")
     .eq("id", leadId)
     .eq("organization_id", organizationId)
     .maybeSingle<LeadRow>();
+
+  if (data?.status === "archived") {
+    await releaseArchivedLeadPhone(client, {
+      organizationId,
+      lead: data,
+      phoneNumber: data.phone_number,
+    });
+    return null;
+  }
 
   return data ?? null;
 }
@@ -325,13 +335,55 @@ async function loadLeadByPhone(
 ) {
   const { data } = await client
     .from("leads")
-    .select("id, display_name, phone_number, metadata")
+    .select("id, display_name, phone_number, status, metadata")
     .eq("organization_id", organizationId)
     .eq("phone_number", leadPhone)
     .limit(1)
     .maybeSingle<LeadRow>();
 
+  if (data?.status === "archived") {
+    await releaseArchivedLeadPhone(client, {
+      organizationId,
+      lead: data,
+      phoneNumber: leadPhone,
+    });
+    return null;
+  }
+
   return data ?? null;
+}
+
+async function releaseArchivedLeadPhone(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    lead: LeadRow;
+    phoneNumber: string | null;
+  },
+) {
+  if (!input.lead.phone_number && !input.phoneNumber) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(input.lead.metadata ?? {}),
+    archived_reopened_at: now,
+    archived_reopened_original_phone: input.lead.phone_number ?? input.phoneNumber,
+  };
+  const { error } = await client
+    .from("leads")
+    .update({
+      phone_number: null,
+      metadata,
+      updated_at: now,
+    })
+    .eq("id", input.lead.id)
+    .eq("organization_id", input.organizationId);
+
+  if (error) {
+    throw new Error(`Nao foi possivel liberar lead arquivado para novo checkout: ${error.message}`);
+  }
 }
 
 function publicGuardResponse(guard: PublicWriteGuardResult) {

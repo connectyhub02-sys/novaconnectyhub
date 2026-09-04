@@ -65,6 +65,7 @@ export async function resolveLeadTrackingContext(
       .select("id, organization_id, phone_number")
       .eq("id", requestedLeadId)
       .eq("organization_id", organizationId)
+      .neq("status", "archived")
       .maybeSingle<LeadRow>();
 
     if (data) {
@@ -79,6 +80,7 @@ export async function resolveLeadTrackingContext(
       .select("id, organization_id, phone_number")
       .eq("organization_id", organizationId)
       .eq("phone_number", leadPhone)
+      .neq("status", "archived")
       .maybeSingle<LeadRow>();
 
     if (data) {
