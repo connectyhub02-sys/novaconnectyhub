@@ -142,6 +142,13 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behavior.mirrorTextFallbackProbability).toBe(30);
   });
 
+  it("keeps global WhatsApp sales behavior anchored in good service", () => {
+    expect(behaviorSource).toContain("Prioridade absoluta: bom atendimento");
+    expect(behaviorSource).toContain("recomende com base na necessidade real");
+    expect(behaviorSource).toContain("A conversa precisa parecer cuidado real");
+    expect(behaviorSource).toContain("não termine seco");
+  });
+
   it("uses the local clock to prevent wrong period greetings", () => {
     const temporalInstruction = sourceBetween(
       runtimeSource,

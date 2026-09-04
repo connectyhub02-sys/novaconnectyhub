@@ -262,6 +262,9 @@ export type ClientLeadRecord = {
     location: string | null;
     ipAddress: string | null;
     lastClick: string | null;
+    deliveryAddress: string | null;
+    deliveryCep: string | null;
+    customerDocument: string | null;
   };
   conversation: {
     id: string | null;
@@ -1102,7 +1105,7 @@ function mapLeadRecord(input: {
     displayName: input.lead.display_name,
     metadata,
   }) ?? fallbackLeadName(input.lead.phone_number);
-  const email = readString(metadata.email) ?? readString(metadata.lead_email);
+  const email = readString(metadata.email) ?? readString(metadata.customer_email) ?? readString(metadata.lead_email);
   const source = readString(input.lead.source) ?? readString(metadata.source) ?? input.lead.channel ?? "whatsapp";
   const qualificationMetadata = readRecord(metadata.qualification) ?? {};
   const leadQualification = readRecord(metadata.lead_qualification) ?? {};
@@ -1132,6 +1135,16 @@ function mapLeadRecord(input: {
     readString(metadata.country) ?? readString(eventMetadata.country),
   ]);
   const ipAddress = readString(metadata.ip_address) ?? readString(metadata.ip) ?? readString(eventMetadata.ip_address);
+  const deliveryAddress = readString(metadata.delivery_address)
+    ?? readString(metadata.destination_address)
+    ?? readString(metadata.address);
+  const deliveryCep = readString(metadata.delivery_cep)
+    ?? readString(metadata.destination_cep)
+    ?? readString(metadata.cep);
+  const customerDocument = readString(metadata.customer_document)
+    ?? readString(metadata.cpf_cnpj)
+    ?? readString(metadata.cpf)
+    ?? readString(metadata.cnpj);
   const latestClick = input.events.find((event) => event.event_type === "tracked_link.clicked");
   const summary = readString(metadata.ai_summary)
     ?? readString(metadata.summary)
@@ -1188,6 +1201,9 @@ function mapLeadRecord(input: {
       location,
       ipAddress,
       lastClick: latestClick?.occurred_at ?? null,
+      deliveryAddress,
+      deliveryCep,
+      customerDocument,
     },
     conversation: {
       id: activeConversationFile?.id ?? null,

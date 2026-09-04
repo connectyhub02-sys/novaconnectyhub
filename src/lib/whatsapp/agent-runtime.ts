@@ -18,6 +18,8 @@ import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/
 import {
   buildLeadQualificationAnalysisPrompt,
   buildLeadQualificationInstruction,
+  getLeadStatusFromScore,
+  getLeadTemperature,
   isLeadQualificationPlaybookActive,
   leadQualificationConfigKey,
   normalizeLeadQualificationAnalysis,
@@ -806,6 +808,12 @@ export async function processWhatsappAgentRun(input: {
     });
 
     if (existingCheckoutLink) {
+      if (isLeadQualificationPlaybookActive(context.qualification) && lead?.id) {
+        await analyzeAndPersistLeadQualification(client, context).catch(async (error: unknown) => {
+          await persistQualificationError(client, context, error);
+        });
+      }
+
       if (behavior.markAsRead) {
         await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
       }
@@ -2121,7 +2129,12 @@ async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
     item.status !== "cancelled"
     && item.status !== "delivered"
     && item.fulfillmentStatus !== "fulfilled"
-    && (runtimeSalesCatalogOrderRequiresShippingBeforePayment(item) || runtimeSalesCatalogOrderNeedsDeliveryAddress(item))
+    && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
+    && (
+      runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+      || runtimeSalesCatalogOrderNeedsDeliveryAddress(item)
+      || runtimeSalesCatalogOrderHasResolvedDeliveryForPayment(item)
+    )
   ));
 
   if (!order) return null;
@@ -3056,8 +3069,17 @@ function hasRecentSavedDeliveryConfirmationPrompt(
     }
 
     const normalized = normalizeSearch(message.text_content);
-    return normalized.includes("endereco de entrega salvo")
-      && normalized.includes("mesmo endereco");
+    const mentionsSavedAddress = normalized.includes("endereco de entrega salvo")
+      || normalized.includes("tenho um endereco salvo")
+      || normalized.includes("endereco salvo");
+    const asksToReuseSavedAddress = normalized.includes("posso usar esse mesmo endereco")
+      || normalized.includes("pode usar esse mesmo endereco")
+      || (
+        normalized.includes("mesmo endereco")
+        && /\b(?:mudou|mudar|trocar|envia|enviar|me envie|me envia)\b/.test(normalized)
+      );
+
+    return asksToReuseSavedAddress || (mentionsSavedAddress && normalized.includes("mesmo endereco"));
   });
 }
 
@@ -3144,6 +3166,17 @@ function runtimeSalesCatalogOrderRequiresShippingBeforePayment(order: RuntimeSal
   }
 
   return !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
+}
+
+function runtimeSalesCatalogOrderHasResolvedDeliveryForPayment(order: RuntimeSalesCatalogOrder) {
+  const hasPhysicalItem = order.items.some((item) => item.fulfillment.mode === "physical");
+
+  if (!hasPhysicalItem) {
+    return true;
+  }
+
+  return !runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
+    && !runtimeSalesCatalogOrderNeedsDeliveryAddress(order);
 }
 
 function hasRuntimeShippingValue(value: string | null | undefined) {
@@ -4997,10 +5030,152 @@ async function analyzeAndPersistLeadQualification(
     },
   }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "lead_analysis", error instanceof Error ? error.message : "Falha ao medir analise de lead."));
 
-  const analysis = normalizeLeadQualificationAnalysis(parseJsonObject(outputText), context.qualification);
+  const analysis = enrichLeadQualificationAnalysisWithRuntimeSignals(
+    normalizeLeadQualificationAnalysis(parseJsonObject(outputText), context.qualification),
+    context,
+  );
   await persistLeadQualification(client, context, analysis);
 
   return analysis;
+}
+
+function enrichLeadQualificationAnalysisWithRuntimeSignals(
+  analysis: LeadQualificationAnalysis,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+): LeadQualificationAnalysis {
+  const config = normalizeLeadQualificationConfig(context.qualification);
+  const fields = {
+    ...extractRuntimeQualificationFields(context, config, analysis.fields),
+    ...analysis.fields,
+  };
+  const answeredQuestionIds = new Set(analysis.answeredQuestionIds);
+
+  for (const question of config.questions) {
+    if (fields[question.crmField]) {
+      answeredQuestionIds.add(question.id);
+    }
+  }
+
+  const answered = Array.from(answeredQuestionIds);
+  const missing = config.questions
+    .filter((question) => question.required && !answeredQuestionIds.has(question.id))
+    .map((question) => question.id);
+  const inferredScore = config.questions.reduce((total, question) => (
+    total + (answeredQuestionIds.has(question.id) ? question.weight : 0)
+  ), 0);
+  const score = Math.max(analysis.score, Math.max(0, Math.min(100, Math.round(inferredScore))));
+  const summary = analysis.summary && analysis.summary !== "Lead em qualificacao."
+    ? analysis.summary
+    : buildRuntimeQualificationSummary(fields);
+
+  return {
+    ...analysis,
+    score,
+    temperature: getLeadTemperature(score, config),
+    status: getLeadStatusFromScore(score, config),
+    answeredQuestionIds: answered,
+    missingQuestionIds: missing,
+    fields,
+    summary,
+    nextBestQuestion: analysis.nextBestQuestion ?? resolveRuntimeQualificationNextQuestion(config, answeredQuestionIds),
+    nextBestAction: analysis.nextBestAction && analysis.nextBestAction !== "Continuar qualificando com uma pergunta objetiva."
+      ? analysis.nextBestAction
+      : resolveRuntimeQualificationNextAction(fields, missing.length),
+  };
+}
+
+function extractRuntimeQualificationFields(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  config: LeadQualificationConfig,
+  existingFields: Record<string, string>,
+) {
+  const allowedFields = new Set(config.questions.map((question) => question.crmField));
+  const inboundTexts = context.messages
+    .filter((message) => message.direction === "inbound")
+    .map((message) => stripInternalWhatsappContext(buildMessageText(message)).trim())
+    .filter(Boolean);
+  const fields: Record<string, string> = collectLeadCapturedCrmFields(context);
+  const setConfiguredField = (field: string, value: string | null) => {
+    if (!allowedFields.has(field) || existingFields[field] || fields[field] || !value) {
+      return;
+    }
+
+    fields[field] = value;
+  };
+
+  setConfiguredField("purpose", findRuntimeQualificationSignal(inboundTexts, /\b(?:quero|preciso|busco|buscando|comprar|fechar|agendar|resolver|ganhar|secar|emagrecer|definir|definida|massa|competicao|competicao)\b/));
+  setConfiguredField("main_pain", findRuntimeQualificationSignal(inboundTexts, /\b(?:dor|problema|incomoda|dificuldade|preciso|quero|emagrecer|secar|ganhar|definir|definida|massa)\b/));
+  setConfiguredField("volume_or_context", findRuntimeQualificationSignal(inboundTexts, /\b(?:ja uso|ja conheco|primeira vez|do zero|experiencia|treino|treino ha|anos|meses|vezes por semana|competicao|protocolo)\b/));
+  setConfiguredField("timeframe", findRuntimeQualificationSignal(inboundTexts, /\b(?:hoje|agora|imediat|essa semana|esta semana|este mes|esse mes|proximos dias|em \d+ (?:dias|semanas|meses|anos)|\d+ (?:dias|semanas|meses|anos))\b/));
+  setConfiguredField("budget", findRuntimeQualificationSignal(inboundTexts, /\b(?:orcamento|investimento|preco|valor|r\$|reais|cartao|credito|pix|sem dinheiro|tenho dinheiro|pagar hoje)\b/));
+  setConfiguredField("objections", findRuntimeQualificationSignal(inboundTexts, /\b(?:duvida|receio|medo|caro|sem dinheiro|vou pensar|nao sei|cartao|credito|pix|problema)\b/));
+
+  return fields;
+}
+
+function collectLeadCapturedCrmFields(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  const metadata = readRecord(context.lead?.metadata) ?? {};
+  const latestOrder = context.salesCatalogOrders.find((order) => (
+    order.status !== "cancelled" && order.status !== "delivered"
+  )) ?? context.salesCatalogOrders[0] ?? null;
+  const fields: Record<string, string> = {};
+  const setField = (key: string, value: string | null | undefined) => {
+    const clean = typeof value === "string" ? value.trim() : "";
+
+    if (clean) {
+      fields[key] = clean.slice(0, 500);
+    }
+  };
+
+  setField("whatsapp_phone", context.lead?.phone_number ?? context.phoneNumber);
+  setField("customer_email", latestOrder?.customerEmail ?? findString(metadata, ["email", "customer_email", "lead_email"]));
+  setField("customer_document", latestOrder?.customerDocument ?? findString(metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]));
+  setField("delivery_address", latestOrder?.destinationAddress ?? findString(metadata, ["delivery_address", "destination_address", "address"]));
+  setField("delivery_cep", latestOrder?.destinationCep ?? findString(metadata, ["delivery_cep", "cep", "destination_cep"]));
+
+  return fields;
+}
+
+function findRuntimeQualificationSignal(texts: string[], pattern: RegExp) {
+  for (let index = texts.length - 1; index >= 0; index -= 1) {
+    const text = texts[index];
+    const normalized = normalizeSearch(text);
+
+    if (pattern.test(normalized)) {
+      return preview(text, 220);
+    }
+  }
+
+  return null;
+}
+
+function buildRuntimeQualificationSummary(fields: Record<string, string>) {
+  const parts = [
+    fields.purpose ? `Interesse: ${fields.purpose}` : null,
+    fields.volume_or_context ? `Contexto: ${fields.volume_or_context}` : null,
+    fields.timeframe ? `Prazo: ${fields.timeframe}` : null,
+    fields.objections ? `Objeção: ${fields.objections}` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" | ") : "Lead em qualificação.";
+}
+
+function resolveRuntimeQualificationNextQuestion(config: LeadQualificationConfig, answeredQuestionIds: Set<string>) {
+  return config.questions.find((question) => question.required && !answeredQuestionIds.has(question.id))?.question ?? null;
+}
+
+function resolveRuntimeQualificationNextAction(fields: Record<string, string>, missingCount: number) {
+  if (fields.customer_email && fields.customer_document && fields.delivery_address) {
+    return "Dados principais do lead e do pedido capturados; conduzir o próximo passo comercial sem repetir perguntas.";
+  }
+
+  if (missingCount === 0) {
+    return "Lead qualificado; conduzir para o próximo passo comercial com atendimento consultivo.";
+  }
+
+  return "Continuar atendendo normalmente e capturar a próxima informação de qualificação quando ficar natural.";
 }
 
 async function persistLeadQualification(
@@ -5013,7 +5188,11 @@ async function persistLeadQualification(
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = context.lead.metadata ?? {};
+  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
+    client,
+    context.lead.id,
+    context.lead.metadata,
+  );
   const currentQualification = readRecord(currentMetadata.qualification) ?? {};
   const nextQualification = {
     ...currentQualification,
@@ -5041,6 +5220,10 @@ async function persistLeadQualification(
     budget: analysis.fields.budget ?? analysis.fields.investment ?? currentMetadata.budget,
     timeframe: analysis.fields.timeframe ?? analysis.fields.urgency ?? currentMetadata.timeframe,
     objections: analysis.fields.objections ?? analysis.fields.objection ?? currentMetadata.objections,
+    main_pain: analysis.fields.main_pain ?? currentMetadata.main_pain,
+    volume_or_context: analysis.fields.volume_or_context ?? currentMetadata.volume_or_context,
+    decision_authority: analysis.fields.decision_authority ?? currentMetadata.decision_authority,
+    next_step_acceptance: analysis.fields.next_step_acceptance ?? currentMetadata.next_step_acceptance,
     last_qualification_updated_at: now,
   };
 
@@ -8272,9 +8455,31 @@ function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) 
   }
 
   return {
-    text: sanitizeCustomerVisibleInternalTags(rendered),
+    text: sanitizeCustomerVisibleInternalTags(suppressDuplicateSalesCatalogCustomerMentions(rendered, Array.from(selected.values()))),
     items: Array.from(selected.values()),
   };
+}
+
+function suppressDuplicateSalesCatalogCustomerMentions(text: string, items: RuntimeSalesCatalogItem[]) {
+  let result = text;
+
+  for (const item of items) {
+    const firstTitleWord = item.title
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/[^\p{L}\p{N}]+$/gu, "");
+
+    if (!firstTitleWord || firstTitleWord.length < 3) {
+      continue;
+    }
+
+    result = result.replace(
+      new RegExp(`\\b(${escapeRegExp(firstTitleWord)})\\s+\\1\\b`, "giu"),
+      "$1",
+    );
+  }
+
+  return result;
 }
 
 function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
@@ -8748,6 +8953,17 @@ function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
     return false;
   }
 
+  if (
+    isRuntimeSavedDeliveryAffirmation(input.intentText)
+    && hasRecentSavedDeliveryConfirmationPrompt(input.context.messages, input.latestInbound)
+  ) {
+    return false;
+  }
+
+  if (hasRecentResolvedSalesCatalogOrderForSelections(input.context.salesCatalogOrders, input.selections, input.latestInbound)) {
+    return false;
+  }
+
   const shippingIntentText = [
     input.intentText,
     buildRecentSalesCatalogCheckoutInboundMemoryText(input.context.messages, input.latestInbound),
@@ -8769,6 +8985,44 @@ function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
   );
 
   return !hasDeliverySignal && canResolveSalesCatalogDeliveryForSelections(input.context, input.selections);
+}
+
+function hasRecentResolvedSalesCatalogOrderForSelections(
+  orders: RuntimeSalesCatalogOrder[],
+  selections: RuntimeSalesCatalogOrderSelection[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  const order = findRecentSalesCatalogOrderForSelections(orders, selections, latestInbound);
+
+  return Boolean(order && runtimeSalesCatalogOrderHasResolvedDeliveryForPayment(order));
+}
+
+function findRecentSalesCatalogOrderForSelections(
+  orders: RuntimeSalesCatalogOrder[],
+  selections: RuntimeSalesCatalogOrderSelection[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!latestInbound || selections.length === 0) {
+    return null;
+  }
+
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+  if (!Number.isFinite(latestInboundMs)) {
+    return null;
+  }
+
+  const selectedItemIds = new Set(selections.map((selection) => selection.item.id));
+
+  return orders.find((order) => {
+    if (order.paymentStatus === "confirmed" || order.paymentStatus === "refunded" || order.paymentStatus === "failed") return false;
+    if (order.status === "cancelled" || order.status === "delivered") return false;
+    if (!order.items.some((item) => item.catalogItemId && selectedItemIds.has(item.catalogItemId))) return false;
+
+    const orderMs = Date.parse(order.updatedAt ?? order.createdAt ?? "");
+    return Number.isFinite(orderMs)
+      && orderMs <= latestInboundMs + 60_000
+      && latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs;
+  }) ?? null;
 }
 
 function hasPhysicalSalesCatalogSelection(selections: Array<{ item: RuntimeSalesCatalogItem }>) {
@@ -8869,7 +9123,7 @@ function buildSalesCatalogOrderConfirmationShippingLine(
     return `- Taxa de entrega${method ? ` (${method})` : ""}: R$ ${formattedAmount}`;
   }
 
-  return `- Frete${method ? ` (${method})` : ""}: R$ ${formattedAmount}`;
+  return `- Frete${method && normalizedMethod !== "frete" ? ` (${method})` : ""}: R$ ${formattedAmount}`;
 }
 
 function buildSalesCatalogPaymentMethodChoicePrompt(input: {
@@ -10235,7 +10489,13 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 }): Promise<OutboundMessage | null> {
   const order = findRecentPendingSalesCatalogCheckoutOrder(input.context.salesCatalogOrders, input.latestInbound);
 
-  if (!order || !isSalesCatalogPaymentLinkFollowUp(input.userText, input.context.messages, input.latestInbound)) {
+  if (
+    !order
+    || !(
+      isSalesCatalogPaymentLinkFollowUp(input.userText, input.context.messages, input.latestInbound)
+      || isSalesCatalogContextualCheckoutConfirmation(input.userText, input.context.messages, input.latestInbound)
+    )
+  ) {
     return null;
   }
 
@@ -10243,6 +10503,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     resolvesSalesCatalogPaymentPrerequisiteText(input.userText, input.latestInbound)
     && !hasRecentSalesCatalogCheckoutConfirmation(input.context, input.userText)
     && !runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
+    && !hasRecentSalesCatalogPaymentMethodChoicePrompt(input.context.messages, input.latestInbound)
   ) {
     await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
@@ -10478,7 +10739,7 @@ function buildSalesCatalogExistingOrderConfirmationText(order: RuntimeSalesCatal
       ? `- Retirada na loja: ${shippingAmount}`
       : normalizedShippingMethod.includes("entrega local")
         ? `- Taxa de entrega${order.shippingMethod ? ` (${order.shippingMethod})` : ""}: ${shippingAmount}`
-        : `- Frete${order.shippingMethod ? ` (${order.shippingMethod})` : ""}: ${shippingAmount}`
+        : `- Frete${order.shippingMethod && normalizedShippingMethod !== "frete" ? ` (${order.shippingMethod})` : ""}: ${shippingAmount}`
     : "";
 
   return [
@@ -10589,6 +10850,29 @@ function isSalesCatalogPaymentLinkFollowUp(
   const asksForAction = /\b(?:cade|kd|manda|mandar|envia|enviar|gera|gerar|gerou|faz|fazer|pronto|concluir|finalizar)\b/.test(normalized);
 
   return mentionsCheckout && asksForAction;
+}
+
+function isSalesCatalogContextualCheckoutConfirmation(
+  userText: string,
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!hasSalesCatalogCheckoutConfirmationIntent(userText) && !isRuntimeSavedDeliveryAffirmation(userText)) {
+    return false;
+  }
+
+  return hasRecentSalesCatalogCheckoutConfirmationPrompt(messages, latestInbound)
+    || hasRecentSalesCatalogPaymentMethodChoicePrompt(messages, latestInbound)
+    || hasRecentSavedDeliveryConfirmationPrompt(messages, latestInbound)
+    || hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
+}
+
+function hasRecentSalesCatalogCheckoutConfirmationPrompt(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .some((messageBlock) => isSalesCatalogCheckoutConfirmationPreviewText(messageBlock.text));
 }
 
 function hasRecentSalesCatalogCheckoutPromise(
@@ -17059,6 +17343,17 @@ function repairIncompleteAssistantEnding(value: string) {
   if (!text) return "";
 
   const normalizedLastLine = text.split(/\n+/).pop()?.replace(/[)"'\]]+$/g, "").trim() ?? "";
+
+  if (
+    normalizedLastLine.length > 90
+    && !/[.!?]$/.test(normalizedLastLine)
+    && /,\s*[\p{L}]{3,14}$/u.test(normalizedLastLine)
+    && !/(?:https?:|www\.|\{\{|r\$|\d)\b/i.test(normalizedLastLine)
+  ) {
+    const repaired = text.replace(/,\s*[\p{L}]{3,14}[\s)"'\]]*$/u, ".").trimEnd();
+
+    return repaired || text;
+  }
 
   if (!/\b(?:a|ao|aos|as|com|contra|da|das|de|do|dos|e|em|entre|na|nas|no|nos|o|os|para|pela|pelas|pelo|pelos|por|que|se|sem|sobre|um|uma|uns|umas)$/i.test(normalizedLastLine)) {
     return text;

@@ -4422,6 +4422,9 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
     { label: "Localizacao", value: lead.technical.location ?? "Nao identificada", icon: MapPin },
     { label: "IP", value: lead.technical.ipAddress ?? "Nao identificado", icon: Activity },
     { label: "Ultimo clique", value: formatDateTime(lead.technical.lastClick), icon: Clock },
+    { label: "Endereco entrega", value: lead.technical.deliveryAddress ?? "Nao informado", icon: MapPin },
+    { label: "CEP entrega", value: lead.technical.deliveryCep ?? "Nao informado", icon: MapPin },
+    { label: "CPF/CNPJ", value: lead.technical.customerDocument ?? "Nao informado", icon: Activity },
   ];
 
   return (

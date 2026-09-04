@@ -10,6 +10,8 @@ const storeCheckoutRouteSource = readFileSync("src/app/api/public/sales-catalog/
 const productCheckoutRouteSource = readFileSync("src/app/api/public/sales-catalog/products/[productId]/checkout/route.ts", "utf8");
 const leadContextSource = readFileSync("src/lib/tracking/lead-context.ts", "utf8");
 const whatsappWebhookSource = readFileSync("src/lib/whatsapp/webhook-ingest.ts", "utf8");
+const leadsCrmSource = readFileSync("src/lib/client-os/leads-crm.ts", "utf8");
+const leadsCrmConsoleSource = readFileSync("src/components/connectyhub-os/leads-crm-console.tsx", "utf8");
 
 describe("public storefront lead identity", () => {
   it("hydrates cart contact fields from the tracked lead context", () => {
@@ -51,6 +53,15 @@ describe("public storefront lead identity", () => {
     expect(storeCheckoutRouteSource).toContain("checkout_email: input.customerEmail");
     expect(storeCheckoutRouteSource).toContain("customer_email: customerEmail");
     expect(storeCheckoutRouteSource).toContain("payerEmail: customerEmail");
+  });
+
+  it("surfaces captured delivery and document data in the lead CRM file", () => {
+    expect(leadsCrmSource).toContain("deliveryAddress: string | null");
+    expect(leadsCrmSource).toContain("readString(metadata.delivery_address)");
+    expect(leadsCrmSource).toContain("readString(metadata.customer_document)");
+    expect(leadsCrmConsoleSource).toContain("Endereco entrega");
+    expect(leadsCrmConsoleSource).toContain("CEP entrega");
+    expect(leadsCrmConsoleSource).toContain("CPF/CNPJ");
   });
 
   it("does not reuse archived leads when a WhatsApp contact restarts the funnel", () => {

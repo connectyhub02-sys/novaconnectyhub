@@ -37,7 +37,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
 
     expect(renderer).toContain("formatSalesCatalogCustomerMention(item)");
     expect(renderer).toContain("referencesSalesCatalogItem(normalizedOriginalText, item)");
-    expect(renderer).toContain("sanitizeCustomerVisibleInternalTags(rendered)");
+    expect(renderer).toContain("sanitizeCustomerVisibleInternalTags(suppressDuplicateSalesCatalogCustomerMentions");
     expect(renderer).toContain("function sanitizeSalesCatalogCustomerText");
     expect(renderer).toContain("destino da venda");
     expect(renderer).toContain("estoque e disponibilidade");
@@ -295,6 +295,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRecovery).toContain(".from(\"sales_catalog_payment_sessions\")");
     expect(checkoutRecovery).toContain("sendSalesCatalogPaymentLink");
     expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutPromise");
+    expect(followUpDetection).toContain("isSalesCatalogContextualCheckoutConfirmation");
+    expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutConfirmationPrompt");
+    expect(followUpDetection).toContain("hasRecentSalesCatalogPaymentMethodChoicePrompt");
     expect(followUpDetection).toContain("link de pagamento");
     expect(followUpDetection).toContain("codigo pix");
     expect(followUpDetection).toContain("nao abriu");
@@ -338,6 +341,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("cleanRuntimeDeliveryAddressLine");
     expect(runtimeSource).toContain("readLeadSavedDeliveryAddress");
     expect(runtimeSource).toContain("Tenho um endereço de entrega salvo");
+    expect(runtimeSource).toContain("Tenho um endereço salvo");
     expect(runtimeSource).toContain("maybeAttachSavedSalesCatalogDeliveryToOrder");
     expect(runtimeSource).toContain("maybeAttachSalesCatalogCustomerNameToOrder");
     expect(runtimeSource).toContain("persistLeadCustomerNameSnapshot");
@@ -348,6 +352,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("sales_catalog.saved_delivery_address_reused");
     expect(shippingRuntime).toContain("isRuntimeSavedDeliveryAffirmation");
     expect(shippingRuntime).toContain("hasRecentSavedDeliveryConfirmationPrompt");
+    expect(shippingRuntime).toContain("runtimeSalesCatalogOrderHasResolvedDeliveryForPayment");
+    expect(runtimeSource).toContain("hasRecentResolvedSalesCatalogOrderForSelections");
+    expect(runtimeSource).toContain("posso usar esse mesmo endereco");
     expect(leadMemory).toContain("Endereço de entrega salvo");
     expect(leadMemory).toContain("confirme se pode usar esse mesmo endereço");
   });
@@ -426,6 +433,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
     expect(renderer).toContain("hasSubstantiveSalesCatalogAnswer(input.text)");
     expect(renderer).toContain("ensureSalesCatalogConsultativeContinuation(input.text, items)");
+    expect(renderer).toContain("suppressDuplicateSalesCatalogCustomerMentions");
     expect(renderer).toContain("Quer que eu separe ${itemName} para você?");
     expect(renderer).toContain("salesCatalogTextHasNaturalNextStep");
     expect(renderer).toContain("function shouldSendSalesCatalogProductPageLinks");

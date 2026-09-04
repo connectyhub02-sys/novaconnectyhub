@@ -202,4 +202,15 @@ describe("lead qualification configuration", () => {
     expect(runtimeSource).toContain("normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true })");
     expect(runtimeSource).toContain("qualificationActive = isLeadQualificationPlaybookActive(qualification)");
   });
+
+  it("enriches lead qualification from runtime signals before saving CRM data", () => {
+    expect(runtimeSource).toContain("enrichLeadQualificationAnalysisWithRuntimeSignals");
+    expect(runtimeSource).toContain("extractRuntimeQualificationFields");
+    expect(runtimeSource).toContain("collectLeadCapturedCrmFields");
+    expect(runtimeSource).toContain("delivery_address");
+    expect(runtimeSource).toContain("customer_document");
+    expect(runtimeSource).toContain("getLeadTemperature(score, config)");
+    expect(runtimeSource).toContain("loadLatestLeadMetadataForRuntimeUpdate(");
+    expect(runtimeSource).toContain("Continuar atendendo normalmente");
+  });
 });
