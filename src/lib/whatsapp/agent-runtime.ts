@@ -5231,6 +5231,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
     "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartao ou link de pagamento, nunca gere pagamento direto na primeira intencao.",
     "- Antes do pagamento, envie uma previa curta do pedido com itens, quantidades e total quando houver preco. Pergunte claramente: Posso fechar seu pedido e gerar o pagamento?",
+    "- Se ainda faltarem dados para cobrar, organize em duas fases: primeiro nome completo, CPF/CNPJ e e-mail; depois endereco completo com CEP quando houver entrega. Se algum dado ja estiver no arquivo do lead ou na conversa recente, confirme ou aproveite em vez de pedir de novo.",
     "- Somente depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, gere Pix direto ou checkout/link conforme a forma habilitada.",
     "- Se o lead corrigir item, quantidade, sabor, variacao, endereco ou forma de pagamento, ajuste a previa e peca nova confirmacao antes do pagamento.",
     "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; depois da confirmacao do lead, o sistema deve criar um unico checkout com todos os itens somados.",
@@ -5384,6 +5385,7 @@ function buildSalesCatalogCommerceLines(
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
     "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
+    "- Dados de cobranca e entrega devem ser coletados com pouco atrito: primeiro nome completo, CPF/CNPJ e e-mail; depois endereco completo com CEP quando entrega/frete for necessario. Nao repita pergunta por dados que ja apareceram claramente na conversa.",
     `- Metodos de pagamento automatico habilitados no Asaas: ${asaasMethods}.`,
     "- O agente so pode oferecer formas de pagamento habilitadas no gateway Asaas desta empresa. Se Pix, cartao de credito ou boleto estiver desativado, nao ofereca essa forma ao lead.",
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
@@ -5391,7 +5393,7 @@ function buildSalesCatalogCommerceLines(
       : "",
     buildSalesCatalogPhysicalPaymentReadinessLine(shippingSettings),
     pixEnabled
-      ? "- Pix: depois da confirmacao do pedido, o sistema gera Pix automatico e envia o copia-e-cola no WhatsApp; a confirmacao principal vem pelo webhook do gateway, nao por comprovante manual."
+      ? "- Pix: depois da confirmacao do pedido, o sistema gera Pix automatico e envia um botao para copiar o codigo no WhatsApp quando o provedor aceitar; a confirmacao principal vem pelo webhook do gateway, nao por comprovante manual."
       : "- Pix esta desativado; nao prometa Pix, copia-e-cola ou QR Code.",
     creditCardEnabled
       ? "- Cartao de credito: use o checkout seguro da ConnectyHub. Nunca peca numero, validade, CVV ou dados sensiveis de cartao pelo WhatsApp."
@@ -5445,7 +5447,7 @@ function buildSalesCatalogPhysicalPaymentReadinessLine(settings: ClientSalesCata
   }
 
   if (settings.shippingEnabled) {
-    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Peca direto: \"Me confirme seu endereco completo, por favor, com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se houver.\" Nao ofereca retirada local.";
+    return "- Produto fisico precisa ter CEP, endereco completo e frete calculado antes de gerar Pix ou checkout de cartao. Depois dos dados de cobranca, peca direto: \"Me confirme seu endereco completo, por favor, com rua, numero, bairro, cidade, CEP e complemento ou ponto de referencia se houver.\" Nao ofereca retirada local.";
   }
 
   if (hasLocalDelivery) {
@@ -7240,7 +7242,12 @@ async function sendAgentResponse(input: {
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
   const deliveryText = shouldRequestCheckoutConfirmation
-    ? buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)
+    ? buildSalesCatalogOrderConfirmationPrompt({
+        context,
+        latestInbound,
+        selections: checkoutOrderSelections,
+        intentText: orderIntentText,
+      })
     : paymentMethodChoicePrompt ?? (
         shouldUseControlledPaymentStepText
           ? buildSalesCatalogControlledPaymentStepText()
@@ -8442,18 +8449,63 @@ function shouldRequestSalesCatalogCheckoutConfirmation(input: {
   );
 }
 
-function buildSalesCatalogOrderConfirmationPrompt(selections: RuntimeSalesCatalogOrderSelection[]) {
+function buildSalesCatalogOrderConfirmationPrompt(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  selections: RuntimeSalesCatalogOrderSelection[];
+  intentText: string;
+}) {
+  const selections = input.selections;
   const previewItems = selections.map((selection) => buildSalesCatalogOrderPreviewItem(selection));
-  const total = sumRuntimeOrderTotal(previewItems);
+  const subtotal = sumRuntimeOrderTotal(previewItems);
+  const shippingIntentText = [
+    input.intentText,
+    buildRecentSalesCatalogCheckoutInboundMemoryText(input.context.messages, input.latestInbound),
+  ].filter(Boolean).join("\n");
+  const shipping = resolveInitialSalesCatalogOrderShipping({
+    context: input.context,
+    selections,
+    intentText: shippingIntentText,
+  });
+  const shippingLine = buildSalesCatalogOrderConfirmationShippingLine(shipping);
+  const total = shipping
+    ? addRuntimeMoney(subtotal, shipping.shippingTotal) ?? subtotal
+    : subtotal;
   const lines = previewItems.map((item) => item.line);
   const totalLine = total ? `Total: R$ ${total}.` : "";
 
   return [
     "Antes de fechar, confirma se o pedido ficou assim:",
     lines.join("\n"),
+    shippingLine,
     totalLine,
     "Posso fechar seu pedido e gerar o pagamento?",
   ].filter(Boolean).join("\n\n");
+}
+
+function buildSalesCatalogOrderConfirmationShippingLine(
+  shipping: ReturnType<typeof resolveInitialSalesCatalogOrderShipping>,
+) {
+  if (!shipping?.shippingTotal) {
+    return "";
+  }
+
+  const amount = normalizeCurrencyAmount(shipping.shippingTotal);
+  const formattedAmount = typeof amount === "number" && Number.isFinite(amount)
+    ? formatRuntimeOrderMoney(amount)
+    : shipping.shippingTotal;
+  const method = shipping.shippingMethod?.trim() ?? "";
+  const normalizedMethod = normalizeSearch(method);
+
+  if (normalizedMethod.includes("retirada")) {
+    return `- Retirada na loja: R$ ${formattedAmount}`;
+  }
+
+  if (normalizedMethod.includes("entrega local")) {
+    return `- Taxa de entrega${method ? ` (${method})` : ""}: R$ ${formattedAmount}`;
+  }
+
+  return `- Frete${method ? ` (${method})` : ""}: R$ ${formattedAmount}`;
 }
 
 function buildSalesCatalogPaymentMethodChoicePrompt(input: {
@@ -8475,7 +8527,7 @@ function buildSalesCatalogPaymentMethodChoicePrompt(input: {
     "Perfeito, pedido confirmado.",
     `Qual forma de pagamento voce prefere: ${choiceText}?`,
     hasPix && hasCardCheckout
-      ? "No Pix eu gero o copia e cola por aqui. No cartao eu te envio o botao do checkout seguro."
+      ? "No Pix eu envio o codigo para copiar por aqui. No cartao eu abro um checkout seguro."
       : "",
   ].filter(Boolean).join("\n");
 }
@@ -9888,11 +9940,19 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
         `Posso usar esse mesmo endereco para este pedido? Se mudou, me envie o ${deliveryDataLabel}.`,
       ]
     : [];
-  const missingDataLabels = [
+  const missingCustomerDataLabels = [
     needsCustomerName ? "nome completo" : null,
     needsCustomerEmail ? "e-mail" : null,
     needsCustomerDocument ? "CPF ou CNPJ" : null,
-    needsDeliveryAddress && savedDeliveryLines.length === 0 ? deliveryDataLabel : null,
+  ].filter((item): item is string => Boolean(item));
+  const shouldAskCustomerDataBeforeDelivery = (
+    missingCustomerDataLabels.length > 0
+    && needsDeliveryAddress
+    && savedDeliveryLines.length === 0
+  );
+  const missingDataLabels = [
+    ...missingCustomerDataLabels,
+    needsDeliveryAddress && savedDeliveryLines.length === 0 && !shouldAskCustomerDataBeforeDelivery ? deliveryDataLabel : null,
   ].filter((item): item is string => Boolean(item));
   const intro = !needsHumanForDelivery
     ? "Antes de gerar o pagamento, preciso confirmar seus dados do pedido."
@@ -9901,7 +9961,10 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     intro,
     ...savedDeliveryLines,
     missingDataLabels.length > 0 ? `Me envie: ${formatRuntimeDataList(missingDataLabels)}.` : "",
-    needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
+    shouldAskCustomerDataBeforeDelivery
+      ? "Depois disso, eu confirmo o endereco completo para calcular a entrega."
+      : "",
+    needsDeliveryAddress && canPickup && !shouldAskCustomerDataBeforeDelivery ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     needsHumanForDelivery
       ? "A loja ainda nao habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
       : "",
@@ -9957,12 +10020,11 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
   payment: SalesCatalogPaymentLinkResult;
 }, options: { reason?: SalesCatalogHumanInterventionIssueReason } = {}): Promise<OutboundMessage> {
   const isPixCodeMissing = options.reason === "pix_code_missing";
-  const providerLabel = input.payment.providerLabel || "gateway de pagamento";
   const messageText = [
     isPixCodeMissing
       ? "Pedido registrado, mas nao consegui gerar o codigo Pix agora."
       : "Pedido registrado, mas nao consegui gerar o pagamento online agora.",
-    `Vou chamar uma pessoa do time para ajustar o ${providerLabel} e te passar o proximo passo por aqui.`,
+    "Vou chamar uma pessoa do time para ajustar o pagamento e te passar o proximo passo por aqui.",
   ].join("\n");
   const textProviderResponse = await sendWhatsappText({
     credentials: input.context.credentials,
@@ -10152,29 +10214,74 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
-  const messageText = buildSalesCatalogPixDirectWhatsappText(input.payment);
-  const textProviderResponse = await sendWhatsappText({
-    credentials: input.context.credentials,
-    token: input.token,
-    phone: input.phone,
-    text: messageText,
-    trackId: `agent_pix_payment_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-    mentions: resolveGroupMentions(input.context),
-  });
-  const providerResponse = {
-    delivery: "whatsapp_pix_code",
-    provider: input.payment.provider,
-    providerLabel: input.payment.providerLabel,
-    orderId: input.payment.orderId,
-    checkoutUrl: input.payment.checkoutUrl,
-    trackingUrl: input.payment.trackingUrl,
-    pixTicketUrl: input.payment.pixTicketUrl,
-    textProviderResponse,
-  };
+  const pixCode = normalizeSalesCatalogPixCopyCode(input.payment.pixQrCode);
+  let messageText = buildSalesCatalogPixDirectWhatsappText(input.payment, { includeCode: false });
+  let providerResponse: unknown;
+  let interactiveButton = false;
+  let buttonFallback = false;
+
+  try {
+    const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      choices: [buildSalesCatalogPixCopyButtonChoice(pixCode)],
+      footerText: resolveInteractiveButtonFooterText(input.context.organization),
+      trackId: `agent_pix_copy_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+    });
+    providerResponse = {
+      delivery: "whatsapp_pix_copy_button",
+      provider: input.payment.provider,
+      providerLabel: input.payment.providerLabel,
+      orderId: input.payment.orderId,
+      checkoutUrl: input.payment.checkoutUrl,
+      trackingUrl: input.payment.trackingUrl,
+      pixTicketUrl: input.payment.pixTicketUrl,
+      copyButtonProviderResponse,
+    };
+    interactiveButton = true;
+  } catch (error) {
+    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de copiar Pix.");
+    messageText = buildSalesCatalogPixDirectWhatsappText(input.payment, { includeCode: true });
+    const textProviderResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      trackId: `agent_pix_payment_fallback_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+      linkPreview: false,
+    });
+
+    providerResponse = {
+      fallback: true,
+      delivery: "whatsapp_pix_code",
+      reason: "pix_copy_button_failed",
+      error: errorMessage,
+      provider: input.payment.provider,
+      providerLabel: input.payment.providerLabel,
+      orderId: input.payment.orderId,
+      checkoutUrl: input.payment.checkoutUrl,
+      trackingUrl: input.payment.trackingUrl,
+      pixTicketUrl: input.payment.pixTicketUrl,
+      textProviderResponse,
+    };
+    buttonFallback = true;
+    await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+      chunkIndex: 1,
+      chunksTotal: 1,
+      errorMessage,
+      providerResponse,
+    });
+  }
   const message: OutboundMessage = {
     text: messageText,
     mode: "text",
     providerResponse,
+    interactiveButton,
+    buttonFallback,
     persisted: true,
   };
 
@@ -10183,18 +10290,32 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
   return message;
 }
 
-function buildSalesCatalogPixDirectWhatsappText(payment: SalesCatalogPaymentLinkResult) {
+function buildSalesCatalogPixCopyButtonChoice(pixCode: string) {
+  return `Copiar codigo Pix|copy:${pixCode}`;
+}
+
+function normalizeSalesCatalogPixCopyCode(value: string | null | undefined) {
+  return (value ?? "").replace(/[\r\n]+/g, "").trim();
+}
+
+function buildSalesCatalogPixDirectWhatsappText(
+  payment: SalesCatalogPaymentLinkResult,
+  options: { includeCode: boolean },
+) {
   const amount = formatSalesCatalogWhatsappPaymentAmount(payment.amount);
-  const code = payment.pixQrCode?.trim() ?? "";
+  const code = normalizeSalesCatalogPixCopyCode(payment.pixQrCode);
 
   return [
     "Pedido fechado. Gerei o Pix para voce pagar direto por aqui.",
     amount ? `Valor: ${amount}` : "",
-    "Pix copia e cola:",
-    "```",
-    code,
-    "```",
-    `Assim que o ${payment.providerLabel} confirmar, o pedido atualiza automaticamente por aqui.`,
+    options.includeCode
+      ? "Pix copia e cola:"
+      : "Toque em Copiar codigo Pix, abra seu banco, escolha Pix Copia e Cola e cole o codigo.",
+    options.includeCode ? "```" : "",
+    options.includeCode ? code : "",
+    options.includeCode ? "```" : "",
+    options.includeCode ? "Copie o codigo inteiro antes de colar no banco." : "",
+    "Assim que voce realizar o pagamento, eu te atualizo por aqui.",
   ].filter(Boolean).join("\n");
 }
 
@@ -11550,6 +11671,7 @@ async function sendWhatsappText(input: {
   trackId: string;
   replyId?: string;
   mentions?: string;
+  linkPreview?: boolean;
 }) {
   const text = normalizeOutboundLanguageText(input.text);
 
@@ -11560,7 +11682,7 @@ async function sendWhatsappText(input: {
     body: {
       number: input.phone,
       text,
-      linkPreview: true,
+      linkPreview: input.linkPreview ?? true,
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),

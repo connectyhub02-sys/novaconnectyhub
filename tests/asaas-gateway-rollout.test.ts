@@ -101,6 +101,11 @@ describe("Asaas gateway rollout", () => {
     expect(webhookSource).toContain("source: \"asaas_webhook\"");
     expect(webhookSource).toContain("sales_catalog.payment_webhook_processed");
     expect(postPaymentSource).toContain("\"asaas_webhook\"");
+    expect(postPaymentSource).toContain("isPixPaymentMethodLabel");
+    expect(postPaymentSource).toContain("paymentMethod?: string | null");
+    expect(postPaymentSource).toContain("isPixPaymentStatusNotification(input.paymentMethod, input.paymentMethodLabel)");
+    expect(webhookSource).toContain("paymentMethod: session.method");
+    expect(postPaymentSource).toContain("normalizePendingPaymentStatusText");
   });
 
   it("collects lead data required by Asaas before generating payment", () => {
@@ -109,6 +114,7 @@ describe("Asaas gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("sales_catalog.customer_billing_details_saved");
     expect(whatsappAgentRuntimeSource).toContain("formatRuntimeDataList");
     expect(whatsappAgentRuntimeSource).toContain("Posso usar esse mesmo endereco");
+    expect(whatsappAgentRuntimeSource).toContain("Copiar codigo Pix|copy:");
     expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
     expect(whatsappAgentRuntimeSource).toContain("gateway Asaas desta empresa");
     expect(whatsappAgentRuntimeSource).toContain("Me confirme seu endereco completo");

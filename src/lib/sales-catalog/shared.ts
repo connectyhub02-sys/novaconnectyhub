@@ -931,7 +931,7 @@ export function createDefaultSalesCatalogLeadDataPolicy(): SalesCatalogLeadDataP
 export function createDefaultSalesCatalogMessageTemplates(): SalesCatalogWhatsAppMessageTemplates {
   return {
     orderSummary: "{cliente}, segue o resumo do pedido {pedido}: {itens}. Total: {valor}.",
-    paymentRequest: "{cliente}, para concluir o pedido {pedido}, toque no botao de pagamento abaixo. Assim que confirmar, eu te aviso por aqui.",
+    paymentRequest: "{cliente}, para concluir o pedido {pedido}, use o link de pagamento abaixo. Assim que pagar, eu te aviso por aqui.",
     paymentConfirmed: "{cliente}, pagamento confirmado para o pedido {pedido}. Vamos seguir com a separacao e te manter informado por aqui.",
     paymentRejected: "{cliente}, o pagamento do pedido {pedido} nao foi aprovado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
     paymentRefunded: "{cliente}, o pagamento do pedido {pedido} foi estornado. Se precisar de ajuda para refazer a compra, eu te acompanho por aqui.",

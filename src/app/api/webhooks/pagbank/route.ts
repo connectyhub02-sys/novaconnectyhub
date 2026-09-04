@@ -267,6 +267,7 @@ export async function POST(request: NextRequest) {
       orderId: session.order_id,
       paymentSessionId: session.id,
       providerPaymentId,
+      paymentMethod: session.method,
       paymentMethodLabel,
       status: pixData.status,
       source: "pagbank_webhook",

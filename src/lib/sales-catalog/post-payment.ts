@@ -103,6 +103,7 @@ export async function handleSalesCatalogPaymentStatusChange(input: {
   orderId: string;
   paymentSessionId: string;
   providerPaymentId: string | null;
+  paymentMethod?: string | null;
   paymentMethodLabel: string;
   status: SalesCatalogPaymentStatus;
   source: SalesCatalogPostPaymentSource;
@@ -125,6 +126,7 @@ export async function handleSalesCatalogPaymentStatusChange(input: {
     items,
     paymentSessionId: input.paymentSessionId,
     providerPaymentId: input.providerPaymentId,
+    paymentMethod: input.paymentMethod,
     paymentMethodLabel: input.paymentMethodLabel,
     status: notificationStatus,
     source: input.source,
@@ -135,6 +137,7 @@ export async function handleSalesCatalogPaymentStatusChange(input: {
     items,
     paymentSessionId: input.paymentSessionId,
     providerPaymentId: input.providerPaymentId,
+    paymentMethod: input.paymentMethod,
     paymentMethodLabel: input.paymentMethodLabel,
     status: notificationStatus,
     source: input.source,
@@ -676,6 +679,7 @@ async function maybeNotifyPaymentStatus(input: {
   items: OrderItemRow[];
   paymentSessionId: string;
   providerPaymentId: string | null;
+  paymentMethod?: string | null;
   paymentMethodLabel: string;
   status: SalesCatalogPaymentNotificationStatus;
   source: string;
@@ -683,6 +687,7 @@ async function maybeNotifyPaymentStatus(input: {
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusNotificationPrefix(input.status);
   if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+  if (input.status === "pending" && isPixPaymentStatusNotification(input.paymentMethod, input.paymentMethodLabel)) return false;
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
   const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
@@ -859,6 +864,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   items: OrderItemRow[];
   paymentSessionId: string;
   providerPaymentId: string | null;
+  paymentMethod?: string | null;
   paymentMethodLabel: string;
   status: SalesCatalogPaymentNotificationStatus;
   source: string;
@@ -866,6 +872,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusResponsibleNotificationPrefix(input.status);
   if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+  if (input.status === "pending" && isPixPaymentStatusNotification(input.paymentMethod, input.paymentMethodLabel)) return false;
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
   const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
@@ -1089,10 +1096,14 @@ function buildPaymentStatusMessage(input: {
   const checkoutUrl = readLatestCheckoutUrl(input.order.metadata);
 
   if (template) {
-    const rendered = renderMessageTemplate(template, {
+    let rendered = renderMessageTemplate(template, {
       ...variables,
       link_pagamento: checkoutUrl,
     });
+
+    if (input.status === "pending") {
+      rendered = normalizePendingPaymentStatusText(rendered);
+    }
 
     if (input.status === "pending" && checkoutUrl && !rendered.includes(checkoutUrl)) {
       return `${rendered}\nLink de pagamento: ${checkoutUrl}`;
@@ -1104,7 +1115,7 @@ function buildPaymentStatusMessage(input: {
   if (input.status === "pending") {
     return [
       `${variables.cliente}, seu pagamento do pedido ${variables.pedido} ainda esta aguardando confirmacao.`,
-      checkoutUrl ? `Link de pagamento: ${checkoutUrl}` : "Se ja pagou, assim que o gateway confirmar eu te aviso por aqui.",
+      checkoutUrl ? `Link de pagamento: ${checkoutUrl}` : "Se ja pagou, assim que o pagamento for confirmado eu te aviso por aqui.",
     ].join("\n");
   }
 
@@ -1118,6 +1129,21 @@ function buildPaymentStatusMessage(input: {
   }
 
   return `${variables.cliente}, o pagamento do pedido ${variables.pedido} nao foi aprovado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.`;
+}
+
+function isPixPaymentMethodLabel(value: string | null | undefined) {
+  const normalized = (value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+  return /\bpix\b/.test(normalized);
+}
+
+function isPixPaymentStatusNotification(method: string | null | undefined, label: string | null | undefined) {
+  const normalizedMethod = (method ?? "").trim().toLowerCase();
+
+  return normalizedMethod === "pix" || isPixPaymentMethodLabel(label);
 }
 
 function buildResponsiblePaymentStatusMessage(input: {
@@ -1158,6 +1184,14 @@ function buildPaymentTemplateVariables(order: OrderRow, itemSummary: string, pay
 
 function renderMessageTemplate(template: string, variables: Record<string, string>) {
   return template.replace(/\{([a-z0-9_]+)\}/gi, (match, key: string) => variables[key.toLowerCase()] ?? match);
+}
+
+function normalizePendingPaymentStatusText(text: string) {
+  return text
+    .replace(/toque no bot[aã]o de pagamento abaixo/gi, "use o link de pagamento abaixo")
+    .replace(/toque no bot[aã]o abaixo/gi, "use o link abaixo")
+    .replace(/Assim que confirmar/g, "Assim que pagar")
+    .replace(/assim que confirmar/g, "assim que pagar");
 }
 
 async function sendResponsiblePaymentWhatsappMessages(input: {

@@ -84,7 +84,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
 
     expect(delivery).toContain("hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText)");
     expect(delivery).toContain("shouldRequestSalesCatalogCheckoutConfirmation");
-    expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)");
+    expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt({");
     expect(checkoutRuntime).toContain("source: \"current_response\" | \"recent_lead_message\" | \"confirmation_preview\"");
     expect(checkoutRuntime).toContain("salesCatalogCheckoutConfirmationWindowMs");
     expect(checkoutRuntime).toContain("Posso fechar seu pedido e gerar o pagamento?");
@@ -140,7 +140,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("function buildSalesCatalogPaymentMethodChoicePrompt");
     expect(checkoutRuntime).toContain("function shouldUseSalesCatalogControlledPaymentStepText");
     expect(checkoutRuntime).toContain("Qual forma de pagamento voce prefere");
-    expect(checkoutRuntime).toContain("No Pix eu gero o copia e cola por aqui");
+    expect(checkoutRuntime).toContain("No Pix eu envio o codigo para copiar por aqui");
     expect(checkoutRuntime).toContain("Vou seguir com o proximo passo do pagamento usando os dados do pedido");
     expect(checkoutRuntime).toContain("getEnabledSalesCatalogRuntimePaymentChoices");
     expect(orderRecorder).toContain("resolveSalesCatalogConfirmedPaymentPreference");
@@ -148,6 +148,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(orderRecorder).toContain("buildRecentSalesCatalogCheckoutInboundMemoryText");
     expect(orderRecorder).toContain("shippingIntentText");
     expect(orderRecorder).toContain("resolveInitialSalesCatalogOrderShipping");
+    expect(checkoutRuntime).toContain("buildSalesCatalogOrderConfirmationShippingLine");
+    expect(checkoutRuntime).toContain("Taxa de entrega");
+    expect(checkoutRuntime).toContain("Frete");
   });
 
   it("sends checkout links only when payment needs the checkout surface", () => {
@@ -170,8 +173,15 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("paymentDeferredReason: result.paymentDeferredReason ?? null");
     expect(paymentSender).toContain("shouldSendSalesCatalogPixInsideWhatsapp");
     expect(paymentSender).toContain("sendSalesCatalogPixDirectWhatsapp");
+    expect(paymentSender).toContain("buildSalesCatalogPixCopyButtonChoice");
+    expect(paymentSender).toContain("Copiar codigo Pix|copy:");
+    expect(paymentSender).toContain("whatsapp_pix_copy_button");
+    expect(paymentSender).toContain("agent_pix_copy_button");
+    expect(paymentSender).toContain("pix_copy_button_failed");
     expect(paymentSender).toContain("Pix copia e cola:");
-    expect(paymentSender).toContain("agent_pix_payment");
+    expect(paymentSender).toContain("agent_pix_payment_fallback");
+    expect(paymentSender).toContain("Assim que voce realizar o pagamento, eu te atualizo por aqui.");
+    expect(paymentSender).not.toContain("Assim que o ${payment.providerLabel} confirmar");
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");
     expect(paymentSender).toContain("sendSalesCatalogPaymentUnavailableWhatsapp");
     expect(paymentSender).toContain("notifyResponsibleHumanAboutPaymentIssue");
@@ -190,6 +200,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("e-mail");
     expect(paymentSender).toContain("CPF ou CNPJ");
     expect(paymentSender).toContain("endereco completo com rua, numero, bairro, cidade, CEP");
+    expect(paymentSender).toContain("Depois disso, eu confirmo o endereco completo para calcular a entrega.");
     expect(paymentSender).not.toContain("Se for entrega por frete");
     expect(paymentSender).not.toContain("confirmar a forma de entrega desse pedido");
     expect(runtimeSource).toContain("urlChoiceFormat ?? \"plain\"");

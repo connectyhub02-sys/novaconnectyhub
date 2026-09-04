@@ -244,6 +244,7 @@ export async function POST(request: NextRequest) {
       orderId: session.order_id,
       paymentSessionId: session.id,
       providerPaymentId,
+      paymentMethod: session.method,
       paymentMethodLabel,
       status: paymentData.status,
       source: "asaas_webhook",
