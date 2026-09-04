@@ -20,7 +20,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "main_need",
     label: "Necessidade",
-    question: "O que você quer resolver ou comprar hoje?",
+    question: "O que voce quer resolver ou comprar hoje?",
     crmField: "purpose",
     weight: 15,
     required: true,
@@ -36,7 +36,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "volume_or_context",
     label: "Volume ou contexto",
-    question: "Qual é o tamanho da sua demanda ou do seu contexto atual?",
+    question: "Qual e o tamanho da sua demanda ou do seu contexto atual?",
     crmField: "volume_or_context",
     weight: 10,
     required: false,
@@ -44,7 +44,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "budget_or_ticket",
     label: "Valor ou orcamento",
-    question: "Você já tem uma faixa de investimento ou valor esperado?",
+    question: "Voce ja tem uma faixa de investimento ou valor esperado?",
     crmField: "budget",
     weight: 15,
     required: false,
@@ -52,7 +52,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "urgency",
     label: "Prazo",
-    question: "Você quer resolver isso agora, esta semana, este mês ou está apenas pesquisando?",
+    question: "Voce quer resolver isso agora, esta semana, este mes ou esta apenas pesquisando?",
     crmField: "timeframe",
     weight: 15,
     required: true,
@@ -60,7 +60,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "decision_authority",
     label: "Decisor",
-    question: "Quem decide esse tipo de compra: você mesmo ou mais alguém participa?",
+    question: "Quem decide esse tipo de compra: voce mesmo ou mais alguem participa?",
     crmField: "decision_authority",
     weight: 10,
     required: true,
@@ -68,7 +68,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "objection",
     label: "Objecao",
-    question: "Qual seria sua maior dúvida antes de avançar?",
+    question: "Qual seria sua maior duvida antes de avancar?",
     crmField: "objections",
     weight: 10,
     required: false,
@@ -76,7 +76,7 @@ const oldImplicitDefaultQuestions = [
   {
     id: "next_step_acceptance",
     label: "Proximo passo",
-    question: "Se fizer sentido, você toparia ver uma demonstração ou receber uma proposta objetiva?",
+    question: "Se fizer sentido, voce toparia ver uma demonstracao ou receber uma proposta objetiva?",
     crmField: "next_step_acceptance",
     weight: 5,
     required: true,
@@ -145,6 +145,24 @@ describe("lead qualification configuration", () => {
     expect(normalized.enabled).toBe(false);
     expect(normalized.questions).toEqual([]);
     expect(isLeadQualificationPlaybookActive(normalized)).toBe(false);
+  });
+
+  it("preserves older playbooks that have a custom commercial objective", () => {
+    const configuredBeforeMarker = {
+      enabled: true,
+      productName: "",
+      commercialObjective: "Qualificar leads para agenda premium de odontologia.",
+      qualifyThreshold: 70,
+      vipThreshold: 85,
+      maxQuestionsPerConversation: 6,
+      askOneQuestionAtATime: true,
+      questions: oldImplicitDefaultQuestions,
+    };
+
+    const normalized = normalizeLeadQualificationConfig(configuredBeforeMarker, { persisted: true });
+
+    expect(normalized.commercialObjective).toBe("Qualificar leads para agenda premium de odontologia.");
+    expect(normalized.questions).toEqual(oldImplicitDefaultQuestions);
   });
 
   it("keeps customer-configured panel playbooks active and humanized", () => {

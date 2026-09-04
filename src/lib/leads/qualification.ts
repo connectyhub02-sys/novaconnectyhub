@@ -42,73 +42,6 @@ export const leadQualificationConfigKey = "lead_qualification_config";
 const legacyDefaultCommercialObjective = "Entender a dor do lead, qualificar potencial de compra e conduzir para o proximo passo comercial.";
 const defaultGlobalCommercialObjective = "Entender necessidade, contexto, prazo e objecao para orientar o lead e conduzir o proximo passo comercial sem travar a venda.";
 
-const legacyImplicitDefaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
-  {
-    id: "main_need",
-    label: "Necessidade",
-    question: "O que você quer resolver ou comprar hoje?",
-    crmField: "purpose",
-    weight: 15,
-    required: true,
-  },
-  {
-    id: "main_pain",
-    label: "Dor principal",
-    question: "Qual problema mais te incomoda nesse assunto hoje?",
-    crmField: "main_pain",
-    weight: 20,
-    required: true,
-  },
-  {
-    id: "volume_or_context",
-    label: "Volume ou contexto",
-    question: "Qual é o tamanho da sua demanda ou do seu contexto atual?",
-    crmField: "volume_or_context",
-    weight: 10,
-    required: false,
-  },
-  {
-    id: "budget_or_ticket",
-    label: "Valor ou orcamento",
-    question: "Você já tem uma faixa de investimento ou valor esperado?",
-    crmField: "budget",
-    weight: 15,
-    required: false,
-  },
-  {
-    id: "urgency",
-    label: "Prazo",
-    question: "Você quer resolver isso agora, esta semana, este mês ou está apenas pesquisando?",
-    crmField: "timeframe",
-    weight: 15,
-    required: true,
-  },
-  {
-    id: "decision_authority",
-    label: "Decisor",
-    question: "Quem decide esse tipo de compra: você mesmo ou mais alguém participa?",
-    crmField: "decision_authority",
-    weight: 10,
-    required: true,
-  },
-  {
-    id: "objection",
-    label: "Objecao",
-    question: "Qual seria sua maior dúvida antes de avançar?",
-    crmField: "objections",
-    weight: 10,
-    required: false,
-  },
-  {
-    id: "next_step_acceptance",
-    label: "Proximo passo",
-    question: "Se fizer sentido, você toparia ver uma demonstração ou receber uma proposta objetiva?",
-    crmField: "next_step_acceptance",
-    weight: 5,
-    required: true,
-  },
-];
-
 export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
   {
     id: "main_need",
@@ -443,25 +376,7 @@ function isPersistedUnconfiguredQualificationConfig(record: Record<string, unkno
     return true;
   }
 
-  return record.enabled === true
-    && areQualificationQuestionsEquivalent(config.questions, legacyImplicitDefaultLeadQualificationQuestions);
-}
-
-function areQualificationQuestionsEquivalent(left: LeadQualificationQuestion[], right: LeadQualificationQuestion[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((question, index) => {
-    const other = right[index];
-    return other
-      && question.id === other.id
-      && question.label === other.label
-      && question.question === other.question
-      && question.crmField === other.crmField
-      && question.weight === other.weight
-      && question.required === other.required;
-  });
+  return true;
 }
 
 function cloneLeadQualificationConfig(config: LeadQualificationConfig): LeadQualificationConfig {
