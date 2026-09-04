@@ -852,6 +852,19 @@ export const salesCatalogPaymentMethodTemplates: SalesCatalogPaymentMethod[] = [
   },
 ];
 
+export function isDefaultSalesCatalogPaymentMethodEnabled(id: SalesCatalogPaymentMethodId) {
+  return id === "pix" || id === "card_link";
+}
+
+export function createDefaultSalesCatalogPaymentMethods(): SalesCatalogPaymentMethod[] {
+  return salesCatalogPaymentMethodTemplates.map((method) => ({
+    ...method,
+    enabled: isDefaultSalesCatalogPaymentMethodEnabled(method.id),
+    instructions: method.instructions,
+    requiresProof: false,
+  }));
+}
+
 export const salesCatalogPagBankPaymentMethodOptions: Array<{
   id: SalesCatalogPagBankPaymentMethod;
   label: string;
@@ -962,7 +975,7 @@ export function createDefaultSalesCatalogOrderBumps(): SalesCatalogOrderBumpSett
 
 export function createDefaultSalesCatalogCommerceAgentSettings(): SalesCatalogCommerceAgentSettings {
   return {
-    enabled: false,
+    enabled: true,
     mode: "assistant",
     surfaces: ["store", "product", "cart", "checkout"],
     verticalPlaybook: "generic",
@@ -975,12 +988,7 @@ export function createDefaultSalesCatalogCommerceAgentSettings(): SalesCatalogCo
 
 export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerceSettings {
   return {
-    paymentMethods: salesCatalogPaymentMethodTemplates.map((method) => ({
-      ...method,
-      enabled: false,
-      instructions: null,
-      requiresProof: false,
-    })),
+    paymentMethods: createDefaultSalesCatalogPaymentMethods(),
     pagBank: createDefaultSalesCatalogPagBankSettings(),
     asaas: createDefaultSalesCatalogAsaasSettings(),
     orderPolicy: createDefaultSalesCatalogOrderPolicy(),

@@ -1100,15 +1100,21 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     storefront: readStorefrontSettings(metadata.storefront ?? metadata.storefront_settings ?? metadata.storefrontSettings, categories),
     trackInventory: readNullableBoolean(metadata.track_inventory) ?? false,
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
-    paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
+    paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods, {
+      configuredAt: metadata.payment_methods_configured_at ?? metadata.paymentMethodsConfiguredAt,
+    }),
     pagBank: readPagBankSettings(metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank, commerceDefaults.pagBank),
     asaas: readAsaasSettings(metadata.asaas ?? metadata.asaas_settings ?? metadata.asaasSettings, commerceDefaults.asaas),
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
     automationSettings: readAutomationSettings(metadata.automation_settings ?? metadata.automationSettings, commerceDefaults.automationSettings),
-    orderBumps: readOrderBumps(metadata.order_bumps ?? metadata.orderBumps, createDefaultSalesCatalogOrderBumps()),
-    commerceAgent: readCommerceAgentSettings(metadata.commerce_agent ?? metadata.commerceAgent, commerceDefaults.commerceAgent),
+    orderBumps: readOrderBumps(metadata.order_bumps ?? metadata.orderBumps, createDefaultSalesCatalogOrderBumps(), {
+      configuredAt: metadata.order_bumps_configured_at ?? metadata.orderBumpsConfiguredAt,
+    }),
+    commerceAgent: readCommerceAgentSettings(metadata.commerce_agent ?? metadata.commerceAgent, commerceDefaults.commerceAgent, {
+      configuredAt: metadata.commerce_agent_configured_at ?? metadata.commerceAgentConfiguredAt,
+    }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1855,7 +1861,11 @@ function readAttributeList(value: unknown, fallback: SalesCatalogAttribute[]): S
   return attributes.length > 0 ? attributes : fallback;
 }
 
-function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[]): SalesCatalogPaymentMethod[] {
+function readPaymentMethods(
+  value: unknown,
+  fallback: SalesCatalogPaymentMethod[],
+  options: { configuredAt?: unknown } = {},
+): SalesCatalogPaymentMethod[] {
   const methodsById = new Map(fallback.map((method) => [method.id, { ...method }]));
 
   if (Array.isArray(value)) {
@@ -1877,7 +1887,13 @@ function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[
     }
   }
 
-  return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
+  const methods = salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
+
+  if (methods.some((method) => method.enabled) || readString(options.configuredAt)) {
+    return methods;
+  }
+
+  return fallback.map((method) => ({ ...method }));
 }
 
 function readPagBankSettings(value: unknown, fallback: SalesCatalogPagBankSettings): SalesCatalogPagBankSettings {
@@ -2084,7 +2100,11 @@ function readAutomationSettings(value: unknown, fallback: SalesCatalogAutomation
   };
 }
 
-function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings): SalesCatalogOrderBumpSettings {
+function readOrderBumps(
+  value: unknown,
+  fallback: SalesCatalogOrderBumpSettings,
+  options: { configuredAt?: unknown } = {},
+): SalesCatalogOrderBumpSettings {
   const record = readRecord(value);
   if (!record) return fallback;
 
@@ -2108,7 +2128,7 @@ function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings)
     })
     .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item));
 
-  return {
+  const settings = {
     enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
     whatsappEnabled: readNullableBoolean(record.whatsapp_enabled ?? record.whatsappEnabled) ?? fallback.whatsappEnabled,
     checkoutEnabled: readNullableBoolean(record.checkout_enabled ?? record.checkoutEnabled) ?? fallback.checkoutEnabled,
@@ -2116,16 +2136,23 @@ function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings)
     maxOffersPerOrder: readNumber(record.max_offers_per_order ?? record.maxOffersPerOrder) ?? fallback.maxOffersPerOrder,
     items,
   };
+
+  if (!settings.enabled && settings.items.length === 0 && !readString(options.configuredAt)) {
+    return { ...fallback, items: [...fallback.items] };
+  }
+
+  return settings;
 }
 
 function readCommerceAgentSettings(
   value: unknown,
   fallback: SalesCatalogCommerceAgentSettings,
+  options: { configuredAt?: unknown } = {},
 ): SalesCatalogCommerceAgentSettings {
   const record = readRecord(value);
   if (!record) return fallback;
 
-  return {
+  const settings = {
     enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
     mode: normalizeCommerceAgentMode(readString(record.mode), fallback.mode),
     surfaces: normalizeCommerceAgentSurfaces(record.surfaces, fallback.surfaces),
@@ -2141,6 +2168,12 @@ function readCommerceAgentSettings(
       ?? fallback.checkoutQuietMode,
     agentDockLabel: readString(record.agent_dock_label ?? record.agentDockLabel) ?? fallback.agentDockLabel,
   };
+
+  if (!settings.enabled && !readString(options.configuredAt)) {
+    return { ...settings, enabled: fallback.enabled };
+  }
+
+  return settings;
 }
 
 function normalizeCommerceAgentMode(

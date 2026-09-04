@@ -1167,6 +1167,7 @@ async function saveCatalogSettings(input: {
     track_inventory: trackInventory,
     variation_media: variationMedia,
     payment_methods: paymentMethods.map(serializePaymentMethod),
+    payment_methods_configured_at: now,
     pagbank: serializePagBankSettings(pagBank),
     asaas: serializeAsaasSettings(asaas),
     order_policy: serializeOrderPolicy(orderPolicy),
@@ -1174,7 +1175,9 @@ async function saveCatalogSettings(input: {
     message_templates: serializeMessageTemplates(messageTemplates),
     automation_settings: serializeAutomationSettings(automationSettings),
     order_bumps: serializeOrderBumps(orderBumps),
+    order_bumps_configured_at: now,
     commerce_agent: serializeCommerceAgentSettings(commerceAgent),
+    commerce_agent_configured_at: now,
     updated_by: input.userId,
     updated_from: "sales_catalog_setup",
   };
