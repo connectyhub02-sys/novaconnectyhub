@@ -183,8 +183,11 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("Copiar codigo Pix|copy:");
     expect(paymentSender).toContain("whatsapp_pix_copy_button");
     expect(paymentSender).toContain("agent_pix_copy_button");
-    expect(paymentSender).toContain("Pix copia e cola:");
-    expect(paymentSender).toContain("agent_pix_payment_fallback");
+    expect(paymentSender).toContain("buildSalesCatalogPixCodeOnlyWhatsappText");
+    expect(paymentSender).toContain("codigo Pix sozinho");
+    expect(paymentSender).toContain("whatsapp_pix_code_separate_message");
+    expect(paymentSender).toContain("agent_pix_payment_fallback_intro");
+    expect(paymentSender).toContain("agent_pix_payment_fallback_code");
     expect(paymentSender).toContain("Assim que voce realizar o pagamento, eu te atualizo por aqui.");
     expect(paymentSender).not.toContain("Assim que o ${payment.providerLabel} confirmar");
     expect(paymentSender).toContain("sendSalesCatalogPaymentDeferredWhatsapp");

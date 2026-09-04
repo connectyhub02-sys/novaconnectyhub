@@ -286,8 +286,10 @@ describe("PagBank gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("pixCode");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_payment_request");
     expect(whatsappAgentRuntimeSource).toContain("Copiar codigo Pix|copy:");
-    expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
-    expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code");
+    expect(whatsappAgentRuntimeSource).toContain("buildSalesCatalogPixCodeOnlyWhatsappText");
+    expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code_separate_message");
+    expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment_fallback_intro");
+    expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment_fallback_code");
     expect(whatsappAgentRuntimeSource).toContain("agent_pix_copy_button");
     expect(whatsappAgentRuntimeSource).toContain("billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle)))");
     expect(paymentSessionsSource).toContain("createAsaasPixPayment");

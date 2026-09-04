@@ -117,7 +117,9 @@ describe("Asaas gateway rollout", () => {
     expect(whatsappAgentRuntimeSource).toContain("/send/request-payment");
     expect(whatsappAgentRuntimeSource).toContain("pixCode");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_payment_request");
-    expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
+    expect(whatsappAgentRuntimeSource).toContain("buildSalesCatalogPixCodeOnlyWhatsappText");
+    expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code_separate_message");
+    expect(whatsappAgentRuntimeSource).toContain("agent_pix_payment_fallback_code");
     expect(whatsappAgentRuntimeSource).toContain("gateway Asaas desta empresa");
     expect(whatsappAgentRuntimeSource).toContain("Me confirme seu endereco completo");
   });
