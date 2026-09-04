@@ -85,7 +85,10 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText)");
     expect(delivery).toContain("shouldRequestSalesCatalogCheckoutConfirmation");
     expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt({");
-    expect(checkoutRuntime).toContain("source: \"current_response\" | \"recent_lead_message\" | \"confirmation_preview\"");
+    expect(checkoutRuntime).toContain("| \"current_response\"");
+    expect(checkoutRuntime).toContain("| \"cart_draft\"");
+    expect(checkoutRuntime).toContain("| \"confirmation_preview\"");
+    expect(checkoutRuntime).toContain("| \"recent_assistant_recommendation\"");
     expect(checkoutRuntime).toContain("salesCatalogCheckoutConfirmationWindowMs");
     expect(checkoutRuntime).toContain("Posso fechar seu pedido e gerar o pagamento?");
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
@@ -103,9 +106,37 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("const confirmationPreviewText = confirmedCheckoutIntent");
     expect(checkoutRuntime).toContain("if (confirmationPreviewText)");
     expect(checkoutRuntime).toContain("\"confirmation_preview\",");
+    expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartDraftPreviewText");
+    expect(checkoutRuntime).toContain("\"cart_draft\",");
+    expect(checkoutRuntime).toContain("selectRecentSingleSalesCatalogAssistantRecommendation");
     expect(runtimeSource).toContain("isSalesCatalogOrderPreviewHeaderText");
     expect(runtimeSource).toContain("top|perfeito|show|beleza|blz|combinado");
     expect(runtimeSource).toContain("\\bprevia\\b.{0,100}\\bpedido\\b");
+  });
+
+  it("reconstructs split checkout prompts and ignores assistant-only extra items while closing", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const checkoutRuntime = sourceBetween(
+      "function buildRecentSalesCatalogCheckoutConfirmationPreviewText",
+      "function isSalesCatalogMessageOutsideCartWindow",
+    );
+    const paymentPrompt = sourceBetween(
+      "function hasRecentSalesCatalogPaymentMethodChoicePrompt",
+      "async function sendSalesCatalogPaymentLink",
+    );
+
+    expect(delivery).toContain("const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText)");
+    expect(delivery).toContain("hasOrderIntent && assistantCatalogItems.length !== 1 ? [] : assistantCatalogItems");
+    expect(delivery).toContain("suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems)");
+    expect(checkoutRuntime).toContain("function buildRecentOutboundMessageBlocks");
+    expect(checkoutRuntime).toContain("candidate.text");
+    expect(checkoutRuntime).toContain("text_content: block.text");
+    expect(checkoutRuntime).toContain("function isSalesCatalogCartDraftPreviewText");
+    expect(checkoutRuntime).toContain("function hasSalesCatalogCartDraftPreviewDetails");
+    expect(paymentPrompt).toContain("buildRecentOutboundMessageBlocks(messages, latestInbound)");
+    expect(paymentPrompt).toContain("normalizeSearch(messageBlock.text)");
+    expect(runtimeSource).toContain("function suppressDuplicateSalesCatalogOrderProductMentions");
+    expect(runtimeSource).toContain("isStandaloneSalesCatalogProductMentionLine");
   });
 
   it("does not treat package size as a purchased quantity", () => {

@@ -7204,10 +7204,14 @@ async function sendAgentResponse(input: {
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
   const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText) || hasConfirmedCheckoutIntent;
-  const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
+  const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
+  const assistantCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
-    selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText),
     selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
+  );
+  const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
+    leadCatalogItems,
+    hasOrderIntent && assistantCatalogItems.length !== 1 ? [] : assistantCatalogItems,
   );
   const checkoutOrderSelections = resolveSalesCatalogOrderSelections({
     context,
@@ -7242,7 +7246,7 @@ async function sendAgentResponse(input: {
   const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
-  const deliveryText = shouldRequestCheckoutConfirmation
+  const rawDeliveryText = shouldRequestCheckoutConfirmation
     ? buildSalesCatalogOrderConfirmationPrompt({
         context,
         latestInbound,
@@ -7258,6 +7262,7 @@ async function sendAgentResponse(input: {
               hasOrderIntent,
             })
       );
+  const deliveryText = suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems);
   const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
     && !shouldWaitForPaymentMethodChoice
     && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
@@ -8314,10 +8319,20 @@ function mergeRuntimeSalesCatalogItems(...groups: RuntimeSalesCatalogItem[][]) {
 type RuntimeSalesCatalogOrderSelection = {
   item: RuntimeSalesCatalogItem;
   quantity: number;
-  source: "current_response" | "recent_lead_message" | "confirmation_preview";
+  source:
+    | "current_response"
+    | "recent_lead_message"
+    | "cart_draft"
+    | "confirmation_preview"
+    | "recent_assistant_recommendation";
   mentionText: string | null;
   quantitySignal: string | null;
   fractionalQuantity: number | null;
+};
+
+type RuntimeOutboundMessageBlock = {
+  firstMessage: ConversationMessageRow;
+  text: string;
 };
 
 const salesCatalogCartHistoryMessageLimit = 18;
@@ -8370,7 +8385,63 @@ function resolveSalesCatalogOrderSelections(input: {
     return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
   }
 
-  for (const item of input.currentItems) {
+  const hasOrderIntent = hasSalesCatalogOrderIntent(input.intentText) || confirmedCheckoutIntent;
+
+  if (!hasOrderIntent) {
+    for (const item of input.currentItems) {
+      const quantity = resolveSalesCatalogMentionQuantity([input.intentText, input.responseText].join(" "), item);
+      addSelection({
+        item,
+        quantity: quantity.quantity,
+        source: "current_response",
+        mentionText: preview([input.intentText, input.responseText].filter(Boolean).join(" "), 280),
+        quantitySignal: quantity.signal,
+        fractionalQuantity: quantity.fractionalQuantity,
+      });
+    }
+
+    return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+  }
+
+  const currentIntentSelections = selectSalesCatalogOrderSelectionsFromText(
+    input.context.salesCatalog,
+    input.intentText,
+    "recent_lead_message",
+  );
+  for (const selection of currentIntentSelections) {
+    addSelection(selection);
+  }
+
+  const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentSelections.length);
+
+  if (selected.size === 0 && !isSalesCatalogCartAdditionOnlyIntent(input.intentText)) {
+    const cartDraftText = buildRecentSalesCatalogCartDraftPreviewText(input.context.messages, latestInbound);
+
+    if (cartDraftText) {
+      for (const selection of selectSalesCatalogOrderSelectionsFromText(
+        input.context.salesCatalog,
+        cartDraftText,
+        "cart_draft",
+      )) {
+        addSelection(selection);
+      }
+
+      return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+    }
+  }
+
+  if (selected.size === 0 && !isSalesCatalogCartAdditionOnlyIntent(input.intentText)) {
+    for (const selection of selectRecentSingleSalesCatalogAssistantRecommendation(
+      input.context.salesCatalog,
+      input.context.messages,
+      latestInbound,
+    )) {
+      addSelection(selection);
+    }
+  }
+
+  if (selected.size === 0 && input.currentItems.length === 1) {
+    const item = input.currentItems[0];
     const quantity = resolveSalesCatalogMentionQuantity([input.intentText, input.responseText].join(" "), item);
     addSelection({
       item,
@@ -8382,14 +8453,6 @@ function resolveSalesCatalogOrderSelections(input: {
     });
   }
 
-  const hasOrderIntent = hasSalesCatalogOrderIntent(input.intentText) || confirmedCheckoutIntent;
-
-  if (!hasOrderIntent) {
-    return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
-  }
-
-  const currentIntentItems = selectSalesCatalogItemsFromText(input.context.salesCatalog, input.intentText);
-  const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentItems.length);
   const cartBoundaryMs = resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders);
   const latestInboundMs = Date.parse(latestInbound?.occurred_at ?? "");
   const recentInboundMessages = input.context.messages
@@ -8732,6 +8795,10 @@ function buildRecentSalesCatalogCheckoutConfirmationPreviewText(
     return "";
   }
 
+  if (preview.text_content?.trim()) {
+    return preview.text_content.trim();
+  }
+
   const previewMs = Date.parse(preview.occurred_at);
   const latestInboundMs = Date.parse(latestInbound.occurred_at);
   if (!Number.isFinite(previewMs) || !Number.isFinite(latestInboundMs)) {
@@ -8767,29 +8834,122 @@ function findRecentSalesCatalogCheckoutConfirmationPreview(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
+  const block = buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .find((candidate) => isSalesCatalogCheckoutConfirmationPreviewText(candidate.text));
+
+  return block
+    ? {
+        ...block.firstMessage,
+        text_content: block.text,
+      }
+    : null;
+}
+
+function buildRecentSalesCatalogCartDraftPreviewText(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .find((candidate) => isSalesCatalogCartDraftPreviewText(candidate.text))
+    ?.text
+    .trim() ?? "";
+}
+
+function selectRecentSingleSalesCatalogAssistantRecommendation(
+  items: RuntimeSalesCatalogItem[],
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+): RuntimeSalesCatalogOrderSelection[] {
+  for (const block of buildRecentOutboundMessageBlocks(messages, latestInbound)) {
+    if (isSalesCatalogCheckoutConfirmationPreviewText(block.text) || isSalesCatalogCartDraftPreviewText(block.text)) {
+      continue;
+    }
+
+    const matchedItems = selectSalesCatalogItemsFromText(items, block.text)
+      .filter((item) => item.salesDestination === "connectyhub_checkout" && item.status === "active" && isSalesCatalogItemSellable(item));
+
+    if (matchedItems.length > 1) {
+      return [];
+    }
+
+    const item = matchedItems[0];
+    if (!item) {
+      continue;
+    }
+
+    const quantity = resolveSalesCatalogMentionQuantity(block.text, item);
+
+    return [{
+      item,
+      quantity: quantity.quantity,
+      source: "recent_assistant_recommendation",
+      mentionText: preview(block.text, 280),
+      quantitySignal: quantity.signal,
+      fractionalQuantity: quantity.fractionalQuantity,
+    }];
+  }
+
+  return [];
+}
+
+function buildRecentOutboundMessageBlocks(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+  windowMs = salesCatalogCheckoutConfirmationWindowMs,
+): RuntimeOutboundMessageBlock[] {
   if (!latestInbound) {
-    return null;
+    return [];
   }
 
   const latestInboundMs = Date.parse(latestInbound.occurred_at);
   if (!Number.isFinite(latestInboundMs)) {
-    return null;
+    return [];
   }
 
-  return messages
+  const blocks: RuntimeOutboundMessageBlock[] = [];
+  let currentBlock: ConversationMessageRow[] = [];
+  const flushCurrentBlock = () => {
+    if (currentBlock.length === 0) {
+      return;
+    }
+
+    blocks.push({
+      firstMessage: currentBlock[0],
+      text: currentBlock
+        .map((message) => message.text_content?.trim())
+        .filter(Boolean)
+        .join("\n\n"),
+    });
+    currentBlock = [];
+  };
+
+  const recentMessages = messages
     .slice()
-    .reverse()
-    .find((message) => {
-      if (message.direction !== "outbound") return false;
-      if (!message.text_content?.trim()) return false;
+    .sort((left, right) => Date.parse(left.occurred_at) - Date.parse(right.occurred_at));
 
-      const occurredAt = Date.parse(message.occurred_at);
-      if (!Number.isFinite(occurredAt)) return false;
-      if (occurredAt >= latestInboundMs) return false;
-      if (latestInboundMs - occurredAt > salesCatalogCheckoutConfirmationWindowMs) return false;
+  for (const message of recentMessages) {
+    const occurredAt = Date.parse(message.occurred_at);
+    if (!Number.isFinite(occurredAt)) {
+      continue;
+    }
 
-      return isSalesCatalogCheckoutConfirmationPreviewText(message.text_content);
-    }) ?? null;
+    if (occurredAt >= latestInboundMs || latestInboundMs - occurredAt > windowMs) {
+      continue;
+    }
+
+    if (message.direction === "outbound" && message.text_content?.trim()) {
+      currentBlock.push(message);
+      continue;
+    }
+
+    if (message.direction === "inbound") {
+      flushCurrentBlock();
+    }
+  }
+
+  flushCurrentBlock();
+
+  return blocks.reverse();
 }
 
 function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
@@ -8834,6 +8994,17 @@ function isSalesCatalogCheckoutConfirmationPreviewText(text: string) {
   return asksToConfirm && hasOrderPreview && hasSalesCatalogOrderConfirmationPreviewDetails(normalized);
 }
 
+function isSalesCatalogCartDraftPreviewText(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return isSalesCatalogOrderPreviewHeaderText(normalized)
+    && hasSalesCatalogCartDraftPreviewDetails(normalized);
+}
+
 function isSalesCatalogOrderPreviewHeaderText(normalizedText: string) {
   if (/\b(?:quer que eu|quer q eu|posso|consigo|vou)\b.{0,80}\b(?:monte|montar|confirmar|verificar|buscar)\b/.test(normalizedText)) {
     return false;
@@ -8855,6 +9026,15 @@ function hasSalesCatalogOrderConfirmationPreviewDetails(normalizedText: string) 
     || /\b\d+\s*x\s+/.test(normalizedText);
 
   return hasPaymentTotal && asksToClose && hasItemLine;
+}
+
+function hasSalesCatalogCartDraftPreviewDetails(normalizedText: string) {
+  const hasPaymentTotal = /\b(?:total|subtotal|valor)\b.{0,60}(?:r\$|\d)/.test(normalizedText)
+    || /r\$\s*\d/.test(normalizedText);
+  const hasItemLine = /(?:^|\n)\s*-\s*\d+(?:x|un|unidade|unidades)?\b/.test(normalizedText)
+    || /\b\d+\s*x\s+/.test(normalizedText);
+
+  return hasPaymentTotal && hasItemLine;
 }
 
 function isSalesCatalogMessageOutsideCartWindow(message: ConversationMessageRow, latestInboundMs: number) {
@@ -9104,6 +9284,57 @@ function sanitizeSalesCatalogCustomerText(text: string, hasCatalogContext: boole
   }
 
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function suppressDuplicateSalesCatalogOrderProductMentions(text: string, items: RuntimeSalesCatalogItem[]) {
+  if (!items.length || !isSalesCatalogCartDraftPreviewText(text)) {
+    return text;
+  }
+
+  const seenOrderItems = new Set<string>();
+  const filtered: string[] = [];
+
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const normalized = normalizeSearch(trimmed);
+    const mentionedItem = items.find((item) => referencesSalesCatalogItem(normalized, item));
+
+    if (!mentionedItem) {
+      filtered.push(line);
+      continue;
+    }
+
+    if (isSalesCatalogOrderItemLine(trimmed)) {
+      seenOrderItems.add(mentionedItem.id);
+      filtered.push(line);
+      continue;
+    }
+
+    if (seenOrderItems.has(mentionedItem.id) && isStandaloneSalesCatalogProductMentionLine(trimmed, mentionedItem)) {
+      continue;
+    }
+
+    filtered.push(line);
+  }
+
+  return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function isSalesCatalogOrderItemLine(line: string) {
+  return /^\s*(?:[-*]\s*)?\d+\s*x\b/i.test(line);
+}
+
+function isStandaloneSalesCatalogProductMentionLine(line: string, item: RuntimeSalesCatalogItem) {
+  const normalized = normalizeSearch(line);
+  const productMention = normalizeSearch(formatSalesCatalogCustomerMention(item));
+  const title = normalizeSearch(item.title);
+
+  return Boolean(
+    normalized
+    && !isSalesCatalogOrderItemLine(line)
+    && (normalized.includes(productMention) || normalized.includes(title))
+    && (/\b(?:brl|r\s*\$|\d{1,6}(?:\s|$))\b/.test(normalized) || normalized.length <= productMention.length + 30),
+  );
 }
 
 function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
@@ -9961,40 +10192,17 @@ function hasRecentSalesCatalogPaymentMethodChoicePrompt(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
-  if (!latestInbound) {
-    return false;
-  }
+  return buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .some((messageBlock) => {
+      const normalized = normalizeSearch(messageBlock.text);
+      const asksPaymentMethod = /\bqual\b.{0,80}\bforma\b.{0,40}\bpagamento\b/.test(normalized)
+        || /\b(?:pix)\b.{0,80}\b(?:cartao|credito)\b/.test(normalized)
+        || /\b(?:cartao|credito)\b.{0,80}\b(?:pix)\b/.test(normalized);
+      const referencesConfirmedOrder = /\bpedido\b.{0,50}\bconfirmado\b/.test(normalized)
+        || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized);
 
-  const latestInboundMs = Date.parse(latestInbound.occurred_at);
-
-  if (!Number.isFinite(latestInboundMs)) {
-    return false;
-  }
-
-  return messages.some((message) => {
-    if (message.direction !== "outbound" || !message.text_content?.trim()) {
-      return false;
-    }
-
-    const occurredAt = Date.parse(message.occurred_at);
-
-    if (!Number.isFinite(occurredAt)) {
-      return false;
-    }
-
-    if (occurredAt >= latestInboundMs || latestInboundMs - occurredAt > salesCatalogCheckoutConfirmationWindowMs) {
-      return false;
-    }
-
-    const normalized = normalizeSearch(message.text_content);
-    const asksPaymentMethod = /\bqual\b.{0,80}\bforma\b.{0,40}\bpagamento\b/.test(normalized)
-      || /\b(?:pix)\b.{0,80}\b(?:cartao|credito)\b/.test(normalized)
-      || /\b(?:cartao|credito)\b.{0,80}\b(?:pix)\b/.test(normalized);
-    const referencesConfirmedOrder = /\bpedido\b.{0,50}\bconfirmado\b/.test(normalized)
-      || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized);
-
-    return asksPaymentMethod && referencesConfirmedOrder;
-  });
+      return asksPaymentMethod && referencesConfirmedOrder;
+    });
 }
 
 async function sendSalesCatalogPaymentLink(input: {
