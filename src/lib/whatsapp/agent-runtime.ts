@@ -4753,40 +4753,79 @@ function buildSocialProofInstruction(learnings: KnowledgeMemoryRow[]): string[] 
 
 function buildTemporalAwarenessInstruction(behavior: WhatsappBehaviorConfig): string[] {
   if (!behavior.temporalAwareness) return [];
-  const tz = behavior.aiScheduleTimezone || "America/Sao_Paulo";
-  let hour: number;
-  let weekday: string;
-  try {
-    hour = parseInt(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date()), 10);
-    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: tz }).format(new Date());
-  } catch {
-    hour = new Date().getHours();
-    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(new Date());
-  }
-  let period: string;
-  let greeting: string;
-  if (hour >= 5 && hour < 12) {
-    period = "manha";
-    greeting = "bom dia";
-  } else if (hour >= 12 && hour < 18) {
-    period = "tarde";
-    greeting = "boa tarde";
-  } else if (hour >= 18 && hour < 22) {
-    period = "noite";
-    greeting = "boa noite";
-  } else {
-    period = "madrugada";
-    greeting = "boa noite";
-  }
+  const clock = resolveRuntimeLocalClock(behavior);
+
   return [
     "",
     "CONSCIENCIA TEMPORAL:",
-    `- Agora sao aproximadamente ${hour}h (${period}), ${weekday}.`,
-    `- Use '${greeting}' como saudacao quando iniciar ou retomar conversa. Nunca misture periodo.`,
+    `- Horario local de referencia: ${clock.formattedTime} (${clock.period}), ${clock.weekday}, fuso ${clock.timezone}.`,
+    `- Saudacao correta para este momento: '${clock.greeting}'. Use essa saudacao quando iniciar ou retomar conversa.`,
+    `- Se o lead usar saudacao de outro periodo (ex.: disser 'boa noite' durante a tarde), nao espelhe o erro: responda com '${clock.greeting}' ou siga direto ao assunto.`,
+    "- Nunca aceite a saudacao do lead como fonte de horario. Use apenas o horario local de referencia acima.",
     "- Adapte energia ao horario: mais animado de manha, mais tranquilo a noite.",
     "- Se o lead mandar mensagem de madrugada, seja breve e acolhedor.",
     "- Nunca diga 'eu sei que horas sao' ou mencione sistema/relogio. Use naturalmente.",
   ];
+}
+
+function resolveRuntimeLocalClock(behavior: WhatsappBehaviorConfig, now = new Date()) {
+  const timezone = behavior.aiScheduleTimezone || "America/Sao_Paulo";
+  let hour: number;
+  let minute: number;
+  let weekday: string;
+
+  try {
+    const timeParts = new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: timezone,
+    }).formatToParts(now);
+
+    hour = parseInt(timeParts.find((part) => part.type === "hour")?.value ?? "", 10);
+    minute = parseInt(timeParts.find((part) => part.type === "minute")?.value ?? "", 10);
+    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: timezone }).format(now);
+  } catch {
+    hour = now.getHours();
+    minute = now.getMinutes();
+    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(now);
+  }
+
+  if (!Number.isFinite(hour)) {
+    hour = now.getHours();
+  }
+
+  if (!Number.isFinite(minute)) {
+    minute = now.getMinutes();
+  }
+
+  if (hour === 24) {
+    hour = 0;
+  }
+
+  const period = resolveRuntimeDayPeriod(hour);
+  const greeting = resolveRuntimeGreetingForPeriod(period);
+
+  return {
+    timezone,
+    hour,
+    minute,
+    weekday,
+    period,
+    greeting,
+    formattedTime: `${String(hour).padStart(2, "0")}h${String(minute).padStart(2, "0")}`,
+  };
+}
+
+function resolveRuntimeDayPeriod(hour: number) {
+  if (hour >= 5 && hour < 12) return "manha";
+  if (hour >= 12 && hour < 18) return "tarde";
+  if (hour >= 18 && hour < 22) return "noite";
+  return "madrugada";
+}
+
+function resolveRuntimeGreetingForPeriod(period: string) {
+  return period === "manha" ? "bom dia" : period === "tarde" ? "boa tarde" : "boa noite";
 }
 
 function buildConversationArcInstruction(behavior: WhatsappBehaviorConfig, conversationMetadata: Record<string, unknown> | null): string[] {
@@ -7281,7 +7320,10 @@ async function sendAgentResponse(input: {
               hasOrderIntent,
             })
       );
-  const deliveryText = suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems);
+  const deliveryText = normalizeTemporalGreetingInOutboundText(
+    suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems),
+    context.behavior,
+  );
   const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
     && !shouldWaitForPaymentMethodChoice
     && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
@@ -16661,6 +16703,32 @@ function normalizeAssistantText(value: string) {
     normalizeOutboundLanguageText(cleaned)
       .slice(0, assistantResponseMaxLength),
   );
+}
+
+function normalizeTemporalGreetingInOutboundText(text: string, behavior: WhatsappBehaviorConfig) {
+  if (!behavior.temporalAwareness) {
+    return text;
+  }
+
+  const clock = resolveRuntimeLocalClock(behavior);
+  const expectedGreeting = normalizeSearch(clock.greeting);
+
+  return text.replace(
+    /^(\s*(?:(?:oi|ola|olá|opa|e ai|e aí|fala)(?:[,!\s-]+))?)(bom\s+dia|boa\s+tarde|boa\s+noite)\b/i,
+    (match, prefix: string, greeting: string) => {
+      if (normalizeSearch(greeting) === expectedGreeting) {
+        return match;
+      }
+
+      return `${prefix}${matchTemporalGreetingCase(greeting, clock.greeting)}`;
+    },
+  );
+}
+
+function matchTemporalGreetingCase(original: string, target: string) {
+  return /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(original)
+    ? `${target.charAt(0).toUpperCase()}${target.slice(1)}`
+    : target;
 }
 
 function repairIncompleteAssistantEnding(value: string) {

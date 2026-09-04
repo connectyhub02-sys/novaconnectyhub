@@ -142,6 +142,34 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behavior.mirrorTextFallbackProbability).toBe(30);
   });
 
+  it("uses the local clock to prevent wrong period greetings", () => {
+    const temporalInstruction = sourceBetween(
+      runtimeSource,
+      "function buildTemporalAwarenessInstruction",
+      "function buildConversationArcInstruction",
+    );
+    const delivery = sourceBetween(
+      runtimeSource,
+      "async function sendAgentResponse",
+      "type CompanyLocationReply",
+    );
+    const normalizer = sourceBetween(
+      runtimeSource,
+      "function normalizeTemporalGreetingInOutboundText",
+      "function repairIncompleteAssistantEnding",
+    );
+
+    expect(temporalInstruction).toContain("resolveRuntimeLocalClock(behavior)");
+    expect(temporalInstruction).toContain("Horario local de referencia");
+    expect(temporalInstruction).toContain("Saudacao correta para este momento");
+    expect(temporalInstruction).toContain("nao espelhe o erro");
+    expect(temporalInstruction).toContain("Nunca aceite a saudacao do lead como fonte de horario");
+    expect(delivery).toContain("normalizeTemporalGreetingInOutboundText(");
+    expect(normalizer).toContain("resolveRuntimeLocalClock(behavior)");
+    expect(normalizer).toContain("bom\\s+dia|boa\\s+tarde|boa\\s+noite");
+    expect(normalizer).toContain("matchTemporalGreetingCase(greeting, clock.greeting)");
+  });
+
   it("removes critical infrastructure toggles from the client behavior panel", () => {
     const behaviorPanel = sourceBetween(
       consoleSource,
