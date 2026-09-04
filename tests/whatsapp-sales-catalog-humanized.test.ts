@@ -178,7 +178,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("pixCode");
     expect(paymentSender).toContain("whatsapp_pix_payment_request");
     expect(paymentSender).toContain("agent_pix_payment_request");
-    expect(paymentSender).toContain("pix_payment_request_failed");
+    expect(paymentSender).toContain("paymentLink");
+    expect(paymentSender).toContain("pix_copy_button_and_payment_request_failed");
     expect(paymentSender).toContain("buildSalesCatalogPixCopyButtonChoice");
     expect(paymentSender).toContain("Copiar codigo Pix|copy:");
     expect(paymentSender).toContain("whatsapp_pix_copy_button");
@@ -236,8 +237,11 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(followUpDetection).toContain("codigo pix");
     expect(followUpDetection).toContain("nao abriu");
     expect(followUpDetection).toContain("ainda nao");
-    expect(followUpDetection).toContain("resolvesCustomerDataForPayment");
-    expect(followUpDetection).toContain("extractRuntimeCustomerNameFromStructuredReply");
+    expect(followUpDetection).toContain("resolvesSalesCatalogPaymentPrerequisiteText");
+    expect(runtimeSource).toContain("extractRuntimeCustomerNameFromStructuredReply");
+    expect(checkoutRecovery).toContain("sendSalesCatalogExistingOrderConfirmationWhatsapp");
+    expect(checkoutRecovery).toContain("payment_prerequisite_resolved_without_final_confirmation");
+    expect(checkoutRecovery).toContain("preferredMethod === \"card\" && currentMethod !== \"card\"");
     expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
     expect(checkoutRecovery).toContain("gatewayUnavailable");
     expect(checkoutRecovery).toContain("if (paymentDeferred || gatewayUnavailable)");

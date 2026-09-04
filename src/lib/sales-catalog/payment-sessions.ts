@@ -31,6 +31,7 @@ import {
   createAsaasPixPayment,
   ensureAsaasAccessToken,
   extractAsaasPaymentData,
+  loadAsaasPlatformBillingConfig,
 } from "./asaas";
 import type { SalesCatalogAsaasSettings, SalesCatalogPagBankSettings } from "./shared";
 import {
@@ -45,6 +46,9 @@ type PaymentGatewayIntegration =
   | Awaited<ReturnType<typeof ensureMercadoPagoAccessToken>>
   | Awaited<ReturnType<typeof ensurePagBankAccessToken>>
   | Awaited<ReturnType<typeof ensureAsaasAccessToken>>;
+type PlatformPaymentGatewayConfig =
+  | Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>>
+  | Awaited<ReturnType<typeof loadAsaasPlatformBillingConfig>>;
 type PaymentGatewayPixData =
   | ReturnType<typeof extractMercadoPagoPixData>
   | ReturnType<typeof extractPagBankPixData>
@@ -193,7 +197,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const pagBankSettings = catalogSettings?.pagBank ?? null;
   const asaasSettings = catalogSettings?.asaas ?? null;
   let integration: PaymentGatewayIntegration | null = null;
-  let platformBilling: Awaited<ReturnType<typeof loadPagBankPlatformBillingConfig>> | null = null;
+  let platformBilling: PlatformPaymentGatewayConfig | null = null;
   let providerSetupError: string | null = null;
 
   if (paymentProvider === "pagbank" && pagBankSettings && preferredMethod === "pix" && !pagBankSettings.enabledMethods.includes("pix")) {
@@ -224,7 +228,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   try {
     if (connectyHubOwned) {
-      platformBilling = await loadPagBankPlatformBillingConfig({ client: input.client });
+      platformBilling = paymentProvider === "asaas"
+        ? await loadAsaasPlatformBillingConfig({ client: input.client })
+        : await loadPagBankPlatformBillingConfig({ client: input.client });
     } else if (paymentProvider === "asaas") {
       integration = await ensureAsaasAccessToken({
         client: input.client,
@@ -249,7 +255,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
   const missingAccessTokenMessage = connectyHubOwned
-    ? "Nao foi possivel localizar a conta PagBank da ConnectyHub para este pagamento."
+    ? `Nao foi possivel localizar a conta ${paymentProviderLabel} da ConnectyHub para este pagamento.`
     : `Nao foi possivel localizar a conta ${paymentProviderLabel} para este pagamento.`;
 
   const sessionId = randomUUID();
@@ -460,10 +466,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
         checkout_ready_for_card: true,
       };
 
-      if (paymentProvider === "asaas" && !connectyHubOwned) {
+      if (paymentProvider === "asaas") {
         const asaasCheckout = await createAsaasCheckout({
           accessToken,
-          mode: getPaymentIntegrationMode(integration),
+          mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
+          apiBaseUrl: getPaymentGatewayApiBaseUrl(platformBilling, paymentProvider),
           amount,
           description,
           externalReference,
@@ -689,10 +696,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
   try {
     let pixData: PaymentGatewayPixData;
 
-    if (paymentProvider === "asaas" && !connectyHubOwned) {
+    if (paymentProvider === "asaas") {
       const asaasPix = await createAsaasPixPayment({
         accessToken,
-        mode: getPaymentIntegrationMode(integration),
+        mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
+        apiBaseUrl: getPaymentGatewayApiBaseUrl(platformBilling, paymentProvider),
         amount,
         description,
         externalReference,
@@ -1276,7 +1284,7 @@ async function resolvePaymentGatewayProvider(input: {
   connectyHubOwned?: boolean;
 }): Promise<PaymentGatewayProvider> {
   if (input.connectyHubOwned) {
-    return "pagbank";
+    return "asaas";
   }
 
   const { data } = await input.client
@@ -1313,6 +1321,17 @@ function formatPaymentMethodLabel(provider: PaymentGatewayProvider, method: "pix
 
 function getPaymentIntegrationMode(integration: PaymentGatewayIntegration | null) {
   return integration && "mode" in integration ? integration.mode : null;
+}
+
+function getPaymentGatewayApiBaseUrl(
+  platformBilling: PlatformPaymentGatewayConfig | null,
+  provider: PaymentGatewayProvider,
+) {
+  if (provider !== "asaas" || !platformBilling || !("apiBaseUrl" in platformBilling)) {
+    return null;
+  }
+
+  return platformBilling.apiBaseUrl;
 }
 
 function buildProviderPaymentMetadata(

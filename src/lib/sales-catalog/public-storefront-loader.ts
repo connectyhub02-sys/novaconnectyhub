@@ -4,6 +4,7 @@ import type {
   PublicStorefrontSettings,
   PublicStorefrontTrackingParams,
 } from "@/components/checkout/public-storefront";
+import { cookies } from "next/headers";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogStoreProductUrl } from "@/lib/sales-catalog/public-urls";
@@ -56,6 +57,27 @@ type StorefrontConversationRow = {
   metadata: JsonRecord | null;
 };
 
+type StorefrontLeadIdentityRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  metadata: JsonRecord | null;
+};
+
+type StorefrontCommerceSessionRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  lead_name: string | null;
+  lead_phone: string | null;
+  metadata: JsonRecord | null;
+};
+
+export type PublicStorefrontBrowserTrackingContext = {
+  visitorId: string | null;
+  sessionId: string | null;
+};
+
 export type PublicStorefrontLeadContext = {
   leadId: string | null;
   leadName: string | null;
@@ -77,6 +99,7 @@ export type PublicStorefrontPageData = {
 export async function loadPublicStorefrontPageData(input: {
   storeSlug: string;
   query?: Record<string, string | string[] | undefined>;
+  browserTracking?: PublicStorefrontBrowserTrackingContext | null;
 }): Promise<PublicStorefrontPageData | null> {
   const client = createServiceClient();
   const organization = await loadPublicStorefrontOrganization(input.storeSlug);
@@ -95,6 +118,9 @@ export async function loadPublicStorefrontPageData(input: {
     leadId,
     leadPhone,
     conversationId,
+    trackingLinkId,
+    visitorId: input.browserTracking?.visitorId ?? null,
+    sessionId: input.browserTracking?.sessionId ?? null,
   });
   const tracking: PublicStorefrontTrackingParams = {
     organizationId: organization.id,
@@ -129,7 +155,11 @@ export async function loadPublicStorefrontPageData(input: {
     storefront,
     products,
     tracking,
-    publicTrackingContext: buildStorePublicTrackingContext(tracking),
+    publicTrackingContext: buildStorePublicTrackingContext({
+      ...tracking,
+      leadName: tracking.leadName,
+      leadEmail: tracking.leadEmail,
+    }),
   };
 }
 
@@ -198,7 +228,9 @@ export function resolvePublicStorefrontSettings(settings: PublicStorefrontSettin
 export function buildStorePublicTrackingContext(input: {
   organizationId: string;
   leadId: string | null;
+  leadName?: string | null;
   leadPhone: string | null;
+  leadEmail?: string | null;
   conversationId: string | null;
   agentId: string | null;
   trackingLinkId: string | null;
@@ -210,7 +242,9 @@ export function buildStorePublicTrackingContext(input: {
     organization_id: input.organizationId,
     tracking_token: secret ? createOrganizationTrackingToken(input.organizationId, secret) : null,
     lead_id: input.leadId,
+    lead_name: input.leadName ?? null,
     lead_phone: input.leadPhone,
+    lead_email: input.leadEmail ?? null,
     conversation_id: input.conversationId,
     agent_id: input.agentId,
     tracking_link_id: input.trackingLinkId,
@@ -225,10 +259,16 @@ export async function loadPublicStorefrontLeadContext(
     leadId: string | null;
     leadPhone: string | null;
     conversationId: string | null;
+    trackingLinkId?: string | null;
+    visitorId?: string | null;
+    sessionId?: string | null;
   },
 ): Promise<PublicStorefrontLeadContext> {
   const requestedLeadId = normalizeUuid(input.leadId);
   const requestedConversationId = normalizeUuid(input.conversationId);
+  const requestedTrackingLinkId = normalizeUuid(input.trackingLinkId);
+  const visitorId = readString(input.visitorId);
+  const sessionId = readString(input.sessionId);
   let conversationId: string | null = null;
   let leadId: string | null = requestedLeadId;
   let leadName: string | null = null;
@@ -237,25 +277,69 @@ export async function loadPublicStorefrontLeadContext(
   let lead: StorefrontLeadRow | null = null;
 
   if (requestedConversationId) {
-    const { data: conversation } = await client
-      .from("conversations")
-      .select("id, lead_id, metadata")
-      .eq("id", requestedConversationId)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle<StorefrontConversationRow>();
+    const conversation = await loadPublicStorefrontConversation(client, input.organizationId, requestedConversationId);
+    const merged = mergePublicStorefrontConversationContext({
+      conversation,
+      leadId,
+      leadName,
+      leadPhone,
+      leadEmail,
+      conversationId,
+    });
 
-    if (conversation) {
-      const conversationMetadata = readRecord(conversation.metadata);
+    leadId = merged.leadId;
+    leadName = merged.leadName;
+    leadPhone = merged.leadPhone;
+    leadEmail = merged.leadEmail;
+    conversationId = merged.conversationId;
+  }
 
-      conversationId = conversation.id;
-      leadId = leadId ?? normalizeUuid(conversation.lead_id);
-      leadName = resolveLeadPersonalName({ metadata: conversationMetadata });
-      leadEmail = resolveLeadEmail(conversationMetadata);
-      leadPhone = leadPhone
-        ?? normalizeWhatsappPhone(readString(conversationMetadata.lead_phone))
-        ?? normalizeWhatsappPhone(readString(conversationMetadata.phone_number))
-        ?? normalizeWhatsappPhone(readString(conversationMetadata.customer_phone));
-    }
+  const restoredIdentity = await findPublicStorefrontLeadIdentity(client, {
+    organizationId: input.organizationId,
+    visitorId,
+    sessionId,
+    trackingLinkId: requestedTrackingLinkId,
+  }).catch(() => null);
+  const restoredSession = await findPublicStorefrontCommerceSession(client, {
+    organizationId: input.organizationId,
+    visitorId,
+    sessionId,
+  }).catch(() => null);
+  const restoredIdentityMetadata = readRecord(restoredIdentity?.metadata);
+  const restoredSessionMetadata = readRecord(restoredSession?.metadata);
+
+  leadId = leadId ?? normalizeUuid(restoredIdentity?.lead_id) ?? normalizeUuid(restoredSession?.lead_id);
+  conversationId = conversationId
+    ?? normalizeUuid(restoredIdentity?.conversation_id)
+    ?? normalizeUuid(restoredSession?.conversation_id);
+  leadName = leadName
+    ?? readString(restoredSession?.lead_name)
+    ?? resolveLeadPersonalName({ metadata: restoredIdentityMetadata })
+    ?? resolveLeadPersonalName({ metadata: restoredSessionMetadata });
+  leadPhone = leadPhone
+    ?? normalizeWhatsappPhone(readString(restoredIdentityMetadata.lead_phone))
+    ?? normalizeWhatsappPhone(readString(restoredSession?.lead_phone))
+    ?? normalizeWhatsappPhone(readString(restoredSessionMetadata.lead_phone));
+  leadEmail = leadEmail
+    ?? resolveLeadEmail(restoredIdentityMetadata)
+    ?? resolveLeadEmail(restoredSessionMetadata);
+
+  if (conversationId && conversationId !== requestedConversationId) {
+    const conversation = await loadPublicStorefrontConversation(client, input.organizationId, conversationId);
+    const merged = mergePublicStorefrontConversationContext({
+      conversation,
+      leadId,
+      leadName,
+      leadPhone,
+      leadEmail,
+      conversationId,
+    });
+
+    leadId = merged.leadId;
+    leadName = merged.leadName;
+    leadPhone = merged.leadPhone;
+    leadEmail = merged.leadEmail;
+    conversationId = merged.conversationId;
   }
 
   if (leadId) {
@@ -279,6 +363,57 @@ export async function loadPublicStorefrontLeadContext(
     leadPhone,
     leadEmail,
     conversationId,
+  };
+}
+
+export async function readPublicStorefrontBrowserTrackingContext(): Promise<PublicStorefrontBrowserTrackingContext> {
+  const cookieStore = await cookies();
+
+  return {
+    visitorId: readCookieString(cookieStore.get("connecty_visitor_id")?.value),
+    sessionId: readCookieString(cookieStore.get("connecty_session_id")?.value),
+  };
+}
+
+async function loadPublicStorefrontConversation(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  conversationId: string,
+) {
+  const { data } = await client
+    .from("conversations")
+    .select("id, lead_id, metadata")
+    .eq("id", conversationId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<StorefrontConversationRow>();
+
+  return data ?? null;
+}
+
+function mergePublicStorefrontConversationContext(input: {
+  conversation: StorefrontConversationRow | null;
+  leadId: string | null;
+  leadName: string | null;
+  leadPhone: string | null;
+  leadEmail: string | null;
+  conversationId: string | null;
+}) {
+  if (!input.conversation) {
+    return input;
+  }
+
+  const conversationMetadata = readRecord(input.conversation.metadata);
+
+  return {
+    conversation: input.conversation,
+    leadId: input.leadId ?? normalizeUuid(input.conversation.lead_id),
+    leadName: input.leadName ?? resolveLeadPersonalName({ metadata: conversationMetadata }),
+    leadPhone: input.leadPhone
+      ?? normalizeWhatsappPhone(readString(conversationMetadata.lead_phone))
+      ?? normalizeWhatsappPhone(readString(conversationMetadata.phone_number))
+      ?? normalizeWhatsappPhone(readString(conversationMetadata.customer_phone)),
+    leadEmail: input.leadEmail ?? resolveLeadEmail(conversationMetadata),
+    conversationId: input.conversation.id,
   };
 }
 
@@ -309,6 +444,80 @@ async function loadPublicStorefrontLeadByPhone(
     .eq("phone_number", leadPhone)
     .limit(1)
     .maybeSingle<StorefrontLeadRow>();
+
+  return data ?? null;
+}
+
+async function findPublicStorefrontLeadIdentity(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    visitorId: string | null;
+    sessionId: string | null;
+    trackingLinkId: string | null;
+  },
+) {
+  const identities = [
+    input.visitorId ? { identity_type: "visitor_cookie", identity_value: input.visitorId } : null,
+    input.sessionId ? { identity_type: "session_cookie", identity_value: input.sessionId } : null,
+    input.trackingLinkId ? { identity_type: "tracking_link", identity_value: input.trackingLinkId } : null,
+  ].filter((row): row is { identity_type: string; identity_value: string } => Boolean(row));
+
+  if (identities.length === 0) {
+    return null;
+  }
+
+  const filters = identities
+    .map((row) => `and(identity_type.eq.${row.identity_type},identity_value.eq.${escapeSupabaseOrValue(row.identity_value)})`)
+    .join(",");
+  const { data } = await client
+    .from("lead_web_identities")
+    .select("id, lead_id, conversation_id, metadata")
+    .eq("organization_id", input.organizationId)
+    .or(filters)
+    .order("confidence", { ascending: false })
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<StorefrontLeadIdentityRow>();
+
+  return data?.lead_id || data?.conversation_id ? data : null;
+}
+
+async function findPublicStorefrontCommerceSession(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    visitorId: string | null;
+    sessionId: string | null;
+  },
+) {
+  if (input.sessionId) {
+    const { data } = await client
+      .from("commerce_sessions")
+      .select("id, lead_id, conversation_id, lead_name, lead_phone, metadata")
+      .eq("organization_id", input.organizationId)
+      .eq("session_cookie_id", input.sessionId)
+      .eq("status", "active")
+      .order("last_seen_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<StorefrontCommerceSessionRow>();
+
+    if (data) return data;
+  }
+
+  if (!input.visitorId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("commerce_sessions")
+    .select("id, lead_id, conversation_id, lead_name, lead_phone, metadata")
+    .eq("organization_id", input.organizationId)
+    .eq("visitor_cookie_id", input.visitorId)
+    .eq("status", "active")
+    .order("last_seen_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<StorefrontCommerceSessionRow>();
 
   return data ?? null;
 }
@@ -542,10 +751,26 @@ function normalizeEmail(value: string | null) {
   return normalized && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : null;
 }
 
+function readCookieString(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function normalizeWhatsappPhone(value: string | null) {
   const digits = value?.replace(/\D/g, "") ?? "";
 
   return digits.length >= 10 ? digits : null;
+}
+
+function escapeSupabaseOrValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/\)/g, "\\)");
 }
 
 function normalizeUuid(value: string | null | undefined) {

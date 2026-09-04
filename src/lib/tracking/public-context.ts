@@ -3,7 +3,9 @@ export type ConnectyPublicTrackingContext = {
   organization_id?: string | null;
   tracking_token?: string | null;
   lead_id?: string | null;
+  lead_name?: string | null;
   lead_phone?: string | null;
+  lead_email?: string | null;
   conversation_id?: string | null;
   agent_id?: string | null;
   order_id?: string | null;
@@ -21,7 +23,9 @@ const contextKeys = [
   "organization_id",
   "tracking_token",
   "lead_id",
+  "lead_name",
   "lead_phone",
+  "lead_email",
   "conversation_id",
   "agent_id",
   "order_id",
@@ -31,6 +35,8 @@ const contextKeys = [
   "catalog_item_id",
   "tracking_source",
 ] as const;
+
+const publicTrackingStorageKey = "connectyhub_public_tracking_context";
 
 declare global {
   interface Window {
@@ -43,12 +49,17 @@ export function writePublicTrackingContext(context: ConnectyPublicTrackingContex
     return;
   }
 
-  const normalized = normalizePublicTrackingContext(context);
+  const incoming = normalizePublicTrackingContext(context);
+  const normalized = context === null
+    ? null
+    : mergeStoredPublicTrackingContext(readStoredPublicTrackingContext(), incoming);
 
   if (normalized) {
     window.__CONNECTYHUB_TRACKING_CONTEXT__ = normalized;
+    writeStoredPublicTrackingContext(normalized);
   } else {
     delete window.__CONNECTYHUB_TRACKING_CONTEXT__;
+    clearStoredPublicTrackingContext();
   }
 
   window.dispatchEvent(new CustomEvent(publicTrackingContextUpdatedEventName, {
@@ -62,9 +73,10 @@ export function readPublicTrackingContext() {
   }
 
   const fromWindow = normalizePublicTrackingContext(window.__CONNECTYHUB_TRACKING_CONTEXT__);
+  const fromStorage = readStoredPublicTrackingContext();
   const fromUrl = readPublicTrackingContextFromSearchParams(new URLSearchParams(window.location.search));
 
-  return mergePublicTrackingContext(fromWindow, fromUrl);
+  return mergePublicTrackingContext(mergeStoredPublicTrackingContext(fromStorage, fromWindow), fromUrl);
 }
 
 export function readPublicTrackingContextFromSearchParams(searchParams: URLSearchParams) {
@@ -126,7 +138,9 @@ export function buildPublicTrackingApiBody(context: ConnectyPublicTrackingContex
     organization_id: context.organization_id,
     tracking_token: context.tracking_token,
     lead_id: context.lead_id,
+    lead_name: context.lead_name,
     lead_phone: context.lead_phone,
+    lead_email: context.lead_email,
     conversation_id: context.conversation_id,
     agent_id: context.agent_id,
     order_id: context.order_id,
@@ -146,7 +160,9 @@ export function buildPublicTrackingMetadata(context: ConnectyPublicTrackingConte
   return {
     public_tracking: context,
     lead_id: context.lead_id,
+    lead_name: context.lead_name,
     lead_phone: context.lead_phone,
+    lead_email: context.lead_email,
     conversation_id: context.conversation_id,
     agent_id: context.agent_id,
     order_id: context.order_id,
@@ -170,4 +186,51 @@ export function getPublicTrackingContextSignature(context: ConnectyPublicTrackin
 
 function readContextString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 500) : null;
+}
+
+function mergeStoredPublicTrackingContext(
+  stored: ConnectyPublicTrackingContext | null,
+  next: ConnectyPublicTrackingContext | null,
+) {
+  if (!stored) return next;
+  if (!next) return stored;
+
+  const storedOrganization = stored.organization_id ?? null;
+  const nextOrganization = next.organization_id ?? null;
+
+  if (storedOrganization && nextOrganization && storedOrganization !== nextOrganization) {
+    return next;
+  }
+
+  return mergePublicTrackingContext(stored, next);
+}
+
+function readStoredPublicTrackingContext() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return normalizePublicTrackingContext(window.localStorage.getItem(publicTrackingStorageKey)
+      ? JSON.parse(window.localStorage.getItem(publicTrackingStorageKey) as string)
+      : null);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPublicTrackingContext(context: ConnectyPublicTrackingContext) {
+  try {
+    window.localStorage.setItem(publicTrackingStorageKey, JSON.stringify(context));
+  } catch {
+    // Public tracking persistence cannot block commerce flows.
+  }
+}
+
+function clearStoredPublicTrackingContext() {
+  try {
+    window.localStorage.removeItem(publicTrackingStorageKey);
+  } catch {
+    // Public tracking persistence cannot block commerce flows.
+  }
 }

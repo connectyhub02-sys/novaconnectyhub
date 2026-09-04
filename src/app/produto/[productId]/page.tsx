@@ -37,7 +37,12 @@ import {
   buildLeadAwareSalesCatalogStoreProductsUrl,
   buildLeadAwareSalesCatalogStoreUrl,
 } from "@/lib/sales-catalog/public-urls";
-import { loadPublicStorefrontLeadContext, loadStoreProducts, mapStorefrontProduct } from "@/lib/sales-catalog/public-storefront-loader";
+import {
+  loadPublicStorefrontLeadContext,
+  loadStoreProducts,
+  mapStorefrontProduct,
+  readPublicStorefrontBrowserTrackingContext,
+} from "@/lib/sales-catalog/public-storefront-loader";
 import {
   isSalesCatalogDisplayableProduct,
   resolveSalesCatalogStorefrontFontFamily,
@@ -211,11 +216,15 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const agentId = readSearchString(query.agent_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
   const storeSlug = organization.slug ?? organization.id;
+  const browserTracking = await readPublicStorefrontBrowserTrackingContext();
   const leadContext = await loadPublicStorefrontLeadContext(client, {
     organizationId: organization.id,
     leadId: requestedLeadId,
     leadPhone: requestedLeadPhone,
     conversationId: requestedConversationId,
+    trackingLinkId,
+    visitorId: browserTracking.visitorId,
+    sessionId: browserTracking.sessionId,
   });
   const leadId = leadContext.leadId ?? requestedLeadId;
   const leadName = leadContext.leadName;
@@ -254,7 +263,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     organizationId: organization.id,
     productId: item.id,
     leadId,
+    leadName,
     leadPhone,
+    leadEmail,
     conversationId,
     agentId,
     trackingLinkId,
@@ -729,7 +740,9 @@ function buildProductPublicTrackingContext(input: {
   organizationId: string;
   productId: string;
   leadId: string | null;
+  leadName?: string | null;
   leadPhone: string | null;
+  leadEmail?: string | null;
   conversationId: string | null;
   agentId: string | null;
   trackingLinkId: string | null;
@@ -741,7 +754,9 @@ function buildProductPublicTrackingContext(input: {
     organization_id: input.organizationId,
     tracking_token: secret ? createOrganizationTrackingToken(input.organizationId, secret) : null,
     lead_id: input.leadId,
+    lead_name: input.leadName ?? null,
     lead_phone: input.leadPhone,
+    lead_email: input.leadEmail ?? null,
     conversation_id: input.conversationId,
     agent_id: input.agentId,
     tracking_link_id: input.trackingLinkId,

@@ -71,13 +71,16 @@ export function CheckoutPaymentOptions({
   orderBumps,
   whatsappHref,
 }: CheckoutPaymentOptionsProps) {
-  const [method, setMethod] = useState<PaymentMethod>(initialPaymentMethod ?? "pix");
+  const showCard = canUseCard && (paymentProvider === "asaas" || paymentProvider === "pagbank" || Boolean(cardPublicKey));
+  const defaultMethod = initialPaymentMethod ?? (canUsePix && showCard ? null : canUsePix ? "pix" : showCard ? "card" : null);
+  const [method, setMethod] = useState<PaymentMethod | null>(defaultMethod);
   const [feedback, setFeedback] = useState<CheckoutPaymentFeedbackPayload | null>(null);
   const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>([]);
   const [pixUpdating, setPixUpdating] = useState(false);
   const [pixUpdateError, setPixUpdateError] = useState<string | null>(null);
-  const showCard = canUseCard && (paymentProvider === "pagbank" || Boolean(cardPublicKey));
-  const activeMethod = method === "card" && showCard ? "card" : canUsePix ? "pix" : showCard ? "card" : "pix";
+  const [asaasCardLoading, setAsaasCardLoading] = useState(false);
+  const [asaasCardError, setAsaasCardError] = useState<string | null>(null);
+  const activeMethod = method === "card" && showCard ? "card" : method === "pix" && canUsePix ? "pix" : null;
   const selectedOrderBumps = useMemo(
     () => orderBumps.filter((item) => selectedOrderBumpIds.includes(item.productId)),
     [orderBumps, selectedOrderBumpIds],
@@ -148,12 +151,61 @@ export function CheckoutPaymentOptions({
 
   function selectPaymentMethod(nextMethod: PaymentMethod) {
     setMethod(nextMethod);
+    setAsaasCardError(null);
+    setPixUpdateError(null);
     publishCommerceAgentEvent("payment_method_selected", {
       session_id: sessionId,
       payment_method: nextMethod,
       selected_order_bump_ids: selectedOrderBumpIds,
       total_amount: totalAmount,
     });
+  }
+
+  async function openAsaasCardCheckout() {
+    if (asaasCardLoading) return;
+
+    setAsaasCardLoading(true);
+    setAsaasCardError(null);
+    publishCommerceAgentEvent("asaas_card_checkout_started", {
+      session_id: sessionId,
+      selected_order_bump_ids: selectedOrderBumpIds,
+      total_amount: totalAmount,
+    });
+
+    try {
+      const response = await fetch(`/api/checkout/${sessionId}/card`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ selectedOrderBumpIds }),
+      });
+      const data = await response.json().catch(() => null) as {
+        checkoutUrl?: string;
+        trackingUrl?: string | null;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.checkoutUrl) {
+        throw new Error(data?.error ?? "Nao foi possivel abrir o cartao Asaas.");
+      }
+
+      publishCommerceAgentEvent("asaas_card_checkout_created", {
+        session_id: sessionId,
+        checkout_url: data.checkoutUrl,
+        tracking_url: data.trackingUrl ?? null,
+        total_amount: totalAmount,
+      });
+      window.location.href = data.trackingUrl ?? data.checkoutUrl;
+    } catch (error) {
+      publishCommerceAgentEvent("asaas_card_checkout_failed", {
+        session_id: sessionId,
+        reason: error instanceof Error ? error.message : "unknown_error",
+      });
+      setAsaasCardError(error instanceof Error ? error.message : "Nao foi possivel abrir o cartao Asaas.");
+    } finally {
+      setAsaasCardLoading(false);
+    }
   }
 
   async function updatePixWithOrderBumps() {
@@ -234,7 +286,14 @@ export function CheckoutPaymentOptions({
         </div>
       ) : null}
 
-      {activeMethod === "card" && paymentProvider === "mercado_pago" && cardPublicKey ? (
+      {activeMethod === "card" && paymentProvider === "asaas" ? (
+        <AsaasHostedCheckoutPanel
+          loading={asaasCardLoading}
+          error={asaasCardError}
+          totalLabel={totalAmountLabel}
+          onOpen={openAsaasCardCheckout}
+        />
+      ) : activeMethod === "card" && paymentProvider === "mercado_pago" && cardPublicKey ? (
         <MercadoPagoCardBrick
           publicKey={cardPublicKey}
           sessionId={sessionId}
@@ -258,6 +317,11 @@ export function CheckoutPaymentOptions({
           rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
           onPaymentStatusChange={handleCardPaymentStatusChange}
           onAlternativePaymentRequest={() => setMethod("pix")}
+        />
+      ) : activeMethod === null ? (
+        <PaymentMethodEmptyState
+          canUseCard={showCard}
+          canUsePix={canUsePix}
         />
       ) : !canUsePix ? (
         <div className="mt-5 rounded-[8px] border border-amber-200 bg-amber-50 p-4">
@@ -286,6 +350,67 @@ export function CheckoutPaymentOptions({
         onUsePix={() => setMethod("pix")}
         onClose={() => setFeedback(null)}
       />
+    </div>
+  );
+}
+
+function PaymentMethodEmptyState({
+  canUseCard,
+  canUsePix,
+}: {
+  canUseCard: boolean;
+  canUsePix: boolean;
+}) {
+  return (
+    <div className="mt-5 rounded-[8px] border border-blue-100 bg-white p-4">
+      <p className="text-sm font-black text-slate-950">Escolha como deseja pagar</p>
+      <p className="mt-2 text-xs leading-5 text-slate-600">
+        {canUsePix && canUseCard
+          ? "Selecione Pix para pagar por QR code ou cartao para abrir o checkout seguro."
+          : "Selecione uma forma habilitada para continuar."}
+      </p>
+    </div>
+  );
+}
+
+function AsaasHostedCheckoutPanel({
+  error,
+  loading,
+  totalLabel,
+  onOpen,
+}: {
+  error: string | null;
+  loading: boolean;
+  totalLabel: string;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="mt-5 rounded-[8px] border border-blue-100 bg-white p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
+          <CreditCard className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-black text-slate-950">Cartao de credito Asaas</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            O pagamento de {totalLabel} sera concluido no checkout seguro do Asaas.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-blue-700 px-4 text-sm font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        disabled={loading}
+        onClick={onOpen}
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+        {loading ? "Abrindo cartao..." : "Abrir pagamento no cartao"}
+      </button>
+      {error ? (
+        <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

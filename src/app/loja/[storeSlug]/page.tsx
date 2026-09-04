@@ -6,6 +6,7 @@ import { PublicTrackingContextBridge } from "@/components/tracking/public-tracki
 import {
   loadPublicStorefrontOrganization,
   loadPublicStorefrontPageData,
+  readPublicStorefrontBrowserTrackingContext,
   resolvePublicStorefrontBranding,
 } from "@/lib/sales-catalog/public-storefront-loader";
 import { buildStorefrontStructuredData } from "@/lib/seo/structured-data";
@@ -64,6 +65,7 @@ export default async function StorePage({ params, searchParams }: StorePageProps
   const data = await loadPublicStorefrontPageData({
     storeSlug,
     query: (await searchParams) ?? {},
+    browserTracking: await readPublicStorefrontBrowserTrackingContext(),
   });
 
   if (!data) {

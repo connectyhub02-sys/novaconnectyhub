@@ -8,9 +8,11 @@ import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
   buildPublicTrackingMetadata,
+  type ConnectyPublicTrackingContext,
   getPublicTrackingContextSignature,
   publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
+  writePublicTrackingContext,
 } from "@/lib/tracking/public-context";
 
 type TrackPayload = {
@@ -512,7 +514,7 @@ async function trackEvent(payload: TrackPayload) {
     const snapshot = getTrackingSnapshot();
     const publicTracking = readPublicTrackingContext();
 
-    await fetch("/api/track", {
+    const response = await fetch("/api/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
@@ -534,6 +536,11 @@ async function trackEvent(payload: TrackPayload) {
         },
       }),
     });
+    const result = await response.json().catch(() => null) as { public_tracking?: ConnectyPublicTrackingContext | null } | null;
+
+    if (response.ok && result?.public_tracking) {
+      writePublicTrackingContext(result.public_tracking);
+    }
   } catch {
     // Tracking cannot block product flows.
   }

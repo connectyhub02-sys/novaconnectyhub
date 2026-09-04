@@ -1102,10 +1102,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
     pagBank: readPagBankSettings(metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank, commerceDefaults.pagBank),
-    asaas: readAsaasSettings(
-      metadata.asaas ?? metadata.asaas_settings ?? metadata.asaasSettings ?? metadata.pagbank ?? metadata.pag_bank ?? metadata.pagBank,
-      commerceDefaults.asaas,
-    ),
+    asaas: readAsaasSettings(metadata.asaas ?? metadata.asaas_settings ?? metadata.asaasSettings, commerceDefaults.asaas),
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
@@ -1703,7 +1700,7 @@ function normalizePaymentProvider(value: string | null): SalesCatalogPaymentProv
   if (value === "asaas") return "asaas";
   if (value === "pagbank") return "pagbank";
   if (value === "mercado_pago") return "mercado_pago";
-  return "mercado_pago";
+  return "asaas";
 }
 
 function normalizePaymentIntegrationStatus(value: string | null): SalesCatalogPaymentIntegrationStatus {

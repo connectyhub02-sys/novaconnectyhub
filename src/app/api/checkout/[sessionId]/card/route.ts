@@ -25,6 +25,7 @@ import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sal
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-payment";
+import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,14 @@ export async function POST(
 
   if (isFinalPaymentSessionStatus(sourceSession.status)) {
     return NextResponse.json({ error: "Este pagamento ja foi finalizado." }, { status: 400 });
+  }
+
+  if (sourceSession.provider === "asaas") {
+    return processAsaasPublicCardCheckout({
+      body,
+      client,
+      sourceSession,
+    });
   }
 
   if (sourceSession.provider === "pagbank") {
@@ -470,6 +479,158 @@ export async function POST(
       error: error instanceof Error ? error.message : "Nao foi possivel processar o cartao.",
     }, { status: 400 });
   }
+}
+
+async function processAsaasPublicCardCheckout(input: {
+  body: JsonRecord;
+  client: ReturnType<typeof createServiceClient>;
+  sourceSession: PaymentSessionRow;
+}) {
+  const { body, client, sourceSession } = input;
+  const selectedOrderBumpIds = readStringList(body.selectedOrderBumpIds, []);
+
+  const { data: order, error: orderError } = await client
+    .from("sales_catalog_orders")
+    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
+    .eq("id", sourceSession.order_id)
+    .eq("organization_id", sourceSession.organization_id)
+    .maybeSingle<OrderRow>();
+
+  if (orderError || !order) {
+    return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
+  }
+
+  if (isClosedOrder(order)) {
+    return NextResponse.json({ error: "Este pedido ja foi finalizado." }, { status: 400 });
+  }
+
+  const { data: itemRows } = await client
+    .from("sales_catalog_order_items")
+    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment, metadata")
+    .eq("order_id", order.id)
+    .eq("organization_id", sourceSession.organization_id)
+    .order("created_at", { ascending: true });
+  let items = (itemRows ?? []) as OrderItemRow[];
+
+  if (hasRecurringSalesCatalogOrderItem(readRecord(order.metadata) ?? {}, items)) {
+    return NextResponse.json({
+      error: "Produto recorrente precisa do fluxo de cobranca recorrente antes de pagar por cartao.",
+    }, { status: 400 });
+  }
+
+  const activeCardSession = await findActiveCardSession({
+    client,
+    organizationId: sourceSession.organization_id,
+    orderId: order.id,
+  });
+
+  if (activeCardSession) {
+    return NextResponse.json({
+      ok: true,
+      reused: true,
+      sessionId: activeCardSession.id,
+      checkoutUrl: activeCardSession.checkout_url,
+      trackingUrl: activeCardSession.checkout_url,
+    });
+  }
+
+  const orderBumpApplication = await applySalesCatalogCheckoutOrderBumps({
+    client,
+    organizationId: sourceSession.organization_id,
+    orderId: order.id,
+    selectedProductIds: selectedOrderBumpIds,
+  });
+  items = orderBumpApplication.items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    sale_price: item.sale_price,
+    total: item.total,
+    sku_code: item.sku_code,
+    fulfillment: item.fulfillment,
+    metadata: item.metadata,
+  }));
+
+  if (hasRecurringSalesCatalogOrderItem(readRecord(orderBumpApplication.order.metadata) ?? {}, items)) {
+    return NextResponse.json({
+      error: "Produto recorrente precisa do fluxo de cobranca recorrente antes de pagar por cartao.",
+    }, { status: 400 });
+  }
+
+  if (requiresSalesCatalogShippingBeforePayment(orderBumpApplication.order, items)) {
+    return NextResponse.json({
+      error: "Confirme frete, retirada ou entrega antes de pagar este pedido.",
+    }, { status: 400 });
+  }
+
+  const amount = orderBumpApplication.totalAmount
+    ?? normalizeCurrencyAmount(sourceSession.amount)
+    ?? normalizeCurrencyAmount(order.total)
+    ?? normalizeCurrencyAmount(order.subtotal);
+
+  if (!amount) {
+    return NextResponse.json({ error: "Informe o total do pedido antes de pagar." }, { status: 400 });
+  }
+
+  const result = await createSalesCatalogPixPaymentSession({
+    client,
+    organizationId: sourceSession.organization_id,
+    orderId: order.id,
+    amount,
+    payerEmail: sourceSession.payer_email ?? order.customer_email,
+    preferredMethod: "card",
+    source: "checkout",
+    actorId: null,
+  }).catch((error: unknown) => ({
+    error: error instanceof Error ? error.message : "Nao foi possivel criar o checkout de cartao Asaas.",
+  }));
+
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: sourceSession.organization_id,
+    source_type: "sales_catalog_payment_session",
+    source_id: result.session.id,
+    event_type: "sales_catalog.asaas_card_checkout_created_from_public_checkout",
+    title: "Checkout de cartao Asaas criado",
+    summary: `Checkout ${sourceSession.id.slice(0, 8)} abriu uma nova sessao Asaas para cartao.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "payment", "asaas", "card", "checkout", "lead_tracking"],
+    payload: {
+      source_payment_session_id: sourceSession.id,
+      new_payment_session_id: result.session.id,
+      checkout_url: result.checkoutUrl,
+      tracking_url: result.trackingUrl,
+      order_id: order.id,
+      lead_id: order.lead_id,
+      conversation_id: order.conversation_id,
+      lead_phone: order.customer_phone,
+      selected_order_bump_product_ids: selectedOrderBumpIds,
+      applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
+      added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
+      amount,
+      items: summarizePaymentItems(items),
+    },
+  });
+
+  revalidatePath(`/checkout/${sourceSession.id}`);
+  revalidatePath(`/checkout/${result.session.id}`);
+  revalidatePath("/dashboard/links");
+
+  return NextResponse.json({
+    ok: true,
+    sessionId: result.session.id,
+    checkoutUrl: result.checkoutUrl,
+    trackingUrl: result.trackingUrl,
+    status: result.session.status,
+    providerStatus: result.session.providerStatus,
+    providerStatusDetail: result.session.providerStatusDetail,
+  });
 }
 
 async function processPagBankPublicCardPayment(input: {

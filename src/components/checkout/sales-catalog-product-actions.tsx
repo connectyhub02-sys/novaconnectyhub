@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, Minus, Plus, ShoppingBag } from "lucide-react";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import { readPublicTrackingContext } from "@/lib/tracking/public-context";
 import { cn } from "@/lib/utils";
 
 type ProductCheckoutButtonProps = {
@@ -54,15 +55,16 @@ export function ProductCheckoutButton({
 
     try {
       const searchParams = new URLSearchParams(window.location.search);
+      const tracking = readPublicTrackingContext();
       const response = await fetch(`/api/public/sales-catalog/products/${encodeURIComponent(productId)}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leadId: searchParams.get("lead_id"),
-          leadPhone: searchParams.get("lead_phone"),
-          conversationId: searchParams.get("conversation_id"),
-          agentId: searchParams.get("agent_id"),
-          trackingLinkId: searchParams.get("tracking_link_id"),
+          leadId: searchParams.get("lead_id") ?? tracking?.lead_id,
+          leadPhone: searchParams.get("lead_phone") ?? tracking?.lead_phone,
+          conversationId: searchParams.get("conversation_id") ?? tracking?.conversation_id,
+          agentId: searchParams.get("agent_id") ?? tracking?.agent_id,
+          trackingLinkId: searchParams.get("tracking_link_id") ?? tracking?.tracking_link_id,
           quantity,
         }),
       });

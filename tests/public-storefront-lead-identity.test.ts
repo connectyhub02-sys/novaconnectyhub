@@ -4,17 +4,31 @@ import { describe, expect, it } from "vitest";
 const storefrontSource = readFileSync("src/components/checkout/public-storefront.tsx", "utf8");
 const productCartSource = readFileSync("src/components/checkout/product-page-cart-controller.tsx", "utf8");
 const storefrontLoaderSource = readFileSync("src/lib/sales-catalog/public-storefront-loader.ts", "utf8");
+const publicTrackingContextSource = readFileSync("src/lib/tracking/public-context.ts", "utf8");
+const trackerSource = readFileSync("src/components/tracking/connecty-tracker.tsx", "utf8");
 const storeCheckoutRouteSource = readFileSync("src/app/api/public/sales-catalog/stores/[storeSlug]/checkout/route.ts", "utf8");
 
 describe("public storefront lead identity", () => {
   it("hydrates cart contact fields from the tracked lead context", () => {
+    expect(storefrontLoaderSource).toContain("readPublicStorefrontBrowserTrackingContext");
+    expect(storefrontLoaderSource).toContain("findPublicStorefrontLeadIdentity");
+    expect(storefrontLoaderSource).toContain("findPublicStorefrontCommerceSession");
+    expect(storefrontLoaderSource).toContain("leadName: string | null");
     expect(storefrontLoaderSource).toContain("leadEmail: string | null");
+    expect(storefrontLoaderSource).toContain("leadName: leadContext.leadName");
     expect(storefrontLoaderSource).toContain("leadEmail: leadContext.leadEmail");
+    expect(storefrontLoaderSource).toContain("resolveLeadPersonalName");
     expect(storefrontLoaderSource).toContain("function resolveLeadEmail");
     expect(storefrontLoaderSource).toContain("record.customer_email");
     expect(storefrontSource).toContain("leadEmail: string | null");
     expect(storefrontSource).toContain("useState(tracking.leadEmail ?? \"\")");
     expect(productCartSource).toContain("useState(tracking.leadEmail ?? \"\")");
+    expect(storefrontSource).toContain("publicTrackingContextUpdatedEventName");
+    expect(productCartSource).toContain("publicTrackingContextUpdatedEventName");
+    expect(publicTrackingContextSource).toContain("connectyhub_public_tracking_context");
+    expect(publicTrackingContextSource).toContain("lead_name");
+    expect(publicTrackingContextSource).toContain("lead_email");
+    expect(trackerSource).toContain("writePublicTrackingContext(result.public_tracking)");
   });
 
   it("keeps known WhatsApp data out of repeated cart questions and requires email", () => {

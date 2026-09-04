@@ -119,8 +119,10 @@ describe("PagBank gateway rollout", () => {
 
   it("labels public checkout payment surfaces by provider", () => {
     expect(checkoutPageSource).toContain("formatCheckoutPaymentProviderLabel(session.provider)");
-    expect(checkoutPageSource).toContain("loadMercadoPagoSecurity={session.provider === \"mercado_pago\" && canUseCard}");
+    expect(checkoutPageSource).toContain("loadMercadoPagoSecurity={false}");
     expect(checkoutOptionsSource).toContain("paymentProviderLabel");
+    expect(checkoutOptionsSource).toContain("AsaasHostedCheckoutPanel");
+    expect(checkoutOptionsSource).toContain("Abrir pagamento no cartao");
     expect(checkoutOptionsSource).toContain("Abrir pagamento no {paymentProviderLabel}");
   });
 
@@ -192,11 +194,16 @@ describe("PagBank gateway rollout", () => {
     expect(billingPaymentMethodsSource).toContain("decryptCredentialValue(row.provider_token_encrypted)");
   });
 
-  it("extends PagBank card checkout to public product payments without treating recurring products as one-time", () => {
-    expect(checkoutPageSource).toContain("canUsePagBankCard");
+  it("keeps PagBank public card code dormant while Asaas owns public product card checkout", () => {
+    expect(checkoutPageSource).toContain("const canUseAsaasCard =");
+    expect(checkoutPageSource).toContain("const canUseCard = canUseAsaasCard");
     expect(checkoutPageSource).toContain("pagBankCardEnabled");
+    expect(checkoutPageSource).toContain("const pagBankCardEnabled = false");
     expect(checkoutPageSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutPageSource).toContain("paymentProvider={paymentProvider}");
+    expect(checkoutOptionsSource).toContain("paymentProvider === \"asaas\"");
+    expect(checkoutOptionsSource).toContain("AsaasHostedCheckoutPanel");
+    expect(checkoutOptionsSource).toContain("openAsaasCardCheckout");
     expect(checkoutOptionsSource).toContain("PagBankCardForm");
     expect(checkoutOptionsSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutOptionsSource).toContain("cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}");
@@ -206,6 +213,8 @@ describe("PagBank gateway rollout", () => {
     expect(pagBankCardFormSource).toContain("type: input.paymentMethodType");
     expect(publicPagBankCardSessionRouteSource).toContain("ensurePagBankCardPublicKey");
     expect(publicPagBankCardSessionRouteSource).toContain("createPagBankThreeDSSession");
+    expect(publicCheckoutCardRouteSource).toContain("processAsaasPublicCardCheckout");
+    expect(publicCheckoutCardRouteSource).toContain("preferredMethod: \"card\"");
     expect(publicCheckoutCardRouteSource).toContain("processPagBankPublicCardPayment");
     expect(publicCheckoutCardRouteSource).toContain("createPagBankCardOrder");
     expect(publicCheckoutCardRouteSource).toContain("extractPagBankCardData");

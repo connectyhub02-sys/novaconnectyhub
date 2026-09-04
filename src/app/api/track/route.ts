@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     ?? readString(metadata.catalog_item_id)
     ?? readString(publicTracking.catalog_item_id);
   const trackingSource = readString(body.tracking_source) ?? readString(metadata.tracking_source) ?? readString(publicTracking.tracking_source);
+  let resolvedPublicTrackingContext: JsonRecord | null = null;
 
   try {
     const client = createServiceClient();
@@ -231,6 +232,29 @@ export async function POST(request: NextRequest) {
       referrer: readString(body.referrer),
       metadata,
     }).catch(() => undefined);
+
+    const leadProfile = leadContext.leadId
+      ? await loadTrackingLeadProfile(client, organizationAttribution.organizationId, leadContext.leadId).catch(() => null)
+      : null;
+    const leadProfileMetadata = readRecord(leadProfile?.metadata) ?? {};
+
+    resolvedPublicTrackingContext = {
+      scope,
+      organization_id: organizationAttribution.organizationId,
+      tracking_token: trackingToken,
+      lead_id: leadContext.leadId,
+      lead_name: readString(leadProfile?.display_name) ?? resolveLeadNameFromMetadata(leadProfileMetadata),
+      lead_phone: leadContext.leadPhone ?? readString(leadProfile?.phone_number),
+      lead_email: resolveLeadEmail(leadProfileMetadata),
+      conversation_id: leadContext.conversationId,
+      agent_id: agentId,
+      order_id: orderId,
+      payment_session_id: paymentSessionId,
+      tracking_link_id: trackingLinkId,
+      product_id: productId,
+      catalog_item_id: catalogItemId,
+      tracking_source: trackingSource,
+    };
   } catch (error) {
     return NextResponse.json(
       {
@@ -245,7 +269,30 @@ export async function POST(request: NextRequest) {
     ok: true,
     visitor_id: visitorId,
     vapid_public_key: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null,
+    public_tracking: resolvedPublicTrackingContext,
   });
+}
+
+async function loadTrackingLeadProfile(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string | null,
+  leadId: string,
+) {
+  if (!organizationId) return null;
+
+  const { data } = await client
+    .from("leads")
+    .select("id, display_name, phone_number, metadata")
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<{
+      id: string;
+      display_name: string | null;
+      phone_number: string | null;
+      metadata: JsonRecord | null;
+    }>();
+
+  return data ?? null;
 }
 
 async function canAttributeOrganization(
@@ -683,6 +730,8 @@ async function upsertTrackingLeadWebIdentity(
       latest_product_id: input.productId ?? readString(existingMetadata.latest_product_id),
       agent_id: input.agentId ?? readString(existingMetadata.agent_id),
       lead_phone: input.leadPhone ?? readString(existingMetadata.lead_phone),
+      lead_name: readString(existingMetadata.lead_name),
+      lead_email: readString(existingMetadata.lead_email),
       tracking_source: input.trackingSource ?? readString(existingMetadata.tracking_source),
       returning_visitor: Boolean(existing?.lead_id || existing?.conversation_id),
     },
@@ -784,6 +833,27 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveLeadNameFromMetadata(metadata: JsonRecord | null) {
+  const record = readRecord(metadata);
+
+  return readString(record?.name)
+    ?? readString(record?.customer_name)
+    ?? readString(record?.lead_name)
+    ?? readString(record?.contact_name);
+}
+
+function resolveLeadEmail(metadata: JsonRecord | null) {
+  const record = readRecord(metadata);
+  const value = readString(record?.email)
+    ?? readString(record?.customer_email)
+    ?? readString(record?.lead_email)
+    ?? readString(record?.checkout_email)
+    ?? readString(record?.contact_email);
+  const normalized = value?.replace(/\s+/g, "").trim().toLowerCase().slice(0, 160);
+
+  return normalized && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : null;
 }
 
 function readNumber(value: unknown) {

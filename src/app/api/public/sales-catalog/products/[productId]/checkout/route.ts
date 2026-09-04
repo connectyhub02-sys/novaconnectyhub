@@ -97,7 +97,12 @@ export async function POST(
   const leadPhone = normalizePhone(readString(body.leadPhone));
   const trackingLinkId = normalizeUuid(readString(body.trackingLinkId));
   const quantity = normalizeQuantity(body.quantity);
-  const lead = leadId ? await loadLead(client, row.organization_id, leadId) : null;
+  let lead = leadId ? await loadLead(client, row.organization_id, leadId) : null;
+
+  if (!lead && leadPhone) {
+    lead = await loadLeadByPhone(client, row.organization_id, leadPhone);
+  }
+
   const customerPhone = normalizePhone(lead?.phone_number) ?? leadPhone;
   const customerName = readString(lead?.display_name) ?? "Lead WhatsApp";
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
@@ -308,6 +313,22 @@ async function loadLead(
     .select("id, display_name, phone_number, metadata")
     .eq("id", leadId)
     .eq("organization_id", organizationId)
+    .maybeSingle<LeadRow>();
+
+  return data ?? null;
+}
+
+async function loadLeadByPhone(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  leadPhone: string,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("id, display_name, phone_number, metadata")
+    .eq("organization_id", organizationId)
+    .eq("phone_number", leadPhone)
+    .limit(1)
     .maybeSingle<LeadRow>();
 
   return data ?? null;

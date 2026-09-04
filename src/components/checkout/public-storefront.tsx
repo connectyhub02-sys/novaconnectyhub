@@ -35,6 +35,10 @@ import {
   type SalesCatalogStorefrontFontPreset,
 } from "@/lib/sales-catalog/shared";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import {
+  publicTrackingContextUpdatedEventName,
+  readPublicTrackingContext,
+} from "@/lib/tracking/public-context";
 
 export type PublicStorefrontBranding = {
   displayName: string;
@@ -163,6 +167,25 @@ export function PublicStorefront({
   const storePath = `/loja/${encodeURIComponent(storeSlug)}`;
   const shopPath = `${storePath}/produtos`;
   const cartPath = `${storePath}/carrinho`;
+
+  useEffect(() => {
+    function applyLeadContext() {
+      const context = readPublicTrackingContext();
+
+      if (!context || (context.organization_id && context.organization_id !== tracking.organizationId)) {
+        return;
+      }
+
+      setCustomerName((current) => current.trim() || !context.lead_name ? current : context.lead_name);
+      setCustomerPhone((current) => current.trim() || !context.lead_phone ? current : context.lead_phone);
+      setCustomerEmail((current) => current.trim() || !context.lead_email ? current : context.lead_email);
+    }
+
+    applyLeadContext();
+    window.addEventListener(publicTrackingContextUpdatedEventName, applyLeadContext);
+
+    return () => window.removeEventListener(publicTrackingContextUpdatedEventName, applyLeadContext);
+  }, [tracking.organizationId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -524,6 +547,7 @@ export function PublicStorefront({
     });
 
     try {
+      const publicTracking = readPublicTrackingContext();
       const response = await fetch(`/api/public/sales-catalog/stores/${encodeURIComponent(storeSlug)}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -531,11 +555,11 @@ export function PublicStorefront({
           customerName,
           customerPhone,
           customerEmail,
-          leadId: tracking.leadId,
-          leadPhone: tracking.leadPhone,
-          conversationId: tracking.conversationId,
-          agentId: tracking.agentId,
-          trackingLinkId: tracking.trackingLinkId,
+          leadId: publicTracking?.lead_id ?? tracking.leadId,
+          leadPhone: publicTracking?.lead_phone ?? tracking.leadPhone,
+          conversationId: publicTracking?.conversation_id ?? tracking.conversationId,
+          agentId: publicTracking?.agent_id ?? tracking.agentId,
+          trackingLinkId: publicTracking?.tracking_link_id ?? tracking.trackingLinkId,
           items: cart.map((line) => ({
             productId: line.product.id,
             quantity: line.quantity,
@@ -1536,14 +1560,12 @@ function StoreFooter({
   );
 }
 
-type PaymentBadgeTone = "visa" | "mastercard" | "pix" | "paypal" | "gpay";
+type PaymentBadgeTone = "asaas" | "card" | "pix";
 
 const paymentBadges: Array<{ label: string; tone: PaymentBadgeTone }> = [
-  { label: "Visa", tone: "visa" },
-  { label: "Mastercard", tone: "mastercard" },
+  { label: "Asaas", tone: "asaas" },
+  { label: "Cartao", tone: "card" },
   { label: "Pix", tone: "pix" },
-  { label: "PayPal", tone: "paypal" },
-  { label: "G Pay", tone: "gpay" },
 ];
 
 function PaymentBadge({ label, tone }: { label: string; tone: PaymentBadgeTone }) {
@@ -1551,11 +1573,9 @@ function PaymentBadge({ label, tone }: { label: string; tone: PaymentBadgeTone }
     <span
       className={cn(
         "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
-        tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
-        tone === "mastercard" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
+        tone === "asaas" && "border-[#0030b9]/20 bg-[#0030b9] text-white",
+        tone === "card" && "border-slate-200 bg-white text-slate-900",
         tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-        tone === "paypal" && "border-[#003087]/20 bg-[#003087] text-white",
-        tone === "gpay" && "border-black/10 bg-white text-black",
       )}
     >
       {label}

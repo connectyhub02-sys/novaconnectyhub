@@ -212,40 +212,50 @@ export default async function CheckoutPage({
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
-  const pagBankCardEnabled = Boolean(catalogSettings?.pagBank.enabledMethods.some((method) => (
-    method === "credit_card" || method === "debit_card"
-  )));
+  const asaasPixEnabled = catalogSettings?.asaas.enabledMethods.includes("pix") ?? true;
+  const asaasCardEnabled = catalogSettings?.asaas.enabledMethods.includes("credit_card") ?? true;
+  const pagBankCardEnabled = false;
   const initialPaymentMethod = normalizeCheckoutInitialPaymentMethod(query.payment_method ?? query.method);
   const sessionMetadata = readRecord(session.metadata);
   const checkoutPaymentOwner = readString(session.payment_owner_type)
     ?? readString(sessionMetadata.payment_owner)
     ?? readString(sessionMetadata.payment_receiver);
   const connectyHubOwned = checkoutPaymentOwner === "connectyhub";
-  const pagBankCardPaymentMethodTypes: Array<"CREDIT_CARD" | "DEBIT_CARD"> = connectyHubOwned
-    ? ["CREDIT_CARD", "DEBIT_CARD"]
-    : [
-        catalogSettings?.pagBank.enabledMethods.includes("credit_card") ? "CREDIT_CARD" : null,
-        catalogSettings?.pagBank.enabledMethods.includes("debit_card") ? "DEBIT_CARD" : null,
-      ].filter((method): method is "CREDIT_CARD" | "DEBIT_CARD" => Boolean(method));
+  const pagBankCardPaymentMethodTypes: Array<"CREDIT_CARD" | "DEBIT_CARD"> = pagBankCardEnabled
+    ? connectyHubOwned
+      ? ["CREDIT_CARD", "DEBIT_CARD"]
+      : [
+          catalogSettings?.pagBank.enabledMethods.includes("credit_card") ? "CREDIT_CARD" : null,
+          catalogSettings?.pagBank.enabledMethods.includes("debit_card") ? "DEBIT_CARD" : null,
+        ].filter((method): method is "CREDIT_CARD" | "DEBIT_CARD" => Boolean(method))
+    : [];
   const paymentProvider = session.provider === "asaas" ? "asaas" : session.provider === "pagbank" ? "pagbank" : "mercado_pago";
-  const canUseMercadoPagoCard = session.method !== "card"
-    && session.provider === "mercado_pago"
-    && !shippingBlocked
-    && !paid
-    && !failed
-    && amountNumber !== null
-    && integration?.status === "connected"
-    && Boolean(integration.public_key);
-  const canUsePagBankCard = session.method !== "card"
-    && session.provider === "pagbank"
+  const canUseAsaasCard = session.method !== "card"
+    && session.provider === "asaas"
     && !shippingBlocked
     && !paid
     && !failed
     && amountNumber !== null
     && (connectyHubOwned || integration?.status === "connected")
-    && (connectyHubOwned || pagBankCardEnabled);
-  const canUseCard = canUseMercadoPagoCard || canUsePagBankCard;
-  const canUsePix = connectyHubOwned || session.provider !== "pagbank" || Boolean(catalogSettings?.pagBank.enabledMethods.includes("pix"));
+    && (connectyHubOwned || asaasCardEnabled);
+  const canUseCard = canUseAsaasCard;
+  const canUsePix = session.provider === "asaas"
+    ? connectyHubOwned || asaasPixEnabled
+    : false;
+  const checkoutPaymentTitle = session.method === "card"
+    ? "Pagamento do pedido"
+    : canUsePix && canUseCard
+      ? "Escolha o pagamento"
+      : canUsePix
+        ? "Pague com Pix"
+        : "Pagamento do pedido";
+  const checkoutPaymentMetric = canUsePix && canUseCard && session.method !== "card"
+    ? "Pix ou cartão"
+    : session.method === "card"
+      ? "Cartão"
+      : canUsePix
+        ? "Pix"
+        : "Indisponível";
   const commercialContext = resolveCheckoutCommercialContext(session, order);
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
@@ -291,7 +301,7 @@ export default async function CheckoutPage({
     <CheckoutShell
       publicTrackingContext={publicTrackingContext}
       style={publicLayoutStyle}
-      loadMercadoPagoSecurity={session.provider === "mercado_pago" && canUseCard}
+      loadMercadoPagoSecurity={false}
     >
       <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
         Checkout seguro da {branding.displayName}.{" "}
@@ -373,7 +383,7 @@ export default async function CheckoutPage({
           <div className="flex items-start justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{paymentProviderLabel}</span>
-              <h2 className="mt-2 text-2xl font-black text-[color:var(--store-text)]">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
+              <h2 className="mt-2 text-2xl font-black text-[color:var(--store-text)]">{checkoutPaymentTitle}</h2>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-[#128C4A]">
               <ShieldCheck className="h-3.5 w-3.5" />
@@ -465,7 +475,7 @@ export default async function CheckoutPage({
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <CheckoutMetric label="Total" value={amount} />
-            <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartão" : "Pix"} />
+            <CheckoutMetric label="Pagamento" value={checkoutPaymentMetric} />
             <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
             <CheckoutMetric label="Status" value={formatSalesCatalogPaymentSessionStatus(status)} />
           </div>
@@ -551,7 +561,9 @@ function buildCheckoutPublicTrackingContext(input: {
     organization_id: input.organizationId,
     tracking_token: secret ? createOrganizationTrackingToken(input.organizationId, secret) : null,
     lead_id: input.order.lead_id,
+    lead_name: input.order.customer_name,
     lead_phone: input.order.customer_phone,
+    lead_email: input.session.payer_email,
     conversation_id: input.order.conversation_id,
     agent_id: resolveCheckoutAgentId(orderMetadata, sessionMetadata),
     order_id: input.order.id,

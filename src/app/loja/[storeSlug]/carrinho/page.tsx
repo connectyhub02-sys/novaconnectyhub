@@ -5,6 +5,7 @@ import { PublicTrackingContextBridge } from "@/components/tracking/public-tracki
 import {
   loadPublicStorefrontOrganization,
   loadPublicStorefrontPageData,
+  readPublicStorefrontBrowserTrackingContext,
   resolvePublicStorefrontBranding,
 } from "@/lib/sales-catalog/public-storefront-loader";
 
@@ -43,6 +44,7 @@ export default async function StoreCartPage({ params, searchParams }: StoreCartP
   const data = await loadPublicStorefrontPageData({
     storeSlug,
     query: (await searchParams) ?? {},
+    browserTracking: await readPublicStorefrontBrowserTrackingContext(),
   });
 
   if (!data) {
