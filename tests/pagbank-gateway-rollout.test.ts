@@ -281,6 +281,10 @@ describe("PagBank gateway rollout", () => {
   it("delivers Pix directly in WhatsApp and blocks one-time Pix for recurring products", () => {
     expect(whatsappAgentRuntimeSource).toContain("shouldSendSalesCatalogPixInsideWhatsapp");
     expect(whatsappAgentRuntimeSource).toContain("sendSalesCatalogPixDirectWhatsapp");
+    expect(whatsappAgentRuntimeSource).toContain("sendWhatsappPaymentRequest");
+    expect(whatsappAgentRuntimeSource).toContain("/send/request-payment");
+    expect(whatsappAgentRuntimeSource).toContain("pixCode");
+    expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_payment_request");
     expect(whatsappAgentRuntimeSource).toContain("Copiar codigo Pix|copy:");
     expect(whatsappAgentRuntimeSource).toContain("Pix copia e cola:");
     expect(whatsappAgentRuntimeSource).toContain("whatsapp_pix_code");

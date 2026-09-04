@@ -10215,66 +10215,105 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
   const pixCode = normalizeSalesCatalogPixCopyCode(input.payment.pixQrCode);
+  const amount = normalizeCurrencyAmount(input.payment.amount);
+  const order = input.context.salesCatalogOrders.find((item) => item.id === input.payment.orderId) ?? null;
   let messageText = buildSalesCatalogPixDirectWhatsappText(input.payment, { includeCode: false });
   let providerResponse: unknown;
   let interactiveButton = false;
   let buttonFallback = false;
 
   try {
-    const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Pedido sem valor valido para montar botao nativo de Pix.");
+    }
+
+    const paymentRequestProviderResponse = await sendWhatsappPaymentRequest({
       credentials: input.context.credentials,
       token: input.token,
       phone: input.phone,
+      title: "Pagamento do pedido",
       text: messageText,
-      choices: [buildSalesCatalogPixCopyButtonChoice(pixCode)],
       footerText: resolveInteractiveButtonFooterText(input.context.organization),
-      trackId: `agent_pix_copy_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      itemName: buildSalesCatalogPixPaymentRequestItemName(order, input.payment),
+      invoiceNumber: input.payment.orderId.slice(0, 8).toUpperCase(),
+      amount,
+      pixCode,
+      trackId: `agent_pix_payment_request_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
       mentions: resolveGroupMentions(input.context),
     });
     providerResponse = {
-      delivery: "whatsapp_pix_copy_button",
+      delivery: "whatsapp_pix_payment_request",
       provider: input.payment.provider,
       providerLabel: input.payment.providerLabel,
       orderId: input.payment.orderId,
       checkoutUrl: input.payment.checkoutUrl,
       trackingUrl: input.payment.trackingUrl,
       pixTicketUrl: input.payment.pixTicketUrl,
-      copyButtonProviderResponse,
+      paymentRequestProviderResponse,
     };
     interactiveButton = true;
   } catch (error) {
-    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de copiar Pix.");
-    messageText = buildSalesCatalogPixDirectWhatsappText(input.payment, { includeCode: true });
-    const textProviderResponse = await sendWhatsappText({
-      credentials: input.context.credentials,
-      token: input.token,
-      phone: input.phone,
-      text: messageText,
-      trackId: `agent_pix_payment_fallback_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-      mentions: resolveGroupMentions(input.context),
-      linkPreview: false,
-    });
+    const paymentRequestError = describeRuntimeError(error, "Falha desconhecida ao enviar solicitacao nativa de Pix.");
 
-    providerResponse = {
-      fallback: true,
-      delivery: "whatsapp_pix_code",
-      reason: "pix_copy_button_failed",
-      error: errorMessage,
-      provider: input.payment.provider,
-      providerLabel: input.payment.providerLabel,
-      orderId: input.payment.orderId,
-      checkoutUrl: input.payment.checkoutUrl,
-      trackingUrl: input.payment.trackingUrl,
-      pixTicketUrl: input.payment.pixTicketUrl,
-      textProviderResponse,
-    };
-    buttonFallback = true;
-    await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-      chunkIndex: 1,
-      chunksTotal: 1,
-      errorMessage,
-      providerResponse,
-    });
+    try {
+      const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: messageText,
+        choices: [buildSalesCatalogPixCopyButtonChoice(pixCode)],
+        footerText: resolveInteractiveButtonFooterText(input.context.organization),
+        trackId: `agent_pix_copy_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+        mentions: resolveGroupMentions(input.context),
+      });
+      providerResponse = {
+        delivery: "whatsapp_pix_copy_button",
+        provider: input.payment.provider,
+        providerLabel: input.payment.providerLabel,
+        orderId: input.payment.orderId,
+        checkoutUrl: input.payment.checkoutUrl,
+        trackingUrl: input.payment.trackingUrl,
+        pixTicketUrl: input.payment.pixTicketUrl,
+        paymentRequestFallback: true,
+        paymentRequestError,
+        copyButtonProviderResponse,
+      };
+      interactiveButton = true;
+    } catch (copyButtonError) {
+      const errorMessage = describeRuntimeError(copyButtonError, "Falha desconhecida ao enviar botao de copiar Pix.");
+      messageText = buildSalesCatalogPixDirectWhatsappText(input.payment, { includeCode: true });
+      const textProviderResponse = await sendWhatsappText({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: messageText,
+        trackId: `agent_pix_payment_fallback_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+        mentions: resolveGroupMentions(input.context),
+        linkPreview: false,
+      });
+
+      providerResponse = {
+        fallback: true,
+        delivery: "whatsapp_pix_code",
+        reason: "pix_payment_request_failed",
+        paymentRequestError,
+        copyButtonError: errorMessage,
+        provider: input.payment.provider,
+        providerLabel: input.payment.providerLabel,
+        orderId: input.payment.orderId,
+        checkoutUrl: input.payment.checkoutUrl,
+        trackingUrl: input.payment.trackingUrl,
+        pixTicketUrl: input.payment.pixTicketUrl,
+        textProviderResponse,
+      };
+      buttonFallback = true;
+      await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+        chunkIndex: 1,
+        chunksTotal: 1,
+        errorMessage: `${paymentRequestError}; ${errorMessage}`,
+        providerResponse,
+      });
+    }
   }
   const message: OutboundMessage = {
     text: messageText,
@@ -10288,6 +10327,22 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
   await saveOutboundMessage(input.client, input.context, message);
 
   return message;
+}
+
+function buildSalesCatalogPixPaymentRequestItemName(
+  order: RuntimeSalesCatalogOrder | null,
+  payment: SalesCatalogPaymentLinkResult,
+) {
+  const titles = (order?.items ?? [])
+    .map((item) => preview(item.title, 34))
+    .filter(Boolean);
+
+  if (titles.length === 0) {
+    return `Pedido ${payment.orderId.slice(0, 8).toUpperCase()}`;
+  }
+
+  const suffix = titles.length > 2 ? ` +${titles.length - 2}` : "";
+  return preview(`${titles.slice(0, 2).join(" + ")}${suffix}`, 60);
 }
 
 function buildSalesCatalogPixCopyButtonChoice(pixCode: string) {
@@ -10310,7 +10365,7 @@ function buildSalesCatalogPixDirectWhatsappText(
     amount ? `Valor: ${amount}` : "",
     options.includeCode
       ? "Pix copia e cola:"
-      : "Toque em Copiar codigo Pix, abra seu banco, escolha Pix Copia e Cola e cole o codigo.",
+      : "Toque no botao abaixo, revise o pagamento e copie o Pix para pagar no seu banco.",
     options.includeCode ? "```" : "",
     options.includeCode ? code : "",
     options.includeCode ? "```" : "",
@@ -11683,6 +11738,44 @@ async function sendWhatsappText(input: {
       number: input.phone,
       text,
       linkPreview: input.linkPreview ?? true,
+      readchat: true,
+      readmessages: true,
+      ...(input.replyId ? { replyid: input.replyId } : {}),
+      ...(input.mentions ? { mentions: input.mentions } : {}),
+      track_source: "connectyhub",
+      track_id: input.trackId,
+    },
+  });
+}
+
+async function sendWhatsappPaymentRequest(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  title: string;
+  text: string;
+  footerText?: string;
+  itemName: string;
+  invoiceNumber: string;
+  amount: number;
+  pixCode: string;
+  trackId: string;
+  replyId?: string;
+  mentions?: string;
+}) {
+  return callUazapi(input.credentials, "/send/request-payment", {
+    method: "POST",
+    token: input.token,
+    timeoutMs: outboundTextDeliveryTimeoutMs,
+    body: {
+      number: input.phone,
+      title: normalizeOutboundLanguageText(input.title),
+      text: normalizeOutboundLanguageText(input.text),
+      footer: input.footerText ?? "ConnectyHub",
+      itemName: normalizeOutboundLanguageText(input.itemName),
+      invoiceNumber: input.invoiceNumber,
+      amount: Number(input.amount.toFixed(2)),
+      pixCode: input.pixCode,
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),
@@ -16136,7 +16229,7 @@ function sanitizeProviderData(value: unknown): unknown {
     Object.entries(value as JsonRecord).map(([key, item]) => {
       const normalized = key.toLowerCase();
 
-      if (normalized.includes("token") || normalized.includes("secret") || normalized.includes("qrcode")) {
+      if (normalized.includes("token") || normalized.includes("secret") || normalized.includes("qrcode") || normalized.includes("pixcode")) {
         return [key, "[redacted]"];
       }
 
