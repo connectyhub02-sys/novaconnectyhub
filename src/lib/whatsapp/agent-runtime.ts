@@ -8487,7 +8487,27 @@ function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
   const priceText = price ? ` - ${price}${item.currency ? ` ${item.currency}` : ""}` : "";
   const highlightText = item.highlightLabel ? ` (${item.highlightLabel})` : "";
 
-  return `${item.title}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
+  return `${cleanSalesCatalogCustomerTitle(item.title)}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
+}
+
+function cleanSalesCatalogCustomerTitle(value: string) {
+  const title = value.replace(/\s+/g, " ").trim();
+  const imageArtifact = title.match(/^(.{8,}?)\s+-\s+Imagem\s+\d+\s+.+$/i);
+
+  if (imageArtifact?.[1]?.trim()) {
+    return imageArtifact[1].trim();
+  }
+
+  return title;
+}
+
+function buildSalesCatalogTitleMatchCandidates(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const cleaned = cleanSalesCatalogCustomerTitle(normalized);
+
+  return Array.from(new Set([normalized, cleaned]))
+    .map((candidate) => normalizeSearch(candidate))
+    .filter((candidate) => candidate.length >= 5);
 }
 
 function prepareSalesCatalogDeliveryText(input: {
@@ -8627,11 +8647,10 @@ function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCa
   if (!normalizedText) return false;
 
   const candidates = [
-    item.title,
-    ...item.skus.map((sku) => sku.title ?? ""),
-    item.platformProductCode ?? "",
+    ...buildSalesCatalogTitleMatchCandidates(item.title),
+    ...item.skus.flatMap((sku) => buildSalesCatalogTitleMatchCandidates(sku.title ?? "")),
+    normalizeSearch(item.platformProductCode ?? ""),
   ]
-    .map((value) => normalizeSearch(value))
     .filter((value) => value.length >= 5);
 
   return candidates.some((candidate) => {
@@ -9352,7 +9371,7 @@ function buildSalesCatalogOrderPreviewItem(selection: RuntimeSalesCatalogOrderSe
   const salePrice = sku?.salePrice ?? selection.item.offer.salePrice;
   const unitTotal = salePrice ?? unitPrice;
   const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
-  const title = preview(sku?.title || selection.item.title, 90);
+  const title = preview(cleanSalesCatalogCustomerTitle(sku?.title || selection.item.title), 90);
   const priceText = total ? ` - R$ ${total}` : "";
 
   return {
@@ -9376,7 +9395,8 @@ function hasRecentSalesCatalogCheckoutConfirmation(
     return true;
   }
 
-  const directPreference = detectSalesCatalogPreferredPaymentMethod(intentText);
+  const directPreference = detectSalesCatalogPreferredPaymentMethod(intentText)
+    ?? detectRecentSalesCatalogPaymentPreference(context.messages, latestInbound);
   return Boolean(
     directPreference
     && hasRecentSalesCatalogPaymentMethodChoicePrompt(context.messages, latestInbound),
@@ -9745,11 +9765,10 @@ function selectSalesCatalogItemsForOrderText(items: RuntimeSalesCatalogItem[], t
 
 function referencesSalesCatalogItemByExactCandidate(normalizedText: string, item: RuntimeSalesCatalogItem) {
   const candidates = [
-    item.title,
-    ...item.skus.map((sku) => sku.title ?? ""),
-    item.platformProductCode ?? "",
+    ...buildSalesCatalogTitleMatchCandidates(item.title),
+    ...item.skus.flatMap((sku) => buildSalesCatalogTitleMatchCandidates(sku.title ?? "")),
+    normalizeSearch(item.platformProductCode ?? ""),
   ]
-    .map((value) => normalizeSearch(value))
     .filter((value) => value.length >= 5);
 
   return candidates.some((candidate) => normalizedText.includes(candidate));
@@ -9790,11 +9809,10 @@ function resolveSalesCatalogMentionQuantity(text: string, item: RuntimeSalesCata
 
 function buildSalesCatalogOrderMentionCandidates(item: RuntimeSalesCatalogItem) {
   const baseCandidates = [
-    item.title,
-    ...item.skus.map((sku) => sku.title ?? ""),
-    item.platformProductCode ?? "",
+    ...buildSalesCatalogTitleMatchCandidates(item.title),
+    ...item.skus.flatMap((sku) => buildSalesCatalogTitleMatchCandidates(sku.title ?? "")),
+    normalizeSearch(item.platformProductCode ?? ""),
   ]
-    .map((value) => normalizeSearch(value))
     .filter((value) => value.length >= 5);
 
   return Array.from(new Set([
@@ -10934,7 +10952,9 @@ function hasSalesCatalogPaymentMethodChoiceText(text: string) {
     || /\b(?:pix)\b.{0,80}\b(?:cartao|credito)\b/.test(normalized)
     || /\b(?:cartao|credito)\b.{0,80}\b(?:pix)\b/.test(normalized);
   const referencesConfirmedOrder = /\bpedido\b.{0,50}\bconfirmado\b/.test(normalized)
-    || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized);
+    || /\bperfeito\b.{0,50}\bpedido\b/.test(normalized)
+    || /\btudo certinho\b.{0,120}\b(?:pix|cartao|credito|pagamento)\b/.test(normalized)
+    || /\b(?:pagamento|pagar)\b.{0,120}\b(?:pix|cartao|credito)\b/.test(normalized);
 
   return asksPaymentMethod && referencesConfirmedOrder;
 }

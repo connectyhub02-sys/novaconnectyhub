@@ -196,6 +196,14 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function recordSalesCatalogOrderIntent",
       "async function maybeCreateSalesCatalogPaymentLink",
     );
+    const paymentChoiceDetector = sourceBetween(
+      "function hasRecentSalesCatalogPaymentMethodChoicePrompt",
+      "async function sendSalesCatalogPaymentLink",
+    );
+    const confirmationDetector = sourceBetween(
+      "function hasRecentSalesCatalogCheckoutConfirmation",
+      "function buildRecentSalesCatalogCheckoutConfirmationPreviewText",
+    );
 
     expect(delivery).toContain("paymentMethodChoicePrompt");
     expect(delivery).toContain("shouldWaitForPaymentMethodChoice");
@@ -215,6 +223,10 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("Ainda preciso calcular a entrega antes do total final.");
     expect(checkoutRuntime).toContain("getEnabledSalesCatalogRuntimePaymentChoices");
     expect(checkoutRuntime).toContain("detectRecentSalesCatalogPaymentPreference");
+    expect(confirmationDetector).toContain("detectSalesCatalogPreferredPaymentMethod(intentText)");
+    expect(confirmationDetector).toContain("?? detectRecentSalesCatalogPaymentPreference(context.messages, latestInbound)");
+    expect(paymentChoiceDetector).toContain("tudo certinho");
+    expect(paymentChoiceDetector).toContain("(?:pagamento|pagar)");
     expect(orderRecorder).toContain("resolveSalesCatalogConfirmedPaymentPreference");
     expect(orderRecorder).toContain("getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings).length > 1");
     expect(orderRecorder).toContain("buildRecentSalesCatalogCheckoutInboundMemoryText");
@@ -338,6 +350,27 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSessionsSource).toContain("preferred_payment_method: input.preferredMethod");
     expect(runtimeSource).toContain("readStoredSalesCatalogPaymentPreference(metadata)");
     expect(runtimeSource).toContain("appendCheckoutPaymentMethod(baseUrl, \"card\")");
+  });
+
+  it("uses clean catalog title variants when rebuilding checkout previews", () => {
+    const mentionFormatter = sourceBetween(
+      "function formatSalesCatalogCustomerMention",
+      "function prepareSalesCatalogDeliveryText",
+    );
+    const orderMatcher = sourceBetween(
+      "function referencesSalesCatalogItemByExactCandidate",
+      "function isStrongSalesCatalogOrderToken",
+    );
+    const orderPreview = sourceBetween(
+      "function buildSalesCatalogOrderPreviewItem",
+      "function hasRecentSalesCatalogCheckoutConfirmation",
+    );
+
+    expect(mentionFormatter).toContain("cleanSalesCatalogCustomerTitle(item.title)");
+    expect(mentionFormatter).toContain("buildSalesCatalogTitleMatchCandidates");
+    expect(mentionFormatter).toContain("Imagem");
+    expect(orderMatcher).toContain("buildSalesCatalogTitleMatchCandidates(item.title)");
+    expect(orderPreview).toContain("cleanSalesCatalogCustomerTitle(sku?.title || selection.item.title)");
   });
 
   it("stores clean delivery addresses and confirms saved addresses on future orders", () => {
