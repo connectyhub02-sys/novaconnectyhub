@@ -215,7 +215,8 @@ export default async function CheckoutPage({
   const asaasPixEnabled = catalogSettings?.asaas.enabledMethods.includes("pix") ?? true;
   const asaasCardEnabled = catalogSettings?.asaas.enabledMethods.includes("credit_card") ?? true;
   const pagBankCardEnabled = false;
-  const initialPaymentMethod = normalizeCheckoutInitialPaymentMethod(query.payment_method ?? query.method);
+  const initialPaymentMethod = normalizeCheckoutInitialPaymentMethod(query.payment_method ?? query.method)
+    ?? (session.method === "card" ? "card" : null);
   const sessionMetadata = readRecord(session.metadata);
   const checkoutPaymentOwner = readString(session.payment_owner_type)
     ?? readString(sessionMetadata.payment_owner)
@@ -230,8 +231,7 @@ export default async function CheckoutPage({
         ].filter((method): method is "CREDIT_CARD" | "DEBIT_CARD" => Boolean(method))
     : [];
   const paymentProvider = session.provider === "asaas" ? "asaas" : session.provider === "pagbank" ? "pagbank" : "mercado_pago";
-  const canUseAsaasCard = session.method !== "card"
-    && session.provider === "asaas"
+  const canUseAsaasCard = session.provider === "asaas"
     && !shippingBlocked
     && !paid
     && !failed
@@ -240,7 +240,7 @@ export default async function CheckoutPage({
     && (connectyHubOwned || asaasCardEnabled);
   const canUseCard = canUseAsaasCard;
   const canUsePix = session.provider === "asaas"
-    ? connectyHubOwned || asaasPixEnabled
+    ? session.method !== "card" && (connectyHubOwned || asaasPixEnabled)
     : false;
   const checkoutPaymentTitle = session.method === "card"
     ? "Pagamento do pedido"
@@ -416,7 +416,7 @@ export default async function CheckoutPage({
               title="Frete pendente"
               body="Este pedido tem produto físico. O pagamento será liberado assim que o frete, retirada ou entrega for definido no WhatsApp."
             />
-          ) : session.method === "card" ? (
+          ) : session.method === "card" && session.provider !== "asaas" ? (
             <CheckoutState
               tone="info"
               title="Pagamento com cartão registrado"
@@ -438,7 +438,7 @@ export default async function CheckoutPage({
               pixTicketUrl={session.pix_ticket_url}
               paymentProviderLabel={paymentProviderLabel}
               initialPaymentMethod={initialPaymentMethod}
-              maxInstallments={connectyHubOwned ? 12 : catalogSettings?.pagBank.maxInstallments ?? 1}
+              maxInstallments={connectyHubOwned ? 12 : catalogSettings?.asaas.maxInstallments ?? 1}
               organizationName={branding.displayName}
               orderCode={order.id.slice(0, 8).toUpperCase()}
               items={items.map((item) => ({

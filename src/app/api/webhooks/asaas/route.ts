@@ -32,6 +32,8 @@ type PaymentSessionRow = {
 
 type OrderTrackingRow = {
   id: string;
+  latest_payment_session_id: string | null;
+  payment_status: string | null;
   lead_id: string | null;
   conversation_id: string | null;
   customer_phone: string | null;
@@ -183,7 +185,7 @@ export async function POST(request: NextRequest) {
     const paymentMethodLabel = session.method === "card" ? "Cartao Asaas" : "Pix Asaas";
     const { data: orderContextRow } = await client
       .from("sales_catalog_orders")
-      .select("id, lead_id, conversation_id, customer_phone, total, metadata")
+      .select("id, lead_id, conversation_id, customer_phone, total, latest_payment_session_id, payment_status, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<OrderTrackingRow>();
@@ -216,10 +218,12 @@ export async function POST(request: NextRequest) {
         provider_payment_id: providerPaymentId,
         provider_status: paymentData.providerStatus,
         provider_status_detail: paymentData.providerStatusDetail,
-        pix_qr_code: paymentData.pixQrCode,
-        pix_qr_code_base64: paymentData.pixQrCodeBase64,
-        pix_ticket_url: paymentData.pixTicketUrl,
-        paid_at: paymentData.paidAt,
+        // Status webhooks do not include /pixQrCode data. Never erase the code
+        // already returned when the payment was created (including concurrent writes).
+        ...(paymentData.pixQrCode ? { pix_qr_code: paymentData.pixQrCode } : {}),
+        ...(paymentData.pixQrCodeBase64 ? { pix_qr_code_base64: paymentData.pixQrCodeBase64 } : {}),
+        ...(paymentData.pixTicketUrl ? { pix_ticket_url: paymentData.pixTicketUrl } : {}),
+        ...(paymentData.paidAt ? { paid_at: paymentData.paidAt } : {}),
         metadata: {
           ...sessionMetadata,
           asaas_payment_id: paymentId ?? sessionMetadata.asaas_payment_id ?? null,
@@ -232,13 +236,26 @@ export async function POST(request: NextRequest) {
       .eq("id", session.id)
       .eq("organization_id", session.organization_id);
 
-    await client
-      .from("sales_catalog_orders")
-      .update(orderPatch)
-      .eq("id", session.order_id)
-      .eq("organization_id", session.organization_id);
+    // An abandoned Pix may expire after the customer switches to card. Record
+    // that session's status without replacing the current checkout or notifying
+    // the customer that their new payment failed. Financial events still apply.
+    const financialEvent = paymentData.status === "approved" || paymentData.status === "refunded";
+    const currentSessionId = orderContextRow?.latest_payment_session_id;
+    let orderUpdated = false;
+    if (financialEvent || ((!currentSessionId || currentSessionId === session.id)
+      && !["confirmed", "refunded"].includes(orderContextRow?.payment_status ?? ""))) {
+      let update = client.from("sales_catalog_orders").update(orderPatch)
+        .eq("id", session.order_id).eq("organization_id", session.organization_id);
+      if (!financialEvent) {
+        update = currentSessionId ? update.eq("latest_payment_session_id", currentSessionId) : update.is("latest_payment_session_id", null);
+        if (orderContextRow?.payment_status) update = update.eq("payment_status", orderContextRow.payment_status);
+      }
+      const { data: updatedOrder, error: orderUpdateError } = await update.select("id").maybeSingle();
+      if (orderUpdateError) throw new Error(orderUpdateError.message);
+      orderUpdated = Boolean(updatedOrder);
+    }
 
-    const postPayment = await handleSalesCatalogPaymentStatusChange({
+    const postPayment = orderUpdated ? await handleSalesCatalogPaymentStatusChange({
       client,
       organizationId: session.organization_id,
       orderId: session.order_id,
@@ -248,7 +265,7 @@ export async function POST(request: NextRequest) {
       paymentMethodLabel,
       status: paymentData.status,
       source: "asaas_webhook",
-    });
+    }) : { inventoryDeducted: false, whatsappNotified: false, responsibleNotified: false, commissions: null };
     const commissions = paymentData.status === "approved"
       ? null
       : await markPlatformProductCommissionsForPaymentStatus({
@@ -291,6 +308,7 @@ export async function POST(request: NextRequest) {
         status: paymentData.status,
         payment_method: session.method ?? null,
         payment_method_label: paymentMethodLabel,
+        order_updated: orderUpdated,
         lead_id: orderContextRow?.lead_id ?? null,
         conversation_id: orderContextRow?.conversation_id ?? null,
         lead_phone: orderContextRow?.customer_phone ?? null,

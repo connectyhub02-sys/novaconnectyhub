@@ -21,6 +21,51 @@ const context = (messages: ReturnType<typeof message>[]) => ({
 });
 
 describe("WhatsApp commerce regression: real runtime decisions", () => {
+  it("resends the internal tracked card checkout after the hosted gateway checkout has been created", async () => {
+    const latest = message("inbound", "Me manda o link do cartão de novo", 3);
+    const db = commerceDatabase({
+      sales_catalog_payment_sessions: [{ id: "session", organization_id: "store", order_id: "order", method: "card", provider: "asaas", amount: "573,80", checkout_url: "https://asaas.example/checkout/hosted", metadata: { preferred_payment_method: "card", public_checkout_url: "https://loja.example/checkout/session", public_checkout_tracking_url: "https://loja.example/r/internal", checkout_tracking_url: "https://loja.example/r/provider" } }],
+      conversation_messages: [{ ...latest, conversation_id: "conversation" }],
+    });
+    const createPayment = vi.fn();
+    const requests: Record<string, unknown>[] = [];
+    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment } }, { fetch: async (_url: string, init: { body: string }) => {
+      requests.push(JSON.parse(init.body));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "delivery" }) };
+    } });
+    const ctx = { ...context([message("outbound", "Gerei o checkout do cartão", 2), latest]), instance: { id: "instance", metadata: {} }, behavior: {}, credentials: { baseUrl: "https://whatsapp.invalid" },
+      salesCatalogOrders: [{ id: "order", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza" }], createdAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
+    };
+    await call("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: latest.text_content, token: "fake", phone: "5500000000000" });
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(1);
+    expect((requests[0].choices as string[])[0]).toContain("/r/internal?payment_method=card");
+  });
+  it.each([
+    ["pix", "Tem como pagar no credito", "Posso gerar o link de pagamento no cartão para você?", "Sim me manda por favor", "card"],
+    ["card", "Dá para pagar com Pix?", "Posso gerar o código Pix para você?", "pode mandar", "pix"],
+  ])("keeps the method offered before a generic confirmation from %s to %s", async (oldMethod, question, offer, confirmation, preferredMethod) => {
+    const latest = message("inbound", confirmation, 6);
+    const db = commerceDatabase({
+      sales_catalog_payment_sessions: [{ id: "session", organization_id: "store", order_id: "order", method: oldMethod, provider: "asaas", amount: "573,80", checkout_url: "https://loja.example/checkout/old", metadata: { preferred_payment_method: oldMethod }, pix_qr_code: null }],
+      conversation_messages: [{ ...latest, conversation_id: "conversation" }],
+    });
+    const createPayment = vi.fn(async () => ({ session: { provider: "asaas", amount: "573,80" }, checkoutUrl: "https://loja.example/checkout/new", trackingUrl: "https://loja.example/r/tracked", pixQrCode: preferredMethod === "pix" ? "test-pix" : null }));
+    const requests: Record<string, unknown>[] = [];
+    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment } }, { fetch: async (_url: string, init: { body: string }) => {
+      requests.push(JSON.parse(init.body));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "delivery" }) };
+    } });
+    const ctx = { ...context([message("inbound", question, 4), message("outbound", offer, 5), latest]),
+      instance: { id: "instance", metadata: {} }, behavior: {}, credentials: { baseUrl: "https://whatsapp.invalid" },
+      salesCatalogOrders: [{ id: "order", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza" }], createdAt: "2026-09-04T12:00:00Z", updatedAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
+    };
+    const result = await call<{ text: string }>("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: confirmation, token: "fake", phone: "5500000000000" });
+    expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order", preferredMethod, amount: "573,80" }));
+    expect(requests).toHaveLength(1);
+    expect(result.text).not.toContain("não consegui");
+    expect((requests[0].choices as string[])[0]).toContain(preferredMethod === "card" ? "/r/tracked?payment_method=card" : "test-pix");
+  });
   it("captures the explicit name when the billing reply starts with Pix on its own line", () => {
     const call = runtimeHarness();
     expect(call("extractRuntimeCustomerNameFromStructuredReply", "Pix\nMaria Pereira Dias\ncliente@example.test\n12345678909\nRua Exemplo, 10, CEP 88000000")).toBe("Maria Pereira Dias");

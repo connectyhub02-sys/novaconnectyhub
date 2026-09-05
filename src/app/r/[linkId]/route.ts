@@ -41,15 +41,17 @@ export async function GET(
 
   const metadata = readRecord(link.metadata) ?? {};
   const slug = readString(metadata.slug) ?? link.id.slice(0, 8);
-  const leadId = request.nextUrl.searchParams.get("lead_id") ?? readString(metadata.lead_id);
-  const leadPhone = request.nextUrl.searchParams.get("lead_phone") ?? readString(metadata.lead_phone);
-  const conversationId = request.nextUrl.searchParams.get("conversation_id") ?? readString(metadata.conversation_id);
+  // A payment link already belongs to a lead/order. A stale query string must
+  // not attribute that checkout click to a different CRM record.
+  const leadId = readString(metadata.lead_id) ?? request.nextUrl.searchParams.get("lead_id");
+  const leadPhone = readString(metadata.lead_phone) ?? request.nextUrl.searchParams.get("lead_phone");
+  const conversationId = readString(metadata.conversation_id) ?? request.nextUrl.searchParams.get("conversation_id");
   const agentId = request.nextUrl.searchParams.get("agent_id")
     ?? readString(metadata.agent_id)
     ?? readString(metadata.whatsapp_agent_id)
     ?? readString(metadata.producer_agent_id);
-  const orderId = request.nextUrl.searchParams.get("order_id") ?? readString(metadata.order_id);
-  const paymentSessionId = request.nextUrl.searchParams.get("payment_session_id") ?? readString(metadata.payment_session_id);
+  const orderId = readString(metadata.order_id) ?? request.nextUrl.searchParams.get("order_id");
+  const paymentSessionId = readString(metadata.payment_session_id) ?? request.nextUrl.searchParams.get("payment_session_id");
   const paymentMethod = normalizePaymentMethod(request.nextUrl.searchParams.get("payment_method") ?? request.nextUrl.searchParams.get("method"));
   const trackingToken = createPublicTrackingToken(link.organization_id);
   const utmUrl = applyTrackedLinkUtm(link.content, {

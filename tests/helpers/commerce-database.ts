@@ -23,6 +23,19 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return query;
         },
         in(key: string, values: unknown[]) { filters.push(row => values.includes(row[key])); return query; },
+        is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
+        gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },
+        not(key: string, operator: string, value: unknown) {
+          if (operator !== "is") throw new Error(`Unsupported operator: ${operator}`);
+          filters.push(row => value === null ? row[key] != null : row[key] !== value);
+          return query;
+        },
+        contains(key: string, value: unknown[] | Row) {
+          filters.push(row => Array.isArray(value)
+            ? value.every(item => Array.isArray(row[key]) && (row[key] as unknown[]).includes(item))
+            : Object.entries(value).every(([field, expected]) => (row[key] as Row | undefined)?.[field] === expected));
+          return query;
+        },
         insert(value: Row | Row[]) { operation = "insert"; payload = value; return query; },
         update(value: Row) { operation = "update"; payload = value; return query; },
         async maybeSingle() { const result = execute(); return { ...result, data: result.data[0] ?? null }; },

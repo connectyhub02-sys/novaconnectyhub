@@ -464,9 +464,13 @@ export async function createSalesCatalogPixPaymentSession(input: {
       let cardMetadata: JsonRecord = {
         preferred_payment_method: "card",
         checkout_ready_for_card: true,
+        public_checkout_url: checkoutUrl,
+        public_checkout_tracking_url: checkoutTracking?.trackingUrl ?? null,
       };
 
-      if (paymentProvider === "asaas") {
+      // WhatsApp opens our tracked checkout first. The hosted card checkout is
+      // created only after the customer chooses to continue on that page.
+      if (paymentProvider === "asaas" && input.source === "checkout") {
         const asaasCheckout = await createAsaasCheckout({
           accessToken,
           mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),

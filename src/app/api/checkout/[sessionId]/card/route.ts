@@ -86,6 +86,8 @@ type ActiveCardSessionRow = {
   id: string;
   checkout_url: string | null;
   status: string | null;
+  amount: string | number | null;
+  metadata: JsonRecord | null;
 };
 
 export async function POST(
@@ -518,22 +520,6 @@ async function processAsaasPublicCardCheckout(input: {
     }, { status: 400 });
   }
 
-  const activeCardSession = await findActiveCardSession({
-    client,
-    organizationId: sourceSession.organization_id,
-    orderId: order.id,
-  });
-
-  if (activeCardSession) {
-    return NextResponse.json({
-      ok: true,
-      reused: true,
-      sessionId: activeCardSession.id,
-      checkoutUrl: activeCardSession.checkout_url,
-      trackingUrl: activeCardSession.checkout_url,
-    });
-  }
-
   const orderBumpApplication = await applySalesCatalogCheckoutOrderBumps({
     client,
     organizationId: sourceSession.organization_id,
@@ -573,6 +559,23 @@ async function processAsaasPublicCardCheckout(input: {
     return NextResponse.json({ error: "Informe o total do pedido antes de pagar." }, { status: 400 });
   }
 
+  const activeCardSession = await findActiveCardSession({
+    client, organizationId: sourceSession.organization_id, orderId: order.id,
+    provider: "asaas", expectedAmount: amount,
+  });
+  if (activeCardSession?.checkout_url) {
+    const trackingUrl = readString(readRecord(activeCardSession.metadata)?.checkout_tracking_url) ?? activeCardSession.checkout_url;
+    await client.from("intelligence_events").insert({
+      scope: "organization", organization_id: sourceSession.organization_id,
+      source_type: "sales_catalog_payment_session", source_id: activeCardSession.id,
+      event_type: "sales_catalog.card_checkout_reopened", title: "Link de cartao reaberto",
+      summary: "O lead continuou o pagamento no checkout de cartao existente.",
+      visibility: "organization", tags: ["sales_catalog", "payment", "card", "lead_tracking"],
+      payload: { lead_id: order.lead_id, conversation_id: order.conversation_id, order_id: order.id, payment_session_id: activeCardSession.id },
+    });
+    return NextResponse.json({ ok: true, reused: true, sessionId: activeCardSession.id, checkoutUrl: activeCardSession.checkout_url, trackingUrl });
+  }
+
   const result = await createSalesCatalogPixPaymentSession({
     client,
     organizationId: sourceSession.organization_id,
@@ -588,6 +591,9 @@ async function processAsaasPublicCardCheckout(input: {
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+  if (result.gatewayUnavailable || result.paymentDeferred) {
+    return NextResponse.json({ error: result.session.failureReason ?? "Nao foi possivel abrir o pagamento no cartao. Tente novamente." }, { status: 503 });
   }
 
   await client.from("intelligence_events").insert({
@@ -1049,20 +1055,24 @@ async function findActiveCardSession(input: {
   client: ReturnType<typeof createServiceClient>;
   organizationId: string;
   orderId: string;
+  provider?: "asaas";
+  expectedAmount?: number;
 }) {
   const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  const { data } = await input.client
+  let query = input.client
     .from("sales_catalog_payment_sessions")
-    .select("id, checkout_url, status")
+    .select("id, checkout_url, status, amount, metadata")
     .eq("organization_id", input.organizationId)
     .eq("order_id", input.orderId)
     .eq("method", "card")
     .in("status", ["created", "pending"])
     .gte("created_at", cutoff)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<ActiveCardSessionRow>();
+    .limit(1);
+  if (input.provider) query = query.eq("provider", input.provider).not("provider_payment_id", "is", null);
+  const { data } = await query.maybeSingle<ActiveCardSessionRow>();
 
+  if (input.expectedAmount !== undefined && normalizeCurrencyAmount(data?.amount) !== input.expectedAmount) return null;
   return data ?? null;
 }
 

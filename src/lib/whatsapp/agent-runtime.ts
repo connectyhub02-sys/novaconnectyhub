@@ -9391,6 +9391,9 @@ function resolveSalesCatalogConfirmedPaymentPreference(
     return directPreference;
   }
 
+  const affirmedPreference = resolveSalesCatalogAffirmedPaymentPreference(context.messages, findLatestInbound(context.messages), intentText);
+  if (affirmedPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, affirmedPreference)) return affirmedPreference;
+
   const recentPreference = detectSalesCatalogPreferredPaymentMethod(
     buildRecentSalesCatalogPaymentMethodMemoryText(context.messages, findLatestInbound(context.messages)),
   );
@@ -9406,6 +9409,23 @@ function resolveSalesCatalogConfirmedPaymentPreference(
   }
 
   return choices.length === 1 ? choices[0].preference : null;
+}
+
+function resolveSalesCatalogAffirmedPaymentPreference(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+  userText: string,
+): SalesCatalogRuntimePaymentPreference | null {
+  if (!latestInbound || requiresCommerceConversationReply(userText)) return null;
+  if (!isSalesCatalogContextualCheckoutConfirmation(userText, messages, latestInbound)
+    && !isSalesCatalogPaymentLinkFollowUp(userText, messages, latestInbound)) return null;
+  const latestMs = Date.parse(latestInbound.occurred_at);
+  const offeredPayment = messages.filter((message) => message.direction === "outbound"
+    && Date.parse(message.occurred_at) < latestMs)
+    .sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))[0];
+  if (!offeredPayment || !hasRecentSalesCatalogCheckoutPromise([offeredPayment], latestInbound)) return null;
+  // "Sim, me manda" confirms the method just offered, not the old session's Pix.
+  return detectSalesCatalogPreferredPaymentMethod(offeredPayment.text_content ?? "");
 }
 
 function detectRecentSalesCatalogPaymentPreference(
@@ -10844,14 +10864,16 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     return null;
   }
 
-  const checkoutUrl = asString(data.checkout_url);
+  const metadata = readRecord(data.metadata) ?? {};
+  const checkoutUrl = (data.method === "card" ? asString(metadata.public_checkout_url) : null)
+    ?? asString(data.checkout_url);
 
   if (!checkoutUrl) {
     return null;
   }
 
-  const metadata = readRecord(data.metadata) ?? {};
-  const trackingUrl = asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
+  const trackingUrl = (data.method === "card" ? asString(metadata.public_checkout_tracking_url) : null)
+    ?? asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
   const providerStatus = asString(data.provider_status)?.toLowerCase();
   const paymentDeferred = providerStatus === "payment_deferred"
     || metadata.payment_deferred === true;
@@ -10859,6 +10881,9 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     || providerStatus === "gateway_error"
     || metadata.gateway_available === false;
   const preferredMethod = detectSalesCatalogPreferredPaymentMethod(input.userText)
+    ?? resolveSalesCatalogAffirmedPaymentPreference(input.context.messages, input.latestInbound, input.userText)
+    ?? detectRecentSalesCatalogPaymentPreference(input.context.messages, input.latestInbound,
+      resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders))
     ?? readStoredSalesCatalogPaymentPreference(metadata)
     ?? (asString(data.pix_qr_code) ? "pix" : null);
   const currentMethod = resolveSalesCatalogPaymentSessionPreference(data, metadata);
@@ -11154,7 +11179,8 @@ function findRecentPendingSalesCatalogCheckoutOrder(
     const orderMs = Date.parse(order.updatedAt ?? order.createdAt ?? "");
     return Number.isFinite(orderMs)
       && orderMs <= latestInboundMs + 60_000
-      && latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs;
+      && (latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs
+        || Boolean(order.checkoutConfirmedAt && order.latestPaymentSessionId));
   }) ?? null;
 }
 
