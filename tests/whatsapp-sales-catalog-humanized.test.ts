@@ -24,6 +24,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(builder).toContain("memória interna");
     expect(builder).toContain("Nunca copie a ficha técnica completa");
     expect(builder).toContain("responda em até 2 mensagens curtas");
+    expect(builder).toContain("apresente no máximo 2 opções");
+    expect(builder).toContain("aja como atendente consultivo");
+    expect(builder).toContain("recomende no maximo 2 itens");
     expect(builder).toContain("resumo interno: ${preview(item.description, 180)}");
     expect(builder).toContain("formatRuntimeSalesCatalogDestinationForPrompt(item)");
     expect(builder).not.toContain("formatSalesCatalogInline");
@@ -108,6 +111,19 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
   });
 
+  it("keeps recommendation promises out of checkout intent", () => {
+    const orderIntent = sourceBetween(
+      "function hasSalesCatalogOrderIntent",
+      "function detectSalesCatalogPreferredPaymentMethod",
+    );
+
+    expect(orderIntent).toContain("isSalesCatalogRecommendationBeforePurchaseIntent(normalized)");
+    expect(runtimeSource).toContain("function isSalesCatalogRecommendationBeforePurchaseIntent");
+    expect(runtimeSource).toContain("o que voce");
+    expect(runtimeSource).toContain("vou comprar");
+    expect(runtimeSource).toContain("alreadyChoseSpecificOffer");
+  });
+
   it("uses the confirmed order preview as the closed cart source", () => {
     const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
     const checkoutRuntime = sourceBetween(
@@ -131,6 +147,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("top|perfeito|show|beleza|blz|combinado");
     expect(runtimeSource).toContain("sim|s|quero|ok|okay");
     expect(runtimeSource).toContain("\\bprevia\\b.{0,100}\\bpedido\\b");
+    expect(runtimeSource).toContain("estrutura|estruturar|combinar|combinacao|juntar|junto|juntos");
   });
 
   it("reconstructs split checkout prompts and ignores assistant-only extra items while closing", () => {
@@ -420,6 +437,28 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("posso usar esse mesmo endereco");
     expect(leadMemory).toContain("Endereço de entrega salvo");
     expect(leadMemory).toContain("confirme se pode usar esse mesmo endereço");
+  });
+
+  it("stores lead billing details before the checkout order exists", () => {
+    const runtime = sourceBetween("async function processWhatsappAgentRun", "async function loadRunContext");
+    const leadContact = sourceBetween(
+      "async function maybePersistSalesCatalogLeadContactDetailsFromMessage",
+      "async function persistLeadDeliveryAddressSnapshot",
+    );
+    const orderRecorder = sourceBetween(
+      "async function recordSalesCatalogOrderIntent",
+      "async function maybeCreateSalesCatalogPaymentLink",
+    );
+
+    expect(runtime).toContain("maybePersistSalesCatalogLeadContactDetailsFromMessage");
+    expect(leadContact).toContain("extractRuntimeCustomerNameFromStructuredReply(input.userText)");
+    expect(leadContact).toContain("persistLeadBillingDetailsSnapshot({");
+    expect(leadContact).toContain("orderId: null");
+    expect(runtimeSource).toContain("function normalizeRuntimeCustomerDocument");
+    expect(runtimeSource).toContain("mas|ja|eu|te|passei|enviei|mandei|informei|falei");
+    expect(orderRecorder).toContain("const customerDataText");
+    expect(orderRecorder).toContain("customer_email: customerEmail");
+    expect(orderRecorder).toContain("customer_document: customerDocument");
   });
 
   it("uses agent responsible humans for handoff notifications before legacy behavior numbers", () => {

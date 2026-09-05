@@ -686,6 +686,12 @@ export async function processWhatsappAgentRun(input: {
       await persistLeadMediaFile({ client, context, token, latestInbound }).catch(() => {});
     }
 
+    await maybePersistSalesCatalogLeadContactDetailsFromMessage({
+      client,
+      context,
+      userText,
+    }).catch(() => {});
+
     const refreshedSalesCatalogOrders = await maybeMarkSalesCatalogPaymentProof({
       client,
       context,
@@ -2456,7 +2462,17 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
     && ((!item.customerEmail && email) || (!item.customerDocument && document))
   ));
 
-  if (!order) return null;
+  if (!order) {
+    await persistLeadBillingDetailsSnapshot({
+      client: input.client,
+      context: input.context,
+      orderId: null,
+      email,
+      document,
+    }).catch(() => {});
+
+    return null;
+  }
 
   const now = new Date().toISOString();
   const patch: JsonRecord = {
@@ -2516,6 +2532,46 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
   });
 }
 
+async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  userText: string;
+}) {
+  if (!input.context.lead?.id) {
+    return;
+  }
+
+  const email = extractRuntimeEmail(input.userText);
+  const document = extractRuntimeCustomerDocument(input.userText);
+  const existingCustomerName = resolveRuntimeSalesCatalogCustomerName(input.context, null);
+  const customerName = existingCustomerName
+    ? null
+    : extractRuntimeCustomerNameFromStructuredReply(input.userText)
+      ?? (email || document ? extractRuntimeCustomerName(input.userText) : null);
+
+  if (!email && !document && !customerName) {
+    return;
+  }
+
+  if (customerName) {
+    await persistLeadCustomerNameSnapshot({
+      client: input.client,
+      context: input.context,
+      customerName,
+    }).catch(() => {});
+  }
+
+  if (email || document) {
+    await persistLeadBillingDetailsSnapshot({
+      client: input.client,
+      context: input.context,
+      orderId: null,
+      email,
+      document,
+    }).catch(() => {});
+  }
+}
+
 async function persistLeadDeliveryAddressSnapshot(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -2570,7 +2626,7 @@ async function persistLeadDeliveryAddressSnapshot(input: {
 async function persistLeadBillingDetailsSnapshot(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
-  orderId: string;
+  orderId: string | null;
   email: string | null;
   document: string | null;
 }) {
@@ -3035,7 +3091,7 @@ function sanitizeRuntimeCustomerNameCandidate(
     return null;
   }
 
-  if (/\b(?:pix|cartao|credito|debito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar|sim|ok|top|beleza|perfeito|pode|quero|rua|avenida|bairro|cep|numero|cpf|cnpj|email|e mail|porque|precisa|preciso|sistema|seguro|dados)\b/.test(normalized)) {
+  if (/\b(?:pix|cartao|credito|debito|boleto|dinheiro|pagamento|entrega|frete|pedido|finalizar|fechar|sim|ok|top|beleza|perfeito|pode|quero|rua|avenida|bairro|cep|numero|cpf|cnpj|email|e mail|porque|precisa|preciso|sistema|seguro|dados|mas|ja|eu|te|passei|enviei|mandei|informei|falei|mesmo|mesma|acima|antes)\b/.test(normalized)) {
     return null;
   }
 
@@ -3335,9 +3391,8 @@ function runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(
 
   const document = order.customerDocument
     ?? findString(context.lead?.metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]);
-  const digits = document?.replace(/\D/g, "") ?? "";
 
-  return digits.length !== 11 && digits.length !== 14;
+  return !normalizeRuntimeCustomerDocument(document);
 }
 
 function resolveRuntimeSalesCatalogCustomerName(
@@ -3370,13 +3425,19 @@ function extractRuntimeEmail(value: string) {
   return normalizeRuntimeEmail(match?.[0]);
 }
 
+function normalizeRuntimeCustomerDocument(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  return digits.length === 11 || digits.length === 14 ? digits : null;
+}
+
 function extractRuntimeCustomerDocument(value: string) {
   const candidates = value.match(/\b\d[\d.\-/\s]{9,20}\d\b/g) ?? [];
 
   for (const candidate of candidates) {
-    const digits = candidate.replace(/\D/g, "");
-    if (digits.length === 11 || digits.length === 14) {
-      return digits;
+    const document = normalizeRuntimeCustomerDocument(candidate);
+    if (document) {
+      return document;
     }
   }
 
@@ -5526,9 +5587,9 @@ function buildLinkButtonLines(
     "- Nunca deixe tags internas como {{link_produto}} visiveis para o lead. Tags de link sao marcadores internos e precisam virar botao ou URL antes do envio.",
     "- Nunca leia URLs em audio. Quando a resposta tiver link, produto com botao ou tag de link, mantenha a conversa natural e deixe o sistema separar audio, botao e texto.",
     "- Nao invente nem encurte tags. Se nao souber a tag, fale do produto pelo nome e peca confirmacao.",
-    "- Se recomendar 2 ou 3 produtos na mesma resposta, inclua a tag/URL de cada produto recomendado. Nao cite duas opcoes e envie link de apenas uma.",
+    "- Se recomendar mais de um produto na mesma resposta, limite a no maximo 2 opcoes ou 1 combinacao enxuta e inclua a tag/URL de cada produto recomendado. Nao cite duas opcoes e envie link de apenas uma.",
     "- Se o lead pedir link, outro link, mandar de novo ou disser que nao recebeu, responda incluindo novamente a tag/URL do produto citado.",
-    "- Se o lead pedir marca, categoria, objetivo ou disser 'me manda um', escolha 1 a 3 produtos EXATOS do catalogo abaixo e inclua a tag/URL de cada escolhido.",
+    "- Se o lead pedir marca, categoria, objetivo ou disser 'me manda um', escolha no maximo 2 produtos EXATOS do catalogo abaixo e inclua a tag/URL de cada escolhido.",
     "- Nunca escreva 'olha esses aqui', 'segue o link', 'te mandei', 'vou mandar' ou equivalente sem colocar na mesma resposta a tag/URL exata que gera o botao.",
     "- Se nao conseguir escolher um produto exato do catalogo, nao prometa link. Faca uma pergunta curta para decidir qual produto enviar.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
@@ -5577,7 +5638,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "",
     "CATÁLOGO DE VENDAS DISPONÍVEL:",
     "- Use o catálogo como memória interna para conversar como uma pessoa real. Nunca copie a ficha técnica completa para o lead.",
-    "- Quando o lead perguntar se tem um produto, responda em até 2 mensagens curtas, confirme que tem e apresente no máximo 3 opções com nome, preço e uma frase simples de contexto.",
+    "- Quando o lead perguntar se tem um produto, responda em até 2 mensagens curtas, confirme que tem e apresente no máximo 2 opções com nome, preço e uma frase simples de contexto.",
+    "- Quando o lead pedir orientação para decidir o que comprar, aja como atendente consultivo: entenda o objetivo, recomende 1 opção principal ou 1 combinação enxuta, explique por que encaixa e termine com uma pergunta curta para o lead avançar.",
     "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Não despeje descrição, benefícios, estoque, arquivos ou dados técnicos de uma vez.",
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a página de produto; o sistema pode enviar automaticamente o botão Ver produto.",
     "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartão ou link de pagamento, nunca gere pagamento direto na primeira intenção.",
@@ -5595,7 +5657,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
-    "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
+    "- Se o lead pedir algo generico, recomende no maximo 2 itens do catalogo e inclua a tag de cada um.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
     "- Se algum item legado aparecer como revisar destino da venda, confirme a intencao com o lead e acione o dono antes de prometer checkout.",
     "- Nunca invente desconto, cupom, prazo promocional ou condicao comercial; use somente oferta/cupom cadastrado no item.",
@@ -9695,9 +9757,9 @@ function isSalesCatalogCartOfferPromptText(text: string) {
     return false;
   }
 
-  const asksLeadToAccept = /\b(?:quer|posso|bora|vamos|se quiser|deixa eu|ja)\b.{0,140}\b(?:montar|monte|separar|separe|separo|reservar|garantir|fechar|pedido|previa|combo|dupla|opcao|opcoes)\b/.test(normalized)
-    || /\b(?:montar|monte|separar|separe|separo|reservar|garantir|fechar)\b.{0,100}\b(?:para voce|pra voce|seu pedido|esse pedido|esse combo|essa dupla)\b/.test(normalized);
-  const referencesCart = /\b(?:pedido|previa|combo|dupla|cesta|carrinho|produtos|itens|separar|pote|unidade|caixa|opcao|opcoes)\b/.test(normalized);
+  const asksLeadToAccept = /\b(?:quer|posso|bora|vamos|se quiser|deixa eu|ja)\b.{0,140}\b(?:montar|monte|montagem|estrutura|estruturar|combinar|combinacao|juntar|junto|juntos|separar|separe|separo|reservar|garantir|fechar|pedido|previa|combo|kit|dupla|opcao|opcoes)\b/.test(normalized)
+    || /\b(?:montar|monte|montagem|estrutura|estruturar|combinar|combinacao|juntar|separar|separe|separo|reservar|garantir|fechar)\b.{0,100}\b(?:para voce|pra voce|seu pedido|esse pedido|esse combo|essa dupla|esses produtos|esses itens|junto|juntos)\b/.test(normalized);
+  const referencesCart = /\b(?:pedido|previa|combo|kit|dupla|cesta|carrinho|produtos|itens|separar|pote|unidade|caixa|opcao|opcoes|estrutura|estruturar|combinacao|combinar|junto|juntos)\b/.test(normalized);
 
   return asksLeadToAccept && referencesCart;
 }
@@ -10367,13 +10429,26 @@ async function recordSalesCatalogOrderIntent(input: {
       return null;
     }
 
-    const customerName = input.context.lead
+    let customerName = input.context.lead
       ? resolveLeadPersonalName({
           displayName: input.context.lead.display_name,
           metadata: input.context.lead.metadata,
         })
       : null;
     const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
+    const leadMetadata = input.context.lead?.metadata;
+    const checkoutInboundMemoryText = buildRecentSalesCatalogCheckoutInboundMemoryText(
+      input.context.messages,
+      findLatestInbound(input.context.messages),
+    );
+    const customerDataText = [intentText, input.text, checkoutInboundMemoryText].filter(Boolean).join("\n");
+    customerName = customerName
+      ?? extractRuntimeCustomerNameFromStructuredReply(customerDataText)
+      ?? extractRuntimeCustomerName(customerDataText);
+    const customerEmail = normalizeRuntimeEmail(findString(leadMetadata, ["email", "customer_email", "lead_email"]))
+      ?? extractRuntimeEmail(customerDataText);
+    const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
+      ?? extractRuntimeCustomerDocument(customerDataText);
     const orderSelections = orderCatalogSelections.map((selection) => {
       const { item } = selection;
       const mentionText = [selection.mentionText, intentText, input.text].filter(Boolean).join(" ");
@@ -10412,10 +10487,6 @@ async function recordSalesCatalogOrderIntent(input: {
       : "client_direct";
     const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
     const commissionEligible = items.some((item) => item.commissionEligible);
-    const checkoutInboundMemoryText = buildRecentSalesCatalogCheckoutInboundMemoryText(
-      input.context.messages,
-      findLatestInbound(input.context.messages),
-    );
     const shippingIntentText = [intentText, checkoutInboundMemoryText].filter(Boolean).join("\n");
     const initialShipping = resolveInitialSalesCatalogOrderShipping({
       context: input.context,
@@ -10447,6 +10518,8 @@ async function recordSalesCatalogOrderIntent(input: {
         fulfillment_status: primaryItem.fulfillment.schedulingRequired ? "scheduled" : "pending",
         customer_name: customerName,
         customer_phone: customerPhone,
+        customer_email: customerEmail,
+        customer_document: customerDocument,
         subtotal: total,
         destination_cep: initialShipping?.destinationCep ?? null,
         destination_address: initialShipping?.destinationAddress ?? null,
@@ -12296,11 +12369,31 @@ async function persistSalesCatalogUnavailableOrderAttempt(input: {
 function hasSalesCatalogOrderIntent(text: string) {
   const normalized = normalizeSearch(text);
 
+  if (isSalesCatalogRecommendationBeforePurchaseIntent(normalized)) {
+    return false;
+  }
+
   return (
     /\b(fechar|fechamos|confirmar|confirmo|confirmado|comprar|compra|pedido|pedir|reservar|reservo|reservado|pagamento|pagar|pix|comprovante|entrega|frete|cep)\b/.test(normalized)
     || /\b(quero esse|quero essa|quero um|quero uma|vou querer|pode mandar|manda pra mim|separa pra mim|fecha pra mim)\b/.test(normalized)
   )
     && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
+}
+
+function isSalesCatalogRecommendationBeforePurchaseIntent(normalizedText: string) {
+  if (!normalizedText) {
+    return false;
+  }
+
+  const asksForGuidance = (
+    /\b(?:me ajuda|me ajude|preciso de ajuda|me orienta|me oriente|orientacao|orientar|recomenda|recomende|recomendar|recomendasse|indica|indique|indicar|sugere|sugira|sugerir|escolher|qual|quais|melhor opcao|melhores opcoes)\b/.test(normalizedText)
+    || /\bo que voce\b.{0,80}\b(?:falar|recomendar|indicar|sugerir|orientar)\b/.test(normalizedText)
+  );
+  const promisesToBuyAfterGuidance = /\b(?:vou comprar|eu compro|compro|vou levar|eu levo|fecho|eu fecho)\b/.test(normalizedText);
+  const alreadyChoseSpecificOffer = /\b(?:quero esse|quero essa|quero este|quero esta|esse mesmo|essa mesma|os dois|as duas|ambos|ambas|pode fechar|pode gerar|separa pra mim|separa para mim)\b/.test(normalizedText)
+    || /\b(?:pix|cartao|checkout|link de pagamento|codigo pix|copia e cola)\b/.test(normalizedText);
+
+  return asksForGuidance && promisesToBuyAfterGuidance && !alreadyChoseSpecificOffer;
 }
 
 function detectSalesCatalogPreferredPaymentMethod(text: string): SalesCatalogRuntimePaymentPreference | null {
