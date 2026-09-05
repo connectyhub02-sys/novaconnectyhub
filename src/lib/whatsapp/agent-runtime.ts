@@ -1148,7 +1148,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
           })
         ))),
         getOrganizationSalesCatalogSettings(client, run.organization_id),
-        getOrganizationSalesCatalogShippingSettings(client, run.organization_id).catch(() => null),
+        getOrganizationSalesCatalogShippingSettings(client, run.organization_id),
         loadOrganizationSalesCatalogOrders(client, {
           organizationId: run.organization_id,
           leadId,
@@ -2745,17 +2745,33 @@ function calculateRuntimeOrderTotalWithShipping(order: RuntimeSalesCatalogOrder,
 
 function resolveInitialSalesCatalogOrderShipping(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
-  selections: Array<{ item: RuntimeSalesCatalogItem }>;
+  selections: Array<{ item: RuntimeSalesCatalogItem; quantity?: number; mentionText?: string | null }>;
   intentText: string;
 }) {
-  const physicalItem = input.selections.find((selection) => selection.item.fulfillment.mode === "physical")?.item ?? null;
+  const physicalSelections = input.selections.filter(selection => selection.item.fulfillment.mode === "physical");
+  const firstPhysicalItem = physicalSelections[0]?.item;
+  const physicalItem = firstPhysicalItem ? {
+    ...firstPhysicalItem,
+    price: sumRuntimeOrderTotal(input.selections.map(selection => buildSalesCatalogOrderPreviewItem({
+      ...selection, quantity: selection.quantity ?? 1, source: "confirmation_preview",
+      mentionText: selection.mentionText ?? null, quantitySignal: null, fractionalQuantity: null,
+    }))),
+    shipping: {
+      ...firstPhysicalItem.shipping,
+      profile: physicalSelections.some(selection => selection.item.shipping.profile === "custom") ? "custom" as const
+        : physicalSelections.every(selection => selection.item.shipping.profile === "free") ? "free" as const : "default" as const,
+      weightGrams: physicalSelections.reduce((sum, selection) => sum
+        + (selection.item.shipping.weightGrams ?? 1000) * (selection.quantity ?? 1), 0),
+    },
+  } : null;
   const shippingSettings = input.context.salesCatalogShippingSettings;
+  const shippingIntentText = buildSalesCatalogShippingIntentText(input.context, input.intentText);
 
   if (!physicalItem) {
     return null;
   }
 
-  if (shippingSettings?.configured && shippingSettings.localPickup && hasSalesCatalogPickupSignal(input.intentText)) {
+  if (shippingSettings?.configured && shippingSettings.localPickup && hasSalesCatalogPickupSignal(shippingIntentText)) {
     return {
       destinationCep: null,
       destinationAddress: null,
@@ -2782,13 +2798,13 @@ function resolveInitialSalesCatalogOrderShipping(input: {
 
   const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
     latestInbound: null,
-    text: input.intentText,
+    text: shippingIntentText,
     zones: shippingSettings?.configured && shippingSettings.localDeliveryEnabled
       ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
       : [],
   });
 
-  if (localDeliveryMatch?.zone.price) {
+  if (localDeliveryMatch?.zone.price && isRuntimeResolvedShippingPrice(localDeliveryMatch.zone.price)) {
     const shippingMethod = `Entrega local - ${localDeliveryMatch.zone.name}`;
 
     return {
@@ -2813,11 +2829,11 @@ function resolveInitialSalesCatalogOrderShipping(input: {
     };
   }
 
-  const cep = extractFirstBrazilianCep(input.intentText);
+  const cep = extractFirstBrazilianCep(shippingIntentText);
   if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) {
     return null;
   }
-  const destinationAddress = extractRuntimeAddress(null, input.intentText);
+  const destinationAddress = extractRuntimeAddress(null, shippingIntentText);
 
   const result = calculateSalesCatalogShippingQuotes({
     item: physicalItem,
@@ -2826,7 +2842,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   });
   const quote = result.quotes[0];
 
-  if (result.error || !quote) {
+  if (result.error || !quote || !isRuntimeResolvedShippingPrice(quote.price)) {
     return null;
   }
 
@@ -2852,6 +2868,38 @@ function resolveInitialSalesCatalogOrderShipping(input: {
       notes: quote.notes,
     },
   };
+}
+
+function isRuntimeResolvedShippingPrice(price: string) {
+  return normalizeCurrencyAmount(price) !== null || /^(?:R\$\s*)?0+(?:[.,]0+)?$/i.test(price.trim());
+}
+
+function buildSalesCatalogShippingIntentText(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  intentText: string,
+) {
+  const latestInbound = findLatestInbound(context.messages);
+  const latestMs = Date.parse(latestInbound?.occurred_at ?? "");
+  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders);
+  // Delivery facts outlive intermediate replies and regenerated checkout previews.
+  // Only the customer's messages can establish an address or a pickup choice.
+  const recent = context.messages.filter((message) => message.direction === "inbound"
+    && Date.parse(message.occurred_at) <= latestMs
+    && (!boundary || Date.parse(message.occurred_at) > boundary)
+    && !isSalesCatalogMessageOutsideCartWindow(message, latestMs))
+    .slice().sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+  const texts = [latestInbound?.text_content ?? intentText, ...recent.map(message => message.text_content ?? "")];
+  const deliveryTexts = texts.filter(text => extractRuntimeAddress(null, text)
+    || extractFirstBrazilianCep(text) || hasSalesCatalogPickupSignal(text));
+  const latest = deliveryTexts[0];
+  if (!latest) return intentText;
+  if (hasSalesCatalogPickupSignal(latest) || extractRuntimeAddress(null, latest)) return latest;
+  // A CEP sent separately may complete the preceding address. A new address,
+  // however, must never inherit a CEP from an older, different destination.
+  const latestCep = extractFirstBrazilianCep(latest);
+  const previousAddress = deliveryTexts.slice(1).map(text => extractRuntimeAddress(null, text)).find(Boolean)
+    ?.replace(/\b\d{5}-?\d{3}\b/g, latestCep ?? "");
+  return [latest, previousAddress].filter(Boolean).join("\n");
 }
 
 function resolveSavedSalesCatalogOrderShipping(input: {
@@ -2918,7 +2966,7 @@ function resolveSavedSalesCatalogOrderShipping(input: {
   });
   const quote = result.quotes[0];
 
-  if (result.error || !quote) {
+  if (result.error || !quote || !isRuntimeResolvedShippingPrice(quote.price)) {
     return null;
   }
 
@@ -7736,7 +7784,9 @@ async function sendAgentResponse(input: {
   const shouldWaitForDeliveryDetails = Boolean(deliveryDetailsPrompt);
   const shouldRequestCheckoutConfirmation = !shouldWaitForDeliveryDetails && shouldRequestSalesCatalogCheckoutConfirmation({
     hasOrderIntent,
-    hasConfirmedCheckoutIntent,
+    hasConfirmedCheckoutIntent: hasConfirmedCheckoutIntent && !needsSalesCatalogCheckoutTotalConfirmation({
+      context, selections: checkoutOrderSelections, intentText: orderIntentText,
+    }),
     intentText: orderIntentText,
     selections: checkoutOrderSelections,
   });
@@ -7771,7 +7821,10 @@ async function sendAgentResponse(input: {
   const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
-  const rawDeliveryText = deliveryDetailsPrompt ?? (
+  const unresolvedCheckoutPrompt = hasConfirmedCheckoutIntent && checkoutOrderSelections.length === 0
+    ? "Antes de gerar o pagamento, preciso confirmar os produtos desse resumo. Me confirma o nome e a versão de cada item que você escolheu?"
+    : null;
+  const rawDeliveryText = unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? (
     shouldRequestCheckoutConfirmation
       ? buildSalesCatalogOrderConfirmationPrompt({
           context,
@@ -8993,6 +9046,17 @@ function buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt(input: {
   }
 
   const itemLines = input.selections.map((selection) => buildSalesCatalogOrderPreviewItem(selection).line);
+  const shippingText = buildSalesCatalogShippingIntentText(input.context, input.intentText);
+  const address = extractRuntimeAddress(null, shippingText);
+  const cep = extractFirstBrazilianCep(shippingText);
+  if (address && !cep && input.context.salesCatalogShippingSettings?.shippingEnabled) {
+    return "Já tenho o endereço. Me passa só o CEP para eu calcular o frete e confirmar o total?";
+  }
+  if (cep) {
+    return address
+      ? "Já tenho seu endereço e CEP, mas não encontrei uma tarifa de frete disponível para essa entrega. Você prefere outro endereço ou falar com a equipe para combinar a entrega?"
+      : "Já tenho o CEP. Me passa a rua, número, bairro e cidade para completar a entrega?";
+  }
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
   const canUseSavedDelivery = Boolean(savedDeliveryAddress && canResolveSalesCatalogDeliveryForSelections(input.context, input.selections));
 
@@ -9048,13 +9112,7 @@ function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
     return false;
   }
 
-  const hasDeliverySignal = Boolean(
-    extractRuntimeAddress(input.latestInbound, shippingIntentText)
-    || extractFirstBrazilianCep(shippingIntentText)
-    || hasSalesCatalogPickupSignal(shippingIntentText),
-  );
-
-  return !hasDeliverySignal && canResolveSalesCatalogDeliveryForSelections(input.context, input.selections);
+  return canResolveSalesCatalogDeliveryForSelections(input.context, input.selections);
 }
 
 function hasRecentResolvedSalesCatalogOrderForSelections(
@@ -9178,7 +9236,8 @@ function buildSalesCatalogOrderConfirmationShippingLine(
     return "";
   }
 
-  const amount = normalizeCurrencyAmount(shipping.shippingTotal);
+  const amount = normalizeCurrencyAmount(shipping.shippingTotal)
+    ?? (isRuntimeResolvedShippingPrice(shipping.shippingTotal) ? 0 : null);
   const formattedAmount = typeof amount === "number" && Number.isFinite(amount)
     ? formatRuntimeOrderMoney(amount)
     : shipping.shippingTotal;
@@ -9194,6 +9253,23 @@ function buildSalesCatalogOrderConfirmationShippingLine(
   }
 
   return `- Frete${method && normalizedMethod !== "frete" ? ` (${method})` : ""}: R$ ${formattedAmount}`;
+}
+
+function needsSalesCatalogCheckoutTotalConfirmation(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  selections: RuntimeSalesCatalogOrderSelection[];
+  intentText: string;
+}) {
+  if (!hasPhysicalSalesCatalogSelection(input.selections)) return false;
+  const shipping = resolveInitialSalesCatalogOrderShipping(input);
+  if (canResolveSalesCatalogDeliveryForSelections(input.context, input.selections) && !shipping) return true;
+  const subtotal = sumRuntimeOrderTotal(input.selections.map(buildSalesCatalogOrderPreviewItem));
+  const payableTotal = shipping ? addRuntimeMoney(subtotal, shipping.shippingTotal) : subtotal;
+  const preview = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, findLatestInbound(input.context.messages));
+  const quotedTotal = preview.match(/(?:^|\n)\s*\*{0,2}(?:total(?: do pedido)?|valor total)\s*\*{0,2}\s*:?\s*(?:R\$\s*)?(\d+(?:[.,]\d+)*)/i)?.[1];
+  const accepted = quotedTotal ? normalizeCurrencyAmount(quotedTotal) : null;
+  const payable = normalizeCurrencyAmount(payableTotal);
+  return accepted === null || payable === null || Math.round(accepted * 100) !== Math.round(payable * 100);
 }
 
 function buildSalesCatalogPaymentMethodChoicePrompt(input: {
@@ -9310,7 +9386,8 @@ function resolveSalesCatalogConfirmedPaymentPreference(
     return recentPreference;
   }
 
-  const rememberedPreference = detectRecentSalesCatalogPaymentPreference(context.messages, findLatestInbound(context.messages));
+  const rememberedPreference = detectRecentSalesCatalogPaymentPreference(context.messages, findLatestInbound(context.messages),
+    resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders));
   if (rememberedPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, rememberedPreference)) {
     return rememberedPreference;
   }
@@ -9321,6 +9398,7 @@ function resolveSalesCatalogConfirmedPaymentPreference(
 function detectRecentSalesCatalogPaymentPreference(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
+  cartBoundaryMs: number | null = null,
 ): SalesCatalogRuntimePaymentPreference | null {
   if (!latestInbound) {
     return null;
@@ -9331,26 +9409,20 @@ function detectRecentSalesCatalogPaymentPreference(
     return null;
   }
 
-  const paymentPromptMs = buildRecentOutboundMessageBlocks(messages, latestInbound)
-    .filter((messageBlock) => hasSalesCatalogPaymentMethodChoiceText(messageBlock.text))
-    .map((messageBlock) => Date.parse(messageBlock.firstMessage.occurred_at))
-    .filter((occurredAt) => Number.isFinite(occurredAt))
-    .sort((left, right) => right - left)[0];
-
-  if (!Number.isFinite(paymentPromptMs)) {
-    return null;
-  }
-
+  // A customer can choose Pix together with their address before any formal
+  // payment prompt. Preview repairs must not erase that explicit preference.
   const recentPreferences = messages
     .filter((message) => {
       if (message.direction !== "inbound" || !message.text_content?.trim()) return false;
 
       const occurredAt = Date.parse(message.occurred_at);
       return Number.isFinite(occurredAt)
-        && occurredAt > paymentPromptMs
+        && (!cartBoundaryMs || occurredAt > cartBoundaryMs)
         && occurredAt <= latestInboundMs
         && latestInboundMs - occurredAt <= salesCatalogCheckoutConfirmationWindowMs;
     })
+    .sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
+    .filter((message) => !requiresCommerceConversationReply(message.text_content ?? ""))
     .map((message) => detectSalesCatalogPreferredPaymentMethod(message.text_content ?? ""))
     .filter((preference): preference is SalesCatalogRuntimePaymentPreference => Boolean(preference));
 
@@ -9833,6 +9905,23 @@ function selectSalesCatalogOrderSelectionsFromText(
     : text;
   const selectionText = mentionText || text;
 
+  if (mentionText && (source === "cart_draft" || source === "confirmation_preview")) {
+    const selections: RuntimeSalesCatalogOrderSelection[] = [];
+    for (const line of mentionText.split("\n")) {
+      const matches = matchSalesCatalogOrderItemLine(items, line);
+      // An unresolved line invalidates the whole cart; never silently drop an item
+      // or use words from one line to identify a different product on another.
+      if (matches.length !== 1) return [];
+      const item = matches[0];
+      const explicitQuantity = line.match(/^\s*(?:[-*]\s*)?(\d+)\s*x\b/i)?.[1];
+      const quantity = resolveSalesCatalogMentionQuantity(line, item);
+      selections.push({ item, quantity: explicitQuantity ? Number(explicitQuantity) : quantity.quantity,
+        source, mentionText: line, quantitySignal: explicitQuantity ? "explicit_quantity_requested" : quantity.signal,
+        fractionalQuantity: quantity.fractionalQuantity });
+    }
+    return selections;
+  }
+
   return selectSalesCatalogItemsForOrderText(items, selectionText).map((item) => {
     const quantity = resolveSalesCatalogMentionQuantity(selectionText, item);
 
@@ -9845,6 +9934,24 @@ function selectSalesCatalogOrderSelectionsFromText(
       fractionalQuantity: quantity.fractionalQuantity,
     };
   });
+}
+
+function matchSalesCatalogOrderItemLine(items: RuntimeSalesCatalogItem[], line: string) {
+  const sellable = items.filter(isSalesCatalogItemSellable);
+  const tagged = sellable.filter(item => item.tag && line.includes(item.tag));
+  if (tagged.length) return tagged;
+  const productText = line.replace(/^\s*(?:[-*]\s*)?\d+\s*x\b/i, "")
+    .replace(/(?:R\$|BRL)\s*\d+(?:[.,]\d+)*/gi, "");
+  const tokens = (text: string) => normalizeSearch(text)
+    .replace(/(\d)\s+(ml|mg|kg|cm|g|l)\b/g, "$1$2")
+    .split(" ").filter(token => token && !/^(?:de|do|da|dos|das|com|e)$/.test(token));
+  const requested = tokens(productText);
+  if (!requested.length || !requested.some(token => /[a-z]{3}/.test(token))) return [];
+  return sellable.filter(item => [item.title, ...item.skus.map(sku => sku.title ?? ""), item.platformProductCode ?? ""]
+    .some(title => {
+      const available = new Set(tokens(title));
+      return requested.every(token => available.has(token));
+    }));
 }
 
 function extractSalesCatalogOrderItemLinesText(text: string) {
@@ -10269,6 +10376,10 @@ async function recordSalesCatalogOrderIntent(input: {
   }
 
   if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText)) {
+    return null;
+  }
+
+  if (needsSalesCatalogCheckoutTotalConfirmation({ context: input.context, selections: orderCatalogSelections, intentText })) {
     return null;
   }
 
