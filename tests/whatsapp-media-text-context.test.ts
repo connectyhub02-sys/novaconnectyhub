@@ -56,6 +56,10 @@ describe("WhatsApp media followed by text or audio", () => {
     expect(handler).toContain("agent_view_once_resend");
     expect(detector).toContain("view_once");
     expect(detector).toContain("visualizacao unica");
+    expect(detector).toContain("providerMessage?.viewOnce === true");
+    expect(detector).toContain("content?.viewOnce === true");
+    expect(detector).toContain("Boolean(viewOnceContainer)");
+    expect(detector).not.toContain("buildProviderMessageKeySignature(providerMessage)");
   });
 
   it("does not return plain text before checking recent visual media", () => {

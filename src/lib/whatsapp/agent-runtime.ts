@@ -15955,12 +15955,17 @@ function isViewOnceInboundMessage(message: ConversationMessageRow | null) {
 
   const providerMessage = readProviderMessageRecord(message);
   const content = readRecord(providerMessage?.content);
+  const viewOnceContainer = readRecord(providerMessage?.viewOnceMessage)
+    ?? readRecord(providerMessage?.viewOnceV2Message)
+    ?? readRecord(content?.viewOnceMessage)
+    ?? readRecord(content?.viewOnceV2Message);
 
   if (
     providerMessage?.viewOnce === true
     || providerMessage?.view_once === true
     || providerMessage?.isViewOnce === true
     || providerMessage?.once === true
+    || Boolean(viewOnceContainer)
     || content?.viewOnce === true
     || content?.view_once === true
     || content?.isViewOnce === true
@@ -15977,7 +15982,6 @@ function isViewOnceInboundMessage(message: ConversationMessageRow | null) {
     asString(providerMessage?.mediaType),
     asString(providerMessage?.text),
     asString(providerMessage?.content),
-    buildProviderMessageKeySignature(providerMessage),
   ].filter(Boolean).join(" "));
 
   return /\b(?:view once|viewonce|visualizacao unica|visualização unica|one view)\b/.test(signature);
