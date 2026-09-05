@@ -5,6 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import { readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
+import { updateLeadMetadata } from "@/lib/leads/metadata-update";
+import { buildCommerceConversationInstruction, requiresCommerceConversationReply } from "./commerce-conversation";
 import {
   estimateTokensFromText,
   extractGeminiUsageMetadata,
@@ -93,6 +95,7 @@ import {
 } from "./outbound-language";
 import {
   buildAgentPromptFromTemplate,
+  getAgentPromptTemplate,
   normalizeAgentPromptBuilderConfig,
   promptBuilderMetadataKey,
 } from "./agent-prompt-templates";
@@ -233,7 +236,7 @@ type RuntimeLinkButton = {
 };
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
-type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
+type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder & { checkoutConfirmedAt?: string | null };
 type RuntimeOrganizationLocation = OrganizationLocation;
 type SalesCatalogRuntimePaymentPreference = "pix" | "card";
 type SalesCatalogRuntimePaymentChoice = {
@@ -690,7 +693,7 @@ export async function processWhatsappAgentRun(input: {
       client,
       context,
       userText,
-    }).catch(() => {});
+    });
 
     const refreshedSalesCatalogOrders = await maybeMarkSalesCatalogPaymentProof({
       client,
@@ -1051,7 +1054,7 @@ export async function processWhatsappAgentRun(input: {
 
     extractConversationLearning(client, context).catch(() => {});
     extractLeadMemory(client, context, userText).catch(() => {});
-    await extractCloneMemory(client, context, userText, aiText).catch(() => {});
+    await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
     extractConversationArcSummary(client, context).catch(() => {});
     extractNegotiationState(client, context).catch(() => {});
     scheduleProactiveFollowUp(context).catch(() => {});
@@ -1599,7 +1602,7 @@ async function loadConversationMessages(client: SupabaseClient, conversationId: 
     .eq("conversation_id", conversationId)
     .eq("whatsapp_instance_id", whatsappInstanceId)
     .order("occurred_at", { ascending: false })
-    .limit(24);
+    .limit(80);
 
   if (error) {
     throw new Error(`Nao foi possivel carregar historico da conversa: ${error.message}`);
@@ -1620,85 +1623,83 @@ async function loadOrganizationSalesCatalogOrders(
     return [];
   }
 
-  try {
-    let query = client
-      .from("sales_catalog_orders")
-      .select([
-        "id",
-        "organization_id",
-        "lead_id",
-        "conversation_id",
-        "source",
-        "status",
-        "payment_status",
-        "fulfillment_status",
-        "customer_name",
-        "customer_phone",
-        "customer_document",
-        "customer_email",
-        "destination_cep",
-        "destination_address",
-        "subtotal",
-        "discount_total",
-        "shipping_total",
-        "total",
-        "payment_method",
-        "shipping_method",
-        "agent_notes",
-        "internal_notes",
-        "latest_payment_session_id",
-        "metadata",
-        "created_by",
-        "created_at",
-        "updated_at",
-      ].join(", "))
-      .eq("organization_id", input.organizationId)
-      .order("updated_at", { ascending: false })
-      .limit(8);
+  let query = client
+    .from("sales_catalog_orders")
+    .select([
+      "id",
+      "organization_id",
+      "lead_id",
+      "conversation_id",
+      "source",
+      "status",
+      "payment_status",
+      "fulfillment_status",
+      "customer_name",
+      "customer_phone",
+      "customer_document",
+      "customer_email",
+      "destination_cep",
+      "destination_address",
+      "subtotal",
+      "discount_total",
+      "shipping_total",
+      "total",
+      "payment_method",
+      "shipping_method",
+      "agent_notes",
+      "internal_notes",
+      "latest_payment_session_id",
+      "metadata",
+      "created_by",
+      "created_at",
+      "updated_at",
+    ].join(", "))
+    .eq("organization_id", input.organizationId)
+    .order("updated_at", { ascending: false })
+    .limit(8);
 
-    if (input.leadId && input.conversationId) {
-      query = query.or(`lead_id.eq.${input.leadId},conversation_id.eq.${input.conversationId}`);
-    } else if (input.leadId) {
-      query = query.eq("lead_id", input.leadId);
-    } else if (input.conversationId) {
-      query = query.eq("conversation_id", input.conversationId);
-    }
+  if (input.conversationId) {
+    query = query.eq("conversation_id", input.conversationId);
+  } else if (input.leadId) {
+    query = query.eq("lead_id", input.leadId);
+  }
 
-    const { data, error } = await query;
+  const { data, error } = await query;
 
-    if (error) {
-      return [];
-    }
+  if (error) {
+    throw new Error(`Não foi possível carregar os pedidos: ${error.message}`);
+  }
 
-    const orderRows = (data ?? []) as unknown as SalesCatalogOrderRow[];
-    const orderIds = orderRows.map((order) => order.id);
+  const orderRows = (data ?? []) as unknown as SalesCatalogOrderRow[];
+  const orderIds = orderRows.map((order) => order.id);
 
-    if (orderIds.length === 0) {
-      return [];
-    }
-
-    const { data: itemData, error: itemError } = await client
-      .from("sales_catalog_order_items")
-      .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
-      .in("order_id", orderIds)
-      .order("created_at", { ascending: true });
-
-    if (itemError) {
-      return orderRows.map((order) => mapSalesCatalogOrder(order, []));
-    }
-
-    const itemsByOrder = new Map<string, SalesCatalogOrderItemRow[]>();
-
-    for (const item of (itemData ?? []) as unknown as SalesCatalogOrderItemRow[]) {
-      const current = itemsByOrder.get(item.order_id) ?? [];
-      current.push(item);
-      itemsByOrder.set(item.order_id, current);
-    }
-
-    return orderRows.map((order) => mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []));
-  } catch {
+  if (orderIds.length === 0) {
     return [];
   }
+
+  const { data: itemData, error: itemError } = await client
+    .from("sales_catalog_order_items")
+    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+    .in("order_id", orderIds)
+    .order("created_at", { ascending: true });
+
+  if (itemError) {
+    throw new Error(`Não foi possível carregar os itens dos pedidos: ${itemError.message}`);
+  }
+
+  const itemsByOrder = new Map<string, SalesCatalogOrderItemRow[]>();
+
+  for (const item of (itemData ?? []) as unknown as SalesCatalogOrderItemRow[]) {
+    const current = itemsByOrder.get(item.order_id) ?? [];
+    current.push(item);
+    itemsByOrder.set(item.order_id, current);
+  }
+
+  return orderRows.map((order) => ({
+    ...mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []),
+    checkoutConfirmedAt: asString(readRecord(order.metadata)?.checkout_confirmed_at),
+  }));
+
 }
 
 async function maybeMarkSalesCatalogPaymentProof(input: {
@@ -2383,7 +2384,11 @@ async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
     item.status !== "cancelled"
     && item.status !== "delivered"
     && item.fulfillmentStatus !== "fulfilled"
-    && runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(input.context, item)
+    && item.paymentStatus !== "confirmed"
+    && item.paymentStatus !== "refunded"
+    && item.paymentStatus !== "failed"
+    && item.conversationId === input.context.conversationId
+    && !normalizeLeadNameCandidate(item.customerName)
   ));
 
   if (!order) return null;
@@ -2450,8 +2455,10 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
-  const email = extractRuntimeEmail(input.userText);
-  const document = extractRuntimeCustomerDocument(input.userText);
+  const email = extractRuntimeEmail(input.userText)
+    ?? normalizeRuntimeEmail(findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]));
+  const document = extractRuntimeCustomerDocument(input.userText)
+    ?? normalizeRuntimeCustomerDocument(findString(input.context.lead?.metadata, ["cpf_cnpj", "customer_document"]));
 
   if (!email && !document) return null;
 
@@ -2459,6 +2466,10 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
     item.status !== "cancelled"
     && item.status !== "delivered"
     && item.fulfillmentStatus !== "fulfilled"
+    && item.paymentStatus !== "confirmed"
+    && item.paymentStatus !== "refunded"
+    && item.paymentStatus !== "failed"
+    && item.conversationId === input.context.conversationId
     && ((!item.customerEmail && email) || (!item.customerDocument && document))
   ));
 
@@ -2541,13 +2552,27 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
     return;
   }
 
-  const email = extractRuntimeEmail(input.userText);
-  const document = extractRuntimeCustomerDocument(input.userText);
+  const latestInbound = findLatestInbound(input.context.messages);
+  const latestMs = Date.parse(latestInbound?.occurred_at ?? "");
+  // Recover only lead-authored facts from this conversation, including data sent before a preview.
+  const recentTexts = input.context.messages
+    .filter((message) => message.direction === "inbound"
+      && Date.parse(message.occurred_at) <= latestMs
+      && !isSalesCatalogMessageOutsideCartWindow(message, latestMs))
+    .slice().reverse().map((message) => message.text_content ?? "");
+  const email = extractRuntimeEmail(input.userText)
+    ?? normalizeRuntimeEmail(findString(input.context.lead.metadata, ["email", "customer_email", "lead_email"]))
+    ?? recentTexts.map(extractRuntimeEmail).find(Boolean) ?? null;
+  const document = extractRuntimeCustomerDocument(input.userText)
+    ?? normalizeRuntimeCustomerDocument(findString(input.context.lead.metadata, ["cpf_cnpj", "customer_document"]))
+    ?? recentTexts.map(extractRuntimeCustomerDocument).find(Boolean) ?? null;
   const existingCustomerName = resolveRuntimeSalesCatalogCustomerName(input.context, null);
   const customerName = existingCustomerName
     ? null
     : extractRuntimeCustomerNameFromStructuredReply(input.userText)
-      ?? (email || document ? extractRuntimeCustomerName(input.userText) : null);
+      ?? (email || document ? extractRuntimeCustomerName(input.userText) : null)
+      ?? recentTexts.filter((text) => extractRuntimeEmail(text) || extractRuntimeCustomerDocument(text))
+        .map(extractRuntimeCustomerNameFromStructuredReply).find(Boolean) ?? null;
 
   if (!email && !document && !customerName) {
     return;
@@ -2558,7 +2583,7 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
       client: input.client,
       context: input.context,
       customerName,
-    }).catch(() => {});
+    });
   }
 
   if (email || document) {
@@ -2568,7 +2593,7 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
       orderId: null,
       email,
       document,
-    }).catch(() => {});
+    });
   }
 }
 
@@ -2585,14 +2610,6 @@ async function persistLeadDeliveryAddressSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
-    input.client,
-    input.context.lead.id,
-    input.context.lead.metadata,
-  );
-  const history = Array.isArray(currentMetadata.delivery_addresses)
-    ? currentMetadata.delivery_addresses.filter((entry) => readRecord(entry))
-    : [];
   const snapshot = {
     address: input.destinationAddress,
     cep: input.destinationCep ?? null,
@@ -2601,26 +2618,34 @@ async function persistLeadDeliveryAddressSnapshot(input: {
     updated_at: now,
   };
 
-  await input.client
-    .from("leads")
-    .update({
-      metadata: {
-        ...currentMetadata,
-        address: input.destinationAddress,
-        delivery_address: input.destinationAddress,
-        destination_address: input.destinationAddress,
-        cep: input.destinationCep ?? currentMetadata.cep ?? null,
-        delivery_cep: input.destinationCep ?? currentMetadata.delivery_cep ?? null,
-        last_delivery_address_at: now,
-        delivery_addresses: [
-          ...history
-            .filter((entry) => readRecord(entry)?.address !== input.destinationAddress)
-            .slice(-4),
-          snapshot,
-        ],
-      },
-    })
-    .eq("id", input.context.lead.id);
+  const saved = await updateLeadMetadata({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead.id,
+    buildUpdate: (currentMetadata) => {
+      const history = Array.isArray(currentMetadata.delivery_addresses)
+        ? currentMetadata.delivery_addresses.filter((entry) => readRecord(entry))
+        : [];
+      return {
+        metadata: {
+          ...currentMetadata,
+          address: input.destinationAddress,
+          delivery_address: input.destinationAddress,
+          destination_address: input.destinationAddress,
+          cep: input.destinationCep ?? currentMetadata.cep ?? null,
+          delivery_cep: input.destinationCep ?? currentMetadata.delivery_cep ?? null,
+          last_delivery_address_at: now,
+          delivery_addresses: [
+            ...history
+              .filter((entry) => readRecord(entry)?.address !== input.destinationAddress)
+              .slice(-4),
+            snapshot,
+          ],
+        },
+      };
+    },
+  });
+  input.context.lead.metadata = saved.metadata;
 }
 
 async function persistLeadBillingDetailsSnapshot(input: {
@@ -2635,39 +2660,38 @@ async function persistLeadBillingDetailsSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
-    input.client,
-    input.context.lead.id,
-    input.context.lead.metadata,
-  );
-  const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
-
-  await input.client
-    .from("leads")
-    .update({
-      metadata: {
-        ...currentMetadata,
-        email: input.email ?? currentMetadata.email ?? null,
-        customer_email: input.email ?? currentMetadata.customer_email ?? null,
-        cpf_cnpj: input.document ?? currentMetadata.cpf_cnpj ?? null,
-        customer_document: input.document ?? currentMetadata.customer_document ?? null,
-        last_billing_details_at: now,
-        lead_memory: {
-          ...currentLeadMemory,
-          email: input.email ?? currentLeadMemory.email ?? null,
-          cpfCnpj: input.document ?? currentLeadMemory.cpfCnpj ?? null,
-          updated_at: now,
-          source: "whatsapp_agent_runtime",
-        },
-        billing_details: {
+  const saved = await updateLeadMetadata({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead.id,
+    buildUpdate: (currentMetadata) => {
+      const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
+      return {
+        metadata: {
+          ...currentMetadata,
           email: input.email ?? currentMetadata.email ?? null,
-          document_present: Boolean(input.document ?? currentMetadata.customer_document ?? currentMetadata.cpf_cnpj),
-          order_id: input.orderId,
-          updated_at: now,
+          customer_email: input.email ?? currentMetadata.customer_email ?? null,
+          cpf_cnpj: input.document ?? currentMetadata.cpf_cnpj ?? null,
+          customer_document: input.document ?? currentMetadata.customer_document ?? null,
+          last_billing_details_at: now,
+          lead_memory: {
+            ...currentLeadMemory,
+            email: input.email ?? currentLeadMemory.email ?? null,
+            cpfCnpj: input.document ?? currentLeadMemory.cpfCnpj ?? null,
+            updated_at: now,
+            source: "whatsapp_agent_runtime",
+          },
+          billing_details: {
+            email: input.email ?? currentMetadata.email ?? null,
+            document_present: Boolean(input.document ?? currentMetadata.customer_document ?? currentMetadata.cpf_cnpj),
+            order_id: input.orderId,
+            updated_at: now,
+          },
         },
-      },
-    })
-    .eq("id", input.context.lead.id);
+      };
+    },
+  });
+  input.context.lead.metadata = saved.metadata;
 }
 
 async function persistLeadCustomerNameSnapshot(input: {
@@ -2680,32 +2704,32 @@ async function persistLeadCustomerNameSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
-    input.client,
-    input.context.lead.id,
-    input.context.lead.metadata,
-  );
-  const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
-
-  await input.client
-    .from("leads")
-    .update({
-      display_name: input.customerName,
-      metadata: {
-        ...currentMetadata,
-        person_name: input.customerName,
-        personal_name: input.customerName,
-        name: input.customerName,
-        lead_name: input.customerName,
-        lead_memory: {
-          ...currentLeadMemory,
-          personName: input.customerName,
-          updated_at: now,
-          source: "whatsapp_agent_runtime",
+  const saved = await updateLeadMetadata({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead.id,
+    buildUpdate: (currentMetadata) => {
+      const currentLeadMemory = readRecord(currentMetadata.lead_memory) ?? {};
+      return {
+        display_name: input.customerName,
+        metadata: {
+          ...currentMetadata,
+          person_name: input.customerName,
+          personal_name: input.customerName,
+          name: input.customerName,
+          lead_name: input.customerName,
+          lead_memory: {
+            ...currentLeadMemory,
+            personName: input.customerName,
+            updated_at: now,
+            source: "whatsapp_agent_runtime",
+          },
         },
-      },
-    })
-    .eq("id", input.context.lead.id);
+      };
+    },
+  });
+  input.context.lead.metadata = saved.metadata;
+  input.context.lead.display_name = input.customerName;
 }
 
 function calculateRuntimeOrderTotalWithShipping(order: RuntimeSalesCatalogOrder, shippingTotal: string | null) {
@@ -3347,20 +3371,6 @@ function runtimeSalesCatalogOrderNeedsDeliveryAddress(order: RuntimeSalesCatalog
   return hasPhysicalItem
     && !isRuntimePickupShippingMethod(order.shippingMethod)
     && !hasRuntimeCompleteDeliveryAddress(order.destinationAddress);
-}
-
-async function loadLatestLeadMetadataForRuntimeUpdate(
-  client: SupabaseClient,
-  leadId: string,
-  fallback: JsonRecord | null | undefined,
-) {
-  const { data } = await client
-    .from("leads")
-    .select("metadata")
-    .eq("id", leadId)
-    .maybeSingle<{ metadata: JsonRecord | null }>();
-
-  return readRecord(data?.metadata) ?? fallback ?? {};
 }
 
 function runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment(
@@ -4160,6 +4170,7 @@ function buildSystemInstruction(input: {
     ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
     ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
     ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
+    ...buildSalesCatalogCheckoutStateLines(input.lead),
     ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
     "",
     "COMPORTAMENTO CONFIGURADO:",
@@ -4211,6 +4222,8 @@ function buildSystemInstruction(input: {
     ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
     ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
     ...buildSmallTalkContext(input.behavior),
+    ...(input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
+    ...buildConfiguredNicheCareLines(input.agent),
     "",
     "REGRAS TECNICAS DE SAIDA:",
     "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
@@ -4249,6 +4262,19 @@ function resolveRuntimeAgentPrompt(input: {
     productCount: input.salesCatalog.length,
     knowledgeFileCount: input.knowledge.length,
   });
+}
+
+function buildConfiguredNicheCareLines(agent: AgentRow) {
+  const config = readRecord(readRecord(agent.metadata)?.[promptBuilderMetadataKey]);
+  if (!config) return [];
+  const template = getAgentPromptTemplate(config.templateId ?? config.template_id);
+  return [
+    "",
+    "LIMITES DO NICHO CONFIGURADO:",
+    ...template.careRules.map((rule) => `- ${rule}`),
+    asString(config.neverRules) ?? asString(config.never_rules) ?? "",
+    "- Memorias de estilo e objetivos de venda nao autorizam ultrapassar estes limites. Para duvida clinica, prescricao, ciclo ou combinacao terapeutica, encaminhe para um profissional habilitado; nao prometa resultados.",
+  ].filter(Boolean);
 }
 
 function isElianeRuntimeAgent(agent: AgentRow | null | undefined) {
@@ -5351,54 +5377,54 @@ async function persistLeadQualification(
   }
 
   const now = new Date().toISOString();
-  const currentMetadata = await loadLatestLeadMetadataForRuntimeUpdate(
+  const saved = await updateLeadMetadata({
     client,
-    context.lead.id,
-    context.lead.metadata,
-  );
-  const currentQualification = readRecord(currentMetadata.qualification) ?? {};
-  const nextQualification = {
-    ...currentQualification,
-    ...analysis.fields,
-  };
-  const metadata = {
-    ...currentMetadata,
-    qualification: nextQualification,
-    lead_qualification: {
-      score: analysis.score,
-      temperature: analysis.temperature,
-      status: analysis.status,
-      answered_question_ids: analysis.answeredQuestionIds,
-      missing_question_ids: analysis.missingQuestionIds,
-      next_best_question: analysis.nextBestQuestion,
-      next_best_action: analysis.nextBestAction,
-      summary: analysis.summary,
-      updated_at: now,
-      source: "whatsapp_qualification_agent",
-    },
-    qualification_score: analysis.score,
-    lead_temperature: analysis.temperature,
-    ai_summary: analysis.summary,
-    purpose: analysis.fields.purpose ?? currentMetadata.purpose,
-    budget: analysis.fields.budget ?? analysis.fields.investment ?? currentMetadata.budget,
-    timeframe: analysis.fields.timeframe ?? analysis.fields.urgency ?? currentMetadata.timeframe,
-    objections: analysis.fields.objections ?? analysis.fields.objection ?? currentMetadata.objections,
-    main_pain: analysis.fields.main_pain ?? currentMetadata.main_pain,
-    volume_or_context: analysis.fields.volume_or_context ?? currentMetadata.volume_or_context,
-    decision_authority: analysis.fields.decision_authority ?? currentMetadata.decision_authority,
-    next_step_acceptance: analysis.fields.next_step_acceptance ?? currentMetadata.next_step_acceptance,
-    last_qualification_updated_at: now,
-  };
+    organizationId: context.organization.id,
+    leadId: context.lead.id,
+    buildUpdate: (currentMetadata) => {
+      const currentQualification = readRecord(currentMetadata.qualification) ?? {};
+      const nextQualification = {
+        ...currentQualification,
+        ...analysis.fields,
+      };
+      const metadata = {
+        ...currentMetadata,
+        qualification: nextQualification,
+        lead_qualification: {
+          score: analysis.score,
+          temperature: analysis.temperature,
+          status: analysis.status,
+          answered_question_ids: analysis.answeredQuestionIds,
+          missing_question_ids: analysis.missingQuestionIds,
+          next_best_question: analysis.nextBestQuestion,
+          next_best_action: analysis.nextBestAction,
+          summary: analysis.summary,
+          updated_at: now,
+          source: "whatsapp_qualification_agent",
+        },
+        qualification_score: analysis.score,
+        lead_temperature: analysis.temperature,
+        ai_summary: analysis.summary,
+        purpose: analysis.fields.purpose ?? currentMetadata.purpose,
+        budget: analysis.fields.budget ?? analysis.fields.investment ?? currentMetadata.budget,
+        timeframe: analysis.fields.timeframe ?? analysis.fields.urgency ?? currentMetadata.timeframe,
+        objections: analysis.fields.objections ?? analysis.fields.objection ?? currentMetadata.objections,
+        main_pain: analysis.fields.main_pain ?? currentMetadata.main_pain,
+        volume_or_context: analysis.fields.volume_or_context ?? currentMetadata.volume_or_context,
+        decision_authority: analysis.fields.decision_authority ?? currentMetadata.decision_authority,
+        next_step_acceptance: analysis.fields.next_step_acceptance ?? currentMetadata.next_step_acceptance,
+        last_qualification_updated_at: now,
+      };
 
-  await client
-    .from("leads")
-    .update({
-      score: analysis.score,
-      status: analysis.status,
-      last_event_summary: preview(analysis.summary, 240),
-      metadata,
-    })
-    .eq("id", context.lead.id);
+      return {
+          score: analysis.score,
+          status: analysis.status,
+          last_event_summary: preview(analysis.summary, 240),
+          metadata,
+      };
+    },
+  });
+  context.lead.metadata = saved.metadata;
 
   await client.from("intelligence_events").insert({
     scope: "organization",
@@ -5644,10 +5670,10 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a página de produto; o sistema pode enviar automaticamente o botão Ver produto.",
     "- Regra global de fechamento: quando o lead escolher produtos, quiser comprar, fechar, pagar, receber Pix, boleto, cartão ou link de pagamento, nunca gere pagamento direto na primeira intenção.",
     "- Antes do pagamento, envie uma prévia curta do pedido com itens, quantidades e total quando houver preço. Pergunte claramente: Posso fechar seu pedido e gerar o pagamento?",
-    "- Se ainda faltarem dados para cobrar, organize em duas fases: primeiro nome completo, CPF/CNPJ e e-mail; depois endereço completo com CEP quando houver entrega. Se algum dado já estiver no arquivo do lead ou na conversa recente, confirme ou aproveite em vez de pedir de novo.",
+    "- Para cobrar, aproveite os dados ja recebidos e solicite somente os campos faltantes exigidos pelo pedido e pelo meio de pagamento. Aceite dados em qualquer ordem; endereco e CEP sao necessarios somente quando houver entrega.",
     "- Para produto físico com entrega ou frete, não informe total final e não gere pagamento antes de endereço completo, frete/taxa ou retirada estarem definidos.",
     "- Somente depois de confirmação clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si, gere Pix direto ou checkout/link conforme a forma habilitada.",
-    "- Se o lead corrigir item, quantidade, sabor, variação, endereço ou forma de pagamento, ajuste a prévia e peça nova confirmação antes do pagamento.",
+    "- Se o lead corrigir item, quantidade, sabor, variacao ou endereco, ajuste a previa e peca nova confirmacao do total antes do pagamento. Trocar apenas Pix por cartao ou cartao por Pix preserva o pedido e os dados ja confirmados.",
     "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; depois da confirmação do lead, o sistema deve criar um único checkout com todos os itens somados.",
     "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate apenas os produtos recentes da intenção atual como um carrinho único. Resuma o carrinho em uma frase curta, sem repetir ficha técnica.",
     "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheça naturalmente como fracionamento/combinação e confirme antes de inventar regra de preço.",
@@ -5733,7 +5759,7 @@ function buildSalesCatalogCartIncreaseLines(
   return [
     "",
     "AUMENTO DE CARRINHO NO WHATSAPP:",
-    "- Regra global: antes de gerar Pix, checkout de cartao, boleto ou link de pagamento, avalie uma oportunidade curta de aumentar o carrinho dentro da conversa.",
+    "- Avalie um complemento somente durante a escolha, antes da confirmacao final. Quando o lead pedir para pagar ou estiver enviando dados, conclua o pedido aceito sem abrir novas ofertas.",
     "- Prioridade: primeiro use ofertas configuradas pela loja; se nenhuma combinar e a sugestao automatica estiver ativa, use um complemento coerente do catalogo.",
     "- Sugestao automatica permitida: adicional natural, item complementar, bebida/acessorio/servico ligado ao pedido, ou produto que combine com objetivo declarado pelo lead.",
     "- Produto parecido, substituto ou concorrente do mesmo objetivo nao e aumento de carrinho. Ofereca apenas se complementar o uso principal de forma clara.",
@@ -5996,6 +6022,22 @@ function buildSalesCatalogShippingQuoteLines(quotes: RuntimeSalesCatalogShipping
         }),
       ];
     }),
+  ];
+}
+
+function buildSalesCatalogCheckoutStateLines(lead: LeadRow | null) {
+  if (!lead) return [];
+  const name = resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata });
+  const email = normalizeRuntimeEmail(findString(lead.metadata, ["email", "customer_email", "lead_email"]));
+  const document = normalizeRuntimeCustomerDocument(findString(lead.metadata, ["cpf_cnpj", "customer_document"]));
+  return [
+    "",
+    "DADOS JA CAPTURADOS PARA O PAGAMENTO:",
+    name ? `- Nome: ${name}. Nao solicite novamente.` : "- Nome ainda nao confirmado.",
+    email ? `- E-mail: ${email}. Nao solicite novamente.` : "- E-mail ainda nao informado.",
+    document ? "- CPF/CNPJ ja recebido. Nao solicite novamente." : "- Documento ainda nao informado; solicite somente se o pagamento exigir.",
+    "- Use os dados salvos e o pedido atual. Durante a cobranca, nao reinicie a qualificacao nem sugira mais produtos.",
+    "- O sistema informa o que falta e entrega o botao. Nunca afirme que um Pix foi gerado ou pago sem o resultado correspondente.",
   ];
 }
 
@@ -7656,10 +7698,10 @@ async function sendAgentResponse(input: {
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
   const hasPendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
   const hasConfirmedCartOfferIntent = hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
-  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText)
+  const hasOrderIntent = !requiresCommerceConversationReply(orderIntentText) && (hasSalesCatalogOrderIntent(orderIntentText)
     || hasConfirmedCheckoutIntent
     || hasPendingDeliveryDetailsIntent
-    || hasConfirmedCartOfferIntent;
+    || hasConfirmedCartOfferIntent);
   const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
   const assistantCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
@@ -7714,6 +7756,18 @@ async function sendAgentResponse(input: {
     shouldWaitForPaymentMethodChoice,
     selections: checkoutOrderSelections,
   });
+  if (shouldUseControlledPaymentStepText) {
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+    const payment = await recordSalesCatalogOrderIntent({
+      client: input.client, context, items: selectedCatalogItems, text: cleanText, intentText: orderIntentText,
+    });
+    if (!payment) throw new Error("O pedido confirmado nao produziu uma acao de pagamento.");
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+    return [await sendSalesCatalogPaymentLink({
+      client: input.client, context, token: input.token, phone: input.phone, payment,
+    })];
+  }
+
   const deliveryCatalogItems = hasConfirmedCheckoutIntent && checkoutOrderSelections.length > 0
     ? checkoutOrderSelections.map((selection) => selection.item)
     : selectedCatalogItems;
@@ -7725,15 +7779,11 @@ async function sendAgentResponse(input: {
           selections: checkoutOrderSelections,
           intentText: orderIntentText,
         })
-      : paymentMethodChoicePrompt ?? (
-          shouldUseControlledPaymentStepText
-            ? buildSalesCatalogControlledPaymentStepText()
-            : prepareSalesCatalogDeliveryText({
-                text: cleanText,
-                items: deliveryCatalogItems,
-                hasOrderIntent,
-              })
-        )
+      : paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText({
+          text: cleanText,
+          items: deliveryCatalogItems,
+          hasOrderIntent,
+        })
   );
   const deliveryText = normalizeTemporalGreetingInOutboundText(
     suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems),
@@ -7889,34 +7939,7 @@ async function sendAgentResponse(input: {
       outbound.push(message);
     }
 
-    const paymentLink = shouldWaitForPaymentMethodChoice || shouldWaitForDeliveryDetails
-      ? null
-      : await recordSalesCatalogOrderIntent({
-          client: input.client,
-          context,
-          items: selectedCatalogItems,
-          text: cleanText,
-          intentText: orderIntentText,
-        });
-
-    if (paymentLink) {
-      await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
-
-      try {
-        const paymentOutbound = await sendSalesCatalogPaymentLink({
-          client: input.client,
-          context,
-          token: input.token,
-          phone: input.phone,
-          payment: paymentLink,
-        });
-        outbound.push(paymentOutbound);
-      } catch {
-        // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
-      }
-    }
-
-    if (!paymentLink && !hasOrderIntent && shouldOfferProductPageLinks) {
+    if (!hasOrderIntent && shouldOfferProductPageLinks) {
       const textPersistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "text");
       const productChunkIndex = chunks.length + 1;
       const productOutbound = await maybeSendSalesCatalogProductPageLinks({
@@ -7995,34 +8018,7 @@ async function sendAgentResponse(input: {
     outbound.push(...mediaOutbound);
   }
 
-  const paymentLink = shouldWaitForPaymentMethodChoice || shouldWaitForDeliveryDetails
-    ? null
-    : await recordSalesCatalogOrderIntent({
-        client: input.client,
-        context,
-        items: selectedCatalogItems,
-        text: cleanText,
-        intentText: orderIntentText,
-      });
-
-  if (paymentLink) {
-    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
-
-    try {
-      const paymentOutbound = await sendSalesCatalogPaymentLink({
-        client: input.client,
-        context,
-        token: input.token,
-        phone: input.phone,
-        payment: paymentLink,
-      });
-      outbound.push(paymentOutbound);
-    } catch {
-      // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
-    }
-  }
-
-  if (!paymentLink && !hasOrderIntent && shouldOfferProductPageLinks) {
+  if (!hasOrderIntent && shouldOfferProductPageLinks) {
     const productChunkIndex = correctedChunks.length + catalogAttachments.length + 1;
     const productOutbound = await maybeSendSalesCatalogProductPageLinks({
       client: input.client,
@@ -8685,132 +8681,10 @@ function prepareSalesCatalogDeliveryText(input: {
   items: RuntimeSalesCatalogItem[];
   hasOrderIntent: boolean;
 }) {
-  const items = input.items
-    .filter((item) => isSalesCatalogItemSellable(item))
-    .slice(0, SALES_CATALOG_REPLY_ITEM_LIMIT);
-
-  if (items.length === 0) {
-    return input.text;
-  }
-
-  if (!input.hasOrderIntent && hasSubstantiveSalesCatalogAnswer(input.text)) {
-    return ensureSalesCatalogConsultativeContinuation(input.text, items);
-  }
-
-  const intro = resolveSalesCatalogDeliveryIntro(input.text, input.hasOrderIntent);
-  const itemLines = items.map((item) => `- ${formatSalesCatalogCustomerMention(item)}`);
-  const closing = input.hasOrderIntent
-    ? ""
-    : "Qual dessas opções faz mais sentido para você?";
-
-  const rendered = [intro, itemLines.join("\n"), closing]
-    .filter(Boolean)
-    .join("\n\n");
-
-  return input.hasOrderIntent ? rendered : ensureSalesCatalogConsultativeContinuation(rendered, items);
-}
-
-function ensureSalesCatalogConsultativeContinuation(text: string, items: RuntimeSalesCatalogItem[]) {
-  const trimmed = text.trim();
-
-  if (!trimmed || salesCatalogTextHasNaturalNextStep(trimmed)) {
-    return trimmed;
-  }
-
-  const item = items.find((candidate) => isSalesCatalogItemSellable(candidate));
-  const itemName = item ? preview(item.title, 70) : "essa opção";
-
-  return `${trimmed}\n\nQuer que eu separe ${itemName} para você?`;
-}
-
-function salesCatalogTextHasNaturalNextStep(text: string) {
-  const lastBlock = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .pop() ?? "";
-  const normalized = normalizeSearch(lastBlock);
-
-  if (!lastBlock || /[?]$/.test(lastBlock)) {
-    return true;
-  }
-
-  return /\b(?:quer|prefere|posso|pode|me chama|me manda|me mande|me envia|me envie|me confirma|separo|separar|fechar|finalizar|checkout|pix|cartao|pagamento|proximo passo)\b/.test(normalized);
-}
-
-function hasSubstantiveSalesCatalogAnswer(text: string) {
-  const normalized = normalizeSearch(text);
-  const words = normalized
-    .split(/\s+/)
-    .filter((word) => word.length >= 3 && !salesCatalogWeakAnswerWords.has(word));
-  const sentenceCount = text
-    .split(/[.!?]\s+|\n+/)
-    .map((part) => part.trim())
-    .filter((part) => normalizeSearch(part).length >= 12)
-    .length;
-
-  return words.length >= 18 || (sentenceCount >= 2 && words.length >= 12);
-}
-
-const salesCatalogWeakAnswerWords = new Set([
-  "produto",
-  "produtos",
-  "opcao",
-  "opcoes",
-  "link",
-  "links",
-  "botao",
-  "botoes",
-  "pagina",
-  "paginas",
-  "preco",
-  "valor",
-  "brl",
-]);
-
-function resolveSalesCatalogDeliveryIntro(text: string, hasOrderIntent: boolean) {
-  const candidate = extractFirstSalesCatalogSentence(text);
-
-  if (!candidate || isWeakSalesCatalogIntro(candidate)) {
-    return hasOrderIntent
-      ? "Fechado. Separei o pedido para você:"
-      : "Tenho sim. Separei algumas opções boas para você:";
-  }
-
-  return preview(candidate.replace(/[:;]\s*$/, "."), 180);
-}
-
-function extractFirstSalesCatalogSentence(text: string) {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  for (const line of lines) {
-    if (/^-/.test(line)) continue;
-
-    const sentences = line.match(/[^.!?\n]+[.!?]?/g) ?? [line];
-
-    for (const sentence of sentences) {
-      const candidate = sentence.trim();
-      if (!candidate || isShortSalesCatalogGreeting(candidate)) continue;
-      return candidate;
-    }
-  }
-
-  return "";
-}
-
-function isShortSalesCatalogGreeting(text: string) {
-  const normalized = normalizeSearch(text);
-
-  return normalized.length <= 30 && /\b(boa|bom dia|boa tarde|boa noite|ola|oi|opa|show|perfeito|fechado)\b/.test(normalized);
-}
-
-function isWeakSalesCatalogIntro(text: string) {
-  const normalized = normalizeSearch(text);
-
-  return /\b(algumas opcoes|varios produtos|opcoes bem fortes|separei as paginas|detalhes completos|qual desses|segue o link|botao abaixo)\b/.test(normalized);
+  if (input.text.trim()) return input.text;
+  const items = input.items.filter(isSalesCatalogItemSellable).slice(0, SALES_CATALOG_REPLY_ITEM_LIMIT);
+  if (!items.length) return "";
+  return items.map((item) => `- ${formatSalesCatalogCustomerMention(item)}`).join("\n");
 }
 
 function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCatalogItem) {
@@ -9006,24 +8880,8 @@ function resolveSalesCatalogOrderSelections(input: {
   const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentSelections.length);
 
   if (selected.size === 0 && !isSalesCatalogCartAdditionOnlyIntent(input.intentText)) {
-    const deliveryDetailsPromptText = buildRecentSalesCatalogDeliveryDetailsPromptText(input.context.messages, latestInbound);
-
-    if (deliveryDetailsPromptText) {
-      for (const selection of selectSalesCatalogOrderSelectionsFromText(
-        input.context.salesCatalog,
-        deliveryDetailsPromptText,
-        "cart_draft",
-      )) {
-        addSelection(selection);
-      }
-
-      if (selected.size > 0) {
-        return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
-      }
-    }
-
-    const cartDraftText = buildRecentSalesCatalogCartDraftPreviewText(input.context.messages, latestInbound);
-
+    // Recency wins over prompt type: an old address request cannot replace a newer cart.
+    const cartDraftText = buildRecentSalesCatalogCartSelectionText(input.context, latestInbound);
     if (cartDraftText) {
       for (const selection of selectSalesCatalogOrderSelectionsFromText(
         input.context.salesCatalog,
@@ -9032,7 +8890,6 @@ function resolveSalesCatalogOrderSelections(input: {
       )) {
         addSelection(selection);
       }
-
       return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
     }
   }
@@ -9377,10 +9234,6 @@ function shouldUseSalesCatalogControlledPaymentStepText(input: {
     && !input.shouldWaitForPaymentMethodChoice;
 }
 
-function buildSalesCatalogControlledPaymentStepText() {
-  return "Perfeito, pedido confirmado. Vou seguir com o próximo passo do pagamento usando os dados do pedido.";
-}
-
 function shouldWaitForSalesCatalogPaymentMethodChoice(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   hasConfirmedCheckoutIntent: boolean;
@@ -9578,6 +9431,7 @@ function hasRecentSalesCatalogCheckoutConfirmation(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   intentText: string,
 ) {
+  if (requiresCommerceConversationReply(intentText)) return false;
   const latestInbound = findLatestInbound(context.messages);
   const previewText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(context.messages, latestInbound);
 
@@ -9589,12 +9443,8 @@ function hasRecentSalesCatalogCheckoutConfirmation(
     return true;
   }
 
-  const directPreference = detectSalesCatalogPreferredPaymentMethod(intentText)
-    ?? detectRecentSalesCatalogPaymentPreference(context.messages, latestInbound);
-  return Boolean(
-    directPreference
-    && hasRecentSalesCatalogPaymentMethodChoicePrompt(context.messages, latestInbound),
-  );
+  // A remembered payment preference is not fresh consent (e.g. "obrigado" after choosing Pix).
+  return Boolean(detectSalesCatalogPreferredPaymentMethod(intentText));
 }
 
 function buildRecentSalesCatalogCheckoutConfirmationPreviewText(
@@ -9646,10 +9496,13 @@ function findRecentSalesCatalogCheckoutConfirmationPreview(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
-  const block = buildRecentOutboundMessageBlocks(messages, latestInbound)
-    .find((candidate) => isSalesCatalogCheckoutConfirmationPreviewText(candidate.text));
+  const blocks = buildRecentOutboundMessageBlocks(messages, latestInbound);
+  const block = blocks.find((candidate) => isSalesCatalogCheckoutConfirmationPreviewText(candidate.text)
+    || isSalesCatalogCartDraftPreviewText(candidate.text)
+    || isSalesCatalogCartOfferPromptText(candidate.text)
+    || isSalesCatalogDeliveryDetailsPromptText(candidate.text));
 
-  return block
+  return block && isSalesCatalogCheckoutConfirmationPreviewText(block.text)
     ? {
         ...block.firstMessage,
         text_content: block.text,
@@ -9657,14 +9510,20 @@ function findRecentSalesCatalogCheckoutConfirmationPreview(
     : null;
 }
 
-function buildRecentSalesCatalogCartDraftPreviewText(
-  messages: ConversationMessageRow[],
+function buildRecentSalesCatalogCartSelectionText(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
 ) {
-  return buildRecentOutboundMessageBlocks(messages, latestInbound)
-    .find((candidate) => isSalesCatalogCartDraftPreviewText(candidate.text))
-    ?.text
-    .trim() ?? "";
+  return buildRecentOutboundMessageBlocks(context.messages, latestInbound)
+    .find((block) => {
+      if (isSalesCatalogCartDraftPreviewText(block.text) || isSalesCatalogDeliveryDetailsPromptText(block.text)) return true;
+      if (!isSalesCatalogCartOfferPromptText(block.text)) return false;
+      const choices = selectSalesCatalogItemsForOrderText(context.salesCatalog, block.text);
+      if (!choices.length || (choices.length > 1 && /\bou\b/.test(normalizeSearch(block.text)))) return false;
+      const reply = context.messages.find((message) => message.direction === "inbound"
+        && Date.parse(message.occurred_at) > Date.parse(block.firstMessage.occurred_at));
+      return Boolean(reply && hasSalesCatalogCheckoutConfirmationIntent(reply.text_content ?? ""));
+    })?.text.trim() ?? "";
 }
 
 function hasRecentSalesCatalogCartOfferConfirmation(
@@ -9690,7 +9549,9 @@ function buildRecentSalesCatalogCartOfferText(
         return false;
       }
 
-      return selectSalesCatalogItemsForOrderText(items, candidate.text)
+      const choices = selectSalesCatalogItemsForOrderText(items, candidate.text);
+      if (choices.length > 1 && /\bou\b/.test(normalizeSearch(candidate.text))) return false;
+      return choices
         .some((item) => item.salesDestination === "connectyhub_checkout" && item.status === "active" && isSalesCatalogItemSellable(item));
     })
     ?.text
@@ -9862,6 +9723,7 @@ function buildRecentOutboundMessageBlocks(
 }
 
 function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
+  if (requiresCommerceConversationReply(text)) return false;
   const normalized = normalizeSearch(text);
 
   if (!normalized) {
@@ -9874,7 +9736,7 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
 
   return (
     /^(?:sim|s|quero|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
-    || /\b(?:pode fechar|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
+    || /\b(?:pode fechar|pode continuar|pode seguir|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
     || /^(?:yes|yep|yeah|sure|confirmed|confirm|go ahead|send it)\b/.test(normalized)
     || /\b(?:yes please|send the link|close the order)\b/.test(normalized)
     || /^(?:si|dale|correcto|confirmo|confirmado|eso|es eso|esta bien)\b/.test(normalized)
@@ -10041,7 +9903,8 @@ function normalizedTextHasToken(normalizedText: string, token: string) {
 }
 
 function resolveSalesCatalogMentionQuantity(text: string, item: RuntimeSalesCatalogItem) {
-  const normalizedText = normalizeSearch(text);
+  // Strip prices before punctuation normalization turns "403,67) + Produto" into "403 67 Produto".
+  const normalizedText = normalizeSearch(text.replace(/(?:R\$|BRL)\s*\d+(?:[.,]\d+)*/gi, " valor "));
   const rawText = text.toLowerCase();
   const candidates = buildSalesCatalogOrderMentionCandidates(item);
   const match = candidates
@@ -10415,271 +10278,139 @@ async function recordSalesCatalogOrderIntent(input: {
     return null;
   }
 
-  try {
-    const { data: existingData } = await input.client
-      .from("sales_catalog_orders")
-      .select("id")
-      .eq("organization_id", input.context.organization.id)
-      .eq("metadata->>agent_run_id", input.context.run.id)
-      .limit(1)
-      .maybeSingle();
-    const existing = existingData as unknown as { id: string } | null;
+  const { data: existingData, error: existingOrderError } = await input.client
+    .from("sales_catalog_orders")
+    .select("id")
+    .eq("organization_id", input.context.organization.id)
+    .eq("metadata->>agent_run_id", input.context.run.id)
+    .limit(1)
+    .maybeSingle();
+  if (existingOrderError) {
+    throw new Error(`Não foi possível verificar se o pedido já existe: ${existingOrderError.message}`);
+  }
+  const existing = existingData as unknown as { id: string } | null;
 
-    if (existing?.id) {
-      return null;
-    }
+  if (existing?.id) {
+    return null;
+  }
 
-    let customerName = input.context.lead
-      ? resolveLeadPersonalName({
-          displayName: input.context.lead.display_name,
-          metadata: input.context.lead.metadata,
-        })
-      : null;
-    const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
-    const leadMetadata = input.context.lead?.metadata;
-    const checkoutInboundMemoryText = buildRecentSalesCatalogCheckoutInboundMemoryText(
-      input.context.messages,
-      findLatestInbound(input.context.messages),
-    );
-    const customerDataText = [intentText, input.text, checkoutInboundMemoryText].filter(Boolean).join("\n");
-    customerName = customerName
-      ?? extractRuntimeCustomerNameFromStructuredReply(customerDataText)
-      ?? extractRuntimeCustomerName(customerDataText);
-    const customerEmail = normalizeRuntimeEmail(findString(leadMetadata, ["email", "customer_email", "lead_email"]))
-      ?? extractRuntimeEmail(customerDataText);
-    const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
-      ?? extractRuntimeCustomerDocument(customerDataText);
-    const orderSelections = orderCatalogSelections.map((selection) => {
-      const { item } = selection;
-      const mentionText = [selection.mentionText, intentText, input.text].filter(Boolean).join(" ");
-      const sku = resolveRuntimeOrderSku(item, mentionText);
-      const selectedAttributes = resolveRuntimeOrderSelectedAttributes(item, sku, mentionText);
-      const unitPrice = sku?.price ?? item.price;
-      const salePrice = sku?.salePrice ?? item.offer.salePrice;
-      const unitTotal = salePrice ?? unitPrice;
-      const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
-
-      return {
-        item,
-        sku,
-        quantity: selection.quantity,
-        attributes: selectedAttributes.attributes.length > 0
-          ? selectedAttributes.attributes
-          : sku?.attributes.length
-            ? sku.attributes
-            : item.attributes,
-        attributeModifiers: selectedAttributes.modifiers,
-        attributeModifierTotal: selectedAttributes.modifierTotal,
-        unitPrice,
-        salePrice,
-        total,
-        source: selection.source,
-        mentionText,
-        quantitySignal: selection.quantitySignal,
-        fractionalQuantity: selection.fractionalQuantity,
-      };
-    });
-    const primaryItem = orderSelections[0].item;
-    const total = sumRuntimeOrderTotal(orderSelections);
-    const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
-    const commercialFlowType = containsPlatformProducts
-      ? items.some((item) => item.commercialFlowType === "connectyhub_direct") ? "connectyhub_direct" : "connectyhub_resale"
-      : "client_direct";
-    const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
-    const commissionEligible = items.some((item) => item.commissionEligible);
-    const shippingIntentText = [intentText, checkoutInboundMemoryText].filter(Boolean).join("\n");
-    const initialShipping = resolveInitialSalesCatalogOrderShipping({
-      context: input.context,
-      selections: orderSelections,
-      intentText: shippingIntentText,
-    });
-
-    if (
-      hasPhysicalSalesCatalogSelection(orderSelections)
-      && canResolveSalesCatalogDeliveryForSelections(input.context, orderSelections)
-      && !initialShipping
-    ) {
-      return null;
-    }
-
-    const payableTotal = initialShipping
-      ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total
-      : total;
-    const now = new Date().toISOString();
-    const { data: orderData, error: orderError } = await input.client
-      .from("sales_catalog_orders")
-      .insert({
-        organization_id: input.context.organization.id,
-        lead_id: input.context.lead?.id ?? null,
-        conversation_id: input.context.conversationId,
-        source: "whatsapp_agent",
-        status: "pending_payment",
-        payment_status: "pending",
-        fulfillment_status: primaryItem.fulfillment.schedulingRequired ? "scheduled" : "pending",
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_email: customerEmail,
-        customer_document: customerDocument,
-        subtotal: total,
-        destination_cep: initialShipping?.destinationCep ?? null,
-        destination_address: initialShipping?.destinationAddress ?? null,
-        shipping_total: initialShipping?.shippingTotal ?? null,
-        shipping_method: initialShipping?.shippingMethod ?? null,
-        total: payableTotal,
-        commercial_flow_type: commercialFlowType,
-        revenue_owner_type: revenueOwnerType,
-        contains_platform_products: containsPlatformProducts,
-        commission_eligible: commissionEligible,
-        agent_notes: preview(input.text, 1000),
-        metadata: {
-          created_from: "whatsapp_agent_runtime",
-          agent_run_id: input.context.run.id,
-          agent_id: input.context.agent.id,
-          whatsapp_instance_id: input.context.instance.id,
-          provider_instance_id: input.context.instance.provider_instance_id,
-          selected_catalog_item_ids: items.map((item) => item.id),
-          selected_catalog_item_tags: items.map((item) => item.tag),
-          conversation_cart_items: orderSelections.map((selection) => ({
-            catalog_item_id: selection.item.id,
-            title: selection.item.title,
-            tag: selection.item.tag,
-            quantity: selection.quantity,
-            source: selection.source,
-            quantity_signal: selection.quantitySignal,
-            fractional_quantity: selection.fractionalQuantity,
-            selected_attributes: selection.attributes,
-            attribute_modifiers: selection.attributeModifiers,
-            attribute_modifier_total: selection.attributeModifierTotal,
-            billing_cycle: selection.item.billingCycle,
-            billing_interval: selection.item.billingInterval,
-            mention_preview: selection.mentionText,
-          })),
-          billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle))),
-          initial_shipping: initialShipping?.metadata ?? null,
-          commercial_flow_type: commercialFlowType,
-          revenue_owner_type: revenueOwnerType,
-          commission_eligible: commissionEligible,
-          platform_product_ids: items.map((item) => item.platformProductId).filter(Boolean),
-        },
-        created_at: now,
-        updated_at: now,
+  let customerName = input.context.lead
+    ? resolveLeadPersonalName({
+        displayName: input.context.lead.display_name,
+        metadata: input.context.lead.metadata,
       })
-      .select("id")
-      .single();
-    const order = orderData as unknown as { id: string } | null;
+    : null;
+  const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
+  const leadMetadata = input.context.lead?.metadata;
+  const checkoutInboundMemoryText = buildRecentSalesCatalogCheckoutInboundMemoryText(
+    input.context.messages,
+    findLatestInbound(input.context.messages),
+  );
+  const customerDataText = [intentText, checkoutInboundMemoryText].filter(Boolean).join("\n");
+  customerName = customerName
+    ?? extractRuntimeCustomerNameFromStructuredReply(customerDataText)
+    ?? extractRuntimeCustomerName(customerDataText);
+  const customerEmail = normalizeRuntimeEmail(findString(leadMetadata, ["email", "customer_email", "lead_email"]))
+    ?? extractRuntimeEmail(customerDataText);
+  const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
+    ?? extractRuntimeCustomerDocument(customerDataText);
+  const orderSelections = orderCatalogSelections.map((selection) => {
+    const { item } = selection;
+    const mentionText = [selection.mentionText, intentText, input.text].filter(Boolean).join(" ");
+    const sku = resolveRuntimeOrderSku(item, mentionText);
+    const selectedAttributes = resolveRuntimeOrderSelectedAttributes(item, sku, mentionText);
+    const unitPrice = sku?.price ?? item.price;
+    const salePrice = sku?.salePrice ?? item.offer.salePrice;
+    const unitTotal = salePrice ?? unitPrice;
+    const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
 
-    if (orderError || !order?.id) {
-      return null;
-    }
-
-    if (initialShipping?.destinationAddress && hasRuntimeCompleteDeliveryAddress(initialShipping.destinationAddress)) {
-      await persistLeadDeliveryAddressSnapshot({
-        client: input.client,
-        context: input.context,
-        orderId: order.id,
-        destinationAddress: initialShipping.destinationAddress,
-        destinationCep: initialShipping.destinationCep,
-        source: "initial_order",
-      }).catch(() => {});
-    }
-
-    const orderItems = orderSelections.map(({
+    return {
       item,
       sku,
-      quantity,
+      quantity: selection.quantity,
+      attributes: selectedAttributes.attributes.length > 0
+        ? selectedAttributes.attributes
+        : sku?.attributes.length
+          ? sku.attributes
+          : item.attributes,
+      attributeModifiers: selectedAttributes.modifiers,
+      attributeModifierTotal: selectedAttributes.modifierTotal,
       unitPrice,
       salePrice,
-      total: itemTotal,
-      attributes,
-      attributeModifiers,
-      attributeModifierTotal,
-      source,
+      total,
+      source: selection.source,
       mentionText,
-      quantitySignal,
-      fractionalQuantity,
-    }) => {
-      return {
-        order_id: order.id,
-        organization_id: input.context.organization.id,
-        catalog_item_id: item.id,
-        sku_id: sku?.id ?? null,
-        sku_code: sku?.skuCode ?? null,
-        title: sku?.title || item.title,
-        tag: item.tag,
-        quantity,
-        unit_price: unitPrice,
-        sale_price: salePrice,
-        total: itemTotal,
-        product_origin_type: item.productOriginType,
-        commercial_flow_type: item.commercialFlowType,
-        revenue_owner_type: item.revenueOwnerType,
-        commission_eligible: item.commissionEligible,
-        platform_product_id: item.platformProductId,
-        attributes: attributes.map((attribute) => ({
-          id: attribute.id,
-          name: attribute.name,
-          values: attribute.values,
-        })),
-        fulfillment: {
-          mode: item.fulfillment.mode,
-          scheduling_required: item.fulfillment.schedulingRequired,
-          service_duration: item.fulfillment.serviceDuration,
-          delivery_instructions: item.fulfillment.deliveryInstructions,
-          access_instructions: item.fulfillment.accessInstructions,
-        },
-        metadata: {
-          category: item.category,
-          currency: sku?.currency ?? item.currency,
-          source: item.source,
-          stock_status: sku?.stockStatus ?? item.inventory.status,
-          billing_cycle: item.billingCycle,
-          billing_interval: item.billingInterval,
-          platform_product_id: item.platformProductId,
-          platform_product_code: item.platformProductCode,
-          commercial_flow_type: item.commercialFlowType,
-          revenue_owner_type: item.revenueOwnerType,
-          commission_policy_type: item.commissionPolicyType,
-          commission_eligible: item.commissionEligible,
-          platform_product_commission_percentage: item.platformProductCommissionPercentage,
-          platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
-          platform_product_agent_prompt: item.platformProductAgentPrompt,
-          conversation_cart_source: source,
-          conversation_cart_quantity_signal: quantitySignal,
-          conversation_cart_fractional_quantity: fractionalQuantity,
-          conversation_cart_selected_attributes: attributes,
-          conversation_cart_attribute_modifiers: attributeModifiers,
-          conversation_cart_attribute_modifier_total: attributeModifierTotal,
-          conversation_cart_mention_preview: mentionText,
-        },
-      };
-    });
+      quantitySignal: selection.quantitySignal,
+      fractionalQuantity: selection.fractionalQuantity,
+    };
+  });
+  const primaryItem = orderSelections[0].item;
+  const total = sumRuntimeOrderTotal(orderSelections);
+  const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
+  const commercialFlowType = containsPlatformProducts
+    ? items.some((item) => item.commercialFlowType === "connectyhub_direct") ? "connectyhub_direct" : "connectyhub_resale"
+    : "client_direct";
+  const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
+  const commissionEligible = items.some((item) => item.commissionEligible);
+  const shippingIntentText = [intentText, checkoutInboundMemoryText].filter(Boolean).join("\n");
+  const initialShipping = resolveInitialSalesCatalogOrderShipping({
+    context: input.context,
+    selections: orderSelections,
+    intentText: shippingIntentText,
+  });
 
-    await input.client.from("sales_catalog_order_items").insert(orderItems);
-    await input.client.from("intelligence_events").insert({
-      scope: "organization",
+  if (
+    hasPhysicalSalesCatalogSelection(orderSelections)
+    && canResolveSalesCatalogDeliveryForSelections(input.context, orderSelections)
+    && !initialShipping
+  ) {
+    return null;
+  }
+
+  const payableTotal = initialShipping
+    ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total
+    : total;
+  const now = new Date().toISOString();
+  const { data: orderData, error: orderError } = await input.client
+    .from("sales_catalog_orders")
+    .insert({
       organization_id: input.context.organization.id,
-      source_type: "sales_catalog_order",
-      source_id: order.id,
-      producer_agent_id: input.context.agent.id,
-      event_type: "sales_catalog.order_intent_created",
-      title: "Intencao de pedido criada pelo WhatsApp",
-      summary: items.map((item) => item.title).join(", "),
-      confidence: 0.76,
-      visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "whatsapp", "lead_tracking"],
-      payload: {
-        order_id: order.id,
-        lead_id: input.context.lead?.id ?? null,
-        conversation_id: input.context.conversationId,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      source: "whatsapp_agent",
+      status: "pending_payment",
+      payment_status: "pending",
+      fulfillment_status: primaryItem.fulfillment.schedulingRequired ? "scheduled" : "pending",
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_document: customerDocument,
+      subtotal: total,
+      destination_cep: initialShipping?.destinationCep ?? null,
+      destination_address: initialShipping?.destinationAddress ?? null,
+      shipping_total: initialShipping?.shippingTotal ?? null,
+      shipping_method: initialShipping?.shippingMethod ?? null,
+      total: payableTotal,
+      commercial_flow_type: commercialFlowType,
+      revenue_owner_type: revenueOwnerType,
+      contains_platform_products: containsPlatformProducts,
+      commission_eligible: commissionEligible,
+      agent_notes: preview(input.text, 1000),
+      metadata: {
+        created_from: "whatsapp_agent_runtime",
+        agent_run_id: input.context.run.id,
+        checkout_confirmed_at: latestInbound?.occurred_at ?? now,
+        checkout_confirmed_message_id: latestInbound?.id ?? null,
+        preferred_payment_method: paymentPreference,
+        agent_id: input.context.agent.id,
         whatsapp_instance_id: input.context.instance.id,
         provider_instance_id: input.context.instance.provider_instance_id,
-        agent_run_id: input.context.run.id,
-        product_ids: items.map((item) => item.id),
-        product_tags: items.map((item) => item.tag),
-        cart_items: orderSelections.map((selection) => ({
-          product_id: selection.item.id,
-          product_tag: selection.item.tag,
+        selected_catalog_item_ids: items.map((item) => item.id),
+        selected_catalog_item_tags: items.map((item) => item.tag),
+        conversation_cart_items: orderSelections.map((selection) => ({
+          catalog_item_id: selection.item.id,
           title: selection.item.title,
+          tag: selection.item.tag,
           quantity: selection.quantity,
           source: selection.source,
           quantity_signal: selection.quantitySignal,
@@ -10687,26 +10418,171 @@ async function recordSalesCatalogOrderIntent(input: {
           selected_attributes: selection.attributes,
           attribute_modifiers: selection.attributeModifiers,
           attribute_modifier_total: selection.attributeModifierTotal,
+          billing_cycle: selection.item.billingCycle,
+          billing_interval: selection.item.billingInterval,
+          mention_preview: selection.mentionText,
         })),
+        billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle))),
+        initial_shipping: initialShipping?.metadata ?? null,
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_eligible: commissionEligible,
+        platform_product_ids: items.map((item) => item.platformProductId).filter(Boolean),
       },
-    });
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+  const order = orderData as unknown as { id: string } | null;
 
-    await scheduleSalesCatalogOrderAbandonedFollowUp({
-      client: input.client,
-      context: input.context,
-      orderId: order.id,
-    });
-
-    return maybeCreateSalesCatalogPaymentLink({
-      client: input.client,
-      context: input.context,
-      orderId: order.id,
-      total: payableTotal,
-      preferredMethod: paymentPreference,
-    });
-  } catch {
-    return null;
+  if (orderError || !order?.id) {
+    throw new Error(`Não foi possível salvar o pedido: ${orderError?.message ?? "pedido sem identificador"}`);
   }
+
+  if (initialShipping?.destinationAddress && hasRuntimeCompleteDeliveryAddress(initialShipping.destinationAddress)) {
+    await persistLeadDeliveryAddressSnapshot({
+      client: input.client,
+      context: input.context,
+      orderId: order.id,
+      destinationAddress: initialShipping.destinationAddress,
+      destinationCep: initialShipping.destinationCep,
+      source: "initial_order",
+    }).catch(() => {});
+  }
+
+  const orderItems = orderSelections.map(({
+    item,
+    sku,
+    quantity,
+    unitPrice,
+    salePrice,
+    total: itemTotal,
+    attributes,
+    attributeModifiers,
+    attributeModifierTotal,
+    source,
+    mentionText,
+    quantitySignal,
+    fractionalQuantity,
+  }) => {
+    return {
+      order_id: order.id,
+      organization_id: input.context.organization.id,
+      catalog_item_id: item.id,
+      sku_id: sku?.id ?? null,
+      sku_code: sku?.skuCode ?? null,
+      title: sku?.title || item.title,
+      tag: item.tag,
+      quantity,
+      unit_price: unitPrice,
+      sale_price: salePrice,
+      total: itemTotal,
+      product_origin_type: item.productOriginType,
+      commercial_flow_type: item.commercialFlowType,
+      revenue_owner_type: item.revenueOwnerType,
+      commission_eligible: item.commissionEligible,
+      platform_product_id: item.platformProductId,
+      attributes: attributes.map((attribute) => ({
+        id: attribute.id,
+        name: attribute.name,
+        values: attribute.values,
+      })),
+      fulfillment: {
+        mode: item.fulfillment.mode,
+        scheduling_required: item.fulfillment.schedulingRequired,
+        service_duration: item.fulfillment.serviceDuration,
+        delivery_instructions: item.fulfillment.deliveryInstructions,
+        access_instructions: item.fulfillment.accessInstructions,
+      },
+      metadata: {
+        category: item.category,
+        currency: sku?.currency ?? item.currency,
+        source: item.source,
+        stock_status: sku?.stockStatus ?? item.inventory.status,
+        billing_cycle: item.billingCycle,
+        billing_interval: item.billingInterval,
+        platform_product_id: item.platformProductId,
+        platform_product_code: item.platformProductCode,
+        commercial_flow_type: item.commercialFlowType,
+        revenue_owner_type: item.revenueOwnerType,
+        commission_policy_type: item.commissionPolicyType,
+        commission_eligible: item.commissionEligible,
+        platform_product_commission_percentage: item.platformProductCommissionPercentage,
+        platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
+        platform_product_agent_prompt: item.platformProductAgentPrompt,
+        conversation_cart_source: source,
+        conversation_cart_quantity_signal: quantitySignal,
+        conversation_cart_fractional_quantity: fractionalQuantity,
+        conversation_cart_selected_attributes: attributes,
+        conversation_cart_attribute_modifiers: attributeModifiers,
+        conversation_cart_attribute_modifier_total: attributeModifierTotal,
+        conversation_cart_mention_preview: mentionText,
+      },
+    };
+  });
+
+  const { error: orderItemsError } = await input.client.from("sales_catalog_order_items").insert(orderItems);
+  if (orderItemsError) {
+    await input.client.from("sales_catalog_orders").update({ status: "needs_human" })
+      .eq("id", order.id).eq("organization_id", input.context.organization.id);
+    throw new Error(`Não foi possível salvar os itens do pedido: ${orderItemsError.message}`);
+  }
+  input.context.salesCatalogOrders = await loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.order_intent_created",
+    title: "Intencao de pedido criada pelo WhatsApp",
+    summary: items.map((item) => item.title).join(", "),
+    confidence: 0.76,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      whatsapp_instance_id: input.context.instance.id,
+      provider_instance_id: input.context.instance.provider_instance_id,
+      agent_run_id: input.context.run.id,
+      product_ids: items.map((item) => item.id),
+      product_tags: items.map((item) => item.tag),
+      cart_items: orderSelections.map((selection) => ({
+        product_id: selection.item.id,
+        product_tag: selection.item.tag,
+        title: selection.item.title,
+        quantity: selection.quantity,
+        source: selection.source,
+        quantity_signal: selection.quantitySignal,
+        fractional_quantity: selection.fractionalQuantity,
+        selected_attributes: selection.attributes,
+        attribute_modifiers: selection.attributeModifiers,
+        attribute_modifier_total: selection.attributeModifierTotal,
+      })),
+    },
+  });
+
+  await scheduleSalesCatalogOrderAbandonedFollowUp({
+    client: input.client,
+    context: input.context,
+    orderId: order.id,
+  });
+
+  return maybeCreateSalesCatalogPaymentLink({
+    client: input.client,
+    context: input.context,
+    orderId: order.id,
+    total: payableTotal,
+    preferredMethod: paymentPreference,
+  });
+
 }
 
 async function maybeCreateSalesCatalogPaymentLink(input: {
@@ -10778,6 +10654,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   latestInbound: ConversationMessageRow | null;
   userText: string;
 }): Promise<OutboundMessage | null> {
+  if (requiresCommerceConversationReply(input.userText)) return null;
   const order = findRecentPendingSalesCatalogCheckoutOrder(input.context.salesCatalogOrders, input.latestInbound);
 
   if (
@@ -10792,6 +10669,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   if (
     resolvesSalesCatalogPaymentPrerequisiteText(input.userText, input.latestInbound)
+    && !order.checkoutConfirmedAt
     && !hasRecentSalesCatalogCheckoutConfirmation(input.context, input.userText)
     && !runtimeSalesCatalogOrderRequiresShippingBeforePayment(order)
     && !hasRecentSalesCatalogPaymentMethodChoicePrompt(input.context.messages, input.latestInbound)
@@ -10863,19 +10741,19 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
-  if (preferredMethod === "card" && currentMethod !== "card") {
-    const cardPayment = await createSalesCatalogPixPaymentSession({
+  if (preferredMethod && currentMethod !== preferredMethod) {
+    const methodPayment = await createSalesCatalogPixPaymentSession({
       client: input.client,
       organizationId: input.context.organization.id,
       orderId: order.id,
       amount: order.total ?? data.amount,
       payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
-      preferredMethod: "card",
+      preferredMethod,
       source: "whatsapp_agent",
       actorId: null,
     }).catch(() => null);
 
-    if (!cardPayment) {
+    if (!methodPayment) {
       return null;
     }
 
@@ -10886,18 +10764,18 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       phone: input.phone,
       payment: {
         orderId: order.id,
-        amount: cardPayment.session.amount ?? order.total ?? (data.amount !== null && data.amount !== undefined ? String(data.amount) : null),
-        provider: cardPayment.session.provider,
-        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(cardPayment.session.provider),
-        checkoutUrl: cardPayment.checkoutUrl,
-        trackingUrl: cardPayment.trackingUrl ?? null,
-        pixQrCode: cardPayment.pixQrCode,
-        pixTicketUrl: cardPayment.pixTicketUrl,
-        gatewayUnavailable: cardPayment.gatewayUnavailable === true,
-        paymentDeferred: cardPayment.paymentDeferred === true,
-        paymentDeferredReason: cardPayment.paymentDeferredReason ?? null,
-        preferredMethod: "card",
-        failureReason: cardPayment.session.failureReason ?? null,
+        amount: methodPayment.session.amount ?? order.total ?? (data.amount !== null && data.amount !== undefined ? String(data.amount) : null),
+        provider: methodPayment.session.provider,
+        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(methodPayment.session.provider),
+        checkoutUrl: methodPayment.checkoutUrl,
+        trackingUrl: methodPayment.trackingUrl ?? null,
+        pixQrCode: methodPayment.pixQrCode,
+        pixTicketUrl: methodPayment.pixTicketUrl,
+        gatewayUnavailable: methodPayment.gatewayUnavailable === true,
+        paymentDeferred: methodPayment.paymentDeferred === true,
+        paymentDeferredReason: methodPayment.paymentDeferredReason ?? null,
+        preferredMethod,
+        failureReason: methodPayment.session.failureReason ?? null,
       },
     });
   }
@@ -11161,11 +11039,20 @@ function isSalesCatalogPaymentLinkFollowUp(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
+  if (requiresCommerceConversationReply(userText)) return false;
   const rawText = userText.trim();
   const normalized = normalizeSearch(rawText);
 
   if (!rawText) {
     return false;
+  }
+
+  if (/\bja\b.{0,40}\b(?:passei|enviei|mandei|informei|falei)\b/.test(normalized)) {
+    return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
+  }
+
+  if (detectSalesCatalogPreferredPaymentMethod(rawText) && hasRecentSalesCatalogCheckoutPromise(messages, latestInbound)) {
+    return true;
   }
 
   if (/^\?+$/.test(rawText.replace(/\s+/g, ""))) {
@@ -11415,7 +11302,8 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     : !normalizeRuntimeEmail(findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]));
   const needsCustomerDocument = order
     ? runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(input.context, order, input.payment.provider)
-    : input.payment.provider === "asaas";
+    : input.payment.provider === "asaas"
+      && !normalizeRuntimeCustomerDocument(findString(input.context.lead?.metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document"]));
   const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
   const deliveryDataLabel = "endereço completo com rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver";
@@ -11434,13 +11322,18 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     ...missingCustomerDataLabels,
     needsDeliveryAddress && savedDeliveryLines.length === 0 ? deliveryDataLabel : null,
   ].filter((item): item is string => Boolean(item));
-  const intro = !needsHumanForDelivery
-    ? "Antes de gerar o pagamento, preciso confirmar seus dados do pedido."
-    : "Antes de gerar o pagamento, preciso confirmar a entrega desse pedido com uma pessoa do time.";
+  if (!needsHumanForDelivery && missingDataLabels.length === 0 && savedDeliveryLines.length === 0) {
+    // The customer has nothing left to supply; do not send an empty data request forever.
+    return sendSalesCatalogPaymentUnavailableWhatsapp(input);
+  }
+  const intro = needsHumanForDelivery
+    ? "Preciso confirmar a entrega desse pedido com uma pessoa do time."
+    : missingDataLabels.length > 0
+      ? `Para liberar o pagamento, ${missingDataLabels.length === 1 ? "falta" : "faltam"} ${formatRuntimeDataList(missingDataLabels)}.`
+      : "";
   const messageText = [
     intro,
     ...savedDeliveryLines,
-    missingDataLabels.length > 0 ? `Me envie: ${formatRuntimeDataList(missingDataLabels)}.` : "",
     needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
     needsHumanForDelivery
       ? "A loja ainda não habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
@@ -12367,6 +12260,7 @@ async function persistSalesCatalogUnavailableOrderAttempt(input: {
 }
 
 function hasSalesCatalogOrderIntent(text: string) {
+  if (requiresCommerceConversationReply(text)) return false;
   const normalized = normalizeSearch(text);
 
   if (isSalesCatalogRecommendationBeforePurchaseIntent(normalized)) {
@@ -12398,18 +12292,14 @@ function isSalesCatalogRecommendationBeforePurchaseIntent(normalizedText: string
 
 function detectSalesCatalogPreferredPaymentMethod(text: string): SalesCatalogRuntimePaymentPreference | null {
   const normalized = normalizeSearch(text);
-
-  if (!normalized) return null;
-
-  if (/\b(?:cartao|credito|debito|card)\b/.test(normalized)) {
-    return "card";
-  }
-
-  if (/\b(?:pix|copia e cola|qrcode|qr code)\b/.test(normalized)) {
-    return "pix";
-  }
-
-  return null;
+  if (!normalized || /\b(?:pix\s+ou\s+cartao|cartao\s+ou\s+pix)\b/.test(normalized)) return null;
+  const mentions = Array.from(normalized.matchAll(/\b(?:cartao|credito|debito|card|pix|copia e cola|qrcode|qr code)\b/g));
+  const positive = mentions.filter((mention) => {
+    const before = normalized.slice(0, mention.index).trim();
+    return !/\b(?:nao|sem|em vez de|ao inves de)(?:\s+(?:quero|o|no|em|pelo|pagar|usar|de))*$/.test(before);
+  });
+  const chosen = positive[positive.length - 1]?.[0];
+  return chosen ? /^(?:cartao|credito|debito|card)$/.test(chosen) ? "card" : "pix" : null;
 }
 
 function isSalesCatalogCartAdditionOnlyIntent(text: string) {
@@ -13557,11 +13447,13 @@ async function persistCloneRealTestTurn(
     latestInbound: ConversationMessageRow | null;
   },
 ) {
+  input = { ...input, aiText: input.outbound.map((message) => message.text).filter(Boolean).join("\n\n") };
+  const deliveredAction = input.outbound.some((message) => message.interactiveButton || message.buttonFallback);
   const profile = normalizeWhatsappCloneProfile(readRecord(context.agent.metadata)?.whatsapp_clone_profile);
   const outputLinks = extractLinks(input.aiText);
   const normalizedOutput = normalizeSearch(input.aiText);
   const linkPromiseWithoutLink = /\b(vou mandar|vou te mandar|te mando|segue o link|aqui o link|link da|link do|botao|catalogo|arquivo)\b/.test(normalizedOutput)
-    && outputLinks.length === 0;
+    && outputLinks.length === 0 && !deliveredAction;
   const identityRisk = hasUnsafeIdentityDisclosure(input.aiText);
   const genericRisk = /\b(como posso ajudar|fico a disposicao|estou aqui para ajudar|posso auxiliar)\b/.test(normalizedOutput);
   const reviewFlags = [
@@ -13604,6 +13496,7 @@ async function persistCloneRealTestTurn(
       outboundMessages: input.outbound.length,
       outboundModes: Array.from(new Set(input.outbound.map((message) => message.mode))),
       linkCount: outputLinks.length,
+      deliveredAction,
       usedSharedCompanyContext: Boolean(context.crossAgentContext?.messages.length),
       cloneProfileEnabled: profile.enabled,
       cloneProfileSource: profile.source,
@@ -13767,7 +13660,8 @@ function evaluateCloneHumanization(
   const profile = normalizeWhatsappCloneProfile(readRecord(context.agent.metadata)?.whatsapp_clone_profile);
   const cloneMemory = normalizeWhatsappCloneMemory(readRecord(context.agent.metadata)?.whatsapp_clone_memory);
   const hasCloneMemory = hasCloneMemoryContent(cloneMemory);
-  const linkRequested = /\b(link|botao|comprar|compra|preco|valor|manda|mandar|envia|enviar|ver produto|produto)\b/.test(normalizedInput);
+  const linkRequested = /\b(link|botao|codigo pix|copia e cola|checkout)\b/.test(normalizedInput);
+  const deliveredAction = input.outputLinks.length > 0 || input.outbound.some((message) => message.interactiveButton || message.buttonFallback);
   const humanRequested = isHumanHandoffRequest(input.userText);
   const repeatedPattern = hasRepeatedRecentAgentOutput(context.messages, input.aiText);
   const incompleteOutput = isProbablyIncompleteOutput(input.aiText);
@@ -13804,8 +13698,8 @@ function evaluateCloneHumanization(
     ),
     buildHumanizationMetric(
       "linkDelivery",
-      !linkRequested && !input.linkPromiseWithoutLink ? 1 : input.outputLinks.length > 0 ? 1 : input.linkPromiseWithoutLink ? 0.2 : 0.58,
-      input.outputLinks.length > 0
+      !linkRequested && !input.linkPromiseWithoutLink ? 1 : deliveredAction ? 1 : input.linkPromiseWithoutLink ? 0.2 : 0.58,
+      deliveredAction
         ? "Link ou botao saiu junto da resposta."
         : input.linkPromiseWithoutLink
           ? "Prometeu link/botao sem enviar."
@@ -13852,7 +13746,7 @@ function evaluateCloneHumanization(
     incompleteOutput ? "incomplete_response" : null,
     hasLiteralNewlineBug ? "literal_newline_bug" : null,
     repeatedPattern ? "repeated_pattern" : null,
-    linkRequested && input.outputLinks.length === 0 ? "link_request_without_link" : null,
+    linkRequested && !deliveredAction ? "link_request_without_link" : null,
     input.linkPromiseWithoutLink ? "promised_link_without_link" : null,
     input.genericRisk ? "generic_bot_phrase" : null,
     input.identityRisk ? "identity_disclosure_risk" : null,
@@ -14870,28 +14764,31 @@ async function extractLeadMemory(
   if (!hasLeadMemoryContent(nextMemory)) return;
 
   const personName = normalizeLeadNameCandidate(nextMemory.personName);
-  const metadata: JsonRecord = {
-    ...currentMetadata,
-    lead_memory: {
-      ...nextMemory,
-      updated_at: new Date().toISOString(),
-      source: "whatsapp_agent_memory",
+  const saved = await updateLeadMetadata({
+    client,
+    organizationId: context.organization.id,
+    leadId: context.lead.id,
+    buildUpdate: (latestMetadata) => {
+      const savedName = resolveLeadPersonalName({ displayName: null, metadata: latestMetadata });
+      const metadata: JsonRecord = {
+        ...latestMetadata,
+        lead_memory: {
+          ...(readRecord(latestMetadata.lead_memory) ?? {}),
+          ...nextMemory,
+          personName: savedName ?? personName,
+          updated_at: new Date().toISOString(),
+          source: "whatsapp_agent_memory",
+        },
+      };
+      // An inferred name must never replace identity explicitly captured by checkout.
+      if (!savedName && personName && isLikelyPersonalLeadName(personName)) {
+        Object.assign(metadata, { person_name: personName, personal_name: personName, name: personName, lead_name: personName });
+        return { metadata, display_name: personName };
+      }
+      return { metadata };
     },
-  };
-  const updatePayload: JsonRecord = { metadata };
-
-  if (personName && isLikelyPersonalLeadName(personName)) {
-    metadata.person_name = personName;
-    metadata.personal_name = personName;
-    metadata.name = personName;
-    metadata.lead_name = personName;
-    updatePayload.display_name = personName;
-  }
-
-  await client
-    .from("leads")
-    .update(updatePayload)
-    .eq("id", context.lead.id);
+  });
+  context.lead.metadata = saved.metadata;
 }
 
 async function extractCloneMemory(
@@ -14902,12 +14799,13 @@ async function extractCloneMemory(
 ) {
   if (!context.behavior.cloneMemory || context.messages.length < 2 || !aiText.trim()) return;
 
-  const { data: latestAgent } = await client
+  const { data: latestAgent, error: readError } = await client
     .from("agent_registry")
-    .select("metadata")
+    .select("metadata, updated_at")
     .eq("id", context.agent.id)
-    .maybeSingle<{ metadata: JsonRecord | null }>();
-  const currentMetadata = readRecord(latestAgent?.metadata) ?? context.agent.metadata ?? {};
+    .maybeSingle<{ metadata: JsonRecord | null; updated_at: string }>();
+  if (readError || !latestAgent) return;
+  const currentMetadata = readRecord(latestAgent.metadata) ?? {};
   const currentMemory = normalizeWhatsappCloneMemory(readRecord(currentMetadata.whatsapp_clone_memory));
   const profile = normalizeWhatsappCloneProfile(readRecord(currentMetadata.whatsapp_clone_profile));
   const conversationText = buildConversationText(context.messages);
@@ -14995,7 +14893,7 @@ async function extractCloneMemory(
 
   if (!hasCloneMemoryContent(nextMemory)) return;
 
-  await client
+  let update = client
     .from("agent_registry")
     .update({
       metadata: {
@@ -15008,6 +14906,14 @@ async function extractCloneMemory(
       },
     })
     .eq("id", context.agent.id);
+  update = context.agent.organization_id === null
+    ? update.is("organization_id", null)
+    : update.eq("organization_id", context.agent.organization_id);
+  // Learning produced from an old profile must never revert a customer's clone configuration.
+  update = update.eq("updated_at", latestAgent.updated_at);
+  const { data: saved, error: writeError } = await update.select("metadata").maybeSingle<{ metadata: JsonRecord }>();
+  if (writeError) throw new Error(`Nao foi possivel salvar a memoria do clone: ${writeError.message}`);
+  if (saved) context.agent.metadata = saved.metadata;
 }
 
 async function extractConversationArcSummary(

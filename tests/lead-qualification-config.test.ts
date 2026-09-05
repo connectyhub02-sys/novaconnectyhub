@@ -210,7 +210,7 @@ describe("lead qualification configuration", () => {
     expect(runtimeSource).toContain("delivery_address");
     expect(runtimeSource).toContain("customer_document");
     expect(runtimeSource).toContain("getLeadTemperature(score, config)");
-    expect(runtimeSource).toContain("loadLatestLeadMetadataForRuntimeUpdate(");
+    expect(runtimeSource).toContain("updateLeadMetadata({");
     expect(runtimeSource).toContain("Continuar atendendo normalmente");
   });
 });

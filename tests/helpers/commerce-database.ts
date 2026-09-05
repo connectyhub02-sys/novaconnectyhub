@@ -1,0 +1,52 @@
+type Row = Record<string, unknown>;
+
+/** Minimal in-memory PostgREST boundary. No application decisions are mocked here. */
+export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: { table: string; operation: string }) {
+  const tables = structuredClone(initial);
+  let sequence = 0;
+  for (const table of ["leads", "agent_registry"]) tables[table]?.forEach(row => { row.updated_at ??= "version-0"; });
+  const client = {
+    from(table: string) {
+      let operation = "select";
+      let payload: Row | Row[] = {};
+      const filters: Array<(row: Row) => boolean> = [];
+      const query = {
+        select: () => query,
+        order: () => query,
+        limit: () => query,
+        eq(key: string, value: unknown) {
+          filters.push(row => {
+            const [field, child] = key.split("->>");
+            const actual = child ? (row[field] as Row | undefined)?.[child] : row[field];
+            return typeof actual === "object" ? JSON.stringify(actual) === value : actual === value;
+          });
+          return query;
+        },
+        in(key: string, values: unknown[]) { filters.push(row => values.includes(row[key])); return query; },
+        insert(value: Row | Row[]) { operation = "insert"; payload = value; return query; },
+        update(value: Row) { operation = "update"; payload = value; return query; },
+        async maybeSingle() { const result = execute(); return { ...result, data: result.data[0] ?? null }; },
+        async single() { return query.maybeSingle(); },
+        then(resolve: (value: ReturnType<typeof execute>) => unknown) { return Promise.resolve(execute()).then(resolve); },
+      };
+      function execute() {
+        tables[table] ??= [];
+        if (failure?.table === table && failure.operation === operation) {
+          return { data: [] as Row[], error: { message: "Simulated database failure" } };
+        }
+        let selected = tables[table].filter(row => filters.every(filter => filter(row)));
+        if (operation === "insert") {
+          selected = (Array.isArray(payload) ? payload : [payload]).map(row => ({ id: `row-${++sequence}`, ...row }));
+          tables[table].push(...selected);
+        }
+        if (operation === "update") selected.forEach(row => {
+          Object.assign(row, payload);
+          if (table === "leads" || table === "agent_registry") row.updated_at = `version-${++sequence}`;
+        });
+        return { data: structuredClone(selected), error: null };
+      }
+      return query;
+    },
+  };
+  return { client, tables };
+}

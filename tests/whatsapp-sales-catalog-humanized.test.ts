@@ -136,7 +136,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("const confirmationPreviewText = confirmedCheckoutIntent");
     expect(checkoutRuntime).toContain("if (confirmationPreviewText)");
     expect(checkoutRuntime).toContain("\"confirmation_preview\",");
-    expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartDraftPreviewText");
+    expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartSelectionText");
     expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartOfferText");
     expect(checkoutRuntime).toContain("\"cart_draft\",");
     expect(checkoutRuntime).toContain("\"cart_offer\",");
@@ -232,22 +232,21 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("shouldWaitForPaymentMethodChoice");
     expect(delivery).toContain("shouldWaitForDeliveryDetails");
     expect(delivery).toContain("shouldUseControlledPaymentStepText");
-    expect(delivery).toContain("paymentMethodChoicePrompt ?? (");
-    expect(delivery).toContain("buildSalesCatalogControlledPaymentStepText()");
-    expect(delivery).toContain("shouldWaitForPaymentMethodChoice || shouldWaitForDeliveryDetails");
+    expect(delivery).toContain("paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText");
+    expect(delivery).toContain("return [await sendSalesCatalogPaymentLink({");
     expect(checkoutRuntime).toContain("function buildSalesCatalogPaymentMethodChoicePrompt");
     expect(checkoutRuntime).toContain("function buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt");
     expect(checkoutRuntime).toContain("function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout");
     expect(checkoutRuntime).toContain("function shouldUseSalesCatalogControlledPaymentStepText");
     expect(checkoutRuntime).toContain("Qual forma de pagamento você prefere");
     expect(checkoutRuntime).toContain("No Pix eu envio o código para copiar por aqui");
-    expect(checkoutRuntime).toContain("Vou seguir com o próximo passo do pagamento usando os dados do pedido");
+    expect(checkoutRuntime).not.toContain("Vou seguir com o próximo passo do pagamento usando os dados do pedido");
     expect(checkoutRuntime).toContain("Antes de fechar e calcular o total final");
     expect(checkoutRuntime).toContain("Ainda preciso calcular a entrega antes do total final.");
     expect(checkoutRuntime).toContain("getEnabledSalesCatalogRuntimePaymentChoices");
     expect(checkoutRuntime).toContain("detectRecentSalesCatalogPaymentPreference");
     expect(confirmationDetector).toContain("detectSalesCatalogPreferredPaymentMethod(intentText)");
-    expect(confirmationDetector).toContain("?? detectRecentSalesCatalogPaymentPreference(context.messages, latestInbound)");
+    expect(confirmationDetector).not.toContain("?? detectRecentSalesCatalogPaymentPreference(context.messages, latestInbound)");
     expect(paymentChoiceDetector).toContain("tudo certinho");
     expect(paymentChoiceDetector).toContain("(?:pagamento|pagar)");
     expect(orderRecorder).toContain("resolveSalesCatalogConfirmedPaymentPreference");
@@ -265,7 +264,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
   it("sends checkout links only when payment needs the checkout surface", () => {
     const deliveryText = sourceBetween(
       "function prepareSalesCatalogDeliveryText",
-      "function hasSubstantiveSalesCatalogAnswer",
+      "function referencesSalesCatalogItem",
     );
     const checkoutRuntime = sourceBetween(
       "async function maybeCreateSalesCatalogPaymentLink",
@@ -276,7 +275,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function maybeSendSalesCatalogProductPageLinks",
     );
 
-    expect(deliveryText).toContain("const closing = input.hasOrderIntent\n    ? \"\"");
+    expect(deliveryText).toContain("if (input.text.trim()) return input.text;");
     expect(checkoutRuntime).not.toContain("if (result.paymentDeferred)");
     expect(checkoutRuntime).toContain("paymentDeferred: result.paymentDeferred === true");
     expect(checkoutRuntime).toContain("paymentDeferredReason: result.paymentDeferredReason ?? null");
@@ -313,12 +312,12 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerNameBeforePayment");
     expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerEmailBeforePayment");
     expect(paymentSender).toContain("runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment");
-    expect(paymentSender).toContain("Antes de gerar o pagamento, preciso confirmar seus dados do pedido.");
+    expect(paymentSender).toContain("Para liberar o pagamento");
     expect(paymentSender).toContain("nome completo");
     expect(paymentSender).toContain("e-mail");
     expect(paymentSender).toContain("CPF ou CNPJ");
     expect(paymentSender).toContain("endereço completo com rua, número, bairro, cidade, CEP");
-    expect(paymentSender).toContain("Me envie: ${formatRuntimeDataList(missingDataLabels)}.");
+    expect(paymentSender).toContain("missingDataLabels.length === 0 && savedDeliveryLines.length === 0");
     expect(paymentSender).not.toContain("Depois disso, eu confirmo o endereco completo para calcular a entrega.");
     expect(paymentSender).not.toContain("Se for entrega por frete");
     expect(paymentSender).not.toContain("confirmar a forma de entrega desse pedido");
@@ -361,7 +360,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("extractRuntimeCustomerNameFromStructuredReply");
     expect(checkoutRecovery).toContain("sendSalesCatalogExistingOrderConfirmationWhatsapp");
     expect(checkoutRecovery).toContain("payment_prerequisite_resolved_without_final_confirmation");
-    expect(checkoutRecovery).toContain("preferredMethod === \"card\" && currentMethod !== \"card\"");
+    expect(checkoutRecovery).toContain("preferredMethod && currentMethod !== preferredMethod");
     expect(checkoutRecovery).toContain("readStoredSalesCatalogPaymentPreference");
     expect(checkoutRecovery).toContain("gatewayUnavailable");
     expect(checkoutRecovery).toContain("if (paymentDeferred || gatewayUnavailable)");
@@ -427,7 +426,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("persistLeadCustomerNameSnapshot");
     expect(runtimeSource).toContain("extractRuntimeCustomerName");
     expect(runtimeSource).toContain("extractRuntimeCustomerNameFromStructuredReply");
-    expect(runtimeSource).toContain("loadLatestLeadMetadataForRuntimeUpdate");
+    expect(runtimeSource).toContain("updateLeadMetadata");
     expect(runtimeSource).toContain("sales_catalog.customer_name_saved");
     expect(runtimeSource).toContain("sales_catalog.saved_delivery_address_reused");
     expect(shippingRuntime).toContain("isRuntimeSavedDeliveryAffirmation");
@@ -533,11 +532,11 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("&& shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
     expect(delivery).toContain("!hasOrderIntent && shouldOfferProductPageLinks");
     expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
-    expect(renderer).toContain("hasSubstantiveSalesCatalogAnswer(input.text)");
-    expect(renderer).toContain("ensureSalesCatalogConsultativeContinuation(input.text, items)");
+    expect(renderer).toContain("if (input.text.trim()) return input.text;");
+    expect(renderer).not.toContain("ensureSalesCatalogConsultativeContinuation(input.text, items)");
     expect(renderer).toContain("suppressDuplicateSalesCatalogCustomerMentions");
-    expect(renderer).toContain("Quer que eu separe ${itemName} para você?");
-    expect(renderer).toContain("salesCatalogTextHasNaturalNextStep");
+    expect(renderer).not.toContain("Quer que eu separe ${itemName} para você?");
+    expect(renderer).not.toContain("salesCatalogTextHasNaturalNextStep");
     expect(renderer).toContain("function shouldSendSalesCatalogProductPageLinks");
     expect(renderer).toContain("latestInbound?.text_content");
   });
