@@ -100,6 +100,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt({");
     expect(checkoutRuntime).toContain("| \"current_response\"");
     expect(checkoutRuntime).toContain("| \"cart_draft\"");
+    expect(checkoutRuntime).toContain("| \"cart_offer\"");
     expect(checkoutRuntime).toContain("| \"confirmation_preview\"");
     expect(checkoutRuntime).toContain("| \"recent_assistant_recommendation\"");
     expect(checkoutRuntime).toContain("salesCatalogCheckoutConfirmationWindowMs");
@@ -120,10 +121,15 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("if (confirmationPreviewText)");
     expect(checkoutRuntime).toContain("\"confirmation_preview\",");
     expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartDraftPreviewText");
+    expect(checkoutRuntime).toContain("buildRecentSalesCatalogCartOfferText");
     expect(checkoutRuntime).toContain("\"cart_draft\",");
+    expect(checkoutRuntime).toContain("\"cart_offer\",");
     expect(checkoutRuntime).toContain("selectRecentSingleSalesCatalogAssistantRecommendation");
+    expect(runtimeSource).toContain("hasRecentSalesCatalogCartOfferConfirmation");
+    expect(runtimeSource).toContain("function isSalesCatalogCartOfferPromptText");
     expect(runtimeSource).toContain("isSalesCatalogOrderPreviewHeaderText");
     expect(runtimeSource).toContain("top|perfeito|show|beleza|blz|combinado");
+    expect(runtimeSource).toContain("sim|s|quero|ok|okay");
     expect(runtimeSource).toContain("\\bprevia\\b.{0,100}\\bpedido\\b");
   });
 
@@ -302,6 +308,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("urlChoiceFormat ?? \"plain\"");
     expect(runtimeSource).toContain("normalizeInteractiveButtonChoice(choice, \"prefixed\")");
     expect(runtimeSource).toContain("repairIncompleteAssistantEnding");
+    expect(runtimeSource).toContain("hasDanglingCurrencyEnding");
+    expect(runtimeSource).toContain("retenção");
   });
 
   it("resends existing checkout links before handing payment-link follow-ups to the model", () => {
@@ -372,6 +380,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     );
 
     expect(mentionFormatter).toContain("cleanSalesCatalogCustomerTitle(item.title)");
+    expect(mentionFormatter).toContain("formatSalesCatalogWhatsappPaymentAmount(price)");
     expect(mentionFormatter).toContain("buildSalesCatalogTitleMatchCandidates");
     expect(mentionFormatter).toContain("Imagem");
     expect(orderMatcher).toContain("buildSalesCatalogTitleMatchCandidates(item.title)");
@@ -394,6 +403,9 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtimeSource).toContain("Tenho um endereço de entrega salvo");
     expect(runtimeSource).toContain("Tenho um endereço salvo");
     expect(runtimeSource).toContain("maybeAttachSavedSalesCatalogDeliveryToOrder");
+    expect(runtimeSource).toContain("hasPendingSalesCatalogDeliveryDetailsResolution");
+    expect(runtimeSource).toContain("resolveSavedSalesCatalogOrderShipping");
+    expect(runtimeSource).toContain("saved_shipping_quote");
     expect(runtimeSource).toContain("maybeAttachSalesCatalogCustomerNameToOrder");
     expect(runtimeSource).toContain("persistLeadCustomerNameSnapshot");
     expect(runtimeSource).toContain("extractRuntimeCustomerName");

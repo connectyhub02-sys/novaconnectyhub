@@ -102,7 +102,7 @@ import {
   type WhatsappHandoffNotificationEventData,
   type WhatsappHandoffNotificationResult,
 } from "./handoff-notifications";
-import { isHumanHandoffRequest } from "./human-handoff";
+import { isConsultativeSalesGuidanceRequest, isHumanHandoffRequest } from "./human-handoff";
 import {
   getCloneHumanizationMetricLabel,
   type CloneHumanizationMetric,
@@ -2690,6 +2690,16 @@ function resolveInitialSalesCatalogOrderShipping(input: {
     };
   }
 
+  const savedDeliveryShipping = resolveSavedSalesCatalogOrderShipping({
+    context: input.context,
+    physicalItem,
+    intentText: input.intentText,
+  });
+
+  if (savedDeliveryShipping) {
+    return savedDeliveryShipping;
+  }
+
   const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
     latestInbound: null,
     text: input.intentText,
@@ -2755,6 +2765,98 @@ function resolveInitialSalesCatalogOrderShipping(input: {
       min_days: quote.minDays,
       max_days: quote.maxDays,
       destination_address: destinationAddress,
+      cep: quote.cep,
+      uf: quote.uf,
+      state: quote.state,
+      weight_grams: quote.weightGrams,
+      notes: quote.notes,
+    },
+  };
+}
+
+function resolveSavedSalesCatalogOrderShipping(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  physicalItem: RuntimeSalesCatalogItem;
+  intentText: string;
+}) {
+  if (
+    !isRuntimeSavedDeliveryAffirmation(input.intentText)
+    || !hasRecentSavedDeliveryConfirmationPrompt(input.context.messages, findLatestInbound(input.context.messages))
+  ) {
+    return null;
+  }
+
+  const savedAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
+  const shippingSettings = input.context.salesCatalogShippingSettings;
+  if (!savedAddress || !shippingSettings?.configured) {
+    return null;
+  }
+
+  const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
+    latestInbound: null,
+    text: savedAddress.address,
+    zones: shippingSettings.localDeliveryEnabled
+      ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
+      : [],
+  });
+
+  if (localDeliveryMatch?.zone.price) {
+    const shippingMethod = `Entrega local - ${localDeliveryMatch.zone.name}`;
+
+    return {
+      destinationCep: savedAddress.cep,
+      destinationAddress: savedAddress.address,
+      shippingTotal: localDeliveryMatch.zone.price,
+      shippingMethod,
+      metadata: {
+        source: "whatsapp_agent_runtime",
+        mode: "saved_local_delivery",
+        service_name: shippingMethod,
+        provider: "local_delivery",
+        price: localDeliveryMatch.zone.price,
+        min_days: localDeliveryMatch.zone.minDays,
+        max_days: localDeliveryMatch.zone.maxDays,
+        match_source: localDeliveryMatch.source,
+        coordinates: localDeliveryMatch.coordinates,
+        zone_id: localDeliveryMatch.zone.id,
+        zone_name: localDeliveryMatch.zone.name,
+        notes: localDeliveryMatch.zone.notes,
+        destination_address: savedAddress.address,
+        cep: savedAddress.cep,
+      },
+    };
+  }
+
+  if (!shippingSettings.shippingEnabled || !savedAddress.cep) {
+    return null;
+  }
+
+  const result = calculateSalesCatalogShippingQuotes({
+    item: input.physicalItem,
+    settings: shippingSettings,
+    cep: savedAddress.cep,
+  });
+  const quote = result.quotes[0];
+
+  if (result.error || !quote) {
+    return null;
+  }
+
+  return {
+    destinationCep: savedAddress.cep,
+    destinationAddress: savedAddress.address,
+    shippingTotal: quote.price,
+    shippingMethod: quote.serviceName,
+    metadata: {
+      source: "whatsapp_agent_runtime",
+      mode: "saved_shipping_quote",
+      service_id: quote.serviceId,
+      service_name: quote.serviceName,
+      provider: quote.provider,
+      price: quote.price,
+      min_days: quote.minDays,
+      max_days: quote.maxDays,
+      destination_address: savedAddress.address,
       cep: quote.cep,
       uf: quote.uf,
       state: quote.state,
@@ -7490,9 +7592,12 @@ async function sendAgentResponse(input: {
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
-  const hasPendingDeliveryDetailsIntent = hasRecentSalesCatalogDeliveryDetailsPrompt(context.messages, latestInbound)
-    && resolvesSalesCatalogPaymentPrerequisiteText(orderIntentText, latestInbound);
-  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText) || hasConfirmedCheckoutIntent || hasPendingDeliveryDetailsIntent;
+  const hasPendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
+  const hasConfirmedCartOfferIntent = hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
+  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText)
+    || hasConfirmedCheckoutIntent
+    || hasPendingDeliveryDetailsIntent
+    || hasConfirmedCartOfferIntent;
   const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
   const assistantCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
@@ -8484,7 +8589,10 @@ function suppressDuplicateSalesCatalogCustomerMentions(text: string, items: Runt
 
 function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
   const price = item.offer.salePrice ?? item.price;
-  const priceText = price ? ` - ${price}${item.currency ? ` ${item.currency}` : ""}` : "";
+  const formattedPrice = price
+    ? formatSalesCatalogWhatsappPaymentAmount(price) ?? normalizeOutboundLanguageText(`${price}${item.currency ? ` ${item.currency}` : ""}`)
+    : "";
+  const priceText = formattedPrice ? ` - ${formattedPrice}` : "";
   const highlightText = item.highlightLabel ? ` (${item.highlightLabel})` : "";
 
   return `${cleanSalesCatalogCustomerTitle(item.title)}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
@@ -8738,6 +8846,7 @@ type RuntimeSalesCatalogOrderSelection = {
     | "current_response"
     | "recent_lead_message"
     | "cart_draft"
+    | "cart_offer"
     | "confirmation_preview"
     | "recent_assistant_recommendation";
   mentionText: string | null;
@@ -8784,6 +8893,8 @@ function resolveSalesCatalogOrderSelections(input: {
   };
   const latestInbound = findLatestInbound(input.context.messages);
   const confirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(input.context, input.intentText);
+  const pendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(input.context.messages, latestInbound, input.intentText);
+  const confirmedCartOfferIntent = hasRecentSalesCatalogCartOfferConfirmation(input.context, input.intentText);
   const confirmationPreviewText = confirmedCheckoutIntent
     ? buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, latestInbound)
     : "";
@@ -8800,7 +8911,10 @@ function resolveSalesCatalogOrderSelections(input: {
     return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
   }
 
-  const hasOrderIntent = hasSalesCatalogOrderIntent(input.intentText) || confirmedCheckoutIntent;
+  const hasOrderIntent = hasSalesCatalogOrderIntent(input.intentText)
+    || confirmedCheckoutIntent
+    || pendingDeliveryDetailsIntent
+    || confirmedCartOfferIntent;
 
   if (!hasOrderIntent) {
     for (const item of input.currentItems) {
@@ -8858,6 +8972,24 @@ function resolveSalesCatalogOrderSelections(input: {
       }
 
       return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+    }
+  }
+
+  if (selected.size === 0 && confirmedCartOfferIntent && !isSalesCatalogCartAdditionOnlyIntent(input.intentText)) {
+    const cartOfferText = buildRecentSalesCatalogCartOfferText(input.context.salesCatalog, input.context.messages, latestInbound);
+
+    if (cartOfferText) {
+      for (const selection of selectSalesCatalogOrderSelectionsFromText(
+        input.context.salesCatalog,
+        cartOfferText,
+        "cart_offer",
+      )) {
+        addSelection(selection);
+      }
+
+      if (selected.size > 0) {
+        return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+      }
     }
   }
 
@@ -9473,6 +9605,36 @@ function buildRecentSalesCatalogCartDraftPreviewText(
     .trim() ?? "";
 }
 
+function hasRecentSalesCatalogCartOfferConfirmation(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  intentText: string,
+) {
+  if (!hasSalesCatalogCheckoutConfirmationIntent(intentText)) {
+    return false;
+  }
+
+  const latestInbound = findLatestInbound(context.messages);
+  return Boolean(buildRecentSalesCatalogCartOfferText(context.salesCatalog, context.messages, latestInbound));
+}
+
+function buildRecentSalesCatalogCartOfferText(
+  items: RuntimeSalesCatalogItem[],
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  return buildRecentOutboundMessageBlocks(messages, latestInbound)
+    .find((candidate) => {
+      if (!isSalesCatalogCartOfferPromptText(candidate.text)) {
+        return false;
+      }
+
+      return selectSalesCatalogItemsForOrderText(items, candidate.text)
+        .some((item) => item.salesDestination === "connectyhub_checkout" && item.status === "active" && isSalesCatalogItemSellable(item));
+    })
+    ?.text
+    .trim() ?? "";
+}
+
 function buildRecentSalesCatalogDeliveryDetailsPromptText(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
@@ -9490,6 +9652,22 @@ function hasRecentSalesCatalogDeliveryDetailsPrompt(
   return Boolean(buildRecentSalesCatalogDeliveryDetailsPromptText(messages, latestInbound));
 }
 
+function hasPendingSalesCatalogDeliveryDetailsResolution(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+  intentText: string,
+) {
+  if (!hasRecentSalesCatalogDeliveryDetailsPrompt(messages, latestInbound)) {
+    return false;
+  }
+
+  return resolvesSalesCatalogPaymentPrerequisiteText(intentText, latestInbound)
+    || (
+      isRuntimeSavedDeliveryAffirmation(intentText)
+      && hasRecentSavedDeliveryConfirmationPrompt(messages, latestInbound)
+    );
+}
+
 function isSalesCatalogDeliveryDetailsPromptText(text: string) {
   const normalized = normalizeSearch(text);
 
@@ -9504,6 +9682,24 @@ function isSalesCatalogDeliveryDetailsPromptText(text: string) {
   const hasDeliveryFields = /\b(?:rua|numero|bairro|cidade|cep)\b/.test(normalized);
 
   return requestsDeliveryBeforeClosing && hasDeliveryFields;
+}
+
+function isSalesCatalogCartOfferPromptText(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (isSalesCatalogCheckoutConfirmationPreviewText(text) || isSalesCatalogCartDraftPreviewText(text)) {
+    return false;
+  }
+
+  const asksLeadToAccept = /\b(?:quer|posso|bora|vamos|se quiser|deixa eu|ja)\b.{0,140}\b(?:montar|monte|separar|separe|separo|reservar|garantir|fechar|pedido|previa|combo|dupla|opcao|opcoes)\b/.test(normalized)
+    || /\b(?:montar|monte|separar|separe|separo|reservar|garantir|fechar)\b.{0,100}\b(?:para voce|pra voce|seu pedido|esse pedido|esse combo|essa dupla)\b/.test(normalized);
+  const referencesCart = /\b(?:pedido|previa|combo|dupla|cesta|carrinho|produtos|itens|separar|pote|unidade|caixa|opcao|opcoes)\b/.test(normalized);
+
+  return asksLeadToAccept && referencesCart;
 }
 
 function selectRecentSingleSalesCatalogAssistantRecommendation(
@@ -9610,12 +9806,12 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
     return false;
   }
 
-  if (/\b(nao|errado|corrige|corrigir|troca|trocar|muda|mudar|altera|alterar|remove|remover|tira|tirar|cancela|cancelar|cancel|wrong|change|remove|quiero otro|quiero otra)\b/.test(normalized)) {
+  if (/\b(nao|errado|corrige|corrigir|troca|trocar|muda|mudar|altera|alterar|remove|remover|tira|tirar|cancela|cancelar|cancel|outro|outra|diferente|wrong|change|remove|quiero otro|quiero otra)\b/.test(normalized)) {
     return false;
   }
 
   return (
-    /^(?:sim|s|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
+    /^(?:sim|s|quero|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
     || /\b(?:pode fechar|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
     || /^(?:yes|yep|yeah|sure|confirmed|confirm|go ahead|send it)\b/.test(normalized)
     || /\b(?:yes please|send the link|close the order)\b/.test(normalized)
@@ -10111,7 +10307,11 @@ async function recordSalesCatalogOrderIntent(input: {
   intentText?: string;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
   const intentText = input.intentText ?? input.text;
-  const hasOrderIntent = hasSalesCatalogOrderIntent(intentText) || hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText);
+  const latestInbound = findLatestInbound(input.context.messages);
+  const hasOrderIntent = hasSalesCatalogOrderIntent(intentText)
+    || hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText)
+    || hasPendingSalesCatalogDeliveryDetailsResolution(input.context.messages, latestInbound, intentText)
+    || hasRecentSalesCatalogCartOfferConfirmation(input.context, intentText);
   const cartSelections = resolveSalesCatalogOrderSelections({
     context: input.context,
     currentItems: input.items,
@@ -16490,6 +16690,10 @@ async function detectHumanHandoffIntent(input: {
     return { handoff: false, source: "keyword", confidence: 0, reason: "empty_text" };
   }
 
+  if (isConsultativeSalesGuidanceRequest(text)) {
+    return { handoff: false, source: "keyword", confidence: 0.15, reason: "sales_guidance_request" };
+  }
+
   if (isHumanHandoffRequest(text)) {
     return { handoff: true, source: "keyword", confidence: 0.98, reason: "explicit_handoff_phrase" };
   }
@@ -16597,6 +16801,7 @@ function buildHumanHandoffClassifierInstruction() {
     "Responda somente JSON valido no formato {\"handoff\":boolean,\"confidence\":number,\"reason\":\"curto\"}.",
     "Marque handoff=true quando o lead pede transferencia, fala com vendedor/atendente/suporte/pessoa/equipe, reclama que quer alguem melhor, pede para ligar, ou indica que nao quer continuar com o agente.",
     "Entenda variacoes informais, erros de digitacao, ironia leve e contexto das ultimas mensagens.",
+    "Marque handoff=false se o lead pede orientacao, recomendacao ou alguem com experiencia para escolher produto/servico e ainda esta comprando ou negociando normalmente.",
     "Marque handoff=false se o lead so menciona humano/IA como assunto, faz teste de Turing, pede explicacao, pergunta sobre criar/clonar pessoa, alguem virtual, persona, clone, avatar, manda ok/sim/nao, ou esta apenas negociando normalmente.",
     "Se estiver em duvida, retorne handoff=false.",
   ].join("\n");
@@ -17411,6 +17616,18 @@ function repairIncompleteAssistantEnding(value: string) {
 
   const normalizedLastLine = text.split(/\n+/).pop()?.replace(/[)"'\]]+$/g, "").trim() ?? "";
 
+  if (/\breten$/i.test(normalizedLastLine)) {
+    return text.replace(/\breten[\s)"'\]]*$/i, "retenção.").trimEnd();
+  }
+
+  if (hasDanglingCurrencyEnding(normalizedLastLine)) {
+    const repaired = removeIncompleteTrailingLine(text);
+
+    if (repaired) {
+      return repaired;
+    }
+  }
+
   if (
     normalizedLastLine.length > 90
     && !/[.!?]$/.test(normalizedLastLine)
@@ -17430,6 +17647,26 @@ function repairIncompleteAssistantEnding(value: string) {
 
   if (!repaired) {
     return text;
+  }
+
+  return /[.!?]$/.test(repaired) ? repaired : `${repaired}.`;
+}
+
+function hasDanglingCurrencyEnding(value: string) {
+  return /(?:^|\s)(?:[-\u2013\u2014]\s*)?R\$\s*\d{0,2}$/i.test(value)
+    && /\b(?:x|produto|pedido|combo|total|subtotal|power lab|valor)\b/i.test(value);
+}
+
+function removeIncompleteTrailingLine(value: string) {
+  const lines = value.split(/\r?\n/);
+
+  if (lines.length <= 1) {
+    return "";
+  }
+
+  const repaired = lines.slice(0, -1).join("\n").trimEnd();
+  if (!repaired) {
+    return "";
   }
 
   return /[.!?]$/.test(repaired) ? repaired : `${repaired}.`;

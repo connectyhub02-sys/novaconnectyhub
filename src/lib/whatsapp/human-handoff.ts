@@ -5,6 +5,10 @@ const strongHumanTarget = String.raw`(?:humano|atendente|vendedor|consultor|pess
 const supportTeamTarget = String.raw`(?:suporte|pessoal|equipe|time)`;
 const personTarget = String.raw`(?:alguem(?!\s+virtual))`;
 const handoffTarget = String.raw`(?:${strongHumanTarget}|${supportTeamTarget}|${personTarget})`;
+const salesGuidanceSignalPattern = /\b(?:orientacao|orientar|recomenda|recomendacao|recomendar|indica|indicacao|indicar|o que devo|o que eu devo|qual produto|quais produtos|melhor opcao|opcao melhor|protocolo|comprar|adquirir|disposto a comprar|nao quero errar)\b/;
+const experiencedGuidancePattern = /\b(?:alguem|pessoa)\b.{0,90}\b(?:mais\s+)?(?:experiencia|experiente|entende|conhece|especialista)\b|\b(?:mais experiencia|mais experiente|entende mais|especialista no produto)\b/;
+const explicitHumanRolePattern = /\b(?:atendente humano|suporte humano|humano|pessoa real|pessoa de verdade|equipe|time|vendedor)\b/;
+const explicitTransferActionPattern = /\b(?:chama|chamar|aciona|acionar|passa|passar|transfere|transferir|transfira|encaminha|encaminhar)\b/;
 
 const humanHandoffRequestPatterns = [
   new RegExp(String.raw`\b(?:atendimento|suporte)\s+humano\b`),
@@ -23,7 +27,26 @@ export function isHumanHandoffRequest(value: string) {
     return false;
   }
 
+  if (isConsultativeSalesGuidanceRequest(value)) {
+    return false;
+  }
+
   return humanHandoffRequestPatterns.some((pattern) => pattern.test(normalized));
+}
+
+export function isConsultativeSalesGuidanceRequest(value: string) {
+  const normalized = normalizeHandoffSearch(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return Boolean(
+    experiencedGuidancePattern.test(normalized)
+    && salesGuidanceSignalPattern.test(normalized)
+    && !explicitHumanRolePattern.test(normalized)
+    && !explicitTransferActionPattern.test(normalized),
+  );
 }
 
 function normalizeHandoffSearch(value: string) {
