@@ -44,6 +44,8 @@ import {
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
+import { useAttendanceHistory } from "./use-attendance-history";
+import { mergeConversationMessages, mergeLeadActivities, mergeLiveLeadWorkspace } from "@/lib/client-os/lead-crm-merge";
 import { getTrackingSnapshot } from "@/lib/tracking/client";
 import type {
   ClientSocialApproval,
@@ -536,6 +538,7 @@ export function LeadCrmConsole({
 
       {detailsLead ? (
         <LeadDetailsModal
+          key={detailsLead.id}
           checkoutRecords={checkoutRecordsByLead.get(detailsLead.id) ?? []}
           lead={detailsLead}
           onClose={() => setDetailsLeadId(null)}
@@ -543,73 +546,6 @@ export function LeadCrmConsole({
       ) : null}
     </section>
   );
-}
-
-function mergeLiveLeadWorkspace(current: ClientLeadCrmWorkspace, next: ClientLeadCrmWorkspace): ClientLeadCrmWorkspace {
-  const currentLeadsById = new Map(current.leads.map((lead) => [lead.id, lead]));
-
-  return {
-    ...next,
-    leads: next.leads.map((lead) => {
-      const currentLead = currentLeadsById.get(lead.id);
-      return currentLead ? mergeLiveLeadRecord(currentLead, lead) : lead;
-    }),
-  };
-}
-
-function mergeLiveLeadRecord(current: ClientLeadRecord, next: ClientLeadRecord): ClientLeadRecord {
-  const trackingEvents = current.leadFile.trackingEvents.length > next.leadFile.trackingEvents.length
-    ? current.leadFile.trackingEvents
-    : next.leadFile.trackingEvents;
-  const intelligenceEvents = current.leadFile.intelligenceEvents.length > next.leadFile.intelligenceEvents.length
-    ? current.leadFile.intelligenceEvents
-    : next.leadFile.intelligenceEvents;
-  const activities = current.activities.length > next.activities.length
-    ? mergeLeadActivities(next.activities, current.activities)
-    : next.activities;
-
-  return {
-    ...next,
-    activities,
-    leadFile: {
-      ...next.leadFile,
-      firstSeenAt: pickTimelineDate([next.leadFile.firstSeenAt, current.leadFile.firstSeenAt], "asc"),
-      intelligenceEventCount: intelligenceEvents.length,
-      intelligenceEvents,
-      lastSeenAt: pickTimelineDate([next.leadFile.lastSeenAt, current.leadFile.lastSeenAt], "desc"),
-      trackingEventCount: trackingEvents.length,
-      trackingEvents,
-    },
-    technical: {
-      ...next.technical,
-      lastClick: next.technical.lastClick ?? current.technical.lastClick,
-    },
-  };
-}
-
-function mergeLeadActivities(primary: ClientLeadActivity[], preserved: ClientLeadActivity[]) {
-  const activitiesById = new Map(primary.map((activity) => [activity.id, activity]));
-
-  for (const activity of preserved) {
-    if (!activitiesById.has(activity.id)) {
-      activitiesById.set(activity.id, activity);
-    }
-  }
-
-  return Array.from(activitiesById.values()).sort((a, b) => toTimestamp(b.occurredAt) - toTimestamp(a.occurredAt));
-}
-
-function pickTimelineDate(values: Array<string | null | undefined>, direction: "asc" | "desc") {
-  const dates = values.filter((value): value is string => Boolean(value));
-
-  if (!dates.length) {
-    return null;
-  }
-
-  return dates.sort((a, b) => {
-    const diff = toTimestamp(a) - toTimestamp(b);
-    return direction === "asc" ? diff : -diff;
-  })[0];
 }
 
 function LeadWorkspaceWarning({ warnings }: { warnings: string[] }) {
@@ -1011,7 +947,7 @@ function ConversationsView({
               <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 sm:p-4 lg:min-h-[620px]">
                 <ConversationHeader lead={selectedLead} />
                 <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-emerald-200 bg-[#efeae2] p-3 sm:mt-4 sm:p-4">
-                  <ChatMessages messages={selectedLead.conversation.messages} />
+                  <ChatMessages key={selectedLead.conversation.id} leadId={selectedLead.id} conversationId={selectedLead.conversation.id} leadName={selectedLead.name} messages={selectedLead.conversation.messages} />
                 </div>
                 <div className="mt-3 grid gap-2 sm:hidden">
                   <button
@@ -1954,7 +1890,7 @@ function AttendanceCenterView({
                   }}
                 >
                   <div className={cn("h-full overflow-y-auto px-3 py-4 sm:px-6", chatLockedByPush && "pointer-events-none opacity-35 blur-[1px]")}>
-                    <ChatMessages messages={activeMessages} />
+                    <ChatMessages key={activeConversationId} leadId={activeLead?.id} conversationId={activeConversationId} leadName={activeLead?.name} messages={activeMessages} />
                   </div>
                   {chatLockedByPush ? (
                     <AttendancePushRequiredOverlay
@@ -2953,26 +2889,6 @@ function formatThreadMessagePreview(message: ClientLeadMessage) {
   return `${author}: ${message.text}`;
 }
 
-function mergeConversationMessages(serverMessages: ClientLeadMessage[], localMessages: ClientLeadMessage[]) {
-  const seen = new Set<string>();
-  const merged: ClientLeadMessage[] = [];
-
-  for (const message of [...serverMessages, ...localMessages]) {
-    const key = message.providerMessageId
-      ? `provider:${message.providerMessageId}`
-      : `local:${message.id}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    merged.push(message);
-  }
-
-  return merged.sort((a, b) => toTimestamp(a.occurredAt) - toTimestamp(b.occurredAt));
-}
-
 function formatHumanInterventionCountdown(humanIntervention: ClientLeadHumanIntervention, nowMs: number) {
   if (!humanIntervention.active || !humanIntervention.pausedUntil) {
     return null;
@@ -3767,13 +3683,19 @@ function MetaDispatchStatusPill({
 
 function LeadDetailsModal({
   checkoutRecords,
-  lead,
+  lead: liveLead,
   onClose,
 }: {
   checkoutRecords: LeadCheckoutRecord[];
   lead: ClientLeadRecord;
   onClose: () => void;
 }) {
+  const history = useAttendanceHistory(liveLead.id, null, "events");
+  const activities = mergeLeadActivities(history.activities, liveLead.activities);
+  const trackingEvents = mergeLeadActivities(history.trackingEvents, liveLead.leadFile.trackingEvents);
+  const trackingIds = new Set(trackingEvents.map((activity) => activity.id));
+  const intelligenceEvents = activities.filter((activity) => !trackingIds.has(activity.id));
+  const lead = { ...liveLead, activities, leadFile: { ...liveLead.leadFile, trackingEvents, intelligenceEvents, trackingEventCount: trackingEvents.length, intelligenceEventCount: intelligenceEvents.length } };
   const preferredConversationId = lead.conversation.id ?? lead.leadFile.conversations[0]?.id ?? null;
   const [conversationSelection, setConversationSelection] = useState<{ leadId: string; conversationId: string | null }>({
     leadId: lead.id,
@@ -3832,6 +3754,7 @@ function LeadDetailsModal({
               <LeadFileSnapshot lead={lead} />
               <LeadCheckoutSnapshot records={checkoutRecords} />
               <ActivityTimeline activities={lead.activities} />
+              <HistoryPageControl history={history} label="Consultar eventos anteriores" />
             </div>
           </aside>
           <main className="min-h-0 bg-white p-3 sm:p-4 lg:overflow-hidden">
@@ -3848,7 +3771,7 @@ function LeadDetailsModal({
                   backgroundSize: "420px auto",
                 }}
               >
-                <ChatMessages messages={selectedConversation?.messages ?? []} />
+                <ChatMessages key={selectedConversation?.id} leadId={lead.id} conversationId={selectedConversation?.id} leadName={lead.name} messages={selectedConversation?.messages ?? []} />
               </div>
               <ConversationSelector
                 conversations={lead.leadFile.conversations}
@@ -4269,6 +4192,7 @@ function redactInternalProviderNames(value: string) {
 }
 
 function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
+  const [visibleCount, setVisibleCount] = useState(10);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
@@ -4276,7 +4200,7 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
         <NeonBadge tone="amber">{events.length}</NeonBadge>
       </div>
       <div className="mt-3 space-y-2">
-        {events.slice(0, 10).map((event) => (
+        {events.slice(0, visibleCount).map((event) => (
           <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(event.title)}</p>
@@ -4285,6 +4209,7 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(event.summary)}</p>
           </div>
         ))}
+        {events.length > visibleCount ? <button className="text-[12px] font-semibold text-blue-600" type="button" onClick={() => setVisibleCount((count) => count + 20)}>Mostrar mais atividades do site</button> : null}
         {!events.length ? <p className="text-[12px] text-slate-500">Sem eventos de cookies, push, GPS, cliques ou navegacao ainda.</p> : null}
       </div>
     </div>
@@ -4450,11 +4375,12 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
 }
 
 function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) {
+  const [visibleCount, setVisibleCount] = useState(10);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Atividade no ecossistema</p>
       <div className="mt-3 space-y-2">
-        {activities.slice(0, 10).map((activity) => (
+        {activities.slice(0, visibleCount).map((activity) => (
           <div key={activity.id} className="grid grid-cols-[10px_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <span className={cn("mt-1.5 h-2 w-2 rounded-full", activity.tone === "green" && "bg-emerald-400", activity.tone === "cyan" && "bg-cyan-400", activity.tone === "amber" && "bg-amber-400", activity.tone === "rose" && "bg-rose-400", activity.tone === "zinc" && "bg-slate-500")} />
             <div className="min-w-0">
@@ -4466,6 +4392,7 @@ function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) 
             </div>
           </div>
         ))}
+        {activities.length > visibleCount ? <button className="text-[12px] font-semibold text-blue-600" type="button" onClick={() => setVisibleCount((count) => count + 20)}>Mostrar mais atividades</button> : null}
         {!activities.length ? <p className="text-[12px] text-slate-500">Sem eventos registrados ainda.</p> : null}
       </div>
     </div>
@@ -4593,25 +4520,48 @@ function formatOriginConfidenceLabel(value: ClientLeadMessage["originConfidence"
   return "baixa";
 }
 
-function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
+function HistoryPageControl({ history, label }: { history: ReturnType<typeof useAttendanceHistory>; label: string }) {
+  if (!history.enabled) return null;
+  return <div className="py-2 text-center text-[12px] text-slate-600">
+    {history.error ? <p role="alert" className="mb-2 text-rose-700">{history.error}</p> : null}
+    {history.loading ? <span role="status">Carregando histórico…</span> : history.cursor || history.error ? (
+      <button className="rounded-full border border-slate-200 bg-white px-4 py-2 font-semibold text-blue-700 shadow-sm" type="button" onClick={() => void history.loadMore()}>{history.error ? "Tentar novamente" : label}</button>
+    ) : <span>Início do histórico carregado</span>}
+  </div>;
+}
+
+function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName }: {
+  messages: ClientLeadMessage[]; leadId?: string | null; conversationId?: string | null; leadName?: string;
+}) {
+  const history = useAttendanceHistory(leadId ?? null, conversationId ?? null, "messages");
+  const messages = mergeConversationMessages(liveMessages, history.messages);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const topRef = useRef<HTMLDivElement | null>(null);
+  const lastMessageId = messages.at(-1)?.id;
+  const previousHeight = useRef(0);
+  const previousLastId = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
-
-  if (!messages.length) {
-    return <EmptyState title="Sem mensagens salvas" detail="Quando o webhook receber ou enviar mensagens, o historico aparece aqui." />;
-  }
+    const container = topRef.current?.parentElement;
+    if (previousLastId.current !== lastMessageId) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    } else if (container && previousHeight.current) {
+      container.scrollTop += container.scrollHeight - previousHeight.current;
+    }
+    previousLastId.current = lastMessageId;
+    previousHeight.current = container?.scrollHeight ?? 0;
+  }, [lastMessageId, messages.length]);
 
   return (
-    <div className="space-y-2">
+    <div ref={topRef} className="space-y-2">
+      <HistoryPageControl history={history} label="Carregar mensagens anteriores" />
+      {!messages.length && !history.loading && !history.error ? <EmptyState title="Sem mensagens salvas" detail="As mensagens recebidas e enviadas aparecem aqui." /> : null}
       {messages.map((message) => {
         const isLead = message.author === "lead" || message.direction === "inbound";
         const isAi = message.author === "ai";
         const isHuman = message.author === "human";
         const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
-        const label = message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
+        const label = (isLead && leadName) || message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
         const isOutbound = !isSystem && !isLead;
         const isAudio = message.mediaKind === "audio";
         const quotedLabel = message.quotedMessage

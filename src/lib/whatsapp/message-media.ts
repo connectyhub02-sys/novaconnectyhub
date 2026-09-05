@@ -61,6 +61,9 @@ export function resolveConversationMessageMedia(
   message: ConversationMessageMediaInput,
   options: { proxyBasePath?: string | null } = {},
 ): ConversationMessageMedia {
+  if (isDeliveredText(message)) {
+    return { kind: "unknown", url: null, directUrl: null, mimeType: null, fileName: null, transcription: null };
+  }
   const directUrl = readConversationMessageMediaUrl(message);
   const mimeType = readConversationMessageMimeType(message);
   const detectedKind = detectConversationMessageMediaKind(message);
@@ -80,6 +83,7 @@ export function resolveConversationMessageMedia(
 }
 
 export function detectConversationMessageMediaKind(message: ConversationMessageMediaInput): WhatsappMessageMediaKind | null {
+  if (isDeliveredText(message)) return null;
   const providerMessage = readProviderMessageRecord(message);
   const content = readRecord(providerMessage?.content);
   const signature = normalizeSearch([
@@ -105,10 +109,11 @@ export function detectConversationMessageMediaKind(message: ConversationMessageM
 }
 
 export function readConversationMessageMediaUrl(message: ConversationMessageMediaInput) {
+  if (isDeliveredText(message)) return null;
   const providerMessage = readProviderMessageRecord(message);
   const payload = readRecord(message.payload);
 
-  return findMediaUrl(providerMessage, true)
+  return findMediaUrl(providerMessage, Boolean(detectConversationMessageMediaKind(message)))
     ?? findMediaUrl(payload, false);
 }
 
@@ -120,7 +125,7 @@ export function readConversationMessageMimeType(message: ConversationMessageMedi
     ?? asString(providerMessage?.mimeType)
     ?? asString(content?.mimetype)
     ?? asString(content?.mimeType)
-    ?? findString(message.payload, ["mimetype", "mimeType", "contentType", "content_type"]);
+    ?? findMediaDescriptor(message.payload, ["mimetype", "mimeType", "contentType", "content_type"]);
 }
 
 export function readProviderMessageRecord(message: Pick<ConversationMessageMediaInput, "payload">) {
@@ -257,7 +262,7 @@ function findMediaUrl(value: unknown, mediaContext: boolean, depth = 0): string 
   }
 
   for (const [key, item] of Object.entries(record)) {
-    if (readRecord(item) || Array.isArray(item)) {
+    if (isCurrentMediaContainer(key) && (readRecord(item) || Array.isArray(item))) {
       const nestedMediaContext = recordIsMedia || mediaContainerKeys.has(normalizeKey(key));
       const found = findMediaUrl(item, nestedMediaContext, depth + 1);
       if (found) return found;
@@ -278,6 +283,29 @@ function recordHasMediaSignature(record: JsonRecord) {
     || signature.includes("mime");
 }
 
+function isCurrentMediaContainer(key: string) {
+  const normalized = normalizeKey(key);
+  return mediaContainerKeys.has(normalized) || ["data", "result", "messages", "providerresponse"].includes(normalized);
+}
+
+function findMediaDescriptor(value: unknown, keys: string[], depth = 0): string | null {
+  if (depth > 5) return null;
+  const record = readRecord(value);
+  if (!record) return null;
+  for (const key of keys) {
+    const descriptor = asString(record[key]);
+    if (descriptor) return descriptor;
+  }
+  for (const [key, item] of Object.entries(record)) {
+    if (!isCurrentMediaContainer(key)) continue;
+    for (const nested of Array.isArray(item) ? item : [item]) {
+      const descriptor = findMediaDescriptor(nested, keys, depth + 1);
+      if (descriptor) return descriptor;
+    }
+  }
+  return null;
+}
+
 function collectMediaSignature(value: unknown, depth = 0, maxDepth = 4): string[] {
   if (!value || depth > maxDepth) return [];
 
@@ -287,7 +315,7 @@ function collectMediaSignature(value: unknown, depth = 0, maxDepth = 4): string[
 
   const record = readRecord(value);
   if (!record) {
-    return typeof value === "string" ? [value] : [];
+    return [];
   }
 
   const parts: string[] = [];
@@ -295,19 +323,16 @@ function collectMediaSignature(value: unknown, depth = 0, maxDepth = 4): string[
   for (const [key, item] of Object.entries(record)) {
     const normalizedKey = normalizeKey(key);
 
-    if (
-      normalizedKey.includes("type")
-      || normalizedKey.includes("kind")
-      || normalizedKey.includes("mime")
-      || normalizedKey.includes("media")
-      || mediaContainerKeys.has(normalizedKey)
-    ) {
-      parts.push(key);
-    }
-
-    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
-      parts.push(String(item));
-    } else if (readRecord(item) || Array.isArray(item)) {
+    // Only actual media descriptors count. Text, quotes, intended delivery and
+    // nullable generated_audio_media_id metadata do not describe delivered media.
+    if (["messagetype", "mediatype", "type", "kind", "mimetype", "contenttype"].includes(normalizedKey) && typeof item === "string") {
+      parts.push(item);
+    } else if (normalizedKey === "ptt" && item === true) {
+      parts.push("ptt");
+    } else if (mediaContainerKeys.has(normalizedKey) && item && (typeof item === "string" || readRecord(item))) {
+      if (!["content", "message", "msg"].includes(normalizedKey)) parts.push(key);
+      parts.push(...collectMediaSignature(item, depth + 1, maxDepth));
+    } else if (["data", "result", "messages", "providerresponse"].includes(normalizedKey)) {
       parts.push(...collectMediaSignature(item, depth + 1, maxDepth));
     }
   }
@@ -316,12 +341,15 @@ function collectMediaSignature(value: unknown, depth = 0, maxDepth = 4): string[
 }
 
 function inferMediaKindFromMimeOrUrl(mimeType: string | null, url: string | null): WhatsappMessageMediaKind | null {
-  const signature = normalizeSearch([mimeType, url].filter(Boolean).join(" "));
+  // The hostname and query string may contain words such as "audio" unrelated to media.
+  let path = "";
+  try { path = url ? new URL(url).pathname : ""; } catch { /* No usable media URL. */ }
+  const signature = normalizeSearch(mimeType ?? "");
 
-  if (isAudioSignature(signature)) return "audio";
-  if (signature.includes("image") || /\.(jpe?g|png|webp|gif)(\?|#|$)/.test(signature)) return "image";
-  if (signature.includes("video") || /\.(mp4|mov|webm|3gp)(\?|#|$)/.test(signature)) return "video";
-  if (signature.includes("pdf") || signature.includes("document") || signature.includes("application/")) return "document";
+  if (isAudioSignature(signature) || /\.(aac|m4a|mp3|oga|ogg|opus|wav)$/i.test(path)) return "audio";
+  if (signature.includes("image") || /\.(jpe?g|png|webp|gif)$/i.test(path)) return "image";
+  if (signature.includes("video") || /\.(mp4|mov|webm|3gp)$/i.test(path)) return "video";
+  if (signature.includes("application/") || /\.(pdf|docx?|xlsx?|pptx?|zip)$/i.test(path)) return "document";
 
   return null;
 }
@@ -428,4 +456,10 @@ function normalizeSearch(value: string) {
 
 function normalizeKey(value: string) {
   return normalizeSearch(value).replace(/[^a-z0-9]/g, "");
+}
+
+function isDeliveredText(message: ConversationMessageMediaInput) {
+  const type = normalizeKey(message.message_type ?? "");
+  return message.payload?.delivery_mode === "text"
+    || ["text", "conversation", "extendedtextmessage", "buttonsmessage", "buttonsresponsemessage", "listmessage", "listresponsemessage", "interactivemessage", "interactiveresponsemessage"].includes(type);
 }

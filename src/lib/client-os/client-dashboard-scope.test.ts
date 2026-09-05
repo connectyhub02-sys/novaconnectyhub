@@ -7,7 +7,7 @@ vi.mock("@/lib/whatsapp/lead-avatar-sync", () => ({
   syncLeadAvatarFromUazapi: vi.fn(),
 }));
 vi.mock("@/lib/whatsapp/lead-names", () => ({
-  resolveLeadPersonalName: vi.fn(() => null),
+  resolveLeadDisplayName: vi.fn(() => null),
 }));
 vi.mock("@/lib/meta/social-approval-policy", () => ({
   buildMetaSocialSuggestedReply: vi.fn(() => "Resposta sugerida."),

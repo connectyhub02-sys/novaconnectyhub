@@ -3117,6 +3117,19 @@ function extractRuntimeCustomerName(text: string) {
 }
 
 function extractRuntimeCustomerNameFromStructuredReply(text: string) {
+  // A checkout reply often starts with "Pix", then gives the name and email
+  // on separate lines. Preserve those boundaries before cleaning the address.
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) {
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const hasNameLabel = /^nome(?: completo)?\s*[:\-]/i.test(line);
+      const followedByEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(lines[index + 1] ?? "");
+      if (!hasNameLabel && !followedByEmail) continue;
+      const candidate = sanitizeRuntimeCustomerNameCandidate(line.replace(/^nome(?: completo)?\s*[:\-]\s*/i, ""), { allowSingleName: false });
+      if (candidate) return candidate;
+    }
+  }
   const raw = text.replace(/\s+/g, " ").trim();
 
   if (!raw) return null;

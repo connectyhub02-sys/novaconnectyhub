@@ -8,6 +8,9 @@ type LeadNameInput = {
 const businessNamePattern =
   /\b(imobiliaria|imoveis|construtora|empreendimentos|empresa|loja|store|shop|comercio|comercial|vendas|atendimento|suporte|sac|consultoria|marketing|agencia|digital|sistema|sistemas|tech|tecnologia|solucao|solucoes|solutions|grupo|holding|oficial|clinica|estetica|studio|academia|fitness|suplemento|suplementos|nutricao|restaurante|pizzaria|barbearia|salao|moda|boutique|advocacia|advogado|advogados|contabilidade|financeira|credito|seguro|agro|delivery|buffalo|mass|connectyhub|ltda|eireli|mei|cnpj|industria|distribuidora|representacoes)\b/;
 
+// Conversation snippets must never become a person's identity or block later name capture.
+const conversationNamePattern = /^(?:(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|sim|nao|obrigad[oa]|valeu|ok|certo|perfeito|pix)(?:\s|$)|(?:qual|quais|quanto|quantos|quanto custa|como|onde|quando|quero|queria|gostaria|preciso|pode|podemos|manda|envia|me manda|me envia|voce|voces|vcs|vcs tem|tem como|tem algum|tem estoque|tem desconto|qualquer duvida)(?:\s|$)|(?:o|e o|me passa o) (?:valor|preco|frete)(?:\s|$)|(?:aguardando|pode fechar|pode gerar)(?:\s|$))/;
+
 export function normalizeLeadNameCandidate(value: unknown, maxLength = 80) {
   return typeof value === "string"
     ? value.replace(/\s+/g, " ").trim().slice(0, maxLength)
@@ -31,7 +34,11 @@ export function classifyWhatsappLeadDisplayName(value: unknown): WhatsappLeadNam
     return "unknown";
   }
 
-  if (businessNamePattern.test(normalized) || /\b(s a|sa)\b/.test(normalized)) {
+  if (/[?!]/.test(name) || conversationNamePattern.test(normalized)) {
+    return "unknown";
+  }
+
+  if (businessNamePattern.test(normalized) || /(?:^|\s)s\.\s*a\.?$/i.test(name)) {
     return "business";
   }
 
@@ -61,14 +68,14 @@ export function resolveLeadPersonalName(input: LeadNameInput) {
   const memory = readRecord(metadata?.lead_memory);
   const qualification = readRecord(metadata?.qualification);
   const candidates = [
-    memory?.personName,
-    memory?.person_name,
     metadata?.person_name,
     metadata?.personal_name,
     metadata?.contact_name,
     metadata?.nome,
     metadata?.name,
     metadata?.lead_name,
+    memory?.personName,
+    memory?.person_name,
     qualification?.person_name,
     qualification?.contact_name,
     input.displayName,
@@ -82,6 +89,17 @@ export function resolveLeadPersonalName(input: LeadNameInput) {
     }
   }
 
+  return null;
+}
+
+// Profile names are only a display fallback, never a confirmed billing identity.
+export function resolveLeadDisplayName(input: LeadNameInput) {
+  const personalName = resolveLeadPersonalName(input);
+  if (personalName) return personalName;
+  const metadata = readRecord(input.metadata);
+  for (const candidate of [metadata?.whatsapp_display_name, metadata?.last_provider_display_name]) {
+    if (classifyWhatsappLeadDisplayName(candidate) !== "unknown") return normalizeLeadNameCandidate(candidate);
+  }
   return null;
 }
 

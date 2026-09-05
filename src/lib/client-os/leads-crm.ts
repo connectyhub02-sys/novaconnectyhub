@@ -12,9 +12,10 @@ import {
   resolveConversationMessageMedia,
   type WhatsappMessageMediaKind,
 } from "@/lib/whatsapp/message-media";
-import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
+import { resolveLeadDisplayName } from "@/lib/whatsapp/lead-names";
 import { platformWhatsappOrganizationSlug, type ConversationPanelScope } from "@/lib/whatsapp/conversation-panel-scope";
 import { listClientCompanies, type ClientCompany } from "./companies";
+import { historyBeforeFilter, type AttendanceHistoryCursor } from "./attendance-history-cursor";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -324,6 +325,112 @@ export type ClientLeadCrmWorkspace = {
   };
   warnings?: string[];
 };
+
+export type AttendanceHistoryPage = {
+  messages: ClientLeadMessage[];
+  activities: ClientLeadActivity[];
+  trackingEvents: ClientLeadActivity[];
+  cursor: AttendanceHistoryCursor | null;
+};
+
+export async function getAttendanceHistory(input: {
+  client?: SupabaseClient;
+  organizationId: string | null;
+  isPlatformAdmin: boolean;
+  leadId: string;
+  conversationId: string | null;
+  kind: "messages" | "events";
+  cursor: AttendanceHistoryCursor;
+}): Promise<AttendanceHistoryPage | null> {
+  if (!input.isPlatformAdmin && !input.organizationId) return null;
+  const client = input.client ?? createServiceClient();
+  let leadQuery = client.from("leads").select("*").eq("id", input.leadId);
+  if (!input.isPlatformAdmin) leadQuery = leadQuery.eq("organization_id", input.organizationId!);
+  const leadResult = await leadQuery.maybeSingle();
+  if (leadResult.error) throw leadResult.error;
+  const lead = leadResult.data as LeadRow | null;
+  if (!lead) return null;
+  const organizationId = lead.organization_id;
+  const conversationsResult = await client.from("conversations")
+    .select("*").eq("organization_id", organizationId).eq("lead_id", lead.id)
+    .order("last_message_at", { ascending: false }).order("id", { ascending: false });
+  if (conversationsResult.error) throw conversationsResult.error;
+  const conversations = (conversationsResult.data ?? []) as ConversationRow[];
+  const instanceIds = uniqueStrings(conversations.map((conversation) => conversation.whatsapp_instance_id));
+  if (!instanceIds.length) return null;
+  const instancesResult = await client.from("whatsapp_instances")
+    .select("id, organization_id, connectyhub_api_client_id, connectyhub_api_visibility, phone_number, display_name, status, metadata")
+    .eq("organization_id", organizationId).in("id", instanceIds);
+  if (instancesResult.error) throw instancesResult.error;
+  const instances = new Map(((instancesResult.data ?? []) as WhatsappInstanceQueueRow[])
+    .filter(isLeadCrmWhatsappInstance).map((instance) => [instance.id, instance]));
+  const visibleConversations = conversations.filter((conversation) => instances.has(conversation.whatsapp_instance_id ?? "")
+    && !isSelfEchoConversation(conversation, instances));
+  if (!visibleConversations.length) return null;
+
+  if (input.kind === "events") {
+    let position = input.cursor.events;
+    const matched: IntelligenceEventRow[] = [];
+    // Scan bounded pages so older tracking events remain reachable even when
+    // another lead generates most of the organization's recent activity.
+    for (let page = 0; page < 3 && position !== null && matched.length < 30; page += 1) {
+      let query = client.from("intelligence_events")
+        .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
+        .eq("organization_id", organizationId)
+        .order("occurred_at", { ascending: false }).order("id", { ascending: false }).limit(501);
+      if (position) query = query.or(historyBeforeFilter("occurred_at", position));
+      const result = await query;
+      if (result.error) throw result.error;
+      const rows = (result.data ?? []) as IntelligenceEventRow[];
+      const batch = rows.slice(0, 500);
+      matched.push(...matchLeadEvents(lead, visibleConversations, batch));
+      const last = batch.at(-1);
+      position = rows.length > 500 && last?.occurred_at ? { at: last.occurred_at, id: last.id } : null;
+    }
+    const activities = buildActivities(lead, visibleConversations, matched);
+    return { messages: [], activities, trackingEvents: activities.filter(isTrackingActivity), cursor: position ? { events: position } : null };
+  }
+
+  const conversation = visibleConversations.find((item) => item.id === input.conversationId);
+  if (!conversation) return null;
+  const [whatsappResult, commerceResult] = await Promise.all([
+    (async () => {
+      if (input.cursor.whatsapp === null) return [];
+      let query = client.from("conversation_messages").select(conversationMessageColumns)
+        .eq("organization_id", organizationId).eq("conversation_id", conversation.id)
+        .order("occurred_at", { ascending: false }).order("id", { ascending: false }).limit(51);
+      if (input.cursor.whatsapp) query = query.or(historyBeforeFilter("occurred_at", input.cursor.whatsapp));
+      const result = await query;
+      if (result.error) throw result.error;
+      return (result.data ?? []) as MessageRow[];
+    })(),
+    (async () => {
+      if (input.cursor.commerce === null) return [];
+      let query = client.from("commerce_agent_messages").select(commerceAgentMessageColumns)
+        .eq("organization_id", organizationId).in("role", ["lead", "assistant"])
+        .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(51);
+      query = conversation.id === visibleConversations[0].id
+        ? query.or(`conversation_id.eq.${conversation.id},and(conversation_id.is.null,lead_id.eq.${lead.id})`)
+        : query.eq("conversation_id", conversation.id);
+      if (input.cursor.commerce) query = query.or(historyBeforeFilter("created_at", input.cursor.commerce));
+      const result = await query;
+      if (result.error) throw result.error;
+      return (result.data ?? []) as CommerceAgentMessageRow[];
+    })(),
+  ]);
+  const whatsapp = whatsappResult.slice(0, 50);
+  const commerce = commerceResult.slice(0, 50);
+  const lastWhatsapp = whatsapp.at(-1);
+  const lastCommerce = commerce.at(-1);
+  const cursor = {
+    whatsapp: whatsappResult.length > 50 && lastWhatsapp?.occurred_at ? { at: lastWhatsapp.occurred_at, id: lastWhatsapp.id } : null,
+    commerce: commerceResult.length > 50 && lastCommerce?.created_at ? { at: lastCommerce.created_at, id: lastCommerce.id } : null,
+  };
+  const fallback = new Map([[lead.id, visibleConversations[0].id]]);
+  const rows = [...whatsapp, ...commerce.map((row) => mapCommerceAgentMessageToConversationMessage(row, fallback)).filter((row): row is MessageRow => Boolean(row))]
+    .sort((a, b) => compareDateAsc(a.occurred_at, b.occurred_at) || a.id.localeCompare(b.id));
+  return { messages: rows.map((row) => mapMessage(row, rows)), activities: [], trackingEvents: [], cursor: cursor.whatsapp || cursor.commerce ? cursor : null };
+}
 
 type LeadCrmLoadOptions = {
   includeEvents?: boolean;
@@ -1101,7 +1208,7 @@ function mapLeadRecord(input: {
   const avatarUrl = readLeadProfileImageUrl(metadata)
     ?? readLeadProfileImageUrl(eventMetadata)
     ?? readLeadProfileImageUrl(input.conversations.map((conversation) => conversation.metadata));
-  const name = resolveLeadPersonalName({
+  const name = resolveLeadDisplayName({
     displayName: input.lead.display_name,
     metadata,
   }) ?? fallbackLeadName(input.lead.phone_number);
@@ -1344,7 +1451,7 @@ function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): C
     provider: row.provider,
     providerMessageId: row.provider_message_id,
     providerChatId: row.provider_chat_id,
-    type: row.message_type ?? "text",
+    type: media.kind === "unknown" ? "text" : media.kind,
     text: readMessageText(row, payload, media.url ?? media.directUrl, media.kind) ?? "Mensagem sem texto.",
     quotedMessage,
     mediaKind: media.kind,
@@ -2028,12 +2135,13 @@ function matchLeadEvents(
       return false;
     }
 
-    if (event.source_id && conversationIds.has(event.source_id)) {
+    if (event.source_id && (event.source_id === lead.id || conversationIds.has(event.source_id))) {
       return true;
     }
 
     const payload = readRecord(event.payload) ?? {};
     const payloadLeadId = readString(payload.lead_id) ?? readString(payload.leadId);
+    const payloadConversationId = readString(payload.conversation_id) ?? readString(payload.conversationId);
     const payloadLeadPhone = normalizePhone(readString(payload.lead_phone) ?? readString(payload.phone_number) ?? readString(payload.phone));
     const payloadChatId = readString(payload.provider_chat_id) ?? readString(payload.chat_id);
     const eventTrackingIds = collectTrackingIds({
@@ -2043,6 +2151,7 @@ function matchLeadEvents(
 
     return (
       payloadLeadId === lead.id ||
+      Boolean(payloadConversationId && conversationIds.has(payloadConversationId)) ||
       Boolean(normalizedLeadPhone && payloadLeadPhone === normalizedLeadPhone) ||
       Boolean(payloadChatId && chatIds.has(payloadChatId)) ||
       intersectsSet(leadTrackingIds, eventTrackingIds)

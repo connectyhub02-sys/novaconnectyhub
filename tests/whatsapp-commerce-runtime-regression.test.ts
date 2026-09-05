@@ -21,6 +21,12 @@ const context = (messages: ReturnType<typeof message>[]) => ({
 });
 
 describe("WhatsApp commerce regression: real runtime decisions", () => {
+  it("captures the explicit name when the billing reply starts with Pix on its own line", () => {
+    const call = runtimeHarness();
+    expect(call("extractRuntimeCustomerNameFromStructuredReply", "Pix\nMaria Pereira Dias\ncliente@example.test\n12345678909\nRua Exemplo, 10, CEP 88000000")).toBe("Maria Pereira Dias");
+    expect(call("extractRuntimeCustomerNameFromStructuredReply", "Nome completo: João de Sá\nCPF: 12345678909")).toBe("João de Sá");
+    expect(call("extractRuntimeCustomerNameFromStructuredReply", "Qual o valor\ncliente@example.test")).toBeNull();
+  });
   it.each([["card", "Pix", "pix"], ["pix", "Cartão", "card"]])("switches an existing %s checkout to %s using the same order", async (oldMethod, reply, preferredMethod) => {
     const latest = message("inbound", reply, 2);
     const db = commerceDatabase({

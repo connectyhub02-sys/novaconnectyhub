@@ -15,6 +15,7 @@ import * as humanization from "@/lib/whatsapp/clone-humanization";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
+  "extractRuntimeCustomerNameFromStructuredReply",
   "resolveSalesCatalogOrderSelections", "resolveSalesCatalogMentionQuantity",
   "hasRecentSalesCatalogCheckoutConfirmation", "buildSalesCatalogOrderConfirmationPrompt",
   "persistLeadBillingDetailsSnapshot", "persistLeadCustomerNameSnapshot", "extractLeadMemory",

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       organizationId: organization.id,
       company,
       includeEvents: false,
-      leadLimit: 70,
+      leadLimit: 80,
       messageLimit: 40,
       syncAvatars: false,
     });
@@ -55,8 +55,7 @@ export async function GET(request: NextRequest) {
       {
         ok: true,
         refreshedAt: new Date().toISOString(),
-        salesCatalogOrders,
-        salesCatalogPaymentSessions,
+        ...(includeCommerce ? { salesCatalogOrders, salesCatalogPaymentSessions } : {}),
         workspace: leadWorkspace,
       },
       {
