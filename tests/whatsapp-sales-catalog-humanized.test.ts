@@ -318,7 +318,12 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(runtime).toContain("maybeSendExistingSalesCatalogCheckoutLink");
     expect(runtime).toContain("reason: \"sales_catalog_existing_checkout_link\"");
     expect(checkoutRecovery).toContain(".from(\"sales_catalog_payment_sessions\")");
+    expect(checkoutRecovery).toContain("maybeCreateMissingSalesCatalogPaymentSession");
+    expect(checkoutRecovery).toContain("if (!paymentSessionId)");
     expect(checkoutRecovery).toContain("sendSalesCatalogPaymentLink");
+    expect(checkoutRecovery).not.toContain("if (!order.latestPaymentSessionId) return false;");
+    expect(runtimeSource).toContain("preferredPaymentMethod");
+    expect(runtimeSource).toContain("isSalesCatalogRuntimePaymentPreferenceEnabled(choices, preferredPaymentMethod)");
     expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutPromise");
     expect(followUpDetection).toContain("isSalesCatalogContextualCheckoutConfirmation");
     expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutConfirmationPrompt");

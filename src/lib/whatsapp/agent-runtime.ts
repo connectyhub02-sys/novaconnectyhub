@@ -10537,7 +10537,25 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   const paymentSessionId = order.latestPaymentSessionId;
 
   if (!paymentSessionId) {
-    return null;
+    const recoveredPayment = await maybeCreateMissingSalesCatalogPaymentSession({
+      client: input.client,
+      context: input.context,
+      order,
+      userText: input.userText,
+      latestInbound: input.latestInbound,
+    });
+
+    if (!recoveredPayment) {
+      return null;
+    }
+
+    return sendSalesCatalogPaymentLink({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      phone: input.phone,
+      payment: recoveredPayment,
+    });
   }
 
   const { data, error } = await input.client
@@ -10769,6 +10787,31 @@ function buildSalesCatalogExistingOrderConfirmationText(order: RuntimeSalesCatal
   ].filter(Boolean).join("\n\n");
 }
 
+async function maybeCreateMissingSalesCatalogPaymentSession(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  order: RuntimeSalesCatalogOrder;
+  userText: string;
+  latestInbound: ConversationMessageRow | null;
+}) {
+  const choices = getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings);
+  const preferredPaymentMethod = resolveSalesCatalogConfirmedPaymentPreference(input.context, input.userText);
+
+  if (!preferredPaymentMethod || !isSalesCatalogRuntimePaymentPreferenceEnabled(choices, preferredPaymentMethod)) {
+    return null;
+  }
+
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+
+  return maybeCreateSalesCatalogPaymentLink({
+    client: input.client,
+    context: input.context,
+    orderId: input.order.id,
+    total: input.order.total ?? input.order.subtotal,
+    preferredMethod: preferredPaymentMethod,
+  });
+}
+
 function readStoredSalesCatalogPaymentPreference(metadata: JsonRecord): SalesCatalogRuntimePaymentPreference | null {
   const value = asString(metadata.preferred_payment_method);
 
@@ -10829,7 +10872,7 @@ function findRecentPendingSalesCatalogCheckoutOrder(
   }
 
   return orders.find((order) => {
-    if (!order.latestPaymentSessionId) return false;
+    if (!order.items.some((item) => Boolean(item.catalogItemId))) return false;
     if (order.paymentStatus === "confirmed" || order.paymentStatus === "refunded" || order.paymentStatus === "failed") return false;
     if (order.status === "cancelled" || order.status === "delivered") return false;
 

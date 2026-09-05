@@ -95,6 +95,109 @@ const PASSKEY_PAIRING_GUIDE = [
   "Voce pode oferecer reset e nova tentativa de QR. Se a conta voltar ao mesmo status, use um fluxo de migracao assistida de sessao apos concluir a validacao no WhatsApp Web oficial.",
 ].join("\n");
 
+const PROVIDER_INTERACTIVE_OPERATION_NOTES = {
+  "/send/menu": [
+    "## Exemplos ConnectyHub validados",
+    "",
+    "Use `type: \"button\"` com `choices` para botoes de checkout, Pix copia e cola, chamada e resposta rapida:",
+    "",
+    "- Checkout: `Finalizar checkout|https://www.connectyhub.com.br/checkout/pedido-123?payment_method=card`",
+    "- Checkout com prefixo: `Finalizar checkout|url:https://www.connectyhub.com.br/checkout/pedido-123`",
+    "- Copiar Pix: `Copiar codigo Pix|copy:TESTE-COPIAR-PIX-123`",
+    "- Chamada: `Falar com atendimento|call:+5511999999999`",
+    "- Resposta rapida: `Confirmar pedido|confirmar_pedido`",
+    "",
+    "Para melhor compatibilidade no WhatsApp Web, evite misturar botoes de resposta rapida com botoes de URL, COPY ou CALL na mesma mensagem.",
+  ].join("\n"),
+  "/send/carousel": [
+    "## Exemplos ConnectyHub validados",
+    "",
+    "Cada card do carrossel pode combinar botoes `URL`, `COPY` e `CALL`. Use `COPY` para cupons, codigos Pix curtos ou referencias que o lead precise copiar.",
+  ].join("\n"),
+  "/send/request-payment": [
+    "## Exemplos ConnectyHub validados",
+    "",
+    "Use este endpoint quando quiser abrir o fluxo nativo `Revisar e pagar` do WhatsApp. O payload pode levar `pixCode` para Pix copia e cola ja gerado, `pixKey` para chave Pix estatica e `paymentLink` para checkout externo/cartao.",
+  ].join("\n"),
+  "/send/pix-button": [
+    "## Exemplos ConnectyHub validados",
+    "",
+    "Use este endpoint quando a acao esperada for exclusivamente Pix por chave. Para Pix copia e cola dinamico de uma venda, prefira `/provider/send/menu` com `copy:` ou `/provider/send/request-payment` com `pixCode`.",
+  ].join("\n"),
+};
+
+const PROVIDER_REQUEST_BODY_EXAMPLES = {
+  "/send/menu": {
+    instanceId: EXAMPLE_INSTANCE_ID,
+    payload: {
+      number: "5511999999999",
+      type: "button",
+      text: "Pedido #123 pronto. Escolha uma acao para concluir:",
+      choices: [
+        "Finalizar checkout|https://www.connectyhub.com.br/checkout/pedido-123?payment_method=card",
+        "Copiar codigo Pix|copy:TESTE-COPIAR-PIX-123",
+      ],
+      footerText: "ConnectyHub",
+      track_source: "connectyhub",
+      track_id: "pedido_123_menu_pagamento",
+    },
+  },
+  "/send/carousel": {
+    instanceId: EXAMPLE_INSTANCE_ID,
+    payload: {
+      number: "5511999999999",
+      text: "Produtos em destaque",
+      carousel: [
+        {
+          text: "Produto A\nEntrega rapida e checkout seguro",
+          image: "https://www.connectyhub.com.br/brand/connectyhub-logo-blue.png",
+          buttons: [
+            {
+              id: "https://www.connectyhub.com.br/checkout/pedido-123",
+              text: "Comprar agora",
+              type: "URL",
+            },
+            {
+              id: "CUPOM20",
+              text: "Copiar cupom",
+              type: "COPY",
+            },
+          ],
+        },
+      ],
+      track_source: "connectyhub",
+      track_id: "catalogo_carrossel_123",
+    },
+  },
+  "/send/request-payment": {
+    instanceId: EXAMPLE_INSTANCE_ID,
+    payload: {
+      number: "5511999999999",
+      title: "Pagamento do pedido",
+      text: "Pedido #123 pronto para pagamento.",
+      footer: "ConnectyHub",
+      itemName: "Pedido #123",
+      invoiceNumber: "PED-123",
+      amount: 237.99,
+      pixCode: "TESTE-COPIAR-PIX-123",
+      paymentLink: "https://www.connectyhub.com.br/checkout/pedido-123?payment_method=card",
+      track_source: "connectyhub",
+      track_id: "pedido_123_request_payment",
+    },
+  },
+  "/send/pix-button": {
+    instanceId: EXAMPLE_INSTANCE_ID,
+    payload: {
+      number: "5511999999999",
+      pixType: "EVP",
+      pixKey: "123e4567-e89b-12d3-a456-426614174000",
+      pixName: "Loja Exemplo",
+      track_source: "connectyhub",
+      track_id: "pedido_123_pix_button",
+    },
+  },
+};
+
 const tagNames = {
   "Admininstração": "Administracao",
   "Administração": "Administracao",
@@ -806,7 +909,7 @@ function buildProviderOperation(sourcePathKey, method, operation) {
     ...sanitized,
     tags: (sanitized.tags || []).map(normalizeTag).filter((tag) => tag !== "Administracao"),
     summary: sanitized.summary || titleFromPath(sourcePathKey),
-    description: buildProviderDescription(sanitized.description, method, hasOriginalBody),
+    description: buildProviderDescription(sourcePathKey, sanitized.description, method, hasOriginalBody),
     security: [{ bearerAuth: [] }, { apiKeyHeader: [] }],
     parameters: queryParameters,
     responses: scrubDeep(sanitized.responses || { "200": { description: "Sucesso" } }),
@@ -817,7 +920,7 @@ function buildProviderOperation(sourcePathKey, method, operation) {
   }
 
   if (method !== "get") {
-    providerOperation.requestBody = buildProviderRequestBody(originalSchema, sanitized.requestBody?.required);
+    providerOperation.requestBody = buildProviderRequestBody(sourcePathKey, originalSchema, sanitized.requestBody?.required);
   } else {
     delete providerOperation.requestBody;
   }
@@ -827,7 +930,7 @@ function buildProviderOperation(sourcePathKey, method, operation) {
   return rewriteRefs(scrubDeep(providerOperation));
 }
 
-function buildProviderDescription(description, method, hasOriginalBody) {
+function buildProviderDescription(sourcePathKey, description, method, hasOriginalBody) {
   const intro =
     "Rota avancada exposta pela ConnectyHub. A autenticacao e feita pela chave ConnectyHub; a plataforma localiza a instancia pelo instanceId e aplica as permissoes do cliente antes de encaminhar a operacao.";
   const bodyNote =
@@ -836,34 +939,54 @@ function buildProviderDescription(description, method, hasOriginalBody) {
       : hasOriginalBody
         ? "Envie instanceId no corpo ou query string e coloque os campos especificos da operacao dentro de payload."
         : "Envie instanceId no corpo ou query string. Esta operacao nao exige payload especifico.";
+  const operationNotes = PROVIDER_INTERACTIVE_OPERATION_NOTES[sourcePathKey] ?? "";
 
-  return [intro, bodyNote, description].filter(Boolean).join("\n\n");
+  return [intro, bodyNote, operationNotes, description].filter(Boolean).join("\n\n");
 }
 
-function buildProviderRequestBody(originalSchema, originalRequired) {
+function buildProviderRequestBody(sourcePathKey, originalSchema, originalRequired) {
   const payloadSchema = originalSchema
-    ? rewriteRefs(scrubDeep(originalSchema))
+    ? enhanceProviderPayloadSchema(sourcePathKey, rewriteRefs(scrubDeep(originalSchema)))
     : {
         type: "object",
         additionalProperties: true,
         description: "Payload especifico da operacao, quando aplicavel.",
       };
+  const schema = {
+    type: "object",
+    required: ["instanceId", ...(originalRequired && originalSchema ? ["payload"] : [])],
+    properties: {
+      instanceId: {
+        type: "string",
+        description: "ID publico da instancia ConnectyHub.",
+        example: EXAMPLE_INSTANCE_ID,
+      },
+      payload: payloadSchema,
+    },
+    ...(PROVIDER_REQUEST_BODY_EXAMPLES[sourcePathKey]
+      ? { example: PROVIDER_REQUEST_BODY_EXAMPLES[sourcePathKey] }
+      : {}),
+  };
 
-  return jsonBody(
-    {
-      type: "object",
-      required: ["instanceId", ...(originalRequired && originalSchema ? ["payload"] : [])],
-      properties: {
-        instanceId: {
-          type: "string",
-          description: "ID publico da instancia ConnectyHub.",
-          example: EXAMPLE_INSTANCE_ID,
-        },
-        payload: payloadSchema,
+  return jsonBody(schema, Boolean(originalRequired));
+}
+
+function enhanceProviderPayloadSchema(sourcePathKey, schema) {
+  if (sourcePathKey !== "/send/request-payment" || !schema?.properties) {
+    return schema;
+  }
+
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      pixCode: schema.properties.pixCode ?? {
+        type: "string",
+        description: "Codigo Pix copia e cola ja gerado para exibir no fluxo nativo de pagamento.",
+        example: "TESTE-COPIAR-PIX-123",
       },
     },
-    Boolean(originalRequired),
-  );
+  };
 }
 
 function isPublicProviderOperation(pathKey, operation) {
