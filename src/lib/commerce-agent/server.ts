@@ -2061,11 +2061,7 @@ function buildWhisperMessage(
   }
 
   if (context.surface === "checkout") {
-    const order = formatOrderItemsForSentence(promptContext.orderItems);
-
-    return order
-      ? `${name}estou aqui no checkout com seu pedido de ${order}. Clica na minha foto se quiser revisar comigo.`
-      : `${name}estou aqui no checkout. Se precisar de ajuda, clica na minha foto que eu continuo por aqui.`;
+    return `${name}continuo por aqui! Se precisar, é só clicar na minha foto.`;
   }
 
   if (context.surface === "cart") {

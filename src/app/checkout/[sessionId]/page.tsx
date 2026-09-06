@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
-import { CheckoutAgentAnchor } from "@/components/checkout/checkout-agent-anchor";
+import { CheckoutCustomerAvatar } from "@/components/checkout/checkout-customer-avatar";
 import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import { loadCheckoutCustomer } from "@/lib/sales-catalog/checkout-customer";
+import { loadCheckoutLeadAvatar } from "@/lib/sales-catalog/checkout-lead-avatar";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
@@ -185,7 +186,7 @@ export default async function CheckoutPage({
   const { sessionId } = await params;
   const query = (await searchParams) ?? {};
   const client = createServiceClient();
-  const { session, order, items, organization, integration, whatsapp, orderBumps } = await loadCheckoutData(client, sessionId);
+  const { session, order, items, organization, integration, whatsapp, orderBumps, customerAvatarUrl } = await loadCheckoutData(client, sessionId);
 
   if (!session || !order || !organization) {
     return (
@@ -299,7 +300,7 @@ export default async function CheckoutPage({
           </a>
           <div className="flex shrink-0 items-center gap-2">
             <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><ShieldCheck className="h-4 w-4" /> Seguro</span>
-            <CheckoutAgentAnchor />
+            <CheckoutCustomerAvatar name={order.customer_name} avatarUrl={customerAvatarUrl} />
           </div>
         </div>
       </header>
@@ -411,7 +412,7 @@ export default async function CheckoutPage({
           </details>
         </div>
       </main>
-      <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-6 pt-2 text-center text-[11px] text-slate-500">
+      <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-24 pt-2 text-center text-[11px] text-slate-500 sm:pb-6">
         <span>Pagamento seguro por {paymentProviderLabel}</span>
         <a className="underline underline-offset-2" href={publicStoreUrl}>Voltar para a loja</a>
         <a href={connectHubPublicUrl} rel="noreferrer" target="_blank">Checkout ConnectyHub</a>
@@ -585,6 +586,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       organization: null,
       integration: null,
       whatsapp: null,
+      customerAvatarUrl: null,
       orderBumps: [] as SalesCatalogCheckoutOrderBump[],
     };
   }
@@ -612,7 +614,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
 
   const rawItems = (itemsResult.data ?? []) as CheckoutOrderItemRow[];
   const order = orderResult.data ? await loadCheckoutCustomer(client, session.organization_id, orderResult.data) : null;
-  const [items, whatsapp] = await Promise.all([
+  const [items, whatsapp, customerAvatarUrl] = await Promise.all([
     enrichCheckoutItemsWithCatalog(client, rawItems, session.organization_id),
     order
       ? loadCheckoutWhatsapp(client, {
@@ -622,6 +624,11 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
           sessionMetadata: session.metadata,
         })
       : Promise.resolve(null),
+    loadCheckoutLeadAvatar(client, {
+      organizationId: session.organization_id,
+      leadId: order?.lead_id ?? null,
+      conversationId: order?.conversation_id ?? null,
+    }),
   ]);
   const orderBumps = orderResult.data
     ? await loadSalesCatalogCheckoutOrderBumps({
@@ -644,6 +651,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     organization: organizationResult.data ?? null,
     integration,
     whatsapp,
+    customerAvatarUrl,
     orderBumps,
   };
 }
