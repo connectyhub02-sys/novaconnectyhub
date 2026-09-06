@@ -1,12 +1,20 @@
 # Checkout transparente — entrega e homologação
 
-Implementação local do plano aprovado em `plano-checkout-transparente-connectyhub.md`. A captura própria de cartão **ainda não foi ativada em produção**. A integração disponível nesta sessão é de produção; a homologação real em Sandbox e a validação aplicável à captura de cartões estão pendentes.
+Implementação publicada do plano aprovado em `plano-checkout-transparente-connectyhub.md`. A captura própria de cartão **foi habilitada para os testes autorizados pelo operador** na loja do Gustavo. A integração Asaas conectada está em produção; a homologação real em Sandbox e a validação aplicável à captura de cartões continuam pendentes.
 
 ## Publicação autorizada em 06/09/2026
 
 Após a entrega local do commit `7a4ab78`, o usuário autorizou a publicação mesmo com a habilitação de cartão pendente. As migrações `0076` e `0077` foram aplicadas juntas em uma transação no banco de produção, registradas no histórico de migrações e acompanhadas da atualização do cache de schema.
 
-A publicação do código não habilita a captura própria: nenhuma referência de validação foi criada e nenhuma loja foi ativada. Cartão fica indisponível nas lojas ainda não habilitadas; não há redirecionamento automático para o checkout externo. A homologação Sandbox e a validação aplicável continuam necessárias para liberar pagamentos reais por cartão.
+A publicação inicial do código manteve a captura própria desabilitada. A ativação posterior, descrita abaixo, foi solicitada explicitamente pelo operador. Não há redirecionamento automático para o checkout externo.
+
+## Ativação para testes autorizada em 06/09/2026
+
+O operador informou que a plataforma ainda não tem clientes e solicitou a liberação para seus testes. Foi habilitada a única loja com integração Asaas conectada, credencial e webhook configurados: a loja do Gustavo. O link existente passou a retornar `enabled: true`; não é necessário gerar outro checkout.
+
+A autorização foi registrada em um evento administrativo de `intelligence_events`. O campo `validation_reference` identifica expressamente a autorização de testes e as validações pendentes; não representa certificação PCI nem homologação concluída no Asaas. Nenhuma cobrança foi enviada durante a ativação.
+
+O uso de teste da plataforma não altera o ambiente do gateway: a integração continua em **produção no Asaas**. O envio de um cartão real pode resultar em cobrança real. Novas lojas não são habilitadas automaticamente por esta alteração.
 
 ## Implementação
 
@@ -43,7 +51,7 @@ Verificação local em 06/09/2026: **478 testes aprovados**, ESLint sem erros e 
 
 Os ensaios de navegador interceptam requisições financeiras e usam cartões fictícios. Eles não representam uma transação homologada junto ao Asaas. Nenhuma cobrança real foi feita para validar esta entrega.
 
-## Implantação
+## Procedimento recomendado para ampliar a implantação
 
 1. Homologar em ambiente separado com integração Asaas **Sandbox** e webhook correspondente. Não trocar a integração da loja que está atendendo clientes por uma conta de testes.
 2. Aplicar, em ordem, as migrações `0076_transparent_checkout_attempts.sql` e `0077_commerce_offer_history.sql`. Conferir os RPCs, permissões `service_role` e atualização do cache de schema.
@@ -53,6 +61,6 @@ Os ensaios de navegador interceptam requisições financeiras e usam cartões fi
 6. Após homologação, aplicar as migrações em produção e liberar inicialmente uma organização com referência da validação. Publicar código e ativação como uma liberação coordenada. Conferir o registro da função de conciliação no Inngest.
 7. Ampliar a ativação por loja após conferir os resultados do piloto.
 
-**Não publicar a substituição do fluxo antes dessa preparação.** O formulário próprio está desabilitado por padrão; publicar somente o código deixaria o cartão indisponível nas lojas ainda não habilitadas. Não há retorno silencioso ao checkout externo. Os links internos existentes continuam apontando ao mesmo pedido depois da liberação.
+O formulário próprio está desabilitado por padrão para novas lojas; publicar somente o código deixa o cartão indisponível nas lojas ainda não habilitadas. Coordenar a configuração com a ampliação da implantação. Não há retorno silencioso ao checkout externo. Os links internos existentes continuam apontando ao mesmo pedido depois da liberação.
 
 Débito direto e assinaturas não são convertidos em crédito avulso. Upsell de um clique com cartão salvo permanece desabilitado: a versão entregue exige um novo aceite e pagamento. A tokenização de produção depende de habilitação do Asaas. [Capacidades documentadas](https://docs.asaas.com/docs/cobrancas-via-cartao-de-credito).
