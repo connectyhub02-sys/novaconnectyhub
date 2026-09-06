@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
 import { ProductPageCartController } from "@/components/checkout/product-page-cart-controller";
+import { CommercialOffers } from "@/components/checkout/commercial-offers";
 import { ProductMobileCheckoutBar, ProductPurchaseControls } from "@/components/checkout/sales-catalog-product-actions";
 import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
 import { JsonLd } from "@/components/seo/json-ld";
@@ -584,6 +585,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           trackingLinkId,
         }}
       />
+      <div className="mx-auto max-w-6xl px-4"><CommercialOffers organizationId={organization.id} surface="product" currentProductIds={[item.id]} title="Você também pode gostar" /></div>
       <PublicStoreFooter
         branding={branding}
         cartUrl={storeCartUrl}

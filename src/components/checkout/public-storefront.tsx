@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
+import { CommercialOffers } from "@/components/checkout/commercial-offers";
 import { cn } from "@/lib/utils";
 import {
   resolveSalesCatalogCategoryIconId,
@@ -224,6 +225,7 @@ export function PublicStorefront({
       storageKey,
       JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity }))),
     );
+    publishCommerceAgentEvent("cart_snapshot_updated", { cart_lines: cart.length, items: cart.map(line => ({ product_id: line.product.id, quantity: line.quantity })) });
   }, [cart, cartLoaded, storageKey]);
 
   const categories = useMemo<StoreCategory[]>(() => {
@@ -661,6 +663,7 @@ export function PublicStorefront({
         />
       )}
 
+      <div className="mx-auto max-w-6xl px-4"><CommercialOffers organizationId={tracking.organizationId} surface="store" currentProductIds={cart.map(line => line.product.id)} title="Sugestões da loja" /></div>
       <StoreFooter
         branding={branding}
         cartPath={cartPath}
@@ -704,6 +707,8 @@ export function PublicStorefront({
       ) : null}
 
       <CartDrawer
+        organizationId={tracking.organizationId}
+        onAddOffer={(id) => { const product = products.find(item => item.id === id && item.canCheckout); if (!product) return false; setCart(current => current.some(line => line.product.id === id) ? current : [...current, { product, quantity: 1 }]); return true; }}
         branding={branding}
         busy={busy}
         cart={cart}
@@ -1626,6 +1631,8 @@ function BrandLogo({ branding, compact = false }: { branding: PublicStorefrontBr
 }
 
 export function CartDrawer({
+  organizationId,
+  onAddOffer,
   open,
   branding,
   cart,
@@ -1644,6 +1651,8 @@ export function CartDrawer({
   onUpdateQuantity,
   onCheckout,
 }: {
+  organizationId?: string;
+  onAddOffer?: (productId: string) => boolean;
   open: boolean;
   branding: PublicStorefrontBranding;
   cart: CartLine[];
@@ -1728,6 +1737,7 @@ export function CartDrawer({
             </div>
           )}
 
+          {organizationId && cart.length > 0 ? <CommercialOffers organizationId={organizationId} surface="cart" currentProductIds={cart.map(line => line.product.id)} onAdd={onAddOffer ? offer => onAddOffer(offer.productId) : undefined} /> : null}
           {cart.length > 0 ? (
             <div className="mt-4 rounded-[8px] border border-[#e5e2d8] bg-white p-4">
               <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>

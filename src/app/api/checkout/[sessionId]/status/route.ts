@@ -50,17 +50,23 @@ export async function GET(
     .eq("organization_id", session.organization_id)
     .maybeSingle<OrderRow>();
 
+  const { data: latest } = order?.latest_payment_session_id && order.latest_payment_session_id !== session.id
+    ? await client.from("sales_catalog_payment_sessions").select("id, organization_id, order_id, method, provider, status, provider_status, provider_status_detail, paid_at, failure_reason, updated_at")
+      .eq("id", order.latest_payment_session_id).eq("organization_id", session.organization_id).eq("order_id", session.order_id).maybeSingle<SessionRow>()
+    : { data: null };
+  const effective = latest ?? session;
+
   return NextResponse.json({
     session: {
-      id: session.id,
-      method: session.method,
-      provider: session.provider,
-      status: session.status,
-      providerStatus: session.provider_status,
-      providerStatusDetail: session.provider_status_detail,
-      paidAt: session.paid_at,
-      failureReason: session.failure_reason,
-      updatedAt: session.updated_at,
+      id: effective.id,
+      method: effective.method,
+      provider: effective.provider,
+      status: order?.payment_status === "confirmed" ? "approved" : order?.payment_status === "refunded" ? "refunded" : effective.status,
+      providerStatus: effective.provider_status,
+      providerStatusDetail: effective.provider_status_detail,
+      paidAt: effective.paid_at,
+      failureReason: effective.failure_reason,
+      updatedAt: effective.updated_at,
     },
     order: order ? {
       id: order.id,
@@ -70,5 +76,5 @@ export async function GET(
       latestPaymentSessionId: order.latest_payment_session_id,
       updatedAt: order.updated_at,
     } : null,
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }

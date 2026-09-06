@@ -4156,6 +4156,9 @@ function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSett
         title: normalizeOptionalText(readFormString(itemRecord.title), 80),
         description: normalizeOptionalText(readFormString(itemRecord.description), 180),
         triggerText: normalizeOptionalText(readFormString(itemRecord.triggerText ?? itemRecord.trigger_text), 220),
+        triggerProductId: normalizeUuid(readFormString(itemRecord.triggerProductId ?? itemRecord.trigger_product_id)),
+        triggerCategory: normalizeOptionalText(readFormString(itemRecord.triggerCategory ?? itemRecord.trigger_category), 100),
+        minimumSubtotal: Math.max(0, readFormNumber(itemRecord.minimumSubtotal ?? itemRecord.minimum_subtotal) ?? 0),
       };
     })
     .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item))
@@ -4165,6 +4168,7 @@ function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSett
     enabled: readBoolean(record.enabled) ?? fallback.enabled,
     whatsappEnabled: readBoolean(record.whatsappEnabled ?? record.whatsapp_enabled) ?? fallback.whatsappEnabled,
     checkoutEnabled: readBoolean(record.checkoutEnabled ?? record.checkout_enabled) ?? fallback.checkoutEnabled,
+    webSurfaces: Array.isArray(record.webSurfaces ?? record.web_surfaces) ? ((record.webSurfaces ?? record.web_surfaces) as unknown[]).filter((value): value is string => typeof value === "string" && ["store", "product", "cart", "checkout", "confirmation"].includes(value)) : ["store", "product", "cart", "checkout", "confirmation"],
     autoSuggestionsEnabled: readBoolean(record.autoSuggestionsEnabled ?? record.auto_suggestions_enabled) ?? fallback.autoSuggestionsEnabled,
     maxOffersPerOrder: clampNumber(readFormNumber(record.maxOffersPerOrder ?? record.max_offers_per_order) ?? fallback.maxOffersPerOrder ?? 1, 1, 3),
     items,
@@ -4362,6 +4366,7 @@ function serializeOrderBumps(settings: SalesCatalogOrderBumpSettings) {
     enabled: settings.enabled,
     whatsapp_enabled: settings.whatsappEnabled,
     checkout_enabled: settings.checkoutEnabled,
+    web_surfaces: settings.webSurfaces,
     auto_suggestions_enabled: settings.autoSuggestionsEnabled,
     max_offers_per_order: settings.maxOffersPerOrder,
     items: settings.items.map((item) => ({
@@ -4371,6 +4376,9 @@ function serializeOrderBumps(settings: SalesCatalogOrderBumpSettings) {
       title: item.title,
       description: item.description,
       trigger_text: item.triggerText,
+      trigger_product_id: item.triggerProductId,
+      trigger_category: item.triggerCategory,
+      minimum_subtotal: item.minimumSubtotal,
     })),
   };
 }

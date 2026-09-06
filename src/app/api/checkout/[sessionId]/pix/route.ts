@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { NextResponse, type NextRequest } from "next/server";
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
@@ -23,12 +24,12 @@ export async function POST(
   context: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await context.params;
+  const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: `checkout-pix:${sessionId}`, maxPayloadBytes: 8192, rateLimit: { limit: 10, windowMs: 60000 } });
+  if (!guard.ok) return NextResponse.json({ error: guard.message }, { status: guard.status });
   const body = readRecord(await request.json().catch(() => null));
   const selectedOrderBumpIds = readStringList(body.selectedOrderBumpIds);
 
-  if (selectedOrderBumpIds.length === 0) {
-    return NextResponse.json({ error: "Selecione ao menos uma oferta para atualizar o Pix." }, { status: 400 });
-  }
+  if (!Array.isArray(body.selectedOrderBumpIds)) return NextResponse.json({ error: "Confira as ofertas do pedido." }, { status: 400 });
 
   const client = createServiceClient();
   const { data: sourceSession, error: sessionError } = await client

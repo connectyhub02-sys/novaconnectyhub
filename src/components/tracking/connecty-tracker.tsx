@@ -1172,6 +1172,7 @@ function readCommerceCartSnapshot(organizationId: string | null) {
     return {
       lines: items.length,
       item_count: itemCount,
+      items: items.slice(0, 50).map(item => ({ product_id: readString(readRecord(item)?.productId), quantity: Math.max(0, Math.min(999, Number(readRecord(item)?.quantity) || 0)) })),
       product_ids: items
         .map((item) => readString(readRecord(item)?.productId))
         .filter((item): item is string => Boolean(item))

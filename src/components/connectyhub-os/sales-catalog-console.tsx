@@ -6330,6 +6330,7 @@ function SalesCatalogCartIncreasePanel({
     product: allProducts.find((product) => product.id === item.productId) ?? null,
   }));
   const maxOffers = Math.max(1, Math.min(3, settings.maxOffersPerOrder ?? 1));
+  const webSurfaces = settings.webSurfaces ?? ["store", "product", "cart", "checkout", "confirmation"];
 
   return (
     <Panel
@@ -6389,6 +6390,12 @@ function SalesCatalogCartIncreasePanel({
             style={{ borderColor: "var(--ch-border)" }}
           />
         </label>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([{ value: "store", label: "Loja" }, { value: "product", label: "Página de produto" }, { value: "cart", label: "Carrinho" }, { value: "confirmation", label: "Após a compra" }] as const).map(surface => (
+            <CartIncreaseSwitch key={surface.value} checked={webSurfaces.includes(surface.value)} label={surface.label} description="Exibe ofertas elegíveis e respeita recusas." onChange={checked => onPatchSettings({ webSurfaces: checked ? [...new Set([...webSurfaces, surface.value])] : webSurfaces.filter(value => value !== surface.value) })} />
+          ))}
+        </div>
 
         <div>
           <FieldLabel>Produtos para oferecer</FieldLabel>
@@ -6463,6 +6470,15 @@ function SalesCatalogCartIncreasePanel({
                   </div>
                 </div>
                 <div className="grid gap-2">
+                  <label className="block text-[11px] text-slate-500">Oferecer quando houver este produto
+                    <select value={config.triggerProductId ?? ""} onChange={event => onUpdateItem(config.productId, { triggerProductId: event.target.value || null })} className="mt-1 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                      <option value="">Qualquer produto</option>{allProducts.filter(item => item.id !== config.productId).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+                    </select>
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="block text-[11px] text-slate-500">Categoria do produto principal<input value={config.triggerCategory ?? ""} onChange={event => onUpdateItem(config.productId, { triggerCategory: event.target.value.slice(0, 100) || null })} placeholder="Qualquer categoria" className="mt-1 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px]" style={{ borderColor: "var(--ch-border)" }} /></label>
+                    <label className="block text-[11px] text-slate-500">Subtotal mínimo (R$)<input type="number" min={0} step="0.01" value={config.minimumSubtotal ?? ""} onChange={event => onUpdateItem(config.productId, { minimumSubtotal: parseOptionalNumber(event.target.value) })} placeholder="Sem mínimo" className="mt-1 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px]" style={{ borderColor: "var(--ch-border)" }} /></label>
+                  </div>
                   <input
                     value={config.badge ?? ""}
                     onChange={(event) => onUpdateItem(config.productId, { badge: event.target.value.slice(0, 32) })}

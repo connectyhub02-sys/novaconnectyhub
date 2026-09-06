@@ -64,6 +64,7 @@ export function CommerceAgentDock() {
   const [session, setSession] = useState<CommerceAgentSession | null>(null);
   const [messages, setMessages] = useState<CommerceAgentMessage[]>([]);
   const [open, setOpen] = useState(false);
+  const [paymentFocused, setPaymentFocused] = useState(false);
   const [whisperVisible, setWhisperVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -88,6 +89,13 @@ export function CommerceAgentDock() {
       window.removeEventListener(publicTrackingContextUpdatedEventName, syncPublicTrackingSignature);
     };
   }, [pathname, search]);
+
+  useEffect(() => {
+    const focus = () => setPaymentFocused(Boolean(document.activeElement?.closest('[data-sensitive="payment"]')));
+    document.addEventListener("focusin", focus);
+    document.addEventListener("focusout", focus);
+    return () => { document.removeEventListener("focusin", focus); document.removeEventListener("focusout", focus); };
+  }, []);
 
   useEffect(() => () => {
     for (const timer of assistantBubbleTimersRef.current) {
@@ -230,7 +238,7 @@ export function CommerceAgentDock() {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, open]);
 
-  if (!session || loading) {
+  if (!session || loading || paymentFocused) {
     return null;
   }
 

@@ -11,6 +11,8 @@ import {
 import { markPlatformProductCommissionsForPaymentStatus } from "@/lib/platform-product-sales";
 import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
+import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
+import { CheckoutError, processTransparentWebhook } from "@/lib/sales-catalog/transparent-checkout";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +70,13 @@ export async function POST(request: NextRequest) {
   const providerEventId = readString(payload.id) ?? readString(payload.eventId) ?? dataId;
   const signatureHeader = request.headers.get("asaas-access-token");
   const requestId = request.headers.get("x-request-id");
+
+  try {
+    const transparent = await processTransparentWebhook(client, payload, signatureHeader);
+    if (transparent) return NextResponse.json(transparent);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "payment_reconciliation_pending" }, { status: error instanceof CheckoutError ? error.status : 503 });
+  }
 
   if (!dataId) {
     await recordWebhookEvent(client, {
@@ -226,6 +235,7 @@ export async function POST(request: NextRequest) {
         ...(paymentData.paidAt ? { paid_at: paymentData.paidAt } : {}),
         metadata: {
           ...sessionMetadata,
+          gateway_request_inflight: false,
           asaas_payment_id: paymentId ?? sessionMetadata.asaas_payment_id ?? null,
           asaas_checkout_id: checkoutId ?? sessionMetadata.asaas_checkout_id ?? null,
           asaas_status: paymentData.providerStatus,
@@ -427,10 +437,10 @@ async function recordWebhookEvent(
     payment_session_id: input.paymentSessionId ?? null,
     event_type: input.eventType,
     action: input.action,
-    signature_header: input.signatureHeader,
+    signature_header: null,
     request_id: input.requestId,
     data_id: input.dataId,
-    payload: input.payload,
+    payload: sanitizePaymentAuditPayload(input.payload),
     processing_status: input.processingStatus,
     error_message: input.errorMessage ?? null,
     processed_at: input.processingStatus === "processed" || input.processingStatus === "failed" ? new Date().toISOString() : null,

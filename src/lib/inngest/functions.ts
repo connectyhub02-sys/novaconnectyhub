@@ -60,6 +60,7 @@ import {
   whatsappCatalogImportProcessRequestedEventName,
 } from "@/lib/sales-catalog/whatsapp-sync";
 import { createServiceClient } from "@/lib/supabase/service";
+import { reconcilePendingTransparentCheckouts } from "@/lib/sales-catalog/transparent-checkout";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
 import {
@@ -737,7 +738,13 @@ export const connectyhubGrowthAgentFunctions = growthAgentSchedules.map((config)
   ),
 );
 
+export const connectyhubTransparentCheckoutReconciliation = inngest.createFunction(
+  { id: "connectyhub-transparent-checkout-reconciliation", name: "ConnectyHub Checkout Payment Reconciliation", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }) => step.run("reconcile-payment-results", () => reconcilePendingTransparentCheckouts(createServiceClient())),
+);
+
 export const functions = [
+  connectyhubTransparentCheckoutReconciliation,
   connectyhubDailyAdminReport,
   connectyhubAdminPing,
   connectyhubWhatsappSync,

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   validatePublicWriteRequest,
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
   const requestedScope = readString(body.scope);
   const trackingToken = readString(body.tracking_token)
     ?? readString(request.headers.get("x-connectyhub-tracking-token"));
-  const metadata = readRecord(body.metadata) ?? {};
+  const metadata = readRecord(sanitizePaymentAuditPayload(body.metadata)) ?? {};
   const publicTracking = readRecord(metadata.public_tracking) ?? {};
   const tracking = extractTrackingData(request);
   const authUser = await getAuthUser();
@@ -587,8 +588,8 @@ async function syncCommerceTrackingContext(input: {
       catalog_item_id: input.catalogItemId,
       agent_id: resolvedAgentId,
       tracking_source: input.trackingSource,
-      commerce_context: readRecord(input.metadata.commerce_context),
-      commerce_cart_snapshot: readRecord(input.metadata.commerce_cart_snapshot),
+      commerce_context: readRecord(input.metadata.commerce_context) ?? readRecord(readRecord(existingSession?.metadata)?.commerce_context),
+      commerce_cart_snapshot: readRecord(input.metadata.commerce_cart_snapshot) ?? readRecord(readRecord(existingSession?.metadata)?.commerce_cart_snapshot),
       latest_surface: surface,
       latest_page_path: pagePath,
       latest_page_url: currentUrl,

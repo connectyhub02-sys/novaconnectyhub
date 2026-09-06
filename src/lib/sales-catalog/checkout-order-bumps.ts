@@ -2,11 +2,12 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  attachSalesCatalogSkus,
   getOrganizationSalesCatalogSettings,
   mapSalesCatalogItem,
 } from "@/lib/client-os/sales-catalog";
 import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
-import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
+import { canAddCommerceOfferDirectly, getCommerceOfferPrice, isEligibleCommerceOffer, matchesCommerceOfferConditions } from "./commerce-offers";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -67,23 +68,37 @@ export async function loadSalesCatalogCheckoutOrderBumps(input: {
   client: SupabaseClient;
   organizationId: string;
   excludeCatalogItemIds?: string[];
+  leadId?: string | null;
+  selectedProductIds?: string[];
+  subtotal?: number;
 }): Promise<SalesCatalogCheckoutOrderBump[]> {
   const configured = await loadConfiguredOrderBumps(input.client, input.organizationId);
   if (configured.length === 0) return [];
 
   const rows = await loadCatalogItems(input.client, input.organizationId, configured.map((item) => item.productId));
-  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const products = await attachSalesCatalogSkus(input.client, rows.map(row => mapSalesCatalogItem(row)), { strict: true });
+  const rowsById = new Map(products.map(item => [item.id, item]));
   const excluded = new Set(input.excludeCatalogItemIds ?? []);
+  const currentProducts = (await loadCatalogItems(input.client, input.organizationId, [...excluded])).map(row => mapSalesCatalogItem(row));
+  if (input.leadId) {
+    const { data: decisions, error } = await input.client.from("lead_commerce_offer_states").select("catalog_item_id").eq("organization_id", input.organizationId).eq("lead_id", input.leadId).eq("status", "declined").gte("updated_at", new Date(Date.now() - 86400000).toISOString());
+    if (error) return [];
+    for (const decision of decisions ?? []) excluded.add(decision.catalog_item_id);
+  }
 
+  const settings = await getOrganizationSalesCatalogSettings(input.client, input.organizationId);
+  const selected = new Set(input.selectedProductIds ?? []);
+  for (const id of selected) excluded.delete(id);
   return configured
     .map((config) => {
       const row = rowsById.get(config.productId);
-      if (!row || excluded.has(row.id)) return null;
+      if (!row || excluded.has(row.id) || !selected.has(row.id) && !matchesCommerceOfferConditions(config, currentProducts, input.subtotal)) return null;
 
-      const item = mapSalesCatalogItem(row);
-      return toCheckoutOrderBump(item, config);
+      return toCheckoutOrderBump(row, config);
     })
-    .filter((item): item is SalesCatalogCheckoutOrderBump => Boolean(item));
+    .filter((item): item is SalesCatalogCheckoutOrderBump => Boolean(item))
+    .sort((a, b) => Number(selected.has(b.productId)) - Number(selected.has(a.productId)))
+    .slice(0, Math.max(selected.size, settings?.orderBumps.maxOffersPerOrder ?? 1));
 }
 
 export async function applySalesCatalogCheckoutOrderBumps(input: {
@@ -98,76 +113,30 @@ export async function applySalesCatalogCheckoutOrderBumps(input: {
   addedBumps: SalesCatalogCheckoutOrderBump[];
   totalAmount: number | null;
 }> {
-  const selectedProductIds = uniqueStrings(input.selectedProductIds).slice(0, 12);
-  const [order, currentItems] = await Promise.all([
-    loadOrder(input.client, input.organizationId, input.orderId),
-    loadOrderItems(input.client, input.organizationId, input.orderId),
-  ]);
-
-  if (selectedProductIds.length === 0) {
-    return {
-      order,
-      items: currentItems,
-      appliedBumps: [],
-      addedBumps: [],
-      totalAmount: normalizeCurrencyAmount(order.total) ?? normalizeCurrencyAmount(order.subtotal),
-    };
-  }
-
-  if (isClosedOrder(order)) {
-    throw new Error("Este pedido ja foi finalizado. Solicite um novo checkout para adicionar ofertas.");
-  }
-
-  const applied = await loadValidatedOrderBumpItems({
-    client: input.client,
-    organizationId: input.organizationId,
-    selectedProductIds,
-  });
-  const existingCatalogItemIds = new Set(currentItems.map((item) => item.catalog_item_id).filter(Boolean));
-  const missing = applied.filter((entry) => !existingCatalogItemIds.has(entry.item.id));
-  const insertedItems = missing.length > 0
-    ? await insertOrderBumpItems({
-        client: input.client,
-        organizationId: input.organizationId,
-        orderId: input.orderId,
-        items: missing,
-      })
-    : [];
-  const amountToAdd = roundMoney(missing.reduce((sum, entry) => sum + entry.config.price, 0));
-  const nextOrder = amountToAdd > 0
-    ? await updateOrderTotals({
-        client: input.client,
-        organizationId: input.organizationId,
-        order,
-        amountToAdd,
-        selectedProductIds,
-        addedProductIds: missing.map((entry) => entry.item.id),
-      })
-    : order;
-
-  return {
-    order: nextOrder,
-    items: [...currentItems, ...insertedItems],
-    appliedBumps: applied.map((entry) => entry.config),
-    addedBumps: missing.map((entry) => entry.config),
-    totalAmount: normalizeCurrencyAmount(nextOrder.total) ?? normalizeCurrencyAmount(nextOrder.subtotal),
-  };
+  const { setSalesCatalogCheckoutOrderBumps } = await import("./checkout-cart");
+  return setSalesCatalogCheckoutOrderBumps(input);
 }
 
 async function loadConfiguredOrderBumps(client: SupabaseClient, organizationId: string) {
   const settings = await getOrganizationSalesCatalogSettings(client, organizationId);
-  if (!settings?.orderBumps.enabled || !settings.orderBumps.checkoutEnabled) return [];
+  if (!settings?.orderBumps.enabled || !settings.orderBumps.checkoutEnabled || settings.orderBumps.webSurfaces && !settings.orderBumps.webSurfaces.includes("checkout")) return [];
 
-  return settings.orderBumps.items.filter((item) => item.active && item.productId);
+  const configured = settings.orderBumps.items.filter((item) => item.active && item.productId);
+  if (!settings.orderBumps.autoSuggestionsEnabled) return configured;
+  const { data: rows } = await client.from("intelligence_memory").select("id, organization_id, title, content, metadata, created_at, updated_at").eq("organization_id", organizationId).eq("memory_type", "sales_catalog_item").order("updated_at", { ascending: false }).limit(100);
+  return [...configured, ...(rows ?? []).map(row => mapSalesCatalogItem(row)).filter(item => isEligibleCommerceOffer(item) && !configured.some(config => config.productId === item.id)).map(item => ({ productId: item.id, active: true, badge: item.highlightLabel, title: null, description: null, triggerText: null }))];
 }
 
-async function loadValidatedOrderBumpItems(input: {
+export async function loadValidatedOrderBumpItems(input: {
   client: SupabaseClient;
   organizationId: string;
   selectedProductIds: string[];
+  currentProductIds?: string[];
+  subtotal?: number;
 }): Promise<AppliedOrderBumpItem[]> {
   const configured = await loadConfiguredOrderBumps(input.client, input.organizationId);
-  const configuredById = new Map(configured.map((item) => [item.productId, item]));
+  const currentProducts = (await loadCatalogItems(input.client, input.organizationId, input.currentProductIds ?? [])).map(row => mapSalesCatalogItem(row));
+  const configuredById = new Map(configured.filter(config => matchesCommerceOfferConditions(config, currentProducts, input.subtotal)).map((item) => [item.productId, item]));
   const invalidSelection = input.selectedProductIds.find((productId) => !configuredById.has(productId));
 
   if (invalidSelection) {
@@ -175,7 +144,8 @@ async function loadValidatedOrderBumpItems(input: {
   }
 
   const rows = await loadCatalogItems(input.client, input.organizationId, input.selectedProductIds);
-  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const products = await attachSalesCatalogSkus(input.client, rows.map(row => mapSalesCatalogItem(row)));
+  const rowsById = new Map(products.map(item => [item.id, item]));
 
   return input.selectedProductIds.map((productId) => {
     const row = rowsById.get(productId);
@@ -184,7 +154,7 @@ async function loadValidatedOrderBumpItems(input: {
       throw new Error("Uma das ofertas selecionadas nao foi encontrada.");
     }
 
-    const item = mapSalesCatalogItem(row);
+    const item = row;
     const checkoutBump = toCheckoutOrderBump(item, config);
     if (!checkoutBump) {
       throw new Error(`${item.title} nao esta disponivel para Order Bump.`);
@@ -213,52 +183,13 @@ async function loadCatalogItems(client: SupabaseClient, organizationId: string, 
   return (data ?? []) as SalesCatalogMemoryRow[];
 }
 
-async function loadOrder(client: SupabaseClient, organizationId: string, orderId: string) {
-  const { data, error } = await client
-    .from("sales_catalog_orders")
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, destination_address, shipping_total, shipping_method, total, metadata")
-    .eq("id", orderId)
-    .eq("organization_id", organizationId)
-    .maybeSingle<SalesCatalogOrderRow>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar o pedido: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error("Pedido nao encontrado.");
-  }
-
-  return data;
-}
-
-async function loadOrderItems(client: SupabaseClient, organizationId: string, orderId: string) {
-  const { data, error } = await client
-    .from("sales_catalog_order_items")
-    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, fulfillment, metadata")
-    .eq("order_id", orderId)
-    .eq("organization_id", organizationId)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar os itens do pedido: ${error.message}`);
-  }
-
-  return (data ?? []) as SalesCatalogCheckoutOrderItem[];
-}
-
-async function insertOrderBumpItems(input: {
-  client: SupabaseClient;
-  organizationId: string;
-  orderId: string;
-  items: AppliedOrderBumpItem[];
-}) {
-  const rows = input.items.map(({ config, item }) => ({
-    order_id: input.orderId,
-    organization_id: input.organizationId,
+export function buildCheckoutOrderBumpRows(items: AppliedOrderBumpItem[], organizationId: string, orderId: string) {
+  return items.map(({ config, item }) => ({
+    order_id: orderId,
+    organization_id: organizationId,
     catalog_item_id: item.id,
-    sku_id: null,
-    sku_code: null,
+    sku_id: item.skus.find(sku => sku.status === "active")?.id ?? null,
+    sku_code: item.skus.find(sku => sku.status === "active")?.skuCode ?? null,
     title: item.title,
     tag: item.tag,
     quantity: 1,
@@ -303,79 +234,23 @@ async function insertOrderBumpItems(input: {
     },
   }));
 
-  const { data, error } = await input.client
-    .from("sales_catalog_order_items")
-    .insert(rows)
-    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, fulfillment, metadata");
-
-  if (error) {
-    throw new Error(`Nao foi possivel adicionar as ofertas ao pedido: ${error.message}`);
-  }
-
-  return (data ?? []) as SalesCatalogCheckoutOrderItem[];
-}
-
-async function updateOrderTotals(input: {
-  client: SupabaseClient;
-  organizationId: string;
-  order: SalesCatalogOrderRow;
-  amountToAdd: number;
-  selectedProductIds: string[];
-  addedProductIds: string[];
-}) {
-  const currentSubtotal = normalizeCurrencyAmount(input.order.subtotal)
-    ?? normalizeCurrencyAmount(input.order.total)
-    ?? 0;
-  const currentTotal = normalizeCurrencyAmount(input.order.total)
-    ?? currentSubtotal
-      + (normalizeCurrencyAmount(input.order.shipping_total) ?? 0)
-      - (normalizeCurrencyAmount(input.order.discount_total) ?? 0);
-  const nextSubtotal = roundMoney(currentSubtotal + input.amountToAdd);
-  const nextTotal = roundMoney(currentTotal + input.amountToAdd);
-  const metadata = readRecord(input.order.metadata);
-  const previousBumps = readStringList(metadata.order_bump_product_ids);
-  const orderBumpProductIds = uniqueStrings([...previousBumps, ...input.selectedProductIds]);
-
-  const { data, error } = await input.client
-    .from("sales_catalog_orders")
-    .update({
-      subtotal: nextSubtotal,
-      total: nextTotal,
-      metadata: {
-        ...metadata,
-        order_bump_product_ids: orderBumpProductIds,
-        order_bump_added_product_ids: uniqueStrings([
-          ...readStringList(metadata.order_bump_added_product_ids),
-          ...input.addedProductIds,
-        ]),
-        order_bump_total_added: roundMoney((normalizeCurrencyAmount(metadata.order_bump_total_added as string | number | null) ?? 0) + input.amountToAdd),
-        order_bump_updated_at: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.order.id)
-    .eq("organization_id", input.organizationId)
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, destination_address, shipping_total, shipping_method, total, metadata")
-    .single<SalesCatalogOrderRow>();
-
-  if (error || !data) {
-    throw new Error(error?.message ?? "Nao foi possivel atualizar o total do pedido.");
-  }
-
-  return data;
 }
 
 function toCheckoutOrderBump(
   item: ClientSalesCatalogItem,
   config: { badge: string | null; title: string | null; description: string | null },
 ): SalesCatalogCheckoutOrderBump | null {
-  const price = normalizeCurrencyAmount(item.price);
+  const price = getCommerceOfferPrice(item);
   if (
     !isSalesCatalogDisplayableProduct(item)
+    || !isEligibleCommerceOffer(item)
     || item.status !== "active"
     || item.salesDestination !== "connectyhub_checkout"
     || item.billingCycle !== "one_time"
     || !price
+    || !canAddCommerceOfferDirectly(item)
+    || item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder
+    || item.inventory.quantity !== null && item.inventory.quantity < 1 && !item.inventory.allowBackorder
   ) {
     return null;
   }
@@ -391,33 +266,13 @@ function toCheckoutOrderBump(
   };
 }
 
-function isClosedOrder(order: SalesCatalogOrderRow) {
-  return order.status === "paid"
-    || order.status === "cancelled"
-    || order.status === "refunded"
-    || order.payment_status === "confirmed"
-    || order.payment_status === "refunded";
-}
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
-function readRecord(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
-}
 
-function readStringList(value: unknown) {
-  if (!Array.isArray(value)) return [];
 
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {

@@ -24,7 +24,7 @@ const initialSession = { id: "internal", organization_id: "store", order_id: "or
 afterEach(() => vi.unstubAllEnvs());
 
 describe("Asaas checkout and lead attribution", () => {
-  it("opens the brand checkout from WhatsApp, then creates the hosted card checkout with the full amount and CRM links", async () => {
+  it("keeps both WhatsApp and site card sessions inside the store with CRM attribution", async () => {
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://loja.example");
     const db = commerceDatabase({ sales_catalog_orders: [order], sales_catalog_order_items: items, sales_catalog_payment_integrations: [{ organization_id: "store", provider: "asaas", status: "connected" }] });
     const createHosted = vi.fn(async () => ({ id: "hosted", link: "https://asaas.example/checkout/hosted", status: "ACTIVE" }));
@@ -45,9 +45,9 @@ describe("Asaas checkout and lead attribution", () => {
     expect(createHosted).not.toHaveBeenCalled();
     const hosted = await service.createSalesCatalogPixPaymentSession({ ...input, source: "checkout" });
     expect(hosted.gatewayUnavailable).toBe(false);
-    expect(hosted.checkoutUrl).toBe("https://asaas.example/checkout/hosted");
+    expect(hosted.checkoutUrl).toContain("https://loja.example/checkout/");
     expect((hosted.session as Row).metadata).toMatchObject({ public_checkout_url: expect.stringMatching(/^https:\/\/loja.example\/checkout\//), public_checkout_tracking_url: expect.stringMatching(/^https:\/\/loja.example\/r\//) });
-    expect(createHosted).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ amount: 573.8, billingTypes: ["CREDIT_CARD"], payerName: "Maria Exemplo" }));
+    expect(createHosted).not.toHaveBeenCalled();
     expect(createPix).not.toHaveBeenCalled();
     for (const result of [internal, hosted]) {
       const link = db.tables.intelligence_memory.find(row => (row.metadata as Row).tracking_url === result.trackingUrl);
@@ -57,28 +57,20 @@ describe("Asaas checkout and lead attribution", () => {
     expect(db.tables.intelligence_events.filter(row => row.event_type === "sales_catalog.card_checkout_created")).toHaveLength(2);
   });
 
-  it.each(["new", "reused", "changed_amount", "gateway_failure"])("handles %s card checkout without redirecting back into the internal session", async mode => {
-    const providerSession = { ...initialSession, id: "hosted", provider_payment_id: "asaas-checkout", checkout_url: "https://asaas.example/checkout/hosted", amount: mode === "changed_amount" ? "500,00" : "573,80", metadata: { checkout_tracking_url: "https://loja.example/r/provider" } };
-    const db = commerceDatabase({ sales_catalog_orders: [order], sales_catalog_order_items: items, sales_catalog_payment_sessions: [initialSession, ...(["reused", "changed_amount"].includes(mode) ? [providerSession] : [])] });
-    const createPayment = vi.fn(async () => ({ session: { id: "new", status: "created", failureReason: "Gateway indisponivel" }, checkoutUrl: "https://asaas.example/checkout/new", trackingUrl: "https://loja.example/r/new", gatewayUnavailable: mode === "gateway_failure" }));
+  it.each(["approved", "pending", "rejected", "unknown"])("returns the %s card result without a hosted redirect", async status => {
+    const db = commerceDatabase({ sales_catalog_payment_sessions: [initialSession] });
+    const pay = vi.fn(async () => ({ status, approved: status === "approved", rejected: status === "rejected" }));
     const route = serverModuleHarness<Route>("src/app/api/checkout/[sessionId]/card/route.ts", {
-      "next/server": next, "next/cache": { revalidatePath: vi.fn() }, "@/lib/supabase/service": { createServiceClient: () => db.client },
-      "@/lib/sales-catalog/mercado-pago": mercadoPago, "@/lib/sales-catalog/checkout-guards": guards,
-      "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
-      "@/lib/sales-catalog/checkout-order-bumps": { applySalesCatalogCheckoutOrderBumps: async () => ({ order, items, totalAmount: 573.8, appliedBumps: [], addedBumps: [] }) },
+      "next/server": next, "@/lib/supabase/service": { createServiceClient: () => db.client },
+      "@/lib/security/public-request-guard": { validatePublicWriteRequest: () => ({ ok: true }), readClientIp: () => "203.0.113.10" },
+      "@/lib/sales-catalog/transparent-checkout": { payTransparentCheckout: pay },
     });
-    const response = await route.POST({ json: async () => ({}) }, { params: Promise.resolve({ sessionId: "internal" }) });
-    if (mode === "reused") {
-      expect(createPayment).not.toHaveBeenCalled();
-      expect(response.body).toMatchObject({ reused: true, trackingUrl: "https://loja.example/r/provider" });
-      expect(db.tables.intelligence_events[0].payload).toMatchObject({ lead_id: "lead", order_id: "order" });
-    } else {
-      expect(createPayment).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ preferredMethod: "card", source: "checkout", amount: 573.8, orderId: "order" }));
-      if (mode === "gateway_failure") {
-        expect(response.status).toBe(503);
-        expect(response.body.checkoutUrl).toBeUndefined();
-      } else expect(response.body.trackingUrl).toBe("https://loja.example/r/new");
-    }
+    const response = await route.POST({ json: async () => ({ attemptId: "attempt" }), headers: new Headers(), url: "https://loja.example/checkout/internal" }, { params: Promise.resolve({ sessionId: "internal" }) });
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe(status);
+    expect(response.body.checkoutUrl).toBeUndefined();
+    expect(response.body.trackingUrl).toBeUndefined();
+    expect(pay).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -87,6 +79,8 @@ describe("Asaas checkout and lead attribution", () => {
     const db = commerceDatabase({ sales_catalog_orders: [{ ...order, latest_payment_session_id: superseded ? "new-card" : "internal" }], sales_catalog_order_items: items, sales_catalog_payment_sessions: [{ ...initialSession, method: "pix", provider_payment_id: "payment", pix_qr_code: "saved-code", pix_qr_code_base64: "saved-image", pix_ticket_url: "saved-url", paid_at: "2026-09-05T12:00:00Z" }] });
     const postPayment = vi.fn(async () => ({}));
     const route = serverModuleHarness<Route>("src/app/api/webhooks/asaas/route.ts", {
+      "@/lib/sales-catalog/transparent-checkout": { processTransparentWebhook: async () => null },
+      "@/lib/security/payment-audit": { sanitizePaymentAuditPayload: (value: unknown) => value },
       "next/server": next, "next/cache": { revalidatePath: vi.fn() }, "@/lib/supabase/service": { createServiceClient: () => db.client },
       "@/lib/sales-catalog/asaas": { ensureAsaasAccessToken: async () => ({ accessToken: "fake", webhookSecret: "fake" }), verifyAsaasWebhookToken: () => ({ ok: true }), getAsaasPayment: async () => ({ id: "payment" }), extractAsaasPaymentData: () => ({ providerPaymentId: "payment", providerStatus: status, status, pixQrCode: null, pixQrCodeBase64: null, pixTicketUrl: null, paidAt: null }) },
       "@/lib/sales-catalog/post-payment": { handleSalesCatalogPaymentStatusChange: postPayment },

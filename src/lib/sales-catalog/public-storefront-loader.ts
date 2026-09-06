@@ -1,3 +1,4 @@
+import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import type {
   PublicStorefrontBranding,
   PublicStorefrontProduct,
@@ -616,9 +617,9 @@ export function mapStorefrontProduct(
   },
   isStoreFeatured: boolean,
 ): PublicStorefrontProduct {
-  const salePrice = normalizeCurrencyAmount(item.offer.salePrice);
+  const salePrice = getCommerceOfferPrice(item);
   const basePrice = normalizeCurrencyAmount(item.price);
-  const price = salePrice ?? basePrice;
+  const price = getCommerceOfferPrice(item);
   const cover = item.media.find((media) => media.kind === "image") ?? null;
   const canCheckout = item.salesDestination === "connectyhub_checkout"
     && price !== null

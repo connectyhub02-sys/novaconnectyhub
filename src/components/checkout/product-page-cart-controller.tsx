@@ -78,6 +78,7 @@ export function ProductPageCartController({
       storageKey,
       JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity }))),
     );
+    publishCommerceAgentEvent("cart_snapshot_updated", { cart_lines: cart.length, items: cart.map(line => ({ product_id: line.product.id, quantity: line.quantity })) });
   }, [cart, cartLoaded, storageKey]);
 
   useEffect(() => {
@@ -209,6 +210,8 @@ export function ProductPageCartController({
 
   return (
     <CartDrawer
+      organizationId={tracking.organizationId}
+      onAddOffer={(id) => { const product = products.find(item => item.id === id && item.canCheckout); if (!product) return false; setCart(current => current.some(line => line.product.id === id) ? current : [...current, { product, quantity: 1 }]); return true; }}
       branding={branding}
       busy={busy}
       cart={cart}

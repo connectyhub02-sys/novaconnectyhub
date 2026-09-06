@@ -10,6 +10,8 @@ import {
   verifyAsaasWebhookToken,
 } from "@/lib/sales-catalog/asaas";
 import { createServiceClient } from "@/lib/supabase/service";
+import { CheckoutError, processTransparentWebhook } from "@/lib/sales-catalog/transparent-checkout";
+import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +33,12 @@ export async function POST(request: NextRequest) {
   const providerEventId = readProviderEventId(payload, dataId);
   const requestId = request.headers.get("x-request-id");
   const signatureHeader = request.headers.get("asaas-access-token");
+  try {
+    const transparent = await processTransparentWebhook(client, payload, signatureHeader);
+    if (transparent) return NextResponse.json(transparent);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "payment_reconciliation_pending" }, { status: error instanceof CheckoutError ? error.status : 503 });
+  }
   const webhookToken = await loadAsaasPlatformBillingWebhookToken({ client }).catch(() => null);
   const signature = verifyAsaasWebhookToken({
     header: signatureHeader,
@@ -161,7 +169,7 @@ async function recordBillingWebhookAudit(
       processingStatus: input.processingStatus,
       errorMessage: input.errorMessage,
       result: input.result,
-      payload: input.payload,
+      payload: sanitizePaymentAuditPayload(input.payload),
     },
   });
 }

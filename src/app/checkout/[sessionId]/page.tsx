@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Script from "next/script";
+import { headers } from "next/headers";
 import type { CSSProperties, ReactNode } from "react";
 import { MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
+import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
   type CheckoutPaymentFeedbackPayload,
@@ -200,13 +202,13 @@ export default async function CheckoutPage({
     );
   }
 
-  const status = normalizePaymentSessionStatus(session.status);
-  const paid = status === "approved";
-  const failed = status === "rejected" || status === "cancelled" || status === "expired" || status === "error";
+  const status = order.payment_status === "confirmed" ? "approved" : order.payment_status === "refunded" ? "refunded" : session.provider === "asaas" && order.status !== "cancelled" && ["expired", "cancelled"].includes(session.status ?? "") ? "pending" : normalizePaymentSessionStatus(session.status);
+  const paid = status === "approved" || order.payment_status === "confirmed";
+  const failed = order.status === "cancelled" || order.payment_status === "refunded" || (session.provider !== "asaas" && ["rejected", "cancelled", "expired", "error"].includes(status));
   const gatewayUnavailable = status === "error"
     && (session.provider_status === "gateway_unavailable" || session.provider_status === "gateway_error");
-  const amount = formatCurrency(session.amount ?? order.total ?? order.subtotal);
-  const amountNumber = normalizeCurrency(session.amount ?? order.total ?? order.subtotal);
+  const amount = formatCurrency(order.total ?? session.amount ?? order.subtotal);
+  const amountNumber = normalizeCurrency(order.total ?? session.amount ?? order.subtotal);
   const subtotal = formatCurrency(order.subtotal);
   const shipping = formatCurrency(order.shipping_total);
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
@@ -240,7 +242,7 @@ export default async function CheckoutPage({
     && (connectyHubOwned || asaasCardEnabled);
   const canUseCard = canUseAsaasCard;
   const canUsePix = session.provider === "asaas"
-    ? session.method !== "card" && (connectyHubOwned || asaasPixEnabled)
+    ? (connectyHubOwned || asaasPixEnabled)
     : false;
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
@@ -310,13 +312,14 @@ export default async function CheckoutPage({
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">{shipping ? `Frete de ${shipping} incluído` : "Valor do pedido confirmado no WhatsApp"}</p>
-          <CheckoutStatusPoller sessionId={session.id} initialStatus={status} initialOrderStatus={order.status} initialProviderStatus={session.provider_status} providerLabel={paymentProviderLabel} />
+          <CheckoutStatusPoller hidePendingStatus={session.provider === "asaas"} sessionId={session.id} initialStatus={status} initialOrderStatus={order.status} initialProviderStatus={session.provider_status} providerLabel={paymentProviderLabel} />
           {paid ? (
-            <CheckoutState
+            <><CheckoutState
               tone="success"
               title="Pagamento confirmado"
               body="Recebemos a confirmação do pagamento. Volte ao WhatsApp para acompanhar o atendimento."
             />
+            <CheckoutUpsell organizationId={organization.id} sessionId={session.id} productIds={items.map(item => item.catalog_item_id).filter((id): id is string => Boolean(id))} /></>
           ) : failed ? (
             <CheckoutState
               tone={gatewayUnavailable ? "info" : "error"}
@@ -348,6 +351,8 @@ export default async function CheckoutPage({
               canUseCard={canUseCard}
               cardPublicKey={integration?.public_key ?? null}
               pagBankCardPaymentMethodTypes={pagBankCardPaymentMethodTypes}
+              pixAmount={normalizeCurrency(session.amount)}
+              pixNeedsRefresh={["cancelled", "expired", "error", "rejected"].includes(session.status ?? "")}
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}
@@ -362,6 +367,7 @@ export default async function CheckoutPage({
                 total: formatCurrency(item.total ?? item.sale_price ?? item.unit_price),
               }))}
               orderBumps={orderBumps}
+              initialSelectedOrderBumpIds={items.filter(item => item.metadata?.order_bump === true).map(item => item.catalog_item_id).filter((id): id is string => Boolean(id))}
               whatsappHref={whatsappReturn?.href ?? null}
             />
           )}
@@ -401,7 +407,7 @@ export default async function CheckoutPage({
   );
 }
 
-function CheckoutShell({
+async function CheckoutShell({
   children,
   loadMercadoPagoSecurity = false,
   publicTrackingContext,
@@ -412,12 +418,14 @@ function CheckoutShell({
   publicTrackingContext?: ConnectyPublicTrackingContext | null;
   style?: CSSProperties;
 }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <div className="storefront-public min-h-screen bg-white text-[color:var(--store-text,#0f172a)]" style={style}>
       {publicTrackingContext ? (
         <>
           <script
             id="connecty-public-tracking-context"
+            nonce={nonce}
             dangerouslySetInnerHTML={{
               __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
             }}
@@ -606,7 +614,11 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     ? await loadSalesCatalogCheckoutOrderBumps({
         client,
         organizationId: session.organization_id,
+        leadId: orderResult.data.lead_id,
+        subtotal: normalizeCurrency(orderResult.data.subtotal) ?? 0,
+        selectedProductIds: items.filter(item => item.metadata?.order_bump === true).map(item => item.catalog_item_id).filter((id): id is string => Boolean(id)),
         excludeCatalogItemIds: items
+          .filter(item => item.metadata?.order_bump !== true)
           .map((item) => item.catalog_item_id)
           .filter((item): item is string => typeof item === "string"),
       }).catch(() => [])

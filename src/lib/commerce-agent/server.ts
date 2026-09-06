@@ -1,3 +1,4 @@
+import { loadCommerceOffers } from "@/lib/sales-catalog/commerce-offers";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1795,42 +1796,15 @@ async function loadFallbackWhatsappInstance(client: SupabaseClient, organization
 }
 
 async function resolveContextualOffer(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
-  const settings = context.settings;
-  const orderBumps = settings.orderBumps;
-  if (!orderBumps.enabled || !orderBumps.checkoutEnabled) {
-    return null;
-  }
-
-  const manualBumps = orderBumps.enabled
-    ? settings.orderBumps.items.filter((item) => item.active).map((item) => item.productId)
-    : [];
-  const candidateIds = [...manualBumps, context.productId].filter((id): id is string => Boolean(id));
-  const products = await loadOfferProducts(context.client, context.organization.id, candidateIds);
-
-  for (const bumpId of manualBumps) {
-    const product = products.find((item) => item.id === bumpId);
-    if (product) return product;
-  }
-
-  if (!orderBumps.autoSuggestionsEnabled) {
-    return null;
-  }
-
-  const categoryHints = getPlaybookCategoryHints(settings.commerceAgent.verticalPlaybook);
-  const fallbackProducts = products.some((item) => item.id !== context.productId)
-    ? products
-    : await loadCatalogProducts(context.client, context.organization.id);
-  const currentProduct = products.find((item) => item.id === context.productId) ?? null;
-  const currentCategory = currentProduct?.category?.trim().toLowerCase() ?? null;
-
-  return fallbackProducts.find((item) => (
-    currentCategory
-      && item.id !== context.productId
-      && item.category?.trim().toLowerCase() === currentCategory
-  )) ?? fallbackProducts.find((item) => (
-    categoryHints.some((hint) => item.category?.toLowerCase().includes(hint))
-    && item.id !== context.productId
-  )) ?? fallbackProducts.find((item) => item.id !== context.productId) ?? null;
+  if (context.surface === "unknown" || context.surface === "checkout" && context.settings.commerceAgent.checkoutQuietMode) return null;
+  const { data: orderItems } = context.orderId ? await context.client.from("sales_catalog_order_items").select("catalog_item_id").eq("organization_id", context.organization.id).eq("order_id", context.orderId) : { data: [] };
+  const offers = await loadCommerceOffers({ client: context.client, organizationId: context.organization.id, surface: context.surface, leadId: context.leadId, currentProductIds: [context.productId, ...(orderItems ?? []).map(item => item.catalog_item_id)].filter((id): id is string => Boolean(id)) });
+  if (!offers.length) return null;
+  const products = await loadOfferProducts(context.client, context.organization.id, offers.map(offer => offer.productId));
+  const manual = context.settings.orderBumps.items.find(item => item.active && products.some(product => product.id === item.productId));
+  if (manual) return products.find(product => product.id === manual.productId) ?? null;
+  const hints = getPlaybookCategoryHints(context.settings.commerceAgent.verticalPlaybook);
+  return products.find(product => hints.some(hint => product.category?.toLowerCase().includes(hint))) ?? products[0] ?? null;
 }
 
 async function loadOfferProducts(client: SupabaseClient, organizationId: string, productIds: string[]) {

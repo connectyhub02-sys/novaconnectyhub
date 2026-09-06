@@ -11,6 +11,7 @@ type CheckoutStatusPollerProps = {
   initialOrderStatus: string | null;
   initialProviderStatus: string | null;
   providerLabel: string;
+  hidePendingStatus?: boolean;
 };
 
 type StatusResponse = {
@@ -37,6 +38,7 @@ export function CheckoutStatusPoller({
   initialOrderStatus,
   initialProviderStatus,
   providerLabel,
+  hidePendingStatus = false,
 }: CheckoutStatusPollerProps) {
   const router = useRouter();
   const refreshedRef = useRef(false);
@@ -92,6 +94,8 @@ export function CheckoutStatusPoller({
     if (status === "refunded") return "warning";
     return "pending";
   }, [status]);
+
+  if (hidePendingStatus && tone === "pending") return null;
 
   return (
     <div className={cn(

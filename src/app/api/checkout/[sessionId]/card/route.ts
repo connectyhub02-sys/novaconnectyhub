@@ -25,11 +25,13 @@ import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sal
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-payment";
-import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { createServiceClient } from "@/lib/supabase/service";
+import { CheckoutError, loadTransparentCheckout, payTransparentCheckout, publicCheckoutQuote, reconcileTransparentAttempt } from "@/lib/sales-catalog/transparent-checkout";
+import { readClientIp, validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -90,11 +92,28 @@ type ActiveCardSessionRow = {
   metadata: JsonRecord | null;
 };
 
+export async function GET(_request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
+  try {
+    const client = createServiceClient();
+    const { sessionId } = await context.params;
+    const snapshot = await loadTransparentCheckout(client, sessionId);
+    if (snapshot.attempt && ["processing", "pending", "unknown"].includes(snapshot.attempt.state)) {
+      await reconcileTransparentAttempt(client, snapshot.attempt.id).catch(() => null);
+      return NextResponse.json(publicCheckoutQuote(await loadTransparentCheckout(client, sessionId)), { headers: { "Cache-Control": "private, no-store" } });
+    }
+    return NextResponse.json(publicCheckoutQuote(snapshot), { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível conferir o pedido." }, { status: error instanceof CheckoutError ? error.status : 503, headers: { "Cache-Control": "private, no-store" } });
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await context.params;
+  const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: `checkout-card:${sessionId}`, maxPayloadBytes: 16384, rateLimit: { limit: 12, windowMs: 600000 } });
+  if (!guard.ok) return NextResponse.json({ error: guard.message }, { status: guard.status });
   const body = readRecord(await request.json().catch(() => null)) ?? {};
   const formData = readRecord(body.formData) ?? body;
   const client = createServiceClient();
@@ -108,16 +127,16 @@ export async function POST(
     return NextResponse.json({ error: "Sessao de pagamento nao encontrada." }, { status: 404 });
   }
 
-  if (isFinalPaymentSessionStatus(sourceSession.status)) {
-    return NextResponse.json({ error: "Este pagamento ja foi finalizado." }, { status: 400 });
+  if (sourceSession.provider === "asaas") {
+    try {
+      return NextResponse.json(await payTransparentCheckout(client, sessionId, body, readClientIp(request.headers)), { headers: { "Cache-Control": "private, no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Confira os dados do cartão e do titular antes de continuar." }, { status: error instanceof CheckoutError ? error.status : 400, headers: { "Cache-Control": "private, no-store" } });
+    }
   }
 
-  if (sourceSession.provider === "asaas") {
-    return processAsaasPublicCardCheckout({
-      body,
-      client,
-      sourceSession,
-    });
+  if (isFinalPaymentSessionStatus(sourceSession.status)) {
+    return NextResponse.json({ error: "Este pagamento ja foi finalizado." }, { status: 400 });
   }
 
   if (sourceSession.provider === "pagbank") {
@@ -481,162 +500,6 @@ export async function POST(
       error: error instanceof Error ? error.message : "Nao foi possivel processar o cartao.",
     }, { status: 400 });
   }
-}
-
-async function processAsaasPublicCardCheckout(input: {
-  body: JsonRecord;
-  client: ReturnType<typeof createServiceClient>;
-  sourceSession: PaymentSessionRow;
-}) {
-  const { body, client, sourceSession } = input;
-  const selectedOrderBumpIds = readStringList(body.selectedOrderBumpIds, []);
-
-  const { data: order, error: orderError } = await client
-    .from("sales_catalog_orders")
-    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
-    .eq("id", sourceSession.order_id)
-    .eq("organization_id", sourceSession.organization_id)
-    .maybeSingle<OrderRow>();
-
-  if (orderError || !order) {
-    return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
-  }
-
-  if (isClosedOrder(order)) {
-    return NextResponse.json({ error: "Este pedido ja foi finalizado." }, { status: 400 });
-  }
-
-  const { data: itemRows } = await client
-    .from("sales_catalog_order_items")
-    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment, metadata")
-    .eq("order_id", order.id)
-    .eq("organization_id", sourceSession.organization_id)
-    .order("created_at", { ascending: true });
-  let items = (itemRows ?? []) as OrderItemRow[];
-
-  if (hasRecurringSalesCatalogOrderItem(readRecord(order.metadata) ?? {}, items)) {
-    return NextResponse.json({
-      error: "Produto recorrente precisa do fluxo de cobranca recorrente antes de pagar por cartao.",
-    }, { status: 400 });
-  }
-
-  const orderBumpApplication = await applySalesCatalogCheckoutOrderBumps({
-    client,
-    organizationId: sourceSession.organization_id,
-    orderId: order.id,
-    selectedProductIds: selectedOrderBumpIds,
-  });
-  items = orderBumpApplication.items.map((item) => ({
-    id: item.id,
-    title: item.title,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    sale_price: item.sale_price,
-    total: item.total,
-    sku_code: item.sku_code,
-    fulfillment: item.fulfillment,
-    metadata: item.metadata,
-  }));
-
-  if (hasRecurringSalesCatalogOrderItem(readRecord(orderBumpApplication.order.metadata) ?? {}, items)) {
-    return NextResponse.json({
-      error: "Produto recorrente precisa do fluxo de cobranca recorrente antes de pagar por cartao.",
-    }, { status: 400 });
-  }
-
-  if (requiresSalesCatalogShippingBeforePayment(orderBumpApplication.order, items)) {
-    return NextResponse.json({
-      error: "Confirme frete, retirada ou entrega antes de pagar este pedido.",
-    }, { status: 400 });
-  }
-
-  const amount = orderBumpApplication.totalAmount
-    ?? normalizeCurrencyAmount(sourceSession.amount)
-    ?? normalizeCurrencyAmount(order.total)
-    ?? normalizeCurrencyAmount(order.subtotal);
-
-  if (!amount) {
-    return NextResponse.json({ error: "Informe o total do pedido antes de pagar." }, { status: 400 });
-  }
-
-  const activeCardSession = await findActiveCardSession({
-    client, organizationId: sourceSession.organization_id, orderId: order.id,
-    provider: "asaas", expectedAmount: amount,
-  });
-  if (activeCardSession?.checkout_url) {
-    const trackingUrl = readString(readRecord(activeCardSession.metadata)?.checkout_tracking_url) ?? activeCardSession.checkout_url;
-    await client.from("intelligence_events").insert({
-      scope: "organization", organization_id: sourceSession.organization_id,
-      source_type: "sales_catalog_payment_session", source_id: activeCardSession.id,
-      event_type: "sales_catalog.card_checkout_reopened", title: "Link de cartao reaberto",
-      summary: "O lead continuou o pagamento no checkout de cartao existente.",
-      visibility: "organization", tags: ["sales_catalog", "payment", "card", "lead_tracking"],
-      payload: { lead_id: order.lead_id, conversation_id: order.conversation_id, order_id: order.id, payment_session_id: activeCardSession.id },
-    });
-    return NextResponse.json({ ok: true, reused: true, sessionId: activeCardSession.id, checkoutUrl: activeCardSession.checkout_url, trackingUrl });
-  }
-
-  const result = await createSalesCatalogPixPaymentSession({
-    client,
-    organizationId: sourceSession.organization_id,
-    orderId: order.id,
-    amount,
-    payerEmail: sourceSession.payer_email ?? order.customer_email,
-    preferredMethod: "card",
-    source: "checkout",
-    actorId: null,
-  }).catch((error: unknown) => ({
-    error: error instanceof Error ? error.message : "Nao foi possivel criar o checkout de cartao Asaas.",
-  }));
-
-  if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
-  }
-  if (result.gatewayUnavailable || result.paymentDeferred) {
-    return NextResponse.json({ error: result.session.failureReason ?? "Nao foi possivel abrir o pagamento no cartao. Tente novamente." }, { status: 503 });
-  }
-
-  await client.from("intelligence_events").insert({
-    scope: "organization",
-    organization_id: sourceSession.organization_id,
-    source_type: "sales_catalog_payment_session",
-    source_id: result.session.id,
-    event_type: "sales_catalog.asaas_card_checkout_created_from_public_checkout",
-    title: "Checkout de cartao Asaas criado",
-    summary: `Checkout ${sourceSession.id.slice(0, 8)} abriu uma nova sessao Asaas para cartao.`,
-    confidence: 1,
-    visibility: "organization",
-    tags: ["sales_catalog", "payment", "asaas", "card", "checkout", "lead_tracking"],
-    payload: {
-      source_payment_session_id: sourceSession.id,
-      new_payment_session_id: result.session.id,
-      checkout_url: result.checkoutUrl,
-      tracking_url: result.trackingUrl,
-      order_id: order.id,
-      lead_id: order.lead_id,
-      conversation_id: order.conversation_id,
-      lead_phone: order.customer_phone,
-      selected_order_bump_product_ids: selectedOrderBumpIds,
-      applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
-      added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
-      amount,
-      items: summarizePaymentItems(items),
-    },
-  });
-
-  revalidatePath(`/checkout/${sourceSession.id}`);
-  revalidatePath(`/checkout/${result.session.id}`);
-  revalidatePath("/dashboard/links");
-
-  return NextResponse.json({
-    ok: true,
-    sessionId: result.session.id,
-    checkoutUrl: result.checkoutUrl,
-    trackingUrl: result.trackingUrl,
-    status: result.session.status,
-    providerStatus: result.session.providerStatus,
-    providerStatusDetail: result.session.providerStatusDetail,
-  });
 }
 
 async function processPagBankPublicCardPayment(input: {

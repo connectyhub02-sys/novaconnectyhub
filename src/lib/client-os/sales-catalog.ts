@@ -961,7 +961,7 @@ export async function getOrganizationSalesCatalogShippingSettings(
   return data ? mapSalesCatalogShippingSettings(data) : null;
 }
 
-async function attachSalesCatalogSkus(client: SupabaseClient, items: ClientSalesCatalogItem[]) {
+export async function attachSalesCatalogSkus(client: SupabaseClient, items: ClientSalesCatalogItem[], options: { strict?: boolean } = {}) {
   const itemIds = items.map((item) => item.id);
 
   if (itemIds.length === 0) {
@@ -976,6 +976,7 @@ async function attachSalesCatalogSkus(client: SupabaseClient, items: ClientSales
     .order("created_at", { ascending: true });
 
   if (error) {
+    if (options.strict) throw new Error("Não foi possível conferir as variações dos produtos.");
     return items;
   }
 
@@ -2124,6 +2125,9 @@ function readOrderBumps(
         title: readString(itemRecord.title),
         description: readString(itemRecord.description),
         triggerText: readString(itemRecord.trigger_text) ?? readString(itemRecord.triggerText),
+        triggerProductId: readString(itemRecord.trigger_product_id) ?? readString(itemRecord.triggerProductId),
+        triggerCategory: readString(itemRecord.trigger_category) ?? readString(itemRecord.triggerCategory),
+        minimumSubtotal: readNumber(itemRecord.minimum_subtotal ?? itemRecord.minimumSubtotal),
       };
     })
     .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item));
@@ -2132,6 +2136,7 @@ function readOrderBumps(
     enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
     whatsappEnabled: readNullableBoolean(record.whatsapp_enabled ?? record.whatsappEnabled) ?? fallback.whatsappEnabled,
     checkoutEnabled: readNullableBoolean(record.checkout_enabled ?? record.checkoutEnabled) ?? fallback.checkoutEnabled,
+    webSurfaces: Array.isArray(record.web_surfaces ?? record.webSurfaces) ? (record.web_surfaces ?? record.webSurfaces) as string[] : ["store", "product", "cart", "checkout", "confirmation"],
     autoSuggestionsEnabled: readNullableBoolean(record.auto_suggestions_enabled ?? record.autoSuggestionsEnabled) ?? fallback.autoSuggestionsEnabled,
     maxOffersPerOrder: readNumber(record.max_offers_per_order ?? record.maxOffersPerOrder) ?? fallback.maxOffersPerOrder,
     items,

@@ -170,9 +170,13 @@ export type SalesCatalogOrderBumpItem = {
   title: string | null;
   description: string | null;
   triggerText: string | null;
+  triggerProductId?: string | null;
+  triggerCategory?: string | null;
+  minimumSubtotal?: number | null;
 };
 
 export type SalesCatalogOrderBumpSettings = {
+  webSurfaces?: string[];
   enabled: boolean;
   whatsappEnabled: boolean;
   checkoutEnabled: boolean;

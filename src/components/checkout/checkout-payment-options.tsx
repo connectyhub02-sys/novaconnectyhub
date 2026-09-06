@@ -2,13 +2,15 @@
 
 import Image from "next/image";
 import { BadgePercent, Check, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckoutPaymentFeedbackModal,
   type CheckoutPaymentFeedbackItem,
   type CheckoutPaymentFeedbackPayload,
 } from "./checkout-payment-feedback-modal";
 import { MercadoPagoCardBrick, type CardPaymentStatusChange } from "./mercado-pago-card-brick";
+import { AsaasCardForm } from "./asaas-card-form";
 import { PagBankCardForm } from "./pagbank-card-form";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,8 @@ type CheckoutPaymentOptionsProps = {
   cardPublicKey: string | null;
   pagBankCardPaymentMethodTypes?: PagBankCardPaymentMethodType[];
   pixQrCode: string | null;
+  pixAmount?: number | null;
+  pixNeedsRefresh?: boolean;
   pixQrCodeBase64: string | null;
   pixTicketUrl: string | null;
   paymentProviderLabel: string;
@@ -33,6 +37,7 @@ type CheckoutPaymentOptionsProps = {
   orderCode: string;
   items: CheckoutPaymentFeedbackItem[];
   orderBumps: CheckoutOrderBumpOption[];
+  initialSelectedOrderBumpIds?: string[];
   whatsappHref: string | null;
 };
 
@@ -60,6 +65,8 @@ export function CheckoutPaymentOptions({
   cardPublicKey,
   pagBankCardPaymentMethodTypes,
   pixQrCode,
+  pixAmount,
+  pixNeedsRefresh,
   pixQrCodeBase64,
   pixTicketUrl,
   paymentProviderLabel,
@@ -69,24 +76,30 @@ export function CheckoutPaymentOptions({
   orderCode,
   items,
   orderBumps,
+  initialSelectedOrderBumpIds = [],
   whatsappHref,
 }: CheckoutPaymentOptionsProps) {
+  const router = useRouter();
+  const cartMutating = useRef(false);
+  const [cartUpdating, setCartUpdating] = useState(false);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
   const showCard = canUseCard && (paymentProvider === "asaas" || paymentProvider === "pagbank" || Boolean(cardPublicKey));
   const defaultMethod = initialPaymentMethod ?? (canUsePix && showCard ? null : canUsePix ? "pix" : showCard ? "card" : null);
   const [method, setMethod] = useState<PaymentMethod | null>(defaultMethod);
   const [feedback, setFeedback] = useState<CheckoutPaymentFeedbackPayload | null>(null);
-  const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>([]);
+  const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>(initialSelectedOrderBumpIds);
   const [pixUpdating, setPixUpdating] = useState(false);
   const [pixUpdateError, setPixUpdateError] = useState<string | null>(null);
-  const [asaasCardLoading, setAsaasCardLoading] = useState(false);
-  const [asaasCardError, setAsaasCardError] = useState<string | null>(null);
+  const [cardBusy, setCardBusy] = useState(false);
   const activeMethod = method === "card" && showCard ? "card" : method === "pix" && canUsePix ? "pix" : null;
   const selectedOrderBumps = useMemo(
     () => orderBumps.filter((item) => selectedOrderBumpIds.includes(item.productId)),
     [orderBumps, selectedOrderBumpIds],
   );
   const orderBumpTotal = selectedOrderBumps.reduce((sum, item) => sum + item.price, 0);
-  const totalAmount = roundMoney(amount + orderBumpTotal);
+  const alreadyIncludedBumpTotal = orderBumps.filter(item => initialSelectedOrderBumpIds.includes(item.productId)).reduce((sum, item) => sum + item.price, 0);
+  const totalAmount = serverTotal ?? roundMoney(amount - alreadyIncludedBumpTotal + orderBumpTotal);
+  const needsPixUpdate = pixNeedsRefresh || !pixQrCode || selectedOrderBumpIds.length > 0 || initialSelectedOrderBumpIds.length > 0 || (pixAmount != null && pixAmount !== totalAmount);
   const totalAmountLabel = formatCurrency(totalAmount);
   const feedbackItems = useMemo(
     () => [
@@ -129,14 +142,33 @@ export function CheckoutPaymentOptions({
     });
   }
 
-  function toggleOrderBump(productId: string) {
+  async function toggleOrderBump(productId: string) {
+    if (cardBusy || cartMutating.current) return;
     setPixUpdateError(null);
     const selected = !selectedOrderBumpIds.includes(productId);
     const option = orderBumps.find((item) => item.productId === productId);
 
+    const nextIds = selected ? [...selectedOrderBumpIds, productId] : selectedOrderBumpIds.filter(id => id !== productId);
+    if (paymentProvider === "asaas") {
+      cartMutating.current = true;
+      setCartUpdating(true);
+      try {
+        const quoteResponse = await fetch(`/api/checkout/${sessionId}/card`, { cache: "no-store" });
+        const quote = await quoteResponse.json();
+        if (!quoteResponse.ok) throw new Error(quote.error ?? "Não foi possível conferir o pedido.");
+        const response = await fetch(`/api/checkout/${sessionId}/cart`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selectedOrderBumpIds: nextIds, revision: quote.revision }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Não foi possível atualizar a oferta.");
+        setServerTotal(result.amount);
+        router.refresh();
+      } catch (error) { setPixUpdateError(error instanceof Error ? error.message : "Confira o pedido e tente novamente."); return; }
+      finally { cartMutating.current = false; setCartUpdating(false); }
+    }
+
     publishCommerceAgentEvent(selected ? "order_bump_selected" : "order_bump_unselected", {
       session_id: sessionId,
       product_id: productId,
+      offer_product_id: productId,
       product_title: option?.title ?? null,
       price: option?.price ?? null,
       active_payment_method: activeMethod,
@@ -150,8 +182,8 @@ export function CheckoutPaymentOptions({
   }
 
   function selectPaymentMethod(nextMethod: PaymentMethod) {
+    if (cardBusy || cartMutating.current) return;
     setMethod(nextMethod);
-    setAsaasCardError(null);
     setPixUpdateError(null);
     publishCommerceAgentEvent("payment_method_selected", {
       session_id: sessionId,
@@ -161,55 +193,8 @@ export function CheckoutPaymentOptions({
     });
   }
 
-  async function openAsaasCardCheckout() {
-    if (asaasCardLoading) return;
-
-    setAsaasCardLoading(true);
-    setAsaasCardError(null);
-    publishCommerceAgentEvent("asaas_card_checkout_started", {
-      session_id: sessionId,
-      selected_order_bump_ids: selectedOrderBumpIds,
-      total_amount: totalAmount,
-    });
-
-    try {
-      const response = await fetch(`/api/checkout/${sessionId}/card`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ selectedOrderBumpIds }),
-      });
-      const data = await response.json().catch(() => null) as {
-        checkoutUrl?: string;
-        trackingUrl?: string | null;
-        error?: string;
-      } | null;
-
-      if (!response.ok || !data?.checkoutUrl) {
-        throw new Error(data?.error ?? "Nao foi possivel abrir o cartao Asaas.");
-      }
-
-      publishCommerceAgentEvent("asaas_card_checkout_created", {
-        session_id: sessionId,
-        checkout_url: data.checkoutUrl,
-        tracking_url: data.trackingUrl ?? null,
-        total_amount: totalAmount,
-      });
-      window.location.href = data.trackingUrl ?? data.checkoutUrl;
-    } catch (error) {
-      publishCommerceAgentEvent("asaas_card_checkout_failed", {
-        session_id: sessionId,
-        reason: error instanceof Error ? error.message : "unknown_error",
-      });
-      setAsaasCardError(error instanceof Error ? error.message : "Nao foi possivel abrir o cartao Asaas.");
-    } finally {
-      setAsaasCardLoading(false);
-    }
-  }
-
   async function updatePixWithOrderBumps() {
-    if (selectedOrderBumpIds.length === 0) return;
+    if (cardBusy || cartMutating.current) return;
 
     setPixUpdating(true);
     setPixUpdateError(null);
@@ -253,6 +238,7 @@ export function CheckoutPaymentOptions({
 
   return (
     <div className="mt-4">
+      {cartUpdating ? <p role="status" className="mb-3 text-xs text-slate-600">Atualizando pedido e frete…</p> : pixUpdateError ? <p role="alert" className="mb-3 text-xs text-rose-700">{pixUpdateError}</p> : null}
       {orderBumps.length > 0 ? (
         <OrderBumpSelector
           items={orderBumps}
@@ -287,12 +273,7 @@ export function CheckoutPaymentOptions({
       ) : null}
 
       {activeMethod === "card" && paymentProvider === "asaas" ? (
-        <AsaasHostedCheckoutPanel
-          loading={asaasCardLoading}
-          error={asaasCardError}
-          totalLabel={totalAmountLabel}
-          onOpen={openAsaasCardCheckout}
-        />
+        <AsaasCardForm sessionId={sessionId} selectedOrderBumpIds={selectedOrderBumpIds} externalBusy={cartUpdating} onBusyChange={setCardBusy} onApproved={() => window.location.reload()} />
       ) : activeMethod === "card" && paymentProvider === "mercado_pago" && cardPublicKey ? (
         <MercadoPagoCardBrick
           publicKey={cardPublicKey}
@@ -328,7 +309,7 @@ export function CheckoutPaymentOptions({
           <p className="text-sm font-black text-slate-950">Pix desativado nesta loja</p>
           <p className="mt-2 text-xs leading-5 text-slate-600">Escolha outra forma habilitada para concluir o pedido.</p>
         </div>
-      ) : selectedOrderBumpIds.length > 0 ? (
+      ) : needsPixUpdate ? (
         <PixOrderBumpUpdatePanel
           totalLabel={totalAmountLabel}
           loading={pixUpdating}
@@ -369,48 +350,6 @@ function PaymentMethodEmptyState({
           ? "Selecione Pix para pagar por QR code ou cartao para abrir o checkout seguro."
           : "Selecione uma forma habilitada para continuar."}
       </p>
-    </div>
-  );
-}
-
-function AsaasHostedCheckoutPanel({
-  error,
-  loading,
-  totalLabel,
-  onOpen,
-}: {
-  error: string | null;
-  loading: boolean;
-  totalLabel: string;
-  onOpen: () => void;
-}) {
-  return (
-    <div className="mt-5 rounded-[8px] border border-blue-100 bg-white p-4">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
-          <CreditCard className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-slate-950">Cartão de crédito</p>
-          <p className="mt-1 text-xs leading-5 text-slate-600">
-            Continue para informar os dados do cartão e pagar {totalLabel} com segurança no Asaas.
-          </p>
-        </div>
-      </div>
-      <button
-        type="button"
-        className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--store-button,#1d4ed8)] px-3 text-sm font-bold text-[color:var(--store-button-text,#fff)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-slate-300"
-        disabled={loading}
-        onClick={onOpen}
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-        {loading ? "Preparando pagamento…" : "Continuar para o cartão"}
-      </button>
-      {error ? (
-        <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -514,9 +453,9 @@ function PixOrderBumpUpdatePanel({
 }) {
   return (
     <div className="mt-5 rounded-[8px] border border-blue-100 bg-blue-50 p-4">
-      <p className="text-sm font-black text-slate-950">Atualize o Pix com as ofertas</p>
+      <p className="text-sm font-black text-slate-950">Pague por Pix</p>
       <p className="mt-2 text-xs leading-5 text-slate-600">
-        O QR Code atual ainda esta no valor anterior. Gere um novo Pix com total de {totalLabel}.
+        Gere o código Pix deste pedido no valor de {totalLabel}.
       </p>
       <button
         type="button"
@@ -530,7 +469,7 @@ function PixOrderBumpUpdatePanel({
         }}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
-        Gerar Pix atualizado
+        Gerar código Pix
       </button>
       {error ? (
         <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">

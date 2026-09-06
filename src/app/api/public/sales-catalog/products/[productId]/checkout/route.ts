@@ -1,7 +1,7 @@
+import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
-import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { createPublicCheckoutIntentKey, findRecentPublicCheckoutSession } from "@/lib/sales-catalog/public-checkout-idempotency";
 import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
@@ -86,7 +86,7 @@ export async function POST(
     return NextResponse.json({ error: "Este produto esta esgotado no momento." }, { status: 422 });
   }
 
-  const amount = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
+  const amount = getCommerceOfferPrice(item);
 
   if (!amount) {
     return NextResponse.json({ error: "Este produto ainda nao tem preco valido para checkout." }, { status: 422 });
@@ -207,7 +207,7 @@ export async function POST(
       tag: item.tag,
       quantity,
       unit_price: item.price ?? amount,
-      sale_price: item.offer.salePrice ?? item.price ?? amount,
+      sale_price: String(amount),
       total: totalAmount,
       product_origin_type: item.productOriginType,
       commercial_flow_type: item.commercialFlowType,

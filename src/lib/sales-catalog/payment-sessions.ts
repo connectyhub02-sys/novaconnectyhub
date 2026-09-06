@@ -27,8 +27,6 @@ import {
   loadPagBankPlatformBillingConfig,
 } from "./pagbank";
 import {
-  buildAsaasCheckoutUrl,
-  createAsaasCheckout,
   createAsaasPixPayment,
   ensureAsaasAccessToken,
   extractAsaasPaymentData,
@@ -463,72 +461,19 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   if (preferredMethod === "card") {
     try {
-      let cardCheckoutUrl = checkoutUrl;
-      let cardCheckoutTracking = checkoutTracking;
-      let providerPaymentId: string | null = null;
-      let providerStatus: string | null = null;
-      let providerStatusDetail: string | null = null;
-      let cardMetadata: JsonRecord = {
+      const cardCheckoutUrl = checkoutUrl;
+      const cardCheckoutTracking = checkoutTracking;
+      const providerPaymentId: string | null = null;
+      const providerStatus: string | null = null;
+      const providerStatusDetail: string | null = null;
+      const cardMetadata: JsonRecord = {
         preferred_payment_method: "card",
         checkout_ready_for_card: true,
         public_checkout_url: checkoutUrl,
         public_checkout_tracking_url: checkoutTracking?.trackingUrl ?? null,
       };
 
-      // WhatsApp opens our tracked checkout first. The hosted card checkout is
-      // created only after the customer chooses to continue on that page.
-      if (paymentProvider === "asaas" && input.source === "checkout") {
-        const asaasCheckout = await createAsaasCheckout({
-          accessToken,
-          mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
-          apiBaseUrl: getPaymentGatewayApiBaseUrl(platformBilling, paymentProvider),
-          amount,
-          description,
-          externalReference,
-          payerEmail,
-          payerName: order.customer_name,
-          payerDocument: order.customer_document,
-          payerPhone: order.customer_phone,
-          payerZipCode: order.destination_cep,
-          payerAddress: order.destination_address,
-          billingTypes: ["CREDIT_CARD"],
-          minutesToExpire: asaasSettings?.checkoutExpirationMinutes ?? null,
-          maxInstallmentCount: asaasSettings?.maxInstallments ?? null,
-          successUrl: checkoutUrl,
-          cancelUrl: checkoutUrl,
-          expiredUrl: checkoutUrl,
-          idempotencyKey,
-          items: gatewayItems,
-        });
-        const asaasCheckoutUrl = buildAsaasCheckoutUrl(asaasCheckout);
-
-        if (!asaasCheckoutUrl) {
-          throw new Error("Asaas criou o checkout, mas nao retornou URL de pagamento.");
-        }
-
-        cardCheckoutUrl = asaasCheckoutUrl;
-        providerPaymentId = asaasCheckout.id ?? null;
-        providerStatus = asaasCheckout.status ?? "created";
-        providerStatusDetail = "asaas_checkout";
-        cardMetadata = {
-          ...cardMetadata,
-          asaas_checkout_id: asaasCheckout.id ?? null,
-          asaas_checkout_url: asaasCheckoutUrl,
-          asaas_checkout_status: asaasCheckout.status ?? null,
-        };
-        cardCheckoutTracking = await createPaymentSessionTrackedLink({
-          client: input.client,
-          organizationId: input.organizationId,
-          order,
-          items,
-          sessionId,
-          checkoutUrl: cardCheckoutUrl,
-          amount,
-          source: input.source,
-          actorId: input.actorId ?? null,
-          itemCount: items.length,
-        }).catch(() => checkoutTracking);
-      }
+      // Card details are collected and processed only on the internal checkout.
 
       const { data: checkoutOnly, error: checkoutOnlyError } = await input.client
         .from("sales_catalog_payment_sessions")
@@ -704,7 +649,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
     }
   }
 
+  let gatewayRequestStarted = false;
   try {
+    const { error: requestClaimError } = await input.client.rpc("begin_checkout_gateway_request", { p_session_id: sessionId });
+    if (requestClaimError) throw new Error("Existe um pagamento em verificação para este pedido. Aguarde a confirmação.");
+    gatewayRequestStarted = true;
     let pixData: PaymentGatewayPixData;
 
     if (paymentProvider === "asaas") {
@@ -872,6 +821,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
           paymentProvider,
           gatewayAvailable: false,
           gatewayError: message,
+          extra: { gateway_request_inflight: gatewayRequestStarted },
         }),
       })
       .eq("id", sessionId)

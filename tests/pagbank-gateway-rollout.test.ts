@@ -7,6 +7,7 @@ const asaasPlatformBillingMigrationSource = read("supabase/migrations/0075_asaas
 const platformProductBillingCycleMigrationSource = read("supabase/migrations/0070_platform_product_billing_cycle.sql");
 const renewalAndResponsibleMigrationSource = read("supabase/migrations/0071_platform_renewal_and_agent_responsibles.sql");
 const pagBankBillingCardMethodsMigrationSource = read("supabase/migrations/0072_pagbank_billing_card_methods.sql");
+const transparentCheckoutSource = read("src/lib/sales-catalog/transparent-checkout.ts");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const integrationsSource = read("src/lib/client-os/integrations.ts");
 const clientConsoleSource = read("src/components/connectyhub-os/client-integrations-console.tsx");
@@ -121,8 +122,8 @@ describe("PagBank gateway rollout", () => {
     expect(checkoutPageSource).toContain("formatCheckoutPaymentProviderLabel(session.provider)");
     expect(checkoutPageSource).toContain("loadMercadoPagoSecurity={false}");
     expect(checkoutOptionsSource).toContain("paymentProviderLabel");
-    expect(checkoutOptionsSource).toContain("AsaasHostedCheckoutPanel");
-    expect(checkoutOptionsSource).toContain("Continuar para o cartão");
+    expect(checkoutOptionsSource).toContain("AsaasCardForm");
+    expect(checkoutOptionsSource).toContain("AsaasCardForm");
     expect(checkoutOptionsSource).toContain("Abrir pagamento no {paymentProviderLabel}");
   });
 
@@ -202,8 +203,8 @@ describe("PagBank gateway rollout", () => {
     expect(checkoutPageSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutPageSource).toContain("paymentProvider={paymentProvider}");
     expect(checkoutOptionsSource).toContain("paymentProvider === \"asaas\"");
-    expect(checkoutOptionsSource).toContain("AsaasHostedCheckoutPanel");
-    expect(checkoutOptionsSource).toContain("openAsaasCardCheckout");
+    expect(checkoutOptionsSource).toContain("AsaasCardForm");
+    expect(checkoutOptionsSource).not.toContain("window.location.href = data.trackingUrl");
     expect(checkoutOptionsSource).toContain("PagBankCardForm");
     expect(checkoutOptionsSource).toContain("pagBankCardPaymentMethodTypes");
     expect(checkoutOptionsSource).toContain("cardSessionPath={`/api/checkout/${sessionId}/pagbank-card-session`}");
@@ -213,13 +214,11 @@ describe("PagBank gateway rollout", () => {
     expect(pagBankCardFormSource).toContain("type: input.paymentMethodType");
     expect(publicPagBankCardSessionRouteSource).toContain("ensurePagBankCardPublicKey");
     expect(publicPagBankCardSessionRouteSource).toContain("createPagBankThreeDSSession");
-    expect(publicCheckoutCardRouteSource).toContain("processAsaasPublicCardCheckout");
-    expect(publicCheckoutCardRouteSource).toContain("preferredMethod: \"card\"");
+    expect(publicCheckoutCardRouteSource).toContain("payTransparentCheckout");
+
     expect(publicCheckoutCardRouteSource).toContain("processPagBankPublicCardPayment");
     expect(publicCheckoutCardRouteSource).toContain("createPagBankCardOrder");
     expect(publicCheckoutCardRouteSource).toContain("extractPagBankCardData");
-    expect(publicCheckoutCardRouteSource).toContain("hasRecurringSalesCatalogOrderItem");
-    expect(publicCheckoutCardRouteSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente");
   });
 
   it("keeps PagBank preferences in code while exposing Asaas payment preferences for client stores", () => {
@@ -235,7 +234,7 @@ describe("PagBank gateway rollout", () => {
     expect(salesCatalogSharedSource).toContain("salesCatalogAsaasPaymentMethodOptions");
     expect(paymentSessionsSource).toContain("asaas_settings");
     expect(paymentSessionsSource).toContain("resolveAsaasPaymentDueDate");
-    expect(paymentSessionsSource).toContain("maxInstallmentCount: asaasSettings?.maxInstallments");
+    expect(transparentCheckoutSource).toContain("settings?.asaas.maxInstallments");
     expect(dashboardSalesCatalogSource).toContain("save_asaas_settings");
     expect(dashboardSalesCatalogSource).toContain("Asaas regra do agente");
     expect(dashboardSalesCatalogSource).toContain("Asaas parcelas");

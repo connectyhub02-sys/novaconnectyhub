@@ -316,11 +316,13 @@ type CrossAgentConversationContext = {
 
 type CommerceStoreContext = {
   latestSessionAt: string | null;
+  offerDecisions?: Array<{ catalog_item_id: string; status: string }>;
   sessions: Array<{
     surface: string | null;
     pagePath: string | null;
     productId: string | null;
     orderId: string | null;
+    cartItems?: Array<{ product_id: string; quantity: number }>;
     agentName: string | null;
     occurredAt: string | null;
   }>;
@@ -3703,7 +3705,10 @@ async function loadLeadCommerceStoreContext(
     messageQuery = messageQuery.eq("conversation_id", input.conversationId);
   }
 
-  const [sessionsResult, messagesResult] = await Promise.all([sessionQuery, messageQuery]);
+  const [sessionsResult, messagesResult, decisionsResult] = await Promise.all([sessionQuery, messageQuery,
+    input.leadId ? client.from("lead_commerce_offer_states").select("catalog_item_id, status").eq("organization_id", input.organizationId).eq("lead_id", input.leadId).gte("updated_at", new Date(Date.now() - 86400000).toISOString()).limit(20) : Promise.resolve({ data: [] }),
+  ]);
+  const offerDecisions = (decisionsResult.data ?? []) as NonNullable<CommerceStoreContext["offerDecisions"]>;
   const sessions = ((sessionsResult.data ?? []) as Array<{
     last_surface: string | null;
     current_path: string | null;
@@ -3719,6 +3724,7 @@ async function loadLeadCommerceStoreContext(
       pagePath: session.current_path ?? asString(metadata.latest_page_path),
       productId: asString(metadata.latest_product_id) ?? asString(metadata.product_id),
       orderId: session.order_id ?? asString(metadata.order_id),
+      cartItems: Array.isArray(readRecord(metadata.commerce_cart_snapshot)?.items) ? (readRecord(metadata.commerce_cart_snapshot)!.items as Array<{ product_id: string; quantity: number }>).filter(item => typeof item?.product_id === "string" && typeof item.quantity === "number" && item.quantity > 0).slice(0, 20) : [],
       agentName: asString(metadata.agent_name),
       occurredAt: session.last_seen_at,
     };
@@ -3748,12 +3754,13 @@ async function loadLeadCommerceStoreContext(
     .sort((left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt))
     .slice(-10);
 
-  if (sessions.length === 0 && messages.length === 0) {
+  if (sessions.length === 0 && messages.length === 0 && offerDecisions.length === 0) {
     return null;
   }
 
   return {
     latestSessionAt: sessions[0]?.occurredAt ?? messages[messages.length - 1]?.occurredAt ?? null,
+    offerDecisions,
     sessions,
     messages,
   };
@@ -4616,7 +4623,7 @@ function buildCrossAgentConversationLines(context: CrossAgentConversationContext
 }
 
 function buildCommerceStoreContextLines(context: CommerceStoreContext | null, agent: AgentRow): string[] {
-  if (!context || (context.sessions.length === 0 && context.messages.length === 0)) return [];
+  if (!context || (context.sessions.length === 0 && context.messages.length === 0 && !context.offerDecisions?.length)) return [];
 
   const currentAgentName = agent.persona_name?.trim() || agent.name;
   const sessionLines = context.sessions.slice(0, 4).map((session) => {
@@ -4630,6 +4637,7 @@ function buildCommerceStoreContextLines(context: CommerceStoreContext | null, ag
       session.pagePath ? `pagina: ${session.pagePath}` : null,
       session.productId ? `produto: ${session.productId}` : null,
       session.orderId ? `pedido: ${session.orderId}` : null,
+      session.cartItems?.length ? `carrinho escolhido no site: ${session.cartItems.map(item => `${item.quantity}x produto ${item.product_id}`).join(", ")}; confira este pedido antes de criar outro e valide os preços no catálogo` : null,
       agentLabel,
     ].filter(Boolean).join(" | ");
   });
@@ -4652,6 +4660,8 @@ function buildCommerceStoreContextLines(context: CommerceStoreContext | null, ag
     context.latestSessionAt ? `- Ultima atividade conhecida na loja: ${context.latestSessionAt}.` : null,
     ...sessionLines,
     ...messageLines,
+    ...(context.offerDecisions ?? []).map(decision => `- Oferta do produto ${decision.catalog_item_id}: ${decision.status === "declined" ? "recusada; não oferecer novamente nesta jornada" : decision.status === "accepted" ? "selecionada no site; confira os itens salvos do pedido antes de adicionar novamente" : decision.status === "removed" ? "removida pelo cliente; não recolocar sem novo pedido explícito" : "já apresentada"}.`),
+    "- Quando o cliente já pediu para pagar, conclua o pedido aceito. Não retome ofertas nem peça novamente os dados já confirmados.",
   ].filter((line): line is string => Boolean(line));
 }
 
@@ -5862,6 +5872,9 @@ function buildSalesCatalogCartIncreaseLines(
         offer.badge ? `selo ${offer.badge}` : "",
         product.category ? `categoria ${product.category}` : "",
         offer.triggerText ? `oferecer quando ${offer.triggerText}` : "oferecer quando complementar o pedido atual",
+        offer.triggerProductId ? `somente se o pedido já contém o produto ${offer.triggerProductId}` : "",
+        offer.triggerCategory ? `somente com produto principal da categoria ${offer.triggerCategory}` : "",
+        offer.minimumSubtotal ? `somente com subtotal de pelo menos R$ ${offer.minimumSubtotal}` : "",
         offer.description ? `argumento ${preview(offer.description, 160)}` : "",
         `tag ${product.tag}`,
       ].filter(Boolean);

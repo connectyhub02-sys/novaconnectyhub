@@ -5,6 +5,7 @@ const migrationSource = read("supabase/migrations/0073_asaas_payment_gateway.sql
 const platformBillingMigrationSource = read("supabase/migrations/0075_asaas_platform_billing.sql");
 const tokenAuditMigrationSource = read("supabase/migrations/0074_sales_catalog_payment_integration_token_audit.sql");
 const asaasGatewaySource = read("src/lib/sales-catalog/asaas.ts");
+const transparentCheckoutSource = read("src/lib/sales-catalog/transparent-checkout.ts");
 const paymentSessionsSource = read("src/lib/sales-catalog/payment-sessions.ts");
 const billingCardRouteSource = read("src/app/api/dashboard/billing/checkout/[subscriptionId]/card/route.ts");
 const platformBillingWebhookRouteSource = read("src/app/api/webhooks/asaas/platform-billing/route.ts");
@@ -62,14 +63,14 @@ describe("Asaas gateway rollout", () => {
     expect(asaasGatewaySource).toContain("webhook_reused");
   });
 
-  it("uses Asaas for client-owned Pix sessions and hosted card checkout", () => {
+  it("uses Asaas for client-owned Pix sessions and internal card checkout", () => {
     expect(paymentSessionsSource).toContain("providers.includes(\"asaas\")");
     expect(paymentSessionsSource).toContain("createAsaasPixPayment");
     expect(paymentSessionsSource).toContain("extractAsaasPaymentData");
-    expect(paymentSessionsSource).toContain("createAsaasCheckout");
+    expect(paymentSessionsSource).not.toContain("createAsaasCheckout");
     expect(paymentSessionsSource).toContain("asaas_settings");
     expect(paymentSessionsSource).toContain("dueDate: resolveAsaasPaymentDueDate");
-    expect(paymentSessionsSource).toContain("maxInstallmentCount: asaasSettings?.maxInstallments");
+    expect(transparentCheckoutSource).toContain("settings?.asaas.maxInstallments");
     expect(paymentSessionsSource).toContain("customer_email_required");
     expect(paymentSessionsSource).toContain("customer_document_required");
     expect(paymentSessionsSource).toContain("return \"pagbank\"");

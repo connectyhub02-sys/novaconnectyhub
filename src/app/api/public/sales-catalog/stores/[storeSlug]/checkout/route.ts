@@ -1,7 +1,7 @@
+import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
-import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { createPublicCheckoutIntentKey, findRecentPublicCheckoutSession } from "@/lib/sales-catalog/public-checkout-idempotency";
 import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
@@ -154,7 +154,7 @@ export async function POST(
       throw new Error(`O produto "${item.title}" esta esgotado no momento.`);
     }
 
-    const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
+    const price = getCommerceOfferPrice(item);
 
     if (!price) {
       throw new Error(`O produto "${item.title}" ainda nao tem preco valido.`);
