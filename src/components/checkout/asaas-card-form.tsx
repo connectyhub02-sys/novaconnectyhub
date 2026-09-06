@@ -5,6 +5,8 @@ import { CheckCircle2, Clock3, Loader2, LockKeyhole } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { parseCheckoutCard, type CheckoutCardHolder } from "@/lib/sales-catalog/card-input";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import { detectCheckoutCardBrand, type CheckoutCardBrand } from "@/lib/sales-catalog/card-brand";
+import { PaymentBrandBadge } from "./payment-brand-badge";
 
 type Quote = { amount: number; revision: number; holder: CheckoutCardHolder; maxInstallments: number; enabled: boolean; paid: boolean; closed: boolean; attempt: { id: string; state: string } | null; shipping: number };
 type Props = { sessionId: string; selectedOrderBumpIds: string[]; externalBusy?: boolean; offers?: ReactNode; onBusyChange: (busy: boolean) => void; onApproved: () => void };
@@ -21,6 +23,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
   const [differentHolder, setDifferentHolder] = useState(false);
   const [holder, setHolder] = useState<CheckoutCardHolder | null>(null);
   const [installments, setInstallments] = useState(1);
+  const [cardBrand, setCardBrand] = useState<CheckoutCardBrand | null>(null);
   const attemptId = useRef<string | null>(null);
   const submitting = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -110,9 +113,15 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
   if (quote && !quote.enabled && !waiting) return <p role="status" className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">O cartão está temporariamente indisponível. Continue pelo WhatsApp para combinar o pagamento com a loja.</p>;
   if (!quote) return <div role="alert" className="mt-4 text-sm text-rose-700">{message}<button type="button" className="mt-3 block underline" onClick={() => loadQuote().catch(error => setMessage(error.message))}>Conferir pedido novamente</button></div>;
 
-  return <form ref={formRef} onSubmit={submit} aria-label="Pagar com cartão de crédito" data-sensitive="payment" autoComplete="on" className="mt-3 space-y-3">
+  return <form ref={formRef} onSubmit={submit} onReset={() => setCardBrand(null)} aria-label="Pagar com cartão de crédito" data-sensitive="payment" autoComplete="on" className="mt-3 space-y-3">
     {waiting ? <div role="status" className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><Clock3 className="h-5 w-5 shrink-0" /><p>Estamos verificando seu pagamento. O resultado aparece aqui automaticamente. Não é necessário pagar novamente.</p></div> : <fieldset disabled={busy} className="space-y-3">
-      <label className="block text-xs font-semibold text-slate-700">Número do cartão<input name="card-number" autoComplete="cc-number" inputMode="numeric" maxLength={23} required placeholder="0000 0000 0000 0000" className={inputClass} /></label>
+      <div>
+        <div className="flex min-h-6 items-center justify-between gap-2">
+          <label htmlFor={`card-number-${sessionId}`} className="text-xs font-semibold text-slate-700">Número do cartão</label>
+          <span role="status" aria-label="Bandeira do cartão" className="inline-flex min-h-6 items-center">{cardBrand ? <PaymentBrandBadge brand={cardBrand} /> : null}</span>
+        </div>
+        <input id={`card-number-${sessionId}`} name="card-number" autoComplete="cc-number" inputMode="numeric" maxLength={23} required placeholder="0000 0000 0000 0000" className={inputClass} onInput={event => setCardBrand(detectCheckoutCardBrand(event.currentTarget.value))} />
+      </div>
       <label className="block text-xs font-semibold text-slate-700">Nome impresso no cartão<input name="card-name" autoComplete="cc-name" maxLength={120} required placeholder="Como aparece no cartão" className={inputClass} /></label>
       <div className="grid grid-cols-2 gap-3"><label className="block text-xs font-semibold text-slate-700">Validade<input name="expiry" autoComplete="cc-exp" inputMode="numeric" required placeholder="MM/AA" maxLength={7} className={inputClass} onChange={event => { const value = event.target.value.replace(/\D/g, "").slice(0, 6); event.target.value = value.length > 2 ? `${value.slice(0, 2)}/${value.slice(2)}` : value; }} /></label><label className="block text-xs font-semibold text-slate-700">CVV<input aria-label="Código de segurança (CVV)" name="card-code" autoComplete="cc-csc" inputMode="numeric" type="password" required placeholder="CVV" maxLength={4} className={inputClass} /></label></div>
       {quote.maxInstallments > 1 ? <label className="block text-xs font-semibold text-slate-700">Parcelamento<select value={installments} onChange={event => setInstallments(Number(event.target.value))} className={inputClass}>{Array.from({ length: quote.maxInstallments }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count}x de {money(quote.amount / count)} — total {money(quote.amount)}</option>)}</select></label> : null}

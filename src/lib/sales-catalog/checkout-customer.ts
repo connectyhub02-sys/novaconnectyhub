@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isLikelyPersonalLeadName, resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
+import { getCheckoutCardHolderMissingFields } from "./card-input";
 
 type RecordValue = Record<string, unknown>;
 export type CheckoutCustomerOrder = {
@@ -61,6 +62,15 @@ export function parseCheckoutAddress(value: string | null | undefined) {
 
 export function hasCheckoutBillingAddress(order: Pick<CheckoutCustomerOrder, "destination_cep" | "destination_address">) {
   return (order.destination_cep?.replace(/\D/g, "").length === 8) && Boolean(parseCheckoutAddress(order.destination_address).addressNumber);
+}
+
+export function getCheckoutCustomerMissingFields(order: CheckoutCustomerOrder, requireAddress = true) {
+  return getCheckoutCardHolderMissingFields({
+    name: order.customer_name, email: order.customer_email, cpfCnpj: order.customer_document,
+    phone: order.customer_phone, postalCode: order.destination_cep,
+    addressNumber: parseCheckoutAddress(order.destination_address).addressNumber,
+  }).filter(issue => requireAddress || !["postalCode", "addressNumber"].includes(issue.field))
+    .map(issue => issue.field === "addressNumber" && !order.destination_address?.trim() ? "Endereço" : issue.label);
 }
 
 function record(value: unknown): RecordValue { return value && typeof value === "object" ? value as RecordValue : {}; }

@@ -4,6 +4,7 @@ import { resolveLeadTechnicalTracking, mergeLeadTechnicalTracking } from "@/lib/
 import { commerceDatabase } from "./helpers/commerce-database";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import type * as Asaas from "@/lib/sales-catalog/asaas";
+import { parseCheckoutCardHolder } from "@/lib/sales-catalog/card-input";
 
 describe("WhatsApp details carried into checkout", () => {
   it("repairs a question used as customer name and fills missing contact details from the same lead", async () => {
@@ -26,6 +27,31 @@ describe("WhatsApp details carried into checkout", () => {
     expect(customer.hasCheckoutBillingAddress({ destination_cep: "88000-000", destination_address: "Rua Exemplo, número 61" })).toBe(true);
     expect(customer.hasCheckoutBillingAddress({ destination_cep: "88000000", destination_address: "Rua 1131" })).toBe(false);
     expect(customer.hasCheckoutBillingAddress({ destination_address: "Rua Exemplo, 61" })).toBe(false);
+  });
+
+  const completeOrder = { id: "qa-order", customer_name: "Maria Exemplo", customer_email: "maria@example.test", customer_phone: "+55 (48) 99999-0000", customer_document: "123.456.789-09", destination_cep: "88000-000", destination_address: "Rua 1131, número 61, apartamento 903" };
+  it("keeps complete WhatsApp data collapsed even with formatted contact fields", () => {
+    expect(customer.getCheckoutCustomerMissingFields(completeOrder)).toEqual([]);
+  });
+  it.each([
+    ["customer_name", "", "Nome completo"], ["customer_email", "sem-email", "E-mail"],
+    ["customer_phone", "999", "Telefone"], ["customer_document", "123", "CPF/CNPJ"],
+    ["destination_cep", "880", "CEP"], ["destination_address", "Rua 1131", "Número do endereço"],
+  ])("flags incomplete %s so the details open before paying", (field, value, label) => {
+    expect(customer.getCheckoutCustomerMissingFields({ ...completeOrder, [field]: value })).toEqual([label]);
+  });
+  it("does not require a delivery address for a digital purchase without card billing", () => {
+    const digital = { ...completeOrder, destination_cep: null, destination_address: null };
+    expect(customer.getCheckoutCustomerMissingFields(digital, false)).toEqual([]);
+    expect(customer.getCheckoutCustomerMissingFields(digital, true)).toEqual(["CEP", "Endereço"]);
+  });
+  it("uses the same validation as the actual card holder submission", () => {
+    for (const email of ["maria@example.test", "invalid", ""]) {
+      const data = { ...completeOrder, customer_email: email };
+      const holder = { name: data.customer_name, email, cpfCnpj: data.customer_document, phone: data.customer_phone, postalCode: data.destination_cep, addressNumber: "61" };
+      if (customer.getCheckoutCustomerMissingFields(data).length) expect(() => parseCheckoutCardHolder(holder)).toThrow();
+      else expect(() => parseCheckoutCardHolder(holder)).not.toThrow();
+    }
   });
 });
 

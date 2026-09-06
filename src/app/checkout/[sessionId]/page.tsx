@@ -7,6 +7,7 @@ import { ChevronDown, MessageCircle, PackageCheck, ShieldCheck } from "lucide-re
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import { CheckoutCustomerAvatar } from "@/components/checkout/checkout-customer-avatar";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import { CheckoutAcceptedPayments } from "@/components/checkout/payment-brand-badge";
 import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
@@ -20,8 +21,8 @@ import {
   loadSalesCatalogCheckoutOrderBumps,
   type SalesCatalogCheckoutOrderBump,
 } from "@/lib/sales-catalog/checkout-order-bumps";
-import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
-import { loadCheckoutCustomer } from "@/lib/sales-catalog/checkout-customer";
+import { readSalesCatalogFulfillmentMode, requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
+import { getCheckoutCustomerMissingFields, loadCheckoutCustomer } from "@/lib/sales-catalog/checkout-customer";
 import { loadCheckoutLeadAvatar } from "@/lib/sales-catalog/checkout-lead-avatar";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
@@ -247,6 +248,9 @@ export default async function CheckoutPage({
   const canUsePix = session.provider === "asaas"
     ? (connectyHubOwned || asaasPixEnabled)
     : false;
+  const acceptsCreditCard = session.provider === "asaas" && (connectyHubOwned || asaasCardEnabled);
+  const hasPhysicalItems = items.some(item => readSalesCatalogFulfillmentMode(item.fulfillment) === "physical");
+  const missingCustomerFields = getCheckoutCustomerMissingFields(order, acceptsCreditCard || hasPhysicalItems);
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
@@ -326,6 +330,27 @@ export default async function CheckoutPage({
             </details> : null}
           </div>
         </section>
+          <details open={missingCustomerFields.length > 0} className="group mx-4 mt-3 min-w-0 self-start rounded-xl border border-slate-200 bg-slate-50/60 lg:col-start-1 lg:row-start-2 lg:mx-6 lg:mb-6 lg:mt-0" aria-label="Dados do cliente">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-2.5 px-3 py-2 [&::-webkit-details-marker]:hidden">
+              <PackageCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-slate-950">Seus dados e entrega</span><span className="mt-0.5 block text-[11px] text-slate-500">{missingCustomerFields.length ? "Complete os dados para continuar" : "Já preenchidos pelo WhatsApp"}</span></span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-slate-200 px-3 pb-3">
+            {missingCustomerFields.length ? <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900">Confira os dados pendentes: {missingCustomerFields.join(", ")}.</p> : null}
+            <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
+            <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
+            <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
+            {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
+            {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
+            {whatsappReturn ? <a className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>{missingCustomerFields.length ? "Completar dados pelo WhatsApp" : "Corrigir dados pelo WhatsApp"}</a> : null}
+            <dl className="mt-2 space-y-2 border-t border-slate-200 pt-3 text-xs">
+              <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
+              <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? "Não se aplica"}</dd></div>
+              <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
+            </dl>
+            </div>
+          </details>
         <section className="min-w-0 p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-slate-100 lg:p-6" aria-label="Pagamento">
           <CheckoutStatusPoller hidePendingStatus={session.provider === "asaas"} sessionId={session.id} initialStatus={status} initialOrderStatus={order.status} initialProviderStatus={session.provider_status} providerLabel={paymentProviderLabel} />
           {paid ? (
@@ -391,26 +416,6 @@ export default async function CheckoutPage({
           {whatsappReturn ? <a href={whatsappReturn.href} className="mt-1 flex min-h-11 items-center justify-center gap-2 text-xs font-medium text-emerald-700"><MessageCircle className="h-4 w-4" /> Falar com {whatsappReturn.displayName ?? "a loja"}</a> : null}
           <CheckoutPaymentFeedbackModal feedback={paymentFeedback} whatsappHref={whatsappReturn?.href ?? null} />
         </section>
-          <details className="group mx-4 mb-4 min-w-0 self-start rounded-xl border border-slate-200 bg-slate-50/60 lg:col-start-1 lg:row-start-2 lg:mx-6 lg:mb-6" aria-label="Dados do cliente">
-            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-2.5 px-3 py-2 [&::-webkit-details-marker]:hidden">
-              <PackageCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-slate-950">Seus dados e entrega</span><span className="mt-0.5 block text-[11px] text-slate-500">Já preenchidos pelo WhatsApp</span></span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="border-t border-slate-200 px-3 pb-3">
-            <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
-            <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
-            <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
-            {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
-            {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
-            {whatsappReturn ? <a className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>Corrigir dados pelo WhatsApp</a> : null}
-            <dl className="mt-2 space-y-2 border-t border-slate-200 pt-3 text-xs">
-              <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
-              <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? "Não se aplica"}</dd></div>
-              <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
-            </dl>
-            </div>
-          </details>
         </div>
       </main>
       <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-6 gap-y-1 px-4 pb-24 pt-1 text-center font-sans sm:pb-6">
@@ -419,6 +424,7 @@ export default async function CheckoutPage({
           <ConnectyLogo type="mark" tone="blue" alt="" className="h-8 w-8" />
           <span><span className="block text-[11px] text-slate-500">Checkout seguro por</span><strong className="block text-sm font-bold text-[#080c48]">ConnectyHub</strong></span>
         </a>
+        <CheckoutAcceptedPayments pix={canUsePix} card={acceptsCreditCard} />
       </footer>
     </CheckoutShell>
   );

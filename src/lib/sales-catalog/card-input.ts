@@ -23,11 +23,29 @@ export function parseCheckoutCard(value: unknown, now = new Date()): CheckoutCar
 }
 
 export function parseCheckoutCardHolder(value: unknown): CheckoutCardHolder {
+  const holder = normalizeCheckoutCardHolder(value);
+  if (getCheckoutCardHolderMissingFields(holder).length) throw new Error("Confira nome, e-mail, CPF/CNPJ, telefone, CEP e número do endereço do titular.");
+  return holder;
+}
+
+/** Shared with the order summary so an incomplete profile is never presented as ready. */
+export function getCheckoutCardHolderMissingFields(value: unknown) {
+  const holder = normalizeCheckoutCardHolder(value);
+  const checks = [
+    { field: "name", label: "Nome completo", valid: holder.name.length >= 2 && holder.name.length <= 120 },
+    { field: "email", label: "E-mail", valid: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(holder.email) },
+    { field: "cpfCnpj", label: "CPF/CNPJ", valid: /^(\d{11}|\d{14})$/.test(holder.cpfCnpj) },
+    { field: "phone", label: "Telefone", valid: /^\d{10,11}$/.test(holder.phone) },
+    { field: "postalCode", label: "CEP", valid: /^\d{8}$/.test(holder.postalCode) },
+    { field: "addressNumber", label: "Número do endereço", valid: /^\d{1,6}$/.test(holder.addressNumber) },
+  ] as const;
+  return checks.filter(check => !check.valid);
+}
+
+function normalizeCheckoutCardHolder(value: unknown): CheckoutCardHolder {
   const data = record(value);
   const phone = digits(data.phone).replace(/^55(?=\d{10,11}$)/, "");
-  const holder = { name: text(data.name), email: text(data.email), cpfCnpj: digits(data.cpfCnpj), postalCode: digits(data.postalCode), addressNumber: text(data.addressNumber), phone };
-  if (holder.name.length < 2 || holder.name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(holder.email) || !/^(\d{11}|\d{14})$/.test(holder.cpfCnpj) || !/^\d{8}$/.test(holder.postalCode) || !/^\d{1,6}$/.test(holder.addressNumber) || !/^\d{10,11}$/.test(phone)) throw new Error("Confira nome, e-mail, CPF/CNPJ, telefone, CEP e número do endereço do titular.");
-  return holder;
+  return { name: text(data.name), email: text(data.email), cpfCnpj: digits(data.cpfCnpj), postalCode: digits(data.postalCode), addressNumber: text(data.addressNumber), phone };
 }
 
 export function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
