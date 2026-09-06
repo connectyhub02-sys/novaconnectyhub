@@ -3,8 +3,9 @@ import Image from "next/image";
 import Script from "next/script";
 import { headers } from "next/headers";
 import type { CSSProperties, ReactNode } from "react";
-import { MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
+import { ChevronDown, MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
+import { CheckoutAgentAnchor } from "@/components/checkout/checkout-agent-anchor";
 import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
@@ -291,27 +292,39 @@ export default async function CheckoutPage({
       loadMercadoPagoSecurity={false}
     >
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1040px] items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="mx-auto flex max-w-[960px] items-center justify-between gap-3 px-4 py-2 sm:px-6 sm:py-4">
           <a className="flex min-w-0 items-center gap-2.5" href={publicStoreUrl}>
             <CheckoutStoreLogo branding={branding} />
             <span className="truncate text-base font-bold text-[color:var(--store-text)] sm:text-xl">{branding.displayName}</span>
           </a>
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-700"><ShieldCheck className="h-4 w-4" /> Seguro</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><ShieldCheck className="h-4 w-4" /> Seguro</span>
+            <CheckoutAgentAnchor />
+          </div>
         </div>
       </header>
-      <main className="mx-auto grid w-full max-w-[1040px] items-start gap-4 px-3 py-4 sm:gap-6 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-label="Pagamento">
+      <main className="mx-auto max-w-[960px] px-3 py-3 sm:px-6 sm:py-8">
+        <div className="grid min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:grid-rows-[auto_1fr]">
+        <section className="min-w-0 px-4 pt-4 lg:col-start-1 lg:row-start-1 lg:p-6" aria-label="Resumo do pedido">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium text-slate-500">Pedido #{order.id.slice(0, 8).toUpperCase()}</p>
-              <h1 className="mt-1 text-xl font-bold text-[color:var(--store-text)] sm:text-2xl">{paid ? "Pedido pago" : "Finalize seu pedido"}</h1>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-slate-950 sm:text-xl" style={{ fontFamily: "var(--store-font-body)" }}>{paid ? "Pedido pago" : "Finalizar pedido"}</h1>
+              <p className="mt-1 text-[11px] text-slate-500">#{order.id.slice(0, 8).toUpperCase()} · {items.reduce((sum, item) => sum + (item.quantity ?? 1), 0)} itens</p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-xs text-slate-500">Total</p>
-              <p className="mt-1 whitespace-nowrap text-2xl font-bold tracking-tight text-[color:var(--store-accent)] sm:text-3xl">{amount}</p>
+              <p className="whitespace-nowrap text-xl font-bold tracking-tight text-[color:var(--store-accent)] sm:text-2xl">{amount}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{shipping ? `Frete ${shipping} incluído` : "Total do pedido"}</p>
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">{shipping ? `Frete de ${shipping} incluído` : "Valor do pedido confirmado no WhatsApp"}</p>
+          <div className="mt-3 divide-y divide-slate-100 border-b border-slate-100">
+            {items.slice(0, 2).map(item => <CheckoutItemCard key={item.id} item={item} />)}
+            {items.length > 2 ? <details className="group">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-xs font-medium text-slate-600 [&::-webkit-details-marker]:hidden">Ver mais {items.length - 2} {items.length - 2 === 1 ? "produto" : "produtos"}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" /></summary>
+              <div className="divide-y divide-slate-100">{items.slice(2).map(item => <CheckoutItemCard key={item.id} item={item} />)}</div>
+            </details> : null}
+          </div>
+        </section>
+        <section className="min-w-0 p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-slate-100 lg:p-6" aria-label="Pagamento">
           <CheckoutStatusPoller hidePendingStatus={session.provider === "asaas"} sessionId={session.id} initialStatus={status} initialOrderStatus={order.status} initialProviderStatus={session.provider_status} providerLabel={paymentProviderLabel} />
           {paid ? (
             <><CheckoutState
@@ -373,32 +386,32 @@ export default async function CheckoutPage({
           )}
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500"><ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Pagamento protegido • Confirmação pelo WhatsApp</p>
-          {whatsappReturn ? <a href={whatsappReturn.href} className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-medium text-emerald-700"><MessageCircle className="h-4 w-4" /> Falar com {whatsappReturn.displayName ?? "a loja"}</a> : null}
+          {whatsappReturn ? <a href={whatsappReturn.href} className="mt-1 flex min-h-11 items-center justify-center gap-2 text-xs font-medium text-emerald-700"><MessageCircle className="h-4 w-4" /> Falar com {whatsappReturn.displayName ?? "a loja"}</a> : null}
           <CheckoutPaymentFeedbackModal feedback={paymentFeedback} whatsappHref={whatsappReturn?.href ?? null} />
         </section>
-        <div className="grid min-w-0 gap-4 sm:gap-6">
-          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-label="Dados do cliente">
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-950"><PackageCheck className="h-4 w-4 text-emerald-600" /> Seus dados</div>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Recebidos pelo WhatsApp e preenchidos no pagamento.</p>
+          <details className="group mx-4 mb-4 min-w-0 self-start rounded-xl border border-slate-200 bg-slate-50/60 lg:col-start-1 lg:row-start-2 lg:mx-6 lg:mb-6" aria-label="Dados do cliente">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-2.5 px-3 py-2 [&::-webkit-details-marker]:hidden">
+              <PackageCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-slate-950">Seus dados e entrega</span><span className="mt-0.5 block text-[11px] text-slate-500">Já preenchidos pelo WhatsApp</span></span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-slate-200 px-3 pb-3">
             <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
             <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
             <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
             {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
             {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
-            {whatsappReturn ? <a className="mt-2 inline-flex min-h-9 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>Corrigir dados pelo WhatsApp</a> : null}
-          </section>
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Resumo do pedido">
-            <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6"><h2 className="text-base font-bold text-slate-950">Resumo do pedido</h2><span className="text-xs text-slate-500">{items.reduce((sum, item) => sum + (item.quantity ?? 1), 0)} itens</span></div>
-            <div className="mt-2 divide-y divide-slate-100">{items.map(item => <CheckoutItemCard key={item.id} item={item} />)}</div>
-            <dl className="space-y-2 border-t border-slate-200 px-4 py-4 text-sm sm:px-6">
+            {whatsappReturn ? <a className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>Corrigir dados pelo WhatsApp</a> : null}
+            <dl className="mt-2 space-y-2 border-t border-slate-200 pt-3 text-xs">
               <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
               <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? "Não se aplica"}</dd></div>
               <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
             </dl>
-          </section>
+            </div>
+          </details>
         </div>
       </main>
-      <footer className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-6 pt-2 text-center text-[11px] text-slate-500">
+      <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-6 pt-2 text-center text-[11px] text-slate-500">
         <span>Pagamento seguro por {paymentProviderLabel}</span>
         <a className="underline underline-offset-2" href={publicStoreUrl}>Voltar para a loja</a>
         <a href={connectHubPublicUrl} rel="noreferrer" target="_blank">Checkout ConnectyHub</a>
@@ -498,7 +511,7 @@ function safeJson(value: unknown) {
 
 function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
   return (
-    <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-black/10 bg-white text-slate-950 shadow-sm">
+    <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-black/10 bg-white text-slate-950 sm:h-12 sm:w-12">
       {branding.logoUrl ? (
         <Image
           alt={branding.logoAlt}
@@ -518,13 +531,13 @@ function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
 function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
   const price = formatCurrency(item.total ?? item.sale_price ?? item.unit_price);
   return (
-    <div className="flex min-w-0 gap-3 px-4 py-3 sm:px-6">
-      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
-        {item.catalogImageUrl ? <Image alt={item.title} src={item.catalogImageUrl} fill unoptimized sizes="48px" className="object-contain" /> : <PackageCheck className="h-5 w-5 text-slate-400" />}
+    <div className="flex min-w-0 items-center gap-2.5 py-2">
+      <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+        {item.catalogImageUrl ? <Image alt="" src={item.catalogImageUrl} fill unoptimized sizes="40px" className="object-contain" /> : <PackageCheck className="h-5 w-5 text-slate-400" />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold leading-5 text-slate-950 sm:text-sm">{item.title}</p>
-        <div className="mt-1 flex items-center justify-between gap-2"><span className="text-xs text-slate-500">Qtd. {item.quantity ?? 1}</span><span className="shrink-0 text-sm font-bold text-slate-950">{price}</span></div>
+        <p className="line-clamp-2 break-words text-xs font-semibold leading-4 text-slate-950" title={item.title}>{item.title}</p>
+        <div className="mt-0.5 flex items-center justify-between gap-2"><span className="text-[11px] text-slate-500">Qtd. {item.quantity ?? 1}</span><span className="shrink-0 text-xs font-bold text-slate-950">{price}</span></div>
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { BadgePercent, Check, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { BadgePercent, Check, ChevronDown, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckoutPaymentFeedbackModal,
@@ -117,16 +117,14 @@ export function CheckoutPaymentOptions({
     [selectedOrderBumpIds],
   );
 
-  useEffect(() => {
-    if (orderBumps.length === 0) return;
-
+  function recordOffersShown() {
     publishCommerceAgentEvent("order_bump_shown", {
       session_id: sessionId,
       order_bump_count: orderBumps.length,
       product_ids: orderBumps.map((item) => item.productId),
       total_available_amount: roundMoney(orderBumps.reduce((sum, item) => sum + item.price, 0)),
     });
-  }, [orderBumps, sessionId]);
+  }
 
   function handleCardPaymentStatusChange(result: CardPaymentStatusChange) {
     if (!result.approved && !result.rejected) return;
@@ -236,21 +234,22 @@ export function CheckoutPaymentOptions({
     }
   }
 
-  return (
-    <div className="mt-4">
-      {cartUpdating ? <p role="status" className="mb-3 text-xs text-slate-600">Atualizando pedido e frete…</p> : pixUpdateError ? <p role="alert" className="mb-3 text-xs text-rose-700">{pixUpdateError}</p> : null}
-      {orderBumps.length > 0 ? (
-        <OrderBumpSelector
-          items={orderBumps}
-          selectedIds={selectedOrderBumpIds}
-          totalLabel={totalAmountLabel}
-          onToggle={toggleOrderBump}
-        />
-      ) : null}
+  const offers = orderBumps.length > 0 ? (
+    <OrderBumpSelector
+      items={orderBumps}
+      selectedIds={selectedOrderBumpIds}
+      disabled={cardBusy || cartUpdating || pixUpdating}
+      onToggle={toggleOrderBump}
+      onOpen={recordOffersShown}
+    />
+  ) : null;
 
+  return (
+    <div>
+      {cartUpdating ? <p role="status" className="mb-3 text-xs text-slate-600">Atualizando pedido e frete…</p> : pixUpdateError ? <p role="alert" className="mb-3 text-xs text-rose-700">{pixUpdateError}</p> : null}
       {showCard && canUsePix ? (
         <div className={cn(
-          "mt-5 grid gap-2 rounded-[8px] border border-blue-100 bg-blue-50 p-1",
+          "grid gap-1 rounded-xl bg-slate-100 p-1",
           showCard && canUsePix ? "grid-cols-2" : "grid-cols-1",
         )}>
           {canUsePix ? (
@@ -265,15 +264,17 @@ export function CheckoutPaymentOptions({
             <PaymentMethodButton
               active={activeMethod === "card"}
               icon={<CreditCard className="h-4 w-4" />}
-              label="Cartão de crédito"
+              label="Cartão"
               onClick={() => selectPaymentMethod("card")}
             />
           ) : null}
         </div>
       ) : null}
 
+      {!(activeMethod === "card" && paymentProvider === "asaas") && offers ? <div className="mt-3">{offers}</div> : null}
+
       {activeMethod === "card" && paymentProvider === "asaas" ? (
-        <AsaasCardForm sessionId={sessionId} selectedOrderBumpIds={selectedOrderBumpIds} externalBusy={cartUpdating} onBusyChange={setCardBusy} onApproved={() => window.location.reload()} />
+        <AsaasCardForm sessionId={sessionId} selectedOrderBumpIds={selectedOrderBumpIds} externalBusy={cartUpdating} offers={offers} onBusyChange={setCardBusy} onApproved={() => window.location.reload()} />
       ) : activeMethod === "card" && paymentProvider === "mercado_pago" && cardPublicKey ? (
         <MercadoPagoCardBrick
           publicKey={cardPublicKey}
@@ -357,30 +358,25 @@ function PaymentMethodEmptyState({
 function OrderBumpSelector({
   items,
   selectedIds,
-  totalLabel,
+  disabled,
   onToggle,
+  onOpen,
 }: {
   items: CheckoutOrderBumpOption[];
   selectedIds: string[];
-  totalLabel: string;
+  disabled: boolean;
   onToggle: (productId: string) => void;
+  onOpen: () => void;
 }) {
   return (
-    <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-[color:var(--store-card-text,#0f172a)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="inline-flex items-center gap-2 text-sm font-black text-slate-950">
-            <BadgePercent className="h-4 w-4 text-amber-600" />
-            Ofertas extras
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-600">Adicione ao pedido e pague tudo em uma unica compra.</p>
-        </div>
-        <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-bold text-amber-700">
-          Total {totalLabel}
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-3">
+    <details className="group rounded-xl border border-amber-200 bg-amber-50/70" onToggle={event => { if (event.currentTarget.open) onOpen(); }}>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-xs font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+        <BadgePercent className="h-4 w-4 shrink-0 text-amber-600" />
+        <span className="flex-1">Ofertas para seu pedido</span>
+        <span className="text-[11px] text-amber-800">{selectedIds.length > 0 ? `${selectedIds.length} adicionada${selectedIds.length > 1 ? "s" : ""}` : "Ver"}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="grid gap-2 px-2 pb-2">
         {items.map((item) => {
           const selected = selectedIds.includes(item.productId);
 
@@ -388,9 +384,12 @@ function OrderBumpSelector({
             <button
               key={item.productId}
               type="button"
+              aria-pressed={selected}
+              aria-label={`${selected ? "Remover" : "Adicionar"} ${item.title}, ${item.priceLabel}`}
+              disabled={disabled}
               onClick={() => onToggle(item.productId)}
               className={cn(
-                "flex min-h-[88px] items-center gap-3 rounded-[8px] border p-3 text-left transition",
+                "flex min-w-0 items-center gap-2.5 rounded-lg border bg-white p-2.5 text-left transition disabled:opacity-60",
                 selected
                   ? "border-[#25D366] bg-emerald-50"
                   : "border-blue-100 bg-white hover:border-amber-300",
@@ -400,32 +399,22 @@ function OrderBumpSelector({
                 <Image
                   src={item.mediaUrl}
                   alt=""
-                  width={64}
-                  height={64}
-                  className="h-16 w-16 rounded-[7px] object-cover"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 shrink-0 rounded-lg object-contain"
                   unoptimized
                 />
               ) : (
-                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[7px] border border-amber-200 bg-amber-100">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100">
                   <BadgePercent className="h-5 w-5 text-amber-700" />
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-black text-[color:var(--store-card-text,#0f172a)]">{item.title}</span>
-                  {item.badge ? (
-                    <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </span>
-                {item.description ? (
-                  <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-600">{item.description}</span>
-                ) : null}
-                <span className="mt-2 block text-sm font-black text-[color:var(--store-card-text,#0f172a)]">{item.priceLabel}</span>
+                <span className="line-clamp-2 break-words text-xs font-semibold leading-4 text-slate-950">{item.title}</span>
+                <span className="mt-1 block text-xs font-bold text-slate-950">+ {item.priceLabel}</span>
               </span>
               <span className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border",
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
                 selected
                   ? "border-[#25D366] bg-[#25D366] text-white"
                   : "border-blue-100 text-slate-400",
@@ -436,7 +425,7 @@ function OrderBumpSelector({
           );
         })}
       </div>
-    </section>
+    </details>
   );
 }
 
@@ -495,8 +484,9 @@ function PaymentMethodButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition",
         active
           ? "border shadow-sm shadow-blue-950/20"
           : "text-slate-600 hover:bg-white hover:text-blue-700",

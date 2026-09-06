@@ -1,10 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { ChevronDown, ExternalLink, Loader2, Send, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import { checkoutAgentAnchorReadyEvent } from "@/components/checkout/checkout-agent-anchor";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
@@ -65,6 +67,7 @@ export function CommerceAgentDock() {
   const [messages, setMessages] = useState<CommerceAgentMessage[]>([]);
   const [open, setOpen] = useState(false);
   const [paymentFocused, setPaymentFocused] = useState(false);
+  const [checkoutAnchor, setCheckoutAnchor] = useState<HTMLElement | null>(null);
   const [whisperVisible, setWhisperVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -76,6 +79,13 @@ export function CommerceAgentDock() {
   const lastContextualOpenerKey = useRef<string | null>(null);
   const assistantBubbleTimersRef = useRef<number[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const syncAnchor = () => setCheckoutAnchor(session?.surface === "checkout" ? document.querySelector<HTMLElement>('[data-checkout-agent-anchor="ready"]') : null);
+    syncAnchor();
+    window.addEventListener(checkoutAgentAnchorReadyEvent, syncAnchor);
+    return () => window.removeEventListener(checkoutAgentAnchorReadyEvent, syncAnchor);
+  }, [pathname, session?.surface]);
 
   useEffect(() => {
     function syncPublicTrackingSignature() {
@@ -200,7 +210,7 @@ export function CommerceAgentDock() {
   }, [pathname, search, trackingContextProbe, trackingContextSignature]);
 
   useEffect(() => {
-    if (!session || open || session.mode === "observer" || !session.whisperMessage) {
+    if (!session || open || session.mode === "observer" || !session.whisperMessage || session.surface === "checkout") {
       return;
     }
 
@@ -221,11 +231,8 @@ export function CommerceAgentDock() {
 
     lastWhisperKey.current = whisperKey;
 
-    const showTimer = window.setTimeout(() => setWhisperVisible(true), session.surface === "checkout" ? 700 : 1_000);
-    const hideTimer = window.setTimeout(
-      () => setWhisperVisible(false),
-      session.surface === "checkout" && session.checkoutQuietMode ? 7_200 : 9_500,
-    );
+    const showTimer = window.setTimeout(() => setWhisperVisible(true), 1_000);
+    const hideTimer = window.setTimeout(() => setWhisperVisible(false), 9_500);
 
     return () => {
       window.clearTimeout(showTimer);
@@ -238,7 +245,7 @@ export function CommerceAgentDock() {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages, open]);
 
-  if (!session || loading || paymentFocused) {
+  if (!session || loading || (paymentFocused && !checkoutAnchor)) {
     return null;
   }
 
@@ -415,12 +422,28 @@ export function CommerceAgentDock() {
     }).catch(() => null);
   }
 
+  const trigger = (
+    <button
+      type="button"
+      className={cn(
+        "group relative ml-auto grid shrink-0 place-items-center rounded-full border border-[#9de7c2] bg-white p-1 text-slate-950 transition hover:shadow-md",
+        checkoutAnchor ? "h-11 w-11" : "h-16 w-16 shadow-2xl shadow-[#075E54]/20",
+      )}
+      onClick={openDock}
+      aria-label={`Abrir agente da loja ${session.agentName}`}
+      title={`Conversar com ${session.agentName}`}
+    >
+      {checkoutAnchor ? <AgentAvatar session={session} size="sm" /> : <AgentAvatar session={session} size="coin" />}
+      <span className="sr-only">{dockText}. {surfaceLabel(session.surface)}</span>
+    </button>
+  );
+
   return (
     <div
       className={cn(
         "fixed z-[45] font-sans text-slate-950",
         isCheckout
-          ? "bottom-20 right-3 sm:bottom-5 sm:right-5"
+          ? "bottom-3 right-3 sm:bottom-5 sm:right-5"
           : "bottom-20 right-3 sm:bottom-5 sm:right-5",
       )}
     >
@@ -555,19 +578,7 @@ export function CommerceAgentDock() {
         </section>
       ) : null}
 
-      <button
-        type="button"
-        className={cn(
-          "group relative ml-auto grid h-16 w-16 place-items-center rounded-full border border-[#9de7c2] bg-white p-1 text-slate-950 shadow-2xl shadow-[#075E54]/20 transition hover:-translate-y-0.5 hover:shadow-[#075E54]/30",
-          isCheckout ? "opacity-95" : "opacity-100",
-        )}
-        onClick={openDock}
-        aria-label={`Abrir agente da loja ${session.agentName}`}
-        title={`Conversar com ${session.agentName}`}
-      >
-        <AgentAvatar session={session} size="coin" />
-        <span className="sr-only">{dockText}. {surfaceLabel(session.surface)}</span>
-      </button>
+      {checkoutAnchor ? createPortal(trigger, checkoutAnchor) : trigger}
     </div>
   );
 }
