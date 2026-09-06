@@ -311,6 +311,7 @@ const rejectedPaymentStatuses = new Set([
   "payment_refused",
   "failed",
   "reproved_by_risk_analysis",
+  "credit_card_capture_refused",
   "checkout_canceled",
   "checkout_expired",
 ]);
@@ -739,7 +740,7 @@ async function processPaymentWebhook(client: SupabaseClient, input: BillingWebho
         planName: record.plan?.name ?? subscription.plan_code,
         amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
         includedCredits: toNumber(record.plan?.included_credits),
-        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        eventType: paymentNotificationType(paymentStatus),
         dedupeKey: `billing:${subscription.id}:payment:${providerStatus}:${String(providerPayment.id ?? input.dataId)}`,
         providerStatus,
         providerReference: String(providerPayment.id ?? input.dataId),
@@ -838,7 +839,7 @@ async function processPagBankPaymentWebhook(
         planName: record.plan?.name ?? subscription.plan_code,
         amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
         includedCredits: toNumber(record.plan?.included_credits),
-        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        eventType: paymentNotificationType(paymentStatus),
         dedupeKey: `billing:${subscription.id}:payment:${providerStatus}:${String(providerPayment.id ?? input.dataId)}`,
         providerStatus,
         providerReference: String(providerPayment.id ?? input.dataId),
@@ -957,7 +958,7 @@ async function processAsaasPaymentWebhook(client: SupabaseClient, input: Billing
         planName: record.plan?.name ?? subscription.plan_code,
         amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
         includedCredits: toNumber(record.plan?.included_credits),
-        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        eventType: paymentNotificationType(paymentStatus),
         dedupeKey: `billing:${subscription.id}:payment:${providerStatus}:${String(providerPayment.id ?? input.dataId)}`,
         providerStatus,
         providerReference: String(providerPayment.id ?? input.dataId),
@@ -1071,7 +1072,7 @@ async function processAsaasCheckoutWebhook(client: SupabaseClient, input: Billin
         planName: record.plan?.name ?? subscription.plan_code,
         amountBrl: toNumber(record.payment?.amount_brl ?? record.invoice?.total_brl ?? providerPayment.transaction_amount),
         includedCredits: toNumber(record.plan?.included_credits),
-        eventType: paymentStatus === "pending" ? "payment_pending" : "payment_rejected",
+        eventType: paymentNotificationType(paymentStatus),
         dedupeKey: `billing:${subscription.id}:checkout:${providerStatus}:${checkoutId}`,
         providerStatus,
         providerReference: checkoutId,
@@ -2614,7 +2615,7 @@ function normalizeAsaasPaymentLike(
   } = {},
 ): MercadoPagoPaymentLike {
   const record = payment as JsonRecord;
-  const status = readString(record.status) ?? fallback.fallbackStatus ?? "PENDING";
+  const status = record.deleted === true ? "DELETED" : readString(record.status) ?? fallback.fallbackStatus ?? "PENDING";
   const externalReference = readString(record.externalReference)
     ?? readString(record.external_reference)
     ?? fallback.externalReference
@@ -3069,4 +3070,22 @@ function sanitizeProviderData(value: unknown): JsonRecord | null {
   }
 
   return value as JsonRecord;
+}
+
+export function paymentNotificationType(status: string) {
+  if (["pending", "in_process", "processing", "unknown"].includes(status)) return "payment_pending";
+  if (["canceled", "cancelled", "expired"].includes(status)) return "payment_canceled";
+  if (status === "refunded") return "payment_refunded";
+  return "payment_rejected";
+}
+
+export async function notifyNativeBillingOutcome(client: SupabaseClient, input: { intent: import("./plan-checkout").BillingCheckoutIntent; attemptId: string; status: string; amount: number }) {
+  const { intent } = input;
+  const eventType = paymentNotificationType(input.status);
+  return enqueuePlatformBillingNotification(client, {
+    organizationId: intent.subscription.organization_id, subscriptionId: intent.subscription.id, invoiceId: intent.invoice.id, paymentId: intent.payment.id,
+    planCode: intent.targetPlanCode, planName: intent.plan.name, amountBrl: input.amount, includedCredits: Number(intent.plan.included_credits ?? 0),
+    eventType, dedupeKey: `billing:native:${input.attemptId}:${eventType}`, providerStatus: input.status, providerReference: input.attemptId,
+    metadata: { source: "dashboard_native_card", checkout_url: `${getAppBaseUrl()}/dashboard/planos/checkout/${intent.subscription.id}` },
+  });
 }

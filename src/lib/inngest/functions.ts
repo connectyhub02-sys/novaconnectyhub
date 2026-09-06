@@ -61,6 +61,7 @@ import {
 } from "@/lib/sales-catalog/whatsapp-sync";
 import { createServiceClient } from "@/lib/supabase/service";
 import { reconcilePendingTransparentCheckouts } from "@/lib/sales-catalog/transparent-checkout";
+import { reconcilePendingNativeBilling } from "@/lib/billing/native-card-checkout";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
 import {
@@ -740,7 +741,10 @@ export const connectyhubGrowthAgentFunctions = growthAgentSchedules.map((config)
 
 export const connectyhubTransparentCheckoutReconciliation = inngest.createFunction(
   { id: "connectyhub-transparent-checkout-reconciliation", name: "ConnectyHub Checkout Payment Reconciliation", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "*/5 * * * *" }] },
-  async ({ step }) => step.run("reconcile-payment-results", () => reconcilePendingTransparentCheckouts(createServiceClient())),
+  async ({ step }) => ({
+    stores: await step.run("reconcile-payment-results", () => reconcilePendingTransparentCheckouts(createServiceClient())),
+    platform: await step.run("reconcile-panel-payments", () => reconcilePendingNativeBilling(createServiceClient())),
+  }),
 );
 
 export const functions = [

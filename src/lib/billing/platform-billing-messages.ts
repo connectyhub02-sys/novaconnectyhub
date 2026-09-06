@@ -96,6 +96,8 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     label: "Pagamento recusado",
     description: "Pagamento negado, expirado ou com falha.",
   },
+  { eventType: "payment_canceled", label: "Pagamento cancelado", description: "A cobrança foi cancelada pelo provedor." },
+  { eventType: "payment_refunded", label: "Pagamento estornado", description: "O provedor confirmou o estorno do pagamento." },
   {
     eventType: "manual_plan_activated",
     label: "Plano ativado manualmente",
@@ -202,11 +204,13 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   trial_expired:
     "{cliente}, seu teste gratis ConnectyHub acabou em {trial_expira_em}. O saldo restante do beneficio expirou. Para reativar atendimentos automaticos, escolha um plano no painel.",
   payment_pending:
-    "{cliente}, seu pagamento do plano {plano} ainda esta pendente. Assim que o Mercado Pago confirmar, seus creditos serao liberados automaticamente.",
+    "{cliente}, seu pagamento do plano {plano} ainda está em confirmação. Não repita a cobrança. Assim que o pagamento for confirmado, seus créditos serão liberados e eu aviso por aqui.",
   payment_approved:
     "{cliente}, pagamento confirmado. Seu plano {plano} foi ativado na ConnectyHub com {creditos} creditos inclusos. Se havia saldo de teste ainda valido, ele foi somado na sua carteira. Valor: {valor}.",
   payment_rejected:
     "{cliente}, o pagamento do plano {plano} não foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos você precisa concluir o pagamento no painel.",
+  payment_canceled: "{cliente}, a cobrança do plano {plano} foi cancelada. Se quiser continuar, confira as opções de pagamento no seu painel.",
+  payment_refunded: "{cliente}, o estorno do pagamento do plano {plano} foi confirmado. O prazo para aparecer na fatura depende do banco emissor. Acompanhe pelo painel.",
   manual_plan_activated:
     "{cliente}, seu plano {plano} foi ativado manualmente pela equipe ConnectyHub com {creditos} creditos. Ele fica valido ate {data_vencimento}. Boas vendas.",
   manual_plan_renewed:

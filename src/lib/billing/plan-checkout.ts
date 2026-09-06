@@ -216,6 +216,16 @@ export async function syncBillingCheckoutCart(
     checkout_status: "internal_checkout_ready",
   };
 
+  if (billingProvider === "asaas") {
+    const { error } = await client.rpc("sync_native_billing_cart", {
+      p_org: intent.subscription.organization_id, p_subscription: intent.subscription.id, p_invoice: intent.invoice.id, p_payment: intent.payment.id,
+      p_amount: totalAmount, p_metadata: cartMetadata,
+      p_items: selectedBumps.map(bump => ({ item_type: bump.itemType, description: bump.title, unit_price_brl: bump.priceBrl, total_brl: bump.priceBrl, credit_amount: bump.creditAmount, metadata: { source: "dashboard_plan_checkout_bump", bump: serializeBump(bump), recurrence: bump.recurrence, platform_product_id: bump.platformProductId } })),
+    });
+    if (error) throw new Error(error.message.includes("BUSY") ? "Estamos conferindo um pagamento. Aguarde antes de alterar o carrinho." : "Não foi possível atualizar o carrinho. Atualize a página.");
+    return { planAmount, bumpsAmount, totalAmount, selectedBumps, externalReference, checkoutPath, checkoutUrl, metadata: cartMetadata };
+  }
+
   const deleteExistingBumps = await client
     .from("billing_invoice_items")
     .delete()

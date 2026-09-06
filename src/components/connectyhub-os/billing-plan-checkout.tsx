@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { CheckCircle2, Copy, CreditCard, ExternalLink, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
+import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import {
   type CardPaymentStatusChange,
   type RejectedPaymentCopy,
 } from "@/components/checkout/mercado-pago-card-brick";
+import { BillingAsaasCardForm } from "./billing-asaas-card-form";
 import { PagBankCardForm } from "@/components/checkout/pagbank-card-form";
 import {
   type BillingCheckoutBump,
@@ -355,6 +356,7 @@ export function BillingPlanCheckout({
   }, [checkPaymentStatus]);
 
   function toggleBump(code: BillingCheckoutBumpCode) {
+    if (cardCheckoutLoading) return;
     const next = selectedBumpCodes.includes(code)
       ? selectedBumpCodes.filter((item) => item !== code)
       : [...selectedBumpCodes, code];
@@ -394,7 +396,7 @@ export function BillingPlanCheckout({
   }
 
   async function generatePix() {
-    if (!canPay) return;
+    if (!canPay || cardCheckoutLoading) return;
 
     setPixLoading(true);
     setNotice(null);
@@ -446,58 +448,6 @@ export function BillingPlanCheckout({
       });
     } finally {
       setPixLoading(false);
-    }
-  }
-
-  async function openAsaasCardCheckout() {
-    if (!canPay || cardCheckoutLoading) return;
-
-    setCardCheckoutLoading(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch(`/api/dashboard/billing/checkout/${subscriptionId}/card`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedBumpCodes }),
-      });
-      const data = await response.json().catch(() => null) as {
-        error?: string;
-        checkoutUrl?: string | null;
-        providerPaymentId?: string | null;
-        providerStatus?: string | null;
-        status?: string;
-      } | null;
-
-      if (!response.ok) {
-        throw new Error(data?.error ?? "Nao foi possivel abrir o checkout Asaas.");
-      }
-
-      if (data?.providerPaymentId) {
-        setProviderPaymentId(data.providerPaymentId);
-      }
-      if (data?.status) {
-        setPaymentStatusOverride(data.status);
-      }
-      setCardStatusPolling(true);
-      setNotice({
-        tone: "warning",
-        message: "Checkout recorrente aberto. Assim que o Asaas confirmar, seu plano sera ativado automaticamente.",
-      });
-
-      if (data?.checkoutUrl) {
-        window.location.assign(data.checkoutUrl);
-        return;
-      }
-
-      throw new Error("Asaas nao retornou o link do checkout recorrente.");
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        message: error instanceof Error ? error.message : "Nao foi possivel abrir o checkout Asaas.",
-      });
-    } finally {
-      setCardCheckoutLoading(false);
     }
   }
 
@@ -603,7 +553,7 @@ export function BillingPlanCheckout({
                 <button
                   key={bump.code}
                   type="button"
-                  disabled={!canPay}
+                  disabled={!canPay || cardCheckoutLoading}
                   onClick={() => toggleBump(bump.code)}
                   className={cn(
                     "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
@@ -720,12 +670,7 @@ export function BillingPlanCheckout({
                 onAlternativePaymentRequest={switchToPixAndGenerate}
               />
             ) : method === "card" && billingProvider === "asaas" && cardEnabled ? (
-              <AsaasRecurringCheckoutPanel
-                amount={totalAmount}
-                loading={cardCheckoutLoading}
-                providerLabel={providerLabel}
-                onOpen={openAsaasCardCheckout}
-              />
+              <BillingAsaasCardForm subscriptionId={subscriptionId} cartSyncing={cartSyncing} onBusyChange={setCardCheckoutLoading} onStatusChange={handleCardPaymentStatusChange} />
             ) : (
               <PixPanel
                 pix={pix}
@@ -1143,44 +1088,6 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
           unoptimized
         />
       )}
-    </div>
-  );
-}
-
-function AsaasRecurringCheckoutPanel({
-  amount,
-  loading,
-  onOpen,
-  providerLabel,
-}: {
-  amount: number;
-  loading: boolean;
-  onOpen: () => void;
-  providerLabel: string;
-}) {
-  return (
-    <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
-      <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-emerald-200/35 bg-slate-950/60 text-emerald-100">
-          <CreditCard className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-sm font-black text-white">Cartao recorrente via {providerLabel}</p>
-          <p className="mt-1 text-xs leading-5 text-emerald-50/80">
-            Primeira cobranca de {formatMoney(amount)} e renovacao mensal automatica enquanto o plano estiver ativo.
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={loading}
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-        {loading ? "Abrindo checkout" : "Abrir checkout recorrente"}
-      </button>
     </div>
   );
 }

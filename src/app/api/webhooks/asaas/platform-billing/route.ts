@@ -12,9 +12,11 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { CheckoutError, processTransparentWebhook } from "@/lib/sales-catalog/transparent-checkout";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
+import { processNativeBillingWebhook } from "@/lib/billing/native-card-checkout";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -34,6 +36,8 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get("x-request-id");
   const signatureHeader = request.headers.get("asaas-access-token");
   try {
+    const nativeBilling = await processNativeBillingWebhook(client, payload, signatureHeader);
+    if (nativeBilling) return NextResponse.json(nativeBilling);
     const transparent = await processTransparentWebhook(client, payload, signatureHeader);
     if (transparent) return NextResponse.json(transparent);
   } catch (error) {

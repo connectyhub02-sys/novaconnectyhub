@@ -686,7 +686,7 @@ async function maybeNotifyPaymentStatus(input: {
 }) {
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusNotificationPrefix(input.status);
-  if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+  if (readString(orderMetadata[`${metadataPrefix}_at`]) && orderMetadata[`${metadataPrefix}_session_id`] === input.paymentSessionId) return false;
   if (input.status === "pending" && isPixPaymentStatusNotification(input.paymentMethod, input.paymentMethodLabel)) return false;
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
@@ -871,7 +871,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
 }) {
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusResponsibleNotificationPrefix(input.status);
-  if (readString(orderMetadata[`${metadataPrefix}_at`])) return false;
+  if (readString(orderMetadata[`${metadataPrefix}_at`]) && orderMetadata[`${metadataPrefix}_session_id`] === input.paymentSessionId) return false;
   if (input.status === "pending" && isPixPaymentStatusNotification(input.paymentMethod, input.paymentMethodLabel)) return false;
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);

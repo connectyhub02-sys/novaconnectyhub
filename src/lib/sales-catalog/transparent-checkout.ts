@@ -4,7 +4,7 @@ import { isIP } from "node:net";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import { ensureAsaasAccessToken, loadAsaasPlatformBillingConfig, verifyAsaasWebhookToken, type AsaasPaymentResponse } from "./asaas";
-import { AsaasDirectError, createAsaasDirectCardPayment, findAsaasDirectPayment, retireAsaasPayment } from "./asaas-direct";
+import { AsaasDirectError, getAsaasNativePayment, applyAsaasPaymentEvent, createAsaasDirectCardPayment, findAsaasDirectPayment, retireAsaasPayment } from "./asaas-direct";
 import { parseCheckoutCard, parseCheckoutCardHolder, record, type CheckoutCardHolder } from "./card-input";
 import { loadCheckoutCustomer, parseCheckoutAddress } from "./checkout-customer";
 import { requiresSalesCatalogShippingBeforePayment } from "./checkout-guards";
@@ -28,7 +28,8 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
   const amount = normalizeCurrencyAmount(order.total);
   if (!amount) throw new CheckoutError("O total do pedido precisa ser confirmado.", 409);
   const settings = await getOrganizationSalesCatalogSettings(client, session.organization_id);
-  const { data: capability } = await client.from("sales_catalog_checkout_capabilities").select("transparent_card_enabled").eq("organization_id", session.organization_id).maybeSingle();
+  const { data: capability, error: capabilityError } = await client.from("sales_catalog_checkout_capabilities").select("transparent_card_enabled").eq("organization_id", session.organization_id).maybeSingle();
+  if (capabilityError) throw new CheckoutError("Não foi possível conferir a disponibilidade do cartão.", 503);
   const holder = {
     name: order.customer_name ?? "", email: order.customer_email ?? "", cpfCnpj: order.customer_document ?? "",
     phone: order.customer_phone ?? "", postalCode: order.destination_cep ?? "", addressNumber: parseCheckoutAddress(order.destination_address).addressNumber ?? "",
@@ -36,7 +37,8 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
   const { data: attempts } = await client.from("sales_catalog_card_attempts").select("id, organization_id, order_id, source_session_id, payment_session_id, amount, revision, installments, state, updated_at")
     .eq("order_id", order.id).eq("organization_id", session.organization_id).order("created_at", { ascending: false }).limit(1);
   const attempt = (attempts?.[0] ?? null) as Attempt | null;
-  return { session, order, items, holder, amount, settings, attempt, enabled: capability?.transparent_card_enabled === true };
+  // The operator enabled ecosystem-wide testing. An explicit store override still wins.
+  return { session, order, items, holder, amount, settings, attempt, enabled: capability?.transparent_card_enabled !== false };
 }
 
 export function publicCheckoutQuote(snapshot: Awaited<ReturnType<typeof loadTransparentCheckout>>) {
@@ -146,15 +148,15 @@ export async function finishTransparentAttempt(client: SupabaseClient, attemptId
   const { data, error } = await client.rpc("finish_checkout_card_attempt", { p_attempt_id: attemptId, p_state: state, p_provider_id: payment?.id ?? null, p_provider_status: payment?.status ?? null });
   if (error || !data?.attempt) throw new CheckoutError("Estamos verificando o resultado do pagamento.", 503);
   const attempt = data.attempt as Attempt;
-  if (["approved", "refunded"].includes(attempt.state)) await processTransparentPaymentEffects(client, attempt.id);
+  await processTransparentPaymentEffects(client, attempt.id);
   return attempt;
 }
 
-export async function reconcileTransparentAttempt(client: SupabaseClient, attemptId: string, force = false) {
+export async function reconcileTransparentAttempt(client: SupabaseClient, attemptId: string, force = false, webhook?: { paymentId: string; event: unknown }) {
   const { data: attempt, error } = await client.from("sales_catalog_card_attempts").select("*").eq("id", attemptId).maybeSingle<Attempt>();
   if (error || !attempt) throw new CheckoutError("Pagamento não encontrado.", 404);
   if (!force && !["processing", "unknown", "pending"].includes(attempt.state)) {
-    if (["approved", "refunded"].includes(attempt.state)) await processTransparentPaymentEffects(client, attempt.id);
+    await processTransparentPaymentEffects(client, attempt.id);
     return attempt;
   }
   if (!force && Date.now() - Date.parse(attempt.updated_at) < 15000) return attempt;
@@ -162,9 +164,10 @@ export async function reconcileTransparentAttempt(client: SupabaseClient, attemp
   const { data: claimed } = await client.from("sales_catalog_card_attempts").update({ updated_at: new Date().toISOString() }).eq("id", attemptId).eq("updated_at", attempt.updated_at).select("id").maybeSingle();
   if (!claimed) return attempt;
   const connection = await resolveTransparentConnection(client, attempt.organization_id, attempt.order_id);
-  const payment = await findAsaasDirectPayment(connection, `checkout_card:${attempt.id}`, { amount: Number(attempt.amount), installments: attempt.installments });
+  let payment = webhook && attempt.installments === 1 ? await getAsaasNativePayment(connection, webhook.paymentId) : await findAsaasDirectPayment(connection, `checkout_card:${attempt.id}`, { amount: Number(attempt.amount), installments: attempt.installments });
+  if (payment && webhook) payment = applyAsaasPaymentEvent(payment, webhook.event);
   if (!payment) return attempt; // Absence after a timeout is not proof of failure.
-  if (payment.externalReference !== `checkout_card:${attempt.id}` || payment.billingType !== "CREDIT_CARD") throw new CheckoutError("Estamos conferindo a identificação do pagamento.", 409);
+  if (payment.externalReference !== `checkout_card:${attempt.id}` || payment.billingType !== "CREDIT_CARD" || Math.abs(Number(payment.value) - Number(attempt.amount) / attempt.installments) > 0.011) throw new CheckoutError("Estamos conferindo a identificação do pagamento.", 409);
   return finishTransparentAttempt(client, attempt.id, directPaymentState(payment), payment);
 }
 
@@ -185,7 +188,7 @@ export async function processTransparentWebhook(client: SupabaseClient, payload:
   if (!attempt) throw new CheckoutError("Pagamento ainda não disponível para conciliação.", 503);
   const connection = await resolveTransparentConnection(client, attempt.organization_id, attempt.order_id);
   if (!verifyAsaasWebhookToken({ header, token: connection.webhookSecret }).ok) throw new CheckoutError("invalid_webhook_token", 401);
-  await reconcileTransparentAttempt(client, attemptId, true);
+  await reconcileTransparentAttempt(client, attemptId, true, typeof payment.id === "string" ? { paymentId: payment.id, event: payload.event } : undefined);
   return { ok: true, processed: true };
 }
 
@@ -198,23 +201,23 @@ async function processTransparentPaymentEffects(client: SupabaseClient, attemptI
     if (inventoryError) throw new CheckoutError("Pagamento registrado; conferindo o estoque do pedido.", 503);
   }
   const { data: session } = await client.from("sales_catalog_payment_sessions").select("provider_payment_id").eq("id", attempt.payment_session_id).single();
-  await handleSalesCatalogPaymentStatusChange({ client, organizationId: attempt.organization_id, orderId: attempt.order_id, paymentSessionId: attempt.payment_session_id, providerPaymentId: session?.provider_payment_id ?? null, paymentMethod: "card", paymentMethodLabel: "Cartão de crédito", status: attempt.state, source: "checkout_card" });
+  await handleSalesCatalogPaymentStatusChange({ client, organizationId: attempt.organization_id, orderId: attempt.order_id, paymentSessionId: attempt.payment_session_id, providerPaymentId: session?.provider_payment_id ?? null, paymentMethod: "card", paymentMethodLabel: "Cartão de crédito", status: attempt.state === "unknown" ? "pending" : attempt.state, source: "checkout_card" });
   const { error: saveError } = await client.from("sales_catalog_card_attempts").update({ effects_completed_state: attempt.state, effects_claimed_at: null }).eq("id", attemptId).eq("state", attempt.state).eq("effects_claimed_at", attempt.effects_claimed_at);
   if (saveError) throw new CheckoutError("Confirmação em processamento.", 503);
 }
 
 export async function reconcilePendingTransparentCheckouts(client: SupabaseClient) {
   const { data: attempts, error } = await client.from("sales_catalog_card_attempts").select("id, state, effects_completed_state")
-    .or("state.in.(processing,unknown,pending),and(state.eq.approved,or(effects_completed_state.is.null,effects_completed_state.neq.approved)),and(state.eq.refunded,or(effects_completed_state.is.null,effects_completed_state.neq.refunded))")
+    .or("state.in.(processing,unknown,pending),effects_completed_state.is.null")
     .order("updated_at", { ascending: true }).limit(5);
   if (error) throw new Error("Não foi possível consultar as tentativas do checkout.");
   let checked = 0;
   let deferred = 0;
   for (const attempt of attempts ?? []) {
     try {
-      if (["approved", "refunded"].includes(attempt.state)) {
+      if (!["processing", "unknown", "pending"].includes(attempt.state)) {
         if (attempt.effects_completed_state !== attempt.state) await processTransparentPaymentEffects(client, attempt.id);
-      } else await reconcileTransparentAttempt(client, attempt.id);
+      } else { await reconcileTransparentAttempt(client, attempt.id); await processTransparentPaymentEffects(client, attempt.id); }
       checked++;
     } catch { deferred++; }
   }

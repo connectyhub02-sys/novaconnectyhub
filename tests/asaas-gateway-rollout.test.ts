@@ -170,9 +170,9 @@ describe("Asaas gateway rollout", () => {
     expect(asaasGatewaySource).toContain("ensureAsaasPlatformBillingWebhook");
     expect(asaasGatewaySource).toContain("asaasPlatformBillingWebhookEvents");
     expect(asaasGatewaySource).toContain("ASAAS_PLATFORM_WEBHOOK_TOKEN");
-    expect(billingCardRouteSource).toContain("chargeTypes: [\"RECURRENT\"]");
-    expect(billingCardRouteSource).toContain("buildAsaasPlatformBillingReturnUrl");
-    expect(billingCardRouteSource).toContain("asaas_recurring_checkout");
+    expect(billingCardRouteSource).toContain("payNativeBillingCard");
+    expect(billingCardRouteSource).not.toContain("createAsaasCheckout");
+    expect(platformBillingWebhookRouteSource).toContain("processNativeBillingWebhook");
     expect(platformBillingWebhookSource).toContain("processPlatformBillingAsaasWebhook");
     expect(platformBillingWebhookSource).toContain("provider: \"asaas\"");
     expect(existsSync("src/app/api/webhooks/asaas/platform-billing/route.ts")).toBe(true);

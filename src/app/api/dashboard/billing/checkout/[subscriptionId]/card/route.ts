@@ -1,3 +1,6 @@
+import { CheckoutError } from "@/lib/sales-catalog/transparent-checkout";
+import { billingHolder, loadNativeBillingSnapshot, payNativeBillingCard, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
+import { readClientIp, validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -14,14 +17,6 @@ import {
   loadMercadoPagoPlatformBillingConfig,
   normalizeCurrencyAmount,
 } from "@/lib/sales-catalog/mercado-pago";
-import {
-  buildAsaasCheckoutUrl,
-  buildAsaasPlatformBillingReturnUrl,
-  createAsaasCheckout,
-  ensureAsaasPlatformBillingWebhook,
-  loadAsaasPlatformBillingConfig,
-  type AsaasCheckoutResponse,
-} from "@/lib/sales-catalog/asaas";
 import {
   buildPagBankPlatformBillingWebhookUrl,
   createPagBankCardOrder,
@@ -50,6 +45,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -94,139 +90,12 @@ export async function POST(
   const billingProvider = resolveBillingCheckoutProvider(intent);
 
   if (billingProvider === "asaas") {
-    const payerEmail = normalizeEmail(intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? null);
-    const fallbackDocument = await loadAccountDocument({ userId: workspace.user.id, client });
-    const payerName = workspace.profile.fullName ?? workspace.organization.name;
-    const payerPhone = workspace.profile.phone;
-
-    if (!payerEmail) {
-      return NextResponse.json({ error: "Informe um e-mail valido no cadastro para criar a assinatura Asaas." }, { status: 422 });
-    }
-
+    const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: "billing-native-card", maxPayloadBytes: 12000 });
+    if (!guard.ok) return NextResponse.json({ error: guard.message }, { status: guard.status });
     try {
-      const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
-      const checkoutItems = buildBillingCheckoutItems(intent, cart);
-
-      await notifyPaymentStartedSafely(client, {
-        organizationId: workspace.organization.id,
-        actorId: workspace.user.id,
-        subscriptionId: intent.subscription.id,
-        invoiceId: intent.invoice.id,
-        paymentId: intent.payment.id,
-        planCode: intent.plan.plan_code,
-        planName: intent.plan.name,
-        amountBrl: cart.totalAmount,
-        includedCredits: toNumber(intent.plan.included_credits),
-        checkoutPath: cart.checkoutPath,
-        checkoutUrl: cart.checkoutUrl,
-        paymentMethod: "card",
-        paymentMethodLabel: "cartao recorrente",
-        selectedBumpCodes: cart.selectedBumps.map((bump) => bump.code),
-        selectedBumpTitles: cart.selectedBumps.map((bump) => bump.title),
-      });
-
-      const config = await loadAsaasPlatformBillingConfig({ client });
-
-      if (config.webhookSecret) {
-        await ensureAsaasPlatformBillingWebhook({ client });
-      }
-
-      const checkout = await createAsaasCheckout({
-        accessToken: config.accessToken,
-        mode: config.mode,
-        apiBaseUrl: config.apiBaseUrl,
-        amount: cart.totalAmount,
-        description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
-        externalReference: cart.externalReference,
-        payerEmail,
-        payerName,
-        payerDocument: fallbackDocument?.number ?? null,
-        payerPhone,
-        billingTypes: ["CREDIT_CARD"],
-        chargeTypes: ["RECURRENT"],
-        subscription: {
-          cycle: "MONTHLY",
-          nextDueDate: formatAsaasCheckoutDateTime(new Date()),
-        },
-        minutesToExpire: 1440,
-        successUrl: buildAsaasPlatformBillingReturnUrl(intent.subscription.id, "success"),
-        cancelUrl: buildAsaasPlatformBillingReturnUrl(intent.subscription.id, "cancel"),
-        expiredUrl: buildAsaasPlatformBillingReturnUrl(intent.subscription.id, "expired"),
-        idempotencyKey: randomUUID(),
-        items: checkoutItems,
-      });
-      const checkoutUrl = buildAsaasCheckoutUrl(checkout);
-
-      if (!checkoutUrl) {
-        throw new Error("Asaas nao retornou o link do checkout recorrente.");
-      }
-
-      const providerPaymentId = checkout.id ?? null;
-      const providerStatus = checkout.status ?? "CHECKOUT_CREATED";
-      const providerPayload = buildAsaasCardCheckoutProviderPayload(checkout, checkoutUrl, providerStatus);
-      const updates = await Promise.all([
-        client
-          .from("organization_subscriptions")
-          .update({
-            billing_provider: "asaas",
-            provider_subscription_id: readAsaasCheckoutSubscriptionId(checkout) ?? intent.subscription.provider_subscription_id,
-            metadata: {
-              ...(intent.subscription.metadata ?? {}),
-              ...cart.metadata,
-              ...providerPayload,
-            },
-          })
-          .eq("id", intent.subscription.id)
-          .eq("organization_id", intent.subscription.organization_id),
-        client
-          .from("billing_invoices")
-          .update({
-            provider: "asaas",
-            provider_payment_id: providerPaymentId,
-            metadata: {
-              ...(intent.invoice.metadata ?? {}),
-              ...cart.metadata,
-              ...providerPayload,
-            },
-          })
-          .eq("id", intent.invoice.id)
-          .eq("organization_id", intent.subscription.organization_id),
-        client
-          .from("billing_payments")
-          .update({
-            provider: "asaas",
-            provider_payment_id: providerPaymentId,
-            provider_status: providerStatus,
-            status: normalizeBillingPaymentStatus(providerStatus),
-            payload: {
-              ...(intent.payment.payload ?? {}),
-              ...cart.metadata,
-              ...providerPayload,
-            },
-          })
-          .eq("id", intent.payment.id)
-          .eq("organization_id", intent.subscription.organization_id),
-      ]);
-      const failedUpdate = updates.find((update) => update.error);
-
-      if (failedUpdate?.error) {
-        throw new Error(`Checkout criado no Asaas, mas nao foi salvo: ${failedUpdate.error.message}`);
-      }
-
-      return NextResponse.json({
-        ok: true,
-        status: "pending",
-        providerStatus,
-        providerStatusDetail: "asaas_recurring_checkout",
-        providerPaymentId,
-        checkoutUrl,
-        externalCheckout: true,
-        webhookReady: Boolean(config.webhookSecret),
-      });
+      return NextResponse.json(await payNativeBillingCard(client, workspace.organization.id, subscriptionId, body, readClientIp(request.headers)), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
-      return NextResponse.json({
-        error: error instanceof Error ? error.message : "Nao foi possivel criar o checkout recorrente Asaas.",
-      }, { status: 400 });
+      return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível concluir a tentativa. Confira os dados do titular e do cartão." }, { status: error instanceof CheckoutError ? error.status : 422 });
     }
   }
 
@@ -591,72 +460,6 @@ function normalizeBillingPaymentStatus(value: string) {
   return "in_process";
 }
 
-function buildBillingCheckoutItems(
-  intent: Awaited<ReturnType<typeof loadBillingCheckoutIntent>> extends infer Result ? NonNullable<Result> : never,
-  cart: Awaited<ReturnType<typeof syncBillingCheckoutCart>>,
-) {
-  return [
-    {
-      id: intent.plan.plan_code,
-      title: `Plano ${intent.plan.name}`,
-      quantity: 1,
-      unitPrice: cart.planAmount,
-      total: cart.planAmount,
-    },
-    ...cart.selectedBumps.map((bump) => ({
-      id: bump.code,
-      title: bump.title,
-      quantity: 1,
-      unitPrice: bump.priceBrl,
-      total: bump.priceBrl,
-    })),
-  ];
-}
-
-function buildAsaasCardCheckoutProviderPayload(
-  checkout: AsaasCheckoutResponse,
-  checkoutUrl: string,
-  providerStatus: string,
-): JsonRecord {
-  const providerPaymentId = checkout.id ?? null;
-  const providerSubscriptionId = readAsaasCheckoutSubscriptionId(checkout);
-
-  return {
-    billing_provider: "asaas",
-    payment_method: "card",
-    latest_payment_method: "card",
-    billing_payment_method: "card",
-    provider_payment_id: providerPaymentId,
-    provider_status: providerStatus,
-    provider_subscription_id: providerSubscriptionId,
-    asaas_checkout_id: providerPaymentId,
-    asaas_checkout_url: checkoutUrl,
-    asaas_checkout_status: providerStatus,
-    asaas_subscription_id: providerSubscriptionId,
-    asaas_charge_type: "RECURRENT",
-    asaas_checkout: {
-      id: providerPaymentId,
-      url: checkoutUrl,
-      status: providerStatus,
-      external_reference: checkout.externalReference ?? null,
-      subscription_id: providerSubscriptionId,
-    },
-  };
-}
-
-function readAsaasCheckoutSubscriptionId(checkout: AsaasCheckoutResponse) {
-  if (typeof checkout.subscription === "string") return checkout.subscription;
-  if (checkout.subscription && typeof checkout.subscription === "object") {
-    return checkout.subscription.id ?? null;
-  }
-
-  return null;
-}
-
-function formatAsaasCheckoutDateTime(date: Date) {
-  return date.toISOString().replace("T", " ").slice(0, 19);
-}
-
 function buildPagBankCardProviderPayload(paymentData: PagBankCardPaymentData): JsonRecord {
   return {
     provider_payment_id: paymentData.providerOrderId ?? paymentData.providerPaymentId,
@@ -914,4 +717,23 @@ async function recordPaymentAttemptContextSafely(
 function toNumber(value: number | string | null | undefined) {
   const number = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+export async function GET(_request: NextRequest, context: { params: Promise<{ subscriptionId: string }> }) {
+  const workspace = await getCurrentWorkspace();
+  if (!workspace?.organization) return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
+  const client = createServiceClient();
+  try {
+    const { subscriptionId } = await context.params;
+    let snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
+    if (snapshot.attempt) {
+      await reconcileNativeBillingAttempt(client, snapshot.attempt.id);
+      snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
+    }
+    const document = await loadAccountDocument({ userId: workspace.user.id, client });
+    return NextResponse.json({ amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, revision: snapshot.revision,
+      holder: billingHolder(snapshot.intent, { name: workspace.profile.fullName ?? workspace.organization.name, email: snapshot.intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" }),
+      attempt: snapshot.attempt ? { id: snapshot.attempt.id, state: snapshot.attempt.state } : null, paid: snapshot.intent.payment.status === "approved",
+    }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) { return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível conferir o pagamento." }, { status: error instanceof CheckoutError ? error.status : 503 }); }
 }

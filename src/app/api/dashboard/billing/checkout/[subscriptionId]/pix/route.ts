@@ -105,6 +105,10 @@ export async function POST(
 
   try {
     const billingProvider = resolveBillingCheckoutProvider(intent);
+    const existingPix = intent.payment.payload?.pix_qr_code;
+    if (billingProvider === "asaas" && existingPix && intent.payment.provider_payment_id && ["pending", "in_process"].includes(intent.payment.status) && !intent.payment.payload?.native_card_attempt_id) {
+      return NextResponse.json({ ok: true, status: "pending", providerPaymentId: intent.payment.provider_payment_id, pixQrCode: existingPix, pixQrCodeBase64: intent.payment.payload?.pix_qr_code_base64 ?? null });
+    }
     const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
     await notifyPaymentStartedSafely(client, {
       organizationId: workspace.organization.id,
@@ -142,6 +146,11 @@ export async function POST(
     const fallbackDocument = billingProvider === "asaas"
       ? await loadAccountDocument({ userId: workspace.user.id, client })
       : null;
+    if (billingProvider === "asaas") {
+      if (!fallbackDocument?.number) throw new Error("Informe CPF/CNPJ no cadastro antes de gerar o Pix.");
+      const { error } = await client.rpc("claim_native_billing_pix", { p_org: workspace.organization.id, p_payment: intent.payment.id });
+      if (error) return NextResponse.json({ error: "Existe um pagamento em conferência. Aguarde o resultado antes de trocar a forma de pagamento." }, { status: 409 });
+    }
     const paymentData = billingProvider === "asaas"
       ? await createAsaasBillingPix({
           client,
@@ -208,6 +217,7 @@ export async function POST(
           ...(intent.payment.payload ?? {}),
           ...cart.metadata,
           billing_provider: billingProvider,
+          pix_creation_pending: false,
           provider_payment_id: providerPaymentId,
           provider_status: paymentData.providerStatus,
           pix_qr_code: paymentData.pixQrCode,

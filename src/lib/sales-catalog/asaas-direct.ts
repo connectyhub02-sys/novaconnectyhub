@@ -15,7 +15,7 @@ async function request(connection: AsaasDirectConnection, endpoint: string, meth
   let response: Response;
   try {
     response = await fetch(`${base}${endpoint}`, {
-      method, cache: "no-store", signal: AbortSignal.timeout(25000),
+      method, cache: "no-store", signal: AbortSignal.timeout(method === "POST" ? 65000 : 25000),
       headers: { access_token: connection.accessToken, "Content-Type": "application/json", "User-Agent": "ConnectyHub/1.0" },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -24,7 +24,7 @@ async function request(connection: AsaasDirectConnection, endpoint: string, meth
   const data = await response.json().catch(() => null);
   if (!response.ok || !data) {
     const definitive = [400, 401, 403, 404, 422].includes(response.status);
-    throw new AsaasDirectError(definitive, response.status === 400 && method === "POST" && endpoint === "/payments");
+    throw new AsaasDirectError(definitive, response.status === 400 && method === "POST" && ["/payments", "/subscriptions"].includes(endpoint));
   }
   return data;
 }
@@ -32,6 +32,58 @@ async function request(connection: AsaasDirectConnection, endpoint: string, meth
 function safePayment(data: Record<string, unknown>): AsaasPaymentResponse {
   const string = (key: string) => typeof data[key] === "string" ? data[key] as string : undefined;
   return { id: string("id"), customer: string("customer"), status: string("status"), externalReference: string("externalReference"), paymentDate: string("paymentDate"), billingType: string("billingType"), value: typeof data.value === "number" ? data.value : undefined, deleted: data.deleted === true };
+}
+
+export type AsaasNativeSubscription = { id: string; value: number; externalReference: string; nextDueDate: string; status: string; deleted: boolean };
+function safeSubscription(data: Record<string, unknown>): AsaasNativeSubscription {
+  return { id: String(data.id ?? ""), value: Number(data.value), externalReference: String(data.externalReference ?? ""), nextDueDate: String(data.nextDueDate ?? ""), status: String(data.status ?? ""), deleted: data.deleted === true };
+}
+
+export async function createAsaasNativeSubscription(input: AsaasDirectConnection & { card: CheckoutCard; holder: CheckoutCardHolder; amount: number; externalReference: string; remoteIp: string; nextDueDate: string }) {
+  let customer: Record<string, unknown>;
+  try {
+    const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
+    customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", { ...input.holder, notificationDisabled: true });
+  } catch { throw new AsaasDirectError(true, false); }
+  if (!customer.id) throw new AsaasDirectError(true, false);
+  const subscription = safeSubscription(await request(input, "/subscriptions", "POST", {
+    customer: customer.id, billingType: "CREDIT_CARD", value: input.amount, cycle: "MONTHLY", nextDueDate: input.nextDueDate,
+    description: "Plano ConnectyHub", externalReference: input.externalReference, creditCard: input.card, creditCardHolderInfo: input.holder, remoteIp: input.remoteIp,
+  }));
+  if (!subscription.id || subscription.externalReference !== input.externalReference || Math.round(subscription.value * 100) !== Math.round(input.amount * 100)) throw new AsaasDirectError(false, false);
+  return subscription;
+}
+
+export async function findAsaasNativeSubscription(connection: AsaasDirectConnection, reference: string) {
+  const list = await request(connection, `/subscriptions?externalReference=${encodeURIComponent(reference)}&includeDeleted=true&limit=100`);
+  const rows = Array.isArray(list.data) ? list.data.map(safeSubscription).filter(row => row.externalReference === reference) : [];
+  if (list.hasMore || rows.length > 1) throw new AsaasDirectError(false, false);
+  return rows[0] ?? null;
+}
+
+export async function cancelAsaasNativeSubscription(connection: AsaasDirectConnection, id: string, expectedReference: string) {
+  const current = safeSubscription(await request(connection, `/subscriptions/${encodeURIComponent(id)}`));
+  if (current.externalReference !== expectedReference) throw new AsaasDirectError(false, false);
+  if (!current.deleted) await request(connection, `/subscriptions/${encodeURIComponent(id)}`, "DELETE");
+}
+
+export async function getAsaasNativePayment(connection: AsaasDirectConnection, id: string) {
+  return safePayment(await request(connection, `/payments/${encodeURIComponent(id)}`));
+}
+
+export async function findAsaasBillingPix(connection: AsaasDirectConnection, reference: string, amount: number) {
+  const list = await request(connection, `/payments?externalReference=${encodeURIComponent(reference)}&limit=100`);
+  const rows = Array.isArray(list.data) ? list.data.map(safePayment).filter(payment => payment.externalReference === reference && payment.billingType === "PIX" && !payment.deleted) : [];
+  if (list.hasMore || rows.length > 1 || rows.some(payment => Math.round(Number(payment.value) * 100) !== Math.round(amount * 100))) throw new AsaasDirectError(false, false);
+  return rows[0] ?? null;
+}
+
+/** Called only after a webhook signature and a fresh provider read have been verified. */
+export function applyAsaasPaymentEvent(payment: AsaasPaymentResponse, event: unknown): AsaasPaymentResponse {
+  if (["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED"].includes(payment.status ?? "") || payment.deleted) return payment;
+  if (event === "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED") return { ...payment, status: "CREDIT_CARD_CAPTURE_REFUSED" };
+  if (event === "PAYMENT_REPROVED_BY_RISK_ANALYSIS") return { ...payment, status: "REPROVED_BY_RISK_ANALYSIS" };
+  return payment;
 }
 
 export async function createAsaasDirectCardPayment(input: AsaasDirectConnection & {

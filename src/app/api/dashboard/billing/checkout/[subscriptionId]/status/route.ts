@@ -14,6 +14,7 @@ import {
 } from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { loadNativeBillingSnapshot, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,6 +42,15 @@ export async function GET(
       return NextResponse.json({ error: "Checkout de plano nao encontrado." }, { status: 404 });
     }
 
+    let nativeAttempt = false;
+    if (resolveBillingCheckoutProvider(intent) === "asaas") {
+      const snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
+      if (snapshot.attempt) {
+        nativeAttempt = true;
+        await reconcileNativeBillingAttempt(client, snapshot.attempt.id);
+        intent = (await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId)).intent;
+      }
+    }
     const providerPaymentId = readProviderPaymentId(intent);
     let reconciliation: {
       processingStatus: string;
@@ -48,7 +58,7 @@ export async function GET(
       reason: string | null;
     } | null = null;
 
-    if (providerPaymentId && shouldReconcileProviderPayment(intent) && !shouldSkipHostedAsaasCheckoutPoll(intent, providerPaymentId)) {
+    if (!nativeAttempt && providerPaymentId && shouldReconcileProviderPayment(intent) && !shouldSkipHostedAsaasCheckoutPoll(intent, providerPaymentId)) {
       const provider = resolveBillingCheckoutProvider(intent);
       const processor = provider === "asaas"
         ? processPlatformBillingAsaasWebhook
