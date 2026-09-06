@@ -1,4 +1,5 @@
 "use client";
+import { billingBumpLabel } from "@/lib/billing/plan-checkout-catalog";
 
 import Image from "next/image";
 import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
@@ -22,6 +23,9 @@ import { InfinityMark } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type BillingPlanCheckoutProps = {
+  purchaseKind?: "plan" | "product";
+  renewal?: boolean;
+  commercialLabel?: string;
   subscriptionId: string;
   planCode: string;
   planName: string;
@@ -93,6 +97,9 @@ type CheckoutStatusResponse = {
 };
 
 export function BillingPlanCheckout({
+  purchaseKind = "plan",
+  renewal = false,
+  commercialLabel,
   subscriptionId,
   planCode,
   planName,
@@ -238,7 +245,7 @@ export function BillingPlanCheckout({
       if (data?.confirmed || data?.paymentStatus === "approved") {
         setNotice({
           tone: "success",
-          message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+          message: "Pagamento confirmado. Confira a liberação da compra no painel.",
         });
         openApprovedFeedback();
         setCardStatusPolling(false);
@@ -316,7 +323,7 @@ export function BillingPlanCheckout({
       setCardStatusPolling(false);
       setNotice({
         tone: "success",
-        message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+        message: "Pagamento confirmado. Confira a liberação da compra no painel.",
       });
       openApprovedFeedback();
       queueCheckoutRefresh();
@@ -434,7 +441,7 @@ export function BillingPlanCheckout({
       setNotice({
         tone: data?.status === "approved" ? "success" : "warning",
         message: data?.status === "approved"
-          ? "Pagamento aprovado. O plano esta sendo ativado."
+          ? "Pagamento aprovado. Sua compra está sendo liberada."
           : "Pix gerado. Assim que o pagamento cair, os creditos serao liberados.",
       });
       if (data?.status === "approved") {
@@ -489,7 +496,7 @@ export function BillingPlanCheckout({
               </div>
               <h2 className="mt-2 text-2xl font-black text-white">{planName}</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                Plano {planCode} com {formatCredits(includedCredits)} creditos inclusos. Saldos anteriores continuam na carteira e somam ao plano ativo.
+                {commercialLabel ?? `Oferta ${planCode}`} · {formatCredits(includedCredits)} créditos inclusos. {purchaseKind === "product" ? "Esta compra não altera a assinatura do plano." : "O uso dos recursos segue o período contratado."}
               </p>
               {storageLimitBytes > 0 ? (
                 <CheckoutStorageSummary
@@ -553,7 +560,7 @@ export function BillingPlanCheckout({
                 <button
                   key={bump.code}
                   type="button"
-                  disabled={!canPay || cardCheckoutLoading}
+                  disabled={!canPay || cardCheckoutLoading || renewal}
                   onClick={() => toggleBump(bump.code)}
                   className={cn(
                     "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
@@ -587,7 +594,7 @@ export function BillingPlanCheckout({
                   <p className="mt-auto pt-3 font-mono text-sm font-black text-cyan-100">
                     {formatMoney(bump.priceBrl)}
                     <span className="ml-1 text-[10px] font-semibold text-slate-500">
-                      {bump.recurrence === "monthly" ? "/mes" : "unico"}
+                      {billingBumpLabel(bump.recurrence)}
                     </span>
                   </p>
                 </button>
@@ -603,7 +610,7 @@ export function BillingPlanCheckout({
           Carrinho
         </div>
         <div className="mt-4 space-y-3">
-          <CartRow label={`Plano ${planName}`} value={formatMoney(planAmountBrl)} />
+          <CartRow label={planName} value={formatMoney(planAmountBrl)} />
           {selectedBumps.map((bump) => (
             <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
           ))}
@@ -614,7 +621,7 @@ export function BillingPlanCheckout({
             <strong className="text-2xl font-black text-emerald-300">{formatMoney(totalAmount)}</strong>
           </div>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            Itens recorrentes ficam salvos no checkout para cobranca mensal do plano.
+            Adicionais recorrentes seguem o período informado na oferta. Os avulsos são cobrados uma única vez.
           </p>
         </div>
 
@@ -646,7 +653,7 @@ export function BillingPlanCheckout({
                 payerEmail={payerEmail}
                 submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
                 extraPayload={cardExtraPayload}
-                successMessage="Pagamento aprovado. Seu plano sera ativado agora."
+                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
                 pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
                 rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
                 showRejectionModal={false}
@@ -663,7 +670,7 @@ export function BillingPlanCheckout({
                 payerPhone={payerPhone}
                 submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
                 extraPayload={cardExtraPayload}
-                successMessage="Pagamento aprovado. Seu plano sera ativado agora."
+                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
                 pendingMessage="Pagamento enviado ao PagBank. Assim que confirmar, os creditos serao liberados."
                 rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
                 onPaymentStatusChange={handleCardPaymentStatusChange}
@@ -686,11 +693,11 @@ export function BillingPlanCheckout({
         ) : (
           <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
             <p className="font-semibold text-white">
-              {checkoutConfirmed ? "Pagamento confirmado" : "Plano em processamento"}
+              {checkoutConfirmed ? "Pagamento confirmado" : "Compra em processamento"}
             </p>
             <p className="mt-2 text-sm leading-6 text-emerald-50/80">
               {checkoutConfirmed
-                ? "Seu plano esta ativo e os creditos ja foram liberados no painel."
+                ? "Pagamento confirmado. Sua compra está registrada no painel."
                 : "Se o pagamento ja foi aprovado, os creditos entram automaticamente no painel."}
             </p>
           </div>
@@ -719,7 +726,7 @@ export function BillingPlanCheckout({
           setFeedbackModal(null);
         }}
         onUsePix={switchToPixAndGenerate}
-        onGoDashboard={() => router.push("/dashboard")}
+        onGoDashboard={() => router.push(purchaseKind === "product" ? "/dashboard/meus-produtos" : "/dashboard/planos")}
       />
     ) : null}
     </>
@@ -835,7 +842,7 @@ function CheckoutPaymentFeedbackModal({
             </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <SuccessMetric label="Plano ativo" value={feedback.planName} />
+              <SuccessMetric label="Compra" value={feedback.planName} />
               <SuccessMetric label="Creditos liberados" value={formatCredits(feedback.credits)} />
               <SuccessMetric label="Total pago" value={formatMoney(feedback.amountBrl)} />
             </div>
@@ -1137,7 +1144,7 @@ function buildPaymentStatusNotice(paymentStatus: string, providerLabel: string):
   if (paymentStatus === "approved") {
     return {
       tone: "success",
-      message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+      message: "Pagamento confirmado. Confira a liberação da compra no painel.",
     };
   }
 

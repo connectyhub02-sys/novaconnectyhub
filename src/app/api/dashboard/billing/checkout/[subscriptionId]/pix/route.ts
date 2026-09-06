@@ -1,3 +1,4 @@
+import { convertAsaasBillingPaymentToPix } from "@/lib/sales-catalog/asaas-direct";
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/lib/account/signup-completion";
 import {
   createAsaasPixPayment,
+  getAsaasPixQrCode,
   extractAsaasPaymentData,
   loadAsaasPlatformBillingConfig,
 } from "@/lib/sales-catalog/asaas";
@@ -65,7 +67,7 @@ export async function POST(
   context: { params: Promise<{ subscriptionId: string }> },
 ) {
   const { subscriptionId } = await context.params;
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace?.organization) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
@@ -88,13 +90,13 @@ export async function POST(
     return NextResponse.json({ error: "Informe um e-mail valido no cadastro para pagar com Pix." }, { status: 422 });
   }
 
-  const availableBumps = await loadBillingCheckoutBumps(client);
-  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,
   });
 
+  const availableBumps = await loadBillingCheckoutBumps(client, intent ?? undefined);
+  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   if (!intent) {
     return NextResponse.json({ error: "Checkout de plano nao encontrado." }, { status: 404 });
   }
@@ -110,23 +112,6 @@ export async function POST(
       return NextResponse.json({ ok: true, status: "pending", providerPaymentId: intent.payment.provider_payment_id, pixQrCode: existingPix, pixQrCodeBase64: intent.payment.payload?.pix_qr_code_base64 ?? null });
     }
     const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
-    await notifyPaymentStartedSafely(client, {
-      organizationId: workspace.organization.id,
-      actorId: workspace.user.id,
-      subscriptionId: intent.subscription.id,
-      invoiceId: intent.invoice.id,
-      paymentId: intent.payment.id,
-      planCode: intent.plan.plan_code,
-      planName: intent.plan.name,
-      amountBrl: cart.totalAmount,
-      includedCredits: toNumber(intent.plan.included_credits),
-      checkoutPath: cart.checkoutPath,
-      checkoutUrl: cart.checkoutUrl,
-      paymentMethod: "pix",
-      paymentMethodLabel: "Pix",
-      selectedBumpCodes: cart.selectedBumps.map((bump) => bump.code),
-      selectedBumpTitles: cart.selectedBumps.map((bump) => bump.title),
-    });
     const checkoutItems = [
       {
         id: intent.plan.plan_code,
@@ -154,6 +139,8 @@ export async function POST(
     const paymentData = billingProvider === "asaas"
       ? await createAsaasBillingPix({
           client,
+          existingPaymentId: intent.payment.payload?.native_recurring_attempt_id ? intent.payment.provider_payment_id : null,
+          expectedReference: intent.payment.payload?.native_recurring_attempt_id ? "billing_recurring:"+intent.payment.payload.native_recurring_attempt_id : null,
           amount: cart.totalAmount,
           description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
           externalReference: cart.externalReference,
@@ -206,7 +193,7 @@ export async function POST(
       });
     }
 
-    await client
+    const persisted = await client
       .from("billing_payments")
       .update({
         provider: billingProvider,
@@ -228,6 +215,16 @@ export async function POST(
       })
       .eq("id", intent.payment.id)
       .eq("organization_id", intent.subscription.organization_id);
+
+    if (persisted.error) throw new Error("Pix gerado e em conferência. Não tente gerar outra cobrança agora.");
+    if (paymentData.status !== "approved") await notifyPaymentStartedSafely(client, {
+      organizationId: intent.subscription.organization_id, actorId: workspace.user.id,
+      subscriptionId: intent.subscription.id, invoiceId: intent.invoice.id, paymentId: intent.payment.id,
+      planCode: intent.plan.plan_code, planName: intent.plan.name, amountBrl: cart.totalAmount,
+      includedCredits: toNumber(intent.plan.included_credits), checkoutPath: cart.checkoutPath, checkoutUrl: cart.checkoutUrl,
+      paymentMethod: "pix", paymentMethodLabel: "Pix", pixCode: paymentData.pixQrCode ?? null,
+      selectedBumpCodes: cart.selectedBumps.map(b => b.code), selectedBumpTitles: cart.selectedBumps.map(b => b.title),
+    });
 
     return NextResponse.json({
       ok: true,
@@ -269,6 +266,7 @@ function normalizeBillingPaymentStatus(value: string) {
 }
 
 async function createAsaasBillingPix(input: {
+  existingPaymentId?:string|null; expectedReference?:string|null;
   client: ReturnType<typeof createServiceClient>;
   amount: number;
   description: string;
@@ -284,6 +282,11 @@ async function createAsaasBillingPix(input: {
   }
 
   const config = await loadAsaasPlatformBillingConfig({ client: input.client });
+  if (input.existingPaymentId && input.expectedReference) {
+    const existing=await convertAsaasBillingPaymentToPix({...config,paymentId:input.existingPaymentId,expectedReference:input.expectedReference,amount:input.amount});
+    const qr=await getAsaasPixQrCode({...config,paymentId:input.existingPaymentId});
+    return extractAsaasPaymentData(existing,qr);
+  }
   const payment = await createAsaasPixPayment({
     accessToken: config.accessToken,
     mode: config.mode,
@@ -422,6 +425,7 @@ async function notifyPaymentStartedSafely(
     checkoutUrl: string;
     paymentMethod: string;
     paymentMethodLabel: string;
+    pixCode?: string | null;
     selectedBumpCodes: string[];
     selectedBumpTitles: string[];
   },
@@ -442,7 +446,7 @@ async function notifyPaymentStartedSafely(
       amountBrl: input.amountBrl,
       includedCredits: input.includedCredits,
       eventType: "checkout_payment_started",
-      dedupeKey: `billing:${input.subscriptionId}:payment_started:${hash}`,
+      dedupeKey: `billing:${input.subscriptionId}:payment_started:${input.paymentId}:${hash}`,
       providerStatus: "payment_started",
       metadata: {
         source: "dashboard_billing_pix_payment_started",
@@ -450,6 +454,7 @@ async function notifyPaymentStartedSafely(
         checkout_url: input.checkoutPath,
         checkout_public_url: input.checkoutUrl,
         payment_method: input.paymentMethod,
+        pix_copy_code: input.pixCode ?? null,
         payment_method_label: input.paymentMethodLabel,
         selected_bump_codes: input.selectedBumpCodes,
         selected_bump_titles: input.selectedBumpTitles,

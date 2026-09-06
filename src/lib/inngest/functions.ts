@@ -552,7 +552,9 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
       const paidLifecycle = await processPaidBillingLifecycleNotifications(client, { limit: 100 });
       const billing = await processPendingPlatformBillingNotifications(client, { limit: 25 });
 
-      return { trial, paidLifecycle, billing };
+      const { data: archived, error: archiveError } = await client.rpc("archive_platform_customer_journey", { p_limit: 500 });
+      if (archiveError) throw new Error("A jornada financeira será retomada: " + archiveError.message);
+      return { trial, paidLifecycle, billing, archived };
     });
 
     return {

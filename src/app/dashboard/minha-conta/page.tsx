@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function DashboardMinhaContaPage() {
   await connection();
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     redirect("/login?next=%2Fdashboard%2Fminha-conta");

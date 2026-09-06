@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
@@ -3270,6 +3271,7 @@ async function callUazapi(
     timeoutMs?: number;
   },
 ) {
+  if (context.organizationId && context.scope === "organization") await assertContractAccess(context.organizationId,createServiceClient());
   const url = new URL(`${context.credentials.baseUrl}${path}`);
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== null && value !== undefined && value !== "") {

@@ -1,3 +1,4 @@
+import { billingPeriodEnd, readCommercialTerms, snapshotPlanCommercialTerms } from "@/lib/billing/commercial-terms";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -79,6 +80,7 @@ const PLAN_SELECT = [
   "sort_order",
   "highlighted",
   "monthly_price_brl",
+  "billing_cycle", "billing_interval", "access_duration_days",
   "included_credits",
   "overage_credit_price_brl",
   "auto_recharge_min_credits",
@@ -215,7 +217,7 @@ async function activateOrRenewPlan(
 
   const now = new Date();
   const cycleStart = now.toISOString();
-  const cycleEnd = addCalendarMonth(now).toISOString();
+  const cycleEnd = billingPeriodEnd(now, readCommercialTerms(plan)).toISOString();
   const subscriptionId = await upsertManualSubscription(client, {
     actorId: input.actorId,
     organization: input.organization,
@@ -284,7 +286,7 @@ async function activateOrRenewPlan(
       includedCredits: toNumber(plan.included_credits),
       balanceCredits: toNumber(wallet?.balance_credits),
       usedCredits: toNumber(wallet?.lifetime_used_credits),
-      daysRemaining: 30,
+      daysRemaining: Math.ceil((Date.parse(cycleEnd) - Date.parse(cycleStart)) / 86400000),
       eventType: input.payload.action === "renew_plan" ? "manual_plan_renewed" : "manual_plan_activated",
       dedupeKey: `billing:${subscriptionId}:${input.payload.action}:${cycleStart}`,
       providerStatus: "admin_manual",
@@ -506,6 +508,7 @@ async function blockCustomerAccess(
     .from("organization_subscriptions")
     .update({ status: "paused" })
     .eq("organization_id", input.organization.id)
+    .eq("subscription_kind", "plan")
     .in("status", ["pending", "active", "past_due", "incomplete"]);
 
   await client
@@ -696,13 +699,14 @@ async function upsertManualSubscription(
     provider_plan_id: input.plan.mercado_pago_preapproval_plan_id,
     current_period_start: input.cycleStart,
     current_period_end: input.cycleEnd,
-    next_billing_at: input.cycleEnd,
+    next_billing_at: readCommercialTerms(input.plan).billingCycle === "one_time" ? null : input.cycleEnd,
     metadata: {
       ...(existing?.metadata ?? {}),
       source: input.source,
       actor_id: input.actorId,
       reason: input.reason,
       manual_activation: true,
+      commercial_terms: snapshotPlanCommercialTerms(input.plan as unknown as Record<string, unknown>),
       updated_at: new Date().toISOString(),
     },
   };

@@ -95,6 +95,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Produto ConnectyHub nao encontrado." }, { status: 404 });
     }
 
+    const purchased = await service.from("platform_product_entitlements").select("id", { count: "exact", head: true }).eq("product_id", productId);
+    if (purchased.error) return NextResponse.json({ error: "Não foi possível conferir as compras vinculadas." }, { status: 503 });
+    if (purchased.count) return NextResponse.json({ error: "Este produto tem compras registradas. Arquive a oferta para preservar o acesso dos compradores." }, { status: 409 });
+
     const { data: deletedCommissions, error: commissionsError } = await service
       .from("platform_product_commissions")
       .delete()

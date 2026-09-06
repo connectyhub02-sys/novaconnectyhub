@@ -72,7 +72,7 @@ export default async function DashboardInvoicePage({
     notFound();
   }
 
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     redirect(`/login?next=${encodeURIComponent(`/dashboard/minha-conta/faturas/${invoiceId}`)}`);

@@ -364,6 +364,9 @@ async function loadCreditWalletForRefund(client: SupabaseClient, organizationId:
 }
 
 export async function debitCredits(client: SupabaseClient, input: CreditDebitInput) {
+  const { data: scope, error: scopeError } = await client.from("organizations").select("billing_organization_id").eq("id", input.organizationId).single();
+  if (scopeError) throw new Error("Não foi possível conferir a carteira do contrato.");
+  const walletOrganizationId = scope.billing_organization_id ?? input.organizationId;
   const trialStatusBeforeDebit = shouldSendTrialUsageNotification(input.metadata)
     ? await getOrganizationBillingAccess({
         client,
@@ -372,12 +375,12 @@ export async function debitCredits(client: SupabaseClient, input: CreditDebitInp
     : null;
 
   const { data, error } = await client.rpc("debit_credit_wallet", {
-    p_organization_id: input.organizationId,
+    p_organization_id: walletOrganizationId,
     p_amount_credits: input.amountCredits,
     p_provider: input.provider ?? null,
     p_usage_event_id: input.usageEventId ?? null,
     p_description: input.description ?? null,
-    p_metadata: input.metadata ?? {},
+    p_metadata: { ...(input.metadata ?? {}), usage_organization_id: input.organizationId },
   });
 
   if (error) {

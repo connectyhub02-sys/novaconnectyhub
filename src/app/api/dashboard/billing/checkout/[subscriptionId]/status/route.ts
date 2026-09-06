@@ -24,7 +24,7 @@ export async function GET(
   context: { params: Promise<{ subscriptionId: string }> },
 ) {
   const { subscriptionId } = await context.params;
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace?.organization) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });

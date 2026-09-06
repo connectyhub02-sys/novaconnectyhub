@@ -15,6 +15,7 @@ export async function loadPublicPricingPlans(
   }
 
   return buildPublicPricingPlans(catalog.plans.map((plan) => ({
+    billingCycle: plan.billingCycle, billingInterval: plan.billingInterval, accessDurationDays: plan.accessDurationDays,
     planCode: plan.planCode,
     name: plan.name,
     shortDescription: plan.shortDescription,

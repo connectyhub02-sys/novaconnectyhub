@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import type { User } from "@supabase/supabase-js";
 import { readAuthUserAvatarUrl } from "@/lib/account/profile-avatar-sync";
@@ -75,7 +76,7 @@ type OwnedOrganizationRow = {
   created_at: string | null;
 };
 
-export async function getCurrentWorkspace(): Promise<CurrentWorkspace | null> {
+export async function getCurrentWorkspace(options: { allowRestricted?: boolean } = {}): Promise<CurrentWorkspace | null> {
   if (!isSupabaseAuthConfigured()) {
     return null;
   }
@@ -92,6 +93,7 @@ export async function getCurrentWorkspace(): Promise<CurrentWorkspace | null> {
 
   const profile = await getOrCreateProfile(user);
   const organization = await getPrimaryOrganization(user.id);
+  if (organization && !profile.isPlatformAdmin && !options.allowRestricted) await assertContractAccess(organization.id);
 
   return {
     user,
@@ -105,7 +107,7 @@ export async function ensureStarterOrganization() {
     return null;
   }
 
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return null;
@@ -392,7 +394,7 @@ async function getPrimaryOrganization(userId: string): Promise<CurrentOrganizati
 
   const membership = (data ?? []).find((row) => {
     const organization = readMembershipOrganization(row.organizations);
-    return organization && !isInactiveOrganizationStatus(organization.status);
+    return Boolean(organization);
   });
   const organization = membership ? readMembershipOrganization(membership.organizations) : null;
 

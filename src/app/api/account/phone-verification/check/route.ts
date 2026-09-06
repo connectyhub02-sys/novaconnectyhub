@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 type JsonRecord = Record<string, unknown>;
 
 export async function POST(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });

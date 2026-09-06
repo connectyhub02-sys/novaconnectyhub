@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -656,6 +657,7 @@ async function publishClaimedMetaOrganicPost(
         throw new Error("Token Meta ausente para publicar no Facebook.");
       }
 
+      await assertContractAccess(item.organization_id!,client);
       const graph = await sendMetaOrganicGraphRequest({
         body: target.body,
         credentials,

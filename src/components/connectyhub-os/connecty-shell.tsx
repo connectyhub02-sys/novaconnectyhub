@@ -200,6 +200,7 @@ const adminSections: NavSection[] = [
       { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky" },
       { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck, tone: "emerald" },
       { label: "Automacoes",         href: "/admin/automacoes",        icon: Zap, tone: "violet" },
+      { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
@@ -217,6 +218,11 @@ const adminSections: NavSection[] = [
     ],
   },
 ];
+
+const restrictedClientSections: NavSection[] = [{ label: "Sua conta", items: [
+  { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
+  { label: "Pagamento do plano", href: "/dashboard/planos", icon: Coins, tone: "amber" },
+]}];
 
 const clientSections: NavSection[] = [
   {
@@ -311,7 +317,9 @@ function ConnectyShellRoot({
 }: ConnectyShellProps) {
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
-  const sections  = mode === "admin" ? adminSections : clientSections;
+  const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
+  const restricted = billingAccess && ["paid_expired", "trial_expired", "inactive"].includes(billingAccess.state);
+  const sections = mode === "admin" ? adminSections : restricted ? restrictedClientSections : clientSections;
   const activeItem = resolveActiveItem(sections, active);
   const activeTone: AccentTone = activeItem?.tone ?? "blue";
   const activePalette = accentPalettes[activeTone];
@@ -337,7 +345,7 @@ function ConnectyShellRoot({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [comingSoonItem, setComingSoonItem] = useState<NavItem | null>(null);
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
-  const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
+
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
   const [accountCompletionChecked, setAccountCompletionChecked] = useState(mode !== "client" || isPlatformAdmin);
   const [, setAccountCompletionDismissed] = useState(false);
@@ -2074,7 +2082,7 @@ function AccountCompletionFeedback({ error, message }: { error: string | null; m
 }
 
 function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatus | null }) {
-  if (!status || status.canUseBillableFeatures) {
+  if (!status || !["paid_expired", "trial_expired", "inactive"].includes(status.state)) {
     return null;
   }
 
@@ -2945,5 +2953,5 @@ function resolveActiveItem(sections: NavSection[], active: string) {
 }
 
 function isClientBillingRecoveryPage(pathname: string) {
-  return pathname === "/dashboard/planos" || pathname.startsWith("/dashboard/planos/");
+  return pathname === "/dashboard/planos" || pathname.startsWith("/dashboard/planos/") || pathname === "/dashboard/meus-produtos" || pathname.startsWith("/dashboard/meus-produtos/");
 }

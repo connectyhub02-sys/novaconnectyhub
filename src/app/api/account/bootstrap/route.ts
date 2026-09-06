@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export async function POST() {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });

@@ -13,7 +13,7 @@ export type BillingCheckoutBump = {
   title: string;
   description: string;
   priceBrl: number;
-  recurrence: "monthly" | "one_time";
+  recurrence: "monthly" | "weekly" | "quarterly" | "yearly" | "one_time";
   itemType: "credit_pack" | "adjustment";
   creditAmount: number | null;
   badge: string;
@@ -88,3 +88,6 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     media: null,
   },
 ];
+
+export function billingBumpInterval(recurrence: BillingCheckoutBump["recurrence"]) { return ({ monthly: "month", weekly: "week", quarterly: "quarter", yearly: "year", one_time: null } as const)[recurrence]; }
+export function billingBumpLabel(recurrence: BillingCheckoutBump["recurrence"]) { return ({ monthly: "/mês", weekly: "/semana", quarterly: "/trimestre", yearly: "/ano", one_time: "único" })[recurrence]; }

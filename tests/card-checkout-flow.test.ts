@@ -30,6 +30,7 @@ describe("Asaas checkout and lead attribution", () => {
     const createHosted = vi.fn(async () => ({ id: "hosted", link: "https://asaas.example/checkout/hosted", status: "ACTIVE" }));
     const createPix = vi.fn();
     const service = serverModuleHarness<Service>("src/lib/sales-catalog/payment-sessions.ts", {
+      "@/lib/billing/contract-access": { assertContractAccess: vi.fn(async () => ({ allowed: true })) },
       "./checkout-customer": customer,
       "node:crypto": crypto, "./mercado-pago": mercadoPago, "@/lib/tracking/tracked-links": tracking,
       "@/lib/sales-catalog/checkout-guards": guards,

@@ -24,7 +24,7 @@ import {
   readAgentResponsibleHumans,
 } from "@/lib/agents/responsible-human";
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
-import { grantCredits } from "@/lib/billing/cost-center";
+import { billingPeriodEnd, billingTermsLabel, readCommercialTerms } from "@/lib/billing/commercial-terms";
 import { getAppBaseUrl, getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
   getAsaasPayment,
@@ -385,6 +385,7 @@ export async function processPlatformBillingPagBankWebhook(
 export async function processPlatformBillingAsaasWebhook(
   client: SupabaseClient,
   input: BillingWebhookInput,
+  verifiedPayment?: AsaasPaymentResponse,
 ): Promise<PlatformBillingWebhookProcessingResult> {
   if (isAsaasCheckoutTopic(input)) {
     return processAsaasCheckoutWebhook(client, input);
@@ -395,7 +396,7 @@ export async function processPlatformBillingAsaasWebhook(
   }
 
   if (isAsaasPaymentTopic(input)) {
-    return processAsaasPaymentWebhook(client, input);
+    return processAsaasPaymentWebhook(client, input, verifiedPayment);
   }
 
   return buildResult({
@@ -631,7 +632,7 @@ async function processSubscriptionWebhook(client: SupabaseClient, input: Billing
     source: "mercado_pago_subscription_webhook",
   });
 
-  if (isMercadoPagoPreapprovalActive(providerStatus)) {
+  if (isMercadoPagoPreapprovalActive(providerStatus) && record.payment?.status === "approved") {
     return activateBillingPlan(client, record, {
       provider: "mercado_pago",
       providerStatus,
@@ -872,12 +873,17 @@ async function processPagBankPaymentWebhook(
   });
 }
 
-async function processAsaasPaymentWebhook(client: SupabaseClient, input: BillingWebhookInput) {
+async function processAsaasPaymentWebhook(client: SupabaseClient, input: BillingWebhookInput, verifiedPayment?: AsaasPaymentResponse) {
   const payloadPayment = readAsaasPaymentPayload(input);
   let rawPayment: JsonRecord | null = payloadPayment;
   let providerPayment = normalizeAsaasPaymentLike(payloadPayment ?? {}, input.dataId);
 
-  if (!providerPayment.id || !providerPayment.status || !providerPayment.external_reference) {
+  // Only internal callers can supply a payment they have just verified remotely.
+  // Webhook JSON is never sufficient evidence to grant access.
+  if (verifiedPayment) {
+    rawPayment = verifiedPayment as JsonRecord;
+    providerPayment = normalizeAsaasPaymentLike(verifiedPayment, input.dataId);
+  } else {
     const config = await loadAsaasPlatformBillingConfig({ client });
     const remotePayment = await getAsaasPayment({
       accessToken: config.accessToken,
@@ -1195,6 +1201,7 @@ async function activateBillingPlan(
     webhook: BillingWebhookInput;
   },
 ) {
+  if (!record.payment || !input.providerPayment || Math.round(Number(input.providerPayment.transaction_amount) * 100) !== Math.round(Number(record.payment.amount_brl) * 100)) throw new Error("Pagamento com valor divergente: conferência necessária antes de liberar a compra.");
   const subscription = record.subscription;
 
   if (!subscription) {
@@ -1237,56 +1244,11 @@ async function activateBillingPlan(
   const cycleEnd = readDate(paymentPayload?.cycle_end_at)
     ?? readDate(invoiceMetadata?.cycle_end_at)
     ?? readDate(input.providerSubscription?.nextPaymentDate)
-    ?? addMonths(cycleStart, 1);
-  const includedCredits = toNumber(plan?.included_credits);
-  const previousCreditTransactionId = readString(paymentPayload?.credit_transaction_id)
-    ?? readString(invoiceMetadata?.credit_transaction_id);
-  const previousBumpCreditTransactionId = readString(paymentPayload?.bump_credit_transaction_id)
-    ?? readString(invoiceMetadata?.bump_credit_transaction_id);
-  const alreadyGranted = Boolean(previousCreditTransactionId);
+    ?? billingPeriodEnd(cycleStart, readCommercialTerms(checkoutMetadata.commercial_terms));
+  const termsSnapshot = checkoutMetadata.commercial_terms as Record<string, unknown> | undefined;
+  const includedCredits = toNumber(Number(termsSnapshot?.included_credits ?? plan.included_credits));
   const additionalBumpCredits = readSelectedBumpCreditAmount(paymentPayload ?? invoiceMetadata);
-  const bumpCreditsAlreadyGranted = Boolean(previousBumpCreditTransactionId);
-  const externalReference = input.providerSubscription?.externalReference
-    ?? readString(input.providerPayment?.external_reference)
-    ?? readString(paymentPayload?.external_reference)
-    ?? readString(invoiceMetadata?.external_reference)
-    ?? readString(subscriptionMetadata.external_reference)
-    ?? `connectyhub_subscription:${subscription.organization_id}:${subscription.id}`;
-  let creditTransactionId: string | null = previousCreditTransactionId;
-  let bumpCreditTransactionId: string | null = previousBumpCreditTransactionId;
-
-  if (!alreadyGranted && includedCredits > 0) {
-    const { data, error } = await client.rpc("grant_billing_plan_credits", {
-      p_organization_id: subscription.organization_id,
-      p_plan_code: activatedPlanCode,
-      p_cycle_start: cycleStart.toISOString(),
-      p_cycle_end: cycleEnd.toISOString(),
-      p_external_reference: externalReference,
-    });
-
-    if (error) {
-      throw new Error(`Pagamento aprovado, mas os creditos nao foram concedidos: ${error.message}`);
-    }
-
-    creditTransactionId = data ? String(data) : null;
-  }
-
-  if (!bumpCreditsAlreadyGranted && additionalBumpCredits > 0) {
-    bumpCreditTransactionId = await grantCredits(client, {
-      organizationId: subscription.organization_id,
-      amountCredits: additionalBumpCredits,
-      description: "Creditos extras comprados no checkout do plano",
-      externalReference: `${externalReference}:order_bumps`,
-      metadata: {
-        source: "dashboard_plan_checkout_bump",
-        subscription_id: subscription.id,
-        plan_code: activatedPlanCode,
-        selected_bumps: readSelectedBumps(paymentPayload ?? invoiceMetadata),
-      },
-      transactionType: "purchase",
-    });
-  }
-
+  if (!record.payment) throw new Error("Confirmação financeira sem pagamento vinculado. Conferência necessária.");
   const providerPaymentSnapshot = input.providerPayment ? sanitizePayment(input.providerPayment) : null;
   const providerLabel = formatBillingPaymentProviderLabel(input.provider);
   const providerTag = formatBillingPaymentProviderTag(input.provider);
@@ -1303,8 +1265,6 @@ async function activateBillingPlan(
     payment_confirmed_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
     included_credits: includedCredits,
     additional_bump_credits: additionalBumpCredits,
-    credit_transaction_id: creditTransactionId,
-    bump_credit_transaction_id: bumpCreditTransactionId,
     mercado_pago_subscription: input.provider === "mercado_pago" ? input.providerSubscription?.raw ?? null : null,
     mercado_pago_payment: input.provider === "mercado_pago" ? providerPaymentSnapshot : null,
     pagbank_payment: input.provider === "pagbank" ? providerPaymentSnapshot : null,
@@ -1312,60 +1272,14 @@ async function activateBillingPlan(
     asaas_payment: input.provider === "asaas" ? providerPaymentSnapshot : null,
   };
 
-  const [subscriptionUpdate, invoiceUpdate, paymentUpdate] = await Promise.all([
-    client
-      .from("organization_subscriptions")
-      .update({
-        status: "active",
-        plan_id: plan.id,
-        plan_code: activatedPlanCode,
-        billing_provider: input.provider,
-        provider_subscription_id: input.providerSubscription?.id ?? subscription.provider_subscription_id,
-        current_period_start: cycleStart.toISOString(),
-        current_period_end: cycleEnd.toISOString(),
-        next_billing_at: cycleEnd.toISOString(),
-        included_credits_granted: includedCredits,
-        metadata,
-      })
-      .eq("id", subscription.id)
-      .eq("organization_id", subscription.organization_id),
-    record.invoice
-      ? client
-          .from("billing_invoices")
-          .update({
-            status: "paid",
-            provider: input.provider,
-            paid_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
-            provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : record.invoice.id,
-            metadata,
-          })
-          .eq("id", record.invoice.id)
-          .eq("organization_id", subscription.organization_id)
-      : Promise.resolve({ error: null }),
-    record.payment
-      ? client
-          .from("billing_payments")
-          .update({
-            status: "approved",
-            provider: input.provider,
-            provider_payment_id: input.providerPayment?.id ? String(input.providerPayment.id) : record.payment.provider_payment_id,
-            provider_status: input.providerStatus,
-            paid_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
-            payload: metadata,
-          })
-          .eq("id", record.payment.id)
-          .eq("organization_id", subscription.organization_id)
-      : Promise.resolve({ error: null }),
-  ]);
-
-  if (subscriptionUpdate.error || invoiceUpdate.error || paymentUpdate.error) {
-    throw new Error(
-      subscriptionUpdate.error?.message
-      ?? invoiceUpdate.error?.message
-      ?? paymentUpdate.error?.message
-      ?? "Nao foi possivel ativar o plano.",
-    );
-  }
+  const { data: fulfillment, error: fulfillmentError } = await client.rpc("fulfill_confirmed_billing_payment", {
+    p_payment: record.payment.id, p_plan_code: activatedPlanCode,
+    p_cycle_start: cycleStart.toISOString(), p_cycle_end: cycleEnd.toISOString(), p_metadata: metadata,
+  });
+  if (fulfillmentError) throw new Error("Pagamento confirmado; a liberação será retomada: " + fulfillmentError.message);
+  const alreadyGranted = Boolean(fulfillment?.already_applied);
+  const creditTransactionId = fulfillment?.credit_transaction_id ?? null;
+  const bumpCreditsAlreadyGranted = alreadyGranted && Boolean(fulfillment?.bump_credit_transaction_id);
 
   const notification = await enqueuePlatformBillingNotification(client, {
     organizationId: subscription.organization_id,
@@ -1439,7 +1353,7 @@ async function updateSubscriptionProviderState(
   await client
     .from("organization_subscriptions")
     .update({
-      status: input.subscriptionStatus,
+      status: input.subscriptionStatus === "active" ? record.subscription.status : input.subscriptionStatus,
       provider_subscription_id: input.providerSubscription.id,
       payer_email: input.providerSubscription.payerEmail ?? record.subscription.payer_email,
       next_billing_at: input.providerSubscription.nextPaymentDate ?? record.subscription.next_billing_at,
@@ -1466,11 +1380,15 @@ async function updatePaymentProviderState(
     source: string;
   },
 ) {
-  const paymentStatus = mapPaymentStatus(input.providerStatus);
+  const mappedStatus = mapPaymentStatus(input.providerStatus);
+  const paymentStatus = record.payment?.status === "approved" && !["approved", "refunded"].includes(mappedStatus) ? "approved" : mappedStatus;
   const paidAt = isActivePaymentStatus(input.providerStatus)
     ? input.providerPayment.date_approved ?? new Date().toISOString()
     : null;
   const paymentId = input.providerPayment.id ? String(input.providerPayment.id) : null;
+  if (record.payment?.provider_payment_id && paymentId && record.payment.provider_payment_id !== paymentId) {
+    throw new Error("Evento de outra tentativa de pagamento: conciliação necessária antes de alterar a fatura.");
+  }
   const metadata = {
     billing_provider: input.provider,
     last_provider_sync_source: input.source,
@@ -1482,7 +1400,7 @@ async function updatePaymentProviderState(
     asaas_payment_id: input.provider === "asaas" ? paymentId : null,
   };
 
-  await Promise.all([
+  const updates = await Promise.all([
     record.payment
       ? client
           .from("billing_payments")
@@ -1491,7 +1409,7 @@ async function updatePaymentProviderState(
             provider: input.provider,
             provider_payment_id: paymentId ?? record.payment.provider_payment_id,
             provider_status: input.providerStatus,
-            paid_at: paidAt,
+            paid_at: paidAt ?? record.payment.paid_at,
             payload: {
               ...(record.payment.payload ?? {}),
               ...metadata,
@@ -1506,7 +1424,7 @@ async function updatePaymentProviderState(
           .update({
             status: mapInvoiceStatusFromPaymentStatus(paymentStatus),
             provider: input.provider,
-            paid_at: paidAt,
+            paid_at: paidAt ?? record.invoice.paid_at,
             provider_payment_id: paymentId ?? undefined,
             metadata: {
               ...(record.invoice.metadata ?? {}),
@@ -1517,6 +1435,8 @@ async function updatePaymentProviderState(
           .eq("organization_id", record.invoice.organization_id)
       : Promise.resolve({ error: null }),
   ]);
+  const failed = updates.find((result) => result.error);
+  if (failed?.error) throw new Error(failed.error.message);
 }
 
 async function loadBillingRecord(
@@ -1579,6 +1499,9 @@ async function loadBillingRecord(
     subscription = await loadSubscriptionById(client, invoice.subscription_id);
   }
 
+  if (payment && subscription && (payment.subscription_id!==subscription.id || payment.organization_id!==subscription.organization_id)) throw new Error("Referências financeiras divergentes.");
+  if (payment && invoice && (payment.invoice_id!==invoice.id || payment.organization_id!==invoice.organization_id)) throw new Error("Fatura não corresponde ao pagamento.");
+  if (input.parsedReference && payment && input.parsedReference.organizationId!==payment.organization_id) throw new Error("Titular financeiro divergente.");
   const plan = subscription ? await loadPlanByCode(client, subscription.plan_code) : null;
 
   return { subscription, payment, invoice, plan };
@@ -1743,7 +1666,9 @@ async function enqueuePlatformBillingNotification(
       metadata: input.metadata,
     }),
   ]);
-  const message = buildBillingMessage({
+  const message = input.metadata.purchase_kind === "product"
+    ? buildProductBillingMessage(input, recipient.profile?.full_name ?? "Olá")
+    : buildBillingMessage({
     eventType: input.eventType,
     customerName: recipient.profile?.full_name ?? recipient.organization?.name ?? null,
     planName: input.planName,
@@ -1994,6 +1919,9 @@ export async function processPendingPlatformBillingNotifications(
   client: SupabaseClient,
   input: { limit?: number } = {},
 ) {
+  const recovered = await client.rpc("recover_abandoned_billing_notices");
+  if (recovered.error) throw new Error("Não foi possível conferir os avisos interrompidos.");
+  if (Number(recovered.data)>0) await client.from("maintenance_audit_logs").insert({event_type:"billing.notice.delivery_uncertain",metadata:{count:recovered.data,action:"Verificar entrega no provedor antes de reenviar."}});
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
   const enqueuedPendingCheckouts = await enqueueMissingPendingCheckoutNotifications(client, {
     limit: Math.min(limit, 25),
@@ -2001,7 +1929,9 @@ export async function processPendingPlatformBillingNotifications(
   const { data, error } = await client
     .from("billing_notification_events")
     .select("id, selected_agent_id, recipient_phone, message_preview, attempts, metadata")
-    .eq("status", "pending")
+    .in("status", ["pending", "failed"])
+    .eq("delivery_uncertain", false)
+    .is("delivery_claimed_at", null)
     .lte("next_attempt_at", new Date().toISOString())
     .lt("attempts", 5)
     .order("next_attempt_at", { ascending: true })
@@ -2145,6 +2075,11 @@ async function sendBillingNotificationNow(
   },
 ) {
   const nextAttempts = Math.max(0, input.attempts ?? 0) + 1;
+  const { data: claimed, error: claimError } = await client.rpc("claim_billing_notice", { p_event: input.eventId });
+  if (claimError) throw new Error("Não foi possível reservar o aviso financeiro.");
+  if (!claimed) return;
+  let dispatched = false;
+
 
   try {
     const [credentials, instance, currentEvent] = await Promise.all([
@@ -2162,20 +2097,23 @@ async function sendBillingNotificationNow(
       eventType: currentEvent?.event_type ?? null,
       metadata: currentEvent?.metadata ?? null,
     });
+    dispatched = true;
     const sendResult = await sendBillingWhatsappNotice({
       credentials,
       token,
       phone: input.phone,
       message: input.message,
       button,
-      trackId: `billing_notice_${input.eventId}_${Date.now()}`,
+      pixCode: readString(currentEvent?.metadata?.pix_copy_code),
+      trackId: `billing_notice_${input.eventId}`,
     });
 
-    await Promise.all([
+    const saved = await Promise.all([
       client
         .from("billing_notification_events")
         .update({
           status: "sent",
+          delivery_claimed_at: null,
           attempts: nextAttempts,
           sent_at: new Date().toISOString(),
           provider_message_id: readProviderMessageId(sendResult.providerResponse.data),
@@ -2197,11 +2135,15 @@ async function sendBillingNotificationNow(
         .update({ last_message_at: new Date().toISOString() })
         .eq("id", instance.id),
     ]);
+    if (saved.some(result => result.error)) throw new Error("Aviso enviado; confirmação de registro em conferência.");
   } catch (error) {
     await client
       .from("billing_notification_events")
       .update({
         status: "failed",
+        delivery_claimed_at: null,
+        delivery_uncertain: dispatched && !(error instanceof BillingNoticeProviderError && error.definitive),
+        next_attempt_at: new Date(Date.now() + Math.min(3600000, 60000 * 2 ** nextAttempts)).toISOString(),
         attempts: nextAttempts,
         error_message: error instanceof Error ? error.message : "Falha ao enviar WhatsApp de billing.",
       })
@@ -2246,6 +2188,7 @@ async function sendBillingWhatsappNotice(input: {
   phone: string;
   message: string;
   button: BillingCheckoutActionButton | null;
+  pixCode?: string | null;
   trackId: string;
 }): Promise<BillingWhatsappNoticeResult> {
   if (input.button) {
@@ -2259,7 +2202,7 @@ async function sendBillingWhatsappNotice(input: {
           number: input.phone,
           type: "button",
           text: buttonMessage,
-          choices: [`${input.button.label}|${input.button.url}`],
+          choices: input.pixCode ? [`Copiar código Pix|copy:${input.pixCode}`] : [`${input.button.label}|${input.button.url}`],
           footerText: "ConnectyHub",
           readchat: true,
           readmessages: true,
@@ -2276,13 +2219,14 @@ async function sendBillingWhatsappNotice(input: {
         fallbackError: null,
       };
     } catch (error) {
+      if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
       const fallbackError = error instanceof Error ? error.message : "Falha ao enviar botao WhatsApp.";
       const providerResponse = await callUazapi(input.credentials, "/send/text", {
         method: "POST",
         token: input.token,
         body: {
           number: input.phone,
-          text: input.message,
+          text: input.pixCode ? `${input.message}\n\nPix copia e cola:\n${input.pixCode}` : input.message,
           linkPreview: false,
           track_source: "connectyhub",
           track_id: `${input.trackId}_fallback`,
@@ -2466,6 +2410,10 @@ async function loadBillingAgentWhatsappInstance(client: SupabaseClient, agentId:
   return data ?? null;
 }
 
+class BillingNoticeProviderError extends Error {
+  constructor(message: string, readonly definitive: boolean) { super(message); }
+}
+
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
@@ -2488,7 +2436,7 @@ async function callUazapi(
   const data = await readResponse(response);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
+    throw new BillingNoticeProviderError(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`, response.status >= 400 && response.status < 500);
   }
 
   return { ok: response.ok, status: response.status, data };
@@ -2720,7 +2668,7 @@ function mapPaymentStatus(providerStatus: string) {
   if (activePaymentStatuses.has(normalizedStatus)) return "approved";
   if (pendingPaymentStatuses.has(normalizedStatus)) return "pending";
   if (rejectedPaymentStatuses.has(normalizedStatus)) {
-    if (normalizedStatus === "refunded" || normalizedStatus === "charged_back" || normalizedStatus === "partially_refunded") return "refunded";
+    if (normalizedStatus === "refunded" || normalizedStatus === "charged_back") return "refunded";
     if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "expired" || normalizedStatus === "deleted" || normalizedStatus === "checkout_canceled" || normalizedStatus === "checkout_expired") return "canceled";
     return "rejected";
   }
@@ -3088,4 +3036,14 @@ export async function notifyNativeBillingOutcome(client: SupabaseClient, input: 
     eventType, dedupeKey: `billing:native:${input.attemptId}:${eventType}`, providerStatus: input.status, providerReference: input.attemptId,
     metadata: { source: "dashboard_native_card", checkout_url: `${getAppBaseUrl()}/dashboard/planos/checkout/${intent.subscription.id}` },
   });
+}
+
+function buildProductBillingMessage(input: {eventType:string;planName:string;amountBrl:number;metadata:JsonRecord}, name:string) {
+  const url = readString(input.metadata.checkout_public_url) ?? getAppBaseUrl()+"/dashboard/meus-produtos";
+  if (input.eventType === "payment_approved") return name+", o pagamento de "+input.planName+" foi confirmado. Sua compra está em "+getAppBaseUrl()+"/dashboard/meus-produtos. Esta compra não altera a mensalidade do plano.";
+  if (input.eventType === "payment_refunded") return "Registramos o reembolso de "+input.planName+". A equipe pode conferir os itens envolvidos com você.";
+  if (["payment_rejected","payment_cancelled","payment_canceled"].includes(input.eventType)) return "O pagamento de "+input.planName+" não foi confirmado. Confira no seu banco; podemos orientar outra forma de pagamento após verificar a tentativa. "+url;
+  if (input.eventType === "paid_plan_expired") return "O período de acesso de "+input.planName+" terminou. Para renovar este produto, acesse "+url+". Suas outras compras avulsas pagas continuam disponíveis.";
+  const terms = readCommercialTerms(input.metadata.commercial_terms);
+  return "Sua compra de "+input.planName+" ("+formatMoney(input.amountBrl)+") está aguardando pagamento. "+(terms.billingCycle === "one_time" ? "Pagamento único, sem renovação automática. " : "Renovação "+billingTermsLabel(terms).toLowerCase()+"; o Pix paga apenas este período. ")+url;
 }

@@ -1,3 +1,4 @@
+import { isBillingRecoveryPath } from "@/lib/billing/recovery-paths";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
@@ -124,7 +125,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (accountCompletion && !accountCompletion.isComplete) {
-      if (isProtectedApi && !incompleteSignupDashboardApiPaths.has(pathname)) {
+      if (isProtectedApi && !incompleteSignupDashboardApiPaths.has(pathname) && !isBillingRecoveryPath(pathname)) {
         return NextResponse.json(
           {
             error: "Complete seu cadastro para liberar o teste gratis.",
@@ -134,12 +135,24 @@ export async function updateSession(request: NextRequest) {
         );
       }
 
-      if (isProtected && !incompleteSignupDashboardPages.has(pathname)) {
+      if (isProtected && !incompleteSignupDashboardPages.has(pathname) && !isBillingRecoveryPath(pathname)) {
         const url = request.nextUrl.clone();
         url.pathname = "/dashboard/minha-conta";
         url.searchParams.set("complete", "1");
         url.searchParams.set("next", pathname);
         return NextResponse.redirect(url);
+      }
+    }
+  }
+
+  if (user && (pathname.startsWith("/dashboard") || isProtectedApi) && !isBillingRecoveryPath(pathname)) {
+    const profile = await getAccountCompletion();
+    if (!profile?.isPlatformAdmin && profile?.isComplete) {
+      const { data: access, error } = await supabase.rpc("my_workspace_contract_access");
+      if (error || !access) return NextResponse.json({ error: "Não foi possível verificar o contrato. Tente novamente." }, { status: 503 });
+      if (!access.allowed) {
+        if (isProtectedApi) return NextResponse.json({ error: "Regularize o plano para utilizar este recurso.", code: "billing_access_required", checkoutUrl: "/dashboard/planos" }, { status: 402 });
+        return NextResponse.redirect(new URL("/dashboard/planos?regularizar=1", request.url));
       }
     }
   }

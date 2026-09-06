@@ -54,7 +54,7 @@ export async function POST(
   context: { params: Promise<{ subscriptionId: string }> },
 ) {
   const { subscriptionId } = await context.params;
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace?.organization) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
@@ -72,13 +72,13 @@ export async function POST(
 
   const body = readRecord(await request.json().catch(() => null));
   const formData = readRecord(body.formData) ?? body;
-  const availableBumps = await loadBillingCheckoutBumps(client);
-  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,
   });
 
+  const availableBumps = await loadBillingCheckoutBumps(client, intent ?? undefined);
+  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   if (!intent) {
     return NextResponse.json({ error: "Checkout de plano nao encontrado." }, { status: 404 });
   }
@@ -720,7 +720,7 @@ function toNumber(value: number | string | null | undefined) {
 }
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ subscriptionId: string }> }) {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
   if (!workspace?.organization) return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
   const client = createServiceClient();
   try {
@@ -731,7 +731,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ su
       snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
     }
     const document = await loadAccountDocument({ userId: workspace.user.id, client });
-    return NextResponse.json({ amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, revision: snapshot.revision,
+    return NextResponse.json({ amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision,
       holder: billingHolder(snapshot.intent, { name: workspace.profile.fullName ?? workspace.organization.name, email: snapshot.intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" }),
       attempt: snapshot.attempt ? { id: snapshot.attempt.id, state: snapshot.attempt.state } : null, paid: snapshot.intent.payment.status === "approved",
     }, { headers: { "Cache-Control": "private, no-store" } });

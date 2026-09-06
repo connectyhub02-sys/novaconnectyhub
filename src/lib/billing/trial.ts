@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getContractAccess } from "./contract-access";
 
 export const TRIAL_PLAN_CODE = "trial";
 export const TRIAL_DAYS = 7;
@@ -174,17 +175,19 @@ export async function getOrganizationBillingAccess(input: {
 }): Promise<BillingAccessStatus> {
   const client = input.client ?? createServiceClient();
   const now = input.now ?? new Date();
+  const contract = await getContractAccess(input.organizationId, client, now);
+  const billingOrganizationId = contract.billing_organization_id ?? input.organizationId;
 
   const [{ data: organization, error: organizationError }, { data: wallet, error: walletError }] = await Promise.all([
     client
       .from("organizations")
       .select("id, plan_code, status, created_at")
-      .eq("id", input.organizationId)
+      .eq("id", billingOrganizationId)
       .maybeSingle<OrganizationBillingRow>(),
     client
       .from("credit_wallets")
       .select("balance_credits, lifetime_used_credits")
-      .eq("organization_id", input.organizationId)
+      .eq("organization_id", billingOrganizationId)
       .maybeSingle<WalletBillingRow>(),
   ]);
 
@@ -200,10 +203,17 @@ export async function getOrganizationBillingAccess(input: {
     return buildInactiveStatus(input.organizationId);
   }
 
-  const cycles = await loadBillingCycles(client, input.organizationId);
+  const cycles = await loadBillingCycles(client, billingOrganizationId);
   const planCode = organization.plan_code;
-  const organizationStatus = organization.status;
+  const organizationStatus = contract.allowed && organization.status === "past_due" ? "active" : organization.status;
   const balanceCredits = toNumber(wallet?.balance_credits);
+
+  if (!contract.allowed) {
+    const state = contract.reason === "trial_expired" ? "trial_expired" : contract.reason === "paid_expired" || contract.reason === "contract_missing" ? "paid_expired" : "inactive";
+    return { ...buildInactiveStatus(input.organizationId), planCode, organizationStatus, state, balanceCredits,
+      bannerTitle: "Serviços suspensos", bannerDescription: "Regularize seu plano para retomar os serviços. Seus produtos avulsos já pagos continuam disponíveis em Meus produtos.",
+      ctaLabel: "Regularizar plano", ctaHref: "/dashboard/planos" };
+  }
 
   if (planCode === "internal") {
     return {

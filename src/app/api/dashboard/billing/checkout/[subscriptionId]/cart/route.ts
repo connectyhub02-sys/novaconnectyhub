@@ -26,7 +26,7 @@ export async function POST(
   context: { params: Promise<{ subscriptionId: string }> },
 ) {
   const { subscriptionId } = await context.params;
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace?.organization) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
@@ -43,13 +43,13 @@ export async function POST(
   }
 
   const body = readRecord(await request.json().catch(() => null));
-  const availableBumps = await loadBillingCheckoutBumps(client);
-  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,
   });
 
+  const availableBumps = await loadBillingCheckoutBumps(client, intent ?? undefined);
+  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   if (!intent) {
     return NextResponse.json({ error: "Checkout de plano nao encontrado." }, { status: 404 });
   }

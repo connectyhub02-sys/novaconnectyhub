@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
+import { billingPeriodEnd, readCommercialTerms, snapshotPlanCommercialTerms } from "@/lib/billing/commercial-terms";
 import {
   assertAccountComplete,
   formatAccountCompletionError,
@@ -31,6 +32,9 @@ type BillingPlanIntentRow = {
   plan_code: string;
   name: string;
   monthly_price_brl: number | string | null;
+  billing_cycle: string;
+  billing_interval: string;
+  access_duration_days: number | null;
   included_credits: number | string | null;
   mercado_pago_preapproval_plan_id: string | null;
 };
@@ -54,7 +58,7 @@ type PlatformBillingProviderRow = {
 };
 
 export async function POST(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
@@ -81,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     const { data: plan, error: planError } = await client
       .from("billing_plans")
-      .select("id, plan_code, name, monthly_price_brl, included_credits, mercado_pago_preapproval_plan_id")
+      .select("id, plan_code, name, monthly_price_brl, billing_cycle, billing_interval, access_duration_days, included_credits, mercado_pago_preapproval_plan_id")
       .eq("plan_code", planCode)
       .eq("status", "active")
       .maybeSingle<BillingPlanIntentRow>();
@@ -205,6 +209,7 @@ export async function POST(request: NextRequest) {
     const checkoutPath = buildDashboardBillingCheckoutPath(subscriptionId);
     const checkoutUrl = buildDashboardBillingCheckoutUrl(subscriptionId);
     const intentMetadata = {
+      commercial_terms: snapshotPlanCommercialTerms(plan),
       source: "dashboard_plan_intent",
       checkout_model: "connectyhub_plan_checkout",
       checkout_kind: "initial",
@@ -402,6 +407,7 @@ async function loadBlockingSubscription(client: ReturnType<typeof createServiceC
     .from("organization_subscriptions")
     .select("id, plan_id, plan_code, status, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, metadata, created_at")
     .eq("organization_id", organizationId)
+    .eq("subscription_kind", "plan")
     .in("status", ["pending", "active", "past_due", "incomplete"])
     .order("created_at", { ascending: false })
     .limit(1)
@@ -430,7 +436,7 @@ async function loadPlatformBillingProvider(client: ReturnType<typeof createServi
     .maybeSingle<PlatformBillingProviderRow>();
 
   if (error) {
-    return "asaas";
+    throw new Error("Não foi possível conferir o recebimento da ConnectyHub. Tente novamente.");
   }
 
   if (data?.recurring_provider === "mercado_pago" || data?.recurring_provider === "pagbank" || data?.recurring_provider === "asaas") {
@@ -462,6 +468,7 @@ async function createCheckoutForExistingSubscription(
     && isBillingCheckoutPayable(existingIntent)
     && existingIntent.targetPlanCode === input.plan.plan_code
     && existingIntent.checkoutKind === input.checkoutKind
+    && (input.checkoutKind !== "renewal" || existingIntent.payment.payload?.previous_current_period_end === input.subscription.current_period_end)
   ) {
     const checkoutPath = buildDashboardBillingCheckoutPath(input.subscription.id);
     const checkoutUrl = buildDashboardBillingCheckoutUrl(input.subscription.id);
@@ -500,7 +507,9 @@ async function createCheckoutForExistingSubscription(
   }
 
   const now = new Date();
-  const amountBrl = toNumber(input.plan.monthly_price_brl);
+  const termsSnapshot = input.checkoutKind === "renewal" && input.subscription.metadata?.commercial_terms
+    ? readRecord(input.subscription.metadata.commercial_terms) : snapshotPlanCommercialTerms(input.plan);
+  const amountBrl = toNumber(termsSnapshot.price_brl as number | undefined ?? input.plan.monthly_price_brl);
   const invoiceId = randomUUID();
   const paymentId = randomUUID();
   const externalReference = buildPlatformBillingExternalReference({
@@ -515,12 +524,13 @@ async function createCheckoutForExistingSubscription(
   const cycleStart = input.checkoutKind === "renewal" && currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime()
     ? currentPeriodEnd
     : now;
-  const cycleEnd = addMonths(cycleStart, 1);
+  const cycleEnd = billingPeriodEnd(cycleStart, readCommercialTerms(termsSnapshot));
   const dueAt = input.checkoutKind === "renewal" && currentPeriodEnd && currentPeriodEnd.getTime() > now.getTime()
     ? currentPeriodEnd
     : new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const intentMetadata = {
     ...(input.subscription.metadata ?? {}),
+    commercial_terms: termsSnapshot,
     source: `dashboard_plan_${input.checkoutKind}`,
     checkout_model: "connectyhub_plan_checkout",
     checkout_kind: input.checkoutKind,
@@ -548,7 +558,7 @@ async function createCheckoutForExistingSubscription(
     .update({
       billing_provider: input.provider,
       payer_email: input.subscription.payer_email ?? input.payerEmail,
-      metadata: intentMetadata,
+      metadata: { ...(input.subscription.metadata ?? {}), pending_checkout_payment_id: paymentId, pending_checkout_invoice_id: invoiceId },
     })
     .eq("id", input.subscription.id)
     .eq("organization_id", input.organizationId);

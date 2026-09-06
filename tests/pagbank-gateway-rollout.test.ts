@@ -267,7 +267,7 @@ describe("PagBank gateway rollout", () => {
     expect(platformProductsConsoleSource).toContain("Modelo de cobranca");
     expect(platformProductsConsoleSource).toContain("Pagamento unico");
     expect(platformProductsConsoleSource).toContain("Recorrente");
-    expect(planCheckoutSource).toContain("billingCycle === \"one_time\"");
+    expect(planCheckoutSource).toContain("billingBumpInterval");
   });
 
   it("keeps client product billing model and agent payment policy explicit", () => {
@@ -420,11 +420,8 @@ describe("PagBank gateway rollout", () => {
 
   it("applies the target plan and grants credits per paid invoice", () => {
     expect(platformBillingWebhookSource).toContain("const targetPlanCode = normalizePlanCode(checkoutMetadata.target_plan_code)");
-    expect(platformBillingWebhookSource).toContain("const previousCreditTransactionId = readString(paymentPayload?.credit_transaction_id)");
+    expect(platformBillingWebhookSource).toContain("fulfill_confirmed_billing_payment");
     expect(platformBillingWebhookSource).toContain("p_plan_code: activatedPlanCode");
-    expect(platformBillingWebhookSource).toContain("plan_id: plan.id");
-    expect(platformBillingWebhookSource).toContain("plan_code: activatedPlanCode");
-    expect(platformBillingWebhookSource).toContain("included_credits_granted: includedCredits");
   });
 
   it("does not treat active subscriptions as confirmed while a renewal payment is pending", () => {

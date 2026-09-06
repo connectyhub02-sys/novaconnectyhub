@@ -130,7 +130,7 @@ type BillingCycleRow = {
 };
 
 export async function GET() {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
@@ -144,6 +144,8 @@ export async function GET() {
 
   try {
     const client = createServiceClient();
+    const accountAccess = await getOrganizationBillingAccess({ organizationId: organization.id, client });
+    const operational = !["paid_expired", "trial_expired", "inactive"].includes(accountAccess.state);
     const usageSummarySince = new Date();
     usageSummarySince.setDate(usageSummarySince.getDate() - 30);
     const [
@@ -158,7 +160,7 @@ export async function GET() {
       cyclesResult,
     ] = await Promise.all([
       getAccountCompletionStatusForUser({ userId: workspace.user.id, client }),
-      getOrganizationBillingAccess({ organizationId: organization.id, client }),
+      Promise.resolve(accountAccess),
       client
         .from("credit_wallets")
         .select("balance_credits, reserved_credits, lifetime_purchased_credits, lifetime_used_credits, status, updated_at")
@@ -167,6 +169,7 @@ export async function GET() {
       client
         .from("organization_subscriptions")
         .select("id, plan_code, status, billing_provider, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, canceled_at, created_at, updated_at, billing_plans(name, monthly_price_brl, included_credits)")
+        .eq("subscription_kind", "plan")
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
         .limit(8)
@@ -188,6 +191,7 @@ export async function GET() {
       client
         .from("usage_events")
         .select("id, feature_code, input_units, output_units, connecty_charge_credits, occurred_at, created_at")
+        .eq("organization_id", operational ? organization.id : "00000000-0000-0000-0000-000000000000")
         .eq("organization_id", organization.id)
         .eq("status", "completed")
         .order("occurred_at", { ascending: false })
@@ -297,7 +301,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });

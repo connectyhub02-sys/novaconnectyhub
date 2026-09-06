@@ -1,4 +1,5 @@
 import "server-only";
+import { billingLocalDate, billingPeriodEnd, isBillingDeadlineReached, readCommercialTerms } from "./commercial-terms";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,6 +42,7 @@ type PlanRelation = {
 
 type SubscriptionRow = {
   id: string;
+  subscription_kind: "plan" | "product";
   organization_id: string;
   plan_id: string | null;
   plan_code: string;
@@ -111,7 +113,6 @@ type PaidLifecycleSummary = {
   warnings: string[];
 };
 
-const PAID_PLAN_CODES = ["starter", "pro", "scale"];
 const DAY_MS = 86_400_000;
 
 export async function processPaidBillingLifecycleNotifications(
@@ -143,10 +144,7 @@ export async function processPaidBillingLifecycleNotifications(
     loadWallets(client, organizationIds),
     loadOpenCycles(client, subscriptionIds),
     loadLatestPayments(client, subscriptionIds),
-    loadRenewalPolicy(client).catch((error) => {
-      summary.warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar a regua de renovacao.");
-      return normalizePlatformBillingRenewalPolicy(null);
-    }),
+    loadRenewalPolicy(client),
   ]);
   const walletByOrganizationId = new Map(wallets.map((wallet) => [wallet.organization_id, wallet]));
   const paymentBySubscriptionId = buildLatestPaymentMap(payments);
@@ -161,6 +159,14 @@ export async function processPaidBillingLifecycleNotifications(
         renewalPolicy,
         now,
       });
+      const terms = readCommercialTerms(subscription.metadata?.commercial_terms);
+      if (subscription.subscription_kind === "product" && (terms.billingCycle === "one_time" || subscription.status === "canceled")) continue;
+      if (terms.billingCycle === "one_time" || subscription.status === "canceled") {
+        if (isBillingDeadlineReached(context.periodEnd, 0, now)) {
+          if (await markSubscriptionPastDue(client, { subscription, now, periodEnd: context.periodEnd })) summary.expiredPlans++;
+        }
+        continue; // End a paid access period without generating an uncontracted renewal/debt notice.
+      }
       const cardAttempt = await maybeAttemptPagBankCardRenewal(client, context, renewalPolicy, now).catch((error) => {
         summary.warnings.push(error instanceof Error ? error.message : "Falha na tentativa automatica de cartao.");
         return { attempted: false, approved: false, failed: true };
@@ -185,6 +191,7 @@ export async function processPaidBillingLifecycleNotifications(
             periodEnd: context.periodEnd,
           });
 
+          if (!expired) continue;
           if (expired) {
             summary.expiredPlans += 1;
             }
@@ -240,80 +247,36 @@ export async function processPaidBillingLifecycleNotifications(
   return summary;
 }
 
-async function loadPaidSubscriptions(client: SupabaseClient, limit: number) {
-  const { data, error } = await client
-    .from("organization_subscriptions")
-    .select("id, organization_id, plan_id, plan_code, status, billing_provider, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, included_credits_granted, metadata, billing_plans(name, monthly_price_brl, included_credits)")
-    .in("plan_code", PAID_PLAN_CODES)
-    .in("status", ["active", "past_due"])
-    .order("current_period_end", { ascending: true, nullsFirst: false })
-    .limit(limit)
-    .returns<SubscriptionRow[]>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar assinaturas pagas: ${error.message}`);
+async function loadPaidSubscriptions(client: SupabaseClient, pageSize: number) {
+  const rows: SubscriptionRow[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client.from("organization_subscriptions")
+      .select("id, subscription_kind, organization_id, plan_id, plan_code, status, billing_provider, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, included_credits_granted, metadata, billing_plans(name, monthly_price_brl, included_credits)")
+      .not("plan_code", "in", "(trial,internal)").in("status", ["active", "past_due", "canceled"])
+      .order("id", { ascending: true }).range(offset, offset + pageSize - 1).returns<SubscriptionRow[]>();
+    if (error) throw new Error("Não foi possível carregar todos os contratos: " + error.message);
+    rows.push(...(data ?? []));
+    if ((data?.length ?? 0) < pageSize) return rows;
   }
-
-  return data ?? [];
 }
 
-async function loadWallets(client: SupabaseClient, organizationIds: string[]) {
-  if (organizationIds.length === 0) {
-    return [];
+async function readFinancialRows<T>(client:SupabaseClient,table:string,columns:string,key:string,ids:string[]) {
+  const rows:T[]=[];
+  for(let start=0;start<ids.length;start+=100) for(let offset=0;;offset+=500) {
+    const result=await client.from(table).select(columns).in(key,ids.slice(start,start+100)).order("id").range(offset,offset+499);
+    if(result.error) throw new Error("Não foi possível consultar "+table+": "+result.error.message);
+    rows.push(...(result.data??[]) as T[]); if((result.data?.length??0)<500) break;
   }
-
-  const { data, error } = await client
-    .from("credit_wallets")
-    .select("organization_id, balance_credits, lifetime_used_credits")
-    .in("organization_id", organizationIds)
-    .returns<WalletRow[]>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar carteiras de creditos: ${error.message}`);
-  }
-
-  return data ?? [];
+  return rows;
 }
-
-async function loadOpenCycles(client: SupabaseClient, subscriptionIds: string[]) {
-  if (subscriptionIds.length === 0) {
-    return [];
-  }
-
-  const { data, error } = await client
-    .from("billing_cycles")
-    .select("id, organization_id, subscription_id, cycle_start, cycle_end, included_credits, used_credits, status")
-    .in("subscription_id", subscriptionIds)
-    .eq("status", "open")
-    .order("cycle_end", { ascending: false })
-    .limit(subscriptionIds.length * 3)
-    .returns<CycleRow[]>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar ciclos pagos: ${error.message}`);
-  }
-
-  return data ?? [];
+async function loadWallets(client:SupabaseClient,ids:string[]) {
+  return readFinancialRows<WalletRow>(client,"credit_wallets","organization_id,balance_credits,lifetime_used_credits","organization_id",ids);
 }
-
-async function loadLatestPayments(client: SupabaseClient, subscriptionIds: string[]) {
-  if (subscriptionIds.length === 0) {
-    return [];
-  }
-
-  const { data, error } = await client
-    .from("billing_payments")
-    .select("id, invoice_id, subscription_id, provider, provider_status, status, payload, created_at, paid_at")
-    .in("subscription_id", subscriptionIds)
-    .order("created_at", { ascending: false })
-    .limit(subscriptionIds.length * 4)
-    .returns<PaymentRow[]>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar pagamentos recentes: ${error.message}`);
-  }
-
-  return data ?? [];
+async function loadOpenCycles(client:SupabaseClient,ids:string[]) {
+  return (await readFinancialRows<CycleRow>(client,"billing_cycles","id,organization_id,subscription_id,cycle_start,cycle_end,included_credits,used_credits,status","subscription_id",ids)).filter(c=>c.status==="open").sort((a,b)=>b.cycle_end.localeCompare(a.cycle_end));
+}
+async function loadLatestPayments(client:SupabaseClient,ids:string[]) {
+  return (await readFinancialRows<PaymentRow>(client,"billing_payments","id,invoice_id,subscription_id,provider,provider_status,status,payload,created_at,paid_at","subscription_id",ids)).sort((a,b)=>(b.created_at??"").localeCompare(a.created_at??""));
 }
 
 async function loadRenewalPolicy(client: SupabaseClient) {
@@ -370,7 +333,7 @@ function buildNotificationContext(input: {
     latestPayment: input.latestPayment,
     renewalPolicy: input.renewalPolicy,
     planName: plan?.name?.trim() || input.subscription.plan_code,
-    amountBrl: toNumber(plan?.monthly_price_brl),
+    amountBrl: toNumber(Number((input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.price_brl ?? plan?.monthly_price_brl)) + (Array.isArray(input.subscription.metadata?.selected_bumps) ? (input.subscription.metadata.selected_bumps as JsonRecord[]).filter(b=>b.recurrence!=="one_time").reduce((n,b)=>n+Number(b.price_brl??0),0):0),
   };
 }
 
@@ -391,19 +354,10 @@ function pickDeadlineEvent(
   const today = dateOnly(now) ?? "hoje";
 
   if (diff <= 0) {
-    const daysPastDue = Math.max(Math.floor(Math.abs(diff) / DAY_MS), 0);
-
-    if (daysPastDue <= 0) {
-      return { eventType: "paid_plan_due_today", dedupeSuffix: `${periodDate}:${today}` };
+    if (isBillingDeadlineReached(periodEnd, context.subscription.subscription_kind === "product" ? 0 : Math.max(policy.suspendAfterDays, policy.gracePeriodDays), now)) {
+      return { eventType: "paid_plan_expired", dedupeSuffix: periodDate + ":expired" };
     }
-
-    const suspendAfterDays = Math.max(policy.suspendAfterDays, policy.gracePeriodDays);
-
-    if (suspendAfterDays > 0 && daysPastDue <= suspendAfterDays) {
-      return { eventType: "paid_plan_grace_period", dedupeSuffix: `${periodDate}:d${daysPastDue}:${today}` };
-    }
-
-    return { eventType: "paid_plan_expired", dedupeSuffix: `${periodDate}:expired` };
+    return { eventType: today === periodDate ? "paid_plan_due_today" : "paid_plan_grace_period", dedupeSuffix: periodDate + ":" + today };
   }
 
   const daysRemaining = Math.ceil(diff / DAY_MS);
@@ -427,7 +381,7 @@ function pickDeadlineEvent(
           ? "paid_plan_one_day_remaining"
           : "paid_plan_three_days_remaining",
       dedupeSuffix: policy.dailyWhatsAppReminders
-        ? `${periodDate}:d${daysRemaining}:${today}`
+        ? `${periodDate}:${today}`
         : periodDate,
     };
   }
@@ -436,7 +390,7 @@ function pickDeadlineEvent(
 }
 
 function pickCreditThresholdEvent(context: ReturnType<typeof buildNotificationContext>) {
-  if (context.includedCredits <= 0 || context.subscription.status !== "active") {
+  if (context.subscription.subscription_kind === "product" || context.includedCredits <= 0 || context.subscription.status !== "active") {
     return null;
   }
 
@@ -467,6 +421,13 @@ async function ensureLifecycleRenewalCheckout(
     return null;
   }
 
+  if (context.subscription.billing_provider === "asaas" && context.subscription.provider_subscription_id?.startsWith("sub_")) {
+    const { ensureAsaasRecurringInvoice } = await import("./native-card-checkout");
+    if (!context.periodEnd || !await ensureAsaasRecurringInvoice(client,context.subscription.id,context.subscription.provider_subscription_id,context.periodEnd.toISOString())) return null;
+    const linked=await loadBillingCheckoutIntent(client,{organizationId:context.subscription.organization_id,subscriptionId:context.subscription.id});
+    if(!linked||!isBillingCheckoutPayable(linked)) return null;
+    return {invoiceId:linked.invoice.id,paymentId:linked.payment.id,checkoutPath:buildDashboardBillingCheckoutPath(context.subscription.id),checkoutUrl:buildDashboardBillingCheckoutUrl(context.subscription.id),checkoutKind:"renewal",targetPlanCode:linked.targetPlanCode,reused:true};
+  }
   const existingIntent = await loadBillingCheckoutIntent(client, {
     organizationId: context.subscription.organization_id,
     subscriptionId: context.subscription.id,
@@ -474,7 +435,10 @@ async function ensureLifecycleRenewalCheckout(
   const checkoutPath = buildDashboardBillingCheckoutPath(context.subscription.id);
   const checkoutUrl = buildDashboardBillingCheckoutUrl(context.subscription.id);
 
-  if (existingIntent && isBillingCheckoutPayable(existingIntent)) {
+  if (existingIntent && isBillingCheckoutPayable(existingIntent)
+    && existingIntent.checkoutKind === "renewal"
+    && existingIntent.payment.payload?.previous_current_period_end === context.periodEnd?.toISOString()
+    && Number(existingIntent.payment.amount_brl) === context.amountBrl) {
     return {
       invoiceId: existingIntent.invoice.id,
       paymentId: existingIntent.payment.id,
@@ -498,13 +462,16 @@ async function ensureLifecycleRenewalCheckout(
   const provider = normalizeLifecycleBillingProvider(context.subscription.billing_provider ?? context.latestPayment?.provider);
   const periodEnd = context.periodEnd;
   const cycleStart = periodEnd && periodEnd.getTime() > now.getTime() ? periodEnd : now;
-  const cycleEnd = addMonths(cycleStart, 1);
+  const cycleEnd = billingPeriodEnd(cycleStart, readCommercialTerms(context.subscription.metadata?.commercial_terms));
   const dueAt = periodEnd && periodEnd.getTime() > now.getTime()
     ? periodEnd
     : new Date(now.getTime() + DAY_MS);
   const metadata = {
     ...(context.subscription.metadata ?? {}),
     source: "paid_lifecycle_renewal_checkout",
+    purchase_kind: context.subscription.subscription_kind,
+    platform_product_id: context.subscription.metadata?.purchase_product_id ?? null,
+    recurrence: "recurring",
     checkout_model: "connectyhub_plan_checkout",
     checkout_kind: "renewal",
     requested_plan_code: context.subscription.plan_code,
@@ -529,91 +496,9 @@ async function ensureLifecycleRenewalCheckout(
     billing_payment_method: paymentMethod,
   };
 
-  const invoiceInsert = await client
-    .from("billing_invoices")
-    .insert({
-      id: invoiceId,
-      organization_id: context.subscription.organization_id,
-      subscription_id: context.subscription.id,
-      status: "open",
-      currency: "BRL",
-      subtotal_brl: context.amountBrl,
-      discount_brl: 0,
-      total_brl: context.amountBrl,
-      due_at: dueAt.toISOString(),
-      provider,
-      metadata,
-    });
-
-  if (invoiceInsert.error) {
-    throw new Error(`Nao foi possivel criar fatura de renovacao: ${invoiceInsert.error.message}`);
-  }
-
-  const itemInsert = await client.from("billing_invoice_items").insert({
-    invoice_id: invoiceId,
-    organization_id: context.subscription.organization_id,
-    item_type: "plan",
-    description: `Renovacao Plano ${context.planName}`,
-    quantity: 1,
-    unit_price_brl: context.amountBrl,
-    total_brl: context.amountBrl,
-    credit_amount: context.includedCredits,
-    metadata,
-  });
-
-  if (itemInsert.error) {
-    throw new Error(`Fatura de renovacao criada, mas o item do plano falhou: ${itemInsert.error.message}`);
-  }
-
-  const paymentInsert = await client
-    .from("billing_payments")
-    .insert({
-      id: paymentId,
-      organization_id: context.subscription.organization_id,
-      invoice_id: invoiceId,
-      subscription_id: context.subscription.id,
-      provider,
-      status: "pending",
-      amount_brl: context.amountBrl,
-      payload: metadata,
-    });
-
-  if (paymentInsert.error) {
-    throw new Error(`Nao foi possivel criar pagamento de renovacao: ${paymentInsert.error.message}`);
-  }
-
-  const subscriptionUpdate = await client
-    .from("organization_subscriptions")
-    .update({
-      billing_provider: provider,
-      metadata,
-    })
-    .eq("id", context.subscription.id)
-    .eq("organization_id", context.subscription.organization_id);
-
-  if (subscriptionUpdate.error) {
-    throw new Error(`Nao foi possivel vincular checkout de renovacao a assinatura: ${subscriptionUpdate.error.message}`);
-  }
-
-  await client.from("maintenance_audit_logs").insert({
-    event_type: "billing.plan_checkout.renewal.lifecycle_created",
-    target_table: "billing_payments",
-    target_id: paymentId,
-    metadata: {
-      ...metadata,
-      amount_brl: context.amountBrl,
-    },
-  });
-
-  return {
-    invoiceId,
-    paymentId,
-    checkoutPath,
-    checkoutUrl,
-    checkoutKind: "renewal",
-    targetPlanCode: context.subscription.plan_code,
-    reused: false,
-  };
+  const prepared = await client.rpc("prepare_contract_renewal", {p_subscription:context.subscription.id,p_expected_end:periodEnd?.toISOString(),p_start:cycleStart.toISOString(),p_end:cycleEnd.toISOString(),p_provider:provider,p_metadata:metadata});
+  if (prepared.error) throw new Error("Não foi possível preparar a renovação: "+prepared.error.message);
+  return {invoiceId:prepared.data.invoice_id,paymentId:prepared.data.payment_id,checkoutPath,checkoutUrl,checkoutKind:"renewal",targetPlanCode:context.subscription.plan_code,reused:prepared.data.reused};
 }
 
 async function maybeAttemptPagBankCardRenewal(
@@ -882,6 +767,8 @@ async function sendLifecycleNotification(
     providerReference: context.subscription.provider_subscription_id,
     metadata: {
       source: input.source,
+      purchase_kind: context.subscription.subscription_kind,
+      commercial_terms: context.subscription.metadata?.commercial_terms,
       billing_provider: context.subscription.billing_provider,
       current_period_start: context.subscription.current_period_start,
       current_period_end: periodEnd,
@@ -1065,65 +952,18 @@ function formatPaymentMethod(value: string) {
   return "Pagamento";
 }
 
-async function markSubscriptionPastDue(
-  client: SupabaseClient,
-  input: {
-    subscription: SubscriptionRow;
-    now: Date;
-    periodEnd: Date | null;
-  },
-) {
-  if (input.subscription.status === "past_due") {
-    return false;
+async function markSubscriptionPastDue(client: SupabaseClient, input: { subscription: SubscriptionRow; now: Date; periodEnd: Date | null }) {
+  if (input.subscription.subscription_kind === "product") {
+    if (!input.periodEnd || input.now < input.periodEnd) return false;
+    const changed = await client.from("organization_subscriptions").update({status:"past_due",updated_at:input.now.toISOString()}).eq("id",input.subscription.id).eq("current_period_end",input.subscription.current_period_end).select("id");
+    if (changed.error) throw new Error("Não foi possível atualizar o período do produto.");
+    return Boolean(changed.data?.length);
   }
-
-  const metadata = {
-    ...(input.subscription.metadata ?? {}),
-    past_due_source: "paid_lifecycle_sweep",
-    past_due_at: input.now.toISOString(),
-    period_ended_at: input.periodEnd?.toISOString() ?? null,
-  };
-
-  const [subscriptionUpdate, organizationUpdate, cycleUpdate] = await Promise.all([
-    client
-      .from("organization_subscriptions")
-      .update({
-        status: "past_due",
-        metadata,
-      })
-      .eq("id", input.subscription.id)
-      .eq("organization_id", input.subscription.organization_id)
-      .eq("status", "active"),
-    client
-      .from("organizations")
-      .update({ status: "past_due" })
-      .eq("id", input.subscription.organization_id)
-      .eq("plan_code", input.subscription.plan_code)
-      .eq("status", "active"),
-    input.periodEnd
-      ? client
-          .from("billing_cycles")
-          .update({
-            status: "closed",
-            metadata: {
-              source: "paid_lifecycle_sweep",
-              closed_at: input.now.toISOString(),
-              reason: "paid_period_expired",
-            },
-          })
-          .eq("subscription_id", input.subscription.id)
-          .eq("status", "open")
-          .lte("cycle_end", input.now.toISOString())
-      : Promise.resolve({ error: null }),
-  ]);
-
-  const error = subscriptionUpdate.error ?? organizationUpdate.error ?? cycleUpdate.error;
-
-  if (error) {
-    throw new Error(`Nao foi possivel marcar plano como vencido: ${error.message}`);
-  }
-
-  return true;
+  const { data, error } = await client.rpc("suspend_expired_platform_contract", {
+    p_subscription: input.subscription.id, p_expected_end: input.periodEnd?.toISOString() ?? null, p_now: input.now.toISOString(),
+  });
+  if (error) throw new Error("Não foi possível reconciliar a suspensão: " + error.message);
+  return data === true;
 }
 
 function findCurrentCycle(cycles: CycleRow[], subscription: SubscriptionRow, now: Date) {
@@ -1183,7 +1023,7 @@ function normalizeLifecyclePaymentStatus(value: string) {
 }
 
 function dateOnly(value: Date | null) {
-  return value?.toISOString().slice(0, 10) ?? null;
+  return value ? billingLocalDate(value) : null;
 }
 
 function toNumber(value: number | string | null | undefined) {

@@ -1,4 +1,8 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { assertContractAccess } from "@/lib/billing/contract-access";
+const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient }>();
+import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
 import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-catalog/checkout-customer";
 import { paymentEvidenceIntent, selectPaymentEvidenceOrder } from "@/lib/sales-catalog/payment-evidence";
 import { deliverPaymentReviewNotification, getLeadPaymentReviews, loadOrderFinancialSummary, refreshLeadOrderFinance } from "@/lib/sales-catalog/payment-reviews";
@@ -512,7 +516,15 @@ async function expireZombieRuns(client: SupabaseClient) {
   };
 }
 
-export async function processWhatsappAgentRun(input: {
+export async function processWhatsappAgentRun(input: { runId: string; client?: SupabaseClient }) {
+  const client = input.client ?? createServiceClient();
+  const scope = await client.from("agent_runs").select("organization_id").eq("id", input.runId).maybeSingle();
+  if (scope.error) throw new Error("Não foi possível conferir a execução do agente.");
+  if (!scope.data?.organization_id) return { status: "missing_run" };
+  return outboundBillingScope.run({ organizationId: scope.data.organization_id, client }, () => processWhatsappAgentRunWithScope({ ...input, client }));
+}
+
+async function processWhatsappAgentRunWithScope(input: {
   runId: string;
   client?: SupabaseClient;
 }) {
@@ -1156,6 +1168,12 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
           conversationId,
         }),
       ]);
+
+  if (isPlatformWhatsapp && leadId) {
+    const financial = await loadPlatformCustomerContext(client, leadId).catch(() => "O financeiro está temporariamente indisponível. Não confirme recebimento, não afirme recusa nem reenvie nova cobrança incerta. Oriente a consultar o painel ou solicite conferência humana.");
+    knowledge.unshift({ id: "platform-financial-live", title: "CONTA DO CLIENTE — CONSULTA FINANCEIRA ATUAL", content: financial,
+      metadata: { extracted_text: true, platform_financial_live: true }, created_at: new Date().toISOString() });
+  }
 
   const behavior = normalizeWhatsappBehaviorConfig(
     instanceMetadata?.behavior_config ??
@@ -5645,7 +5663,8 @@ function buildKnowledgeLines(knowledge: KnowledgeMemoryRow[]) {
       const metadata = readRecord(item.metadata);
       const extracted = metadata?.extracted_text === true;
       const content = item.content.replace(/\s+/g, " ").trim();
-      const previewText = content.length > 900 ? `${content.slice(0, 900)}...` : content;
+      const limit = metadata?.platform_financial_live === true ? 16000 : 900;
+      const previewText = content.length > limit ? `${content.slice(0, limit)}...` : content;
 
       return `- ${item.title}${extracted ? "" : " (arquivo anexado)"}: ${previewText}`;
     }),
@@ -15863,6 +15882,8 @@ async function callUazapi(
     timeoutMs?: number;
   },
 ) {
+  const scope = outboundBillingScope.getStore();
+  if (scope) await assertContractAccess(scope.organizationId, scope.client);
   const fetchInit = {
     method: options.method,
     headers: {

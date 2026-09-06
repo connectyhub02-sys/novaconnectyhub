@@ -1,3 +1,6 @@
+import { billingTermsLabel } from "@/lib/billing/commercial-terms";
+import { readCheckoutCommercialTerms } from "@/lib/billing/plan-checkout";
+import { recordPlatformCustomerEvent } from "@/lib/billing/customer-journey";
 import type { Metadata } from "next";
 import Script from "next/script";
 import Link from "next/link";
@@ -36,7 +39,7 @@ export default async function DashboardBillingCheckoutPage({
 }) {
   await connection();
   const { subscriptionId } = await params;
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     redirect(`/login?next=${encodeURIComponent(`/dashboard/planos/checkout/${subscriptionId}`)}`);
@@ -64,7 +67,8 @@ export default async function DashboardBillingCheckoutPage({
     organizationId: organization.id,
     subscriptionId,
   });
-  const availableBumps = await loadBillingCheckoutBumps(client);
+  if (intent) await recordPlatformCustomerEvent(client, { userId: workspace.user.id, eventType: "checkout_viewed", sourceId: intent.payment.id, payload: { subscription_id: intent.subscription.id, product_id: intent.payment.payload?.purchase_product_id ?? null } });
+  const availableBumps = await loadBillingCheckoutBumps(client, intent ?? undefined);
   const billingProvider = resolveBillingCheckoutProvider(intent);
   const publicKey = billingProvider === "mercado_pago"
     ? await loadMercadoPagoPlatformBillingConfig({ client })
@@ -74,7 +78,7 @@ export default async function DashboardBillingCheckoutPage({
 
   return (
     <ConnectyShell
-      activeHref="/dashboard/planos"
+      activeHref={intent?.payment.payload?.purchase_kind === "product" ? "/dashboard/meus-produtos" : "/dashboard/planos"}
       isPlatformAdmin={workspace.profile.isPlatformAdmin}
       mode="client"
       userAvatarUrl={workspace.profile.avatarUrl}
@@ -121,21 +125,24 @@ export default async function DashboardBillingCheckoutPage({
                 Billing / checkout
               </div>
               <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
-                Finalize sua assinatura.
+                Finalize sua compra.
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                Confira seu plano, adicione creditos promocionais e pague no checkout ConnectyHub.
+                Confira sua compra, escolha os adicionais e pague no checkout ConnectyHub.
               </p>
             </div>
             <Link
               href="/dashboard/planos"
               className="inline-flex min-h-10 items-center justify-center rounded-[8px] border border-white/10 px-4 text-sm font-bold text-slate-200 transition hover:bg-white/5"
             >
-              Trocar plano
+              Ver planos
             </Link>
           </div>
 
           <BillingPlanCheckout
+            purchaseKind={intent.payment.payload?.purchase_kind === "product" ? "product" : "plan"}
+            renewal={intent.checkoutKind === "renewal"}
+            commercialLabel={billingTermsLabel(readCheckoutCommercialTerms(intent))}
             subscriptionId={intent.subscription.id}
             planCode={intent.plan.plan_code}
             planName={intent.plan.name}

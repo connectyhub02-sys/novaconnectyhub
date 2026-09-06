@@ -395,7 +395,7 @@ export async function authenticateGatewayRequest(
     throw new GatewayHttpError(500, "api_key_lookup_failed", keyError.message);
   }
 
-  if (!apiKey || apiKey.status !== "active") {
+  if (!apiKey || !["active", "paused"].includes(apiKey.status)) {
     throw new GatewayHttpError(401, "invalid_api_key", "Chave ConnectyHub invalida, pausada ou revogada.");
   }
 
@@ -413,7 +413,7 @@ export async function authenticateGatewayRequest(
     throw new GatewayHttpError(500, "api_client_lookup_failed", clientError.message);
   }
 
-  if (!apiClient || apiClient.status !== "active") {
+  if (!apiClient || !["active", "paused"].includes(apiClient.status)) {
     throw new GatewayHttpError(403, "api_client_inactive", "Cliente API pausado, arquivado ou inexistente.");
   }
 
@@ -422,6 +422,19 @@ export async function authenticateGatewayRequest(
     featureCode: "connectyhub_api",
     client,
   });
+
+  // Restore only billing pauses after a fresh entitlement decision; revoked keys remain invalid.
+  if (apiKey.status === "paused" || apiClient.status === "paused") {
+    const restored = await restoreGuardedApiClientAccess(client, apiClient);
+    if (restored.status === "active") {
+      await restoreGuardedApiClientChildren(client, { table: "connectyhub_api_keys", clientId: apiClient.id, restoredAt: new Date().toISOString() });
+      const current = await client.from("connectyhub_api_keys").select("status").eq("id", apiKey.id).single();
+      if (current.error) throw new GatewayHttpError(503, "api_restore_pending", "Regularização em processamento.");
+      apiClient.status = restored.status;
+      apiKey.status = current.data.status;
+    }
+  }
+  if (apiKey.status !== "active" || apiClient.status !== "active") throw new GatewayHttpError(403, "api_client_inactive", "Acesso API pausado pela administração.");
 
   assertScopes(apiKey.scopes ?? [], requiredScopes);
 
@@ -3192,6 +3205,7 @@ export async function testClientWebhookEndpoint(input: {
   };
 
   try {
+    await assertOrganizationFeatureAccess({ organizationId: endpoint.organization_id, featureCode: "connectyhub_api", client });
     const response = await fetch(endpoint.url, {
       method: "POST",
       headers,
@@ -3761,6 +3775,7 @@ async function sendExistingGatewayWebhookDelivery(
     .eq("id", input.delivery.id);
 
   try {
+    await assertOrganizationFeatureAccess({ organizationId: input.endpoint.organization_id, featureCode: "connectyhub_api", client });
     const response = await fetch(input.delivery.target_url, {
       method: "POST",
       headers,
@@ -4147,6 +4162,7 @@ async function deliverGatewayWebhook(
   const deliveryStartedAt = Date.now();
 
   try {
+    await assertOrganizationFeatureAccess({ organizationId: input.organizationId, featureCode: "connectyhub_api", client });
     const response = await fetch(input.endpoint.url, {
       method: "POST",
       headers,
@@ -4675,6 +4691,7 @@ async function buildGatewayMigrationCredential(input: {
   instance: GatewayInstanceRow;
   source: "client_dashboard" | "admin_dashboard";
 }): Promise<GatewayMigrationCredentialResult> {
+  if (input.source === "client_dashboard") throw new GatewayHttpError(403, "assisted_migration_required", "A migração de conexão deve ser acompanhada pela equipe ConnectyHub. Utilize sua chave ConnectyHub para integrar a API.");
   const credentials = await loadUazapiCredentials(input.client);
 
   if (input.credential === "serverUrl") {

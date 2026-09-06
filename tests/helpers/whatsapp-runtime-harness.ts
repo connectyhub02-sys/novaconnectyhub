@@ -51,6 +51,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/sales-catalog/payment-reviews": serverModuleHarness("src/lib/sales-catalog/payment-reviews.ts"),
     "@/lib/sales-catalog/checkout-customer": customer,
     "node:crypto": require("node:crypto"),
+    "node:async_hooks": require("node:async_hooks"),
     "./lead-names": leadNames,
     "@/lib/leads/metadata-update": metadataUpdate,
     "@/lib/sales-catalog/shared": catalogShared,

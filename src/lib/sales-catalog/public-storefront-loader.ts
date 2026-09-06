@@ -1,3 +1,4 @@
+import { getContractAccess } from "@/lib/billing/contract-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import type {
   PublicStorefrontBranding,
@@ -175,6 +176,7 @@ export async function loadPublicStorefrontOrganization(storeSlug: string) {
     ? await query.eq("id", decoded).maybeSingle<OrganizationRow>()
     : await query.eq("slug", decoded).maybeSingle<OrganizationRow>();
 
+  if (data && !(await getContractAccess(data.id,client)).allowed) return null;
   return data ?? null;
 }
 

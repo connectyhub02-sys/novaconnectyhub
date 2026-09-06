@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
-  if (!request.nextUrl.pathname.startsWith("/checkout/") && !request.nextUrl.pathname.startsWith("/dashboard/planos/checkout/")) return updateSession(request);
+  if (!request.nextUrl.pathname.startsWith("/checkout/") && !request.nextUrl.pathname.startsWith("/dashboard/planos/checkout/") && !request.nextUrl.pathname.startsWith("/dashboard/meus-produtos/checkout/")) return updateSession(request);
 
   // The request header lets Next apply this nonce to its hydration scripts.
   // Keep the same request through session refresh so cookie updates are preserved.

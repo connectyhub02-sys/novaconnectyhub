@@ -21,6 +21,7 @@ import {
   INCLUDED_CREDIT_TARGET_MARKUP,
 } from "@/lib/billing/credit-economics";
 import type { BillingPlan, BillingPlanCatalog, BillingPlanStatus } from "@/lib/billing/plans";
+import { billingTermsLabel, type BillingCycle, type BillingInterval } from "@/lib/billing/commercial-terms";
 import { ConnectyShell } from "./connecty-shell";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
@@ -33,6 +34,9 @@ type PlanDraft = {
   sortOrder: string;
   highlighted: boolean;
   monthlyPriceBrl: string;
+  billingCycle: BillingCycle;
+  billingInterval: BillingInterval;
+  accessDurationDays: string;
   includedCredits: string;
   overageCreditPriceBrl: string;
   autoRechargeMinCredits: string;
@@ -168,7 +172,7 @@ export function BillingPlansConsole({
       <PageHeader
         eyebrow="Admin OS / Planos e cobranca"
         title="Planos da ConnectyHub"
-        description="Configure mensalidade, creditos inclusos, excedentes e limites antes de ligar a assinatura automatica."
+        description="Configure pagamento único ou recorrente, período de acesso, créditos e limites dos planos ConnectyHub."
         actions={
           <div className="flex flex-wrap gap-2">
             {catalog.schemaReady ? (
@@ -269,7 +273,7 @@ export function BillingPlansConsole({
                       </div>
 
                       <div className="mt-4 grid grid-cols-4 gap-2">
-                        <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
+                        <MiniValue label={billingTermsLabel(plan)} value={formatMoney(plan.monthlyPriceBrl)} />
                         <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
                         <MiniValue label="Storage" value={formatStorageBytes(plan.storageLimitBytes)} />
                         <MiniValue label="Extra" value={formatMoney(plan.overageCreditPriceBrl)} />
@@ -331,10 +335,24 @@ export function BillingPlansConsole({
                 </Field>
 
                 <div className="grid gap-3 md:grid-cols-4">
-                  <NumberField label="Mensalidade R$" value={draft.monthlyPriceBrl} onChange={(value) => updateDraft({ monthlyPriceBrl: value })} step="0.01" />
+                  <NumberField label="Preço R$" value={draft.monthlyPriceBrl} onChange={(value) => updateDraft({ monthlyPriceBrl: value })} step="0.01" />
                   <NumberField label="Creditos inclusos" value={draft.includedCredits} onChange={(value) => updateDraft({ includedCredits: value })} step="1" />
                   <NumberField label="Credito excedente R$" value={draft.overageCreditPriceBrl} onChange={(value) => updateDraft({ overageCreditPriceBrl: value })} step="0.01" />
                   <NumberField label="Limite excedente" value={draft.overageLimitCredits} onChange={(value) => updateDraft({ overageLimitCredits: value })} step="1" />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Tipo de cobrança">
+                    <select value={draft.billingCycle} onChange={event => updateDraft({ billingCycle: event.target.value as BillingCycle })} className="h-10 w-full rounded-xl px-3" style={inputStyle}>
+                      <option value="recurring">Recorrente</option><option value="one_time">Pagamento único</option>
+                    </select>
+                  </Field>
+                  {draft.billingCycle === "recurring" ? <Field label="Intervalo da cobrança">
+                    <select value={draft.billingInterval} onChange={event => updateDraft({ billingInterval: event.target.value as BillingInterval })} className="h-10 w-full rounded-xl px-3" style={inputStyle}>
+                      <option value="week">Semanal</option><option value="month">Mensal</option><option value="quarter">Trimestral</option><option value="year">Anual</option>
+                    </select>
+                  </Field> : <NumberField label="Duração do acesso em dias" value={draft.accessDurationDays} onChange={value => updateDraft({ accessDurationDays: value })} step="1" />}
+                  <p className="text-xs text-slate-500 md:col-span-2">Condições aplicadas às novas contratações. Pagamento único não gera renovação automática.</p>
                 </div>
 
                 <div className="rounded-xl p-4" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.22)" }}>
@@ -473,7 +491,7 @@ export function BillingPlansConsole({
                     <div>
                       <p className="text-[13px] font-semibold text-cyan-100">Proxima ligacao com Mercado Pago</p>
                       <p className="mt-1 text-[12px] leading-5 text-cyan-100/75">
-                        Este cadastro define a oferta. A etapa seguinte cria assinatura, cartao salvo, cobranca mensal,
+                        Este cadastro define a oferta. Os períodos e as condições configurados aqui são apresentados antes do pagamento.
                         recarga automatica e webhook de pagamento usando a conta Mercado Pago da ConnectyHub.
                       </p>
                     </div>
@@ -638,6 +656,9 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
       sortOrder: "100",
       highlighted: false,
       monthlyPriceBrl: "0",
+      billingCycle: "recurring",
+      billingInterval: "month",
+      accessDurationDays: "30",
       includedCredits: "0",
       overageCreditPriceBrl: "0",
       autoRechargeMinCredits: "0",
@@ -666,6 +687,9 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
     sortOrder: String(plan.sortOrder),
     highlighted: plan.highlighted,
     monthlyPriceBrl: String(plan.monthlyPriceBrl),
+    billingCycle: plan.billingCycle,
+    billingInterval: plan.billingInterval,
+    accessDurationDays: String(plan.accessDurationDays ?? 30),
     includedCredits: String(plan.includedCredits),
     overageCreditPriceBrl: String(plan.overageCreditPriceBrl),
     autoRechargeMinCredits: String(plan.autoRechargeMinCredits),
@@ -695,6 +719,9 @@ function buildPayload(draft: PlanDraft) {
     sortOrder: Number(draft.sortOrder || 100),
     highlighted: draft.highlighted,
     monthlyPriceBrl: Number(draft.monthlyPriceBrl || 0),
+    billingCycle: draft.billingCycle,
+    billingInterval: draft.billingInterval,
+    accessDurationDays: draft.billingCycle === "one_time" ? Number(draft.accessDurationDays) : null,
     includedCredits: Number(draft.includedCredits || 0),
     overageCreditPriceBrl: Number(draft.overageCreditPriceBrl || 0),
     autoRechargeMinCredits: Number(draft.autoRechargeMinCredits || 0),

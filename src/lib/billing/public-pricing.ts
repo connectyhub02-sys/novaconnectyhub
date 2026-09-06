@@ -1,4 +1,5 @@
-export type PublicPricingBillingPlan = {
+import { readCommercialTerms, type CommercialTerms } from "./commercial-terms";
+export type PublicPricingBillingPlan = Partial<CommercialTerms> & {
   id?: string;
   planCode: string;
   name: string;
@@ -106,7 +107,7 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
     name: plan.name,
     price: formatBrl(plan.monthlyPriceBrl),
     priceValue: plan.monthlyPriceBrl,
-    period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : "/mes",
+    period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : readCommercialTerms(plan).billingCycle === "one_time" ? `único · ${plan.accessDurationDays} dias` : ({ week: "/semana", month: "/mês", quarter: "/trimestre", year: "/ano" })[readCommercialTerms(plan).billingInterval],
     description: isTrial
       ? presentation?.description || "Teste completo da ConnectyHub por tempo limitado."
       : plan.shortDescription || presentation?.description || "Plano ConnectyHub configurado no admin.",
@@ -114,7 +115,7 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
     storage: buildStorageSummary(plan),
     included,
     locked: buildLockedItems(plan, isTrial),
-    cta: presentation?.cta || (isTrial ? "Comecar teste gratis" : `Assinar ${plan.name}`),
+    cta: readCommercialTerms(plan).billingCycle === "one_time" ? `Comprar ${plan.name}` : presentation?.cta || (isTrial ? "Comecar teste gratis" : `Assinar ${plan.name}`),
     trial: isTrial,
     popular: !isTrial && (plan.highlighted || code === "pro"),
     premium: !isTrial && code === "scale",

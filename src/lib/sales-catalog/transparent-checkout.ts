@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess } from "@/lib/billing/contract-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isIP } from "node:net";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
@@ -74,6 +75,7 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
   if (snapshot.attempt && ["processing", "unknown", "pending", "approved"].includes(snapshot.attempt.state)) {
     return publicAttempt(await reconcileTransparentAttempt(client, snapshot.attempt.id));
   }
+  await assertContractAccess(session.organization_id,client);
   if (!snapshot.enabled) throw new CheckoutError("O cartão está temporariamente indisponível nesta loja. Continue pelo WhatsApp.", 503);
   if (["confirmed", "refunded"].includes(order.payment_status) || ["paid", "in_preparation", "shipped", "delivered", "cancelled"].includes(order.status)) throw new CheckoutError("Este pedido já foi finalizado.", 409);
   if (requiresSalesCatalogShippingBeforePayment(order, items)) throw new CheckoutError("Confirme o endereço e o frete pelo WhatsApp antes de pagar.", 409);

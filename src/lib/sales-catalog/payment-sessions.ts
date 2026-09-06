@@ -104,6 +104,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
   source: "dashboard" | "whatsapp_agent" | "checkout";
   actorId?: string | null;
 }) {
+  const { assertContractAccess } = await import("@/lib/billing/contract-access");
+  await assertContractAccess(input.organizationId, input.client);
   const { data: orderRow, error: orderError } = await input.client
     .from("sales_catalog_orders")
     .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, metadata")

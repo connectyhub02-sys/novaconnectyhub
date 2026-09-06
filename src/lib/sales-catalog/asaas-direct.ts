@@ -33,7 +33,7 @@ async function request(connection: AsaasDirectConnection, endpoint: string, meth
 
 function safePayment(data: Record<string, unknown>): AsaasPaymentResponse {
   const string = (key: string) => typeof data[key] === "string" ? data[key] as string : undefined;
-  return { id: string("id"), customer: string("customer"), status: string("status"), externalReference: string("externalReference"), paymentDate: string("paymentDate"), billingType: string("billingType"), value: typeof data.value === "number" ? data.value : undefined, deleted: data.deleted === true };
+  return { id: string("id"), customer: string("customer"), status: string("status"), externalReference: string("externalReference"), paymentDate: string("paymentDate"), dueDate: string("dueDate"), subscription: string("subscription"), billingType: string("billingType"), value: typeof data.value === "number" ? data.value : undefined, deleted: data.deleted === true };
 }
 
 export type AsaasNativeSubscription = { id: string; value: number; externalReference: string; nextDueDate: string; status: string; deleted: boolean };
@@ -41,7 +41,7 @@ function safeSubscription(data: Record<string, unknown>): AsaasNativeSubscriptio
   return { id: String(data.id ?? ""), value: Number(data.value), externalReference: String(data.externalReference ?? ""), nextDueDate: String(data.nextDueDate ?? ""), status: String(data.status ?? ""), deleted: data.deleted === true };
 }
 
-export async function createAsaasNativeSubscription(input: AsaasDirectConnection & { card: CheckoutCard; holder: CheckoutCardHolder; amount: number; externalReference: string; remoteIp: string; nextDueDate: string }) {
+export async function createAsaasNativeSubscription(input: AsaasDirectConnection & { card: CheckoutCard; holder: CheckoutCardHolder; amount: number; externalReference: string; remoteIp: string; nextDueDate: string; cycle?: "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY" }) {
   let customer: Record<string, unknown>;
   try {
     const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
@@ -49,7 +49,7 @@ export async function createAsaasNativeSubscription(input: AsaasDirectConnection
   } catch (error) { throw new AsaasDirectError(true, false, error instanceof AsaasDirectError ? error.diagnostic : undefined); }
   if (!customer.id) throw new AsaasDirectError(true, false);
   const subscription = safeSubscription(await request(input, "/subscriptions", "POST", {
-    customer: customer.id, billingType: "CREDIT_CARD", value: input.amount, cycle: "MONTHLY", nextDueDate: input.nextDueDate,
+    customer: customer.id, billingType: "CREDIT_CARD", value: input.amount, cycle: input.cycle ?? "MONTHLY", nextDueDate: input.nextDueDate,
     description: "Plano ConnectyHub", externalReference: input.externalReference, creditCard: input.card, creditCardHolderInfo: input.holder, remoteIp: input.remoteIp,
   }));
   if (!subscription.id || subscription.externalReference !== input.externalReference || Math.round(subscription.value * 100) !== Math.round(input.amount * 100)) throw new AsaasDirectError(false, false);
@@ -141,4 +141,31 @@ export async function retireAsaasPayment(connection: AsaasDirectConnection, paym
   if (payment.deleted || ["DELETED", "CANCELED", "CANCELLED"].includes(payment.status ?? "")) return;
   if (!["PENDING", "OVERDUE"].includes(payment.status ?? "")) throw new AsaasDirectError(false, false);
   await request(connection, `/payments/${encodeURIComponent(paymentId)}`, "DELETE");
+}
+
+export async function payExistingAsaasBillingCard(input: AsaasDirectConnection & { paymentId:string; expectedReference:string; amount:number; card:CheckoutCard; holder:CheckoutCardHolder; remoteIp:string }) {
+  const existing = await getAsaasNativePayment(input,input.paymentId);
+  if (existing.externalReference !== input.expectedReference || Math.round(Number(existing.value)*100)!==Math.round(input.amount*100) || existing.deleted) throw new AsaasDirectError(true,false);
+  if (["CONFIRMED","RECEIVED","RECEIVED_IN_CASH"].includes(String(existing.status))) return existing;
+  return safePayment(await request(input,"/payments/"+encodeURIComponent(input.paymentId)+"/payWithCreditCard","POST",{creditCard:input.card,creditCardHolderInfo:input.holder,remoteIp:input.remoteIp}));
+}
+export async function findAsaasSubscriptionCycle(connection: AsaasDirectConnection, subscriptionId:string, dueDate:string) {
+  const found:AsaasPaymentResponse[]=[];
+  for(let offset=0;;offset+=100) {
+    const page=await request(connection,"/subscriptions/"+encodeURIComponent(subscriptionId)+"/payments?limit=100&offset="+offset);
+    for(const raw of Array.isArray(page.data)?page.data:[]) {const p=safePayment(raw);if(!p.deleted&&p.dueDate===dueDate) found.push(p);}
+    if(!page.hasMore) break;
+    if(offset>=10000) throw new AsaasDirectError(false,false);
+  }
+  if(found.length>1) throw new AsaasDirectError(false,false);
+  return found[0]??null;
+}
+
+export async function convertAsaasBillingPaymentToPix(input:AsaasDirectConnection & {paymentId:string;expectedReference:string;amount:number}) {
+  const p=await getAsaasNativePayment(input,input.paymentId);
+  if(p.externalReference!==input.expectedReference||Math.round(Number(p.value)*100)!==Math.round(input.amount*100)||p.deleted) throw new AsaasDirectError(true,false);
+  if(["CONFIRMED","RECEIVED","RECEIVED_IN_CASH"].includes(String(p.status))) return p;
+  if(p.billingType==="PIX") return p;
+  if(!p.dueDate) throw new AsaasDirectError(true,false);
+  return safePayment(await request(input,"/payments/"+encodeURIComponent(input.paymentId),"PUT",{billingType:"PIX",value:input.amount,dueDate:p.dueDate}));
 }

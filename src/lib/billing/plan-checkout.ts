@@ -1,8 +1,10 @@
+import { billingBumpInterval } from "./plan-checkout-catalog";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpMedia } from "./plan-checkout-catalog";
+import { readCommercialTerms } from "./commercial-terms";
 
 export type JsonRecord = Record<string, unknown>;
 export type BillingCheckoutProvider = "mercado_pago" | "pagbank" | "asaas";
@@ -119,31 +121,19 @@ export async function loadBillingCheckoutIntent(
     return null;
   }
 
-  const [invoiceResult, paymentResult] = await Promise.all([
-    client
-      .from("billing_invoices")
-      .select("id, organization_id, subscription_id, status, subtotal_brl, discount_brl, total_brl, provider, metadata")
-      .eq("subscription_id", subscription.id)
-      .eq("organization_id", input.organizationId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<BillingCheckoutIntent["invoice"]>(),
-    client
-      .from("billing_payments")
-      .select("id, organization_id, invoice_id, subscription_id, status, provider, amount_brl, provider_payment_id, provider_status, payload")
-      .eq("subscription_id", subscription.id)
-      .eq("organization_id", input.organizationId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<BillingCheckoutIntent["payment"]>(),
-  ]);
+  const paymentResult = await client.from("billing_payments")
+    .select("id, organization_id, invoice_id, subscription_id, status, provider, amount_brl, provider_payment_id, provider_status, payload")
+    .eq("subscription_id", subscription.id).eq("organization_id", input.organizationId)
+    .order("created_at", {ascending:false}).order("id", {ascending:false}).limit(1).maybeSingle<BillingCheckoutIntent["payment"]>();
+  if (paymentResult.error) throw new Error("Não foi possível consultar o pagamento.");
+  if (!paymentResult.data?.invoice_id) return null;
+  const invoiceResult = await client.from("billing_invoices")
+    .select("id, organization_id, subscription_id, status, subtotal_brl, discount_brl, total_brl, provider, metadata")
+    .eq("id", paymentResult.data.invoice_id).eq("subscription_id", subscription.id).eq("organization_id", input.organizationId)
+    .maybeSingle<BillingCheckoutIntent["invoice"]>();
 
   if (invoiceResult.error) {
     throw new Error(`Nao foi possivel carregar a fatura: ${invoiceResult.error.message}`);
-  }
-
-  if (paymentResult.error) {
-    throw new Error(`Nao foi possivel carregar o pagamento: ${paymentResult.error.message}`);
   }
 
   if (!invoiceResult.data || !paymentResult.data) {
@@ -166,14 +156,23 @@ export async function loadBillingCheckoutIntent(
     return null;
   }
 
+  const terms = paymentResult.data.payload?.commercial_terms ?? invoiceResult.data.metadata?.commercial_terms ?? subscription.metadata?.commercial_terms;
+  const snapshot = terms && typeof terms === "object" ? terms as JsonRecord : {};
   return {
     subscription,
     invoice: invoiceResult.data,
     payment: paymentResult.data,
-    plan: planResult.data,
+    plan: { ...planResult.data,
+      monthly_price_brl: typeof snapshot.price_brl === "number" ? snapshot.price_brl : planResult.data.monthly_price_brl,
+      included_credits: typeof snapshot.included_credits === "number" ? snapshot.included_credits : planResult.data.included_credits,
+    },
     checkoutKind,
     targetPlanCode,
   };
+}
+
+export function readCheckoutCommercialTerms(intent: BillingCheckoutIntent) {
+  return readCommercialTerms(intent.payment.payload?.commercial_terms ?? intent.invoice.metadata?.commercial_terms ?? intent.subscription.metadata?.commercial_terms);
 }
 
 export async function syncBillingCheckoutCart(
@@ -186,6 +185,8 @@ export async function syncBillingCheckoutCart(
   const selectedBumps = selectedBumpCodes
     .map((code) => bumpByCode.get(code))
     .filter((bump): bump is BillingCheckoutBump => Boolean(bump));
+  const terms = readCheckoutCommercialTerms(intent);
+  if (selectedBumps.some(b => b.recurrence !== "one_time" && (terms.billingCycle !== "recurring" || billingBumpInterval(b.recurrence) !== terms.billingInterval))) throw new Error("Adicionais recorrentes precisam ter o mesmo intervalo do plano. Compre separadamente as ofertas com outros períodos.");
   const planAmount = normalizeCurrencyAmount(intent.plan.monthly_price_brl) ?? normalizeCurrencyAmount(intent.invoice.subtotal_brl) ?? 0;
   const bumpsAmount = roundMoney(selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0));
   const totalAmount = roundMoney(planAmount + bumpsAmount);
@@ -461,23 +462,20 @@ export function formatBillingCheckoutDescription(intent: BillingCheckoutIntent, 
   return `ConnectyHub ${intent.plan.name}${bumpText}`.slice(0, 220);
 }
 
-export async function loadBillingCheckoutBumps(client: SupabaseClient) {
+export async function loadBillingCheckoutBumps(client: SupabaseClient, intent?: BillingCheckoutIntent): Promise<BillingCheckoutBump[]> {
+  const saved = intent?.payment.payload?.selected_bumps;
+  const frozen: BillingCheckoutBump[] = Array.isArray(saved) ? saved.map(readRecord).filter((r):r is JsonRecord => Boolean(r)).map(r => ({
+    code:String(r.code), platformProductId:readString(r.platform_product_id),title:String(r.title ?? "Produto ConnectyHub"),description:String(r.description ?? ""),
+    priceBrl:Number(r.price_brl ?? 0),recurrence:String(r.recurrence ?? "one_time") as BillingCheckoutBump["recurrence"],itemType:r.item_type === "credit_pack" ? "credit_pack" : "adjustment",
+    creditAmount:Number(r.credit_amount ?? 0),badge:"",highlightLabel:null,media:null,
+  })) : [];
+  if (intent?.checkoutKind === "renewal") return frozen.filter(b => b.recurrence !== "one_time");
   const options = await loadBillingOrderBumpProductOptions(client);
-  return options
-    .filter((option) => option.selected && option.available)
-    .map((option) => ({
-      code: option.id,
-      platformProductId: option.id,
-      title: option.name,
-      description: option.description,
-      priceBrl: option.priceBrl,
-      recurrence: option.recurrence,
-      itemType: option.creditAmount && option.creditAmount > 0 ? "credit_pack" : "adjustment",
-      creditAmount: option.creditAmount,
-      badge: option.badge,
-      highlightLabel: option.highlightLabel,
-      media: option.media,
-    } satisfies BillingCheckoutBump));
+  const current:BillingCheckoutBump[] = options.filter(option => option.selected && option.available).map(option => ({
+    code:option.id,platformProductId:option.id,title:option.name,description:option.description,priceBrl:option.priceBrl,recurrence:option.recurrence,
+    itemType:option.creditAmount && option.creditAmount>0?"credit_pack":"adjustment",creditAmount:option.creditAmount,badge:option.badge,highlightLabel:option.highlightLabel,media:option.media,
+  }));
+  return [...new Map([...current,...frozen].map(b=>[b.code,b])).values()];
 }
 
 export async function loadBillingOrderBumpProductOptions(client: SupabaseClient): Promise<BillingOrderBumpProductOption[]> {
@@ -512,7 +510,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
     const billingInterval = normalizeBillingProductInterval(record.billing_interval ?? metadata.billing_interval);
     const creditAmount = readOrderBumpCreditAmount(metadata, name, description);
     const media = readOrderBumpMedia(record.media);
-    const available = status === "active" && priceBrl > 0 && billingCycle === "one_time";
+    const available = status === "active" && priceBrl > 0;
 
     return {
       id: String(record.id),
@@ -527,7 +525,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       creditAmount,
       billingCycle,
       billingInterval,
-      recurrence: billingCycle === "recurring" ? "monthly" : "one_time",
+      recurrence: billingCycle === "recurring" ? ({ week: "weekly", month: "monthly", quarter: "quarterly", year: "yearly" } as const)[billingInterval] : "one_time",
       badge: readString(metadata.billing_order_bump_badge)
         ?? (creditAmount && creditAmount > 0 ? "Creditos" : "Adicional"),
       highlightLabel: readHighlightLabel(metadata),

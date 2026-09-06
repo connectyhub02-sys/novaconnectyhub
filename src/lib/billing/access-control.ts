@@ -22,6 +22,7 @@ import {
   type BillingAccessStatus,
 } from "@/lib/billing/trial";
 import { createServiceClient } from "@/lib/supabase/service";
+import { assertContractAccess, ContractAccessError } from "./contract-access";
 
 export class PlanFeatureAccessError extends Error {
   entitlement: PlanFeatureEntitlement;
@@ -48,7 +49,8 @@ export async function assertOrganizationOperationalAccess(input: {
 }) {
   const client = input.client ?? createServiceClient();
   await assertOrganizationOwnerAccountComplete({ organizationId: input.organizationId, client });
-  return assertBillableAccess({ organizationId: input.organizationId, client });
+  await assertContractAccess(input.organizationId, client);
+  return getOrganizationBillingAccess({ organizationId: input.organizationId, client });
 }
 
 export async function assertOrganizationFeatureAccess(input: {
@@ -92,6 +94,7 @@ export async function assertUserFeatureAccess(input: {
 }
 
 export function formatAccessControlError(error: unknown, fallback: string) {
+  if (error instanceof ContractAccessError) return { error: error.message, code: error.code, checkoutUrl: error.checkoutUrl, contractAccess: error.access };
   if (error instanceof AccountCompletionRequiredError) {
     return formatAccountCompletionError(error);
   }
@@ -114,6 +117,7 @@ export function formatAccessControlError(error: unknown, fallback: string) {
 }
 
 export function statusForAccessControlError(error: unknown, fallback: number) {
+  if (error instanceof ContractAccessError) return error.status;
   const accountStatus = statusForAccountCompletionError(error, fallback);
 
   if (accountStatus !== fallback) {

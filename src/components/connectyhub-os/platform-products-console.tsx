@@ -1590,6 +1590,7 @@ function ProductCard({
             <Save className="h-3.5 w-3.5" />
             Editar
           </button>
+          <a href={`/admin/produtos-connectyhub/${product.id}/conteudo`} className="inline-flex min-h-9 items-center rounded-lg border px-3 text-xs font-semibold">Conteúdo comprado</a>
           <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
             <Copy className="h-3.5 w-3.5" />
             Copiar tag

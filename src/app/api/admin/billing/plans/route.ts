@@ -15,6 +15,7 @@ export async function GET() {
   const { data, error } = await auth.supabase
     .from("billing_plans")
     .select(PLAN_SELECT)
+    .eq("offer_kind", "plan")
     .order("sort_order", { ascending: true })
     .order("monthly_price_brl", { ascending: true })
     .limit(100);
@@ -117,6 +118,7 @@ const PLAN_SELECT = [
   "sort_order",
   "highlighted",
   "monthly_price_brl",
+  "billing_cycle", "billing_interval", "access_duration_days",
   "included_credits",
   "overage_credit_price_brl",
   "auto_recharge_min_credits",
@@ -145,6 +147,9 @@ type ParsedPlanPayload = {
   sortOrder: number;
   highlighted: boolean;
   monthlyPriceBrl: number;
+  billingCycle: "one_time" | "recurring";
+  billingInterval: "week" | "month" | "quarter" | "year";
+  accessDurationDays: number | null;
   includedCredits: number;
   overageCreditPriceBrl: number;
   autoRechargeMinCredits: number;
@@ -188,6 +193,15 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
   }
 
   const monthlyPriceBrl = toFiniteNumber(record.monthlyPriceBrl, 0);
+  const billingCycle = record.billingCycle ?? "recurring";
+  const billingInterval = record.billingInterval ?? "month";
+  const accessDurationDays = toNullableInteger(record.accessDurationDays);
+  if ((billingCycle !== "one_time" && billingCycle !== "recurring") ||
+      (billingInterval !== "week" && billingInterval !== "month" && billingInterval !== "quarter" && billingInterval !== "year") ||
+      (billingCycle === "one_time" && (!accessDurationDays || accessDurationDays < 1)) ||
+      (accessDurationDays !== null && (accessDurationDays < 1 || accessDurationDays > 36500))) {
+    return { ok: false, error: "Confira o tipo de cobrança, intervalo e duração do acesso do plano." };
+  }
   const includedCredits = toFiniteNumber(record.includedCredits, 0);
   const overageCreditPriceBrl = toFiniteNumber(record.overageCreditPriceBrl, 0);
   const autoRechargeMinCredits = toFiniteNumber(record.autoRechargeMinCredits, 0);
@@ -234,6 +248,9 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
       sortOrder,
       highlighted: record.highlighted === true,
       monthlyPriceBrl,
+      billingCycle,
+      billingInterval,
+      accessDurationDays: billingCycle === "one_time" ? accessDurationDays : null,
       includedCredits,
       overageCreditPriceBrl,
       autoRechargeMinCredits,
@@ -262,6 +279,9 @@ function toPlanDatabasePayload(plan: ParsedPlanPayload) {
     sort_order: plan.sortOrder,
     highlighted: plan.highlighted,
     monthly_price_brl: plan.monthlyPriceBrl,
+    billing_cycle: plan.billingCycle,
+    billing_interval: plan.billingInterval,
+    access_duration_days: plan.accessDurationDays,
     included_credits: plan.includedCredits,
     overage_credit_price_brl: plan.overageCreditPriceBrl,
     auto_recharge_min_credits: plan.autoRechargeMinCredits,

@@ -37,18 +37,15 @@ export async function syncConnectyhubApiAccessGuards(input: {
 } = {}) {
   const client = input.client ?? createServiceClient();
   const checkedAt = new Date().toISOString();
-  const { data, error } = await client
-    .from("connectyhub_api_clients")
-    .select("id, organization_id, status, metadata")
-    .neq("status", "archived")
-    .order("updated_at", { ascending: true })
-    .limit(input.limit ?? 200);
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar clientes API: ${error.message}`);
+  const rows: ApiAccessClientRow[] = [];
+  const pageSize = Math.min(500, Math.max(1, input.limit ?? 200));
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client.from("connectyhub_api_clients").select("id, organization_id, status, metadata")
+      .neq("status", "archived").order("id").range(offset, offset + pageSize - 1);
+    if (error) throw new Error("Não foi possível carregar clientes API: " + error.message);
+    rows.push(...(data ?? []) as ApiAccessClientRow[]);
+    if ((data?.length ?? 0) < pageSize) break;
   }
-
-  const rows = (data ?? []) as ApiAccessClientRow[];
   const summary = {
     checked: 0,
     allowed: 0,
@@ -111,7 +108,8 @@ async function resolveApiAccessDecision(client: SupabaseClient, organizationId: 
       status: null,
     };
   } catch (error) {
-    const status = statusForAccessControlError(error, 403);
+    const status = statusForAccessControlError(error, 503);
+    if (status === 503) throw error;
     const formatted = formatAccessControlError(error, "API WhatsApp bloqueada.");
 
     return {

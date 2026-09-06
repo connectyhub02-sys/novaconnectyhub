@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default async function DashboardPlanosPage() {
   await connection();
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     redirect("/login?next=%2Fdashboard%2Fplanos");
@@ -86,6 +86,7 @@ async function loadPendingPlan(client: ReturnType<typeof createServiceClient>, o
     .from("organization_subscriptions")
     .select("id, plan_code, status")
     .eq("organization_id", organizationId)
+    .eq("subscription_kind", "plan")
     .in("status", ["pending", "incomplete"])
     .order("created_at", { ascending: false })
     .limit(1)

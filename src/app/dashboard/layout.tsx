@@ -16,7 +16,7 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
 
   if (!workspace) {
     return <>{children}</>;

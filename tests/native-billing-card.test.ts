@@ -1,3 +1,5 @@
+import * as commercial from '../src/lib/billing/commercial-terms';
+import * as bumps from '../src/lib/billing/plan-checkout-catalog';
 import { describe, expect, it, vi } from 'vitest';
 import { serverModuleHarness } from './helpers/server-module-harness';
 import { isIP } from 'node:net';
@@ -8,12 +10,13 @@ const card={holderName:'Teste',number:'4111111111111111',expiryMonth:'12',expiry
 const holder={name:'Cliente Teste',email:'test@example.com',cpfCnpj:'12345678909',phone:'11999999999',postalCode:'01001000',addressNumber:'10'};
 class CheckoutError extends Error {constructor(message:string,public status=400){super(message)}}
 class DirectError extends Error {constructor(public definitive:boolean,public declined:boolean){super('Safe failure')}}
-function setup() {
+function setup(oneTime=false) {
+ const amount=oneTime?120:130;
  let attempt: Record<string,unknown>|null=null;
- const intent={payment:{id:'pay-local',status:'pending',amount_brl:130,payload:{}},invoice:{id:'invoice'},subscription:{id:'subscription',organization_id:'org',metadata:{}},plan:{monthly_price_brl:100},targetPlanCode:'starter'};
- const adapter={AsaasDirectError:DirectError,createAsaasNativeSubscription:vi.fn(async()=>({id:'sub_provider'})),createAsaasDirectCardPayment:vi.fn(async()=>({id:'pay_provider',status:'CONFIRMED',value:130,billingType:'CREDIT_CARD',externalReference:`billing_card:${id}`})),cancelAsaasNativeSubscription:vi.fn(async()=>null),retireAsaasPayment:vi.fn(),findAsaasDirectPayment:vi.fn(async()=>null),findAsaasNativeSubscription:vi.fn(async()=>null),getAsaasNativePayment:vi.fn(),applyAsaasPaymentEvent:vi.fn(p=>p)};
+ const intent={payment:{id:'pay-local',status:'pending',amount_brl:amount,payload:(oneTime?{commercial_terms:{billing_cycle:"one_time",access_duration_days:30}}:{}) as Record<string,unknown>},invoice:{id:'invoice'},subscription:{id:'subscription',organization_id:'org',metadata:{}},plan:{monthly_price_brl:100},targetPlanCode:'starter'};
+ const adapter={AsaasDirectError:DirectError,createAsaasNativeSubscription:vi.fn(async()=>({id:'sub_provider'})),createAsaasDirectCardPayment:vi.fn(async()=>({id:'pay_provider',status:'CONFIRMED',value:amount,billingType:'CREDIT_CARD',externalReference:`billing_card:${id}`})),cancelAsaasNativeSubscription:vi.fn(async()=>null),retireAsaasPayment:vi.fn(),findAsaasDirectPayment:vi.fn(async()=>null),findAsaasNativeSubscription:vi.fn(async()=>null),getAsaasNativePayment:vi.fn(),applyAsaasPaymentEvent:vi.fn(p=>p)};
  const rpc=vi.fn(async(name:string,args:Record<string,unknown>)=>{
-  if(name==='claim_native_billing_card') {attempt={id,organization_id:'org',subscription_id:'subscription',invoice_id:'invoice',payment_id:'pay-local',amount:130,recurring_amount:110,external_reference:`billing_card:${id}`,state:'processing',stage:'preparing',created_at:new Date().toISOString(),updated_at:new Date().toISOString()};return {data:{claimed:true,attempt},error:null}}
+  if(name==='claim_native_billing_card') {attempt={id,organization_id:'org',subscription_id:'subscription',invoice_id:'invoice',payment_id:'pay-local',amount,recurring_amount:oneTime?0:110,external_reference:`billing_card:${id}`,state:'processing',stage:'preparing',created_at:new Date().toISOString(),updated_at:new Date().toISOString()};return {data:{claimed:true,attempt},error:null}}
   if(name==='finish_native_billing_card'){attempt={...attempt,state:args.p_state,provider_payment_id:args.p_provider_payment};return {data:attempt,error:null}}
   return {data:null,error:null};
  });
@@ -30,8 +33,8 @@ function setup() {
   };
   q.single=async()=>table==='billing_card_attempts'&&!update?{data:attempt,error:null}:result();q.maybeSingle=q.single;q.then=(resolve:(r:unknown)=>void)=>Promise.resolve(result()).then(resolve);return q;
  }};
- const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'@/lib/sales-catalog/payment-diagnostics':diagnostics,'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./plan-checkout':{loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[{code:'monthly',priceBrl:10,recurrence:'monthly'},{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:vi.fn()}});
- const pay=()=>mod.payNativeBillingCard(client as never,'org','subscription',{attemptId:id,amount:130,revision:0,acceptRecurring:true,card,holder},'203.0.113.1');
+ const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'@/lib/sales-catalog/payment-diagnostics':diagnostics,'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./commercial-terms':commercial,'./plan-checkout-catalog':bumps,'./plan-checkout':{readCheckoutCommercialTerms:()=>commercial.readCommercialTerms(intent.payment.payload.commercial_terms),loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[...(oneTime?[]:[{code:'monthly',priceBrl:10,recurrence:'monthly'}]),{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:vi.fn()}});
+ const pay=()=>mod.payNativeBillingCard(client as never,'org','subscription',{attemptId:id,amount,revision:0,acceptRecurring:!oneTime,card,holder},'203.0.113.1');
  return {mod,pay,adapter,rpc,client,intent};
 }
 describe('panel native card orchestration',()=>{
@@ -48,7 +51,14 @@ describe('panel native card orchestration',()=>{
  });
  it('rejects stale totals, absent recurring consent and invalid webhook signatures before provider writes',async()=>{
   const s=setup();await expect(s.mod.payNativeBillingCard(s.client as never,'org','subscription',{attemptId:id,amount:1,revision:0,acceptRecurring:true},'203.0.113.1')).rejects.toThrow('carrinho mudou');
-  await expect(s.mod.payNativeBillingCard(s.client as never,'org','subscription',{},'203.0.113.1')).rejects.toThrow('renovação mensal');
+  await expect(s.mod.payNativeBillingCard(s.client as never,'org','subscription',{},'203.0.113.1')).rejects.toThrow('condições de renovação');
   await expect(s.mod.processNativeBillingWebhook(s.client as never,{payment:{id:'pay_test',externalReference:`billing_card:${id}`}},'wrong')).rejects.toMatchObject({status:401});expect(s.rpc).not.toHaveBeenCalled();expect(s.adapter.getAsaasNativePayment).not.toHaveBeenCalled();
  });
+ it('one-time plan charges once without creating an agreement or requiring renewal consent',async()=>{
+  const t=setup(true);expect(await t.pay()).toMatchObject({approved:true});
+  expect(t.adapter.createAsaasDirectCardPayment).toHaveBeenCalledWith(expect.objectContaining({amount:120}));
+  expect(t.adapter.createAsaasNativeSubscription).not.toHaveBeenCalled();
+  expect(t.rpc.mock.calls[0][1].p_recurring).toBe(0);
+ });
+
 });

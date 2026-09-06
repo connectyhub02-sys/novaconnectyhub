@@ -174,11 +174,11 @@ export function resolvePlanFeatureEntitlement(
   }
 
   if (input.billingState) {
-    if (input.billingState === "trial_active" || input.billingState === "trial_low_credits") {
+    if (input.billingState === "trial_active" || input.billingState === "trial_low_credits" || (input.billingState === "trial_no_credits" && featureCode !== "ai_traffic_manager")) {
       return allowedEntitlement(feature, "trial_active");
     }
 
-    if (input.billingState !== "paid_active") {
+    if (input.billingState !== "paid_active" && !(input.billingState === "paid_no_credits" && featureCode !== "ai_traffic_manager")) {
       return blockedEntitlement(feature, "billing_blocked");
     }
 

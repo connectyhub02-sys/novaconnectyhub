@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
@@ -64,6 +65,9 @@ export async function createClientCompany(input: {
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
+  const { data: memberships, error: scopeError } = await client.from("organization_members").select("organization_id").eq("user_id", input.userId).order("created_at").limit(1);
+  if (scopeError || !memberships?.[0]) throw new Error("Crie e regularize sua conta antes de adicionar empresas.");
+  const contract = await assertContractAccess(memberships[0].organization_id, client);
   const name = normalizeCompanyName(input.name);
   const existingCompany = await findExistingClientCompanyByName({
     client,
@@ -101,13 +105,6 @@ export async function createClientCompany(input: {
     throw new Error(`Empresa criada, mas nao foi possivel vincular o usuario: ${memberError.message}`);
   }
 
-  const trialOptIn = await loadUserTrialWhatsappOptIn(client, input.userId);
-  await prepareClientCompanyTrial({
-    organizationId: organization.id,
-    userId: input.userId,
-    optIn: trialOptIn,
-    client,
-  });
 
   return {
     id: organization.id,
@@ -238,6 +235,7 @@ export async function requireClientCompanyAccess(input: {
     throw new Error("Escolha uma empresa vinculada a sua conta.");
   }
 
+  await assertContractAccess(company.id, client);
   return company;
 }
 

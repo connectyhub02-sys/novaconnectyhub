@@ -2,10 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
+import { readCommercialTerms, type CommercialTerms } from "./commercial-terms";
 
 export type BillingPlanStatus = "draft" | "active" | "archived";
 
-export type BillingPlan = {
+export type BillingPlan = CommercialTerms & {
   id: string;
   planCode: string;
   name: string;
@@ -55,6 +56,9 @@ export type BillingPlanRow = {
   sort_order: number | string | null;
   highlighted: boolean | null;
   monthly_price_brl: number | string | null;
+  billing_cycle?: string | null;
+  billing_interval?: string | null;
+  access_duration_days?: number | null;
   included_credits: number | string | null;
   overage_credit_price_brl: number | string | null;
   auto_recharge_min_credits: number | string | null;
@@ -89,6 +93,7 @@ export async function getBillingPlanCatalog(
         "sort_order",
         "highlighted",
         "monthly_price_brl",
+        "billing_cycle", "billing_interval", "access_duration_days",
         "included_credits",
         "overage_credit_price_brl",
         "auto_recharge_min_credits",
@@ -108,6 +113,7 @@ export async function getBillingPlanCatalog(
         "updated_at",
       ].join(", "),
     )
+    .eq("offer_kind", "plan")
     .order("sort_order", { ascending: true })
     .order("monthly_price_brl", { ascending: true })
     .limit(100);
@@ -138,7 +144,7 @@ export async function getBillingPlanCatalog(
       draftPlans: plans.filter((plan) => plan.status === "draft").length,
       archivedPlans: plans.filter((plan) => plan.status === "archived").length,
       recurringRevenueBrl: plans
-        .filter((plan) => plan.status === "active")
+        .filter((plan) => plan.status === "active" && plan.billingCycle === "recurring")
         .reduce((total, plan) => total + plan.monthlyPriceBrl, 0),
     },
     warnings: [],
@@ -147,6 +153,7 @@ export async function getBillingPlanCatalog(
 
 export function mapBillingPlanRow(row: BillingPlanRow): BillingPlan {
   return {
+    ...readCommercialTerms(row),
     id: row.id,
     planCode: row.plan_code,
     name: row.name,
