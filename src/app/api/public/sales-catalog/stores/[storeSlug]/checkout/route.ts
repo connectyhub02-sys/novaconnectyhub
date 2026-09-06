@@ -8,6 +8,7 @@ import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { appendLeadTrackingParams } from "@/lib/tracking/tracked-links";
+import { preparePublicOrderDelivery } from "@/lib/sales-catalog/public-order-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -181,7 +182,8 @@ export async function POST(
 
   const subtotalCents = resolvedItems.reduce((total, entry) => total + entry.totalCents, 0);
   const subtotal = formatMoneyCents(subtotalCents);
-  const total = subtotal;
+  const delivery = await preparePublicOrderDelivery({ client, organizationId: organization.id, entries: resolvedItems, subtotal: subtotalCents / 100, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
+  const total = delivery.total;
   const now = new Date().toISOString();
   let savedLead: LeadRow | null = null;
 
@@ -255,15 +257,13 @@ export async function POST(
       status: "pending_payment",
       payment_status: "pending",
       fulfillment_status: "pending",
-      customer_name: customerName ?? "Cliente da loja",
-      customer_phone: customerPhone,
-      customer_email: customerEmail,
+      ...delivery.customer,
       subtotal,
       discount_total: null,
-      shipping_total: null,
+      shipping_total: delivery.shippingTotal,
       total,
       payment_method: null,
-      shipping_method: null,
+      shipping_method: delivery.shippingMethod,
       agent_notes: "Checkout iniciado pela loja publica.",
       internal_notes: null,
       commercial_flow_type: orderCommercialFlowType,
@@ -276,6 +276,7 @@ export async function POST(
         checkout_intent_key: checkoutIntentKey,
         cart_item_count: resolvedItems.length,
         cart_total_cents: subtotalCents,
+        shipping_quote: delivery.shippingQuote,
         currency: "BRL",
         agent_id: agentId,
         tracking_link_id: trackingLinkId,
@@ -393,6 +394,8 @@ export async function POST(
       lead_phone: customerPhone,
       item_count: resolvedItems.length,
       total,
+      shipping_total: delivery.shippingTotal,
+      shipping_method: delivery.shippingMethod,
       gateway_unavailable: payment.gatewayUnavailable === true,
     },
   });

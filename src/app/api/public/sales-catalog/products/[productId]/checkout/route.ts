@@ -8,6 +8,7 @@ import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { appendLeadTrackingParams } from "@/lib/tracking/tracked-links";
+import { preparePublicOrderDelivery } from "@/lib/sales-catalog/public-order-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -108,6 +109,7 @@ export async function POST(
   const customerName = readString(lead?.display_name) ?? "Lead WhatsApp";
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
   const totalAmount = (amount * quantity).toFixed(2);
+  const delivery = await preparePublicOrderDelivery({ client, organizationId: row.organization_id, entries: [{ item, quantity }], subtotal: amount * quantity, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
   const checkoutIntentKey = createPublicCheckoutIntentKey([
     "sales_catalog_public_product",
     row.organization_id,
@@ -150,15 +152,13 @@ export async function POST(
       status: "pending_payment",
       payment_status: "pending",
       fulfillment_status: item.fulfillment.schedulingRequired ? "scheduled" : "pending",
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      customer_email: customerEmail,
+      ...delivery.customer,
       subtotal: totalAmount,
       discount_total: null,
-      shipping_total: null,
-      total: totalAmount,
+      shipping_total: delivery.shippingTotal,
+      total: delivery.total,
       payment_method: null,
-      shipping_method: null,
+      shipping_method: delivery.shippingMethod,
       agent_notes: "Checkout iniciado pela pagina publica do produto.",
       internal_notes: null,
       commercial_flow_type: item.commercialFlowType,
@@ -173,6 +173,7 @@ export async function POST(
         tracking_link_id: trackingLinkId,
         lead_phone: customerPhone,
         product_page_checkout: true,
+        shipping_quote: delivery.shippingQuote,
         quantity,
         checkout_intent_key: checkoutIntentKey,
         currency: item.currency,
@@ -250,7 +251,7 @@ export async function POST(
     client,
     organizationId: row.organization_id,
     orderId,
-    amount: totalAmount,
+    amount: delivery.total,
     payerEmail: customerEmail,
     source: "checkout",
     actorId: null,
@@ -288,6 +289,9 @@ export async function POST(
       agent_id: agentId,
       lead_phone: customerPhone,
       quantity,
+      shipping_total: delivery.shippingTotal,
+      shipping_method: delivery.shippingMethod,
+      total: delivery.total,
       gateway_unavailable: payment.gatewayUnavailable === true,
     },
   });

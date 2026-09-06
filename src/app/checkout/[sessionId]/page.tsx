@@ -8,6 +8,7 @@ import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-o
 import { CheckoutCustomerAvatar } from "@/components/checkout/checkout-customer-avatar";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { CheckoutAcceptedPayments } from "@/components/checkout/payment-brand-badge";
+import { CheckoutDeliveryEditor } from "@/components/checkout/checkout-delivery-editor";
 import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
@@ -81,6 +82,7 @@ type CheckoutSessionRow = {
 
 type CheckoutOrderRow = {
   id: string;
+  checkout_revision: number;
   lead_id: string | null;
   conversation_id: string | null;
   customer_name: string | null;
@@ -290,6 +292,18 @@ export default async function CheckoutPage({
     order,
     session,
   });
+  const customerSummary = <>
+    <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
+    <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
+    <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
+    {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
+    {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
+    <dl className="mt-2 space-y-2 border-t border-slate-200 pt-3 text-xs">
+      <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
+      <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? (hasPhysicalItems ? "A calcular" : "Não se aplica")}</dd></div>
+      <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
+    </dl>
+  </>;
 
   return (
     <CheckoutShell
@@ -330,25 +344,15 @@ export default async function CheckoutPage({
             </details> : null}
           </div>
         </section>
-          <details open={missingCustomerFields.length > 0} className="group mx-4 mt-3 min-w-0 self-start rounded-xl border border-slate-200 bg-slate-50/60 lg:col-start-1 lg:row-start-2 lg:mx-6 lg:mb-6 lg:mt-0" aria-label="Dados do cliente">
+          <details open={missingCustomerFields.length > 0 || shippingBlocked} className="group mx-4 mt-3 min-w-0 self-start rounded-xl border border-slate-200 bg-slate-50/60 lg:col-start-1 lg:row-start-2 lg:mx-6 lg:mb-6 lg:mt-0" aria-label="Dados do cliente">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-2.5 px-3 py-2 [&::-webkit-details-marker]:hidden">
               <PackageCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-slate-950">Seus dados e entrega</span><span className="mt-0.5 block text-[11px] text-slate-500">{missingCustomerFields.length ? "Complete os dados para continuar" : "Já preenchidos pelo WhatsApp"}</span></span>
+              <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-slate-950">Seus dados e entrega</span><span className="mt-0.5 block text-[11px] text-slate-500">{missingCustomerFields.length ? "Complete os dados para continuar" : shippingBlocked ? "Confira a entrega para continuar" : "Seus dados já estão preenchidos"}</span></span>
               <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
             </summary>
             <div className="border-t border-slate-200 px-3 pb-3">
             {missingCustomerFields.length ? <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900">Confira os dados pendentes: {missingCustomerFields.join(", ")}.</p> : null}
-            <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
-            <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
-            <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
-            {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
-            {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
-            {whatsappReturn ? <a className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>{missingCustomerFields.length ? "Completar dados pelo WhatsApp" : "Corrigir dados pelo WhatsApp"}</a> : null}
-            <dl className="mt-2 space-y-2 border-t border-slate-200 pt-3 text-xs">
-              <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
-              <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? "Não se aplica"}</dd></div>
-              <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
-            </dl>
+            {session.provider === "asaas" && !paid && !failed ? <CheckoutDeliveryEditor key={`${session.id}:${order.checkout_revision}`} sessionId={session.id} initiallyOpen={shippingBlocked || missingCustomerFields.length > 0} initialCustomer={{ customer_name: order.customer_name, customer_phone: order.customer_phone, customer_email: order.customer_email, customer_document: order.customer_document, destination_cep: order.destination_cep, destination_address: order.destination_address }}>{customerSummary}</CheckoutDeliveryEditor> : customerSummary}
             </div>
           </details>
         <section className="min-w-0 p-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-slate-100 lg:p-6" aria-label="Pagamento">
@@ -371,8 +375,8 @@ export default async function CheckoutPage({
           ) : shippingBlocked ? (
             <CheckoutState
               tone="info"
-              title="Frete pendente"
-              body="Este pedido tem produto físico. O pagamento será liberado assim que o frete, retirada ou entrega for definido no WhatsApp."
+              title="Confirme a entrega"
+              body="Confira seus dados e escolha uma opção de entrega nesta página. Depois, continue o pagamento por Pix ou cartão."
             />
           ) : session.method === "card" && session.provider !== "asaas" ? (
             <CheckoutState
@@ -382,6 +386,7 @@ export default async function CheckoutPage({
             />
           ) : (
             <CheckoutPaymentOptions
+              key={`${session.id}:${order.checkout_revision}`}
               sessionId={session.id}
               amount={amountNumber ?? 0}
               payerEmail={session.payer_email}
@@ -603,7 +608,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, lead_id, conversation_id, customer_name, customer_phone, customer_email, customer_document, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
+      .select("id, checkout_revision, lead_id, conversation_id, customer_name, customer_phone, customer_email, customer_document, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),
@@ -789,6 +794,10 @@ async function loadCheckoutIntegration(client: ReturnType<typeof createServiceCl
 
   const metadata = readRecord(session.metadata);
   if (session.payment_owner_type !== "connectyhub" && readString(metadata.payment_owner) !== "connectyhub") {
+    if (session.provider === "asaas") {
+      const { data } = await client.from("sales_catalog_payment_integrations").select("id, public_key, status").eq("organization_id", session.organization_id).eq("provider", "asaas").eq("status", "connected").order("updated_at", { ascending: false }).limit(1).maybeSingle<CheckoutIntegrationRow>();
+      return data ?? null;
+    }
     return null;
   }
 

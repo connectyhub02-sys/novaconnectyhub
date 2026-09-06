@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 
@@ -26,6 +27,8 @@ beforeAll(async () => {
   `);
   await db.exec(readFileSync("supabase/migrations/0076_transparent_checkout_attempts.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0077_commerce_offer_history.sql", "utf8"));
+  await db.exec("alter table leads add column display_name text, add column phone_number text, add column metadata jsonb default '{}', add column last_event_summary text, add column updated_at timestamptz");
+  await db.exec(readFileSync("supabase/migrations/0079_checkout_self_service_delivery.sql", "utf8"));
   await db.query("insert into organizations values ($1)", [org]);
   await db.query("insert into sales_catalog_orders(id,organization_id,subtotal,total,shipping_total,discount_total) values ($1,$2,'100','110','10','0')", [order, org]);
   await db.query("insert into sales_catalog_payment_sessions(id,organization_id,order_id,provider,status) values ($1,$2,$3,'asaas','created')", [source, org, order]);
@@ -35,6 +38,60 @@ afterAll(async () => { await db?.close(); });
 async function claim(id = attempt, revision = 0, amount = 110) {
   return (await db.query<{ result: { claimed: boolean; attempt: { id: string; state: string } } }>("select claim_checkout_card_attempt($1,$2,$3,$4) as result", [source, id, revision, amount])).rows[0].result;
 }
+
+describe.sequential("self-service delivery transactions", () => {
+  const customer = { customer_name: "Maria Exemplo", customer_email: "cliente@example.test", customer_phone: "5548999990000", customer_document: "12345678909", destination_cep: "88330786", destination_address: "Rua Exemplo, número 61, Centro, Cidade Teste" };
+  async function fresh() {
+    const ids = { order: randomUUID(), session: randomUUID(), lead: randomUUID() };
+    await db.query("insert into leads(id,organization_id,metadata) values ($1,$2,$3)", [ids.lead, org, { interest: "keep", lead_memory: { preference: "keep" } }]);
+    await db.query("insert into sales_catalog_orders(id,organization_id,lead_id,subtotal,total,discount_total) values ($1,$2,$3,'467.41','457.41','10')", [ids.order, org, ids.lead]);
+    await db.query("insert into sales_catalog_payment_sessions(id,organization_id,order_id,provider,status,metadata) values ($1,$2,$3,'asaas','created','{}')", [ids.session, org, ids.order]);
+    return ids;
+  }
+  async function save(session: string, revision = 0) {
+    return (await db.query<{ saved: Record<string, unknown> }>("select set_checkout_delivery($1,$2,$3,70,'Frete',$4) as saved", [session, revision, customer, { id: "manual", amount: 70 }])).rows[0].saved;
+  }
+  it("atomically saves contact, freight, discounted total and lead history", async () => {
+    const ids = await fresh();
+    expect(await save(ids.session)).toMatchObject({ total: "527.41", shipping_total: "70.00", checkout_revision: 1, destination_cep: customer.destination_cep });
+    const lead = (await db.query<{ metadata: Record<string, unknown> }>("select metadata from leads where id=$1", [ids.lead])).rows[0];
+    expect(lead.metadata).toMatchObject({ interest: "keep", billing_cep: customer.destination_cep, lead_memory: { preference: "keep", delivery_address: customer.destination_address } });
+    expect((await db.query("select payload from intelligence_events where source_id=$1 and event_type='sales_catalog.checkout_delivery_updated'", [ids.order])).rows).toHaveLength(1);
+  });
+  it("rejects duplicate revisions and a card submission using the previous total", async () => {
+    const ids = await fresh();
+    const results = await Promise.allSettled([save(ids.session), save(ids.session)]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    await expect(db.query("select claim_checkout_card_attempt($1,$2,0,457.41)", [ids.session, randomUUID()])).rejects.toThrow("CHECKOUT_CHANGED");
+  });
+  it.each(["card_lock", "pix_inflight", "remote_pending", "paid"])("blocks delivery edits for %s", async state => {
+    const ids = await fresh();
+    if (state === "card_lock") await db.query("update sales_catalog_orders set checkout_payment_lock=$1 where id=$2", [randomUUID(), ids.order]);
+    if (state === "pix_inflight") await db.query("update sales_catalog_payment_sessions set metadata='{\"gateway_request_inflight\":true}' where id=$1", [ids.session]);
+    if (state === "remote_pending") await db.query("update sales_catalog_payment_sessions set provider_payment_id='pay_fixture',status='pending' where id=$1", [ids.session]);
+    if (state === "paid") await db.query("update sales_catalog_orders set payment_status='confirmed' where id=$1", [ids.order]);
+    await expect(save(ids.session)).rejects.toThrow(/CHECKOUT_PAYMENT|CHECKOUT_CLOSED/);
+    expect((await db.query<{ shipping_total: string | null }>("select shipping_total from sales_catalog_orders where id=$1", [ids.order])).rows[0].shipping_total).toBeNull();
+  });
+  it("does not update a lead from another tenant", async () => {
+    const ids = await fresh();
+    await db.query("update leads set organization_id=$1 where id=$2", [randomUUID(), ids.lead]);
+    await save(ids.session);
+    expect((await db.query("select display_name,metadata from leads where id=$1", [ids.lead])).rows[0]).toEqual({ display_name: null, metadata: { interest: "keep", lead_memory: { preference: "keep" } } });
+  });
+  it("rolls the order back if saving the CRM record fails", async () => {
+    const ids = await fresh();
+    await db.exec("create function test_fail_lead_update() returns trigger language plpgsql as $$ begin raise exception 'test_crm_failure'; end $$; create trigger test_fail_lead_update before update on leads for each row execute function test_fail_lead_update()");
+    try {
+      await expect(save(ids.session)).rejects.toThrow("test_crm_failure");
+      expect((await db.query("select total,checkout_revision from sales_catalog_orders where id=$1", [ids.order])).rows[0]).toEqual({ total: "457.41", checkout_revision: 0 });
+    } finally { await db.exec("drop trigger test_fail_lead_update on leads; drop function test_fail_lead_update()"); }
+  });
+  it("keeps the delivery mutation private to the backend", async () => {
+    const result = await db.query<{ allowed: boolean }>("select has_function_privilege('anon','set_checkout_delivery(uuid,bigint,jsonb,numeric,text,jsonb)','execute') as allowed");
+    expect(result.rows[0].allowed).toBe(false);
+  });
+});
 
 describe.sequential("durable transparent checkout transactions", () => {
   it("rejects a stale amount without creating a payment", async () => {

@@ -3,9 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrganizationSalesCatalogSettings, getOrganizationSalesCatalogShippingSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { buildCheckoutOrderBumpRows, loadValidatedOrderBumpItems } from "./checkout-order-bumps";
 import { normalizeCurrencyAmount } from "./mercado-pago";
-import { calculateSalesCatalogShippingQuotes } from "./shipping-calculator";
+import { chooseOrderDeliveryQuote, quoteOrderDelivery } from "./order-shipping";
 import { record } from "./card-input";
-import type { ClientSalesCatalogItem } from "./shared";
 import { retireCheckoutPaymentsBeforeCartChange } from "./transparent-checkout";
 
 export async function setSalesCatalogCheckoutOrderBumps(input: { client: SupabaseClient; organizationId: string; orderId: string; selectedProductIds: string[]; revision?: number }) {
@@ -37,27 +36,20 @@ export async function setSalesCatalogCheckoutOrderBumps(input: { client: Supabas
     if (productError) throw new Error("Não foi possível atualizar o frete.");
     const byId = new Map((products ?? []).map(row => [row.id, mapSalesCatalogItem(row)]));
     const physical = nextItems.filter(row => (record(row.fulfillment).mode ?? "physical") === "physical");
-    if (!physical.length || /retir|pickup/i.test(shippingMethod ?? "")) shipping = 0;
+    if (!physical.length) { shipping = 0; shippingMethod = null; }
     else {
-      const entries = physical.map(row => ({ item: byId.get(row.catalog_item_id), quantity: row.quantity ?? 1 }));
-      if (entries.some(entry => !entry.item)) throw new Error("Confirme o frete deste pedido pelo WhatsApp antes de adicionar ofertas.");
-      const billable = entries.filter(entry => entry.item!.shipping.profile !== "free") as { item: ClientSalesCatalogItem; quantity: number }[];
-      if (!billable.length) { shipping = 0; shippingMethod = "Frete grátis"; }
-      else {
-        if (billable.some(entry => entry.item.shipping.profile === "custom")) throw new Error("O frete desta oferta precisa ser combinado pelo WhatsApp.");
-        const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
-        if (!shippingSettings || !order.destination_cep) throw new Error("Confirme o CEP e o frete pelo WhatsApp antes de adicionar ofertas.");
-        const subtotal = nextItems.reduce((sum, row) => sum + (normalizeCurrencyAmount(row.total) ?? 0), 0);
-        const base = billable[0].item;
-        const aggregate: ClientSalesCatalogItem = { ...base, price: String(subtotal), shipping: { ...base.shipping, weightGrams: billable.reduce((sum, entry) => sum + (entry.item.shipping.weightGrams ?? 1000) * entry.quantity, 0) } };
-        const result = calculateSalesCatalogShippingQuotes({ item: aggregate, settings: shippingSettings, cep: order.destination_cep });
-        const quotes = result.quotes.filter(quote => normalizeCurrencyAmount(quote.price) !== null);
-        const normalized = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const quote = quotes.find(quote => normalized(shippingMethod ?? "").includes(normalized(quote.serviceName))) ?? (quotes.length === 1 ? quotes[0] : null);
-        if (!quote) throw new Error("A entrega mudou com esta oferta. Confirme a opção de frete pelo WhatsApp.");
-        shipping = normalizeCurrencyAmount(quote.price)!;
-        shippingMethod = quote.serviceName;
-      }
+      const entries = physical.map(row => {
+        const item = byId.get(row.catalog_item_id);
+        if (!item) throw new Error("Um produto não está mais disponível para calcular a entrega.");
+        return { item: { ...item, fulfillment: { ...item.fulfillment, mode: "physical" as const } }, quantity: row.quantity ?? 1 };
+      });
+      const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
+      const subtotal = nextItems.reduce((sum, row) => sum + (normalizeCurrencyAmount(row.total) ?? 0), 0);
+      const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "" });
+      const quote = chooseOrderDeliveryQuote(result.quotes, shippingMethod);
+      if (!quote) throw new Error(result.error ?? "Confira as opções em Seus dados e entrega antes de adicionar a oferta.");
+      shipping = quote.amount;
+      shippingMethod = quote.name;
     }
   }
   if (!sameSelection || pricesChanged) await retireCheckoutPaymentsBeforeCartChange(client, organizationId, orderId);
