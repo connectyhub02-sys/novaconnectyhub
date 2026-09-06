@@ -2,6 +2,12 @@
 
 Implementação local do plano aprovado em `plano-checkout-transparente-connectyhub.md`. A captura própria de cartão **ainda não foi ativada em produção**. A integração disponível nesta sessão é de produção; a homologação real em Sandbox e a validação aplicável à captura de cartões estão pendentes.
 
+## Publicação autorizada em 06/09/2026
+
+Após a entrega local do commit `7a4ab78`, o usuário autorizou a publicação mesmo com a habilitação de cartão pendente. As migrações `0076` e `0077` foram aplicadas juntas em uma transação no banco de produção, registradas no histórico de migrações e acompanhadas da atualização do cache de schema.
+
+A publicação do código não habilita a captura própria: nenhuma referência de validação foi criada e nenhuma loja foi ativada. Cartão fica indisponível nas lojas ainda não habilitadas; não há redirecionamento automático para o checkout externo. A homologação Sandbox e a validação aplicável continuam necessárias para liberar pagamentos reais por cartão.
+
 ## Implementação
 
 - Formulário de cartão na página ConnectyHub, com identificação do pedido reaproveitada, parcelas e opção de titular diferente. A API Asaas processa a cobrança; o navegador permanece na loja.
