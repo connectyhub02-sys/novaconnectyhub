@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as tracking from "../src/lib/tracking/tracked-links";
 import * as guards from "../src/lib/sales-catalog/checkout-guards";
+import * as customer from "../src/lib/sales-catalog/checkout-customer";
 import { commerceDatabase } from "./helpers/commerce-database";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
@@ -29,6 +30,7 @@ describe("Asaas checkout and lead attribution", () => {
     const createHosted = vi.fn(async () => ({ id: "hosted", link: "https://asaas.example/checkout/hosted", status: "ACTIVE" }));
     const createPix = vi.fn();
     const service = serverModuleHarness<Service>("src/lib/sales-catalog/payment-sessions.ts", {
+      "./checkout-customer": customer,
       "node:crypto": crypto, "./mercado-pago": mercadoPago, "@/lib/tracking/tracked-links": tracking,
       "@/lib/sales-catalog/checkout-guards": guards,
       "@/lib/client-os/sales-catalog": { getOrganizationSalesCatalogSettings: async () => null, mapSalesCatalogPaymentSession: (row: Row) => row },

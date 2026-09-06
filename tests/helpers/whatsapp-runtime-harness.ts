@@ -12,6 +12,7 @@ import * as commerceConversation from "@/lib/whatsapp/commerce-conversation";
 import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
 import * as humanization from "@/lib/whatsapp/clone-humanization";
+import * as customer from "@/lib/sales-catalog/checkout-customer";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
@@ -43,6 +44,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   const money = { exports: {} };
   runInNewContext(currency, { module: money, exports: money.exports, require: () => ({}), process, URL });
   const imports: Record<string, unknown> = {
+    "@/lib/sales-catalog/checkout-customer": customer,
     "node:crypto": require("node:crypto"),
     "./lead-names": leadNames,
     "@/lib/leads/metadata-update": metadataUpdate,

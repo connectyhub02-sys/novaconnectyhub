@@ -17,13 +17,11 @@ import {
   type SalesCatalogCheckoutOrderBump,
 } from "@/lib/sales-catalog/checkout-order-bumps";
 import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
+import { loadCheckoutCustomer } from "@/lib/sales-catalog/checkout-customer";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
-  formatSalesCatalogPaymentSessionStatus,
   resolveSalesCatalogStorefrontFontFamily,
-  type SalesCatalogCommercialFlowType,
-  type SalesCatalogRevenueOwnerType,
   type SalesCatalogStorefrontSettings,
 } from "@/lib/sales-catalog/shared";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
@@ -81,6 +79,9 @@ type CheckoutOrderRow = {
   conversation_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_email: string | null;
+  customer_document: string | null;
+  destination_cep: string | null;
   destination_address: string | null;
   subtotal: string | null;
   shipping_total: string | null;
@@ -208,7 +209,6 @@ export default async function CheckoutPage({
   const amountNumber = normalizeCurrency(session.amount ?? order.total ?? order.subtotal);
   const subtotal = formatCurrency(order.subtotal);
   const shipping = formatCurrency(order.shipping_total);
-  const updatedAt = formatDateTime(session.updated_at);
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
@@ -242,21 +242,6 @@ export default async function CheckoutPage({
   const canUsePix = session.provider === "asaas"
     ? session.method !== "card" && (connectyHubOwned || asaasPixEnabled)
     : false;
-  const checkoutPaymentTitle = session.method === "card"
-    ? "Pagamento do pedido"
-    : canUsePix && canUseCard
-      ? "Escolha o pagamento"
-      : canUsePix
-        ? "Pague com Pix"
-        : "Pagamento do pedido";
-  const checkoutPaymentMetric = canUsePix && canUseCard && session.method !== "card"
-    ? "Pix ou cartão"
-    : session.method === "card"
-      ? "Cartão"
-      : canUsePix
-        ? "Pix"
-        : "Indisponível";
-  const commercialContext = resolveCheckoutCommercialContext(session, order);
   const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
@@ -303,99 +288,29 @@ export default async function CheckoutPage({
       style={publicLayoutStyle}
       loadMercadoPagoSecurity={false}
     >
-      <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
-        Checkout seguro da {branding.displayName}.{" "}
-        <a className="font-bold underline underline-offset-2" href={publicStoreUrl}>
-          Voltar para loja
-        </a>
-      </div>
-      <header className="sticky top-0 z-30 bg-white">
-        <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
-          <a className="flex min-w-0 items-center gap-3" href={publicStoreUrl}>
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-[1040px] items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+          <a className="flex min-w-0 items-center gap-2.5" href={publicStoreUrl}>
             <CheckoutStoreLogo branding={branding} />
-            <span className="truncate text-xl font-semibold leading-none text-[color:var(--store-text)] lg:text-2xl">
-              {branding.displayName}
-            </span>
+            <span className="truncate text-base font-bold text-[color:var(--store-text)] sm:text-xl">{branding.displayName}</span>
           </a>
-          <div className="hidden items-center gap-6 text-sm text-[color:var(--store-text)] md:flex">
-            <a className="font-medium hover:opacity-70" href={publicStoreUrl}>Loja</a>
-            <span className="font-bold">Checkout</span>
-          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-700"><ShieldCheck className="h-4 w-4" /> Seguro</span>
         </div>
       </header>
-
-      <main className="mx-auto grid w-full max-w-[1240px] gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:py-9">
-        <section className="order-1 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <CheckoutStoreLogo branding={branding} />
-              <div className="min-w-0">
-                <span className="text-xs font-bold uppercase" style={{ color: "var(--store-accent)" }}>Pedido WhatsApp</span>
-                <h1 className="mt-1 truncate text-2xl font-bold text-[color:var(--store-text)] sm:text-3xl">{branding.displayName}</h1>
-                <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">{storefront.headerText}</p>
-              </div>
-            </div>
-            <span className={cn(
-              "rounded-full border px-3 py-1 text-xs font-bold uppercase",
-              paid
-                ? "border-emerald-200 bg-emerald-50 text-[#128C4A]"
-                : failed
-                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                  : "border-black/10 bg-[#f0f0f0] text-black",
-            )}>
-              {formatSalesCatalogPaymentSessionStatus(status)}
-            </span>
-          </div>
-
-          <CheckoutStatusPoller
-            sessionId={session.id}
-            initialStatus={status}
-            initialOrderStatus={order.status}
-            initialProviderStatus={session.provider_status}
-            providerLabel={paymentProviderLabel}
-          />
-
-          <div
-            className="mt-5 rounded-[20px] border p-4"
-            style={{
-              backgroundColor: "var(--store-primary)",
-              borderColor: "var(--store-primary-border)",
-              color: "var(--store-offer-text)",
-            }}
-          >
-            <p className="text-xs font-bold uppercase opacity-80">Total para finalizar</p>
-            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-              <p className="text-3xl font-black sm:text-4xl">{amount ?? "A combinar"}</p>
-              <p className="max-w-[360px] text-sm font-semibold leading-6 opacity-75">
-                Seu pedido ficou pronto. Conclua o pagamento e continue o atendimento pelo WhatsApp da loja.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <CheckoutTrustItem icon={<ShieldCheck className="h-4 w-4" />} label="Pagamento seguro" />
-            <CheckoutTrustItem icon={<MessageCircle className="h-4 w-4" />} label="Retorno ao WhatsApp" />
-            <CheckoutTrustItem icon={<PackageCheck className="h-4 w-4" />} label="Pedido registrado" />
-          </div>
-        </section>
-
-        <aside className="order-2 rounded-[20px] border border-black/10 bg-white p-4 shadow-2xl shadow-black/10 sm:p-6 lg:sticky lg:top-28 lg:order-none lg:row-span-3 lg:self-start">
-          <div className="flex items-start justify-between gap-4">
+      <main className="mx-auto grid w-full max-w-[1040px] items-start gap-4 px-3 py-4 sm:gap-6 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-label="Pagamento">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{paymentProviderLabel}</span>
-              <h2 className="mt-2 text-2xl font-black text-[color:var(--store-text)]">{checkoutPaymentTitle}</h2>
+              <p className="text-xs font-medium text-slate-500">Pedido #{order.id.slice(0, 8).toUpperCase()}</p>
+              <h1 className="mt-1 text-xl font-bold text-[color:var(--store-text)] sm:text-2xl">{paid ? "Pedido pago" : "Finalize seu pedido"}</h1>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-[#128C4A]">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Seguro
-            </span>
+            <div className="shrink-0 text-right">
+              <p className="text-xs text-slate-500">Total</p>
+              <p className="mt-1 whitespace-nowrap text-2xl font-bold tracking-tight text-[color:var(--store-accent)] sm:text-3xl">{amount}</p>
+            </div>
           </div>
-
-          <div className="mt-5 rounded-[20px] border border-black/10 bg-[#f0f0f0] p-4">
-            <p className="text-sm font-bold text-slate-950">{commercialContext.flowLabel}</p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">{commercialContext.checkoutNote}</p>
-          </div>
-
+          <p className="mt-2 text-xs text-slate-500">{shipping ? `Frete de ${shipping} incluído` : "Valor do pedido confirmado no WhatsApp"}</p>
+          <CheckoutStatusPoller sessionId={session.id} initialStatus={status} initialOrderStatus={order.status} initialProviderStatus={session.provider_status} providerLabel={paymentProviderLabel} />
           {paid ? (
             <CheckoutState
               tone="success"
@@ -451,61 +366,37 @@ export default async function CheckoutPage({
             />
           )}
 
-          <p className="mt-5 text-xs leading-5 text-slate-400">
-            A confirmação volta automaticamente para a loja no ConnectyHub. Não envie comprovantes fora da conversa oficial.
-          </p>
-
-          <CheckoutWhatsAppReturn link={whatsappReturn} />
-          <CheckoutPaymentFeedbackModal
-            feedback={paymentFeedback}
-            whatsappHref={whatsappReturn?.href ?? null}
-          />
-        </aside>
-
-        <section className="order-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Resumo</p>
-              <h2 className="mt-1 text-xl font-black text-[color:var(--store-text)]">Seu pedido</h2>
-            </div>
-            <span className="rounded-full border border-black/10 bg-[#f0f0f0] px-3 py-1 text-xs font-bold text-black">
-              #{order.id.slice(0, 8).toUpperCase()}
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <CheckoutMetric label="Total" value={amount} />
-            <CheckoutMetric label="Pagamento" value={checkoutPaymentMetric} />
-            <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
-            <CheckoutMetric label="Status" value={formatSalesCatalogPaymentSessionStatus(status)} />
-          </div>
-
-          <div className="mt-5 divide-y divide-black/10 overflow-hidden rounded-[20px] border border-black/10 bg-white">
-            {items.length > 0 ? items.map((item) => (
-              <CheckoutItemCard key={item.id} item={item} />
-            )) : (
-              <div className="px-4 py-4 text-sm text-slate-600">Pedido registrado no catálogo de vendas.</div>
-            )}
-          </div>
+          <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500"><ShieldCheck className="h-3.5 w-3.5 shrink-0" /> Pagamento protegido • Confirmação pelo WhatsApp</p>
+          {whatsappReturn ? <a href={whatsappReturn.href} className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-medium text-emerald-700"><MessageCircle className="h-4 w-4" /> Falar com {whatsappReturn.displayName ?? "a loja"}</a> : null}
+          <CheckoutPaymentFeedbackModal feedback={paymentFeedback} whatsappHref={whatsappReturn?.href ?? null} />
         </section>
-
-        <section className="order-4 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
-          <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Dados do pedido</p>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
-            <CheckoutDetail label="Subtotal" value={subtotal} />
-            <CheckoutDetail label="Frete" value={shipping ?? order.shipping_method ?? "A combinar"} />
-            <CheckoutDetail label="Origem da venda" value={commercialContext.flowLabel} />
-            <CheckoutDetail label="Última atualização" value={updatedAt ?? "Agora"} />
-          </dl>
-        </section>
+        <div className="grid min-w-0 gap-4 sm:gap-6">
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-label="Dados do cliente">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-950"><PackageCheck className="h-4 w-4 text-emerald-600" /> Seus dados</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Recebidos pelo WhatsApp e preenchidos no pagamento.</p>
+            <p className="mt-3 break-words text-sm font-semibold text-slate-950">{order.customer_name ?? "Cliente"}</p>
+            <p className="mt-1 break-all text-xs text-slate-600">{order.customer_email}</p>
+            <p className="mt-1 text-xs text-slate-600">{order.customer_phone ? formatWhatsappPhone(order.customer_phone) : null}</p>
+            {order.destination_address ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">{order.destination_address}{order.destination_cep && !order.destination_address.includes(order.destination_cep) ? ` • CEP ${order.destination_cep}` : ""}</p> : null}
+            {order.customer_document ? <p className="mt-2 text-xs text-slate-500">CPF/CNPJ cadastrado • final {order.customer_document.replace(/\D/g, "").slice(-4)}</p> : null}
+            {whatsappReturn ? <a className="mt-2 inline-flex min-h-9 items-center text-xs font-medium text-emerald-700 underline underline-offset-2" href={whatsappReturn.href}>Corrigir dados pelo WhatsApp</a> : null}
+          </section>
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Resumo do pedido">
+            <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6"><h2 className="text-base font-bold text-slate-950">Resumo do pedido</h2><span className="text-xs text-slate-500">{items.reduce((sum, item) => sum + (item.quantity ?? 1), 0)} itens</span></div>
+            <div className="mt-2 divide-y divide-slate-100">{items.map(item => <CheckoutItemCard key={item.id} item={item} />)}</div>
+            <dl className="space-y-2 border-t border-slate-200 px-4 py-4 text-sm sm:px-6">
+              <div className="flex justify-between gap-4 text-slate-600"><dt>Produtos</dt><dd>{subtotal}</dd></div>
+              <div className="flex justify-between gap-4 text-slate-600"><dt>Frete</dt><dd>{shipping ?? order.shipping_method ?? "Não se aplica"}</dd></div>
+              <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 font-bold text-slate-950"><dt>Total</dt><dd className="whitespace-nowrap">{amount}</dd></div>
+            </dl>
+          </section>
+        </div>
       </main>
-      <PublicStoreFooter
-        branding={branding}
-        footerContactText={storefront.footerContactText}
-        footerText={storefront.footerText}
-        paymentProviderLabel={paymentProviderLabel}
-      />
+      <footer className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-6 pt-2 text-center text-[11px] text-slate-500">
+        <span>Pagamento seguro por {paymentProviderLabel}</span>
+        <a className="underline underline-offset-2" href={publicStoreUrl}>Voltar para a loja</a>
+        <a href={connectHubPublicUrl} rel="noreferrer" target="_blank">Checkout ConnectyHub</a>
+      </footer>
     </CheckoutShell>
   );
 }
@@ -597,24 +488,6 @@ function safeJson(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function CheckoutMetric({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="rounded-[16px] border border-black/10 bg-[#f0f0f0] p-3">
-      <dt className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{label}</dt>
-      <dd className="mt-2 truncate text-base font-black text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
-    </div>
-  );
-}
-
-function CheckoutDetail({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="rounded-[16px] border border-black/10 bg-[#f0f0f0] px-3 py-2">
-      <dt className="text-xs font-bold uppercase text-[color:var(--store-card-text-muted)]">{label}</dt>
-      <dd className="mt-1 font-bold text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
-    </div>
-  );
-}
-
 function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
   return (
     <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-black/10 bg-white text-slate-950 shadow-sm">
@@ -635,90 +508,16 @@ function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
 }
 
 function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
-  const description = createShortCheckoutDescription(item.catalogDescription ?? readString(readRecord(item.metadata).cart_item_note));
-  const hasLongDescription = Boolean(item.catalogDescription && isLongCheckoutDescription(item.catalogDescription, description));
   const price = formatCurrency(item.total ?? item.sale_price ?? item.unit_price);
-
   return (
-    <div className="flex gap-3 px-4 py-4">
-      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[13px] border border-black/10 bg-[#f0f0f0]">
-        {item.catalogImageUrl ? (
-          <Image
-            alt={item.title}
-            src={item.catalogImageUrl}
-            fill
-            unoptimized
-            sizes="56px"
-            className="object-cover"
-          />
-        ) : (
-          <span className="text-[10px] font-black uppercase text-black/50">Item</span>
-        )}
+    <div className="flex min-w-0 gap-3 px-4 py-3 sm:px-6">
+      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+        {item.catalogImageUrl ? <Image alt={item.title} src={item.catalogImageUrl} fill unoptimized sizes="48px" className="object-contain" /> : <PackageCheck className="h-5 w-5 text-slate-400" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p
-            className="min-w-0 text-sm font-bold leading-5 text-[color:var(--store-card-text)]"
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-              overflow: "hidden",
-            }}
-            title={item.title}
-          >
-            {item.title}
-          </p>
-          <ItemOriginBadge item={item} />
-        </div>
-        <p className="mt-1 text-xs text-slate-500">
-          {item.sku_code ? `SKU ${item.sku_code}` : item.catalogCategory ?? "Item do catálogo"} - Qtd. {item.quantity ?? 1}
-        </p>
-        {description ? (
-          <div className="mt-2 text-xs leading-5 text-slate-600">
-            <p>{description}</p>
-            {hasLongDescription ? (
-              <details className="mt-1">
-                <summary className="cursor-pointer font-bold text-black">Ver detalhes</summary>
-                <p className="mt-2 rounded-[16px] border border-black/10 bg-[#f0f0f0] p-3 text-slate-700">
-                  {item.catalogDescription}
-                </p>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
+        <p className="text-xs font-semibold leading-5 text-slate-950 sm:text-sm">{item.title}</p>
+        <div className="mt-1 flex items-center justify-between gap-2"><span className="text-xs text-slate-500">Qtd. {item.quantity ?? 1}</span><span className="shrink-0 text-sm font-bold text-slate-950">{price}</span></div>
       </div>
-      <span className="shrink-0 text-sm font-black text-[color:var(--store-card-text)]">{price ?? "A combinar"}</span>
-    </div>
-  );
-}
-
-function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
-  const metadata = readRecord(item.metadata);
-  const flow = normalizeCommercialFlowType(item.commercial_flow_type ?? readString(metadata.commercial_flow_type));
-  const origin = item.product_origin_type ?? readString(metadata.product_origin_type);
-  const label = flow === "connectyhub_resale"
-    ? "ConnectyHub"
-    : flow === "connectyhub_direct"
-      ? "Venda CH"
-      : origin === "external_provider" || flow === "external_marketplace"
-        ? "Parceiro"
-        : null;
-
-  if (!label) return null;
-
-  return (
-    <span className="rounded-full border border-black/10 bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
-      {label}
-    </span>
-  );
-}
-
-function CheckoutTrustItem({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="flex min-h-11 items-center gap-2 rounded-full border border-black/10 bg-white px-3 text-xs font-bold text-slate-700">
-      <span className="text-[#128C4A]">{icon}</span>
-      <span>{label}</span>
     </div>
   );
 }
@@ -750,36 +549,6 @@ function CheckoutState({
   );
 }
 
-function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null }) {
-  return (
-    <div className="mt-5 rounded-[8px] border border-emerald-100 bg-emerald-50 p-4">
-      <p className="text-sm font-bold text-[#128C4A]">Continue pelo WhatsApp</p>
-      <p className="mt-2 text-xs leading-5 text-slate-600">
-        O atendimento do pedido continua na conversa oficial da loja.
-      </p>
-      {link ? (
-        <>
-          <a
-            href={link.href}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-[#25D366] px-4 text-sm font-semibold text-white transition hover:bg-[#20bf5a]"
-          >
-            Voltar ao WhatsApp
-          </a>
-          <p className="mt-2 text-center text-[11px] font-semibold text-[#128C4A]">
-            {link.displayName ? `${link.displayName} - ` : ""}{link.phoneLabel}
-          </p>
-        </>
-      ) : (
-        <p className="mt-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
-          Volte para a conversa em que recebeu este checkout para concluir o atendimento.
-        </p>
-      )}
-    </div>
-  );
-}
-
 async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, sessionId: string) {
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
@@ -802,7 +571,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, lead_id, conversation_id, customer_name, customer_phone, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
+      .select("id, lead_id, conversation_id, customer_name, customer_phone, customer_email, customer_document, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),
@@ -821,7 +590,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   ]);
 
   const rawItems = (itemsResult.data ?? []) as CheckoutOrderItemRow[];
-  const order = orderResult.data ?? null;
+  const order = orderResult.data ? await loadCheckoutCustomer(client, session.organization_id, orderResult.data) : null;
   const [items, whatsapp] = await Promise.all([
     enrichCheckoutItemsWithCatalog(client, rawItems, session.organization_id),
     order
@@ -1183,99 +952,6 @@ function resolveOrganizationBranding(
   };
 }
 
-function createShortCheckoutDescription(value: string | null | undefined) {
-  const compact = value?.replace(/\s+/g, " ").trim() ?? "";
-
-  if (!compact) return null;
-  if (compact.length <= 120) return compact;
-
-  const slice = compact.slice(0, 120);
-  const lastBreak = Math.max(slice.lastIndexOf("."), slice.lastIndexOf(","), slice.lastIndexOf(" "));
-  const ending = lastBreak > 60 ? slice.slice(0, lastBreak) : slice;
-
-  return `${ending.trim()}...`;
-}
-
-function isLongCheckoutDescription(fullDescription: string, preview: string | null) {
-  if (!preview) return Boolean(fullDescription.trim());
-
-  return fullDescription.replace(/\s+/g, " ").trim().length > preview.replace(/\s+/g, " ").trim().length;
-}
-
-function PublicStoreFooter({
-  branding,
-  footerContactText,
-  footerText,
-  paymentProviderLabel,
-}: {
-  branding: OrganizationBranding;
-  footerContactText: string;
-  footerText: string;
-  paymentProviderLabel: string;
-}) {
-  return (
-    <footer className="mt-12 bg-[#f0f0f0]">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
-        <div>
-          <div className="flex items-center gap-3">
-            <CheckoutStoreLogo branding={branding} />
-            <p className="text-[22px] font-semibold leading-none text-[color:var(--store-text)]">{branding.displayName}</p>
-          </div>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
-        </div>
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Atendimento</p>
-          <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">{footerContactText}</p>
-        </div>
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Checkout seguro</p>
-          <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">Checkout seguro pela ConnectyHub, pagamento protegido e pedido acompanhado no WhatsApp.</p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {buildCheckoutPaymentBadges(paymentProviderLabel).map((item) => (
-              <CheckoutPaymentBadge key={item.label} label={item.label} tone={item.tone} />
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-[color:var(--store-text-muted)]">
-        Checkout seguro pela{" "}
-        <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
-          ConnectyHub
-        </a>
-      </p>
-    </footer>
-  );
-}
-
-type CheckoutPaymentBadgeTone = "visa" | "pix" | "card" | "provider";
-
-function buildCheckoutPaymentBadges(paymentProviderLabel: string): Array<{ label: string; tone: CheckoutPaymentBadgeTone }> {
-  return [
-    { label: "Visa", tone: "visa" },
-    { label: "Pix", tone: "pix" },
-    { label: "Card", tone: "card" },
-    { label: paymentProviderLabel, tone: "provider" },
-  ];
-}
-
-function CheckoutPaymentBadge({ label, tone }: { label: string; tone: CheckoutPaymentBadgeTone }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
-        tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
-        tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-        tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
-        tone === "provider" && label === "Asaas" && "border-emerald-200/70 bg-emerald-500 text-white",
-        tone === "provider" && label === "PagBank" && "border-[#ffe082]/60 bg-[#f7c331] text-slate-950",
-        tone === "provider" && label !== "Asaas" && label !== "PagBank" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
 function resolvePublicPageStorefront(
   settings: SalesCatalogStorefrontSettings | null,
   branding: OrganizationBranding,
@@ -1354,105 +1030,6 @@ function readRecord(value: unknown): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function readBoolean(value: unknown) {
-  if (typeof value === "boolean") return value;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
-}
-
-function resolveCheckoutCommercialContext(session: CheckoutSessionRow, order: CheckoutOrderRow) {
-  const sessionMetadata = readRecord(session.metadata);
-  const commissionContext = readRecord(session.commission_context);
-  const orderMetadata = readRecord(order.metadata);
-  const flow = normalizeCommercialFlowType(
-    session.commercial_flow_type
-      ?? order.commercial_flow_type
-      ?? readString(sessionMetadata.commercial_flow_type)
-      ?? readString(orderMetadata.latest_commercial_flow_type)
-      ?? readString(orderMetadata.commercial_flow_type),
-  );
-  const revenueOwner = normalizeRevenueOwnerType(
-    session.revenue_owner_type
-      ?? order.revenue_owner_type
-      ?? readString(sessionMetadata.revenue_owner_type)
-      ?? readString(orderMetadata.latest_revenue_owner_type)
-      ?? readString(orderMetadata.revenue_owner_type),
-  );
-  const commissionEligible = readBoolean(order.commission_eligible)
-    ?? readBoolean(commissionContext.eligible)
-    ?? readBoolean(sessionMetadata.commission_eligible)
-    ?? readBoolean(orderMetadata.latest_commission_eligible)
-    ?? false;
-
-  if (flow === "connectyhub_resale") {
-    return {
-      flow,
-      revenueOwner,
-      commissionEligible,
-      flowLabel: "Produto ConnectyHub via loja parceira",
-      receiverLabel: "ConnectyHub",
-      checkoutNote: "O pagamento é processado pela ConnectyHub e o acompanhamento continua pelo WhatsApp da loja parceira.",
-    };
-  }
-
-  if (flow === "connectyhub_direct") {
-    return {
-      flow,
-      revenueOwner,
-      commissionEligible,
-      flowLabel: "Venda direta ConnectyHub",
-      receiverLabel: "ConnectyHub",
-      checkoutNote: "O pagamento e recebido pela ConnectyHub para este produto. O atendimento continua pelo WhatsApp oficial.",
-    };
-  }
-
-  if (flow === "external_marketplace") {
-    return {
-      flow,
-      revenueOwner,
-      commissionEligible,
-      flowLabel: "Marketplace parceiro",
-      receiverLabel: revenueOwner === "external_provider" ? "Fornecedor" : "ConnectyHub",
-      checkoutNote: "O pedido será acompanhado no WhatsApp e liquidado conforme a regra comercial do fornecedor parceiro.",
-    };
-  }
-
-  return {
-    flow,
-    revenueOwner,
-    commissionEligible,
-    flowLabel: "Produto da loja",
-    receiverLabel: "Loja parceira",
-    checkoutNote: "O pagamento vai para a conta configurada pela loja. Você continua acompanhando tudo pelo WhatsApp.",
-  };
-}
-
-function normalizeCommercialFlowType(value: string | null | undefined): SalesCatalogCommercialFlowType {
-  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
-  return "client_direct";
-}
-
-function normalizeRevenueOwnerType(value: string | null | undefined): SalesCatalogRevenueOwnerType {
-  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
-  return "client";
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "America/Sao_Paulo",
-  }).format(date);
 }
 
 function requiresShippingBeforePayment(order: CheckoutOrderRow, items: CheckoutOrderItemRow[]) {

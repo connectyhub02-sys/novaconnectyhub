@@ -46,6 +46,7 @@ import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components
 import { cn } from "@/lib/utils";
 import { useAttendanceHistory } from "./use-attendance-history";
 import { mergeConversationMessages, mergeLeadActivities, mergeLiveLeadWorkspace } from "@/lib/client-os/lead-crm-merge";
+import { mergeLeadTechnicalTracking } from "@/lib/client-os/lead-technical-profile";
 import { getTrackingSnapshot } from "@/lib/tracking/client";
 import type {
   ClientSocialApproval,
@@ -3695,7 +3696,7 @@ function LeadDetailsModal({
   const trackingEvents = mergeLeadActivities(history.trackingEvents, liveLead.leadFile.trackingEvents);
   const trackingIds = new Set(trackingEvents.map((activity) => activity.id));
   const intelligenceEvents = activities.filter((activity) => !trackingIds.has(activity.id));
-  const lead = { ...liveLead, activities, leadFile: { ...liveLead.leadFile, trackingEvents, intelligenceEvents, trackingEventCount: trackingEvents.length, intelligenceEventCount: intelligenceEvents.length } };
+  const lead = { ...liveLead, technical: { ...liveLead.technical, ...mergeLeadTechnicalTracking(history.technical, liveLead.technical) }, activities, leadFile: { ...liveLead.leadFile, trackingEvents, intelligenceEvents, trackingEventCount: trackingEvents.length, intelligenceEventCount: intelligenceEvents.length } };
   const preferredConversationId = lead.conversation.id ?? lead.leadFile.conversations[0]?.id ?? null;
   const [conversationSelection, setConversationSelection] = useState<{ leadId: string; conversationId: string | null }>({
     leadId: lead.id,

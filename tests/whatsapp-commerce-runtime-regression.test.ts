@@ -21,6 +21,28 @@ const context = (messages: ReturnType<typeof message>[]) => ({
 });
 
 describe("WhatsApp commerce regression: real runtime decisions", () => {
+  it("saves the card billing address even for a service without physical delivery", async () => {
+    const latest = message("inbound", "Rua Exemplo, número 61, Centro, Florianópolis, CEP 88000-000", 2);
+    const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "store", metadata: {} }] });
+    const ctx = context([latest]);
+    const call = runtimeHarness();
+    await call("maybePersistSalesCatalogLeadContactDetailsFromMessage", { client: db.client, context: ctx, userText: latest.text_content });
+    expect(db.tables.leads[0].metadata).toMatchObject({ billing_cep: "88000000", billing_address: expect.stringContaining("61") });
+    expect(ctx.lead.metadata).toMatchObject({ billing_cep: "88000000" });
+  });
+  it.each([false, true])("keeps billing details when address and postal code arrive separately (postal first: %s)", async postalFirst => {
+    const texts = ["Rua Exemplo, número 61, Centro, Florianópolis", "Meu CEP é 88000-000"];
+    if (postalFirst) texts.reverse();
+    const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "store", metadata: {} }] });
+    const ctx = context([]);
+    const call = runtimeHarness();
+    for (const [index, text] of texts.entries()) {
+      ctx.messages.push(message("inbound", text, index));
+      await call("maybePersistSalesCatalogLeadContactDetailsFromMessage", { client: db.client, context: ctx, userText: text });
+    }
+    expect(ctx.lead.metadata).toMatchObject({ billing_cep: "88000000", billing_address: texts.find(text => text.startsWith("Rua")) });
+    expect(call<string[]>("buildSalesCatalogCheckoutStateLines", ctx.lead).join("\n")).toContain("CEP ja informado: 88000000");
+  });
   it("resends the internal tracked card checkout after the hosted gateway checkout has been created", async () => {
     const latest = message("inbound", "Me manda o link do cartão de novo", 3);
     const db = commerceDatabase({

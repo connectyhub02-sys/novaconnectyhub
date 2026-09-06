@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Clock3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type CheckoutStatusPollerProps = {
@@ -110,7 +110,7 @@ export function CheckoutStatusPoller({
           {providerStatus ? formatProviderStatusLine(currentProviderLabel, providerStatus) : orderStatus ? `Pedido: ${formatOrderStatus(orderStatus)}` : "Aguardando retorno do pagamento"}
         </p>
       </div>
-      {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      {checking ? <Clock3 aria-label="Aguardando pagamento" className="h-4 w-4 shrink-0" /> : null}
     </div>
   );
 }

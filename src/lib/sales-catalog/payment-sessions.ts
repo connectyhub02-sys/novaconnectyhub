@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { hasCheckoutBillingAddress, loadCheckoutCustomer } from "./checkout-customer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getOrganizationSalesCatalogSettings,
@@ -89,6 +90,8 @@ type DeferredSalesCatalogPaymentReason =
   | "customer_name_required"
   | "customer_email_required"
   | "customer_document_required"
+  | "billing_address_required"
+  | "customer_phone_required"
   | "lead_details_required";
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
@@ -103,7 +106,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   source: "dashboard" | "whatsapp_agent" | "checkout";
   actorId?: string | null;
 }) {
-  const { data: order, error: orderError } = await input.client
+  const { data: orderRow, error: orderError } = await input.client
     .from("sales_catalog_orders")
     .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, metadata")
     .eq("id", input.orderId)
@@ -114,9 +117,10 @@ export async function createSalesCatalogPixPaymentSession(input: {
     throw new Error(`Nao foi possivel carregar o pedido para pagamento: ${orderError.message}`);
   }
 
-  if (!order) {
+  if (!orderRow) {
     throw new Error("Pedido nao encontrado para gerar pagamento.");
   }
+  const order = await loadCheckoutCustomer(input.client, input.organizationId, orderRow, true);
 
   const { data: itemRows } = await input.client
     .from("sales_catalog_order_items")
@@ -139,16 +143,19 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const needsShippingBeforePayment = requiresSalesCatalogShippingBeforePayment(order, items);
   const needsCustomerNameBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerName(order);
   const needsCustomerEmailBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerEmail(order, input.payerEmail);
+  const needsBillingAddressBeforePayment = input.source === "whatsapp_agent" && preferredMethod === "card" && !hasCheckoutBillingAddress(order);
+  const needsPhoneBeforePayment = input.source === "whatsapp_agent" && !/^\d{10,15}$/.test(order.customer_phone?.replace(/\D/g, "") ?? "");
 
-  if (needsShippingBeforePayment || needsCustomerNameBeforePayment || needsCustomerEmailBeforePayment) {
-    const missingCount = [needsShippingBeforePayment, needsCustomerNameBeforePayment, needsCustomerEmailBeforePayment].filter(Boolean).length;
+  if (needsShippingBeforePayment || needsCustomerNameBeforePayment || needsCustomerEmailBeforePayment || needsBillingAddressBeforePayment || needsPhoneBeforePayment) {
+    const missingCount = [needsShippingBeforePayment, needsCustomerNameBeforePayment, needsCustomerEmailBeforePayment, needsBillingAddressBeforePayment, needsPhoneBeforePayment].filter(Boolean).length;
     const reason: DeferredSalesCatalogPaymentReason = missingCount > 1
       ? "lead_details_required"
       : needsShippingBeforePayment
         ? "shipping_required"
         : needsCustomerNameBeforePayment
           ? "customer_name_required"
-          : "customer_email_required";
+          : needsCustomerEmailBeforePayment ? "customer_email_required"
+            : needsBillingAddressBeforePayment ? "billing_address_required" : "customer_phone_required";
     return createDeferredSalesCatalogCheckoutSession({
       ...input,
       order,
@@ -1153,6 +1160,8 @@ function hasSalesCatalogOrderCustomerDocument(order: OrderRow) {
 }
 
 function formatDeferredSalesCatalogPaymentReason(reason: DeferredSalesCatalogPaymentReason) {
+  if (reason === "billing_address_required") return "Endereço de cobrança com CEP e número pendente";
+  if (reason === "customer_phone_required") return "Telefone do cliente pendente";
   if (reason === "customer_name_required") {
     return "Nome do cliente pendente";
   }

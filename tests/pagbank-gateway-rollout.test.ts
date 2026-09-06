@@ -122,7 +122,7 @@ describe("PagBank gateway rollout", () => {
     expect(checkoutPageSource).toContain("loadMercadoPagoSecurity={false}");
     expect(checkoutOptionsSource).toContain("paymentProviderLabel");
     expect(checkoutOptionsSource).toContain("AsaasHostedCheckoutPanel");
-    expect(checkoutOptionsSource).toContain("Abrir pagamento no cartao");
+    expect(checkoutOptionsSource).toContain("Continuar para o cartão");
     expect(checkoutOptionsSource).toContain("Abrir pagamento no {paymentProviderLabel}");
   });
 

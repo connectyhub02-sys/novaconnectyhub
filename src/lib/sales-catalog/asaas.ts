@@ -1,4 +1,5 @@
 import "server-only";
+import { parseCheckoutAddress } from "./checkout-customer";
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -610,7 +611,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
 export async function createAsaasCheckout(input: AsaasCheckoutInput) {
   const billingTypes = input.billingTypes?.length ? input.billingTypes : ["CREDIT_CARD"];
   const amount = normalizeAsaasAmount(input.amount);
-  const fallbackItemName = sanitizeAsaasText(input.description, 80) ?? "Pedido ConnectyHub";
+  const fallbackItemName = sanitizeAsaasText(input.description, 30) ?? "Pedido ConnectyHub";
   const items = buildAsaasCheckoutItems(input.items, amount, fallbackItemName);
   const maxInstallmentCount = normalizeAsaasInstallmentCount(input.maxInstallmentCount);
   const chargeTypes = normalizeAsaasCheckoutChargeTypes(input.chargeTypes, maxInstallmentCount);
@@ -629,7 +630,7 @@ export async function createAsaasCheckout(input: AsaasCheckoutInput) {
       items,
       ...(chargeTypes.includes("INSTALLMENT") ? { installment: { maxInstallmentCount } } : {}),
       ...(chargeTypes.includes("RECURRENT") ? { subscription: buildAsaasCheckoutSubscription(input.subscription) } : {}),
-      customerData: buildAsaasCheckoutCustomerData(input),
+      customerData: await buildAsaasCheckoutCustomerData(input),
       callback: buildAsaasCheckoutCallback(input),
     },
     fallbackMessage: "Nao foi possivel criar o checkout Asaas.",
@@ -1061,20 +1062,35 @@ function createSafeAsaasAffiliateUrl(value: string) {
   }
 }
 
-function buildAsaasCheckoutCustomerData(input: AsaasCheckoutInput) {
+async function buildAsaasCheckoutCustomerData(input: AsaasCheckoutInput) {
   const document = normalizeAsaasDocument(input.payerDocument);
   const name = sanitizeAsaasText(input.payerName, 120);
+  const address = parseCheckoutAddress(input.payerAddress);
+  const postalCode = normalizeAsaasPostalCode(input.payerZipCode);
+  const postalAddress = postalCode ? await lookupAsaasCheckoutPostalAddress(postalCode) : null;
   const customerData = compactObject({
     name: name ?? undefined,
     cpfCnpj: document ?? undefined,
     email: sanitizeAsaasText(input.payerEmail, 120) ?? undefined,
     phone: normalizeAsaasPhone(input.payerPhone) ?? undefined,
     mobilePhone: normalizeAsaasPhone(input.payerPhone) ?? undefined,
-    postalCode: normalizeAsaasPostalCode(input.payerZipCode) ?? undefined,
-    ...parseAsaasAddress(input.payerAddress),
+    postalCode: postalCode ?? undefined,
+    ...address,
+    addressNumber: address.addressNumber ? Number(address.addressNumber) : undefined,
+    province: address.province ?? postalAddress?.bairro,
+    city: postalAddress?.ibge ? Number(postalAddress.ibge) : undefined,
   });
 
   return Object.keys(customerData).length > 0 ? customerData : undefined;
+}
+
+async function lookupAsaasCheckoutPostalAddress(postalCode: string): Promise<{ bairro?: string; ibge?: string } | null> {
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${postalCode}/json/`, { signal: AbortSignal.timeout(4000) });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data && !data.erro ? { bairro: readString(data.bairro) ?? undefined, ibge: /^\d{7}$/.test(data.ibge) ? data.ibge : undefined } : null;
+  } catch { return null; }
 }
 
 function buildAsaasCheckoutCallback(input: AsaasCheckoutInput) {
@@ -1093,7 +1109,7 @@ function buildAsaasCheckoutItems(
   fallbackName: string,
 ) {
   const mapped = (items ?? []).flatMap((item) => {
-    const name = sanitizeAsaasText(item.title, 80);
+    const name = sanitizeAsaasText(item.title, 30);
     const quantity = normalizeAsaasQuantity(item.quantity);
     const value = normalizeAsaasItemValue(item, quantity);
 
@@ -1107,7 +1123,7 @@ function buildAsaasCheckoutItems(
     return mapped;
   }
 
-  return [{ name: fallbackName, quantity: 1, value: fallbackAmount }];
+  return [{ name: sanitizeAsaasText(fallbackName, 30) ?? "Pedido", quantity: 1, value: fallbackAmount }];
 }
 
 function normalizeAsaasItemValue(
@@ -1218,20 +1234,12 @@ function normalizeAsaasPostalCode(value: string | null | undefined) {
 
 function normalizeAsaasPhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
-
-  return digits.length >= 10 && digits.length <= 13 ? digits : undefined;
+  const local = digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
+  return local.length === 10 || local.length === 11 ? local : undefined;
 }
 
 function parseAsaasAddress(value: string | null | undefined) {
-  const text = sanitizeAsaasText(value, 255);
-  if (!text) return {};
-
-  const numberMatch = text.match(/\b(?:n(?:umero|um|o)?\.?\s*)?(\d{1,6})\b/i);
-
-  return compactObject({
-    address: text,
-    addressNumber: numberMatch?.[1],
-  });
+  return compactObject(parseCheckoutAddress(sanitizeAsaasText(value, 255)));
 }
 
 function sanitizeAsaasText(value: string | null | undefined, maxLength: number) {

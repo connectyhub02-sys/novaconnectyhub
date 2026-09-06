@@ -252,7 +252,7 @@ export function CheckoutPaymentOptions({
   }
 
   return (
-    <div className="mt-6">
+    <div className="mt-4">
       {orderBumps.length > 0 ? (
         <OrderBumpSelector
           items={orderBumps}
@@ -262,7 +262,7 @@ export function CheckoutPaymentOptions({
         />
       ) : null}
 
-      {showCard || canUsePix ? (
+      {showCard && canUsePix ? (
         <div className={cn(
           "mt-5 grid gap-2 rounded-[8px] border border-blue-100 bg-blue-50 p-1",
           showCard && canUsePix ? "grid-cols-2" : "grid-cols-1",
@@ -279,7 +279,7 @@ export function CheckoutPaymentOptions({
             <PaymentMethodButton
               active={activeMethod === "card"}
               icon={<CreditCard className="h-4 w-4" />}
-              label="Cartao"
+              label="Cartão de crédito"
               onClick={() => selectPaymentMethod("card")}
             />
           ) : null}
@@ -362,7 +362,7 @@ function PaymentMethodEmptyState({
   canUsePix: boolean;
 }) {
   return (
-    <div className="mt-5 rounded-[8px] border border-blue-100 bg-white p-4">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-sm font-black text-slate-950">Escolha como deseja pagar</p>
       <p className="mt-2 text-xs leading-5 text-slate-600">
         {canUsePix && canUseCard
@@ -391,20 +391,20 @@ function AsaasHostedCheckoutPanel({
           <CreditCard className="h-5 w-5" />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-black text-slate-950">Cartao de credito Asaas</p>
+          <p className="text-sm font-bold text-slate-950">Cartão de crédito</p>
           <p className="mt-1 text-xs leading-5 text-slate-600">
-            O pagamento de {totalLabel} sera concluido no checkout seguro do Asaas.
+            Continue para informar os dados do cartão e pagar {totalLabel} com segurança no Asaas.
           </p>
         </div>
       </div>
       <button
         type="button"
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-blue-700 px-4 text-sm font-black text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--store-button,#1d4ed8)] px-3 text-sm font-bold text-[color:var(--store-button-text,#fff)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-slate-300"
         disabled={loading}
         onClick={onOpen}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-        {loading ? "Abrindo cartao..." : "Abrir pagamento no cartao"}
+        {loading ? "Preparando pagamento…" : "Continuar para o cartão"}
       </button>
       {error ? (
         <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">

@@ -3,12 +3,14 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { historyDatabase } from "./helpers/history-database";
 import * as cursors from "@/lib/client-os/attendance-history-cursor";
 import * as names from "@/lib/whatsapp/lead-names";
+import * as technical from "@/lib/client-os/lead-technical-profile";
 import type * as Crm from "@/lib/client-os/leads-crm";
 import type * as Media from "@/lib/whatsapp/message-media";
 import { mergeConversationMessages, mergeLiveLeadRecord } from "@/lib/client-os/lead-crm-merge";
 
 const media = serverModuleHarness<typeof Media>("src/lib/whatsapp/message-media.ts");
 const crm = serverModuleHarness<typeof Crm>("src/lib/client-os/leads-crm.ts", {
+  "./lead-technical-profile": technical,
   "./attendance-history-cursor": cursors, "@/lib/whatsapp/message-media": media, "@/lib/whatsapp/lead-names": names,
 });
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -34,6 +36,14 @@ function tables() {
 }
 
 describe("attendance history", () => {
+  it("returns recorded device and location along with deferred CRM event history", async () => {
+    const data = tables();
+    data.intelligence_events = [{ id: uuid(1200), organization_id: organizationId, source_id: leadId, occurred_at: at, title: "Checkout", event_type: "tracked_link.clicked", payload: { lead_id: leadId, device_type: "mobile", browser: "chrome", os: "android", ip_address: "203.0.113.5", city: "Cidade Teste", region: "SC", country: "BR" } }];
+    const { client } = historyDatabase(data);
+    const result = await crm.getAttendanceHistory({ ...input, client: client as never, kind: "events" });
+    expect(result?.technical).toEqual({ device: "mobile", browser: "chrome", os: "android", ipAddress: "203.0.113.5", location: "Cidade Teste / SC / BR", lastClick: at });
+    expect(result?.trackingEvents).toHaveLength(1);
+  });
   it("pages every message from WhatsApp and storefront without dropping equal timestamps", async () => {
     const data = tables();
     const { client } = historyDatabase(data);

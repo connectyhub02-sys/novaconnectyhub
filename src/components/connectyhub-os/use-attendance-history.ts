@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { AttendanceHistoryPage } from "@/lib/client-os/leads-crm";
 import type { AttendanceHistoryCursor } from "@/lib/client-os/attendance-history-cursor";
 import { mergeConversationMessages, mergeLeadActivities } from "@/lib/client-os/lead-crm-merge";
+import { mergeLeadTechnicalTracking, type LeadTechnicalTracking } from "@/lib/client-os/lead-technical-profile";
 
 type HistoryState = AttendanceHistoryPage & { key: string; loading: boolean; error: string | null };
 
@@ -22,7 +23,19 @@ export function useAttendanceHistory(leadId: string | null, conversationId: stri
     }).catch((error: Error) => {
       if (!controller.signal.aborted) setState({ key, messages: [], activities: [], trackingEvents: [], cursor: null, loading: false, error: error.message });
     });
-    return () => controller.abort();
+    const interval = kind === "events" ? window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void fetchHistory(leadId, conversationId, kind, null, controller.signal).then(page => {
+        if (controller.signal.aborted) return;
+        setState(latest => latest.key === key ? {
+          ...latest,
+          activities: mergeLeadActivities(page.activities, latest.activities),
+          trackingEvents: mergeLeadActivities(page.trackingEvents, latest.trackingEvents),
+          technical: mergeLeadTechnicalTracking(page.technical, latest.technical) as LeadTechnicalTracking,
+        } : latest);
+      }).catch(() => undefined);
+    }, 15000) : null;
+    return () => { controller.abort(); if (interval) window.clearInterval(interval); };
   }, [conversationId, key, kind, leadId]);
 
   async function loadMore() {
@@ -35,6 +48,7 @@ export function useAttendanceHistory(leadId: string | null, conversationId: stri
         messages: mergeConversationMessages(page.messages, latest.messages),
         activities: mergeLeadActivities(page.activities, latest.activities),
         trackingEvents: mergeLeadActivities(page.trackingEvents, latest.trackingEvents),
+        technical: mergeLeadTechnicalTracking(latest.technical, page.technical) as LeadTechnicalTracking,
       } : latest);
     } catch (error) {
       setState((latest) => latest.key === key ? { ...latest, loading: false, error: error instanceof Error ? error.message : "Falha ao carregar historico." } : latest);

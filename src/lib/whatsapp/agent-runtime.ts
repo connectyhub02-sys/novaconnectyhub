@@ -1,4 +1,5 @@
 import "server-only";
+import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-catalog/checkout-customer";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -2573,6 +2574,21 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
       ?? (email || document ? extractRuntimeCustomerName(input.userText) : null)
       ?? recentTexts.filter((text) => extractRuntimeEmail(text) || extractRuntimeCustomerDocument(text))
         .map(extractRuntimeCustomerNameFromStructuredReply).find(Boolean) ?? null;
+
+  const billingAddress = extractRuntimeAddress(latestInbound, input.userText);
+  const billingCep = extractFirstBrazilianCep(input.userText);
+  const hasBillingStreet = Boolean(parseCheckoutAddress(billingAddress).addressNumber);
+  if (hasBillingStreet || billingCep) {
+    const saved = await updateLeadMetadata({
+      client: input.client, organizationId: input.context.organization.id, leadId: input.context.lead.id,
+      buildUpdate: (metadata) => ({ metadata: {
+        ...metadata,
+        ...(hasBillingStreet ? { billing_address: billingAddress } : {}),
+        ...(billingCep ? { billing_cep: billingCep } : {}),
+      } }),
+    });
+    input.context.lead.metadata = saved.metadata;
+  }
 
   if (!email && !document && !customerName) {
     return;
@@ -6091,12 +6107,18 @@ function buildSalesCatalogCheckoutStateLines(lead: LeadRow | null) {
   const name = resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata });
   const email = normalizeRuntimeEmail(findString(lead.metadata, ["email", "customer_email", "lead_email"]));
   const document = normalizeRuntimeCustomerDocument(findString(lead.metadata, ["cpf_cnpj", "customer_document"]));
+  const address = findString(lead.metadata, ["billing_address", "delivery_address", "destination_address", "address"]);
+  const cep = findString(lead.metadata, ["billing_cep", "delivery_cep", "destination_cep", "cep"]);
   return [
     "",
     "DADOS JA CAPTURADOS PARA O PAGAMENTO:",
+    "- Antes de enviar Pix ou checkout, colete pelo WhatsApp os dados pessoais exigidos: nome completo, e-mail, CPF/CNPJ e telefone (aproveite o numero da conversa). Para entrega ou cartao, confirme endereco completo com CEP e numero. Pergunte apenas o que ainda falta.",
+    "- Os dados ja coletados preenchem o checkout automaticamente. Nunca solicite numero do cartao, validade, CVV ou senha no WhatsApp; esses dados sao informados somente na etapa segura de pagamento.",
     name ? `- Nome: ${name}. Nao solicite novamente.` : "- Nome ainda nao confirmado.",
     email ? `- E-mail: ${email}. Nao solicite novamente.` : "- E-mail ainda nao informado.",
     document ? "- CPF/CNPJ ja recebido. Nao solicite novamente." : "- Documento ainda nao informado; solicite somente se o pagamento exigir.",
+    address ? `- Endereco ja informado: ${address}. Nao solicite novamente; confirme somente eventual dado faltante.` : "- Endereco ainda nao informado.",
+    cep ? `- CEP ja informado: ${cep}. Nao solicite novamente.` : "- CEP ainda nao informado.",
     "- Use os dados salvos e o pedido atual. Durante a cobranca, nao reinicie a qualificacao nem sugira mais produtos.",
     "- O sistema informa o que falta e entrega o botao. Nunca afirme que um Pix foi gerado ou pago sem o resultado correspondente.",
   ];
@@ -11454,6 +11476,11 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     ? runtimeSalesCatalogOrderNeedsCustomerDocumentBeforePayment(input.context, order, input.payment.provider)
     : input.payment.provider === "asaas"
       && !normalizeRuntimeCustomerDocument(findString(input.context.lead?.metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document"]));
+  const needsBillingAddress = input.payment.preferredMethod === "card" && !hasCheckoutBillingAddress({
+    destination_cep: order?.destinationCep ?? findString(input.context.lead?.metadata, ["billing_cep", "delivery_cep", "destination_cep", "cep"]),
+    destination_address: order?.destinationAddress ?? findString(input.context.lead?.metadata, ["billing_address", "delivery_address", "destination_address", "address"]),
+  });
+  const needsCustomerPhone = input.payment.paymentDeferredReason === "customer_phone_required";
   const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
   const deliveryDataLabel = "endereço completo com rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver";
@@ -11467,6 +11494,8 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
     needsCustomerName ? "nome completo" : null,
     needsCustomerEmail ? "e-mail" : null,
     needsCustomerDocument ? "CPF ou CNPJ" : null,
+    needsCustomerPhone ? "telefone com DDD" : null,
+    needsBillingAddress && !needsDeliveryAddress ? "endereço de cobrança com CEP e número" : null,
   ].filter((item): item is string => Boolean(item));
   const missingDataLabels = [
     ...missingCustomerDataLabels,

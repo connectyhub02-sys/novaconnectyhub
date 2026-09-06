@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveLeadTechnicalTracking } from "./lead-technical-profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   readLeadProfileImageUrl,
@@ -327,6 +328,7 @@ export type ClientLeadCrmWorkspace = {
 };
 
 export type AttendanceHistoryPage = {
+  technical?: import("./lead-technical-profile").LeadTechnicalTracking;
   messages: ClientLeadMessage[];
   activities: ClientLeadActivity[];
   trackingEvents: ClientLeadActivity[];
@@ -388,7 +390,7 @@ export async function getAttendanceHistory(input: {
       position = rows.length > 500 && last?.occurred_at ? { at: last.occurred_at, id: last.id } : null;
     }
     const activities = buildActivities(lead, visibleConversations, matched);
-    return { messages: [], activities, trackingEvents: activities.filter(isTrackingActivity), cursor: position ? { events: position } : null };
+    return { messages: [], activities, trackingEvents: activities.filter(isTrackingActivity), technical: resolveLeadTechnicalTracking(readRecord(lead.metadata) ?? {}, matched), cursor: position ? { events: position } : null };
   }
 
   const conversation = visibleConversations.find((item) => item.id === input.conversationId);
@@ -1233,15 +1235,7 @@ function mapLeadRecord(input: {
     updatedAt: readString(leadQualification.updated_at) ?? readString(metadata.last_qualification_updated_at),
     fields: mapQualificationFields(qualificationMetadata),
   };
-  const device = readString(metadata.device_type) ?? readString(metadata.device) ?? readString(eventMetadata.device_type);
-  const browser = readString(metadata.browser) ?? readString(eventMetadata.browser);
-  const os = readString(metadata.os) ?? readString(eventMetadata.os);
-  const location = formatLocation([
-    readString(metadata.city) ?? readString(eventMetadata.city),
-    readString(metadata.region) ?? readString(eventMetadata.region),
-    readString(metadata.country) ?? readString(eventMetadata.country),
-  ]);
-  const ipAddress = readString(metadata.ip_address) ?? readString(metadata.ip) ?? readString(eventMetadata.ip_address);
+  const technicalTracking = resolveLeadTechnicalTracking(metadata, input.events);
   const deliveryAddress = readString(metadata.delivery_address)
     ?? readString(metadata.destination_address)
     ?? readString(metadata.address);
@@ -1252,7 +1246,6 @@ function mapLeadRecord(input: {
     ?? readString(metadata.cpf_cnpj)
     ?? readString(metadata.cpf)
     ?? readString(metadata.cnpj);
-  const latestClick = input.events.find((event) => event.event_type === "tracked_link.clicked");
   const summary = readString(metadata.ai_summary)
     ?? readString(metadata.summary)
     ?? input.lead.last_event_summary
@@ -1302,12 +1295,7 @@ function mapLeadRecord(input: {
     qualification,
     technical: {
       origin: source,
-      device,
-      browser,
-      os,
-      location,
-      ipAddress,
-      lastClick: latestClick?.occurred_at ?? null,
+      ...technicalTracking,
       deliveryAddress,
       deliveryCep,
       customerDocument,

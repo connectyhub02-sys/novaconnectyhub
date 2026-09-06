@@ -1,4 +1,5 @@
 import type { ClientLeadActivity, ClientLeadCrmWorkspace, ClientLeadMessage, ClientLeadRecord } from "./leads-crm";
+import { mergeLeadTechnicalTracking } from "./lead-technical-profile";
 
 export function mergeConversationMessages(primary: ClientLeadMessage[], preserved: ClientLeadMessage[]) {
   const seen = new Set<string>();
@@ -41,7 +42,7 @@ export function mergeLiveLeadRecord(current: ClientLeadRecord, next: ClientLeadR
       trackingEvents, trackingEventCount: trackingEvents.length,
       intelligenceEvents, intelligenceEventCount: intelligenceEvents.length,
     },
-    technical: { ...next.technical, lastClick: next.technical.lastClick ?? current.technical.lastClick },
+    technical: { ...next.technical, ...mergeLeadTechnicalTracking(next.technical, current.technical) },
   };
 }
 
