@@ -6,6 +6,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import { CheckoutCustomerAvatar } from "@/components/checkout/checkout-customer-avatar";
+import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { CheckoutUpsell } from "@/components/checkout/checkout-upsell";
 import {
   CheckoutPaymentFeedbackModal,
@@ -412,10 +413,12 @@ export default async function CheckoutPage({
           </details>
         </div>
       </main>
-      <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 pb-24 pt-2 text-center text-[11px] text-slate-500 sm:pb-6">
-        <span>Pagamento seguro por {paymentProviderLabel}</span>
-        <a className="underline underline-offset-2" href={publicStoreUrl}>Voltar para a loja</a>
-        <a href={connectHubPublicUrl} rel="noreferrer" target="_blank">Checkout ConnectyHub</a>
+      <footer className="mx-auto flex max-w-[960px] flex-wrap items-center justify-center gap-x-6 gap-y-1 px-4 pb-24 pt-1 text-center font-sans sm:pb-6">
+        <a className="inline-flex min-h-11 items-center text-xs text-slate-500 underline underline-offset-2 hover:text-slate-900" href={publicStoreUrl}>Voltar para a loja</a>
+        <a href={connectHubPublicUrl} rel="noreferrer" target="_blank" aria-label="Checkout seguro por ConnectyHub" className="inline-flex min-h-11 items-center gap-2 rounded-lg text-left">
+          <ConnectyLogo type="mark" tone="blue" alt="" className="h-8 w-8" />
+          <span><span className="block text-[11px] text-slate-500">Checkout seguro por</span><strong className="block text-sm font-bold text-[#080c48]">ConnectyHub</strong></span>
+        </a>
       </footer>
     </CheckoutShell>
   );

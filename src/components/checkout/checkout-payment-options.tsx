@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { BadgePercent, Check, ChevronDown, Copy, CreditCard, Loader2, QrCode } from "lucide-react";
+import { Copy, CreditCard, Loader2, QrCode } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
 } from "./checkout-payment-feedback-modal";
 import { MercadoPagoCardBrick, type CardPaymentStatusChange } from "./mercado-pago-card-brick";
 import { AsaasCardForm } from "./asaas-card-form";
+import { CheckoutOrderBumps, type CheckoutOrderBumpOption } from "./checkout-order-bumps";
 import { PagBankCardForm } from "./pagbank-card-form";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { cn } from "@/lib/utils";
@@ -43,16 +44,6 @@ type CheckoutPaymentOptionsProps = {
 
 type PaymentMethod = "pix" | "card";
 type PagBankCardPaymentMethodType = "CREDIT_CARD" | "DEBIT_CARD";
-
-type CheckoutOrderBumpOption = {
-  productId: string;
-  title: string;
-  description: string | null;
-  badge: string | null;
-  price: number;
-  priceLabel: string;
-  mediaUrl: string | null;
-};
 
 export function CheckoutPaymentOptions({
   sessionId,
@@ -117,11 +108,12 @@ export function CheckoutPaymentOptions({
     [selectedOrderBumpIds],
   );
 
-  function recordOffersShown() {
+  function recordOfferShown(productId: string) {
     publishCommerceAgentEvent("order_bump_shown", {
       session_id: sessionId,
       order_bump_count: orderBumps.length,
-      product_ids: orderBumps.map((item) => item.productId),
+      product_id: productId,
+      product_ids: [productId],
       total_available_amount: roundMoney(orderBumps.reduce((sum, item) => sum + item.price, 0)),
     });
   }
@@ -235,12 +227,13 @@ export function CheckoutPaymentOptions({
   }
 
   const offers = orderBumps.length > 0 ? (
-    <OrderBumpSelector
+    <CheckoutOrderBumps
       items={orderBumps}
       selectedIds={selectedOrderBumpIds}
       disabled={cardBusy || cartUpdating || pixUpdating}
       onToggle={toggleOrderBump}
-      onOpen={recordOffersShown}
+      onView={recordOfferShown}
+      onNavigate={(productId, index) => publishCommerceAgentEvent("order_bump_carousel_navigated", { session_id: sessionId, product_id: productId, position: index + 1, order_bump_count: orderBumps.length })}
     />
   ) : null;
 
@@ -352,80 +345,6 @@ function PaymentMethodEmptyState({
           : "Selecione uma forma habilitada para continuar."}
       </p>
     </div>
-  );
-}
-
-function OrderBumpSelector({
-  items,
-  selectedIds,
-  disabled,
-  onToggle,
-  onOpen,
-}: {
-  items: CheckoutOrderBumpOption[];
-  selectedIds: string[];
-  disabled: boolean;
-  onToggle: (productId: string) => void;
-  onOpen: () => void;
-}) {
-  return (
-    <details className="group rounded-xl border border-amber-200 bg-amber-50/70" onToggle={event => { if (event.currentTarget.open) onOpen(); }}>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-xs font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-        <BadgePercent className="h-4 w-4 shrink-0 text-amber-600" />
-        <span className="flex-1">Ofertas para seu pedido</span>
-        <span className="text-[11px] text-amber-800">{selectedIds.length > 0 ? `${selectedIds.length} adicionada${selectedIds.length > 1 ? "s" : ""}` : "Ver"}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="grid gap-2 px-2 pb-2">
-        {items.map((item) => {
-          const selected = selectedIds.includes(item.productId);
-
-          return (
-            <button
-              key={item.productId}
-              type="button"
-              aria-pressed={selected}
-              aria-label={`${selected ? "Remover" : "Adicionar"} ${item.title}, ${item.priceLabel}`}
-              disabled={disabled}
-              onClick={() => onToggle(item.productId)}
-              className={cn(
-                "flex min-w-0 items-center gap-2.5 rounded-lg border bg-white p-2.5 text-left transition disabled:opacity-60",
-                selected
-                  ? "border-[#25D366] bg-emerald-50"
-                  : "border-blue-100 bg-white hover:border-amber-300",
-              )}
-            >
-              {item.mediaUrl ? (
-                <Image
-                  src={item.mediaUrl}
-                  alt=""
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 shrink-0 rounded-lg object-contain"
-                  unoptimized
-                />
-              ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100">
-                  <BadgePercent className="h-5 w-5 text-amber-700" />
-                </span>
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-2 break-words text-xs font-semibold leading-4 text-slate-950">{item.title}</span>
-                <span className="mt-1 block text-xs font-bold text-slate-950">+ {item.priceLabel}</span>
-              </span>
-              <span className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
-                selected
-                  ? "border-[#25D366] bg-[#25D366] text-white"
-                  : "border-blue-100 text-slate-400",
-              )}>
-                {selected ? <Check className="h-4 w-4" /> : null}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </details>
   );
 }
 
