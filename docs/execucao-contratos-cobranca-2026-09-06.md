@@ -15,7 +15,7 @@ Data: 06/09/2026. Escopo aprovado no plano de cobrança, produtos e bloqueio int
 ## Validação
 
 - Build de produção Next.js concluído.
-- 80 arquivos / 600 testes aprovados: cobrança avulsa, renovação, prazo exato, idempotência, RLS com sessão antiga, isolamento contratual, biblioteca, preservação de créditos comprados, avisos e arquivo do lead.
+- 80 arquivos / 600 testes da implementação inicial aprovados: cobrança avulsa, renovação, prazo exato, idempotência, RLS com sessão antiga, isolamento contratual, biblioteca, preservação de créditos comprados, avisos e arquivo do lead. Mais três testes cobrem a apresentação da fatura vencida, exclusão de faturas quitadas e falha na consulta financeira.
 - Migrações 0082–0092 ensaiadas no banco real com transação e **rollback**, incluindo execução do arquivo de jornada. Foram corrigidas diferenças entre os índices reais de conversas e o modelo inicial de teste.
 - Prévia sobre 581 organizações: 2 internas, 5 contratos ativos, 1 em carência, 1 contrato vencido, 1 trial vigente, 569 trials vencidos e 2 cadastros pendentes. Organizações não equivalem a usuários: um titular pode possuir várias empresas.
 - Nenhum registro de entrega de token direto do provedor foi encontrado nas 49 instâncias consultadas. A exportação pelo painel do cliente foi restringida; isso não comprova inexistência de cópias antigas feitas por outros meios.
@@ -34,4 +34,8 @@ Pagamentos com resultado incerto ficam retidos para conciliação, sem segunda c
 
 ## Publicação
 
-Migrações 0082–0092 aplicadas em transação e confirmadas no Supabase em 06/09/2026. Código preparado para publicação pela branch `master`; a confirmação da revisão em produção será registrada no retorno da execução.
+Migrações 0082–0092 aplicadas em transação e confirmadas no Supabase em 06/09/2026. Commit inicial `f87cad8` publicado na `master`, com Vercel em estado Ready e domínio de produção atribuído.
+
+Na conferência em produção, a sessão da BuffaloMass foi redirecionada para regularização, com apenas Meus produtos e Pagamento do plano no menu. A biblioteca e o checkout próprio da assinatura abriram com a conta suspensa. A fatura existente de R$ 497 foi identificada para exibição em destaque, sem criar outra cobrança. O ajuste complementar inclui esse acesso direto na página de planos.
+
+Foram arquivados 83 eventos financeiros históricos. O contexto financeiro do cliente contém a suspensão do contrato e a regra de confirmação pelo sistema. A chamada anônima à função de concessão de créditos foi recusada com código `42501`.

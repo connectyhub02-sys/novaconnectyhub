@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { AccountCompletionRequiredError, assertAccountComplete } from "@/lib/account/signup-completion";
-import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
+import { loadPendingPlan } from "@/lib/billing/pending-plan";
 import { loadPublicPricingPlans } from "@/lib/billing/public-pricing-server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -53,6 +54,12 @@ export default async function DashboardPlanosPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <section className="space-y-6">
+        {pendingPlan ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-slate-900">
+          <div><h2 className="font-bold">{pendingPlan.renewal ? "Regularize seu plano" : "Conclua o pagamento do plano"}</h2>
+            <p className="mt-1 text-sm">{pendingPlan.planName} · {pendingPlan.amountBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+            <p className="mt-1 text-sm text-slate-600">A liberação acontece após a confirmação do pagamento.</p></div>
+          <Link href={pendingPlan.checkoutUrl} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white">Pagar fatura do plano</Link>
+        </div> : null}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300">
@@ -79,32 +86,6 @@ export default async function DashboardPlanosPage() {
       </section>
     </ConnectyShell>
   );
-}
-
-async function loadPendingPlan(client: ReturnType<typeof createServiceClient>, organizationId: string) {
-  const { data, error } = await client
-    .from("organization_subscriptions")
-    .select("id, plan_code, status")
-    .eq("organization_id", organizationId)
-    .eq("subscription_kind", "plan")
-    .in("status", ["pending", "incomplete"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{
-      id: string;
-      plan_code: string;
-      status: string;
-    }>();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return {
-    subscriptionId: data.id,
-    planCode: data.plan_code,
-    checkoutUrl: buildDashboardBillingCheckoutPath(data.id),
-  };
 }
 
 function getCurrentPurchasablePlanCode(planCode: string | null | undefined, status: string | null | undefined) {
