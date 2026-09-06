@@ -18,6 +18,7 @@ import {
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
 import { PublicTrackingContextBridge } from "@/components/tracking/public-tracking-context-bridge";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getLeadPaymentReviews } from "@/lib/sales-catalog/payment-reviews";
 import {
   loadSalesCatalogCheckoutOrderBumps,
   type SalesCatalogCheckoutOrderBump,
@@ -210,6 +211,7 @@ export default async function CheckoutPage({
 
   const status = order.payment_status === "confirmed" ? "approved" : order.payment_status === "refunded" ? "refunded" : session.provider === "asaas" && order.status !== "cancelled" && ["expired", "cancelled"].includes(session.status ?? "") ? "pending" : normalizePaymentSessionStatus(session.status);
   const paid = status === "approved" || order.payment_status === "confirmed";
+  const financialReview = order.lead_id ? (await getLeadPaymentReviews(createServiceClient(), session.organization_id, order.lead_id)).some(review => !review.order_id || review.order_id === order.id) : false;
   const failed = order.status === "cancelled" || order.payment_status === "refunded" || (session.provider !== "asaas" && ["rejected", "cancelled", "expired", "error"].includes(status));
   const gatewayUnavailable = status === "error"
     && (session.provider_status === "gateway_unavailable" || session.provider_status === "gateway_error");
@@ -364,6 +366,8 @@ export default async function CheckoutPage({
               body="Recebemos a confirmação do pagamento. Volte ao WhatsApp para acompanhar o atendimento."
             />
             <CheckoutUpsell organizationId={organization.id} sessionId={session.id} productIds={items.map(item => item.catalog_item_id).filter((id): id is string => Boolean(id))} /></>
+          ) : financialReview ? (
+            <CheckoutState tone="info" title="Pagamento em conferência" body="Nossa equipe está conferindo sua informação de pagamento. Aguarde antes de tentar pagar novamente. Você recebe o resultado pelo WhatsApp." />
           ) : failed ? (
             <CheckoutState
               tone={gatewayUnavailable ? "info" : "error"}

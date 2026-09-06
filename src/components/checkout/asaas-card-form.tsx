@@ -8,7 +8,7 @@ import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { detectCheckoutCardBrand, type CheckoutCardBrand } from "@/lib/sales-catalog/card-brand";
 import { PaymentBrandBadge } from "./payment-brand-badge";
 
-type Quote = { amount: number; revision: number; holder: CheckoutCardHolder; maxInstallments: number; enabled: boolean; paid: boolean; closed: boolean; attempt: { id: string; state: string } | null; shipping: number };
+type Quote = { amount: number; revision: number; holder: CheckoutCardHolder; maxInstallments: number; enabled: boolean; paid: boolean; closed: boolean; review?: boolean; attempt: { id: string; state: string } | null; shipping: number };
 type Props = { sessionId: string; selectedOrderBumpIds: string[]; externalBusy?: boolean; offers?: ReactNode; onBusyChange: (busy: boolean) => void; onApproved: () => void };
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const inputClass = "mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base text-slate-950 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50";
@@ -56,7 +56,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || busy || !quote) return;
+    if (submitting.current || busy || !quote || quote.review) return;
     const form = new FormData(event.currentTarget);
     let card;
     let paymentRequested = false;
@@ -110,6 +110,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
   if (loading) return <p className="mt-5 flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Conferindo seu pedido…</p>;
   if (quote?.paid) return <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900"><CheckCircle2 className="mb-2 h-6 w-6" /><p className="font-bold">Pagamento aprovado!</p><p className="mt-1 text-sm">Seu pedido está confirmado. Você acompanha os próximos passos pelo WhatsApp.</p></div>;
   if (quote?.closed) return <p className="mt-4 text-sm">Este pedido foi encerrado. Continue pelo WhatsApp para fazer um novo pedido.</p>;
+  if (quote?.review) return <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Pagamento em conferência pela equipe. Aguarde antes de tentar pagar novamente. O resultado será informado pelo WhatsApp.</p>;
   if (quote && !quote.enabled && !waiting) return <p role="status" className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">O cartão está temporariamente indisponível. Continue pelo WhatsApp para combinar o pagamento com a loja.</p>;
   if (!quote) return <div role="alert" className="mt-4 text-sm text-rose-700">{message}<button type="button" className="mt-3 block underline" onClick={() => loadQuote().catch(error => setMessage(error.message))}>Conferir pedido novamente</button></div>;
 

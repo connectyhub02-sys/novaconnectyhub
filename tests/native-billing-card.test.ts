@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { serverModuleHarness } from './helpers/server-module-harness';
 import { isIP } from 'node:net';
 import * as cardInput from '../src/lib/sales-catalog/card-input';
+import * as diagnostics from '../src/lib/sales-catalog/payment-diagnostics';
 const id='55555555-5555-4555-8555-555555555555';
 const card={holderName:'Teste',number:'4111111111111111',expiryMonth:'12',expiryYear:'2030',ccv:'123'};
 const holder={name:'Cliente Teste',email:'test@example.com',cpfCnpj:'12345678909',phone:'11999999999',postalCode:'01001000',addressNumber:'10'};
@@ -29,7 +30,7 @@ function setup() {
   };
   q.single=async()=>table==='billing_card_attempts'&&!update?{data:attempt,error:null}:result();q.maybeSingle=q.single;q.then=(resolve:(r:unknown)=>void)=>Promise.resolve(result()).then(resolve);return q;
  }};
- const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./plan-checkout':{loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[{code:'monthly',priceBrl:10,recurrence:'monthly'},{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:vi.fn()}});
+ const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'@/lib/sales-catalog/payment-diagnostics':diagnostics,'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./plan-checkout':{loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[{code:'monthly',priceBrl:10,recurrence:'monthly'},{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:vi.fn()}});
  const pay=()=>mod.payNativeBillingCard(client as never,'org','subscription',{attemptId:id,amount:130,revision:0,acceptRecurring:true,card,holder},'203.0.113.1');
  return {mod,pay,adapter,rpc,client,intent};
 }

@@ -1,10 +1,11 @@
 import "server-only";
 import type { AsaasMode, AsaasPaymentResponse } from "./asaas";
 import type { CheckoutCard, CheckoutCardHolder } from "./card-input";
+import { classifyAsaasFailure, type PaymentDiagnostic } from "./payment-diagnostics";
 
 export type AsaasDirectConnection = { accessToken: string; mode?: AsaasMode | null };
 export class AsaasDirectError extends Error {
-  constructor(public readonly definitive: boolean, public readonly declined: boolean) {
+  constructor(public readonly definitive: boolean, public readonly declined: boolean, public readonly diagnostic?: PaymentDiagnostic) {
     super(declined ? "O cartão não foi autorizado. Confira os dados ou use outra forma de pagamento." : definitive ? "Não foi possível preparar o pagamento. Tente novamente mais tarde." : "Estamos verificando o resultado do pagamento. Não repita a cobrança agora.");
   }
 }
@@ -19,12 +20,13 @@ async function request(connection: AsaasDirectConnection, endpoint: string, meth
       headers: { access_token: connection.accessToken, "Content-Type": "application/json", "User-Agent": "ConnectyHub/1.0" },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-  } catch { throw new AsaasDirectError(false, false); }
+  } catch { throw new AsaasDirectError(false, false, classifyAsaasFailure(null, endpoint, method)); }
   if (response.ok && [204, 205].includes(response.status)) return {};
   const data = await response.json().catch(() => null);
   if (!response.ok || !data) {
     const definitive = [400, 401, 403, 404, 422].includes(response.status);
-    throw new AsaasDirectError(definitive, response.status === 400 && method === "POST" && ["/payments", "/subscriptions"].includes(endpoint));
+    const diagnostic = classifyAsaasFailure(response.status, endpoint, method, data);
+    throw new AsaasDirectError(definitive, diagnostic.category === "declined", diagnostic);
   }
   return data;
 }
@@ -44,7 +46,7 @@ export async function createAsaasNativeSubscription(input: AsaasDirectConnection
   try {
     const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
     customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", { ...input.holder, notificationDisabled: true });
-  } catch { throw new AsaasDirectError(true, false); }
+  } catch (error) { throw new AsaasDirectError(true, false, error instanceof AsaasDirectError ? error.diagnostic : undefined); }
   if (!customer.id) throw new AsaasDirectError(true, false);
   const subscription = safeSubscription(await request(input, "/subscriptions", "POST", {
     customer: customer.id, billingType: "CREDIT_CARD", value: input.amount, cycle: "MONTHLY", nextDueDate: input.nextDueDate,
@@ -93,9 +95,9 @@ export async function createAsaasDirectCardPayment(input: AsaasDirectConnection 
   try {
     const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
     customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", { ...input.holder, notificationDisabled: true });
-  } catch {
+  } catch (error) {
     // Customer lookup/creation cannot charge a card. A retry starts by looking it up again.
-    throw new AsaasDirectError(true, false);
+    throw new AsaasDirectError(true, false, error instanceof AsaasDirectError ? error.diagnostic : undefined);
   }
   if (typeof customer.id !== "string") throw new AsaasDirectError(true, false);
   // Processing occurs exactly once, after the durable application attempt has been claimed.

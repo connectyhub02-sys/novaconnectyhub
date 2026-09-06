@@ -1,4 +1,5 @@
 import "server-only";
+import { paymentOutcomeCopy } from "@/lib/sales-catalog/payment-diagnostics";
 import { isIP } from "node:net";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -66,6 +67,10 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
     return billingAttemptResult(await finishNativeBilling(client, attempt, directPaymentState(payment), payment));
   } catch (error) {
     const definitive = error instanceof AsaasDirectError && error.definitive;
+    if (error instanceof AsaasDirectError && error.diagnostic) {
+      const diagnostic = await client.from("billing_card_attempts").update({ diagnostic: error.diagnostic }).eq("id", attempt.id).eq("organization_id", organizationId);
+      if (diagnostic.error) throw new CheckoutError("Pagamento em conferência. Não repita a cobrança.", 503);
+    }
     let state = definitive ? error.declined ? "rejected" : "error" : "unknown";
     if (definitive && attempt.provider_subscription_id) {
       try { await cancelAsaasNativeSubscription(config, attempt.provider_subscription_id, `billing_recurring:${attempt.id}`); } catch { state = "unknown"; }
@@ -130,7 +135,7 @@ async function applyNativeBillingEffects(client: SupabaseClient, attempt: Attemp
 }
 
 export function billingAttemptResult(attempt: Attempt) {
-  return { ok: true, status: attempt.state, approved: attempt.state === "approved", rejected: ["rejected", "error", "cancelled"].includes(attempt.state), providerPaymentId: attempt.provider_payment_id, message: attempt.state === "approved" ? "Pagamento confirmado. Seu plano está sendo atualizado no painel." : ["rejected", "error", "cancelled"].includes(attempt.state) ? "Não foi possível concluir o pagamento. Confira os dados e tente novamente." : "Estamos conferindo o resultado. Não repita a cobrança; você receberá a atualização pelo WhatsApp." };
+  return { ok: true, status: attempt.state, approved: attempt.state === "approved", rejected: ["rejected", "error", "cancelled"].includes(attempt.state), providerPaymentId: attempt.provider_payment_id, message: attempt.state === "approved" ? "Pagamento confirmado. Seu plano está sendo atualizado no painel." : paymentOutcomeCopy(attempt.state) };
 }
 
 export async function processNativeBillingWebhook(client: SupabaseClient, payload: Record<string, unknown>, header: string | null) {

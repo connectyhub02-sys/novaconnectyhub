@@ -1,4 +1,5 @@
 import "server-only";
+import { paymentOutcomeCopy } from "./payment-diagnostics";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -94,7 +95,7 @@ type ResponsibleWhatsappDelivery = {
 };
 
 type SalesCatalogPaymentStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
-type SalesCatalogPostPaymentSource = "mercado_pago_webhook" | "pagbank_webhook" | "asaas_webhook" | "checkout_card";
+type SalesCatalogPostPaymentSource = "mercado_pago_webhook" | "pagbank_webhook" | "asaas_webhook" | "checkout_card" | "lead_financial_check";
 type SalesCatalogPaymentNotificationStatus = "pending" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
 
 export async function handleSalesCatalogPaymentStatusChange(input: {
@@ -1094,6 +1095,11 @@ function buildPaymentStatusMessage(input: {
   const variables = buildPaymentTemplateVariables(input.order, itemSummary, input.paymentMethod);
   const template = input.template?.trim();
   const checkoutUrl = readLatestCheckoutUrl(input.order.metadata);
+
+  // Historical templates may assert that no debit occurred. Only verified facts belong here.
+  if (["error", "rejected", "cancelled", "expired"].includes(input.status)) {
+    return `${variables.cliente}, sobre o pedido ${variables.pedido}: ${paymentOutcomeCopy(input.status)}`;
+  }
 
   if (template) {
     let rendered = renderMessageTemplate(template, {

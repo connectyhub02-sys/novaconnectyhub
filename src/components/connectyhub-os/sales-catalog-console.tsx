@@ -2334,7 +2334,7 @@ export function SalesCatalogConsole({
 
   async function updateOrder(
     order: ClientSalesCatalogOrder,
-    patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">>,
+    patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">> & { paymentVerificationReference?: string },
   ) {
     if (updatingOrderId) return;
 
@@ -2351,6 +2351,7 @@ export function SalesCatalogConsole({
           orderId: order.id,
           status: patch.status,
           paymentStatus: patch.paymentStatus,
+          paymentVerificationReference: patch.paymentVerificationReference,
           fulfillmentStatus: patch.fulfillmentStatus,
         }),
       });
@@ -8015,8 +8016,10 @@ function OrderCard({
   paymentLoading: boolean;
   updating: boolean;
   onCreatePayment: () => void;
-  onUpdate: (patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">>) => void;
+  onUpdate: (patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">> & { paymentVerificationReference?: string }) => void;
 }) {
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [paymentReference, setPaymentReference] = useState("");
   const customerLabel = order.customerName ?? order.customerPhone ?? "Lead sem nome";
   const itemSummary = order.items.length > 0
     ? order.items.map((item) => `${item.quantity}x ${item.title}`).join(", ")
@@ -8151,7 +8154,11 @@ function OrderCard({
             <select
               value={order.paymentStatus}
               disabled={updating}
-              onChange={(event) => onUpdate({ paymentStatus: event.target.value as SalesCatalogPaymentStatus })}
+              onChange={(event) => {
+                const paymentStatus = event.target.value as SalesCatalogPaymentStatus;
+                setConfirmingPayment(paymentStatus === "confirmed");
+                if (paymentStatus !== "confirmed") onUpdate({ paymentStatus });
+              }}
               className="h-10 w-full rounded-lg border bg-transparent pl-9 pr-3 text-[12px] outline-none disabled:opacity-50"
               style={{ borderColor: "var(--ch-border)" }}
             >
@@ -8179,6 +8186,23 @@ function OrderCard({
           </div>
         </label>
       </div>
+
+      {confirmingPayment && order.paymentStatus !== "confirmed" ? (
+        <div className="mt-3 space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--ch-border)" }}>
+          <label className="block text-[12px]">
+            Referência da conferência financeira
+            <textarea value={paymentReference} onChange={event => setPaymentReference(event.target.value)} maxLength={500} disabled={updating}
+              className="mt-2 min-h-20 w-full rounded-lg border bg-transparent p-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}
+              placeholder="Registre a consulta ao processador ou ao extrato da empresa." />
+          </label>
+          <p className="text-[11px] text-slate-500">Confirme somente após verificar o recebimento. O comprovante enviado pelo cliente, sozinho, não confirma o pagamento.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={updating || paymentReference.trim().length < 5} onClick={() => onUpdate({ paymentStatus: "confirmed", paymentVerificationReference: paymentReference.trim() })}
+              className="min-h-9 rounded-lg border px-3 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>Registrar recebimento conferido</button>
+            <button type="button" disabled={updating} onClick={() => setConfirmingPayment(false)} className="min-h-9 px-3 text-[12px]">Cancelar</button>
+          </div>
+        </div>
+      ) : null}
 
       {order.internalNotes || updating ? (
         <div className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>

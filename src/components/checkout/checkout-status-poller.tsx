@@ -142,7 +142,7 @@ function formatStatus(status: string) {
   if (status === "cancelled") return "Pagamento cancelado";
   if (status === "expired") return "Pagamento expirado";
   if (status === "refunded") return "Pagamento reembolsado";
-  if (status === "error") return "Pagamento com erro";
+  if (status === "error") return "Pagamento não concluído";
   return "Status do pagamento";
 }
 

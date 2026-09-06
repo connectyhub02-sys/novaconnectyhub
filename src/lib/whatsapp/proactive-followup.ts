@@ -1,4 +1,5 @@
 import "server-only";
+import { getLeadPaymentReviews } from "@/lib/sales-catalog/payment-reviews";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -89,6 +90,8 @@ export async function processWhatsappProactiveFollowUp(input: {
 }) {
   const client = input.client ?? createServiceClient();
   const { data: eventData } = input;
+  const reviews = await getLeadPaymentReviews(client, eventData.organizationId, eventData.leadId);
+  if (reviews.some(review => !eventData.salesCatalogOrderId || !review.order_id || review.order_id === eventData.salesCatalogOrderId)) return { status: "skipped", reason: "financial_review" };
 
   const instance = await loadInstance(client, eventData.whatsappInstanceId);
   if (!instance) return { status: "skipped", reason: "missing_instance" };

@@ -118,6 +118,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
   if (!orderRow) {
     throw new Error("Pedido nao encontrado para gerar pagamento.");
   }
+  const reviewCheck = await input.client.rpc("assert_checkout_review_clear", { p_order_id: orderRow.id });
+  if (reviewCheck.error) throw new Error("Este pagamento está em conferência pela equipe. Aguarde antes de tentar pagar novamente.");
   const order = await loadCheckoutCustomer(input.client, input.organizationId, orderRow, true);
 
   const { data: itemRows } = await input.client

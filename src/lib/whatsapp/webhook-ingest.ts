@@ -1,4 +1,5 @@
 import "server-only";
+import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -171,6 +172,7 @@ export async function ingestUazapiWebhook(input: {
   }
 
   if (!isConversationMessageWebhookEvent(eventType)) {
+    await preserveProviderMessageChange(client, instance, message, eventType, payload);
     await markWebhookEvent(client, eventResult.eventId, "processed");
     return {
       ...baseResult,
@@ -522,6 +524,20 @@ function isConversationMessageWebhookEvent(eventType: string) {
     || normalized === "messages"
     || normalized === "message received"
     || normalized === "messages received";
+}
+
+async function preserveProviderMessageChange(client: SupabaseClient, instance: WhatsappInstanceRow, message: MessageSnapshot, eventType: string, payload: JsonRecord) {
+  const normalized = eventType.toLowerCase().replace(/[._-]+/g, " ").trim();
+  if (!/^messages? (update|updated|edit|edited|delete|deleted|revoke|revoked)$/.test(normalized) || !message.providerMessageId) return;
+  const existing = await client.from("conversation_messages").select("id, payload, text_content").eq("organization_id", instance.organization_id).eq("whatsapp_instance_id", instance.id).eq("provider_message_id", message.providerMessageId).maybeSingle();
+  if (existing.error) throw new Error("Não foi possível consultar a mensagem alterada.");
+  if (!existing.data) return; // The immutable webhook remains available for later provider reconciliation.
+  const deleted = /delete|revoke/.test(normalized);
+  const updated = await client.from("conversation_messages").update({
+    ...(!deleted && message.textContent ? { text_content: message.textContent } : {}),
+    payload: { ...readRecord(existing.data.payload), provider_change: { event: normalized, deleted, occurred_at: message.occurredAt, payload } },
+  }).eq("id", existing.data.id).eq("organization_id", instance.organization_id);
+  if (updated.error) throw new Error("Não foi possível preservar a alteração da mensagem.");
 }
 
 async function insertWebhookEvent(
@@ -900,7 +916,7 @@ async function insertConversationMessage(
     payload: JsonRecord;
   },
 ) {
-  const messagePayload = buildConversationMessagePayload(input.payload, input.message);
+  const messagePayload = sanitizePaymentAuditPayload(buildConversationMessagePayload(input.payload, input.message));
   const insertPayload = {
     organization_id: input.organizationId,
     conversation_id: input.conversationId,
@@ -911,7 +927,7 @@ async function insertConversationMessage(
     provider_chat_id: input.message.providerChatId,
     direction: input.message.direction,
     message_type: input.message.messageType,
-    text_content: input.message.textContent,
+    text_content: sanitizePaymentAuditPayload(input.message.textContent),
     payload: messagePayload,
     occurred_at: input.message.occurredAt,
   };
@@ -930,6 +946,8 @@ async function insertConversationMessage(
       .from("conversation_messages")
       .select("id")
       .eq("provider", "uazapi")
+      .eq("organization_id", input.organizationId)
+      .eq("whatsapp_instance_id", input.whatsappInstanceId)
       .eq("provider_message_id", input.message.providerMessageId)
       .maybeSingle<{ id: string }>();
 

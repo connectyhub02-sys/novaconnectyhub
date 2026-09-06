@@ -23,6 +23,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return query;
         },
         in(key: string, values: unknown[]) { filters.push(row => values.includes(row[key])); return query; },
+        neq(key: string, value: unknown) { filters.push(row => row[key] !== value); return query; },
         is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
         gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },
         not(key: string, operator: string, value: unknown) {
@@ -37,6 +38,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return query;
         },
         insert(value: Row | Row[]) { operation = "insert"; payload = value; return query; },
+        upsert(value: Row) { operation = "upsert"; payload = value; return query; },
         update(value: Row) { operation = "update"; payload = value; return query; },
         async maybeSingle() { const result = execute(); return { ...result, data: result.data[0] ?? null }; },
         async single() { return query.maybeSingle(); },
@@ -56,6 +58,13 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           Object.assign(row, payload);
           if (table === "leads" || table === "agent_registry") row.updated_at = `version-${++sequence}`;
         });
+        if (operation === "upsert") {
+          const value = payload as Row;
+          const previous = tables[table].find(row => row.id === value.id);
+          if (previous) Object.assign(previous, value);
+          else tables[table].push({ id: `row-${++sequence}`, ...value });
+          selected = tables[table].filter(row => row.id === value.id);
+        }
         return { data: structuredClone(selected), error: null };
       }
       return query;

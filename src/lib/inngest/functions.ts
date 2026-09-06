@@ -61,6 +61,9 @@ import {
 } from "@/lib/sales-catalog/whatsapp-sync";
 import { createServiceClient } from "@/lib/supabase/service";
 import { reconcilePendingTransparentCheckouts } from "@/lib/sales-catalog/transparent-checkout";
+import { archiveLeadMediaBatch } from "@/lib/leads/message-archive";
+import { recoverPaymentReviewNotifications } from "@/lib/sales-catalog/payment-reviews";
+import { sendResolvedPaymentReviewNotices } from "@/lib/sales-catalog/payment-review-resolution";
 import { reconcilePendingNativeBilling } from "@/lib/billing/native-card-checkout";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
@@ -743,11 +746,19 @@ export const connectyhubTransparentCheckoutReconciliation = inngest.createFuncti
   { id: "connectyhub-transparent-checkout-reconciliation", name: "ConnectyHub Checkout Payment Reconciliation", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "*/5 * * * *" }] },
   async ({ step }) => ({
     stores: await step.run("reconcile-payment-results", () => reconcilePendingTransparentCheckouts(createServiceClient())),
+    reviews: await step.run("recover-payment-review-notifications", () => recoverPaymentReviewNotifications(createServiceClient())),
+    reviewResults: await step.run("deliver-payment-review-results", () => sendResolvedPaymentReviewNotices(createServiceClient())),
     platform: await step.run("reconcile-panel-payments", () => reconcilePendingNativeBilling(createServiceClient())),
   }),
 );
 
+export const connectyhubLeadMediaArchive = inngest.createFunction(
+  { id: "connectyhub-lead-media-archive", name: "ConnectyHub Lead Message Archive", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "* * * * *" }] },
+  async ({ step }) => step.run("preserve-message-media", () => archiveLeadMediaBatch(createServiceClient())),
+);
+
 export const functions = [
+  connectyhubLeadMediaArchive,
   connectyhubTransparentCheckoutReconciliation,
   connectyhubDailyAdminReport,
   connectyhubAdminPing,

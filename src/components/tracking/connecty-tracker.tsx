@@ -1,4 +1,5 @@
 "use client";
+import { enqueueTrackingEvent } from "@/lib/tracking/event-queue";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, LocateFixed, X } from "lucide-react";
@@ -514,11 +515,7 @@ async function trackEvent(payload: TrackPayload) {
     const snapshot = getTrackingSnapshot();
     const publicTracking = readPublicTrackingContext();
 
-    const response = await fetch("/api/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      keepalive: true,
-      body: JSON.stringify({
+    const result = await enqueueTrackingEvent({
         ...buildPublicTrackingApiBody(publicTracking),
         visitor_cookie_id: snapshot.visitorId,
         session_cookie_id: snapshot.sessionId,
@@ -534,11 +531,8 @@ async function trackEvent(payload: TrackPayload) {
           ...(payload.metadata ?? getPageMetadata()),
           tracking_cookies: snapshot.cookies,
         },
-      }),
-    });
-    const result = await response.json().catch(() => null) as { public_tracking?: ConnectyPublicTrackingContext | null } | null;
-
-    if (response.ok && result?.public_tracking) {
+    }) as { public_tracking?: ConnectyPublicTrackingContext | null } | null;
+    if (result?.public_tracking) {
       writePublicTrackingContext(result.public_tracking);
     }
   } catch {

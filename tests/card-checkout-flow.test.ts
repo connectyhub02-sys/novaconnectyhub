@@ -37,7 +37,8 @@ describe("Asaas checkout and lead attribution", () => {
       "@/lib/platform-product-sales": { resolveSalesCatalogOrderPaymentOwner: async () => ({ owner: "seller", commercialFlowType: "direct", revenueOwnerType: "seller", commissionEligible: false, catalogItemIds: [], platformProductIds: [] }) },
       "./asaas": { ensureAsaasAccessToken: async () => ({ id: "integration", accessToken: "fake", mode: "sandbox" }), createAsaasCheckout: createHosted, createAsaasPixPayment: createPix, buildAsaasCheckoutUrl: (result: Row) => result.link },
     });
-    const input = { client: db.client, organizationId: "store", orderId: "order", preferredMethod: "card" };
+    const reviewGuard = vi.fn(async () => ({ error: null }));
+    const input = { client: { ...db.client, rpc: reviewGuard }, organizationId: "store", orderId: "order", preferredMethod: "card" };
     const internal = await service.createSalesCatalogPixPaymentSession({ ...input, source: "whatsapp_agent" });
     expect(internal.gatewayUnavailable).toBe(false);
     expect(internal.checkoutUrl).toMatch(/^https:\/\/loja.example\/checkout\//);
@@ -49,6 +50,7 @@ describe("Asaas checkout and lead attribution", () => {
     expect((hosted.session as Row).metadata).toMatchObject({ public_checkout_url: expect.stringMatching(/^https:\/\/loja.example\/checkout\//), public_checkout_tracking_url: expect.stringMatching(/^https:\/\/loja.example\/r\//) });
     expect(createHosted).not.toHaveBeenCalled();
     expect(createPix).not.toHaveBeenCalled();
+    expect(reviewGuard).toHaveBeenCalledWith("assert_checkout_review_clear", { p_order_id: "order" });
     for (const result of [internal, hosted]) {
       const link = db.tables.intelligence_memory.find(row => (row.metadata as Row).tracking_url === result.trackingUrl);
       expect(link?.metadata).toMatchObject({ lead_id: "lead", conversation_id: "conversation", order_id: "order", payment_session_id: (result.session as Row).id, amount: 573.8 });

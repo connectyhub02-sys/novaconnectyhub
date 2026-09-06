@@ -10,9 +10,10 @@ import { loadCheckoutCustomer, parseCheckoutAddress } from "./checkout-customer"
 import { requiresSalesCatalogShippingBeforePayment } from "./checkout-guards";
 import { normalizeCurrencyAmount } from "./mercado-pago";
 import { handleSalesCatalogPaymentStatusChange } from "./post-payment";
+import { paymentOutcomeCopy, type PaymentDiagnostic } from "./payment-diagnostics";
 
 type Json = Record<string, unknown>;
-type Attempt = { id: string; organization_id: string; order_id: string; source_session_id: string; payment_session_id: string; amount: number; revision: number; installments: number; state: string; updated_at: string };
+type Attempt = { id: string; organization_id: string; order_id: string; source_session_id: string; payment_session_id: string; amount: number; revision: number; installments: number; state: string; updated_at: string; diagnostic?: PaymentDiagnostic | null };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export class CheckoutError extends Error { constructor(message: string, public status = 400) { super(message); } }
 
@@ -37,8 +38,10 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
   const { data: attempts } = await client.from("sales_catalog_card_attempts").select("id, organization_id, order_id, source_session_id, payment_session_id, amount, revision, installments, state, updated_at")
     .eq("order_id", order.id).eq("organization_id", session.organization_id).order("created_at", { ascending: false }).limit(1);
   const attempt = (attempts?.[0] ?? null) as Attempt | null;
+  const reviewResult = order.lead_id ? await client.from("sales_catalog_payment_reviews").select("id").eq("organization_id", session.organization_id).eq("lead_id", order.lead_id).neq("status", "resolved").or(`order_id.eq.${order.id},order_id.is.null`).limit(1) : { data: [], error: null };
+  if (reviewResult.error) throw new CheckoutError("Não foi possível conferir o pagamento. Atualize a página.", 503);
   // The operator enabled ecosystem-wide testing. An explicit store override still wins.
-  return { session, order, items, holder, amount, settings, attempt, enabled: capability?.transparent_card_enabled !== false };
+  return { session, order, items, holder, amount, settings, attempt, review: Boolean(reviewResult.data?.length), enabled: capability?.transparent_card_enabled !== false };
 }
 
 export function publicCheckoutQuote(snapshot: Awaited<ReturnType<typeof loadTransparentCheckout>>) {
@@ -46,6 +49,7 @@ export function publicCheckoutQuote(snapshot: Awaited<ReturnType<typeof loadTran
   return {
     amount, revision: Number(order.checkout_revision ?? 0), holder,
     enabled: snapshot.enabled,
+    review: snapshot.review,
     maxInstallments: Math.min(12, Math.max(1, settings?.asaas.maxInstallments ?? 1)),
     paid: order.payment_status === "confirmed", closed: order.payment_status === "refunded" || order.status === "cancelled",
     attempt: attempt ? { id: attempt.id, state: attempt.state } : null,
@@ -65,6 +69,7 @@ export async function resolveTransparentConnection(client: SupabaseClient, organ
 export async function payTransparentCheckout(client: SupabaseClient, sessionId: string, body: Json, remoteIp: string) {
   const snapshot = await loadTransparentCheckout(client, sessionId);
   const { session, order, items, settings } = snapshot;
+  if (snapshot.review) throw new CheckoutError("Seu pagamento está em conferência pela equipe. Aguarde antes de tentar pagar novamente.", 409);
   // Repeat submissions read the existing attempt; card data is never reused or persisted.
   if (snapshot.attempt && ["processing", "unknown", "pending", "approved"].includes(snapshot.attempt.state)) {
     return publicAttempt(await reconcileTransparentAttempt(client, snapshot.attempt.id));
@@ -109,7 +114,7 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
     // An ambiguous gateway result keeps the durable lock. It is never retried automatically.
     const definitive = !chargeStarted || (error instanceof AsaasDirectError && error.definitive);
     const state = definitive ? error instanceof AsaasDirectError && error.declined ? "rejected" : "error" : "unknown";
-    const result = await finishTransparentAttempt(client, attempt.id, state).catch(() => ({ ...attempt, state: "unknown" }));
+    const result = await finishTransparentAttempt(client, attempt.id, state, undefined, error instanceof AsaasDirectError ? error.diagnostic : undefined).catch(() => ({ ...attempt, state: "unknown" }));
     return publicAttempt(result);
   }
 }
@@ -144,8 +149,8 @@ export function directPaymentState(payment: AsaasPaymentResponse) {
   return "pending";
 }
 
-export async function finishTransparentAttempt(client: SupabaseClient, attemptId: string, state: string, payment?: AsaasPaymentResponse) {
-  const { data, error } = await client.rpc("finish_checkout_card_attempt", { p_attempt_id: attemptId, p_state: state, p_provider_id: payment?.id ?? null, p_provider_status: payment?.status ?? null });
+export async function finishTransparentAttempt(client: SupabaseClient, attemptId: string, state: string, payment?: AsaasPaymentResponse, diagnostic?: PaymentDiagnostic | null) {
+  const { data, error } = await client.rpc("finish_checkout_card_attempt_diagnostic", { p_attempt_id: attemptId, p_state: state, p_provider_id: payment?.id ?? null, p_provider_status: payment?.status ?? null, p_diagnostic: diagnostic ?? null });
   if (error || !data?.attempt) throw new CheckoutError("Estamos verificando o resultado do pagamento.", 503);
   const attempt = data.attempt as Attempt;
   await processTransparentPaymentEffects(client, attempt.id);
@@ -172,7 +177,7 @@ export async function reconcileTransparentAttempt(client: SupabaseClient, attemp
 }
 
 function publicAttempt(attempt: Attempt) {
-  return { sessionId: attempt.payment_session_id, attemptId: attempt.id, status: attempt.state, approved: attempt.state === "approved", rejected: ["rejected", "error", "cancelled"].includes(attempt.state), message: attempt.state === "approved" ? "Pagamento aprovado!" : attempt.state === "rejected" ? "O cartão não foi autorizado. Confira os dados ou use outro cartão." : ["error", "cancelled"].includes(attempt.state) ? "Não foi possível concluir o pagamento. Confira o pedido e tente novamente." : "Estamos verificando o pagamento. Você pode acompanhar por aqui, sem repetir a cobrança." };
+  return { sessionId: attempt.payment_session_id, attemptId: attempt.id, status: attempt.state, approved: attempt.state === "approved", rejected: ["rejected", "error", "cancelled"].includes(attempt.state), message: paymentOutcomeCopy(attempt.state, attempt.diagnostic) };
 }
 
 export async function processTransparentWebhook(client: SupabaseClient, payload: Json, header: string | null) {

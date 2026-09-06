@@ -29,11 +29,102 @@ beforeAll(async () => {
   await db.exec(readFileSync("supabase/migrations/0077_commerce_offer_history.sql", "utf8"));
   await db.exec("alter table leads add column display_name text, add column phone_number text, add column metadata jsonb default '{}', add column last_event_summary text, add column updated_at timestamptz");
   await db.exec(readFileSync("supabase/migrations/0079_checkout_self_service_delivery.sql", "utf8"));
+  await db.exec(`alter table intelligence_events add column occurred_at timestamptz default now();
+    create table conversations(id uuid primary key,organization_id uuid,lead_id uuid,metadata jsonb default '{}');
+    create table conversation_messages(id uuid primary key,organization_id uuid,lead_id uuid,conversation_id uuid,direction text,text_content text,payload jsonb default '{}',created_at timestamptz default now(),updated_at timestamptz default now());
+    create table lead_files(id uuid primary key default gen_random_uuid(),archive_id uuid);
+    create table billing_card_attempts(id uuid primary key);
+    create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint);`);
+  await db.exec(readFileSync("supabase/migrations/0080_payment_evidence_and_reviews.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0081_lead_journey_archive.sql", "utf8"));
   await db.query("insert into organizations values ($1)", [org]);
   await db.query("insert into sales_catalog_orders(id,organization_id,subtotal,total,shipping_total,discount_total) values ($1,$2,'100','110','10','0')", [order, org]);
   await db.query("insert into sales_catalog_payment_sessions(id,organization_id,order_id,provider,status) values ($1,$2,$3,'asaas','created')", [source, org, order]);
 }, 30000);
 afterAll(async () => { await db?.close(); });
+
+describe.sequential("payment evidence and durable lead history", () => {
+  async function fixture() {
+    const ids = { lead: randomUUID(), order: randomUUID(), session: randomUUID(), conversation: randomUUID(), message: randomUUID(), attempt: randomUUID() };
+    await db.query("insert into leads(id,organization_id) values ($1,$2)", [ids.lead, org]);
+    await db.query("insert into conversations(id,organization_id,lead_id) values ($1,$2,$3)", [ids.conversation, org, ids.lead]);
+    await db.query("insert into sales_catalog_orders(id,organization_id,lead_id,conversation_id,total,subtotal,shipping_total,discount_total) values ($1,$2,$3,$4,'110','100','10','0')", [ids.order, org, ids.lead, ids.conversation]);
+    await db.query("insert into sales_catalog_payment_sessions(id,organization_id,order_id,provider,status,metadata) values ($1,$2,$3,'asaas','created','{}')", [ids.session, org, ids.order]);
+    await db.query("insert into conversation_messages(id,organization_id,lead_id,conversation_id,direction,text_content,payload) values ($1,$2,$3,$4,'inbound','Já paguei',$5)", [ids.message, org, ids.lead, ids.conversation, { image: { file: "fixture" }, creditCard: { number: "4111111111111111", cvv: "123" }, access_token: "secret" }]);
+    return ids;
+  }
+  async function evidence(ids: Awaited<ReturnType<typeof fixture>>) {
+    return (await db.query<{ result: { review: { id: string } | null; duplicate?: boolean; confirmed?: boolean } }>("select record_checkout_payment_evidence($1,$2,$3,$4,$5,'attachment') as result", [org, ids.lead, ids.conversation, ids.message, ids.order])).rows[0].result;
+  }
+  it("preserves a rejection, deduplicates proof and blocks a new charge while reviewed", async () => {
+    const ids = await fixture();
+    await db.query("update sales_catalog_orders set payment_status='failed' where id=$1", [ids.order]);
+    const first = await evidence(ids), duplicate = await evidence(ids);
+    expect(first.review?.id).toBeTruthy(); expect(duplicate.duplicate).toBe(true);
+    expect((await db.query("select payment_status,status from sales_catalog_orders where id=$1", [ids.order])).rows[0]).toEqual({ payment_status: "failed", status: "pending_payment" });
+    await expect(db.query("select claim_checkout_card_attempt($1,$2,0,110)", [ids.session, ids.attempt])).rejects.toThrow("CHECKOUT_FINANCIAL_REVIEW");
+    await expect(db.query("update sales_catalog_orders set total='120' where id=$1", [ids.order])).rejects.toThrow("CHECKOUT_FINANCIAL_REVIEW");
+    expect((await db.query("select * from sales_catalog_payment_evidence where message_id=$1", [ids.message])).rows).toHaveLength(1);
+  });
+  it("a concurrent confirmation wins over an attachment and resolves its review", async () => {
+    const ids = await fixture();
+    await db.query("select claim_checkout_card_attempt($1,$2,0,110)", [ids.session, ids.attempt]);
+    await Promise.all([evidence(ids), db.query("select finish_checkout_card_attempt($1,'approved','pay_fixture','CONFIRMED')", [ids.attempt])]);
+    expect((await db.query("select payment_status from sales_catalog_orders where id=$1", [ids.order])).rows[0]).toEqual({ payment_status: "confirmed" });
+    expect((await db.query("select id from sales_catalog_payment_reviews where order_id=$1 and status<>'resolved'", [ids.order])).rows).toHaveLength(0);
+  });
+  it("late Pix confirmation survives an old card rejection and evidence never downgrades it", async () => {
+    const ids = await fixture();
+    await db.query("select claim_checkout_card_attempt($1,$2,0,110)", [ids.session, ids.attempt]);
+    await db.query("select finish_checkout_card_attempt($1,'rejected')", [ids.attempt]);
+    await evidence(ids);
+    await db.query("update sales_catalog_payment_sessions set provider_payment_id='pay_pix' where id=$1", [ids.session]);
+    await db.query("select apply_verified_catalog_payment($1,$2,'approved','RECEIVED','pay_pix')", [ids.session, org]);
+    await db.query("select finish_checkout_card_attempt($1,'error')", [ids.attempt]);
+    expect((await db.query("select payment_status from sales_catalog_orders where id=$1", [ids.order])).rows[0]).toEqual({ payment_status: "confirmed" });
+    expect((await evidence(ids)).review).not.toBeNull(); // Historical evidence keeps its resolved review.
+  });
+  it("rejects a message from another lead and keeps sensitive gateway fields out of the archive", async () => {
+    const ids = await fixture(), other = await fixture();
+    await expect(db.query("select record_checkout_payment_evidence($1,$2,$3,$4,$5,'claim')", [org, ids.lead, ids.conversation, other.message, ids.order])).rejects.toThrow("MESSAGE_NOT_FOUND");
+    const row = (await db.query<{ snapshot: unknown }>("select snapshot from lead_message_archive where message_id=$1", [ids.message])).rows[0];
+    expect(JSON.stringify(row.snapshot)).not.toMatch(/4111111111111111|secret/);
+    expect((await db.query("select public from storage.buckets where id='lead-archive'")).rows[0]).toEqual({ public: false });
+  });
+  it("preserves old and edited text, even after provider deletion and with no agent run", async () => {
+    const ids = await fixture();
+    await db.query("update conversation_messages set text_content='Endereço corrigido' where id=$1", [ids.message]);
+    await db.query("delete from conversation_messages where id=$1", [ids.message]);
+    const rows = (await db.query<{ operation: string; snapshot: { text_content: string } }>("select operation,snapshot from lead_message_archive where message_id=$1", [ids.message])).rows;
+    expect(rows.some(row => row.snapshot.text_content === "Já paguei")).toBe(true);
+    expect(rows.some(row => row.operation === "updated" && row.snapshot.text_content === "Endereço corrigido")).toBe(true);
+    expect(rows.some(row => row.operation === "deleted")).toBe(true);
+  });
+  it("will not resolve unknown payments or let browser roles confirm one", async () => {
+    const ids = await fixture();
+    await db.query("select claim_checkout_card_attempt($1,$2,0,110)", [ids.session, ids.attempt]);
+    await db.query("select finish_checkout_card_attempt($1,'unknown')", [ids.attempt]);
+    const item = await evidence(ids);
+    await expect(db.query("select resolve_checkout_payment_review($1,$2,$3,'unconfirmed','checked fixture')", [item.review?.id, org, randomUUID()])).rejects.toThrow("PAYMENT_STILL_VERIFYING");
+    const permission = await db.query("select has_function_privilege('anon','public.record_checkout_payment_evidence(uuid,uuid,uuid,uuid,uuid,text)','execute') as allowed");
+    expect(permission.rows[0]).toEqual({ allowed: false });
+  });
+  it("claims a human notification once and allows recovery after a recorded failure", async () => {
+    const ids = await fixture(), item = await evidence(ids);
+    await db.query("update sales_catalog_payment_reviews set notification_payload='{}' where id=$1", [item.review?.id]);
+    const claims = await Promise.all([db.query<{ row: unknown }>("select claim_payment_review_notification($1) as row", [item.review?.id]), db.query<{ row: unknown }>("select claim_payment_review_notification($1) as row", [item.review?.id])]);
+    expect(claims.filter(result => result.rows[0].row)).toHaveLength(1);
+    await db.query("update sales_catalog_payment_reviews set notification_claimed_at=null,notification_status='pending' where id=$1", [item.review?.id]);
+    expect((await db.query<{ row: unknown }>("select claim_payment_review_notification($1) as row", [item.review?.id])).rows[0].row).toBeTruthy();
+  });
+  it("never lets a late generic status or legacy proof overwrite verified receipt", async () => {
+    const ids = await fixture();
+    await db.query("update sales_catalog_orders set payment_status='confirmed',status='paid' where id=$1", [ids.order]);
+    await db.query("update sales_catalog_orders set payment_status='proof_sent',status='needs_human' where id=$1", [ids.order]);
+    await db.query("update sales_catalog_orders set payment_status='failed',status='pending_payment' where id=$1", [ids.order]);
+    expect((await db.query("select payment_status,status from sales_catalog_orders where id=$1", [ids.order])).rows[0]).toEqual({ payment_status: "confirmed", status: "paid" });
+  });
+});
 
 async function claim(id = attempt, revision = 0, amount = 110) {
   return (await db.query<{ result: { claimed: boolean; attempt: { id: string; state: string } } }>("select claim_checkout_card_attempt($1,$2,$3,$4) as result", [source, id, revision, amount])).rows[0].result;
@@ -75,7 +166,9 @@ describe.sequential("self-service delivery transactions", () => {
   });
   it("does not update a lead from another tenant", async () => {
     const ids = await fresh();
-    await db.query("update leads set organization_id=$1 where id=$2", [randomUUID(), ids.lead]);
+    const otherOrg = randomUUID();
+    await db.query("insert into organizations values ($1)", [otherOrg]);
+    await db.query("update leads set organization_id=$1 where id=$2", [otherOrg, ids.lead]);
     await save(ids.session);
     expect((await db.query("select display_name,metadata from leads where id=$1", [ids.lead])).rows[0]).toEqual({ display_name: null, metadata: { interest: "keep", lead_memory: { preference: "keep" } } });
   });
@@ -96,7 +189,7 @@ describe.sequential("self-service delivery transactions", () => {
 describe.sequential("durable transparent checkout transactions", () => {
   it("rejects a stale amount without creating a payment", async () => {
     await expect(claim(attempt, 0, 100)).rejects.toThrow("CHECKOUT_CHANGED");
-    expect((await db.query("select * from sales_catalog_card_attempts")).rows).toHaveLength(0);
+    expect((await db.query("select * from sales_catalog_card_attempts where order_id=$1", [order])).rows).toHaveLength(0);
   });
   it("claims only one attempt for submissions with different IDs", async () => {
     const results = await Promise.all([claim(), claim(second)]);
@@ -118,7 +211,7 @@ describe.sequential("durable transparent checkout transactions", () => {
     await db.query("select finish_checkout_card_attempt($1,'pending','pay_test','PENDING')", [attempt]);
     const saved = (await db.query("select payment_status,status,checkout_payment_lock from sales_catalog_orders where id=$1", [order])).rows[0];
     expect(saved).toEqual({ payment_status: "confirmed", status: "paid", checkout_payment_lock: null });
-    expect((await db.query("select * from intelligence_events where event_type='sales_catalog.card_payment_approved'")).rows).toHaveLength(1);
+    expect((await db.query("select * from intelligence_events where event_type='sales_catalog.card_payment_approved' and source_id=$1", [attempt])).rows).toHaveLength(1);
     await expect(claim(second)).rejects.toThrow("CHECKOUT_CLOSED");
   });
   it("rolls back partial stock changes and deducts only once when a worker retries", async () => {

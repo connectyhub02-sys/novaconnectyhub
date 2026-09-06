@@ -19,6 +19,8 @@ export const runtime = "nodejs";
 type JsonRecord = Record<string, unknown>;
 
 type TrackingBody = {
+  event_id?: unknown;
+  occurred_at?: unknown;
   visitor_cookie_id?: unknown;
   session_cookie_id?: unknown;
   organization_id?: unknown;
@@ -168,6 +170,7 @@ export async function POST(request: NextRequest) {
       hasLeadContext: Boolean(leadContext.leadId || leadContext.leadPhone),
     });
     const payload = {
+      client_occurred_at: readString(body.occurred_at),
       visitor_cookie_id: visitorId,
       session_cookie_id: sessionId,
       referrer: readString(body.referrer),
@@ -192,11 +195,13 @@ export async function POST(request: NextRequest) {
       product_id: productId,
       catalog_item_id: catalogItemId,
       tracking_source: trackingSource,
+      origin: "browser",
       user_id: authUser?.id ?? null,
       user_email: authUser?.email ?? null,
       tracked_at: new Date().toISOString(),
     };
     const { error } = await client.from("intelligence_events").insert({
+      tracking_event_key: readUuid(readString(body.event_id)) ? `${organizationAttribution.organizationId ?? "platform"}:${visitorId}:${readUuid(readString(body.event_id))}` : null,
       scope,
       organization_id: organizationAttribution.organizationId,
       source_type: sourceType,
@@ -210,8 +215,8 @@ export async function POST(request: NextRequest) {
       payload,
     });
 
-    if (error) {
-      return NextResponse.json({ visitor_id: visitorId, error: error.message }, { status: 500 });
+    if (error && error.code !== "23505") {
+      return NextResponse.json({ visitor_id: visitorId, error: "tracking_write_failed" }, { status: 500 });
     }
 
     await syncCommerceTrackingContext({
@@ -232,7 +237,7 @@ export async function POST(request: NextRequest) {
       trackingSource,
       referrer: readString(body.referrer),
       metadata,
-    }).catch(() => undefined);
+    });
 
     const leadProfile = leadContext.leadId
       ? await loadTrackingLeadProfile(client, organizationAttribution.organizationId, leadContext.leadId).catch(() => null)

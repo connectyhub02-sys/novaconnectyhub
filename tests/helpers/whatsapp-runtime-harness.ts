@@ -13,9 +13,12 @@ import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
 import * as humanization from "@/lib/whatsapp/clone-humanization";
 import * as customer from "@/lib/sales-catalog/checkout-customer";
+import * as paymentEvidence from "@/lib/sales-catalog/payment-evidence";
+import { serverModuleHarness } from "./server-module-harness";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
+  "loadOrganizationSalesCatalogOrders", "handleLeadFinancialEvidence",
   "extractRuntimeCustomerNameFromStructuredReply",
   "resolveSalesCatalogOrderSelections", "resolveSalesCatalogMentionQuantity",
   "hasRecentSalesCatalogCheckoutConfirmation", "buildSalesCatalogOrderConfirmationPrompt",
@@ -44,6 +47,8 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   const money = { exports: {} };
   runInNewContext(currency, { module: money, exports: money.exports, require: () => ({}), process, URL });
   const imports: Record<string, unknown> = {
+    "@/lib/sales-catalog/payment-evidence": paymentEvidence,
+    "@/lib/sales-catalog/payment-reviews": serverModuleHarness("src/lib/sales-catalog/payment-reviews.ts"),
     "@/lib/sales-catalog/checkout-customer": customer,
     "node:crypto": require("node:crypto"),
     "./lead-names": leadNames,

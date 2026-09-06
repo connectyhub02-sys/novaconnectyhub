@@ -2661,6 +2661,12 @@ async function updateSalesCatalogOrderStatus(input: {
   const patch: JsonRecord = {};
   const status = normalizeNullableSalesCatalogOrderStatus(readFormString(input.body?.status));
   const paymentStatus = normalizeNullableSalesCatalogPaymentStatus(readFormString(input.body?.paymentStatus));
+  if (paymentStatus === "confirmed") {
+    const reference = normalizeOptionalText(readFormString(input.body?.paymentVerificationReference), 500);
+    if (!["owner", "admin"].includes(company.role) || !reference || reference.length < 5 || /(?:\d[ -]?){16,19}/.test(reference)) throw new Error("A confirmação manual exige um administrador e a referência da conferência financeira. Comprovante do cliente não confirma recebimento.");
+    const confirmed = await input.client.rpc("confirm_catalog_payment_manually", { p_order_id: orderId, p_organization_id: company.id, p_actor_id: input.userId, p_reference: reference });
+    if (confirmed.error) throw new Error("Conferência não concluída. Verifique se ainda há pagamentos em análise.");
+  }
   const fulfillmentStatus = normalizeNullableSalesCatalogFulfillmentStatus(readFormString(input.body?.fulfillmentStatus));
   const internalNotes = normalizeOptionalText(readFormString(input.body?.internalNotes), 1200);
 

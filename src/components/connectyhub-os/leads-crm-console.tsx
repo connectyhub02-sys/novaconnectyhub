@@ -1,4 +1,5 @@
 "use client";
+import { LeadFinancialArchive } from "./lead-financial-archive";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
@@ -3751,6 +3752,7 @@ function LeadDetailsModal({
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
               <QualificationGrid lead={lead} />
               <LeadTechnicalFile lead={lead} />
+              <LeadFinancialArchive key={lead.id} leadId={lead.id} companyId={lead.companyId} />
               <TrackingArchive events={lead.leadFile.trackingEvents} />
               <LeadFileSnapshot lead={lead} />
               <LeadCheckoutSnapshot records={checkoutRecords} />
