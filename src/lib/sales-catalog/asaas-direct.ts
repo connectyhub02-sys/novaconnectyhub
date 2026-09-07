@@ -90,11 +90,12 @@ export function applyAsaasPaymentEvent(payment: AsaasPaymentResponse, event: unk
 
 export async function createAsaasDirectCardPayment(input: AsaasDirectConnection & {
   card: CheckoutCard; holder: CheckoutCardHolder; amount: number; installments: number; externalReference: string; remoteIp: string;
+  customerId?: string;
 }) {
   let customer: Record<string, unknown>;
   try {
     const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
-    customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", { ...input.holder, notificationDisabled: true });
+    customer = input.customerId ? {id:input.customerId} : Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", { ...input.holder, notificationDisabled: true });
   } catch (error) {
     // Customer lookup/creation cannot charge a card. A retry starts by looking it up again.
     throw new AsaasDirectError(true, false, error instanceof AsaasDirectError ? error.diagnostic : undefined);
@@ -168,4 +169,29 @@ export async function convertAsaasBillingPaymentToPix(input:AsaasDirectConnectio
   if(p.billingType==="PIX") return p;
   if(!p.dueDate) throw new AsaasDirectError(true,false);
   return safePayment(await request(input,"/payments/"+encodeURIComponent(input.paymentId),"PUT",{billingType:"PIX",value:input.amount,dueDate:p.dueDate}));
+}
+
+/** The token stays exclusively inside the billing credential vault. */
+export async function tokenizeAsaasBillingCard(input: AsaasDirectConnection & {card: CheckoutCard; holder: CheckoutCardHolder; remoteIp: string}) {
+  const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
+  const customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", {...input.holder, notificationDisabled: true});
+  if (typeof customer.id !== "string") throw new AsaasDirectError(true, false);
+  const result = await request(input, "/creditCard/tokenizeCreditCard", "POST", {customer: customer.id, creditCard: input.card, creditCardHolderInfo: input.holder, remoteIp: input.remoteIp});
+  if (typeof result.creditCardToken !== "string" || !result.creditCardToken) throw new AsaasDirectError(true, false);
+  return {customerId: customer.id, token: result.creditCardToken};
+}
+
+/** No external subscription and no card on creation: the application owns the schedule. */
+export async function createManagedAsaasInvoice(input: AsaasDirectConnection & {customerId: string; amount: number; dueDate: string; reference: string}) {
+  const payment = safePayment(await request(input, "/payments", "POST", {customer: input.customerId, billingType: "CREDIT_CARD", value: input.amount, dueDate: input.dueDate, externalReference: input.reference, description: "Renovação ConnectyHub"}));
+  if (!payment.id || payment.externalReference !== input.reference || payment.customer !== input.customerId || Math.round(Number(payment.value)*100) !== Math.round(input.amount*100)) throw new AsaasDirectError(false, false);
+  return payment;
+}
+
+export async function payManagedAsaasInvoice(input: AsaasDirectConnection & {paymentId: string; reference: string; customerId: string; token: string; amount: number}) {
+  const payment = await getAsaasNativePayment(input, input.paymentId);
+  if (payment.deleted || payment.customer !== input.customerId || payment.externalReference !== input.reference || payment.subscription || Math.round(Number(payment.value)*100) !== Math.round(input.amount*100)) throw new AsaasDirectError(true, false);
+  if (["CONFIRMED", "RECEIVED"].includes(String(payment.status))) return payment;
+  if (!["PENDING", "OVERDUE", "CREDIT_CARD_CAPTURE_REFUSED"].includes(String(payment.status))) throw new AsaasDirectError(false, false);
+  return safePayment(await request(input, `/payments/${encodeURIComponent(input.paymentId)}/payWithCreditCard`, "POST", {creditCardToken: input.token}));
 }

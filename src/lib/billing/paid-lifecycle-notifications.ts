@@ -1,4 +1,5 @@
 import "server-only";
+import { attemptManagedAsaasRenewal } from "./managed-asaas-renewals";
 import { billingLocalDate, billingPeriodEnd, isBillingDeadlineReached, readCommercialTerms } from "./commercial-terms";
 
 import { randomUUID } from "node:crypto";
@@ -12,25 +13,14 @@ import {
 } from "@/lib/billing/plan-checkout";
 import {
   sendPlatformBillingLifecycleNotification,
-  processPlatformBillingPagBankWebhook,
   type PlatformBillingLifecycleNotificationType,
 } from "@/lib/billing/platform-billing-webhook";
-import {
-  loadDefaultPagBankBillingCardMethod,
-  markBillingPaymentMethodFailed,
-} from "@/lib/billing/payment-methods";
 import {
   normalizePlatformBillingRenewalPolicy,
   platformBillingRenewalPolicyMetadataKey,
   type PlatformBillingRenewalPolicy,
 } from "@/lib/billing/renewal-policy";
 import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
-import {
-  buildPagBankPlatformBillingWebhookUrl,
-  createPagBankCardOrder,
-  extractPagBankCardData,
-  loadPagBankPlatformBillingConfig,
-} from "@/lib/sales-catalog/pagbank";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -167,7 +157,7 @@ export async function processPaidBillingLifecycleNotifications(
         }
         continue; // End a paid access period without generating an uncontracted renewal/debt notice.
       }
-      const cardAttempt = await maybeAttemptPagBankCardRenewal(client, context, renewalPolicy, now).catch((error) => {
+      const cardAttempt = await (renewalPolicy.cardChargeAttemptEnabled ? attemptManagedAsaasRenewal(client, {organizationId:subscription.organization_id,subscriptionId:subscription.id,periodEnd:context.periodEnd,now,prepare:()=>ensureLifecycleRenewalCheckout(client,context,"paid_plan_renewal_reminder","card")}) : Promise.resolve({attempted:false,approved:false,failed:false})).catch((error) => {
         summary.warnings.push(error instanceof Error ? error.message : "Falha na tentativa automatica de cartao.");
         return { attempted: false, approved: false, failed: true };
       });
@@ -181,7 +171,7 @@ export async function processPaidBillingLifecycleNotifications(
         continue;
       }
 
-      const deadlineEvent = pickDeadlineEvent(context, renewalPolicy, now);
+      const deadlineEvent = cardAttempt.attempted ? null : pickDeadlineEvent(context, renewalPolicy, now);
 
         if (deadlineEvent) {
           if (deadlineEvent.eventType === "paid_plan_expired") {
@@ -361,19 +351,7 @@ function pickDeadlineEvent(
   }
 
   const daysRemaining = Math.ceil(diff / DAY_MS);
-  const cardRetryFailed = readString(context.subscription.metadata?.card_retry_status) === "failed"
-    || readString(context.latestPayment?.payload?.card_retry_status) === "failed";
-
-  if (cardRetryFailed && daysRemaining <= policy.cardChargeAttemptDays) {
-    return { eventType: "payment_card_retry_failed", dedupeSuffix: `${periodDate}:card_failed:${today}` };
-  }
-
-  const shouldRemindPix =
-    context.paymentMethod !== "card"
-    || !policy.cardChargeAttemptEnabled
-    || (cardRetryFailed && policy.cardFailureUsesPixFallback);
-
-  if (shouldRemindPix && daysRemaining <= policy.pixReminderStartDays) {
+  if (daysRemaining <= policy.pixReminderStartDays) {
     return {
       eventType: policy.dailyWhatsAppReminders
         ? "paid_plan_renewal_reminder"
@@ -459,13 +437,10 @@ async function ensureLifecycleRenewalCheckout(
     invoiceId,
     paymentId,
   });
-  const provider = normalizeLifecycleBillingProvider(context.subscription.billing_provider ?? context.latestPayment?.provider);
+  const provider = "asaas";
   const periodEnd = context.periodEnd;
   const cycleStart = periodEnd && periodEnd.getTime() > now.getTime() ? periodEnd : now;
   const cycleEnd = billingPeriodEnd(cycleStart, readCommercialTerms(context.subscription.metadata?.commercial_terms));
-  const dueAt = periodEnd && periodEnd.getTime() > now.getTime()
-    ? periodEnd
-    : new Date(now.getTime() + DAY_MS);
   const metadata = {
     ...(context.subscription.metadata ?? {}),
     source: "paid_lifecycle_renewal_checkout",
@@ -499,231 +474,6 @@ async function ensureLifecycleRenewalCheckout(
   const prepared = await client.rpc("prepare_contract_renewal", {p_subscription:context.subscription.id,p_expected_end:periodEnd?.toISOString(),p_start:cycleStart.toISOString(),p_end:cycleEnd.toISOString(),p_provider:provider,p_metadata:metadata});
   if (prepared.error) throw new Error("Não foi possível preparar a renovação: "+prepared.error.message);
   return {invoiceId:prepared.data.invoice_id,paymentId:prepared.data.payment_id,checkoutPath,checkoutUrl,checkoutKind:"renewal",targetPlanCode:context.subscription.plan_code,reused:prepared.data.reused};
-}
-
-async function maybeAttemptPagBankCardRenewal(
-  client: SupabaseClient,
-  context: ReturnType<typeof buildNotificationContext>,
-  policy: PlatformBillingRenewalPolicy,
-  now: Date,
-) {
-  if (!shouldAttemptPagBankCardRenewal(context, policy, now)) {
-    return { attempted: false, approved: false, failed: false };
-  }
-
-  const today = dateOnly(now) ?? now.toISOString().slice(0, 10);
-  const periodDate = dateOnly(context.periodEnd) ?? "sem-data";
-  const lastAttemptKey = readString(context.subscription.metadata?.card_retry_attempt_key)
-    ?? readString(context.latestPayment?.payload?.card_retry_attempt_key);
-  const attemptKey = `${context.subscription.id}:${periodDate}:${today}`;
-
-  if (lastAttemptKey === attemptKey) {
-    return { attempted: false, approved: false, failed: false };
-  }
-
-  const renewalCheckout = await ensureLifecycleRenewalCheckout(client, context, "payment_card_retry_failed", "card");
-
-  if (!renewalCheckout) {
-    return { attempted: false, approved: false, failed: false };
-  }
-
-  const intent = await loadBillingCheckoutIntent(client, {
-    organizationId: context.subscription.organization_id,
-    subscriptionId: context.subscription.id,
-  });
-
-  if (!intent || !isBillingCheckoutPayable(intent)) {
-    return { attempted: false, approved: false, failed: false };
-  }
-
-  await markCardRetryInProgress(client, context, {
-    attemptKey,
-    invoiceId: intent.invoice.id,
-    paymentId: intent.payment.id,
-    now,
-  });
-
-  try {
-    const card = await loadDefaultPagBankBillingCardMethod(client, {
-      organizationId: context.subscription.organization_id,
-      subscriptionId: context.subscription.id,
-    });
-
-    if (!card) {
-      await markCardRetryFailed(client, context, {
-        attemptKey,
-        invoiceId: intent.invoice.id,
-        paymentId: intent.payment.id,
-        reason: "Nenhum cartao PagBank salvo para recorrencia.",
-        now,
-      });
-
-      return { attempted: true, approved: false, failed: true };
-    }
-
-    const config = await loadPagBankPlatformBillingConfig({ client });
-    const externalReference = readString(intent.payment.payload?.external_reference)
-      ?? readString(intent.invoice.metadata?.external_reference)
-      ?? buildPlatformBillingExternalReference({
-        organizationId: context.subscription.organization_id,
-        subscriptionId: context.subscription.id,
-        invoiceId: intent.invoice.id,
-        paymentId: intent.payment.id,
-      });
-    const order = await createPagBankCardOrder({
-      accessToken: config.accessToken,
-      mode: config.mode,
-      apiBaseUrl: config.apiBaseUrl,
-      amount: context.amountBrl,
-      description: `Renovacao Plano ${context.planName}`,
-      externalReference,
-      payerEmail: context.subscription.payer_email ?? "financeiro@connectyhub.com.br",
-      payerName: card.holderName ?? "Cliente ConnectyHub",
-      payerDocument: card.holderTaxId,
-      notificationUrl: config.webhookUrl || buildPagBankPlatformBillingWebhookUrl(),
-      idempotencyKey: attemptKey,
-      items: [{
-        id: context.subscription.plan_code,
-        title: `Renovacao Plano ${context.planName}`,
-        quantity: 1,
-        unitPrice: context.amountBrl,
-        total: context.amountBrl,
-      }],
-      cardToken: card.token,
-      holderName: card.holderName,
-      holderTaxId: card.holderTaxId,
-      installments: 1,
-      paymentMethodType: "CREDIT_CARD",
-      storeCard: true,
-      recurringType: "SUBSEQUENT",
-      softDescriptor: config.softDescriptor,
-    });
-    const paymentData = extractPagBankCardData(order.order);
-    const providerPaymentId = paymentData.providerOrderId ?? paymentData.providerPaymentId;
-    const paymentStatus = normalizeLifecyclePaymentStatus(paymentData.status);
-    const update = await client
-      .from("billing_payments")
-      .update({
-        provider: "pagbank",
-        provider_payment_id: providerPaymentId,
-        provider_status: paymentData.providerStatus ?? paymentData.status,
-        status: paymentStatus,
-        payload: {
-          ...(intent.payment.payload ?? {}),
-          card_retry_status: paymentStatus === "approved" ? "approved" : paymentStatus === "pending" ? "pending" : "failed",
-          card_retry_attempt_key: attemptKey,
-          card_retry_attempted_at: now.toISOString(),
-          card_retry_payment_method_id: card.id,
-          payment_method: "card",
-          latest_payment_method: "card",
-          billing_payment_method: "card",
-          pagbank_order_id: paymentData.providerOrderId,
-          pagbank_charge_id: paymentData.providerPaymentId,
-          pagbank_payment: {
-            id: providerPaymentId,
-            status: paymentData.providerStatus,
-            status_detail: paymentData.providerStatusDetail,
-            recurring_type: paymentData.recurringType,
-            payment_response_reference: paymentData.paymentResponseReference,
-          },
-        },
-      })
-      .eq("id", intent.payment.id)
-      .eq("organization_id", context.subscription.organization_id);
-
-    if (update.error) {
-      throw new Error(`Nao foi possivel registrar tentativa automatica PagBank: ${update.error.message}`);
-    }
-
-    if (providerPaymentId) {
-      await processPlatformBillingPagBankWebhook(client, {
-        dataId: providerPaymentId,
-        eventType: "payment",
-        action: "payment.updated",
-        providerEventId: null,
-        requestId: null,
-        payload: {
-          source: "paid_lifecycle_pagbank_card_retry",
-          subscription_id: context.subscription.id,
-          invoice_id: intent.invoice.id,
-          payment_id: intent.payment.id,
-          attempt_key: attemptKey,
-        },
-      });
-    }
-
-    if (paymentStatus === "approved") {
-      await markCardRetryApproved(client, context, {
-        attemptKey,
-        invoiceId: intent.invoice.id,
-        paymentId: intent.payment.id,
-        providerPaymentId,
-        now,
-      });
-
-      return { attempted: true, approved: true, failed: false };
-    }
-
-    if (paymentStatus !== "pending") {
-      await markBillingPaymentMethodFailed(client, {
-        id: card.id,
-        organizationId: context.subscription.organization_id,
-        reason: paymentData.providerStatusDetail ?? paymentData.providerStatus ?? "Pagamento recorrente recusado.",
-        metadata: {
-          source: "paid_lifecycle_pagbank_card_retry",
-          attempt_key: attemptKey,
-          payment_id: intent.payment.id,
-          pagbank_order_id: paymentData.providerOrderId,
-          pagbank_charge_id: paymentData.providerPaymentId,
-        },
-      }).catch(() => null);
-      await markCardRetryFailed(client, context, {
-        attemptKey,
-        invoiceId: intent.invoice.id,
-        paymentId: intent.payment.id,
-        providerPaymentId,
-        reason: paymentData.providerStatusDetail ?? paymentData.providerStatus ?? "Pagamento recorrente recusado.",
-        now,
-      });
-
-      return { attempted: true, approved: false, failed: true };
-    }
-
-    return { attempted: true, approved: false, failed: false };
-  } catch (error) {
-    await markCardRetryFailed(client, context, {
-      attemptKey,
-      invoiceId: intent.invoice.id,
-      paymentId: intent.payment.id,
-      reason: error instanceof Error ? error.message : "Falha na tentativa automatica de cartao.",
-      now,
-    });
-
-    return { attempted: true, approved: false, failed: true };
-  }
-}
-
-function shouldAttemptPagBankCardRenewal(
-  context: ReturnType<typeof buildNotificationContext>,
-  policy: PlatformBillingRenewalPolicy,
-  now: Date,
-) {
-  if (!policy.cardChargeAttemptEnabled) return false;
-  if (context.paymentMethod !== "card") return false;
-  if (context.subscription.billing_provider !== "pagbank") return false;
-  if (context.subscription.status !== "active") return false;
-  if (!context.periodEnd || context.periodEnd.getTime() <= now.getTime()) return false;
-  if (context.daysRemaining === null || context.daysRemaining > policy.cardChargeAttemptDays) return false;
-  if (context.amountBrl <= 0) return false;
-
-  const retryStatus = readString(context.subscription.metadata?.card_retry_status)
-    ?? readString(context.latestPayment?.payload?.card_retry_status);
-  const lastAttemptKey = readString(context.subscription.metadata?.card_retry_attempt_key)
-    ?? readString(context.latestPayment?.payload?.card_retry_attempt_key);
-  const periodDate = dateOnly(context.periodEnd) ?? "sem-data";
-  const samePeriodAttempt = Boolean(lastAttemptKey?.startsWith(`${context.subscription.id}:${periodDate}:`));
-
-  return !(samePeriodAttempt && (retryStatus === "approved" || retryStatus === "pending"));
 }
 
 function shouldAttachRenewalCheckout(eventType: PlatformBillingLifecycleNotificationType) {
@@ -789,124 +539,6 @@ async function sendLifecycleNotification(
       checkout_public_url: checkoutUrl,
     },
   });
-}
-
-async function markCardRetryInProgress(
-  client: SupabaseClient,
-  context: ReturnType<typeof buildNotificationContext>,
-  input: {
-    attemptKey: string;
-    invoiceId: string;
-    paymentId: string;
-    now: Date;
-  },
-) {
-  const metadata = {
-    ...(context.subscription.metadata ?? {}),
-    card_retry_status: "pending",
-    card_retry_attempt_key: input.attemptKey,
-    card_retry_attempted_at: input.now.toISOString(),
-    card_retry_invoice_id: input.invoiceId,
-    card_retry_payment_id: input.paymentId,
-    payment_method: "card",
-    latest_payment_method: "card",
-    billing_payment_method: "card",
-  };
-
-  context.subscription.metadata = metadata;
-
-  await client
-    .from("organization_subscriptions")
-    .update({ metadata })
-    .eq("id", context.subscription.id)
-    .eq("organization_id", context.subscription.organization_id);
-}
-
-async function markCardRetryApproved(
-  client: SupabaseClient,
-  context: ReturnType<typeof buildNotificationContext>,
-  input: {
-    attemptKey: string;
-    invoiceId: string;
-    paymentId: string;
-    providerPaymentId: string | null;
-    now: Date;
-  },
-) {
-  const metadata = {
-    ...(context.subscription.metadata ?? {}),
-    card_retry_status: "approved",
-    card_retry_attempt_key: input.attemptKey,
-    card_retry_approved_at: input.now.toISOString(),
-    card_retry_invoice_id: input.invoiceId,
-    card_retry_payment_id: input.paymentId,
-    card_retry_provider_payment_id: input.providerPaymentId,
-    payment_method: "card",
-    latest_payment_method: "card",
-    billing_payment_method: "card",
-  };
-
-  context.subscription.metadata = metadata;
-
-  await client
-    .from("organization_subscriptions")
-    .update({ metadata })
-    .eq("id", context.subscription.id)
-    .eq("organization_id", context.subscription.organization_id);
-}
-
-async function markCardRetryFailed(
-  client: SupabaseClient,
-  context: ReturnType<typeof buildNotificationContext>,
-  input: {
-    attemptKey: string;
-    invoiceId: string;
-    paymentId: string;
-    providerPaymentId?: string | null;
-    reason: string;
-    now: Date;
-  },
-) {
-  const metadata = {
-    ...(context.subscription.metadata ?? {}),
-    card_retry_status: "failed",
-    card_retry_attempt_key: input.attemptKey,
-    card_retry_failed_at: input.now.toISOString(),
-    card_retry_failure_reason: input.reason,
-    card_retry_invoice_id: input.invoiceId,
-    card_retry_payment_id: input.paymentId,
-    card_retry_provider_payment_id: input.providerPaymentId ?? null,
-    payment_method: "card",
-    latest_payment_method: "card",
-    billing_payment_method: "card",
-  };
-
-  context.subscription.metadata = metadata;
-
-  await Promise.all([
-    client
-      .from("organization_subscriptions")
-      .update({ metadata })
-      .eq("id", context.subscription.id)
-      .eq("organization_id", context.subscription.organization_id),
-    client
-      .from("billing_payments")
-      .update({
-        status: "rejected",
-        payload: {
-          ...(context.latestPayment?.payload ?? {}),
-          card_retry_status: "failed",
-          card_retry_attempt_key: input.attemptKey,
-          card_retry_failed_at: input.now.toISOString(),
-          card_retry_failure_reason: input.reason,
-          payment_method: "card",
-          latest_payment_method: "card",
-          billing_payment_method: "card",
-        },
-      })
-      .eq("id", input.paymentId)
-      .eq("organization_id", context.subscription.organization_id),
-  ]);
 }
 
 function buildLatestPaymentMap(payments: PaymentRow[]) {
@@ -995,31 +627,6 @@ function readDate(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
-function normalizeLifecycleBillingProvider(value: unknown) {
-  const provider = readString(value);
-  if (provider === "mercado_pago" || provider === "pagbank" || provider === "asaas") {
-    return provider;
-  }
-
-  return "asaas";
-}
-
-function normalizeLifecyclePaymentStatus(value: string) {
-  if (value === "approved") return "approved";
-  if (value === "pending") return "pending";
-  if (value === "refunded") return "refunded";
-  if (value === "cancelled" || value === "canceled" || value === "expired") return "canceled";
-  if (value === "rejected") return "rejected";
-
-  return "in_process";
 }
 
 function dateOnly(value: Date | null) {

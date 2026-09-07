@@ -439,9 +439,7 @@ async function loadPlatformBillingProvider(client: ReturnType<typeof createServi
     throw new Error("Não foi possível conferir o recebimento da ConnectyHub. Tente novamente.");
   }
 
-  if (data?.recurring_provider === "mercado_pago" || data?.recurring_provider === "pagbank" || data?.recurring_provider === "asaas") {
-    return data.recurring_provider;
-  }
+
 
   return "asaas";
 }

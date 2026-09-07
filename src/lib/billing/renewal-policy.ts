@@ -14,8 +14,8 @@ export type PlatformBillingRenewalPolicy = {
 export const defaultPlatformBillingRenewalPolicy: PlatformBillingRenewalPolicy = {
   pixReminderStartDays: 3,
   cardChargeAttemptDays: 3,
-  gracePeriodDays: 3,
-  suspendAfterDays: 3,
+  gracePeriodDays: 0,
+  suspendAfterDays: 0,
   dailyWhatsAppReminders: true,
   cardChargeAttemptEnabled: true,
   cardFailureUsesPixFallback: true,

@@ -1,5 +1,7 @@
 import { billingBumpInterval } from "./plan-checkout-catalog";
 import "server-only";
+import { savePendingAsaasCard } from "./asaas-card-vault";
+import { managedRenewalConsentVersion } from "./managed-renewal-policy";
 import { payExistingAsaasBillingCard, findAsaasSubscriptionCycle } from "@/lib/sales-catalog/asaas-direct";
 import { billingPeriodEnd, billingTermsLabel, readCommercialTerms } from "./commercial-terms";
 import { readCheckoutCommercialTerms } from "./plan-checkout";
@@ -8,13 +10,13 @@ import { isIP } from "node:net";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { record, parseCheckoutCard, parseCheckoutCardHolder, type CheckoutCardHolder } from "@/lib/sales-catalog/card-input";
-import { AsaasDirectError, findAsaasBillingPix, applyAsaasPaymentEvent, createAsaasDirectCardPayment, createAsaasNativeSubscription, findAsaasNativeSubscription, cancelAsaasNativeSubscription, findAsaasDirectPayment, getAsaasNativePayment, retireAsaasPayment } from "@/lib/sales-catalog/asaas-direct";
+import { AsaasDirectError, findAsaasBillingPix, applyAsaasPaymentEvent, createAsaasDirectCardPayment, findAsaasNativeSubscription, cancelAsaasNativeSubscription, findAsaasDirectPayment, getAsaasNativePayment, retireAsaasPayment } from "@/lib/sales-catalog/asaas-direct";
 import { loadAsaasPlatformBillingConfig, getAsaasPixQrCode, extractAsaasPaymentData, verifyAsaasWebhookToken, type AsaasPaymentResponse } from "@/lib/sales-catalog/asaas";
 import { CheckoutError, directPaymentState } from "@/lib/sales-catalog/transparent-checkout";
 import { loadBillingCheckoutIntent, resolveBillingCheckoutProvider, isBillingCheckoutPayable, loadBillingCheckoutBumps, readSelectedBillingCheckoutBumpCodesForCatalog, type BillingCheckoutIntent } from "./plan-checkout";
 import { processPlatformBillingAsaasWebhook, notifyNativeBillingOutcome } from "./platform-billing-webhook";
 
-type Attempt = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; amount: number; recurring_amount: number; external_reference: string; state: string; stage: string; provider_subscription_id: string | null; provider_payment_id: string | null; previous_subscription_id: string | null; updated_at: string; created_at: string; effects_completed_state: string | null; effects_claimed_at: string | null };
+export type Attempt = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; amount: number; recurring_amount: number; external_reference: string; state: string; stage: string; provider_subscription_id: string | null; provider_payment_id: string | null; previous_subscription_id: string | null; updated_at: string; created_at: string; managed_renewal?: boolean; effects_completed_state: string | null; effects_claimed_at: string | null };
 const activeStates = ["processing", "unknown", "pending"];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -46,7 +48,7 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
   const snapshot = await loadNativeBillingSnapshot(client, organizationId, subscriptionId);
   if (snapshot.attempt && activeStates.includes(snapshot.attempt.state)) return billingAttemptResult(await reconcileNativeBillingAttempt(client, snapshot.attempt.id));
   if (!isBillingCheckoutPayable(snapshot.intent)) throw new CheckoutError("Este pagamento já foi finalizado.", 409);
-  if (snapshot.recurringAmount > 0 && body.acceptRecurring !== true) throw new CheckoutError("Confirme as condições de renovação.", 422);
+  if (snapshot.recurringAmount > 0 && (body.acceptRecurring !== true || body.recurringConsentVersion !== managedRenewalConsentVersion)) throw new CheckoutError("Confirme as condições de renovação.", 422);
   if (!isIP(remoteIp) || typeof body.attemptId !== "string" || !uuid.test(body.attemptId)) throw new CheckoutError("Atualize a página antes de pagar.", 400);
   if (body.amount !== snapshot.amount || body.revision !== snapshot.revision || Number(snapshot.intent.payment.amount_brl) !== snapshot.amount) throw new CheckoutError("O carrinho mudou. Confira o total antes de pagar.", 409);
   const card = parseCheckoutCard(body.card); const holder = parseCheckoutCardHolder(body.holder);
@@ -54,7 +56,8 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
   if (!config.accessToken || !config.webhookSecret) throw new CheckoutError("O recebimento da ConnectyHub precisa ser configurado.", 503);
   // Never replace an already-running recurring agreement as a side effect of a retry.
   const recurringAttemptId = record(snapshot.intent.payment.payload).native_recurring_attempt_id;
-  const recurringInvoice = typeof recurringAttemptId === "string" && Boolean(snapshot.intent.payment.provider_payment_id);
+  const managedReference = record(snapshot.intent.payment.payload).managed_external_reference;
+  const recurringInvoice = (typeof recurringAttemptId === "string" || typeof managedReference === "string") && Boolean(snapshot.intent.payment.provider_payment_id);
   if (snapshot.intent.subscription.provider_subscription_id?.startsWith("sub_") && !recurringInvoice) throw new CheckoutError("Este plano já possui renovação automática. Confira a cobrança existente no painel antes de criar outra assinatura.", 409);
   const reference = `billing_card:${body.attemptId}`;
   const { data, error } = await client.rpc("claim_native_billing_card", { p_org: organizationId, p_payment: snapshot.intent.payment.id, p_attempt: body.attemptId, p_revision: snapshot.revision, p_amount: snapshot.amount, p_recurring: snapshot.recurringAmount, p_reference: reference });
@@ -62,26 +65,23 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
   let attempt = data.attempt as Attempt;
   if (!data.claimed) return billingAttemptResult(await reconcileNativeBillingAttempt(client, attempt.id));
   try {
+    const customerId = snapshot.recurringAmount > 0 && !snapshot.intent.subscription.provider_subscription_id ? await savePendingAsaasCard(client, {...config, organizationId, subscriptionId, attemptId: attempt.id, card, holder, remoteIp}) : undefined;
     if (recurringInvoice) {
       const saved = await client.from("billing_card_attempts").update({provider_payment_id:snapshot.intent.payment.provider_payment_id,stage:"charging"}).eq("id",attempt.id).select("*").single();
       if(saved.error) throw new AsaasDirectError(true,false);
       attempt=saved.data as Attempt;
-      const payment = await payExistingAsaasBillingCard({...config, paymentId:snapshot.intent.payment.provider_payment_id!, expectedReference:"billing_recurring:"+recurringAttemptId, amount:snapshot.amount,card,holder,remoteIp});
+      const payment = await payExistingAsaasBillingCard({...config, paymentId:snapshot.intent.payment.provider_payment_id!, expectedReference:typeof managedReference === "string" ? managedReference : "billing_recurring:"+recurringAttemptId, amount:snapshot.amount,card,holder,remoteIp});
       return billingAttemptResult(await finishNativeBilling(client,attempt,directPaymentState(payment),payment));
     }
     const oldPaymentId = snapshot.intent.payment.provider_payment_id;
     if (oldPaymentId) await retireAsaasPayment(config, oldPaymentId, !oldPaymentId.startsWith("pay_"));
     const { error: holderError } = await client.from("organization_subscriptions").update({ metadata: { ...record(snapshot.intent.subscription.metadata), billing_card_holder: holder } }).eq("id", subscriptionId).eq("organization_id", organizationId);
     if (holderError) throw new AsaasDirectError(true, false);
-    // One-time purchases never create a recurring agreement.
-    const recurring = snapshot.recurringAmount > 0 ? await createAsaasNativeSubscription({ ...config, card, holder, amount: snapshot.recurringAmount, externalReference: `billing_recurring:${attempt.id}`, remoteIp,
-      cycle: { week: "WEEKLY", month: "MONTHLY", quarter: "QUARTERLY", year: "YEARLY" }[snapshot.terms.billingInterval] as "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY",
-      nextDueDate: String(record(snapshot.intent.payment.payload).cycle_end_at ?? billingPeriodEnd(new Date(), { ...snapshot.terms, billingCycle: "recurring" }).toISOString()).slice(0, 10),
-    }) : null;
-    const saved = await client.from("billing_card_attempts").update({ provider_subscription_id: recurring?.id ?? null, stage: "charging", updated_at: new Date().toISOString() }).eq("id", attempt.id).eq("state", "processing").select("*").single();
+    // Recurring card authorization is saved in our vault. No provider-managed agreement.
+    const saved = await client.from("billing_card_attempts").update({ stage: "charging", updated_at: new Date().toISOString() }).eq("id", attempt.id).eq("state", "processing").select("*").single();
     if (saved.error) throw new AsaasDirectError(false, false);
     attempt = saved.data as Attempt;
-    const payment = await createAsaasDirectCardPayment({ ...config, card, holder, amount: snapshot.amount, installments: 1, externalReference: attempt.external_reference, remoteIp });
+    const payment = await createAsaasDirectCardPayment({ ...config, card, holder, customerId, amount: snapshot.amount, installments: 1, externalReference: attempt.external_reference, remoteIp });
     return billingAttemptResult(await finishNativeBilling(client, attempt, directPaymentState(payment), payment));
   } catch (error) {
     const definitive = error instanceof AsaasDirectError && error.definitive;
@@ -106,16 +106,19 @@ export async function reconcileNativeBillingAttempt(client: SupabaseClient, id: 
   const { data: claimed } = await client.from("billing_card_attempts").update({ updated_at: new Date().toISOString() }).eq("id", id).eq("updated_at", attempt.updated_at).select("id").maybeSingle();
   if (!claimed) return attempt;
   const config = await loadAsaasPlatformBillingConfig({ client });
-  const payment = webhookPayment ?? (attempt.provider_payment_id ? await getAsaasNativePayment(config, attempt.provider_payment_id) : await findAsaasDirectPayment(config, attempt.external_reference, { amount: Number(attempt.amount), installments: 1 }));
+  const managed = attempt.managed_renewal ? await client.from("billing_payments").select("payload").eq("id",attempt.payment_id).single() : null;
+  if (managed?.error) throw new CheckoutError("Pagamento em conferência.",503);
+  const lookupReference = String(managed?.data?.payload?.managed_external_reference ?? attempt.external_reference);
+  const payment = webhookPayment ?? (attempt.provider_payment_id ? await getAsaasNativePayment(config, attempt.provider_payment_id) : await findAsaasDirectPayment(config, lookupReference, { amount: Number(attempt.amount), installments: 1 }));
   if (payment) {
     const invoice = await client.from("billing_payments").select("payload").eq("id",attempt.payment_id).single();
     if (invoice.error) throw new CheckoutError("Pagamento em conferência.",503);
     const recurringOrigin = record(invoice.data?.payload).native_recurring_attempt_id;
-    const expectedReference = recurringOrigin ? "billing_recurring:"+recurringOrigin : attempt.external_reference;
+    const expectedReference = record(invoice.data?.payload).managed_external_reference ?? (recurringOrigin ? "billing_recurring:"+recurringOrigin : attempt.external_reference);
     if (payment.externalReference !== expectedReference || payment.billingType !== "CREDIT_CARD" || Math.round(Number(payment.value) * 100) !== Math.round(Number(attempt.amount) * 100)) throw new CheckoutError("Pagamento em conferência.", 409);
     return finishNativeBilling(client, attempt, directPaymentState(payment), payment);
   }
-  if (attempt.stage === "preparing" && Date.now() - Date.parse(attempt.created_at as string) > 180000) {
+  if (!attempt.managed_renewal && attempt.stage === "preparing" && Date.now() - Date.parse(attempt.created_at as string) > 180000) {
     // No charge was ever dispatched. Retire a recovered future agreement before allowing a retry.
     const recurring = await findAsaasNativeSubscription(config, `billing_recurring:${id}`);
     if (recurring) await cancelAsaasNativeSubscription(config, recurring.id, `billing_recurring:${id}`);
@@ -125,7 +128,7 @@ export async function reconcileNativeBillingAttempt(client: SupabaseClient, id: 
   return attempt; // Absence after a charge timeout never authorizes a second debit.
 }
 
-async function finishNativeBilling(client: SupabaseClient, attempt: Attempt, state: string, payment?: AsaasPaymentResponse) {
+export async function finishNativeBilling(client: SupabaseClient, attempt: Attempt, state: string, payment?: AsaasPaymentResponse) {
   const { data, error } = await client.rpc("finish_native_billing_card", { p_attempt: attempt.id, p_state: state, p_provider_payment: payment?.id ?? null, p_provider_status: payment?.status ?? null });
   if (error || !data) throw new CheckoutError("Pagamento em conferência. Não repita a cobrança.", 503);
   const updated = data as Attempt;
@@ -169,8 +172,13 @@ export async function processNativeBillingWebhook(client: SupabaseClient, payloa
   let reference = String(payment.externalReference ?? recurring.externalReference ?? "");
   if (!reference && (payment.id || recurring.id)) {
     const column = payment.id ? "provider_payment_id" : "provider_subscription_id";
-    const { data } = await client.from("billing_card_attempts").select("id").eq(column, String(payment.id ?? recurring.id)).maybeSingle();
-    if (data) reference = `${payment.id ? "billing_card" : "billing_recurring"}:${data.id}`;
+    const { data, error } = await client.from("billing_card_attempts").select("id,payment_id").eq(column, String(payment.id ?? recurring.id)).order("created_at", {ascending: false}).limit(1).maybeSingle();
+    if (error) throw new CheckoutError("Pagamento em conferência.",503);
+    if (data) {
+      const invoice = payment.id ? await client.from("billing_payments").select("payload").eq("id",data.payment_id).single() : null;
+      if (invoice?.error) throw new CheckoutError("Pagamento em conferência.",503);
+      reference = String(record(invoice?.data?.payload).managed_external_reference ?? `${payment.id ? "billing_card" : "billing_recurring"}:${data.id}`);
+    }
   }
   if (reference.startsWith("connectyhub_subscription:") && payload.event === "PAYMENT_DELETED") {
     const parts = reference.split(":");
@@ -183,6 +191,22 @@ export async function processNativeBillingWebhook(client: SupabaseClient, payloa
         return { ok: true, processed: true, replaced: true };
       }
     }
+  }
+  if (reference.startsWith("billing_managed:")) {
+    const paymentId = reference.split(":")[1];
+    if (!uuid.test(paymentId ?? "")) throw new CheckoutError("Referência inválida.",400);
+    const config = await loadAsaasPlatformBillingConfig({client});
+    if (!verifyAsaasWebhookToken({header,token:config.webhookSecret}).ok) throw new CheckoutError("invalid_webhook_token",401);
+    const remote = await getAsaasNativePayment(config,String(payment.id));
+    if (remote.billingType === "PIX") {
+      await reconcileManagedBillingPix(client,paymentId,remote);
+      return {ok:true,processed:true};
+    }
+    const latest = await client.from("billing_card_attempts").select("id").eq("payment_id",paymentId).order("created_at",{ascending:false}).limit(1).maybeSingle();
+    if (latest.error || !latest.data) throw new CheckoutError("Pagamento em conferência.",503);
+    // A late refusal event cannot be attributed to a newer attempt on the same invoice.
+    await reconcileNativeBillingAttempt(client,latest.data.id,remote,true);
+    return {ok:true,processed:true};
   }
   if (!reference.startsWith("billing_card:") && !reference.startsWith("billing_recurring:")) return null;
   const id = reference.split(":")[1]; if (!uuid.test(id)) throw new CheckoutError("Referência inválida.", 400);
@@ -228,6 +252,14 @@ export async function reconcilePendingNativeBilling(client: SupabaseClient) {
   return { checked, deferred, recoveredPix };
 }
 
+async function reconcileManagedBillingPix(client: SupabaseClient, paymentId: string, payment: AsaasPaymentResponse) {
+  const local = await client.from("billing_payments").select("organization_id,subscription_id,invoice_id,amount_brl,provider_payment_id").eq("id",paymentId).single();
+  if (local.error || !local.data || payment.externalReference !== `billing_managed:${paymentId}` || payment.id !== local.data.provider_payment_id || payment.billingType !== "PIX" || Math.round(Number(payment.value)*100) !== Math.round(Number(local.data.amount_brl)*100)) throw new CheckoutError("Pagamento em conferência.",409);
+  const canonical = `connectyhub_subscription:${local.data.organization_id}:${local.data.subscription_id}:${local.data.invoice_id}:${paymentId}`;
+  // Paying by Pix must not activate a card token from a rejected card attempt.
+  await processPlatformBillingAsaasWebhook(client,{dataId:payment.id!,eventType:"payment",action:"managed_pix_reconciled",providerEventId:null,requestId:paymentId,payload:{payment:{...payment,externalReference:canonical}}},{...payment,externalReference:canonical});
+}
+
 export function billingHolder(intent: BillingCheckoutIntent, defaults: Partial<CheckoutCardHolder>) {
   return { name: defaults.name ?? "", email: defaults.email ?? "", cpfCnpj: defaults.cpfCnpj ?? "", phone: defaults.phone ?? "", postalCode: "", addressNumber: "", ...record(intent.subscription.metadata?.billing_card_holder) };
 }
@@ -240,16 +272,18 @@ async function recoverNativeBillingPix(client: SupabaseClient) {
     try {
       const config = await loadAsaasPlatformBillingConfig({ client });
       const recurringOrigin = row.payload?.native_recurring_attempt_id;
-      const reference = recurringOrigin ? "billing_recurring:"+recurringOrigin : String(row.payload?.external_reference ?? "");
+      const managedReference = row.payload?.managed_external_reference;
+      const reference = managedReference ? String(managedReference) : recurringOrigin ? "billing_recurring:"+recurringOrigin : String(row.payload?.external_reference ?? "");
       if (!reference) continue;
-      const payment = recurringOrigin && row.provider_payment_id ? await getAsaasNativePayment(config,row.provider_payment_id) : await findAsaasBillingPix(config, reference, Number(row.amount_brl));
+      const payment = (managedReference || recurringOrigin) && row.provider_payment_id ? await getAsaasNativePayment(config,row.provider_payment_id) : await findAsaasBillingPix(config, reference, Number(row.amount_brl));
       if (payment && (payment.externalReference !== reference || payment.billingType !== "PIX" || Math.round(Number(payment.value)*100) !== Math.round(Number(row.amount_brl)*100))) continue;
       if (!payment?.id) continue; // A timeout without a matching payment never permits a new charge.
       const qr = await getAsaasPixQrCode({ ...config, paymentId: payment.id });
       const pix = extractAsaasPaymentData(payment, qr);
       const saved = await client.from("billing_payments").update({ provider_payment_id: payment.id, provider_status: payment.status, payload: { ...row.payload, pix_creation_pending: false, pix_qr_code: pix.pixQrCode, pix_qr_code_base64: pix.pixQrCodeBase64, asaas_payment_id: payment.id } }).eq("id", row.id).eq("payload->>pix_creation_pending", "true");
       if (saved.error) continue;
-      if (recurringOrigin) await processNativeBillingRenewal(client,String(recurringOrigin),payment.id);
+      if (managedReference) await reconcileManagedBillingPix(client,row.id,payment);
+      else if (recurringOrigin) await processNativeBillingRenewal(client,String(recurringOrigin),payment.id);
       else await processPlatformBillingAsaasWebhook(client, { dataId: payment.id, eventType: "payment", action: "native_pix_reconciled", providerEventId: null, requestId: row.id, payload: { payment } });
       recovered++;
     } catch { /* Keep the durable hold for the next reconciliation. */ }

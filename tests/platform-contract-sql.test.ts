@@ -210,3 +210,56 @@ describe.sequential("contratos, direitos por item e memória financeira", () => 
   });
 
 });
+
+describe("managed Asaas schedule and credential boundary", () => {
+  beforeAll(async () => {
+    await db.exec("alter table platform_billing_settings add column recurring_provider text; create table billing_payment_methods(provider text,status text,is_default boolean,metadata jsonb);");
+    await db.exec("insert into platform_billing_settings(setting_key,metadata) values('default','{}') on conflict(setting_key) do nothing;");
+    await db.exec(readFileSync("supabase/migrations/0093_managed_asaas_renewals.sql", "utf8"));
+  });
+  async function managedFixture() {
+    const f = await fixture();
+    await db.query("update organization_subscriptions set billing_provider='asaas',current_period_end='2026-09-10T12:00:00Z' where id=$1", [f.sub]);
+    const activation = randomUUID();
+    await db.query("select claim_native_billing_card($1,$2,$3,0,120,100,$4)", [f.org,f.payment,activation,`billing_card:${activation}`]);
+    const method = randomUUID();
+    await db.query("insert into billing_asaas_card_vault(id,organization_id,subscription_id,activation_attempt_id,customer_id,token_encrypted,consent_version) values($1,$2,$3,$4,'cus_test','v1:encrypted-fixture','connectyhub-advance-3-2-1-v1')",[method,f.org,f.sub,activation]);
+    await db.query("select finish_native_billing_card($1,'approved','pay_initial','CONFIRMED')",[activation]);
+    const prepared = (await db.query<{r:{payment_id:string}}>("select prepare_contract_renewal($1,'2026-09-10T12:00:00Z','2026-09-10T12:00:00Z','2026-10-10T12:00:00Z','asaas','{}') r",[f.sub])).rows[0].r;
+    return {...f,method,renewal:prepared.payment_id};
+  }
+  async function claim(f: Awaited<ReturnType<typeof managedFixture>>, at: string) {
+    return (await db.query<{r:{claimed:boolean;attempt:{id:string}}|null}>("select claim_managed_asaas_renewal($1,$2,$3,$4,'2026-09-10T12:00:00Z',$5) r",[f.sub,f.renewal,randomUUID(),f.method,at])).rows[0].r;
+  }
+  it("permits D-3/D-2/D-1 once each at 09:00 Brazil time, never on or after due day",async()=>{
+    const f=await managedFixture();
+    expect(await claim(f,'2026-09-06T12:00:00Z')).toBeNull();
+    expect(await claim(f,'2026-09-07T11:59:00Z')).toBeNull();
+    for(const day of [7,8,9]) {
+      const r=await claim(f,`2026-09-0${day}T12:00:00Z`);expect(r?.claimed).toBe(true);
+      await db.query("select finish_native_billing_card($1,'rejected',null,'CREDIT_CARD_CAPTURE_REFUSED')",[r!.attempt.id]);
+      expect(await claim(f,`2026-09-0${day}T16:00:00Z`)).toBeNull();
+    }
+    expect(await claim(f,'2026-09-10T11:00:00Z')).toBeNull();
+    expect(await claim(f,'2026-09-11T12:00:00Z')).toBeNull();
+  });
+  it("holds an uncertain debit across days and preserves the same invoice",async()=>{
+    const f=await managedFixture();const r=await claim(f,'2026-09-07T12:00:00Z');
+    await db.query("select finish_native_billing_card($1,'unknown','pay_uncertain',null)",[r!.attempt.id]);
+    expect(await claim(f,'2026-09-08T12:00:00Z')).toBeNull();
+    const reused=(await db.query<{r:{payment_id:string}}>("select prepare_contract_renewal($1,'2026-09-10T12:00:00Z','2026-09-10T12:00:00Z','2026-10-10T12:00:00Z','asaas','{}') r",[f.sub])).rows[0].r;
+    expect(reused.payment_id).toBe(f.renewal);
+  });
+  it("stops after approval and never grants an extra three days of access",async()=>{
+    const f=await managedFixture();expect((await access(f.org,'2026-09-10T11:59:59Z')).allowed).toBe(true);expect((await access(f.org,'2026-09-10T12:00:00Z')).allowed).toBe(false);
+    const r=await claim(f,'2026-09-07T12:00:00Z');await db.query("select finish_native_billing_card($1,'approved','pay_confirmed','CONFIRMED')",[r!.attempt.id]);expect(await claim(f,'2026-09-08T12:00:00Z')).toBeNull();
+  });
+  it("requires an authorized active token and isolates it from authenticated sessions",async()=>{
+    const f=await managedFixture();await db.query("update billing_asaas_card_vault set status='inactive' where id=$1",[f.method]);expect(await claim(f,'2026-09-07T12:00:00Z')).toBeNull();
+    const denied=await db.query<{allowed:boolean}>("select has_table_privilege('authenticated','billing_asaas_card_vault','select') as allowed");expect(denied.rows[0].allowed).toBe(false);
+  });
+  it("does not debit after switching the invoice to Pix or under an external agreement",async()=>{
+    const f=await managedFixture();await db.query("update billing_payments set payload=payload||'{\"auto_charge_disabled\":true}' where id=$1",[f.renewal]);expect(await claim(f,'2026-09-07T12:00:00Z')).toBeNull();
+    await db.query("update billing_payments set payload=payload- 'auto_charge_disabled' where id=$1",[f.renewal]);await db.query("update organization_subscriptions set provider_subscription_id='sub_old' where id=$1",[f.sub]);expect(await claim(f,'2026-09-07T12:00:00Z')).toBeNull();
+  });
+});

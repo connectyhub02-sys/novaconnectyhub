@@ -1,4 +1,5 @@
 import { convertAsaasBillingPaymentToPix } from "@/lib/sales-catalog/asaas-direct";
+import { processNativeBillingWebhook } from "@/lib/billing/native-card-checkout";
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -139,8 +140,8 @@ export async function POST(
     const paymentData = billingProvider === "asaas"
       ? await createAsaasBillingPix({
           client,
-          existingPaymentId: intent.payment.payload?.native_recurring_attempt_id ? intent.payment.provider_payment_id : null,
-          expectedReference: intent.payment.payload?.native_recurring_attempt_id ? "billing_recurring:"+intent.payment.payload.native_recurring_attempt_id : null,
+          existingPaymentId: (intent.payment.payload?.native_recurring_attempt_id || intent.payment.payload?.managed_external_reference) ? intent.payment.provider_payment_id : null,
+          expectedReference: typeof intent.payment.payload?.managed_external_reference === "string" ? intent.payment.payload.managed_external_reference : intent.payment.payload?.native_recurring_attempt_id ? "billing_recurring:"+intent.payment.payload.native_recurring_attempt_id : null,
           amount: cart.totalAmount,
           description: formatBillingCheckoutDescription(intent, cart.selectedBumps),
           externalReference: cart.externalReference,
@@ -172,6 +173,10 @@ export async function POST(
     const providerPaymentId = readProviderPaymentId(paymentData);
 
     if (paymentData.status === "approved" && providerPaymentId) {
+      if (billingProvider === "asaas" && intent.payment.payload?.managed_external_reference) {
+        const config = await loadAsaasPlatformBillingConfig({client});
+        await processNativeBillingWebhook(client,{payment:{id:providerPaymentId,externalReference:intent.payment.payload.managed_external_reference}},config.webhookSecret);
+      } else {
       const processor = billingProvider === "asaas"
         ? processPlatformBillingAsaasWebhook
         : billingProvider === "pagbank"
@@ -191,6 +196,7 @@ export async function POST(
           payment_id: intent.payment.id,
         },
       });
+      }
     }
 
     const persisted = await client
@@ -205,6 +211,7 @@ export async function POST(
           ...cart.metadata,
           billing_provider: billingProvider,
           pix_creation_pending: false,
+          auto_charge_disabled: true,
           provider_payment_id: providerPaymentId,
           provider_status: paymentData.providerStatus,
           pix_qr_code: paymentData.pixQrCode,
@@ -284,6 +291,7 @@ async function createAsaasBillingPix(input: {
   const config = await loadAsaasPlatformBillingConfig({ client: input.client });
   if (input.existingPaymentId && input.expectedReference) {
     const existing=await convertAsaasBillingPaymentToPix({...config,paymentId:input.existingPaymentId,expectedReference:input.expectedReference,amount:input.amount});
+    if (["CONFIRMED","RECEIVED","RECEIVED_IN_CASH"].includes(String(existing.status))) return extractAsaasPaymentData(existing);
     const qr=await getAsaasPixQrCode({...config,paymentId:input.existingPaymentId});
     return extractAsaasPaymentData(existing,qr);
   }

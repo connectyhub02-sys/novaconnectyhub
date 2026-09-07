@@ -357,9 +357,9 @@ describe("PagBank gateway rollout", () => {
     expect(platformAutomationsConsoleSource).toContain("/api/admin/automations/renewal-policy");
     expect(paidLifecycleSource).toContain("loadRenewalPolicy");
     expect(paidLifecycleSource).toContain("ensureLifecycleRenewalCheckout");
-    expect(paidLifecycleSource).toContain("maybeAttemptPagBankCardRenewal");
-    expect(paidLifecycleSource).toContain("loadDefaultPagBankBillingCardMethod");
-    expect(paidLifecycleSource).toContain("recurringType: \"SUBSEQUENT\"");
+    expect(paidLifecycleSource).not.toContain("maybeAttemptPagBankCardRenewal");
+    expect(paidLifecycleSource).toContain("attemptManagedAsaasRenewal");
+    expect(paidLifecycleSource).not.toContain("loadDefaultPagBankBillingCardMethod");
     expect(paidLifecycleSource).toContain("paid_lifecycle_renewal_checkout");
     expect(paidLifecycleSource).toContain("renewal_invoice_id");
     expect(paidLifecycleSource).toContain("payment_card_retry_failed");

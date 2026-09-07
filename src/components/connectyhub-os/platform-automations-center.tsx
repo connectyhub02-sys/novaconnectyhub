@@ -1248,8 +1248,8 @@ function buildRenewalPolicyPayload(draft: RenewalPolicyDraft) {
   return {
     pixReminderStartDays: parseInteger(draft.pixReminderStartDays, 3),
     cardChargeAttemptDays: parseInteger(draft.cardChargeAttemptDays, 3),
-    gracePeriodDays: parseInteger(draft.gracePeriodDays, 3),
-    suspendAfterDays: parseInteger(draft.suspendAfterDays, 3),
+    gracePeriodDays: parseInteger(draft.gracePeriodDays, 0),
+    suspendAfterDays: parseInteger(draft.suspendAfterDays, 0),
     dailyWhatsAppReminders: draft.dailyWhatsAppReminders,
     cardChargeAttemptEnabled: draft.cardChargeAttemptEnabled,
     cardFailureUsesPixFallback: draft.cardFailureUsesPixFallback,

@@ -14,7 +14,8 @@ import {
 } from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
-import { loadNativeBillingSnapshot, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
+import { loadNativeBillingSnapshot, processNativeBillingWebhook, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
+import { loadAsaasPlatformBillingConfig } from "@/lib/sales-catalog/asaas";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,7 +46,13 @@ export async function GET(
     let nativeAttempt = false;
     if (resolveBillingCheckoutProvider(intent) === "asaas") {
       const snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
-      if (snapshot.attempt) {
+      const managedReference = intent.payment.payload?.managed_external_reference;
+      if (managedReference && intent.payment.provider_payment_id) {
+        nativeAttempt = true;
+        const config = await loadAsaasPlatformBillingConfig({client});
+        await processNativeBillingWebhook(client,{payment:{id:intent.payment.provider_payment_id,externalReference:managedReference}},config.webhookSecret);
+        intent = (await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId)).intent;
+      } else if (snapshot.attempt) {
         nativeAttempt = true;
         await reconcileNativeBillingAttempt(client, snapshot.attempt.id);
         intent = (await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId)).intent;

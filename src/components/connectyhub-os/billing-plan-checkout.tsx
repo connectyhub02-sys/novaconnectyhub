@@ -133,7 +133,7 @@ export function BillingPlanCheckout({
     Boolean(initialProviderPaymentId) && ["pending", "in_process"].includes(paymentStatus) && !initialPixQrCode,
   );
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
-  const cardEnabled = billingProvider === "asaas" || billingProvider === "pagbank" || (billingProvider === "mercado_pago" && Boolean(cardPublicKey));
+  const cardEnabled = billingProvider === "asaas" || (billingProvider === "mercado_pago" && Boolean(cardPublicKey));
   const providerLabel = billingProvider === "asaas" ? "Asaas" : billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
   const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardEnabled ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({

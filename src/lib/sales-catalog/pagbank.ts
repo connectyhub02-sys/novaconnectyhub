@@ -600,6 +600,7 @@ export async function ensurePagBankAccessToken(input: {
 }
 
 export async function createPagBankPixOrder(input: PagBankPixOrderInput) {
+  assertPagBankPaymentsAvailable();
   const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const response = await fetch(`${config.apiBaseUrl}/orders`, {
@@ -622,6 +623,7 @@ export async function createPagBankPixOrder(input: PagBankPixOrderInput) {
 }
 
 export async function createPagBankCardOrder(input: PagBankCardOrderInput) {
+  assertPagBankPaymentsAvailable();
   const config = getPagBankRuntimeConfig(input.mode, input.apiBaseUrl);
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const response = await fetch(`${config.apiBaseUrl}/orders`, {
@@ -1610,3 +1612,5 @@ function timingSafeHexEqual(left: string, right: string) {
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
+
+function assertPagBankPaymentsAvailable(): void { throw new Error("PagBank foi desativado. Utilize o checkout Asaas da ConnectyHub."); }
