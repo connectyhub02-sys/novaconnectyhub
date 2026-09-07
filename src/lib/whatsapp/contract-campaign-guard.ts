@@ -37,7 +37,7 @@ export async function pauseSuspendedInstanceCampaigns(client: SupabaseClient, in
     if (String(result?.status).toLowerCase() !== "paused") throw new Error("CAMPAIGN_QUEUE_PAUSE_UNCONFIRMED");
     paused++;
     const saved = await client.from("intelligence_events").insert({
-      scope: "organization", organization_id: instance.organization_id, source_type: "whatsapp_instance", source_id: instance.id,
+      scope: "organization", visibility: "organization", organization_id: instance.organization_id, source_type: "whatsapp_instance", source_id: instance.id,
       event_type: "whatsapp.campaign.contract_paused", title: "Campanha pausada por suspensão do plano",
       summary: "A fila do provedor foi pausada. A campanha e o histórico foram preservados para revisão após a regularização.",
       payload: { folder_id: id, whatsapp_instance_id: instance.id, action: "stop", status: "paused" },
