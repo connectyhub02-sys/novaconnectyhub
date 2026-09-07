@@ -202,6 +202,7 @@ const adminSections: NavSection[] = [
       { label: "Automacoes",         href: "/admin/automacoes",        icon: Zap, tone: "violet" },
       { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
+      { label: "Campanhas comerciais", href: "/admin/campanhas-comerciais", icon: Coins, tone: "emerald" },
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
       { label: "Integracoes",       href: "/admin/clientes/integracoes", icon: PlugZap, tone: "teal" },
@@ -238,6 +239,7 @@ const clientSections: NavSection[] = [
     label: "Crescimento",
     items: [
       { label: "Catálogo de Vendas", href: "/dashboard/links",         icon: ShoppingBag, tone: "sky" },
+      { label: "Campanhas e benefícios", href: "/dashboard/campanhas-comerciais", icon: Coins, tone: "emerald" },
       { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },

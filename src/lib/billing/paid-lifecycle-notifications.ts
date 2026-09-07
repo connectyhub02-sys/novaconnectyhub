@@ -1,4 +1,5 @@
 import "server-only";
+import { preparePlatformCampaign } from "@/lib/commerce/platform-campaigns";
 import { attemptManagedAsaasRenewal } from "./managed-asaas-renewals";
 import { billingLocalDate, billingPeriodEnd, isBillingDeadlineReached, readCommercialTerms } from "./commercial-terms";
 
@@ -323,7 +324,7 @@ function buildNotificationContext(input: {
     latestPayment: input.latestPayment,
     renewalPolicy: input.renewalPolicy,
     planName: plan?.name?.trim() || input.subscription.plan_code,
-    amountBrl: toNumber(Number((input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.price_brl ?? plan?.monthly_price_brl)) + (Array.isArray(input.subscription.metadata?.selected_bumps) ? (input.subscription.metadata.selected_bumps as JsonRecord[]).filter(b=>b.recurrence!=="one_time").reduce((n,b)=>n+Number(b.price_brl??0),0):0),
+    amountBrl: toNumber(Number((input.subscription.metadata?.campaign_pricing as JsonRecord | undefined)?.next_price_brl ?? (input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.price_brl ?? plan?.monthly_price_brl)) + (Array.isArray(input.subscription.metadata?.selected_bumps) ? (input.subscription.metadata.selected_bumps as JsonRecord[]).filter(b=>b.recurrence!=="one_time").reduce((n,b)=>n+Number(b.price_brl??0),0):0),
   };
 }
 
@@ -473,6 +474,7 @@ async function ensureLifecycleRenewalCheckout(
 
   const prepared = await client.rpc("prepare_contract_renewal", {p_subscription:context.subscription.id,p_expected_end:periodEnd?.toISOString(),p_start:cycleStart.toISOString(),p_end:cycleEnd.toISOString(),p_provider:provider,p_metadata:metadata});
   if (prepared.error) throw new Error("Não foi possível preparar a renovação: "+prepared.error.message);
+  await preparePlatformCampaign(client, prepared.data.payment_id);
   return {invoiceId:prepared.data.invoice_id,paymentId:prepared.data.payment_id,checkoutPath,checkoutUrl,checkoutKind:"renewal",targetPlanCode:context.subscription.plan_code,reused:prepared.data.reused};
 }
 

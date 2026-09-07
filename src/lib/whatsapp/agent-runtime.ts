@@ -1,3 +1,4 @@
+import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { assertContractAccess } from "@/lib/billing/contract-access";
@@ -1173,6 +1174,11 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     const financial = await loadPlatformCustomerContext(client, leadId).catch(() => "O financeiro está temporariamente indisponível. Não confirme recebimento, não afirme recusa nem reenvie nova cobrança incerta. Oriente a consultar o painel ou solicite conferência humana.");
     knowledge.unshift({ id: "platform-financial-live", title: "CONTA DO CLIENTE — CONSULTA FINANCEIRA ATUAL", content: financial,
       metadata: { extracted_text: true, platform_financial_live: true }, created_at: new Date().toISOString() });
+  }
+
+  if (!isPlatformWhatsapp && leadId) {
+    const commercial = await loadLeadCommercialContext(client,run.organization_id,leadId).catch(()=>"Condições comerciais indisponíveis. Não invente descontos nem confirme recebimento; consulte o checkout ou a equipe.");
+    knowledge.unshift({id:"store-commercial-live",title:"CONTRATOS E BENEFÍCIOS DO LEAD",content:commercial,metadata:{extracted_text:true,commercial_live:true},created_at:new Date().toISOString()});
   }
 
   const behavior = normalizeWhatsappBehaviorConfig(

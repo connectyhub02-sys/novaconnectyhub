@@ -90,7 +90,8 @@ type DeferredSalesCatalogPaymentReason =
   | "customer_document_required"
   | "billing_address_required"
   | "customer_phone_required"
-  | "lead_details_required";
+  | "lead_details_required"
+  | "subscription_renewal";
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
 
@@ -101,6 +102,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   amount?: string | number | null;
   payerEmail?: string | null;
   preferredMethod?: "pix" | "card" | null;
+  deferProvider?: boolean;
   source: "dashboard" | "whatsapp_agent" | "checkout";
   actorId?: string | null;
 }) {
@@ -120,9 +122,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
   if (!orderRow) {
     throw new Error("Pedido nao encontrado para gerar pagamento.");
   }
+  const { assertStoreAgreementPayable } = await import("@/lib/commerce/store-payment-guard");
+  await assertStoreAgreementPayable(input.client, input.organizationId, orderRow.id);
   const reviewCheck = await input.client.rpc("assert_checkout_review_clear", { p_order_id: orderRow.id });
   if (reviewCheck.error) throw new Error("Este pagamento está em conferência pela equipe. Aguarde antes de tentar pagar novamente.");
-  const order = await loadCheckoutCustomer(input.client, input.organizationId, orderRow, true);
+  let order = await loadCheckoutCustomer(input.client, input.organizationId, orderRow, true);
 
   const { data: itemRows } = await input.client
     .from("sales_catalog_order_items")
@@ -130,7 +134,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
     .eq("order_id", order.id)
     .order("created_at", { ascending: true });
   const items = (itemRows ?? []) as OrderItemRow[];
-  const amount = normalizeCurrencyAmount(input.amount)
+  let amount = normalizeCurrencyAmount(input.amount)
     ?? normalizeCurrencyAmount(order.total)
     ?? normalizeCurrencyAmount(order.subtotal);
   const orderMetadata = readRecord(order.metadata);
@@ -170,8 +174,16 @@ export async function createSalesCatalogPixPaymentSession(input: {
   }
 
   if (hasRecurringSalesCatalogOrderItem(orderMetadata, items)) {
-    throw new Error("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
+    const { ensureStoreRecurringAgreement } = await import("@/lib/commerce/store-campaigns");
+    await ensureStoreRecurringAgreement(input.client, input.organizationId, order.id);
+    const repriced = await input.client.from("sales_catalog_orders").select("*").eq("id", order.id).eq("organization_id", input.organizationId).single();
+    if (repriced.error) throw new Error("Não foi possível conferir o total da assinatura.");
+    order = { ...order, ...repriced.data };
+    amount = normalizeCurrencyAmount(order.total);
+    if (!amount) throw new Error("Confira o total da assinatura.");
   }
+
+  if (input.deferProvider) return createDeferredSalesCatalogCheckoutSession({ ...input, order, items, amount, preferredMethod, reason: "subscription_renewal", reasonLabel: "Confira sua renovação no checkout." });
 
   const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
     client: input.client,

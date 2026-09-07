@@ -1,4 +1,8 @@
 import { assertPublicCommerceAccess } from "./public-commerce-access";
+import { ensureStoreRecurringAgreement } from "@/lib/commerce/store-campaigns";
+import { assertStoreAgreementPayable } from "@/lib/commerce/store-payment-guard";
+import { campaignPriceNotice,type CampaignPricing } from "@/lib/commerce/campaigns";
+import { saveStoreRecurringCard,storeRecurringConsentVersion } from "@/lib/commerce/store-card-vault";
 import "server-only";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -29,6 +33,10 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
   const order = await loadCheckoutCustomer(client, session.organization_id, savedOrder);
   const { data: items, error: itemsError } = await client.from("sales_catalog_order_items").select("*").eq("order_id", order.id).eq("organization_id", session.organization_id).order("created_at");
   if (itemsError || !items?.length) throw new CheckoutError("Não foi possível conferir os itens do pedido.", 409);
+  if (items.some(item => record(item.metadata).billing_cycle === "recurring") && !record(order.metadata).commercial_agreement_id) {
+    await ensureStoreRecurringAgreement(client, session.organization_id, order.id);
+    return loadTransparentCheckout(client, sessionId);
+  }
   const amount = normalizeCurrencyAmount(order.total);
   if (!amount) throw new CheckoutError("O total do pedido precisa ser confirmado.", 409);
   const settings = await getOrganizationSalesCatalogSettings(client, session.organization_id);
@@ -49,11 +57,18 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
 
 export function publicCheckoutQuote(snapshot: Awaited<ReturnType<typeof loadTransparentCheckout>>) {
   const { order, holder, amount, settings, attempt } = snapshot;
+  const pricing = record(order.metadata).campaign_pricing as CampaignPricing | undefined;
+  const recurringItem = snapshot.items.find(item => record(item.metadata).billing_cycle === "recurring");
+  const quantity = Number(recurringItem?.quantity ?? 1);
+  const shipping = normalizeCurrencyAmount(order.shipping_total) ?? 0;
+  const money = (n: number) => n.toLocaleString("pt-BR", {style:"currency",currency:"BRL"});
+  const renewalNotice = pricing?.recurring ? ` Valores do produto por unidade. Quantidade recorrente: ${quantity}. Próximo total previsto: ${money(pricing.next_price_brl * quantity + shipping)}, incluindo frete de ${money(shipping)}. Produtos avulsos desta compra não se repetem. Se o frete mudar, a nova cobrança depende da sua confirmação no checkout.` : "";
   return {
     amount, revision: Number(order.checkout_revision ?? 0), holder,
+    recurring: pricing?.recurring === true, campaignNotice: pricing ? campaignPriceNotice(pricing) + renewalNotice : null,
     enabled: snapshot.enabled,
     review: snapshot.review,
-    maxInstallments: Math.min(12, Math.max(1, settings?.asaas.maxInstallments ?? 1)),
+    maxInstallments: pricing?.recurring ? 1 : Math.min(12, Math.max(1, settings?.asaas.maxInstallments ?? 1)),
     paid: order.payment_status === "confirmed", closed: order.payment_status === "refunded" || order.status === "cancelled",
     attempt: attempt ? { id: attempt.id, state: attempt.state } : null,
     shipping: normalizeCurrencyAmount(order.shipping_total) ?? 0,
@@ -78,10 +93,13 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
     return publicAttempt(await reconcileTransparentAttempt(client, snapshot.attempt.id));
   }
   await assertContractAccess(session.organization_id,client);
+  await assertStoreAgreementPayable(client, session.organization_id, order.id);
   if (!snapshot.enabled) throw new CheckoutError("O cartão está temporariamente indisponível nesta loja. Continue pelo WhatsApp.", 503);
   if (["confirmed", "refunded"].includes(order.payment_status) || ["paid", "in_preparation", "shipped", "delivered", "cancelled"].includes(order.status)) throw new CheckoutError("Este pedido já foi finalizado.", 409);
   if (requiresSalesCatalogShippingBeforePayment(order, items)) throw new CheckoutError("Confirme o endereço e o frete pelo WhatsApp antes de pagar.", 409);
-  if (items.some(item => record(item.metadata).billing_cycle && record(item.metadata).billing_cycle !== "one_time")) throw new CheckoutError("Este pedido possui uma assinatura e precisa do checkout de recorrência.", 409);
+  const recurring = record(record(order.metadata).campaign_pricing).recurring === true;
+  if (items.some(item => record(item.metadata).billing_cycle === "recurring") && !recurring) throw new CheckoutError("Confira as condições da assinatura antes de pagar.", 409);
+  if (recurring && (body.acceptRecurring !== true || body.recurringConsentVersion !== storeRecurringConsentVersion)) throw new CheckoutError("Autorize as condições de renovação antes de pagar.", 422);
   const sourceOwner = session.payment_owner_type ?? record(session.metadata).payment_owner;
   if (sourceOwner !== "connectyhub" && settings && !settings.asaas.enabledMethods.includes("credit_card")) throw new CheckoutError("O cartão não está habilitado nesta loja.", 409);
   if (!isIP(remoteIp)) throw new CheckoutError("Não foi possível identificar a conexão. Atualize a página.", 400);
@@ -106,8 +124,9 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
     // Re-read after retiring old sessions: a concurrent Pix confirmation must stop this charge.
     const { data: current, error: currentError } = await client.from("sales_catalog_orders").select("payment_status, checkout_payment_lock").eq("id", order.id).eq("organization_id", session.organization_id).single();
     if (currentError || current.payment_status === "confirmed" || current.checkout_payment_lock !== attempt.id) throw new CheckoutError("Estamos conferindo um pagamento anterior deste pedido.", 409);
+    const customerId = recurring ? await saveStoreRecurringCard(client, connection, {organizationId:session.organization_id,agreementId:String(record(order.metadata).commercial_agreement_id),attemptId:attempt.id,card,holder,remoteIp}) : undefined;
     chargeStarted = true;
-    let payment = await createAsaasDirectCardPayment({ ...connection, card, holder, installments, amount: snapshot.amount, externalReference: `checkout_card:${attempt.id}`, remoteIp });
+    let payment = await createAsaasDirectCardPayment({ ...connection, card, holder, customerId, installments, amount: snapshot.amount, externalReference: `checkout_card:${attempt.id}`, remoteIp });
     if (installments > 1) {
       const complete = await findAsaasDirectPayment(connection, `checkout_card:${attempt.id}`, { amount: snapshot.amount, installments });
       if (!complete) throw new AsaasDirectError(false, false);
@@ -260,7 +279,7 @@ async function reconcileUncertainPixRequests(client: SupabaseClient) {
   return recovered;
 }
 
-async function validateTransparentInventory(client: SupabaseClient, organizationId: string, items: Array<{ catalog_item_id: string | null; sku_id?: string | null; quantity: number | null }>, trackInventory: boolean) {
+export async function validateTransparentInventory(client: SupabaseClient, organizationId: string, items: Array<{ catalog_item_id: string | null; sku_id?: string | null; quantity: number | null }>, trackInventory: boolean) {
   const ids = [...new Set(items.map(item => item.catalog_item_id).filter(Boolean))];
   const { data: products, error } = await client.from("intelligence_memory").select("id, organization_id, title, content, metadata, created_at, updated_at").eq("organization_id", organizationId).eq("memory_type", "sales_catalog_item").in("id", ids);
   if (error) throw new CheckoutError("Não foi possível conferir a disponibilidade dos produtos.", 409);

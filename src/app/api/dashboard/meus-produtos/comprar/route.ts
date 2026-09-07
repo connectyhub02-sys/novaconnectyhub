@@ -1,3 +1,4 @@
+import {preparePlatformCampaign} from "@/lib/commerce/platform-campaigns";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentWorkspace, ensureStarterOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     const owned = await client.from("platform_product_entitlements").select("id").eq("buyer_user_id", workspace.user.id).eq("product_id", product.id).eq("state", "active")
       .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`).limit(1).maybeSingle();
     if (owned.error) throw new Error("Não foi possível conferir suas compras.");
-    if (owned.data && Number(product.metadata?.credit_amount ?? 0) <= 0) return NextResponse.json({ checkoutUrl: `/dashboard/meus-produtos/${owned.data.id}`, alreadyPurchased: true });
+    if (owned.data && product.billing_cycle !== "recurring" && Number(product.metadata?.credit_amount ?? 0) <= 0) return NextResponse.json({ checkoutUrl: `/dashboard/meus-produtos/${owned.data.id}`, alreadyPurchased: true });
     const amount = normalizeCurrencyAmount(product.offer?.sale_price ?? product.offer?.salePrice ?? product.price);
     if (!amount || amount <= 0) throw new Error("O preço deste produto precisa ser configurado.");
     const terms = { billing_cycle: product.billing_cycle, billing_interval: product.billing_interval, price_brl: amount, included_credits: Number(product.metadata?.credit_amount ?? 0), access_duration_days: null };
@@ -33,9 +34,10 @@ export async function POST(request: NextRequest) {
     if (result.error) throw new Error("Não foi possível preparar a compra.");
     const checkoutUrl = `/dashboard/meus-produtos/checkout/${result.data}`;
     await recordPlatformCustomerEvent(client, { userId: workspace.user.id, eventType: "product_checkout_created", sourceId: result.data, eventKey: `product_checkout:${result.data}`, payload: { product_id: product.id, product: product.name, terms } });
-    const intent = await loadBillingCheckoutIntent(client, { organizationId: organization.id, subscriptionId: result.data });
+    let intent = await loadBillingCheckoutIntent(client, { organizationId: organization.id, subscriptionId: result.data });
+    if (intent && typeof body.campaignId === "string" && typeof body.optionId === "string") {await preparePlatformCampaign(client,intent.payment.id,{campaignId:body.campaignId,optionId:body.optionId});intent=await loadBillingCheckoutIntent(client,{organizationId:organization.id,subscriptionId:result.data});}
     if (intent) await sendPlatformSubscriptionPendingNotification(client, { organizationId: organization.id, subscriptionId: result.data, invoiceId: intent.invoice.id, paymentId: intent.payment.id,
-      planCode: intent.targetPlanCode, planName: product.name, amountBrl: amount, includedCredits: terms.included_credits,
+      planCode: intent.targetPlanCode, planName: product.name, amountBrl: Number(intent.payment.amount_brl), includedCredits: terms.included_credits,
       metadata: { purchase_kind: "product", checkout_url: checkoutUrl, checkout_public_url: getAppBaseUrl() + checkoutUrl } }).catch(() => null);
     return NextResponse.json({ checkoutUrl });
   } catch (error) {

@@ -823,6 +823,7 @@ export async function queueWhatsappSimpleCampaign(
     text: string;
     numbers: string[];
     scheduledFor?: string | null;
+    commercialCampaign?: JsonRecord;
   },
 ) {
   assertWhatsappConnected(context);
@@ -839,6 +840,7 @@ export async function queueWhatsappSimpleCampaign(
   const title = input.title.trim() || `Campanha WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
 
   return queueWhatsappOutbound(client, context, {
+    commercialCampaign: input.commercialCampaign,
     operation: "campaign_simple",
     title,
     summary: `${numbers.length} destinatario(s). ${preview(text, 140)}`,
@@ -1982,6 +1984,12 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
     const context = await resolveContextByOutboundItem(client, claimed);
     assertWhatsappConnected(context);
     const payload = readRecord(metadata.payload) ?? {};
+    if (metadata.commercial_campaign) {
+      const { recheckCommercialAnnouncement } = await import("@/lib/commerce/announcements");
+      const checked = await recheckCommercialAnnouncement(client, metadata, claimed.scope, claimed.organization_id);
+      payload.numbers = checked.recipients.map(r => r.phone);
+      metadata.commercial_campaign = { ...readRecord(metadata.commercial_campaign), recipients: checked.recipients };
+    }
     let providerResponse: unknown;
 
     if (operation === "status") {
@@ -2576,6 +2584,7 @@ async function queueWhatsappOutbound(
     scheduledFor?: string | null;
     payload: JsonRecord;
     recurrence?: JsonRecord | null;
+    commercialCampaign?: JsonRecord;
   },
 ) {
   const scheduledFor = normalizeScheduledFor(input.scheduledFor);
@@ -2600,6 +2609,7 @@ async function queueWhatsappOutbound(
       scheduled_for: scheduledFor,
       tags: ["whatsapp", "uazapi", input.operation],
       metadata: {
+        commercial_campaign: input.commercialCampaign,
         operation: input.operation,
         payload: input.payload,
         whatsapp_instance_id: context.instance.id,
@@ -5936,4 +5946,10 @@ function preview(value: string, maxLength: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+export async function resolveCommercialAnnouncementContext(client: SupabaseClient, instanceId: string, owner: "platform" | "store", organizationId: string | null) {
+ const row = await client.from("whatsapp_instances").select(instanceSelect).eq("id", instanceId).eq("provider", "uazapi").neq("status", "archived").maybeSingle<WhatsappInstanceRow>();
+ if (row.error || !row.data || (owner === "store" ? row.data.organization_id !== organizationId : readRecord(row.data.metadata)?.admin_whatsapp !== true)) throw new Error("Selecione um WhatsApp desta empresa.");
+ return buildOperationalContext(client, row.data, owner === "platform" ? "platform" : "organization", organizationId, asString(readRecord(row.data.metadata)?.sector_id));
 }

@@ -7,6 +7,7 @@ import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpM
 import { readCommercialTerms } from "./commercial-terms";
 import { readCheckoutPlanAmounts } from "./plan-discounts";
 import { preparePlanPurchaseDiscount } from "./plan-discounts-server";
+import { preparePlatformCampaign } from "@/lib/commerce/platform-campaigns";
 
 export type JsonRecord = Record<string, unknown>;
 export type BillingCheckoutProvider = "mercado_pago" | "pagbank" | "asaas";
@@ -143,8 +144,12 @@ export async function loadBillingCheckoutIntent(
   }
 
   const checkoutKind = readBillingCheckoutKindFromRecords(subscription, invoiceResult.data, paymentResult.data);
+  if (checkoutKind !== "renewal" && !paymentResult.data.payload?.campaign_pricing && paymentResult.data.payload?.campaign_selection) {
+    await preparePlatformCampaign(client, paymentResult.data.id);
+    return loadBillingCheckoutIntent(client, input);
+  }
   const initialTerms = paymentResult.data.payload?.commercial_terms as JsonRecord | undefined;
-  if (checkoutKind === "initial" && initialTerms?.first_purchase_discount_percent !== undefined && !paymentResult.data.payload?.plan_pricing) {
+  if (checkoutKind === "initial" && initialTerms?.first_purchase_discount_percent !== undefined && !paymentResult.data.payload?.plan_pricing && !paymentResult.data.payload?.campaign_pricing) {
     await preparePlanPurchaseDiscount(client, paymentResult.data.id);
     return loadBillingCheckoutIntent(client, input);
   }

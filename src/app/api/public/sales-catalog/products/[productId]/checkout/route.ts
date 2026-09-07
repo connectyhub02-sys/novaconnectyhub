@@ -83,9 +83,7 @@ export async function POST(
     return NextResponse.json({ error: "Este produto nao esta disponivel para checkout online." }, { status: 422 });
   }
 
-  if (item.billingCycle !== "one_time") {
-    return NextResponse.json({ error: "Este produto usa cobranca recorrente e ainda nao esta disponivel neste checkout." }, { status: 422 });
-  }
+
 
   if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
     return NextResponse.json({ error: "Este produto esta esgotado no momento." }, { status: 422 });

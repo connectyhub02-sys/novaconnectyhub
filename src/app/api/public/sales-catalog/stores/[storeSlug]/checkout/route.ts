@@ -151,9 +151,7 @@ export async function POST(
       throw new Error(`O produto "${item.title}" nao esta disponivel para checkout online.`);
     }
 
-    if (item.billingCycle !== "one_time") {
-      throw new Error(`O produto "${item.title}" usa cobranca recorrente e ainda nao esta disponivel neste checkout.`);
-    }
+
 
     if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
       throw new Error(`O produto "${item.title}" esta esgotado no momento.`);

@@ -117,7 +117,7 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
     firstPurchasePrice: discount.firstAmount < discount.renewalAmount ? formatBrl(discount.firstAmount) : undefined,
     firstPurchaseDiscountPercent: discount.firstPercent,
     annualDiscountPercent: discount.annualPercent,
-    period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : readCommercialTerms(plan).billingCycle === "one_time" ? `único · ${plan.accessDurationDays} dias` : ({ week: "/semana", month: "/mês", quarter: "/trimestre", year: "/ano" })[readCommercialTerms(plan).billingInterval],
+    period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : readCommercialTerms(plan).billingCycle === "one_time" ? `único · ${plan.accessDurationDays} dias` : ({ week: "/semana", month: "/mês", quarter: "/trimestre", semester: "/semestre", year: "/ano" })[readCommercialTerms(plan).billingInterval],
     description: isTrial
       ? presentation?.description || "Teste completo da ConnectyHub por tempo limitado."
       : plan.shortDescription || presentation?.description || "Plano ConnectyHub configurado no admin.",

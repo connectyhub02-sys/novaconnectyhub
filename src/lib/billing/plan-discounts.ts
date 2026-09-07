@@ -1,4 +1,5 @@
 import { billingTermsLabel, readCommercialTerms } from "./commercial-terms";
+import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campaigns";
 
 export function parseDiscountPercent(value: unknown): number {
   if (value === undefined || value === null || value === "") return 0;
@@ -38,18 +39,20 @@ type PricedIntent = {
 
 /** Invoice-specific promotions never leak from a previous cycle into a renewal. */
 export function readCheckoutPlanAmounts(intent: PricedIntent) {
-  const renewalAmount = Number(intent.plan.monthly_price_brl ?? 0);
-  const pricing = intent.checkoutKind === "initial" ? intent.payment.payload?.plan_pricing as Record<string, unknown> | undefined : undefined;
+  const campaign = intent.payment.payload?.campaign_pricing as CampaignPricing | undefined;
+  const renewalAmount = Number(campaign?.next_price_brl ?? intent.plan.monthly_price_brl ?? 0);
+  const pricing = campaign ?? (intent.checkoutKind === "initial" ? intent.payment.payload?.plan_pricing as Record<string, unknown> | undefined : undefined);
   const amount = pricing ? Number(pricing.price_brl) : renewalAmount;
   const listAmount = pricing ? Number(pricing.list_price_brl) : amount;
   if (![amount, listAmount, renewalAmount].every(Number.isFinite) || amount < 0 || listAmount < amount) {
     throw new Error("Não foi possível conferir o desconto deste checkout.");
   }
   return { amount, listAmount, renewalAmount, discountAmount: Math.round((listAmount - amount) * 100) / 100,
-    firstPurchaseDiscountPercent: Number(pricing?.first_purchase_discount_percent ?? 0) };
+    firstPurchaseDiscountPercent: Number((pricing as Record<string,unknown> | undefined)?.first_purchase_discount_percent ?? 0) };
 }
 
 export function planDiscountNotice(metadata: Record<string, unknown>) {
+  if (metadata.campaign_pricing) return campaignPriceNotice(metadata.campaign_pricing as CampaignPricing) + (metadata.checkout_kind === "plan_change" && Date.parse(String(metadata.previous_current_period_end)) > Date.now() ? " O tempo restante já pago no plano anterior será acrescentado ao período do novo plano após a confirmação." : "");
   if (metadata.checkout_kind !== "initial") return "";
   const pricing = metadata.plan_pricing as Record<string, unknown> | undefined;
   if (!pricing || Number(pricing.first_purchase_discount_percent ?? 0) <= 0) return "";

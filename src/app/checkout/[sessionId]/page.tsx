@@ -1,3 +1,6 @@
+import { StoreSubscription } from "@/components/commerce/store-subscription";
+import { StoreOffers } from "@/components/commerce/store-offers";
+import type { CampaignPricing } from "@/lib/commerce/campaigns";
 import { StoreUnavailable } from "@/components/checkout/store-unavailable";
 import { isPublicCommerceAvailable } from "@/lib/sales-catalog/public-commerce-access";
 import type { Metadata } from "next";
@@ -358,6 +361,8 @@ export default async function CheckoutPage({
             </summary>
             <div className="border-t border-slate-200 px-3 pb-3">
             {missingCustomerFields.length ? <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900">Confira os dados pendentes: {missingCustomerFields.join(", ")}.</p> : null}
+            {!paid && !failed ? <StoreOffers sessionId={session.id} pricing={order.metadata?.campaign_pricing as CampaignPricing | undefined}/> : null}
+            <StoreSubscription sessionId={session.id}/>
             {session.provider === "asaas" && !paid && !failed ? <CheckoutDeliveryEditor key={`${session.id}:${order.checkout_revision}`} sessionId={session.id} initiallyOpen={shippingBlocked || missingCustomerFields.length > 0} initialCustomer={{ customer_name: order.customer_name, customer_phone: order.customer_phone, customer_email: order.customer_email, customer_document: order.customer_document, destination_cep: order.destination_cep, destination_address: order.destination_address }}>{customerSummary}</CheckoutDeliveryEditor> : customerSummary}
             </div>
           </details>

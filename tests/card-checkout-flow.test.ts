@@ -34,6 +34,7 @@ describe("Asaas checkout and lead attribution", () => {
       "./checkout-customer": customer,
       "node:crypto": crypto, "./mercado-pago": mercadoPago, "@/lib/tracking/tracked-links": tracking,
       "@/lib/sales-catalog/checkout-guards": guards,
+      "@/lib/commerce/store-payment-guard": serverModuleHarness("src/lib/commerce/store-payment-guard.ts"),
       "@/lib/client-os/sales-catalog": { getOrganizationSalesCatalogSettings: async () => null, mapSalesCatalogPaymentSession: (row: Row) => row },
       "@/lib/platform-product-sales": { resolveSalesCatalogOrderPaymentOwner: async () => ({ owner: "seller", commercialFlowType: "direct", revenueOwnerType: "seller", commissionEligible: false, catalogItemIds: [], platformProductIds: [] }) },
       "./asaas": { ensureAsaasAccessToken: async () => ({ id: "integration", accessToken: "fake", mode: "sandbox" }), createAsaasCheckout: createHosted, createAsaasPixPayment: createPix, buildAsaasCheckoutUrl: (result: Row) => result.link },

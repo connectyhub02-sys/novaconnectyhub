@@ -1,4 +1,5 @@
 import { pauseSuspendedWhatsappCampaigns } from "@/lib/whatsapp/contract-campaign-guard";
+import { processStoreRenewals } from "@/lib/commerce/store-renewals";
 import { inngest } from "./client";
 import {
   getWhatsappAgentRunDelaySeconds,
@@ -766,6 +767,7 @@ export const connectyhubWhatsappContractGuard = inngest.createFunction(
 );
 
 export const functions = [
+  inngest.createFunction({id:"connectyhub-store-subscription-renewals",name:"Renovações das assinaturas das lojas",retries:2,concurrency:{limit:1},triggers:[{cron:"*/5 * * * *"}]},async({step})=>step.run("prepare-store-renewals",()=>processStoreRenewals(createServiceClient()))),
   connectyhubWhatsappContractGuard,
   connectyhubLeadMediaArchive,
   connectyhubTransparentCheckoutReconciliation,

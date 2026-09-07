@@ -303,7 +303,7 @@ describe("PagBank gateway rollout", () => {
     expect(paymentSessionsSource).toContain("createAsaasPixPayment");
     expect(paymentSessionsSource).toContain("dueDate: resolveAsaasPaymentDueDate");
     expect(paymentSessionsSource).toContain("hasRecurringSalesCatalogOrderItem(orderMetadata, items)");
-    expect(paymentSessionsSource).toContain("Produto recorrente precisa do fluxo de cobranca recorrente antes de gerar Pix unico.");
+    expect(paymentSessionsSource).toContain("ensureStoreRecurringAgreement");
   });
 
   it("binds catalog freight and pickup offers to explicit store settings", () => {

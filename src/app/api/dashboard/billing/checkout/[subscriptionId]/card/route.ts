@@ -1,3 +1,4 @@
+import {campaignPriceNotice,type CampaignPricing} from "@/lib/commerce/campaigns";
 import { CheckoutError } from "@/lib/sales-catalog/transparent-checkout";
 import { billingHolder, loadNativeBillingSnapshot, payNativeBillingCard, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
 import { readClientIp, validatePublicWriteRequest } from "@/lib/security/public-request-guard";
@@ -731,7 +732,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ su
       snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
     }
     const document = await loadAccountDocument({ userId: workspace.user.id, client });
-    return NextResponse.json({ amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision,
+    return NextResponse.json({ campaignNotice: snapshot.intent.payment.payload?.campaign_pricing ? campaignPriceNotice(snapshot.intent.payment.payload.campaign_pricing as CampaignPricing) : null, amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision,
       holder: billingHolder(snapshot.intent, { name: workspace.profile.fullName ?? workspace.organization.name, email: snapshot.intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" }),
       attempt: snapshot.attempt ? { id: snapshot.attempt.id, state: snapshot.attempt.state } : null, paid: snapshot.intent.payment.status === "approved",
     }, { headers: { "Cache-Control": "private, no-store" } });

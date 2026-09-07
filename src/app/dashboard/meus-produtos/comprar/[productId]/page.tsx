@@ -1,3 +1,4 @@
+import { PlatformOffers } from "@/components/commerce/platform-offers";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -23,6 +24,7 @@ export default async function ProductOfferPage({ params }: { params: Promise<{ p
     <p className="text-3xl font-bold">{price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
     <p>{billingTermsLabel(readCommercialTerms(product))}</p>
     <p className="text-sm text-slate-500">A compra fica disponível na sua conta após a confirmação do pagamento. Produtos avulsos permanecem acessíveis sem assinatura ativa.</p>
+    <PlatformOffers planCode={product.id} />
     <ProductPurchaseButton productId={product.id} />
   </main>;
 }

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadCommerceOffers, type CommerceOfferSurface } from "@/lib/sales-catalog/commerce-offers";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
+import { loadCatalogCampaigns } from "@/lib/commerce/catalog-campaigns";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
   }
   try {
     const offers = await loadCommerceOffers({ client, organizationId, surface, leadId, currentProductIds: (query.get("products") ?? "").split(",").filter(Boolean).slice(0, 100) });
-    return NextResponse.json({ offers }, { headers: { "Cache-Control": "private, no-store" } });
+    const campaigns = ["store","product","cart"].includes(surface) ? await loadCatalogCampaigns(client,organizationId,(query.get("products")??"").split(",").filter(Boolean).slice(0,100)) : [];
+    return NextResponse.json({ offers, campaigns }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ offers: [] }, { headers: { "Cache-Control": "private, no-store" } }); }
 }

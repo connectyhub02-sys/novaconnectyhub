@@ -1,5 +1,7 @@
 import { billingTermsLabel } from "@/lib/billing/commercial-terms";
 import { readCheckoutCommercialTerms } from "@/lib/billing/plan-checkout";
+import { PlatformOffers } from "@/components/commerce/platform-offers";
+import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campaigns";
 import { readCheckoutPlanAmounts } from "@/lib/billing/plan-discounts";
 import { recordPlatformCustomerEvent } from "@/lib/billing/customer-journey";
 import type { Metadata } from "next";
@@ -140,6 +142,7 @@ export default async function DashboardBillingCheckoutPage({
             </Link>
           </div>
 
+          {intent.payment.payload?.campaign_pricing ? <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900">{campaignPriceNotice(intent.payment.payload.campaign_pricing as CampaignPricing)}</p> : ["pending", "rejected"].includes(intent.payment.status) ? <PlatformOffers planCode={String(intent.payment.payload?.purchase_product_id ?? intent.targetPlanCode)} subscriptionId={subscriptionId}/> : null }
           <BillingPlanCheckout
             purchaseKind={intent.payment.payload?.purchase_kind === "product" ? "product" : "plan"}
             renewal={intent.checkoutKind === "renewal"}

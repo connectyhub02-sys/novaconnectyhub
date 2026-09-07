@@ -518,6 +518,7 @@ export async function sendPlatformSubscriptionPendingNotification(
     metadata: {
       commercial_terms: paymentMetadata.commercial_terms,
       plan_pricing: paymentMetadata.plan_pricing,
+      campaign_pricing: paymentMetadata.campaign_pricing,
       checkout_kind: paymentMetadata.checkout_kind,
       source: "dashboard_plan_checkout_created",
       ...(input.metadata ?? {}),
@@ -1243,16 +1244,25 @@ async function activateBillingPlan(
   const activatedPlanCode = plan.plan_code;
   const checkoutKind = readString(checkoutMetadata.checkout_kind) ?? "initial";
   const now = new Date();
-  const cycleStart = readDate(paymentPayload?.cycle_start_at)
+  let cycleStart = readDate(paymentPayload?.cycle_start_at)
     ?? readDate(invoiceMetadata?.cycle_start_at)
     ?? readDate(input.providerPayment?.date_approved)
     ?? readDate(input.providerSubscription?.raw.date_created)
     ?? readDate(input.providerSubscription?.raw.dateCreated)
     ?? now;
-  const cycleEnd = readDate(paymentPayload?.cycle_end_at)
+  let cycleEnd = readDate(paymentPayload?.cycle_end_at)
     ?? readDate(invoiceMetadata?.cycle_end_at)
     ?? readDate(input.providerSubscription?.nextPaymentDate)
     ?? billingPeriodEnd(cycleStart, readCommercialTerms(checkoutMetadata.commercial_terms));
+  if (checkoutMetadata.campaign_pricing) {
+    const confirmedAt = readDate(input.providerPayment?.date_approved) ?? readDate(record.payment?.paid_at) ?? now;
+    cycleStart = new Date(Math.max(cycleStart.getTime(), confirmedAt.getTime()));
+    cycleEnd = billingPeriodEnd(cycleStart, readCommercialTerms(checkoutMetadata.commercial_terms));
+    if (checkoutKind === "plan_change") {
+      const priorEnd = readDate(checkoutMetadata.previous_current_period_end);
+      if (priorEnd) cycleEnd = new Date(cycleEnd.getTime() + Math.max(0, priorEnd.getTime() - confirmedAt.getTime()));
+    }
+  }
   const termsSnapshot = checkoutMetadata.commercial_terms as Record<string, unknown> | undefined;
   const includedCredits = toNumber(Number(termsSnapshot?.included_credits ?? plan.included_credits));
   const additionalBumpCredits = readSelectedBumpCreditAmount(paymentPayload ?? invoiceMetadata);

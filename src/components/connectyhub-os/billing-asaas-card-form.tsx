@@ -5,7 +5,7 @@ import { LockKeyhole } from "lucide-react";
 import { parseCheckoutCard, type CheckoutCardHolder } from "@/lib/sales-catalog/card-input";
 import type { CardPaymentStatusChange } from "@/components/checkout/mercado-pago-card-brick";
 
-type Quote = { amount: number; recurringAmount: number; recurrenceLabel: string; revision: number; holder: CheckoutCardHolder; paid: boolean; attempt: { id: string; state: string } | null };
+type Quote = { campaignNotice?: string | null; amount: number; recurringAmount: number; recurrenceLabel: string; revision: number; holder: CheckoutCardHolder; paid: boolean; attempt: { id: string; state: string } | null };
 const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
 const field = "mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-950 focus:outline-blue-500";
 
@@ -64,7 +64,7 @@ export function BillingAsaasCardForm({ subscriptionId, cartSyncing, onBusyChange
       <label className="block text-xs font-semibold">Número do cartão<input name="number" required inputMode="numeric" autoComplete="cc-number" maxLength={23} placeholder="0000 0000 0000 0000" className={field} /></label>
       <label className="block text-xs font-semibold">Nome impresso no cartão<input name="holderName" required autoComplete="cc-name" className={field} /></label>
       <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Validade<input name="expiry" required inputMode="numeric" autoComplete="cc-exp" maxLength={7} placeholder="MM/AA" className={field} onChange={e => { const digits = e.target.value.replace(/\D/g, "").slice(0, 6); e.target.value = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits; }} /></label><label className="text-xs font-semibold">Código de segurança<input name="ccv" required type="password" inputMode="numeric" autoComplete="cc-csc" maxLength={4} placeholder="CVV" className={field} /></label></div>
-      {quote.recurringAmount > 0 ? <label className="flex items-start gap-2 text-xs leading-5"><input name="recurring" type="checkbox" required className="mt-1" />Autorizo o pagamento de {money(quote.amount)} e a renovação {quote.recurrenceLabel.toLowerCase()} de {money(quote.recurringAmount)} enquanto o contrato estiver ativo. {managedRenewalConsent}</label> : null}
+      {quote.recurringAmount > 0 ? <label className="flex items-start gap-2 text-xs leading-5"><input name="recurring" type="checkbox" required className="mt-1" />Autorizo o pagamento de {money(quote.amount)}. {quote.campaignNotice ?? `Renovação ${quote.recurrenceLabel.toLowerCase()} de ${money(quote.recurringAmount)} enquanto o contrato estiver ativo.`} {managedRenewalConsent}</label> : null}
       <button disabled={sending || cartSyncing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 font-bold text-white disabled:opacity-60"><LockKeyhole size={16} />{sending ? "Processando…" : `Pagar ${money(quote.amount)}`}</button>
     </fieldset>}
     {message ? <p role="status" className="rounded-lg bg-slate-50 p-3 text-sm">{message}</p> : null}

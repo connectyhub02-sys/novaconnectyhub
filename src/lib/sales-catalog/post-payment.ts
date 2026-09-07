@@ -1,3 +1,4 @@
+import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campaigns";
 import "server-only";
 import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
 import { paymentOutcomeCopy } from "./payment-diagnostics";
@@ -1106,6 +1107,16 @@ function buildPaymentStatusMessage(input: {
   const variables = buildPaymentTemplateVariables(input.order, itemSummary, input.paymentMethod);
   const template = input.template?.trim();
   const checkoutUrl = readLatestCheckoutUrl(input.order.metadata);
+
+  if (input.status === "pending" && readRecord(input.order.metadata).renewal === true) {
+    const pricing = readRecord(input.order.metadata).campaign_pricing as CampaignPricing | undefined;
+    return [
+      `${variables.cliente}, a renovação da sua assinatura está disponível. Total deste pedido: ${formatOrderTotal(input.order.total)}.`,
+      pricing ? campaignPriceNotice(pricing) + " Valores da assinatura por unidade; frete e adicionais constam no total." : null,
+      checkoutUrl ? `Confira as condições e acompanhe o pagamento: ${checkoutUrl}` : null,
+      "Se você autorizou renovação no cartão, a tentativa segue as condições aceitas. No Pix, pague pelo checkout para renovar.",
+    ].filter(Boolean).join("\n");
+  }
 
   // Historical templates may assert that no debit occurred. Only verified facts belong here.
   if (["error", "rejected", "cancelled", "expired"].includes(input.status)) {

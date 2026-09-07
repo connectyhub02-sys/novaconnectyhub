@@ -1,5 +1,5 @@
 export type BillingCycle = "one_time" | "recurring";
-export type BillingInterval = "week" | "month" | "quarter" | "year";
+export type BillingInterval = "week" | "month" | "quarter" | "semester" | "year";
 export type CommercialTerms = {
   billingCycle: BillingCycle;
   billingInterval: BillingInterval;
@@ -13,7 +13,7 @@ export function readCommercialTerms(value: unknown): CommercialTerms {
   const days = Number(row.access_duration_days ?? row.accessDurationDays);
   return {
     billingCycle: cycle === "one_time" ? "one_time" : "recurring",
-    billingInterval: interval === "week" || interval === "quarter" || interval === "year" ? interval : "month",
+    billingInterval: interval === "week" || interval === "quarter" || interval === "semester" || interval === "year" ? interval : "month",
     accessDurationDays: Number.isInteger(days) && days > 0 ? days : null,
   };
 }
@@ -43,7 +43,7 @@ export function billingPeriodEnd(start: Date, terms: CommercialTerms): Date {
   } else {
     const day = end.getUTCDate();
     end.setUTCDate(1);
-    end.setUTCMonth(end.getUTCMonth() + (terms.billingInterval === "year" ? 12 : terms.billingInterval === "quarter" ? 3 : 1));
+    end.setUTCMonth(end.getUTCMonth() + (terms.billingInterval === "year" ? 12 : terms.billingInterval === "semester" ? 6 : terms.billingInterval === "quarter" ? 3 : 1));
     const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
     end.setUTCDate(Math.min(day, last));
   }
@@ -52,7 +52,7 @@ export function billingPeriodEnd(start: Date, terms: CommercialTerms): Date {
 
 export function billingTermsLabel(terms: CommercialTerms) {
   if (terms.billingCycle === "one_time") return "Pagamento único";
-  return { week: "Semanal", month: "Mensal", quarter: "Trimestral", year: "Anual" }[terms.billingInterval];
+  return { week: "Semanal", month: "Mensal", quarter: "Trimestral", semester: "Semestral", year: "Anual" }[terms.billingInterval];
 }
 
 export function billingDeadline(periodEnd: string | Date | null, graceDays: number): Date | null {
