@@ -11,6 +11,7 @@ function fixture(resolution = "unconfirmed", origin?: string, timeout = false, l
   }, lookupFailure ? { table: "sales_catalog_orders", operation: "select" } : undefined);
   const fetch = vi.fn(async () => { if (timeout) throw Error("timeout"); return new Response(JSON.stringify({ messageid: "provider-id" })); });
   const resolutionService = serverModuleHarness<typeof import("../src/lib/sales-catalog/payment-review-resolution")>("src/lib/sales-catalog/payment-review-resolution.ts", {
+    "@/lib/billing/contract-access": { getContractAccess: async () => ({ allowed: true }), assertContractAccess: async () => ({ allowed: true }) },
     "@/lib/security/credentials-crypto": { decryptCredentialValue: () => "test" },
     "@/lib/whatsapp/uazapi-credentials": { loadUazapiCredentials: async () => ({ baseUrl: "https://provider.example.test" }) },
   }, [], { fetch });

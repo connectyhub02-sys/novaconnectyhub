@@ -114,7 +114,7 @@ export function CommerceAgentDock() {
     const pageKey = `${pathname ?? ""}?${search}`;
     const probeAttempts = trackingContextProbe.pageKey === pageKey ? trackingContextProbe.attempts : 0;
 
-    if (isTrackingDisabled() || !surface) {
+    if (isTrackingDisabled() || !surface || document.querySelector('[data-commerce-unavailable="true"]')) {
       window.setTimeout(() => {
         setSession(null);
         setMessages([]);

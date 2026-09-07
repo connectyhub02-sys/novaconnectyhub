@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   createPagBankThreeDSSession,
@@ -36,6 +37,9 @@ export async function GET(
   if (error || !session) {
     return NextResponse.json({ error: "Sessao de pagamento nao encontrada." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(session.organization_id, client);
+  if (unavailable) return unavailable;
 
   if (session.provider !== "pagbank") {
     return NextResponse.json({ error: "Este checkout nao usa PagBank." }, { status: 409 });

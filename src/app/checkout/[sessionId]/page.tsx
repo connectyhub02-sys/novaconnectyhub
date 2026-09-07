@@ -1,3 +1,5 @@
+import { StoreUnavailable } from "@/components/checkout/store-unavailable";
+import { isPublicCommerceAvailable } from "@/lib/sales-catalog/public-commerce-access";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Script from "next/script";
@@ -191,7 +193,9 @@ export default async function CheckoutPage({
   const { sessionId } = await params;
   const query = (await searchParams) ?? {};
   const client = createServiceClient();
-  const { session, order, items, organization, integration, whatsapp, orderBumps, customerAvatarUrl } = await loadCheckoutData(client, sessionId);
+  const checkout = await loadCheckoutData(client, sessionId);
+  if ("storeUnavailable" in checkout && checkout.storeUnavailable) return <StoreUnavailable />;
+  const { session, order, items, organization, integration, whatsapp, orderBumps, customerAvatarUrl } = checkout;
 
   if (!session || !order || !organization) {
     return (
@@ -596,8 +600,10 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     .eq("id", sessionId)
     .maybeSingle<CheckoutSessionRow>();
 
-  if (!session) {
+  const storeUnavailable = Boolean(session && !(await isPublicCommerceAvailable(session.organization_id, client)));
+  if (!session || storeUnavailable) {
     return {
+      storeUnavailable,
       session: null,
       order: null,
       items: [] as CheckoutOrderItemRow[],

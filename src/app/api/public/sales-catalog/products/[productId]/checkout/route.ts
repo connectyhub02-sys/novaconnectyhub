@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
@@ -72,6 +73,9 @@ export async function POST(
   if (error || !row?.organization_id) {
     return NextResponse.json({ error: "Produto nao encontrado." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(row.organization_id, client);
+  if (unavailable) return unavailable;
 
   const item = mapSalesCatalogItem(row);
 

@@ -1,3 +1,5 @@
+import { PublicCommerceUnavailableError } from "@/lib/sales-catalog/public-commerce-access";
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
@@ -103,7 +105,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ se
     }
     return NextResponse.json(publicCheckoutQuote(snapshot), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível conferir o pedido." }, { status: error instanceof CheckoutError ? error.status : 503, headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ error: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.message : "Não foi possível conferir o pedido." }, { status: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.status : 503, headers: { "Cache-Control": "private, no-store" } });
   }
 }
 
@@ -127,11 +129,14 @@ export async function POST(
     return NextResponse.json({ error: "Sessao de pagamento nao encontrada." }, { status: 404 });
   }
 
+  const unavailable = await publicCommerceBlockResponse(sourceSession.organization_id, client);
+  if (unavailable) return unavailable;
+
   if (sourceSession.provider === "asaas") {
     try {
       return NextResponse.json(await payTransparentCheckout(client, sessionId, body, readClientIp(request.headers)), { headers: { "Cache-Control": "private, no-store" } });
     } catch (error) {
-      return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Confira os dados do cartão e do titular antes de continuar." }, { status: error instanceof CheckoutError ? error.status : 400, headers: { "Cache-Control": "private, no-store" } });
+      return NextResponse.json({ error: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.message : "Confira os dados do cartão e do titular antes de continuar." }, { status: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.status : 400, headers: { "Cache-Control": "private, no-store" } });
     }
   }
 

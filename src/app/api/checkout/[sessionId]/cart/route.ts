@@ -1,3 +1,4 @@
+import { PublicCommerceUnavailableError } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
@@ -18,6 +19,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ se
     await setSalesCatalogCheckoutOrderBumps({ client, organizationId: snapshot.session.organization_id, orderId: snapshot.order.id, selectedProductIds: body.selectedOrderBumpIds, revision: Number(body.revision) });
     return NextResponse.json(publicCheckoutQuote(await loadTransparentCheckout(client, sessionId)), { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar o carrinho." }, { status: 409 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar o carrinho." }, { status: error instanceof PublicCommerceUnavailableError ? error.status : 409, headers: { "Cache-Control": "private, no-store" } });
   }
 }

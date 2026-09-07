@@ -1,4 +1,5 @@
 import "server-only";
+import { getContractAccess } from "@/lib/billing/contract-access";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
@@ -76,9 +77,11 @@ export async function processWhatsappHandoffNotification(input: {
   const eventData = input.data;
   const instance = await loadWhatsappInstance(client, eventData.whatsappInstanceId);
 
-  if (!instance) {
+  if (!instance || instance.organization_id !== eventData.organizationId) {
     return { status: "skipped", reason: "missing_instance" };
   }
+
+  if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
 
   const [credentials, conversation, lead] = await Promise.all([
     loadUazapiCredentials(client),
@@ -130,6 +133,7 @@ export async function processWhatsappHandoffNotification(input: {
   const results = [];
 
   for (const recipient of recipients) {
+    if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
     try {
       const response = await callUazapi(credentials, "/send/text", {
         method: "POST",

@@ -1,3 +1,5 @@
+import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
+import { isPublicCommerceAvailable } from "@/lib/sales-catalog/public-commerce-access";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -139,6 +141,8 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     };
   }
 
+  if (!row.organization_id || !(await isPublicCommerceAvailable(row.organization_id, client))) return storeUnavailableMetadata;
+
   const item = mapSalesCatalogItem(row);
 
   if (!isSalesCatalogDisplayableProduct(item)) {
@@ -198,6 +202,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   if (!row?.organization_id) {
     notFound();
   }
+
+  if (!(await isPublicCommerceAvailable(row.organization_id, client))) return <StoreUnavailable />;
 
   const item = mapSalesCatalogItem(row);
 

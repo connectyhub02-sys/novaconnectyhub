@@ -1,3 +1,4 @@
+import { assertPublicCommerceAccess } from "./public-commerce-access";
 import "server-only";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -22,6 +23,7 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
   if (!uuid.test(sessionId)) throw new CheckoutError("Checkout não encontrado.", 404);
   const { data: session, error } = await client.from("sales_catalog_payment_sessions").select("*").eq("id", sessionId).eq("provider", "asaas").maybeSingle();
   if (error || !session) throw new CheckoutError("Checkout não encontrado.", 404);
+  await assertPublicCommerceAccess(session.organization_id, client);
   const { data: savedOrder, error: orderError } = await client.from("sales_catalog_orders").select("*").eq("id", session.order_id).eq("organization_id", session.organization_id).maybeSingle();
   if (orderError || !savedOrder) throw new CheckoutError("Pedido não encontrado.", 404);
   const order = await loadCheckoutCustomer(client, session.organization_id, savedOrder);

@@ -1,4 +1,4 @@
-import { getContractAccess } from "@/lib/billing/contract-access";
+import { isPublicCommerceAvailable } from "./public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import type {
   PublicStorefrontBranding,
@@ -102,11 +102,12 @@ export async function loadPublicStorefrontPageData(input: {
   storeSlug: string;
   query?: Record<string, string | string[] | undefined>;
   browserTracking?: PublicStorefrontBrowserTrackingContext | null;
-}): Promise<PublicStorefrontPageData | null> {
+}): Promise<PublicStorefrontPageData | { unavailable: true } | null> {
   const client = createServiceClient();
   const organization = await loadPublicStorefrontOrganization(input.storeSlug);
 
   if (!organization) return null;
+  if (!organization.storefrontAvailable) return { unavailable: true };
 
   const publicSlug = organization.slug ?? organization.id;
   const query = input.query ?? {};
@@ -176,8 +177,8 @@ export async function loadPublicStorefrontOrganization(storeSlug: string) {
     ? await query.eq("id", decoded).maybeSingle<OrganizationRow>()
     : await query.eq("slug", decoded).maybeSingle<OrganizationRow>();
 
-  if (data && !(await getContractAccess(data.id,client)).allowed) return null;
-  return data ?? null;
+  if (!data) return null;
+  return { ...data, storefrontAvailable: await isPublicCommerceAvailable(data.id, client) };
 }
 
 export function resolvePublicStorefrontBranding(

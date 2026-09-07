@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { ModuleKind, transpileModule } from "typescript";
+import { JsxEmit, ModuleKind, transpileModule } from "typescript";
 
 export function serverModuleHarness<T>(path: string, imports: Record<string, unknown> = {}, exposed: string[] = [], globals: Record<string, unknown> = {}): T {
   const source = readFileSync(path, "utf8");
   const compiled = transpileModule(`${source}\nObject.assign(exports, {${exposed.join(",")}});`, {
-    compilerOptions: { module: ModuleKind.CommonJS, target: 9 },
+    fileName: path,
+    compilerOptions: { module: ModuleKind.CommonJS, target: 9, jsx: JsxEmit.ReactJSX },
   }).outputText;
   const loadedModule = { exports: {} };
   runInNewContext(compiled, {

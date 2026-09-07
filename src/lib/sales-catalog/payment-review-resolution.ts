@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -8,6 +9,7 @@ export async function sendResolvedPaymentReviewNotices(client: SupabaseClient) {
   if (result.error) throw new Error("REVIEW_RESOLUTION_QUEUE_FAILED");
   let sent = 0;
   for (const review of result.data ?? []) {
+    if (!(await getContractAccess(review.organization_id, client)).allowed) continue;
     const claim = await client.from("sales_catalog_payment_reviews").update({ resolution_notice_state: "sending" }).eq("id", review.id).eq("resolution_notice_state", "pending").select("id").maybeSingle();
     if (!claim.data) continue;
     let requested = false;
@@ -35,6 +37,7 @@ export async function sendResolvedPaymentReviewNotices(client: SupabaseClient) {
         provider: "uazapi", provider_chat_id: conversation.provider_chat_id, direction: "outbound", message_type: "text", text_content: text, occurred_at: new Date().toISOString(),
         payload: { author_type: "system", delivery_source: "financial_review_resolution", review_id: review.id, delivery_status: "sending" } }, { onConflict: "id" });
       if (message.error) throw new Error("RESOLUTION_MESSAGE_SAVE_FAILED");
+      await assertContractAccess(review.organization_id, client);
       requested = true;
       const response = await fetch(`${credentials.baseUrl.replace(/\/$/, "")}/send/text`, { method: "POST", headers: { "Content-Type": "application/json", token },
         body: JSON.stringify({ number: lead.phone_number, text, track_source: "connectyhub", track_id: `review_resolution_${review.id}`, linkPreview: false }), signal: AbortSignal.timeout(20000) });

@@ -683,6 +683,7 @@ async function publishClaimedMetaOrganicPost(
         throw new Error("Token Meta ausente para publicar no Instagram.");
       }
 
+      await assertContractAccess(item.organization_id!, client);
       const create = await sendMetaOrganicGraphRequest({
         body: target.createBody,
         credentials,
@@ -700,6 +701,7 @@ async function publishClaimedMetaOrganicPost(
         throw new Error("Meta nao retornou o creation_id do container Instagram.");
       }
 
+      await assertContractAccess(item.organization_id!, client);
       const publish = await sendMetaOrganicGraphRequest({
         body: { creation_id: creationId },
         credentials,

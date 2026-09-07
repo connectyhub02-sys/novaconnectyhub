@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { revalidatePath } from "next/cache";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { NextResponse, type NextRequest } from "next/server";
@@ -41,6 +42,9 @@ export async function POST(
   if (sessionError || !sourceSession) {
     return NextResponse.json({ error: "Sessao de pagamento nao encontrada." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(sourceSession.organization_id, client);
+  if (unavailable) return unavailable;
 
   if (sourceSession.status === "approved" || sourceSession.status === "refunded") {
     return NextResponse.json({ error: "Este pagamento ja foi finalizado." }, { status: 400 });

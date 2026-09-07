@@ -66,6 +66,7 @@ describe("Asaas checkout and lead attribution", () => {
     const route = serverModuleHarness<Route>("src/app/api/checkout/[sessionId]/card/route.ts", {
       "next/server": next, "@/lib/supabase/service": { createServiceClient: () => db.client },
       "@/lib/security/public-request-guard": { validatePublicWriteRequest: () => ({ ok: true }), readClientIp: () => "203.0.113.10" },
+      "@/lib/sales-catalog/public-commerce-access": { publicCommerceBlockResponse: async () => null },
       "@/lib/sales-catalog/transparent-checkout": { payTransparentCheckout: pay },
     });
     const response = await route.POST({ json: async () => ({ attemptId: "attempt" }), headers: new Headers(), url: "https://loja.example/checkout/internal" }, { params: Promise.resolve({ sessionId: "internal" }) });

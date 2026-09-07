@@ -1,3 +1,4 @@
+import { PublicCommerceUnavailableError } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -28,4 +29,4 @@ export async function POST(request: NextRequest, context: Context) {
     return NextResponse.json(result, { headers });
   } catch (error) { return failure(error); }
 }
-function failure(error: unknown) { return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível conferir a entrega." }, { status: error instanceof CheckoutError ? error.status : 503, headers }); }
+function failure(error: unknown) { return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível conferir a entrega." }, { status: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.status : 503, headers }); }

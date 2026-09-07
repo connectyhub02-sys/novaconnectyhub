@@ -1,4 +1,5 @@
 import "server-only";
+import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
 import { paymentOutcomeCopy } from "./payment-diagnostics";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -390,6 +391,7 @@ async function maybeNotifyPaymentApproved(input: {
   paymentMethodLabel: string;
   source: string;
 }) {
+  if (!(await getContractAccess(input.order.organization_id, input.client)).allowed) return false;
   const orderMetadata = readRecord(input.order.metadata);
   if (readString(orderMetadata.payment_whatsapp_notified_at)) return false;
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
@@ -432,6 +434,7 @@ async function maybeNotifyPaymentApproved(input: {
     template: settings?.messageTemplates.paymentConfirmed ?? null,
   });
   const credentials = await loadUazapiCredentials(input.client);
+  await assertContractAccess(input.order.organization_id, input.client);
   const providerResponse = await callUazapi(credentials, "/send/text", {
     method: "POST",
     token,
@@ -565,6 +568,7 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
   paymentMethodLabel: string;
   source: string;
 }) {
+  if (!(await getContractAccess(input.order.organization_id, input.client)).allowed) return false;
   const orderMetadata = readRecord(input.order.metadata);
   if (readString(orderMetadata.payment_responsible_whatsapp_notified_at)) return false;
 
@@ -597,6 +601,8 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
   });
   const credentials = await loadUazapiCredentials(input.client);
   const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    client: input.client,
+    organizationId: input.order.organization_id,
     credentials,
     token,
     phones: responsiblePhones,
@@ -685,6 +691,7 @@ async function maybeNotifyPaymentStatus(input: {
   status: SalesCatalogPaymentNotificationStatus;
   source: string;
 }) {
+  if (!(await getContractAccess(input.order.organization_id, input.client)).allowed) return false;
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusNotificationPrefix(input.status);
   if (readString(orderMetadata[`${metadataPrefix}_at`]) && orderMetadata[`${metadataPrefix}_session_id`] === input.paymentSessionId) return false;
@@ -731,6 +738,7 @@ async function maybeNotifyPaymentStatus(input: {
     template: getPaymentStatusTemplate(settings?.messageTemplates ?? null, input.status),
   });
   const credentials = await loadUazapiCredentials(input.client);
+  await assertContractAccess(input.order.organization_id, input.client);
   const providerResponse = await callUazapi(credentials, "/send/text", {
     method: "POST",
     token,
@@ -870,6 +878,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   status: SalesCatalogPaymentNotificationStatus;
   source: string;
 }) {
+  if (!(await getContractAccess(input.order.organization_id, input.client)).allowed) return false;
   const orderMetadata = readRecord(input.order.metadata);
   const metadataPrefix = getPaymentStatusResponsibleNotificationPrefix(input.status);
   if (readString(orderMetadata[`${metadataPrefix}_at`]) && orderMetadata[`${metadataPrefix}_session_id`] === input.paymentSessionId) return false;
@@ -905,6 +914,8 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   });
   const credentials = await loadUazapiCredentials(input.client);
   const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    client: input.client,
+    organizationId: input.order.organization_id,
     credentials,
     token,
     phones: responsiblePhones,
@@ -1201,6 +1212,8 @@ function normalizePendingPaymentStatusText(text: string) {
 }
 
 async function sendResponsiblePaymentWhatsappMessages(input: {
+  client: SupabaseClient;
+  organizationId: string;
   credentials: UazapiCredentials;
   token: string;
   phones: string[];
@@ -1210,6 +1223,7 @@ async function sendResponsiblePaymentWhatsappMessages(input: {
   const deliveries: ResponsibleWhatsappDelivery[] = [];
 
   for (const [index, phone] of input.phones.entries()) {
+    await assertContractAccess(input.organizationId, input.client);
     const providerResponse = await callUazapi(input.credentials, "/send/text", {
       method: "POST",
       token: input.token,

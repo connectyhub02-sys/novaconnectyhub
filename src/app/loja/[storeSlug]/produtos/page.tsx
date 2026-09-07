@@ -1,3 +1,4 @@
+import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicStorefront } from "@/components/checkout/public-storefront";
@@ -30,6 +31,7 @@ export async function generateMetadata({ params }: StoreProductsPageProps): Prom
     };
   }
 
+  if (!organization.storefrontAvailable) return storeUnavailableMetadata;
   const branding = resolvePublicStorefrontBranding(organization);
   const description = `Veja todos os produtos da ${branding.displayName} com atendimento pelo WhatsApp e checkout seguro pela ConnectyHub.`;
   const imageUrl = toAbsoluteUrl(branding.logoUrl);
@@ -71,6 +73,8 @@ export default async function StoreProductsPage({ params, searchParams }: StoreP
   if (!data) {
     notFound();
   }
+
+  if ("unavailable" in data) return <StoreUnavailable />;
 
   return (
     <>

@@ -1,3 +1,4 @@
+import { pauseSuspendedWhatsappCampaigns } from "@/lib/whatsapp/contract-campaign-guard";
 import { inngest } from "./client";
 import {
   getWhatsappAgentRunDelaySeconds,
@@ -759,7 +760,13 @@ export const connectyhubLeadMediaArchive = inngest.createFunction(
   async ({ step }) => step.run("preserve-message-media", () => archiveLeadMediaBatch(createServiceClient())),
 );
 
+export const connectyhubWhatsappContractGuard = inngest.createFunction(
+  { id: "connectyhub-whatsapp-contract-guard", name: "ConnectyHub WhatsApp Contract Guard", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "* * * * *" }] },
+  async ({ step }) => step.run("pause-suspended-provider-campaigns", () => pauseSuspendedWhatsappCampaigns(createServiceClient())),
+);
+
 export const functions = [
+  connectyhubWhatsappContractGuard,
   connectyhubLeadMediaArchive,
   connectyhubTransparentCheckoutReconciliation,
   connectyhubDailyAdminReport,

@@ -1,4 +1,5 @@
 import "server-only";
+import { getContractAccess } from "@/lib/billing/contract-access";
 import { getLeadPaymentReviews } from "@/lib/sales-catalog/payment-reviews";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -90,11 +91,12 @@ export async function processWhatsappProactiveFollowUp(input: {
 }) {
   const client = input.client ?? createServiceClient();
   const { data: eventData } = input;
+  if (!(await getContractAccess(eventData.organizationId, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
   const reviews = await getLeadPaymentReviews(client, eventData.organizationId, eventData.leadId);
   if (reviews.some(review => !eventData.salesCatalogOrderId || !review.order_id || review.order_id === eventData.salesCatalogOrderId)) return { status: "skipped", reason: "financial_review" };
 
   const instance = await loadInstance(client, eventData.whatsappInstanceId);
-  if (!instance) return { status: "skipped", reason: "missing_instance" };
+  if (!instance || instance.organization_id !== eventData.organizationId) return { status: "skipped", reason: "missing_instance" };
 
   const behavior = normalizeWhatsappBehaviorConfig(
     readRecord(instance.metadata)?.behavior_config,
@@ -208,6 +210,7 @@ export async function processWhatsappProactiveFollowUp(input: {
   const phone = lead?.phone_number;
   if (!phone) return { status: "skipped", reason: "missing_phone" };
 
+  if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
   const providerResponse = await callUazapi(credentials, "/send/text", {
     method: "POST",
     token,

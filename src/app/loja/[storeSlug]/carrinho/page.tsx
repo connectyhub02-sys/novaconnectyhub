@@ -1,3 +1,4 @@
+import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicStorefront } from "@/components/checkout/public-storefront";
@@ -27,6 +28,7 @@ export async function generateMetadata({ params }: StoreCartPageProps): Promise<
     };
   }
 
+  if (!organization.storefrontAvailable) return storeUnavailableMetadata;
   const branding = resolvePublicStorefrontBranding(organization);
 
   return {
@@ -50,6 +52,8 @@ export default async function StoreCartPage({ params, searchParams }: StoreCartP
   if (!data) {
     notFound();
   }
+
+  if ("unavailable" in data) return <StoreUnavailable />;
 
   return (
     <>

@@ -1,4 +1,5 @@
 import "server-only";
+import { getContractAccess } from "@/lib/billing/contract-access";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { callUazapiOperation } from "@/lib/uazapi/client";
@@ -59,6 +60,8 @@ export async function processWhatsappReconnectCatchup(input: {
   if (!instance) {
     return { status: "skipped", reason: "instance_not_found" };
   }
+
+  if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
 
   if (instance.status !== "connected") {
     return { status: "skipped", reason: "instance_not_connected", instanceStatus: instance.status };

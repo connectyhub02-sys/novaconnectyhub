@@ -1,3 +1,4 @@
+import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicStorefront } from "@/components/checkout/public-storefront";
@@ -30,6 +31,7 @@ export async function generateMetadata({ params }: StorePageProps): Promise<Meta
     };
   }
 
+  if (!organization.storefrontAvailable) return storeUnavailableMetadata;
   const branding = resolvePublicStorefrontBranding(organization);
   const description = `Compre produtos da ${branding.displayName} com checkout seguro e atendimento no WhatsApp.`;
   const imageUrl = toAbsoluteUrl(branding.logoUrl);
@@ -71,6 +73,8 @@ export default async function StorePage({ params, searchParams }: StorePageProps
   if (!data) {
     notFound();
   }
+
+  if ("unavailable" in data) return <StoreUnavailable />;
 
   return (
     <>

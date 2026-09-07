@@ -1,3 +1,4 @@
+import { isPublicCommerceAvailable, storeUnavailableMessage } from "@/lib/sales-catalog/public-commerce-access";
 import { loadCommerceOffers } from "@/lib/sales-catalog/commerce-offers";
 import "server-only";
 
@@ -350,6 +351,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     return { ok: false, status: 404, error: "Loja nao encontrada." };
   }
 
+  if (!(await isPublicCommerceAvailable(organization.id, client))) return { ok: false, status: 503, error: storeUnavailableMessage };
   const settings = await getOrganizationSalesCatalogSettings(client, organization.id);
   const commerceAgent = settings?.commerceAgent;
 

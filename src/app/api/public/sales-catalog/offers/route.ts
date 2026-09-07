@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadCommerceOffers, type CommerceOfferSurface } from "@/lib/sales-catalog/commerce-offers";
@@ -10,6 +11,9 @@ export async function GET(request: NextRequest) {
   const surface = query.get("surface") as CommerceOfferSurface;
   if (!organizationId || !["store", "product", "cart", "checkout", "confirmation"].includes(surface)) return NextResponse.json({ error: "Página não encontrada." }, { status: 404 });
   const client = createServiceClient();
+  const unavailable = await publicCommerceBlockResponse(organizationId, client);
+  if (unavailable) return unavailable;
+
   let leadId = verifyOrganizationTrackingToken(organizationId, query.get("tracking_token")) ? query.get("lead_id") : null;
   const paymentSessionId = query.get("payment_session_id");
   if (paymentSessionId) {

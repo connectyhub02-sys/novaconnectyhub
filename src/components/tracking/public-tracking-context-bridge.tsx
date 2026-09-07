@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { StoreAvailabilityMonitor } from "@/components/checkout/store-availability-monitor";
 import {
   getPublicTrackingContextSignature,
   type ConnectyPublicTrackingContext,
@@ -18,5 +19,5 @@ export function PublicTrackingContextBridge({ context }: PublicTrackingContextBr
     writePublicTrackingContext(context);
   }, [context, signature]);
 
-  return null;
+  return context?.scope === "organization" && context.organization_id ? <StoreAvailabilityMonitor organizationId={context.organization_id} /> : null;
 }

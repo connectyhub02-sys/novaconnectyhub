@@ -1,3 +1,4 @@
+import { PublicCommerceUnavailableError } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createCheckoutUpsell } from "@/lib/sales-catalog/checkout-upsell";
@@ -11,5 +12,5 @@ export async function POST(request: NextRequest, context: { params: Promise<{ se
   const { sessionId } = await context.params;
   const body = record(await request.json().catch(() => null));
   try { return NextResponse.json(await createCheckoutUpsell(createServiceClient(), sessionId, text(body.productId)), { headers: { "Cache-Control": "private, no-store" } }); }
-  catch (error) { return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível preparar esta oferta." }, { status: error instanceof CheckoutError ? error.status : 503 }); }
+  catch (error) { return NextResponse.json({ error: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.message : "Não foi possível preparar esta oferta." }, { status: (error instanceof CheckoutError || error instanceof PublicCommerceUnavailableError) ? error.status : 503 }); }
 }

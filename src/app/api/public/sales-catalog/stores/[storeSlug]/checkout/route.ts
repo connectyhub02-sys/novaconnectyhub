@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
@@ -72,6 +73,9 @@ export async function POST(
   if (!organization) {
     return NextResponse.json({ error: "Loja nao encontrada." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(organization.id, client);
+  if (unavailable) return unavailable;
 
   const leadId = normalizeUuid(readString(body.leadId));
   const conversationId = normalizeUuid(readString(body.conversationId));

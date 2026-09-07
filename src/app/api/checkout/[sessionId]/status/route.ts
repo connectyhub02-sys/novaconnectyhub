@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -42,6 +43,9 @@ export async function GET(
   if (!session) {
     return NextResponse.json({ error: "Sessao nao encontrada." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(session.organization_id, client);
+  if (unavailable) return unavailable;
 
   const { data: order } = await client
     .from("sales_catalog_orders")

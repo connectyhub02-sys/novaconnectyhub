@@ -1,3 +1,4 @@
+import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { NextResponse, type NextRequest } from "next/server";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -57,6 +58,9 @@ export async function POST(
   if (!organization) {
     return NextResponse.json({ error: "Loja nao encontrada." }, { status: 404 });
   }
+
+  const unavailable = await publicCommerceBlockResponse(organization.id, client);
+  if (unavailable) return unavailable;
 
   const requestedLeadPhone = normalizePhone(readString(body.leadPhone));
   const agentId = normalizeUuid(readString(body.agentId));
