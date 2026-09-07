@@ -21,6 +21,7 @@ import {
 } from "@/lib/billing/platform-billing-webhook";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { preparePlanPurchaseDiscount } from "@/lib/billing/plan-discounts-server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +33,8 @@ type BillingPlanIntentRow = {
   plan_code: string;
   name: string;
   monthly_price_brl: number | string | null;
+  first_purchase_discount_percent: number;
+  annual_discount_percent: number;
   billing_cycle: string;
   billing_interval: string;
   access_duration_days: number | null;
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     const { data: plan, error: planError } = await client
       .from("billing_plans")
-      .select("id, plan_code, name, monthly_price_brl, billing_cycle, billing_interval, access_duration_days, included_credits, mercado_pago_preapproval_plan_id")
+      .select("id, plan_code, name, monthly_price_brl, first_purchase_discount_percent, annual_discount_percent, billing_cycle, billing_interval, access_duration_days, included_credits, mercado_pago_preapproval_plan_id")
       .eq("plan_code", planCode)
       .eq("status", "active")
       .maybeSingle<BillingPlanIntentRow>();
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Plano nao encontrado, inativo ou indisponivel." }, { status: 404 });
     }
 
-    const amountBrl = toNumber(plan.monthly_price_brl);
+    let amountBrl = snapshotPlanCommercialTerms(plan).price_brl;
     const payerEmail = workspace.profile.email ?? workspace.user.email ?? null;
 
     if (!payerEmail) {
@@ -116,6 +119,12 @@ export async function POST(request: NextRequest) {
     if (existingSubscription) {
       if (isPendingSubscription(existingSubscription.status)) {
         if (existingSubscription.plan_code === plan.plan_code) {
+          const pendingIntent = await loadBillingCheckoutIntent(client, { organizationId: organization.id, subscriptionId: existingSubscription.id });
+          if (!pendingIntent) throw new Error("Não foi possível carregar a cobrança pendente.");
+          const terms = readRecord(pendingIntent.payment.payload?.commercial_terms);
+          amountBrl = pendingIntent.checkoutKind === "initial" && terms.first_purchase_discount_percent !== undefined
+            ? await preparePlanPurchaseDiscount(client, pendingIntent.payment.id)
+            : toNumber(pendingIntent.payment.amount_brl);
           const notification = await notifySubscriptionPendingSafely(client, {
             organizationId: organization.id,
             actorId: workspace.user.id,
@@ -299,6 +308,8 @@ export async function POST(request: NextRequest) {
     if (paymentError) {
       throw new Error(paymentError?.message ?? "Nao foi possivel registrar o pagamento pendente.");
     }
+
+    amountBrl = await preparePlanPurchaseDiscount(client, paymentId);
 
     await client.from("maintenance_audit_logs").insert({
       event_type: "billing.plan_checkout.created",

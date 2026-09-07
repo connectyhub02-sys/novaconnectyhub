@@ -30,6 +30,9 @@ type BillingPlanCheckoutProps = {
   planCode: string;
   planName: string;
   planAmountBrl: number;
+  planListAmountBrl?: number;
+  renewalPlanAmountBrl?: number | null;
+  firstPurchaseDiscountPercent?: number;
   includedCredits: number;
   storageLimitBytes: number;
   storageFileLimit: number;
@@ -104,6 +107,9 @@ export function BillingPlanCheckout({
   planCode,
   planName,
   planAmountBrl,
+  planListAmountBrl = planAmountBrl,
+  renewalPlanAmountBrl = null,
+  firstPurchaseDiscountPercent = 0,
   includedCredits,
   storageLimitBytes,
   storageFileLimit,
@@ -610,7 +616,8 @@ export function BillingPlanCheckout({
           Carrinho
         </div>
         <div className="mt-4 space-y-3">
-          <CartRow label={planName} value={formatMoney(planAmountBrl)} />
+          <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
+          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto anual"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
           {selectedBumps.map((bump) => (
             <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
           ))}
@@ -623,6 +630,7 @@ export function BillingPlanCheckout({
           <p className="mt-2 text-xs leading-5 text-slate-500">
             Adicionais recorrentes seguem o período informado na oferta. Os avulsos são cobrados uma única vez.
           </p>
+          {renewalPlanAmountBrl !== null ? <p className="mt-2 text-sm leading-5 text-slate-300">Renovação {commercialLabel?.toLowerCase()}: {formatMoney(renewalPlanAmountBrl + selectedBumps.filter(bump => bump.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0))}.{firstPurchaseDiscountPercent > 0 ? " O desconto de primeira compra termina após esta cobrança." : ""}</p> : null}
         </div>
 
         {canPay ? (

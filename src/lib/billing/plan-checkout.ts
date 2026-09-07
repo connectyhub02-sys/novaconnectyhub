@@ -2,9 +2,11 @@ import { billingBumpInterval } from "./plan-checkout-catalog";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
+import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
 import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpMedia } from "./plan-checkout-catalog";
 import { readCommercialTerms } from "./commercial-terms";
+import { readCheckoutPlanAmounts } from "./plan-discounts";
+import { preparePlanPurchaseDiscount } from "./plan-discounts-server";
 
 export type JsonRecord = Record<string, unknown>;
 export type BillingCheckoutProvider = "mercado_pago" | "pagbank" | "asaas";
@@ -141,6 +143,11 @@ export async function loadBillingCheckoutIntent(
   }
 
   const checkoutKind = readBillingCheckoutKindFromRecords(subscription, invoiceResult.data, paymentResult.data);
+  const initialTerms = paymentResult.data.payload?.commercial_terms as JsonRecord | undefined;
+  if (checkoutKind === "initial" && initialTerms?.first_purchase_discount_percent !== undefined && !paymentResult.data.payload?.plan_pricing) {
+    await preparePlanPurchaseDiscount(client, paymentResult.data.id);
+    return loadBillingCheckoutIntent(client, input);
+  }
   const targetPlanCode = readBillingCheckoutTargetPlanCodeFromRecords(subscription, invoiceResult.data, paymentResult.data);
   const planResult = await client
     .from("billing_plans")
@@ -187,7 +194,8 @@ export async function syncBillingCheckoutCart(
     .filter((bump): bump is BillingCheckoutBump => Boolean(bump));
   const terms = readCheckoutCommercialTerms(intent);
   if (selectedBumps.some(b => b.recurrence !== "one_time" && (terms.billingCycle !== "recurring" || billingBumpInterval(b.recurrence) !== terms.billingInterval))) throw new Error("Adicionais recorrentes precisam ter o mesmo intervalo do plano. Compre separadamente as ofertas com outros períodos.");
-  const planAmount = normalizeCurrencyAmount(intent.plan.monthly_price_brl) ?? normalizeCurrencyAmount(intent.invoice.subtotal_brl) ?? 0;
+  const pricing = readCheckoutPlanAmounts(intent);
+  const planAmount = pricing.amount;
   const bumpsAmount = roundMoney(selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0));
   const totalAmount = roundMoney(planAmount + bumpsAmount);
   const externalReference = readExternalReference(intent)
@@ -278,8 +286,8 @@ export async function syncBillingCheckoutCart(
     client
       .from("billing_invoices")
       .update({
-        subtotal_brl: totalAmount,
-        discount_brl: 0,
+        subtotal_brl: roundMoney(totalAmount + pricing.discountAmount),
+        discount_brl: pricing.discountAmount,
         total_brl: totalAmount,
         provider: billingProvider,
         metadata: {

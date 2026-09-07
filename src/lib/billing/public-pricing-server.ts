@@ -23,6 +23,8 @@ export async function loadPublicPricingPlans(
     sortOrder: plan.sortOrder,
     highlighted: plan.highlighted,
     monthlyPriceBrl: plan.monthlyPriceBrl,
+    firstPurchaseDiscountPercent: plan.firstPurchaseDiscountPercent,
+    annualDiscountPercent: plan.annualDiscountPercent,
     includedCredits: plan.includedCredits,
     overageCreditPriceBrl: plan.overageCreditPriceBrl,
     autoRechargeMinCredits: plan.autoRechargeMinCredits,

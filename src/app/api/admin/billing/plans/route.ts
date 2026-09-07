@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { mapBillingPlanRow, type BillingPlanRow, type BillingPlanStatus } from "@/lib/billing/plans";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
+import { parseDiscountPercent, previewPlanDiscounts } from "@/lib/billing/plan-discounts";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest) {
     metadata: {
       planCode: data.plan_code,
       monthlyPriceBrl: data.monthly_price_brl,
+      firstPurchaseDiscountPercent: data.first_purchase_discount_percent,
+      annualDiscountPercent: data.annual_discount_percent,
       includedCredits: data.included_credits,
     },
   });
@@ -101,6 +104,8 @@ export async function PATCH(request: NextRequest) {
       planCode: data.plan_code,
       status: data.status,
       monthlyPriceBrl: data.monthly_price_brl,
+      firstPurchaseDiscountPercent: data.first_purchase_discount_percent,
+      annualDiscountPercent: data.annual_discount_percent,
       includedCredits: data.included_credits,
     },
   });
@@ -118,6 +123,7 @@ const PLAN_SELECT = [
   "sort_order",
   "highlighted",
   "monthly_price_brl",
+  "first_purchase_discount_percent", "annual_discount_percent",
   "billing_cycle", "billing_interval", "access_duration_days",
   "included_credits",
   "overage_credit_price_brl",
@@ -147,6 +153,8 @@ type ParsedPlanPayload = {
   sortOrder: number;
   highlighted: boolean;
   monthlyPriceBrl: number;
+  firstPurchaseDiscountPercent?: number;
+  annualDiscountPercent?: number;
   billingCycle: "one_time" | "recurring";
   billingInterval: "week" | "month" | "quarter" | "year";
   accessDurationDays: number | null;
@@ -193,6 +201,15 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
   }
 
   const monthlyPriceBrl = toFiniteNumber(record.monthlyPriceBrl, 0);
+  let firstPurchaseDiscountPercent: number | undefined;
+  let annualDiscountPercent: number | undefined;
+  try {
+    firstPurchaseDiscountPercent = mode === "update" && record.firstPurchaseDiscountPercent === undefined ? undefined : parseDiscountPercent(record.firstPurchaseDiscountPercent);
+    annualDiscountPercent = mode === "update" && record.annualDiscountPercent === undefined ? undefined : parseDiscountPercent(record.annualDiscountPercent);
+    if (monthlyPriceBrl > 0 && previewPlanDiscounts(record).firstAmount < 0.01) throw new Error("O valor com desconto deve ser de pelo menos R$ 0,01.");
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Desconto inválido." };
+  }
   const billingCycle = record.billingCycle ?? "recurring";
   const billingInterval = record.billingInterval ?? "month";
   const accessDurationDays = toNullableInteger(record.accessDurationDays);
@@ -248,6 +265,8 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
       sortOrder,
       highlighted: record.highlighted === true,
       monthlyPriceBrl,
+      firstPurchaseDiscountPercent,
+      annualDiscountPercent,
       billingCycle,
       billingInterval,
       accessDurationDays: billingCycle === "one_time" ? accessDurationDays : null,
@@ -279,6 +298,8 @@ function toPlanDatabasePayload(plan: ParsedPlanPayload) {
     sort_order: plan.sortOrder,
     highlighted: plan.highlighted,
     monthly_price_brl: plan.monthlyPriceBrl,
+    ...(plan.firstPurchaseDiscountPercent !== undefined ? { first_purchase_discount_percent: plan.firstPurchaseDiscountPercent } : {}),
+    ...(plan.annualDiscountPercent !== undefined ? { annual_discount_percent: plan.annualDiscountPercent } : {}),
     billing_cycle: plan.billingCycle,
     billing_interval: plan.billingInterval,
     access_duration_days: plan.accessDurationDays,

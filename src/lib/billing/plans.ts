@@ -15,6 +15,8 @@ export type BillingPlan = CommercialTerms & {
   sortOrder: number;
   highlighted: boolean;
   monthlyPriceBrl: number;
+  firstPurchaseDiscountPercent: number;
+  annualDiscountPercent: number;
   includedCredits: number;
   overageCreditPriceBrl: number;
   autoRechargeMinCredits: number;
@@ -56,6 +58,8 @@ export type BillingPlanRow = {
   sort_order: number | string | null;
   highlighted: boolean | null;
   monthly_price_brl: number | string | null;
+  first_purchase_discount_percent?: number | string | null;
+  annual_discount_percent?: number | string | null;
   billing_cycle?: string | null;
   billing_interval?: string | null;
   access_duration_days?: number | null;
@@ -93,6 +97,7 @@ export async function getBillingPlanCatalog(
         "sort_order",
         "highlighted",
         "monthly_price_brl",
+        "first_purchase_discount_percent", "annual_discount_percent",
         "billing_cycle", "billing_interval", "access_duration_days",
         "included_credits",
         "overage_credit_price_brl",
@@ -162,6 +167,8 @@ export function mapBillingPlanRow(row: BillingPlanRow): BillingPlan {
     sortOrder: toNumber(row.sort_order),
     highlighted: Boolean(row.highlighted),
     monthlyPriceBrl: toNumber(row.monthly_price_brl),
+    firstPurchaseDiscountPercent: toNumber(row.first_purchase_discount_percent),
+    annualDiscountPercent: toNumber(row.annual_discount_percent),
     includedCredits: toNumber(row.included_credits),
     overageCreditPriceBrl: toNumber(row.overage_credit_price_brl),
     autoRechargeMinCredits: toNumber(row.auto_recharge_min_credits),

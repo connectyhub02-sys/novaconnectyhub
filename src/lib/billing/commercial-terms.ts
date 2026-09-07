@@ -23,7 +23,14 @@ export function serializeCommercialTerms(terms: CommercialTerms) {
 }
 
 export function snapshotPlanCommercialTerms(plan: Record<string, unknown>) {
-  return { ...serializeCommercialTerms(readCommercialTerms(plan)), price_brl: Number(plan.monthly_price_brl ?? 0), included_credits: Number(plan.included_credits ?? 0) };
+  const terms = readCommercialTerms(plan);
+  const listPrice = Number(plan.monthly_price_brl ?? 0);
+  const annualPercent = terms.billingCycle === "recurring" && terms.billingInterval === "year" ? Number(plan.annual_discount_percent ?? 0) : 0;
+  const cents = Math.round(listPrice * 100);
+  return { ...serializeCommercialTerms(terms), price_brl: (cents - Math.round(cents * annualPercent / 100)) / 100,
+    list_price_brl: listPrice, annual_discount_percent: annualPercent,
+    first_purchase_discount_percent: Number(plan.first_purchase_discount_percent ?? 0),
+    included_credits: Number(plan.included_credits ?? 0) };
 }
 
 export function billingPeriodEnd(start: Date, terms: CommercialTerms): Date {

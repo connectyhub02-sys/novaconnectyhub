@@ -1,5 +1,6 @@
 import { billingTermsLabel } from "@/lib/billing/commercial-terms";
 import { readCheckoutCommercialTerms } from "@/lib/billing/plan-checkout";
+import { readCheckoutPlanAmounts } from "@/lib/billing/plan-discounts";
 import { recordPlatformCustomerEvent } from "@/lib/billing/customer-journey";
 import type { Metadata } from "next";
 import Script from "next/script";
@@ -146,7 +147,10 @@ export default async function DashboardBillingCheckoutPage({
             subscriptionId={intent.subscription.id}
             planCode={intent.plan.plan_code}
             planName={intent.plan.name}
-            planAmountBrl={normalizeCurrencyAmount(intent.plan.monthly_price_brl) ?? 0}
+            planAmountBrl={readCheckoutPlanAmounts(intent).amount}
+            planListAmountBrl={readCheckoutPlanAmounts(intent).listAmount}
+            renewalPlanAmountBrl={readCheckoutCommercialTerms(intent).billingCycle === "recurring" ? readCheckoutPlanAmounts(intent).renewalAmount : null}
+            firstPurchaseDiscountPercent={readCheckoutPlanAmounts(intent).firstPurchaseDiscountPercent}
             includedCredits={normalizeCurrencyAmount(intent.plan.included_credits) ?? 0}
             storageLimitBytes={normalizePlanNumber(intent.plan.storage_limit_bytes)}
             storageFileLimit={normalizePlanNumber(intent.plan.storage_file_limit)}

@@ -21,7 +21,8 @@ import {
   INCLUDED_CREDIT_TARGET_MARKUP,
 } from "@/lib/billing/credit-economics";
 import type { BillingPlan, BillingPlanCatalog, BillingPlanStatus } from "@/lib/billing/plans";
-import { billingTermsLabel, type BillingCycle, type BillingInterval } from "@/lib/billing/commercial-terms";
+import { billingTermsLabel, readCommercialTerms, type BillingCycle, type BillingInterval } from "@/lib/billing/commercial-terms";
+import { previewPlanDiscounts } from "@/lib/billing/plan-discounts";
 import { ConnectyShell } from "./connecty-shell";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
@@ -34,6 +35,8 @@ type PlanDraft = {
   sortOrder: string;
   highlighted: boolean;
   monthlyPriceBrl: string;
+  firstPurchaseDiscountPercent: string;
+  annualDiscountPercent: string;
   billingCycle: BillingCycle;
   billingInterval: BillingInterval;
   accessDurationDays: string;
@@ -87,6 +90,9 @@ export function BillingPlansConsole({
   const [presetSaving, setPresetSaving] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const metrics = useMemo(() => buildMetrics(plans), [plans]);
+  const discountPreview = (() => {
+    try { return previewPlanDiscounts(draft); } catch { return null; }
+  })();
   const activeModuleOptions = useMemo(() => buildModuleOptions(plans, draft.moduleCodes), [plans, draft.moduleCodes]);
   const draftEconomics = useMemo(
     () =>
@@ -335,11 +341,25 @@ export function BillingPlansConsole({
                 </Field>
 
                 <div className="grid gap-3 md:grid-cols-4">
-                  <NumberField label="Preço R$" value={draft.monthlyPriceBrl} onChange={(value) => updateDraft({ monthlyPriceBrl: value })} step="0.01" />
+                  <NumberField label="Preço do período R$" value={draft.monthlyPriceBrl} onChange={(value) => updateDraft({ monthlyPriceBrl: value })} step="0.01" />
                   <NumberField label="Creditos inclusos" value={draft.includedCredits} onChange={(value) => updateDraft({ includedCredits: value })} step="1" />
                   <NumberField label="Credito excedente R$" value={draft.overageCreditPriceBrl} onChange={(value) => updateDraft({ overageCreditPriceBrl: value })} step="0.01" />
                   <NumberField label="Limite excedente" value={draft.overageLimitCredits} onChange={(value) => updateDraft({ overageLimitCredits: value })} step="1" />
                 </div>
+
+                <fieldset className="space-y-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/5 p-4">
+                  <legend className="px-2 text-sm font-bold text-emerald-300">Descontos do plano</legend>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <NumberField label="Primeira compra (%)" value={draft.firstPurchaseDiscountPercent} onChange={value => updateDraft({ firstPurchaseDiscountPercent: value })} step="0.01" max="99.99" />
+                    <NumberField label="Cobrança anual (%)" value={draft.annualDiscountPercent} onChange={value => updateDraft({ annualDiscountPercent: value })} step="0.01" max="99.99" />
+                  </div>
+                  <p className="text-xs leading-5 text-slate-400">Use 0 para desativar. Primeira compra: uma vez por conta, somente na primeira contratação paga de um plano. O desconto anual vale quando o intervalo abaixo é Anual e permanece nas renovações anuais. Os descontos não se acumulam: vale o maior na primeira compra.</p>
+                  <p className="text-xs leading-5 text-slate-400">O preço acima é o total do período. Para um plano anual, informe o preço dos 12 meses. Alterações valem para novos checkouts; assinaturas já contratadas mantêm suas condições.</p>
+                  {discountPreview ? <div className="grid gap-3 sm:grid-cols-2">
+                    <MiniValue label="Primeira compra elegível" value={formatMoney(discountPreview.firstAmount)} />
+                    <MiniValue label={draft.billingCycle === "recurring" ? `Renovação ${billingTermsLabel(readCommercialTerms(draft)).toLowerCase()}` : "Preço sem promoção"} value={formatMoney(discountPreview.renewalAmount)} />
+                  </div> : <p role="alert" className="text-xs text-rose-300">Confira os percentuais: use de 0 a 99,99%.</p>}
+                </fieldset>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Tipo de cobrança">
@@ -623,18 +643,21 @@ function NumberField({
   onChange,
   step,
   allowBlank = false,
+  max,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   step: string;
   allowBlank?: boolean;
+  max?: string;
 }) {
   return (
     <Field label={label}>
       <input
         type="number"
         min="0"
+        max={max}
         step={step}
         value={value}
         onChange={(event) => onChange(allowBlank && event.target.value === "" ? "" : event.target.value)}
@@ -656,6 +679,8 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
       sortOrder: "100",
       highlighted: false,
       monthlyPriceBrl: "0",
+      firstPurchaseDiscountPercent: "0",
+      annualDiscountPercent: "0",
       billingCycle: "recurring",
       billingInterval: "month",
       accessDurationDays: "30",
@@ -687,6 +712,8 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
     sortOrder: String(plan.sortOrder),
     highlighted: plan.highlighted,
     monthlyPriceBrl: String(plan.monthlyPriceBrl),
+    firstPurchaseDiscountPercent: String(plan.firstPurchaseDiscountPercent ?? 0),
+    annualDiscountPercent: String(plan.annualDiscountPercent ?? 0),
     billingCycle: plan.billingCycle,
     billingInterval: plan.billingInterval,
     accessDurationDays: String(plan.accessDurationDays ?? 30),
@@ -719,6 +746,8 @@ function buildPayload(draft: PlanDraft) {
     sortOrder: Number(draft.sortOrder || 100),
     highlighted: draft.highlighted,
     monthlyPriceBrl: Number(draft.monthlyPriceBrl || 0),
+    firstPurchaseDiscountPercent: Number(draft.firstPurchaseDiscountPercent || 0),
+    annualDiscountPercent: Number(draft.annualDiscountPercent || 0),
     billingCycle: draft.billingCycle,
     billingInterval: draft.billingInterval,
     accessDurationDays: draft.billingCycle === "one_time" ? Number(draft.accessDurationDays) : null,

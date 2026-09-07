@@ -1,3 +1,4 @@
+import * as discounts from '../src/lib/billing/plan-discounts';
 import * as schedule from "../src/lib/billing/managed-renewal-policy";
 import * as commercial from '../src/lib/billing/commercial-terms';
 import * as bumps from '../src/lib/billing/plan-checkout-catalog';
@@ -11,10 +12,14 @@ const card={holderName:'Teste',number:'4111111111111111',expiryMonth:'12',expiry
 const holder={name:'Cliente Teste',email:'test@example.com',cpfCnpj:'12345678909',phone:'11999999999',postalCode:'01001000',addressNumber:'10'};
 class CheckoutError extends Error {constructor(message:string,public status=400){super(message)}}
 class DirectError extends Error {constructor(public definitive:boolean,public declined:boolean){super('Safe failure')}}
-function setup(oneTime=false) {
- const amount=oneTime?120:130;
+function setup(oneTime=false, discounted=false) {
+ const amount=oneTime?120:discounted?40:130;
  let attempt: Record<string,unknown>|null=null;
  const intent={payment:{id:'pay-local',status:'pending',amount_brl:amount,payload:(oneTime?{commercial_terms:{billing_cycle:"one_time",access_duration_days:30}}:{}) as Record<string,unknown>},invoice:{id:'invoice'},subscription:{id:'subscription',organization_id:'org',metadata:{}},plan:{monthly_price_brl:100},targetPlanCode:'starter'};
+ if(discounted) {
+  Object.assign(intent, {checkoutKind:'initial'});
+  intent.payment.payload.plan_pricing={price_brl:10,list_price_brl:100,first_purchase_discount_percent:90};
+ }
  const saveCard=vi.fn(async()=>{});
  const fulfill=vi.fn();
  const adapter={AsaasDirectError:DirectError,createAsaasNativeSubscription:vi.fn(async()=>({id:'sub_provider'})),createAsaasDirectCardPayment:vi.fn(async()=>({id:'pay_provider',status:'CONFIRMED',value:amount,billingType:'CREDIT_CARD',externalReference:`billing_card:${id}`})),cancelAsaasNativeSubscription:vi.fn(async()=>null),retireAsaasPayment:vi.fn(),findAsaasDirectPayment:vi.fn(async()=>null),findAsaasNativeSubscription:vi.fn(async()=>null),getAsaasNativePayment:vi.fn(),applyAsaasPaymentEvent:vi.fn(p=>p)};
@@ -36,11 +41,12 @@ function setup(oneTime=false) {
   };
   q.single=async()=>table==='billing_card_attempts'&&!update?{data:attempt,error:null}:result();q.maybeSingle=q.single;q.then=(resolve:(r:unknown)=>void)=>Promise.resolve(result()).then(resolve);return q;
  }};
- const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'./managed-renewal-policy':schedule,'./asaas-card-vault':{savePendingAsaasCard:saveCard},'@/lib/sales-catalog/payment-diagnostics':diagnostics,'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./commercial-terms':commercial,'./plan-checkout-catalog':bumps,'./plan-checkout':{readCheckoutCommercialTerms:()=>commercial.readCommercialTerms(intent.payment.payload.commercial_terms),loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[...(oneTime?[]:[{code:'monthly',priceBrl:10,recurrence:'monthly'}]),{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:fulfill}});
+ const mod=serverModuleHarness<typeof import('../src/lib/billing/native-card-checkout')>('src/lib/billing/native-card-checkout.ts',{'./plan-discounts':discounts,'./managed-renewal-policy':schedule,'./asaas-card-vault':{savePendingAsaasCard:saveCard},'@/lib/sales-catalog/payment-diagnostics':diagnostics,'node:net':{isIP},'@/lib/sales-catalog/card-input':cardInput,'@/lib/sales-catalog/asaas-direct':adapter,'@/lib/sales-catalog/asaas':{loadAsaasPlatformBillingConfig:async()=>({accessToken:'fixture',webhookSecret:'fixture'}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==='fixture'})},'@/lib/sales-catalog/transparent-checkout':{CheckoutError,directPaymentState:(p:{status:string})=>p.status==='CONFIRMED'?'approved':'pending'},'./commercial-terms':commercial,'./plan-checkout-catalog':bumps,'./plan-checkout':{readCheckoutCommercialTerms:()=>commercial.readCommercialTerms(intent.payment.payload.commercial_terms),loadBillingCheckoutIntent:async()=>intent,resolveBillingCheckoutProvider:()=> 'asaas',isBillingCheckoutPayable:()=>true,loadBillingCheckoutBumps:async()=>[...(oneTime?[]:[{code:'monthly',priceBrl:10,recurrence:'monthly'}]),{code:'one',priceBrl:20,recurrence:'one_time'}],readSelectedBillingCheckoutBumpCodesForCatalog:()=>['monthly','one']},'./platform-billing-webhook':{notifyNativeBillingOutcome:vi.fn(),processPlatformBillingAsaasWebhook:fulfill}});
  const pay=()=>mod.payNativeBillingCard(client as never,'org','subscription',{attemptId:id,amount,revision:0,acceptRecurring:!oneTime,recurringConsentVersion:schedule.managedRenewalConsentVersion,card,holder},'203.0.113.1');
  return {mod,pay,adapter,rpc,client,intent,saveCard,fulfill};
 }
 describe('panel native card orchestration',()=>{
+ it('charges the welcome price while authorizing the full recurring price',async()=>{const s=setup(false,true);await s.pay();expect(s.adapter.createAsaasDirectCardPayment).toHaveBeenCalledWith(expect.objectContaining({amount:40}));expect(s.rpc.mock.calls[0][1]).toMatchObject({p_amount:40,p_recurring:110});});
  it('clamps renewal day at the end of a short month',()=>{const {mod}=setup();expect(mod.nextMonthlyBillingDate(new Date('2027-01-31T10:00:00Z'))).toBe('2027-02-28')});
  it('charges the first total once and saves an authorization without an external subscription',async()=>{
   const s=setup();expect(await s.pay()).toMatchObject({approved:true});expect(s.adapter.createAsaasDirectCardPayment).toHaveBeenCalledTimes(1);expect(s.adapter.createAsaasDirectCardPayment).toHaveBeenCalledWith(expect.objectContaining({amount:130}));expect(s.adapter.createAsaasNativeSubscription).not.toHaveBeenCalled();expect(s.saveCard).toHaveBeenCalledTimes(1);

@@ -347,6 +347,8 @@ export function PricingPlansGrid({
               ) : null}
               <h3>{plan.name}</h3>
               <strong>{plan.price}<small>{plan.period}</small></strong>
+              {plan.firstPurchasePrice ? <p className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-400/10 p-3 text-sm text-emerald-200">Primeira compra: <b>{plan.firstPurchasePrice}</b> ({plan.firstPurchaseDiscountPercent}% de desconto). Depois, {plan.price}{plan.period}. Válido uma vez por conta, para a primeira contratação paga de um plano.</p> : null}
+              {Boolean(plan.annualDiscountPercent) ? <p className="mt-2 text-xs text-emerald-200">Preço anual com {plan.annualDiscountPercent}% de desconto. Pagamento do ano de uma vez; renovações anuais pelo valor contratado.</p> : null}
               <p className="mt-3 font-mono text-xs text-zinc-400">{plan.description}</p>
               <p className="mt-1 text-xs italic" style={{ color: `${G}99` }}>{plan.tagline}</p>
               {isPending ? (

@@ -5,6 +5,7 @@ import { managedRenewalConsentVersion } from "./managed-renewal-policy";
 import { payExistingAsaasBillingCard, findAsaasSubscriptionCycle } from "@/lib/sales-catalog/asaas-direct";
 import { billingPeriodEnd, billingTermsLabel, readCommercialTerms } from "./commercial-terms";
 import { readCheckoutCommercialTerms } from "./plan-checkout";
+import { readCheckoutPlanAmounts } from "./plan-discounts";
 import { paymentOutcomeCopy } from "@/lib/sales-catalog/payment-diagnostics";
 import { isIP } from "node:net";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
@@ -35,12 +36,13 @@ export async function loadNativeBillingSnapshot(client: SupabaseClient, organiza
   ]);
   if (error || revision.error) throw new CheckoutError("Não foi possível conferir o pagamento.", 503);
   const selected = readSelectedBillingCheckoutBumpCodesForCatalog(intent, bumps);
-  const planAmount = Number(intent.plan.monthly_price_brl ?? 0);
+  const pricing = readCheckoutPlanAmounts(intent);
+  const planAmount = pricing.amount;
   const chosen = bumps.filter(b => selected.includes(b.code));
   const amount = Math.round((planAmount + chosen.reduce((sum, bump) => sum + bump.priceBrl, 0)) * 100) / 100;
   const terms = readCheckoutCommercialTerms(intent);
   if (chosen.some(b => b.recurrence !== "one_time" && (terms.billingCycle !== "recurring" || billingBumpInterval(b.recurrence) !== terms.billingInterval))) throw new CheckoutError("Escolha adicionais com o mesmo intervalo do plano.", 422);
-  const recurringAmount = Math.round(((terms.billingCycle === "recurring" ? planAmount : 0) + chosen.filter(b => b.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0)) * 100) / 100;
+  const recurringAmount = Math.round(((terms.billingCycle === "recurring" ? pricing.renewalAmount : 0) + chosen.filter(b => b.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0)) * 100) / 100;
   return { intent, terms, recurrenceLabel: billingTermsLabel(terms), selected, amount, recurringAmount, revision: Number(revision.data.checkout_revision), attempt: (attempts?.[0] ?? null) as Attempt | null };
 }
 

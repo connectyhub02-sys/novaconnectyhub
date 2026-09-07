@@ -1,4 +1,5 @@
 import { readCommercialTerms, type CommercialTerms } from "./commercial-terms";
+import { previewPlanDiscounts } from "./plan-discounts";
 export type PublicPricingBillingPlan = Partial<CommercialTerms> & {
   id?: string;
   planCode: string;
@@ -8,6 +9,8 @@ export type PublicPricingBillingPlan = Partial<CommercialTerms> & {
   sortOrder: number;
   highlighted: boolean;
   monthlyPriceBrl: number;
+  firstPurchaseDiscountPercent?: number;
+  annualDiscountPercent?: number;
   includedCredits: number;
   overageCreditPriceBrl: number;
   autoRechargeMinCredits: number;
@@ -39,6 +42,9 @@ export type PublicPricingPlan = {
   trial?: boolean;
   popular?: boolean;
   premium?: boolean;
+  firstPurchasePrice?: string;
+  firstPurchaseDiscountPercent?: number;
+  annualDiscountPercent?: number;
 };
 
 export type PublicPricingStorageSummary = {
@@ -101,12 +107,16 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
   const presentation = defaultPresentation[code];
   const isTrial = code === "trial" || (plan.monthlyPriceBrl <= 0 && plan.trialDays > 0);
   const included = buildIncludedItems(plan, isTrial);
+  const discount = previewPlanDiscounts(plan);
 
   return {
     code,
     name: plan.name,
-    price: formatBrl(plan.monthlyPriceBrl),
-    priceValue: plan.monthlyPriceBrl,
+    price: formatBrl(discount.renewalAmount),
+    priceValue: discount.renewalAmount,
+    firstPurchasePrice: discount.firstAmount < discount.renewalAmount ? formatBrl(discount.firstAmount) : undefined,
+    firstPurchaseDiscountPercent: discount.firstPercent,
+    annualDiscountPercent: discount.annualPercent,
     period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : readCommercialTerms(plan).billingCycle === "one_time" ? `único · ${plan.accessDurationDays} dias` : ({ week: "/semana", month: "/mês", quarter: "/trimestre", year: "/ano" })[readCommercialTerms(plan).billingInterval],
     description: isTrial
       ? presentation?.description || "Teste completo da ConnectyHub por tempo limitado."

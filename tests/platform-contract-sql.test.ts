@@ -56,7 +56,7 @@ beforeAll(async () => {
   const refund = readFileSync("supabase/migrations/0052_platform_billing_refunds.sql", "utf8");
   await db.exec(refund.slice(refund.indexOf("create or replace function public.reverse_credit_wallet_for_refund(")));
   await db.exec(readFileSync("supabase/migrations/0078_ecosystem_native_billing.sql", "utf8"));
-  for (const file of ["0082_platform_commercial_terms", "0083_contract_access", "0084_platform_product_library", "0085_platform_customer_journey", "0086_atomic_billing_fulfillment", "0087_operational_access_guards", "0088_billing_notice_delivery", "0089_recurring_invoice_items", "0090_product_purchase_contracts", "0091_financial_review_and_rpc_boundary", "0092_contract_reconciliation"]) {
+  for (const file of ["0082_platform_commercial_terms", "0083_contract_access", "0084_platform_product_library", "0085_platform_customer_journey", "0086_atomic_billing_fulfillment", "0087_operational_access_guards", "0088_billing_notice_delivery", "0089_recurring_invoice_items", "0090_product_purchase_contracts", "0091_financial_review_and_rpc_boundary", "0092_contract_reconciliation", "0094_plan_purchase_discounts"]) {
     await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
   }
 }, 30000);
@@ -78,6 +78,69 @@ async function fixture(cycle = "recurring") {
 async function access(org: string, at: string) {
   return (await db.query<{ a: { allowed: boolean; reason: string; blocked_at: string } }>("select resolve_organization_contract_access($1,$2) a", [org,at])).rows[0].a;
 }
+
+describe("first plan purchase and annual discounts", () => {
+  async function initial(firstPercent = 90, annualPercent = 0) {
+    const f = await fixture();
+    const renewalPrice = 100 - annualPercent;
+    const terms = { billing_cycle: "recurring", billing_interval: annualPercent ? "year" : "month", price_brl: renewalPrice, list_price_brl: 100, annual_discount_percent: annualPercent, first_purchase_discount_percent: firstPercent };
+    await db.query("delete from billing_invoice_items where invoice_id=$1", [f.invoice]);
+    await db.query("update organization_subscriptions set metadata=$2 where id=$1", [f.sub, { commercial_terms: terms }]);
+    await db.query("update billing_payments set amount_brl=$2,payload=$3 where id=$1", [f.payment, renewalPrice, { checkout_kind: "initial", commercial_terms: terms }]);
+    await db.query("insert into billing_invoice_items(invoice_id,organization_id,item_type,total_brl,unit_price_brl) values($1,$2,'plan',100,100)", [f.invoice, f.org]);
+    return f;
+  }
+  async function quote(payment: string) {
+    return (await db.query<{ q: { amount_brl: number; pricing: Record<string, number> } }>("select prepare_plan_purchase_discount($1) q", [payment])).rows[0].q;
+  }
+  it("discounts the first invoice and preserves the full renewal contract", async () => {
+    const f = await initial();
+    expect(await quote(f.payment)).toMatchObject({ amount_brl: 10, pricing: { renewal_price_brl: 100, discount_brl: 90 } });
+    expect(await quote(f.payment)).toMatchObject({ amount_brl: 10 });
+    expect((await db.query("select subtotal_brl::float8 as subtotal_brl,discount_brl::float8 as discount_brl,total_brl::float8 as total_brl from billing_invoices where id=$1", [f.invoice])).rows[0]).toEqual({ subtotal_brl: 100, discount_brl: 90, total_brl: 10 });
+    await db.query("update billing_payments set status='approved',paid_at=now() where id=$1", [f.payment]);
+    const result = await db.query<{ q: { payment_id: string } }>("select prepare_contract_renewal($1,'2026-09-02T18:57:00Z','2026-09-02T18:57:00Z','2026-10-02T18:57:00Z','asaas','{}') q", [f.sub]);
+    expect((await db.query("select amount_brl from billing_payments where id=$1", [result.rows[0].q.payment_id])).rows[0]).toEqual({ amount_brl: "100" });
+    expect((await db.query("select event_type from platform_customer_journey where event_key=$1", ['plan_pricing:' + f.payment])).rows).toEqual([{ event_type: 'plan_pricing' }]);
+  });
+  it("authorizes a higher future amount only when it matches the actual contract", async () => {
+    const f = await initial(); await quote(f.payment);
+    const revision = (await db.query<{ checkout_revision: number }>("select checkout_revision from billing_payments where id=$1", [f.payment])).rows[0].checkout_revision;
+    const attempt = randomUUID();
+    await expect(db.query("select claim_native_billing_card($1,$2,$3,$4,10,999,$5)", [f.org, f.payment, attempt, revision, 'billing_card:' + attempt])).rejects.toThrow('BILLING_CHANGED');
+    const result = await db.query<{ q: { claimed: boolean; attempt: { amount: number; recurring_amount: number } } }>("select claim_native_billing_card($1,$2,$3,$4,10,100,$5) q", [f.org, f.payment, attempt, revision, 'billing_card:' + attempt]);
+    expect(result.rows[0].q).toMatchObject({ claimed: true, attempt: { amount: 10, recurring_amount: 100 } });
+  });
+  it("does not discount optional extras or lose the promotion on cart edits", async () => {
+    const f = await initial(); await quote(f.payment);
+    await db.query("select sync_native_billing_cart($1,$2,$3,$4,30,$5,$6)", [f.org, f.sub, f.invoice, f.payment, { selected_bump_codes: ['extra'] }, [{ item_type: 'adjustment', description: 'Extra', unit_price_brl: 20, total_brl: 20, metadata: { source: 'dashboard_plan_checkout_bump' } }]]);
+    expect((await db.query("select subtotal_brl::float8 as subtotal_brl,discount_brl::float8 as discount_brl,total_brl::float8 as total_brl from billing_invoices where id=$1", [f.invoice])).rows[0]).toEqual({ subtotal_brl: 120, discount_brl: 90, total_brl: 30 });
+  });
+  it("reserves the first purchase for one company per buyer and retains it on refusal", async () => {
+    const a = await initial(), b = await initial();
+    await db.query("update organizations set owner_id=$2 where id=$1", [b.org, a.user]);
+    expect((await quote(a.payment)).amount_brl).toBe(10);
+    await db.query("update billing_payments set status='rejected' where id=$1", [a.payment]);
+    expect((await quote(a.payment)).amount_brl).toBe(10);
+    expect((await quote(b.payment)).amount_brl).toBe(100);
+  });
+  it("does not give the welcome offer again after a paid or refunded plan", async () => {
+    const a = await initial(), b = await initial();
+    await quote(a.payment);
+    await db.query("update billing_payments set status='approved',paid_at=now() where id=$1", [a.payment]);
+    await db.query("update billing_payments set status='refunded' where id=$1", [a.payment]);
+    await db.query("update organizations set owner_id=$2 where id=$1", [b.org, a.user]);
+    expect((await quote(b.payment)).amount_brl).toBe(100);
+  });
+  it("chooses the larger annual or welcome discount without stacking", async () => {
+    const a = await initial(90, 20), b = await initial(10, 20);
+    expect(await quote(a.payment)).toMatchObject({ amount_brl: 10, pricing: { renewal_price_brl: 80 } });
+    expect(await quote(b.payment)).toMatchObject({ amount_brl: 80, pricing: { first_purchase_discount_percent: 0 } });
+  });
+  it("keeps the discount ledger and preparation inaccessible from the browser", async () => {
+    expect((await db.query("select has_table_privilege('anon','billing_first_purchase_discounts','select') as readable,has_function_privilege('authenticated','prepare_plan_purchase_discount(uuid)','execute') as writable")).rows[0]).toEqual({ readable: false, writable: false });
+  });
+});
 describe.sequential("contratos, direitos por item e memória financeira", () => {
   it("bloqueia exatamente em 72 horas e abrange ativação manual", async () => {
     const f = await fixture();

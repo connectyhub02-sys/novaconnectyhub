@@ -1,4 +1,5 @@
 import "server-only";
+import { planDiscountNotice } from "./plan-discounts";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -497,6 +498,10 @@ export async function sendPlatformSubscriptionPendingNotification(
   client: SupabaseClient,
   input: PlatformSubscriptionPendingNotificationInput,
 ): Promise<PlatformBillingOperationalTestResult> {
+  const paymentQuery = client.from("billing_payments").select("payload,amount_brl").eq("organization_id", input.organizationId).eq("subscription_id", input.subscriptionId);
+  const pricingPayment = input.paymentId ? await paymentQuery.eq("id", input.paymentId).maybeSingle() : await paymentQuery.order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (pricingPayment.error) throw new Error("Não foi possível conferir os valores da notificação de cobrança.");
+  const paymentMetadata = (pricingPayment.data?.payload ?? {}) as JsonRecord;
   const notification = await enqueuePlatformBillingNotification(client, {
     organizationId: input.organizationId,
     subscriptionId: input.subscriptionId,
@@ -504,13 +509,16 @@ export async function sendPlatformSubscriptionPendingNotification(
     paymentId: input.paymentId,
     planCode: input.planCode,
     planName: input.planName,
-    amountBrl: input.amountBrl,
+    amountBrl: pricingPayment.data ? Number(pricingPayment.data.amount_brl) : input.amountBrl,
     includedCredits: input.includedCredits,
     eventType: "subscription_pending",
     dedupeKey: input.dedupeKey ?? `billing:${input.subscriptionId}:subscription:pending`,
     providerStatus: input.providerStatus ?? "pending",
     providerReference: input.providerReference ?? null,
     metadata: {
+      commercial_terms: paymentMetadata.commercial_terms,
+      plan_pricing: paymentMetadata.plan_pricing,
+      checkout_kind: paymentMetadata.checkout_kind,
       source: "dashboard_plan_checkout_created",
       ...(input.metadata ?? {}),
     },
@@ -2734,7 +2742,7 @@ function buildBillingMessage(input: {
   const customerName = input.customerName?.trim() || "Cliente";
   const firstCustomerName = firstName(customerName) ?? "Tudo certo";
 
-  return renderPlatformBillingMessageTemplate(template, {
+  const message = renderPlatformBillingMessageTemplate(template, {
     cliente: firstCustomerName,
     cliente_nome: customerName,
     plano: input.planName,
@@ -2765,6 +2773,8 @@ function buildBillingMessage(input: {
       ?? readString(input.metadata.previous_plan_code)
       ?? "anterior",
   });
+  const discountNotice = ["subscription_pending", "checkout_cart_updated", "checkout_payment_started"].includes(input.eventType) ? planDiscountNotice(input.metadata) : "";
+  return discountNotice ? `${message}\n\n${discountNotice}` : message;
 }
 
 function getBillingMessageTemplateKey(eventType: string): keyof PlatformBillingMessageTemplates {
