@@ -1,6 +1,6 @@
 # API de IA, créditos e soluções personalizadas ConnectyHub
 
-Data: 08/09/2026. Status: implementação concluída, migrações aplicadas e publicação em validação. A geração real da API de IA depende da liberação do projeto Google, que retornou HTTP 403 no piloto. Detalhes e limites em `entrega-api-ia-contratos-2026-09-08.md`.
+Data: 08/09/2026. Status: implementação publicada, migrações aplicadas e geração real da API validada em produção, incluindo consumo, idempotência e revogação da chave. Detalhes e limites em `entrega-api-ia-contratos-2026-09-08.md`.
 
 ## Objetivo
 

@@ -28,14 +28,18 @@ Limites de empresas, membros, agentes, instâncias e armazenamento consideram a 
 - 14 arquivos de testes, 113 testes aprovados: concorrência de carteira, idempotência, reservas, reconciliação, contratos, campanhas, limites, pagamentos, concessão única de créditos, recarga e agenda.
 - Landing page e documentação verificadas em 360, 390, 768 e 1440 px: HTTP 200, sem overflow horizontal ou erros JavaScript; H1 único, canonical de produção e JSON-LD válido.
 - Migrações `0106` a `0113` aplicadas em transações no Supabase e registradas no histórico. Tabelas novas com RLS; operações sensíveis exclusivamente no servidor.
-- Piloto real da API: autenticação e catálogo HTTP 200; chave revogada HTTP 401. Geração recusada pelo Google com HTTP 403, `PERMISSION_DENIED`, mensagem “Your project has been denied access. Please contact support.” A solicitação foi encerrada, com reserva e débito em zero.
-- Não foi possível validar uma geração bem-sucedida e seu consumo real enquanto o projeto Google estiver bloqueado. A contabilidade de sucesso foi validada nos testes transacionais. Não foram feitas cobranças reais de clientes nem enviados lembretes comerciais de teste.
+- Piloto real em produção, pelo endpoint publicado na Vercel: catálogo e geração HTTP 200, resposta `OK`, 10 tokens de entrada e 108 de saída/raciocínio. Custo estimado registrado de R$ 0,002475; reserva final zero. Conta interna em modo `internal_shadow`, sem débito de cliente.
+- Repetição com a mesma chave de idempotência: HTTP 200, `Idempotency-Replayed: true`, resposta idêntica e um único registro de consumo. Após revogação, a chave retornou HTTP 401.
+- O teste a partir do computador local retornou HTTP 403, `PERMISSION_DENIED`, sem consumo ou reserva. Isso não se reproduziu na geração pelo ambiente de produção. Não foi determinada a causa da diferença entre ambientes; não é uma pendência de liberação comprovada da conta em produção.
+- Débito cobrável e concorrência foram validados nos testes transacionais. O piloto real usou a conta interna, sem cobranças reais de clientes ou envio de lembretes comerciais de teste.
+- Publicação do código `31814df52eef1a638ee9c219bf7f209cf4c0c49e`: Vercel Ready, ambiente Production, domínio `www.connectyhub.com.br`. Landing page, documentação, sitemap principal e de catálogo, robots e llms retornaram HTTP 200; a API sem chave retornou HTTP 401.
+- Conferência autenticada: API e créditos abriram na conta BuffaloMass, com carteira, pacotes reais e exigência de cartão para autorizar recarga. Agenda e navegação administrativa carregaram corretamente. O seletor de contratos foi ajustado para as contas dos usuários cadastrados, com identificação por e-mail, excluindo organizações históricas sem vínculo primário.
 
 Evidências locais de QA e do piloto estão em `tmp/custom-review/` e não contêm chaves de API. Chaves temporárias do piloto foram revogadas e os projetos pausados.
 
 ## Modelo e tarifa da API externa
 
-O catálogo antigo da conta foi recusado na consulta de tokens pelo Google. O modelo configurado da plataforma, Gemini 3.6 Flash, aceita a consulta de tokens, mas a geração encontrou o bloqueio de acesso do projeto descrito acima. Os modelos antigos foram preservados no histórico e excluídos apenas da seleção desta API externa.
+O catálogo antigo da conta foi recusado na consulta de tokens pelo Google. O modelo configurado da plataforma, Gemini 3.6 Flash, passou na consulta de tokens e na geração real em produção. Os modelos antigos foram preservados no histórico e excluídos apenas da seleção desta API externa.
 
 A tarifa `external_ai` usa o preço oficial publicado do Gemini 3.6 Flash e mantém a política comercial já configurada: referência de câmbio R$ 6/USD, multiplicador 4, R$ 0,01 por crédito e mínimo de 1 crédito por chamada. O custo em reais é uma estimativa, não uma conciliação cambial da fatura do Google. A mudança de preço publicada para janeiro de 2027 tem vigência própria.
 
@@ -47,10 +51,11 @@ Fontes verificadas em 08/09/2026:
 
 ## Configurações e etapas restantes
 
-1. Resolver o acesso do projeto Google em uso e repetir o piloto de geração, liquidação e replay. Não anunciar a API como operacional para geração antes desse teste.
+1. Monitorar as primeiras integrações de clientes e a conciliação. A geração, liquidação e replay já passaram no piloto em produção. Para desenvolvimento local, o acesso ao Google precisa de diagnóstico específico caso o HTTP 403 persista.
 2. Cadastrar valores acordados e limites de cada contrato personalizado. Nenhum preço foi inventado para Betel, Vision ou outros clientes.
 3. Cadastrar horários reais da reunião no admin; a qualificação não discute preço ou orçamento do projeto.
 4. Cada titular habilita a recarga automática com consentimento próprio e cartão disponível. A disponibilidade do cartão continua dependente da integração e liberação do provedor de pagamento.
 5. Esta primeira versão suporta texto e imagens inline. Não oferece ferramentas arbitrárias, documentos/áudio/vídeo externos ou roteamento automático entre fornecedores. Novos adaptadores e leilão de modelos são evolução futura prevista no plano.
 6. O modo SSE é compatível com o formato de resposta, mas entrega após geração e liquidação; não é streaming incremental do fornecedor. Isso está explicado na documentação pública.
 7. Indexação e citações por buscadores dependem dos mecanismos externos. A entrega valida as condições técnicas, sem prometer ranking.
+8. O envio opcional por IndexNow foi consultado, mas a chave ainda não está configurada em produção (`/indexnow-key.txt` retorna 404). Os novos endereços já estão nos sitemaps e links públicos.
