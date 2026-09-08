@@ -1,7 +1,7 @@
 import "server-only";
 import { parseCheckoutAddress } from "./checkout-customer";
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   decryptCredentialValue,
@@ -927,7 +927,11 @@ async function createAsaasCustomer(input: AsaasCustomerInput) {
       addressNumber: sanitizeAsaasText(input.addressNumber, 20) ?? undefined,
       complement: sanitizeAsaasText(input.complement, 255) ?? undefined,
       province: sanitizeAsaasText(input.province, 80) ?? undefined,
-      externalReference: input.externalReference,
+      // Customer references have a 100-character limit. Keep payment references
+      // untouched: webhooks and reconciliation use the complete billing identity.
+      externalReference: input.externalReference && input.externalReference.length > 100
+        ? `connectyhub:${createHash("sha256").update(input.externalReference).digest("hex")}`
+        : input.externalReference,
       notificationDisabled: input.notificationDisabled ?? true,
     },
     fallbackMessage: "Nao foi possivel cadastrar o cliente no Asaas.",

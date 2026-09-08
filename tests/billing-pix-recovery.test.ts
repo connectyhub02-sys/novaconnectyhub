@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import * as crypto from "node:crypto";
 import * as customer from "../src/lib/sales-catalog/checkout-customer";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
 function gateway(failure: "customer" | "validation" | "timeout" | "server" | "qr" | "none") {
-  const fetch = vi.fn(async (url: string) => {
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes("/customers")) {
+      if (String(JSON.parse(String(init?.body ?? "{}"))?.externalReference ?? "").length > 100) return { ok: false, status: 400, json: async () => ({ errors: [{ description: "O identificador externo não deve ultrapassar 100 caracteres." }] }) };
       if (failure === "customer") throw new Error("Customer lookup unavailable");
       return { ok: true, status: 200, json: async () => url.includes("?") ? { data: [{ id: "cus_test" }] } : { id: "cus_test" } };
     }
@@ -16,7 +18,7 @@ function gateway(failure: "customer" | "validation" | "timeout" | "server" | "qr
     if (failure === "validation" || failure === "server") return { ok: false, status: failure === "validation" ? 400 : 500, json: async () => ({ errors: [{ code: "invalid", description: "Provider rejected request" }] }) };
     return { ok: true, status: 200, json: async () => ({ id: "pay_test", status: "PENDING" }) };
   });
-  const api = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas")>("src/lib/sales-catalog/asaas.ts", { "./checkout-customer": customer }, [], { fetch });
+  const api = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas")>("src/lib/sales-catalog/asaas.ts", { "./checkout-customer": customer, "node:crypto": crypto }, [], { fetch });
   const create = () => api.createAsaasPixPayment({ accessToken: "test", mode: "sandbox", amount: 9.99, description: "Plano", externalReference: "invoice-test", payerEmail: "test@example.test", payerName: "Teste", payerDocument: "12345678909" });
   return { api, fetch, create };
 }
@@ -32,6 +34,22 @@ describe("Pix creation failures and method switch", () => {
   });
   it("returns the payment and QR from the same successful creation", async () => {
     await expect(gateway("none").create()).resolves.toMatchObject({ payment: { id: "pay_test" }, pixQrCode: { payload: "pix-test" } });
+  });
+  it("fits long customer references within Asaas limits without changing the payment identity", async () => {
+    const g = gateway("none");
+    const reference = "connectyhub_subscription:" + ["3f473c21-55aa-425a-a818-a5fa6d826748", "56351d8e-5e74-475e-8b59-e5dd57aea150", "b025a8a3-9d2f-479c-a3e0-c648dd2a4877", "a07c3e81-5434-4520-a531-cf38e3cfc8bf"].join(":");
+    const create = (externalReference: string) => g.api.createAsaasPixPayment({ accessToken: "test", mode: "sandbox", amount: 9.99, description: "Plano", externalReference, payerName: "Teste", payerDocument: "12345678909" });
+    await create(reference);
+    await create(reference);
+    await create(reference + "different");
+    await create("x".repeat(100));
+    const bodies = (endpoint: string) => g.fetch.mock.calls.filter(([url]) => url.endsWith(endpoint)).map(([, init]) => JSON.parse(String(init?.body)));
+    const customers = bodies("/customers"), payments = bodies("/payments");
+    expect(customers[0].externalReference.length).toBeLessThanOrEqual(100);
+    expect(customers[1].externalReference).toBe(customers[0].externalReference);
+    expect(customers[2].externalReference).not.toBe(customers[0].externalReference);
+    expect(customers[3].externalReference).toBe("x".repeat(100));
+    expect(payments[0].externalReference).toBe(reference);
   });
   it("releases only a definitive failure with an unchanged claim; Pix becomes the active method", async () => {
     const { api } = gateway("none");
