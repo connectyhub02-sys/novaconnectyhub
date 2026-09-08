@@ -4365,6 +4365,36 @@ html {
   color: var(--ch-action-text) !important;
 }
 [data-connecty-mode] .ch-action:hover { background-color: var(--ch-action-hover); }
+/* Neutral hover surfaces must follow the light panel theme along with their text. */
+[data-connecty-mode] :is(
+  [class~="hover:bg-slate-800"],
+  [class~="hover:bg-slate-800/60"],
+  [class~="hover:bg-slate-900"]
+):hover:not([data-connecty-contrast="dark"], [data-connecty-contrast="dark"] *) {
+  background-color: #e2e8f0 !important;
+  color: var(--ch-text, #0f172a) !important;
+}
+
+[data-connecty-mode] .ch-payment-method {
+  background-color: transparent;
+  color: #334155;
+}
+[data-connecty-mode] .ch-payment-method:not(:disabled):is(:hover, :focus-visible) {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+[data-connecty-mode] .ch-payment-method[aria-pressed="true"] {
+  background-color: var(--ch-action);
+  color: var(--ch-action-text);
+}
+[data-connecty-mode] .ch-payment-method[aria-pressed="true"]:not(:disabled):is(:hover, :focus-visible) {
+  background-color: var(--ch-action-hover);
+  color: var(--ch-action-text);
+}
+[data-connecty-mode] .ch-payment-method:disabled {
+  background-color: #f1f5f9;
+  color: #64748b;
+}
 [data-connecty-mode] :is(button, a, input, textarea, select, summary):focus-visible {
   outline: 2px solid var(--ch-focus);
   outline-offset: 3px;

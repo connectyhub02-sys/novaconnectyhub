@@ -1135,14 +1135,9 @@ function PaymentMethodButton({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
-      className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition",
-        active
-          ? "bg-cyan-300 text-slate-950"
-          : "text-slate-300 hover:bg-slate-800 hover:text-white",
-        disabled ? "cursor-not-allowed opacity-45" : "",
-      )}
+      className="ch-payment-method inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition-colors"
     >
       {icon}
       {label}
