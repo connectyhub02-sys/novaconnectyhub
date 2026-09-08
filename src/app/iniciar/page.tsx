@@ -22,7 +22,7 @@ export default async function IniciarPage({ searchParams }: IniciarPageProps) {
   const user = await getAuthenticatedUser();
 
   if (user) {
-    const workspace = await getCurrentWorkspace();
+    const workspace = await getCurrentWorkspace({ allowRestricted: true });
     const plan = normalizePlanParam(params.plan);
     const clientDestination = plan ? `/dashboard/planos?plan=${encodeURIComponent(plan)}` : "/dashboard/planos";
     redirect(workspace?.profile.isPlatformAdmin ? "/admin" : clientDestination);

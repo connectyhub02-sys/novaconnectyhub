@@ -5,7 +5,8 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  // Authentication must work before the dashboard applies the contract restrictions.
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
   const target = resolveAuthenticatedEntryPath({
     isPlatformAdmin: workspace?.profile.isPlatformAdmin,
   });

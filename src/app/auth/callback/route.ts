@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code);
   }
 
-  const workspace = await getCurrentWorkspace();
+  const workspace = await getCurrentWorkspace({ allowRestricted: true });
   await ensureStarterOrganization().catch(() => null);
   const target = resolveAuthenticatedEntryPath({
     isPlatformAdmin: workspace?.profile.isPlatformAdmin,

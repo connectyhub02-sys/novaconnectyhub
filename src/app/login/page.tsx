@@ -28,7 +28,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const nextPath = safeNext(params.next);
 
   if (user) {
-    const workspace = await getCurrentWorkspace();
+    const workspace = await getCurrentWorkspace({ allowRestricted: true });
     redirect(resolveAuthenticatedEntryPath({
       isPlatformAdmin: workspace?.profile.isPlatformAdmin,
       nextPath,
