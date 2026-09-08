@@ -1,4 +1,5 @@
 import "server-only";
+import { expandPlatformBillingReference } from "./payment-reference";
 import { planDiscountNotice } from "./plan-discounts";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -2665,7 +2666,7 @@ function normalizeAsaasPaymentMethod(billingType: string | null) {
 }
 
 function parsePlatformBillingExternalReference(value: string | null | undefined): ParsedExternalReference | null {
-  const parts = value?.split(":") ?? [];
+  const parts = expandPlatformBillingReference(value ?? "").split(":");
 
   if (parts.length !== 5 || parts[0] !== "connectyhub_subscription") {
     return null;

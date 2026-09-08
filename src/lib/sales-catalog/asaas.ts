@@ -1,5 +1,6 @@
 import "server-only";
 import { parseCheckoutAddress } from "./checkout-customer";
+import { compactPlatformBillingReference } from "@/lib/billing/payment-reference";
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -577,6 +578,7 @@ class AsaasRequestError extends Error {
 }
 
 export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
+  const externalReference = compactPlatformBillingReference(input.externalReference);
   const customer = await createAsaasCustomer({
     accessToken: input.accessToken,
     mode: input.mode,
@@ -587,7 +589,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
     mobilePhone: input.payerPhone,
     postalCode: input.payerZipCode,
     ...parseAsaasAddress(input.payerAddress),
-    externalReference: input.externalReference,
+    externalReference,
     notificationDisabled: true,
   }).catch((error: unknown) => {
     // Looking up/creating a customer cannot create a payment.
@@ -607,7 +609,7 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
       value: normalizeAsaasAmount(input.amount),
       dueDate,
       description: sanitizeAsaasText(input.description, 500) ?? "Pedido ConnectyHub",
-      externalReference: input.externalReference,
+      externalReference,
     },
     fallbackMessage: "Nao foi possivel gerar Pix no Asaas.",
   }).catch((error: unknown) => {

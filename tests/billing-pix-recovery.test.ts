@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import * as crypto from "node:crypto";
+import * as references from "../src/lib/billing/payment-reference";
 import * as customer from "../src/lib/sales-catalog/checkout-customer";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
@@ -15,10 +16,11 @@ function gateway(failure: "customer" | "validation" | "timeout" | "server" | "qr
       return { ok: true, status: 200, json: async () => ({ payload: "pix-test", encodedImage: "image" }) };
     }
     if (failure === "timeout") throw new Error("Charge timeout");
+    if (String(JSON.parse(String(init?.body ?? "{}"))?.externalReference ?? "").length > 100) return { ok: false, status: 400, json: async () => ({ errors: [{ description: "externalReference exceeds 100 characters" }] }) };
     if (failure === "validation" || failure === "server") return { ok: false, status: failure === "validation" ? 400 : 500, json: async () => ({ errors: [{ code: "invalid", description: "Provider rejected request" }] }) };
     return { ok: true, status: 200, json: async () => ({ id: "pay_test", status: "PENDING" }) };
   });
-  const api = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas")>("src/lib/sales-catalog/asaas.ts", { "./checkout-customer": customer, "node:crypto": crypto }, [], { fetch });
+  const api = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas")>("src/lib/sales-catalog/asaas.ts", { "./checkout-customer": customer, "node:crypto": crypto, "@/lib/billing/payment-reference": references }, [], { fetch });
   const create = () => api.createAsaasPixPayment({ accessToken: "test", mode: "sandbox", amount: 9.99, description: "Plano", externalReference: "invoice-test", payerEmail: "test@example.test", payerName: "Teste", payerDocument: "12345678909" });
   return { api, fetch, create };
 }
@@ -41,7 +43,7 @@ describe("Pix creation failures and method switch", () => {
     const create = (externalReference: string) => g.api.createAsaasPixPayment({ accessToken: "test", mode: "sandbox", amount: 9.99, description: "Plano", externalReference, payerName: "Teste", payerDocument: "12345678909" });
     await create(reference);
     await create(reference);
-    await create(reference + "different");
+    await create(reference.replace("a07c3e81", "b07c3e81"));
     await create("x".repeat(100));
     const bodies = (endpoint: string) => g.fetch.mock.calls.filter(([url]) => url.endsWith(endpoint)).map(([, init]) => JSON.parse(String(init?.body)));
     const customers = bodies("/customers"), payments = bodies("/payments");
@@ -49,7 +51,8 @@ describe("Pix creation failures and method switch", () => {
     expect(customers[1].externalReference).toBe(customers[0].externalReference);
     expect(customers[2].externalReference).not.toBe(customers[0].externalReference);
     expect(customers[3].externalReference).toBe("x".repeat(100));
-    expect(payments[0].externalReference).toBe(reference);
+    expect(payments[0].externalReference.length).toBeLessThanOrEqual(100);
+    expect(references.expandPlatformBillingReference(payments[0].externalReference)).toBe(reference);
   });
   it("releases only a definitive failure with an unchanged claim; Pix becomes the active method", async () => {
     const { api } = gateway("none");

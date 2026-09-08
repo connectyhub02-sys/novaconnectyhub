@@ -1,5 +1,6 @@
 import { billingBumpInterval } from "./plan-checkout-catalog";
 import "server-only";
+import { compactPlatformBillingReference, expandPlatformBillingReference } from "./payment-reference";
 import { savePendingAsaasCard } from "./asaas-card-vault";
 import { managedRenewalConsentVersion } from "./managed-renewal-policy";
 import { payExistingAsaasBillingCard, findAsaasSubscriptionCycle } from "@/lib/sales-catalog/asaas-direct";
@@ -174,7 +175,7 @@ export function billingAttemptResult(attempt: Attempt) {
 
 export async function processNativeBillingWebhook(client: SupabaseClient, payload: Record<string, unknown>, header: string | null) {
   const payment = record(payload.payment); const recurring = record(payload.subscription);
-  let reference = String(payment.externalReference ?? recurring.externalReference ?? "");
+  let reference = expandPlatformBillingReference(String(payment.externalReference ?? recurring.externalReference ?? ""));
   if (!reference && (payment.id || recurring.id)) {
     const column = payment.id ? "provider_payment_id" : "provider_subscription_id";
     const { data, error } = await client.from("billing_card_attempts").select("id,payment_id").eq(column, String(payment.id ?? recurring.id)).order("created_at", {ascending: false}).limit(1).maybeSingle();
@@ -280,8 +281,14 @@ async function recoverNativeBillingPix(client: SupabaseClient) {
       const managedReference = row.payload?.managed_external_reference;
       const reference = managedReference ? String(managedReference) : recurringOrigin ? "billing_recurring:"+recurringOrigin : String(row.payload?.external_reference ?? "");
       if (!reference) continue;
-      const payment = (managedReference || recurringOrigin) && row.provider_payment_id ? await getAsaasNativePayment(config,row.provider_payment_id) : await findAsaasBillingPix(config, reference, Number(row.amount_brl));
-      if (payment && (payment.externalReference !== reference || payment.billingType !== "PIX" || Math.round(Number(payment.value)*100) !== Math.round(Number(row.amount_brl)*100))) continue;
+      const references = [...new Set([compactPlatformBillingReference(reference), reference])];
+      const found = (managedReference || recurringOrigin) && row.provider_payment_id
+        ? [await getAsaasNativePayment(config, row.provider_payment_id)]
+        : await Promise.all(references.map(ref => findAsaasBillingPix(config, ref, Number(row.amount_brl))));
+      const payments = [...new Map(found.filter(p => p?.id).map(p => [p!.id, p!])).values()];
+      if (payments.length !== 1) continue;
+      const payment = payments[0];
+      if (!references.includes(String(payment.externalReference)) || payment.billingType !== "PIX" || Math.round(Number(payment.value)*100) !== Math.round(Number(row.amount_brl)*100)) continue;
       if (!payment?.id) continue; // A timeout without a matching payment never permits a new charge.
       const qr = await getAsaasPixQrCode({ ...config, paymentId: payment.id });
       const pix = extractAsaasPaymentData(payment, qr);
