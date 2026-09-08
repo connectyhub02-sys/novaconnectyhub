@@ -2,7 +2,8 @@
 import { PlatformOffers } from "@/components/commerce/platform-offers";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileImage, FileVideo, Files, HardDrive, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowRight, CheckCircle2, Code2, FileImage, FileVideo, Files, HardDrive, Layers3, Loader2, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { InfinityLoader } from "./infinity-loader";
 import type { PublicPricingPlan, PublicPricingStorageSummary } from "@/lib/billing/public-pricing";
@@ -312,6 +313,7 @@ export function PricingPlansGrid({
 
   return (
     <>
+      <div className="pricing-comparison">
       <div className={surface === "dashboard" ? "pricing-plans-grid pricing-plans-grid-dashboard" : "pricing-plans-grid"}>
         {visiblePlans.length === 0 && catalogLoading ? (
           <PricingPlanSkeleton />
@@ -394,12 +396,11 @@ export function PricingPlansGrid({
             </div>
           );
         })}
+        <PersonalizedPlanCard />
+      </div>
       </div>
 
-      <div className={surface === "dashboard" ? "mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-6 text-slate-900" : "mt-6 rounded-2xl border border-emerald-300/25 bg-emerald-300/5 p-6 text-white"}>
-        <div className="flex flex-wrap items-center justify-between gap-5"><div><h3 className="text-xl font-bold">Soluções personalizadas</h3><p className={surface === "dashboard" ? "mt-2 max-w-2xl text-sm leading-6 text-slate-600" : "mt-2 max-w-2xl text-sm leading-6 text-slate-300"}>Sua ideia, seu próprio software. Desenvolvemos plataformas, aplicativos e sistemas sob medida para sua empresa.</p></div><a href="/solucoes-personalizadas" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-emerald-200">Saiba mais →</a></div>
-        <p className={surface === "dashboard" ? "mt-4 text-xs text-slate-600" : "mt-4 text-xs text-slate-300"}>Todos os planos também permitem usar o saldo em projetos externos pela <a href="/docs/ia" className="underline underline-offset-4">API de IA ConnectyHub</a>. API WhatsApp conforme os recursos contratados.</p>
-      </div>
+      <p className={surface === "dashboard" ? "mt-6 text-center text-xs leading-6 text-slate-600" : "mt-6 text-center text-xs leading-6 text-slate-300"}>Todos os planos também permitem usar o saldo em projetos externos pela <Link href="/docs/ia" className="underline underline-offset-4">API de IA ConnectyHub</Link>. API WhatsApp conforme os recursos contratados.</p>
 
       {catalogFailed && catalogPlans.length === 0 ? (
         <p className="mt-3 text-center font-mono text-[11px] text-amber-200">
@@ -447,6 +448,32 @@ export function PricingPlansGrid({
   );
 }
 
+function PersonalizedPlanCard() {
+  return (
+    <article className="pricing-card pricing-card-custom" aria-labelledby="custom-plan-title">
+      <span className="custom-plan-badge">Feito para você</span>
+      <h3 id="custom-plan-title">Personalizado</h3>
+      <div className="custom-plan-promise">Sua ideia.<br/><span>Seu software.</span></div>
+      <p className="custom-plan-description">Uma solução desenvolvida para o seu negócio, da primeira ideia à evolução.</p>
+      <div className="custom-plan-preview" aria-hidden="true">
+        <div className="custom-plan-preview-bar"><span/><span/><span/><Code2 size={16}/></div>
+        <div className="custom-plan-preview-body"><Layers3 size={28}/><span>Seu próximo<br/>grande projeto</span><Sparkles size={18}/></div>
+        <div className="custom-plan-preview-flow"><span>Ideia</span><ArrowRight size={12}/><span>Software</span><ArrowRight size={12}/><span>Evolução</span></div>
+      </div>
+      <ul>
+        <li>Plataforma com a sua identidade</li>
+        <li>Recursos definidos para o seu projeto</li>
+        <li>Integrações com os seus sistemas</li>
+        <li>WhatsApp, automações e inteligência artificial</li>
+        <li>Experiência para celular e computador</li>
+        <li>Desenvolvimento, implantação e evolução</li>
+      </ul>
+      <p className="custom-plan-invitation">Sua próxima grande ideia pode se tornar o software da sua empresa.</p>
+      <Link className="custom-plan-action" href="/solucoes-personalizadas" aria-label="Saiba mais sobre o plano personalizado">Saiba mais <ArrowRight size={16}/></Link>
+    </article>
+  );
+}
+
 function dashboardButtonLabel({
   currentPlan,
   isCurrent,
@@ -472,7 +499,7 @@ function dashboardButtonLabel({
 
 function PricingPlanSkeleton() {
   return (
-    <div className="pricing-card flex min-h-[320px] items-center justify-center md:col-span-2 xl:col-span-4">
+    <div className="pricing-card col-span-full flex min-h-[320px] items-center justify-center">
       <InfinityLoader
         label="Carregando planos..."
         description="Preparando catalogo, limites e valores disponiveis."
@@ -484,7 +511,7 @@ function PricingPlanSkeleton() {
 
 function PricingPlansEmptyState() {
   return (
-    <div className="pricing-card flex min-h-[320px] items-center justify-center text-center md:col-span-2 xl:col-span-4">
+    <div className="pricing-card col-span-full flex min-h-[320px] items-center justify-center text-center">
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan-200/70">Planos</p>
         <p className="mt-3 text-sm text-white/70">Nenhum plano ativo disponivel no momento.</p>

@@ -25,6 +25,7 @@ import {
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { Spotlight } from "@/components/ui/spotlight";
+import { publicSiteNavItems } from "@/components/seo/public-site-nav";
 
 const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
 
@@ -139,18 +140,6 @@ const socialMetrics = [
   { value: "+14.382", label: "conversas processadas" },
   { value: "98%", label: "taxa de resposta < 30s" },
   { value: "2.108", label: "clones ativos hoje" },
-];
-
-const landingNavItems = [
-  { href: "#inicio", label: "Início" },
-  { href: "#teste-turing", label: "Teste" },
-  { href: "#diferencial", label: "Diferenciais" },
-  { href: "#idiomas", label: "Idiomas" },
-  { href: "#como-funciona", label: "Como funciona" },
-  { href: "#planos", label: "Planos" },
-  { href: "/solucoes", label: "Soluções" },
-  { href: "/docs/api", label: "API" },
-  { href: "#faq", label: "FAQ" },
 ];
 
 const faqs: [string, string][] = [
@@ -741,13 +730,16 @@ export default function Home() {
       <PageSection id="planos" bg="#0a0a0a">
         <GreenPill>{"// Planos"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Planos para iniciar,<br className="hidden sm:block" /> vender e escalar.
+          Planos para iniciar,<br className="hidden sm:block" /> vender e criar o próximo passo.
         </h2>
+        <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">
+          Escolha um plano para sua operação ou conheça o Personalizado: um software desenvolvido para a sua próxima grande ideia.
+        </p>
         <div className="mt-10">
           <PricingPlansGrid />
         </div>
         <p className="mt-6 text-center font-mono text-xs text-zinc-400">
-          Cada plano inclui armazenamento para imagens, videos e arquivos dos produtos. Cancele quando quiser.
+          Os planos de assinatura incluem armazenamento para imagens, vídeos e arquivos. No Personalizado, os recursos são definidos para o seu projeto.
         </p>
       </PageSection>
 
@@ -863,8 +855,8 @@ function Header() {
         >
           <ConnectyLogo className="h-4 w-[104px] sm:w-[132px]" tone="white" type="full" />
         </a>
-        <nav className="hidden min-w-0 items-center gap-3 font-mono text-[10px] text-zinc-300 lg:flex xl:gap-4 xl:text-[11px]">
-          {landingNavItems.map((item) => (
+        <nav aria-label="Navegação principal" className="hidden min-w-0 items-center gap-2 font-mono text-[10px] text-zinc-300 min-[1440px]:flex 2xl:gap-3 2xl:text-[11px]">
+          {publicSiteNavItems.map((item) => (
             <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
               [ {item.label} ]
             </a>
@@ -886,9 +878,10 @@ function Header() {
           </a>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 lg:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 min-[1440px]:hidden"
             aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileNavOpen}
+            aria-controls="home-mobile-menu"
             onClick={() => setMobileNavOpen((current) => !current)}
           >
             {mobileNavOpen ? <X size={15} /> : <Menu size={16} />}
@@ -899,18 +892,20 @@ function Header() {
       <AnimatePresence>
         {mobileNavOpen ? (
           <motion.nav
+            id="home-mobile-menu"
+            aria-label="Navegação no celular"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
-            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 lg:hidden"
+            className="mx-auto mt-3 grid max-h-[calc(100dvh-100px)] max-w-[1760px] gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 min-[1440px]:hidden"
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {landingNavItems.map((item) => (
+              {publicSiteNavItems.map((item) => (
                 <a
                   key={item.href}
                   href={item.href}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-center transition hover:border-white/30 hover:text-white"
+                  className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 px-3 py-2 text-center transition hover:border-white/30 hover:text-white"
                   onClick={() => setMobileNavOpen(false)}
                 >
                   {item.label}

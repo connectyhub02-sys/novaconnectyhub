@@ -986,6 +986,7 @@ html {
   display: flex;
   height: 100%;
   flex-direction: column;
+  min-width: 0;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 16px;
   background: linear-gradient(180deg, rgb(10 10 18 / 95%) 0%, rgb(10 10 18 / 72%) 100%);
@@ -993,21 +994,41 @@ html {
   transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.pricing-comparison {
+  container-type: inline-size;
+}
+
 .pricing-plans-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 16px;
 }
 
-@media (min-width: 768px) {
+@container (min-width: 640px) {
   .pricing-plans-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (min-width: 1280px) {
+@container (min-width: 900px) {
   .pricing-plans-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1120px) {
+  .pricing-plans-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .pricing-card {
+    padding: 28px 16px 20px;
+  }
+
+  .pricing-plans-grid .pricing-card > strong {
+    font-size: clamp(28px, 2.9cqi, 42px);
   }
 }
 
@@ -2764,6 +2785,66 @@ html {
 [data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card [class*="text-slate-300"] {
   color: var(--ch-text) !important;
 }
+
+/* Custom software is a full plan choice, with its own visual identity. */
+.pricing-card-custom {
+  border-color: #69e5bc;
+  background: radial-gradient(ellipse at top right, #17463f, transparent 65%), #0b1c1a;
+  box-shadow: 0 0 0 1px #69e5bc26, 0 20px 50px #00ff8810;
+}
+
+.custom-plan-badge {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  padding: 4px 10px;
+  background: #a7f3d0;
+  color: #064e3b;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.custom-plan-promise {
+  margin-top: 22px;
+  color: #f0fdf4;
+  font-size: clamp(26px, 2.4cqi, 36px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -.04em;
+}
+
+.custom-plan-promise span { color: #a7f3d0; }
+.custom-plan-description { margin-top: 16px; font-size: 13px; line-height: 1.7; color: #c5ded5; }
+.custom-plan-preview { margin-top: 24px; border: 1px solid #a7f3d033; border-radius: 12px; background: #06151166; }
+.custom-plan-preview-bar { display: flex; align-items: center; gap: 4px; padding: 10px; border-bottom: 1px solid #a7f3d026; color: #a7f3d0; }
+.custom-plan-preview-bar > span { width: 4px; height: 4px; border-radius: 50%; background: #a7f3d066; }
+.custom-plan-preview-bar > svg { margin-left: auto; }
+.custom-plan-preview-body { display: flex; align-items: center; gap: 10px; padding: 24px 12px; color: #d1fae5; }
+.custom-plan-preview-body > span { flex: 1; font-size: 12px; font-weight: 650; line-height: 1.5; }
+.custom-plan-preview-body > svg { flex-shrink: 0; }
+.custom-plan-preview-flow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; padding: 10px; border-top: 1px solid #a7f3d026; font-size: 10px; color: #b7d9cb; }
+.pricing-card-custom ul { font-family: var(--font-geist-sans); font-size: 13px; line-height: 1.6; color: #d1e6de; }
+.pricing-card-custom li { padding-left: 16px; position: relative; }
+.pricing-card-custom li::before { position: absolute; left: 0; content: "✓"; color: #6ee7b7; }
+.custom-plan-invitation { margin-bottom: 20px; border-top: 1px solid #a7f3d02b; padding-top: 16px; font-size: 12px; line-height: 1.7; color: #b7d9cb; }
+.pricing-card-custom a.custom-plan-action { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; border: 1px solid #a7f3d0; border-radius: 8px; background: #a7f3d0; color: #064e3b; text-transform: none; font-size: 14px; }
+.pricing-card-custom a.custom-plan-action:hover { background: #d1fae5; border-color: #d1fae5; color: #022c22; }
+.pricing-card-custom a.custom-plan-action:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 4px; }
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-custom { border: 2px solid #059669; background: linear-gradient(155deg, #ecfdf5, #ffffff 70%); }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-promise { color: #0f172a; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-promise span { color: #047857; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-preview { border-color: #a7f3d0; background: #f0fdf4; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-preview-bar,
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-preview-body,
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-preview-flow { border-color: #a7f3d0; color: #065f46; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-preview-bar > span { background: #059669; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .custom-plan-invitation { border-color: #a7f3d0; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-custom li::before { color: #047857; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-custom a.custom-plan-action { border-color: #047857; background: #047857; color: #ffffff; }
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-custom a.custom-plan-action:hover { background: #065f46; color: #ffffff; }
 
 /* ── METRIC CARD — mobile 3-in-a-row ───────────────── */
 /* Override the large desktop size for narrow viewports */

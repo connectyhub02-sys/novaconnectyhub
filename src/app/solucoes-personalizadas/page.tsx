@@ -27,7 +27,7 @@ const faq=[
 ];
 import { MeetingLink } from "@/components/seo/meeting-link";
 export default function Page(){return <div className={styles.page}>
-  <PublicSiteHeader active="solutions"/>
+  <PublicSiteHeader active="custom"/>
   <JsonLd id="custom-software-service" data={{"@context":"https://schema.org","@graph":[{"@type":"Service","@id":buildCanonicalUrl("/solucoes-personalizadas#servico"),name:"Desenvolvimento de software sob medida",description,serviceType:"Desenvolvimento de plataformas, aplicativos e sistemas personalizados",provider:{"@type":"Organization",name:"ConnectyHub",url:buildCanonicalUrl("/")},url:buildCanonicalUrl("/solucoes-personalizadas"),areaServed:{"@type":"Country",name:"Brasil"}},{"@type":"BreadcrumbList",itemListElement:[{"@type":"ListItem",position:1,name:"ConnectyHub",item:buildCanonicalUrl("/")},{"@type":"ListItem",position:2,name:"Soluções personalizadas",item:buildCanonicalUrl("/solucoes-personalizadas")}]}]}}/>
   <main>
     <section className={styles.hero}>
