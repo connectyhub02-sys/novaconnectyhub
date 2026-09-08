@@ -17,6 +17,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { loadNativeBillingSnapshot, processNativeBillingWebhook, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
 import { loadAsaasPlatformBillingConfig } from "@/lib/sales-catalog/asaas";
 import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
+import { billingUsesPix } from "@/lib/billing/pix-creation";
 import type { RejectedPaymentCopy } from "@/components/checkout/mercado-pago-card-brick";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export async function GET(
         const config = await loadAsaasPlatformBillingConfig({client});
         await processNativeBillingWebhook(client,{payment:{id:intent.payment.provider_payment_id,externalReference:managedReference}},config.webhookSecret);
         intent = (await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId)).intent;
-      } else if (snapshot.attempt) {
+      } else if (snapshot.attempt && !billingUsesPix(intent.payment.payload)) {
         nativeAttempt = true;
         await reconcileNativeBillingAttempt(client, snapshot.attempt.id);
         const refreshed = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);

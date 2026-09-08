@@ -1,5 +1,6 @@
 import { convertAsaasBillingPaymentToPix } from "@/lib/sales-catalog/asaas-direct";
 import { processNativeBillingWebhook } from "@/lib/billing/native-card-checkout";
+import { releaseFailedBillingPixClaim } from "@/lib/billing/pix-creation";
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/account/signup-completion";
 import {
   createAsaasPixPayment,
+  AsaasPixCreationError,
   getAsaasPixQrCode,
   extractAsaasPaymentData,
   loadAsaasPlatformBillingConfig,
@@ -106,6 +108,7 @@ export async function POST(
     return NextResponse.json({ error: "Este checkout nao esta aberto para pagamento." }, { status: 409 });
   }
 
+  let pixClaim: Parameters<typeof releaseFailedBillingPixClaim>[1] | null = null;
   try {
     const billingProvider = resolveBillingCheckoutProvider(intent);
     const existingPix = intent.payment.payload?.pix_qr_code;
@@ -135,7 +138,13 @@ export async function POST(
     if (billingProvider === "asaas") {
       if (!fallbackDocument?.number) throw new Error("Informe CPF/CNPJ no cadastro antes de gerar o Pix.");
       const { error } = await client.rpc("claim_native_billing_pix", { p_org: workspace.organization.id, p_payment: intent.payment.id });
-      if (error) return NextResponse.json({ error: "Existe um pagamento em conferência. Aguarde o resultado antes de trocar a forma de pagamento." }, { status: 409 });
+      if (error) {
+        const busy = /BILLING_PAYMENT_BUSY/.test(error.message);
+        return NextResponse.json({ error: busy ? "Existe um pagamento em conferência. Aguarde o resultado antes de trocar a forma de pagamento." : "Não foi possível preparar o Pix. Tente novamente em instantes." }, { status: busy ? 409 : 503 });
+      }
+      const claimed = await client.from("billing_payments").select("updated_at,payload").eq("id", intent.payment.id).eq("organization_id", workspace.organization.id).single();
+      if (claimed.error || !claimed.data) throw new Error("Pix em conferência. Aguarde antes de tentar novamente.");
+      pixClaim = { paymentId: intent.payment.id, organizationId: workspace.organization.id, updatedAt: claimed.data.updated_at, payload: claimed.data.payload ?? {} };
     }
     const paymentData = billingProvider === "asaas"
       ? await createAsaasBillingPix({
@@ -211,6 +220,10 @@ export async function POST(
           ...cart.metadata,
           billing_provider: billingProvider,
           pix_creation_pending: false,
+          pix_creation_failure: null,
+          native_card_attempt_id: null,
+          payment_method: "pix",
+          billing_payment_method: "pix",
           auto_charge_disabled: true,
           provider_payment_id: providerPaymentId,
           provider_status: paymentData.providerStatus,
@@ -244,6 +257,10 @@ export async function POST(
       pixTicketUrl: paymentData.pixTicketUrl,
     });
   } catch (error) {
+    if (pixClaim) {
+      try { await releaseFailedBillingPixClaim(client, pixClaim, error); }
+      catch (releaseError) { return NextResponse.json({ error: releaseError instanceof Error ? releaseError.message : "Pix em conferência." }, { status: 503 }); }
+    }
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel gerar o Pix.",
     }, { status: 400 });
@@ -288,7 +305,9 @@ async function createAsaasBillingPix(input: {
     throw new Error("Informe CPF ou CNPJ no cadastro da conta para gerar Pix pelo Asaas.");
   }
 
-  const config = await loadAsaasPlatformBillingConfig({ client: input.client });
+  const config = await loadAsaasPlatformBillingConfig({ client: input.client }).catch((error: unknown) => {
+    throw new AsaasPixCreationError(error instanceof Error ? error.message : "Não foi possível preparar o Pix.", true);
+  });
   if (input.existingPaymentId && input.expectedReference) {
     const existing=await convertAsaasBillingPaymentToPix({...config,paymentId:input.existingPaymentId,expectedReference:input.expectedReference,amount:input.amount});
     if (["CONFIRMED","RECEIVED","RECEIVED_IN_CASH"].includes(String(existing.status))) return extractAsaasPaymentData(existing);

@@ -285,7 +285,7 @@ async function recoverNativeBillingPix(client: SupabaseClient) {
       if (!payment?.id) continue; // A timeout without a matching payment never permits a new charge.
       const qr = await getAsaasPixQrCode({ ...config, paymentId: payment.id });
       const pix = extractAsaasPaymentData(payment, qr);
-      const saved = await client.from("billing_payments").update({ provider_payment_id: payment.id, provider_status: payment.status, payload: { ...row.payload, pix_creation_pending: false, pix_qr_code: pix.pixQrCode, pix_qr_code_base64: pix.pixQrCodeBase64, asaas_payment_id: payment.id } }).eq("id", row.id).eq("payload->>pix_creation_pending", "true");
+      const saved = await client.from("billing_payments").update({ provider_payment_id: payment.id, provider_status: payment.status, payload: { ...row.payload, pix_creation_pending: false, native_card_attempt_id: null, payment_method: "pix", billing_payment_method: "pix", pix_qr_code: pix.pixQrCode, pix_qr_code_base64: pix.pixQrCodeBase64, asaas_payment_id: payment.id } }).eq("id", row.id).eq("payload->>pix_creation_pending", "true");
       if (saved.error) continue;
       if (managedReference) await reconcileManagedBillingPix(client,row.id,payment);
       else if (recurringOrigin) await processNativeBillingRenewal(client,String(recurringOrigin),payment.id);

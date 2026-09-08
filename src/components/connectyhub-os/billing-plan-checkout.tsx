@@ -450,6 +450,9 @@ export function BillingPlanCheckout({
         qrCodeBase64: data?.pixQrCodeBase64 ?? null,
         ticketUrl: data?.pixTicketUrl ?? null,
       });
+      setPaymentFailure(null);
+      lastRejectionRef.current = null;
+      setFeedbackModal(null);
       if (data?.status) {
         setPaymentStatusOverride(data.status);
       }

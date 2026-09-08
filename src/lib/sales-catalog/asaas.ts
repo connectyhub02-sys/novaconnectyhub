@@ -564,6 +564,18 @@ export async function ensureAsaasAccessToken(input: {
   return secrets;
 }
 
+/** Whether a failed Pix operation could already have created a charge. */
+export class AsaasPixCreationError extends Error {
+  constructor(message: string, public readonly safeToRetry: boolean, public readonly providerPaymentId: string | null = null) {
+    super(message);
+    this.name = "AsaasPixCreationError";
+  }
+}
+
+class AsaasRequestError extends Error {
+  constructor(message: string, public readonly httpStatus: number) { super(message); }
+}
+
 export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
   const customer = await createAsaasCustomer({
     accessToken: input.accessToken,
@@ -577,6 +589,9 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
     ...parseAsaasAddress(input.payerAddress),
     externalReference: input.externalReference,
     notificationDisabled: true,
+  }).catch((error: unknown) => {
+    // Looking up/creating a customer cannot create a payment.
+    throw new AsaasPixCreationError(error instanceof Error ? error.message : "Não foi possível conferir o cadastro para gerar o Pix.", true);
   });
   const dueDate = input.dueDate ?? formatAsaasDueDate(new Date());
   const payment = await requestAsaas<AsaasPaymentResponse>({
@@ -595,13 +610,19 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
       externalReference: input.externalReference,
     },
     fallbackMessage: "Nao foi possivel gerar Pix no Asaas.",
+  }).catch((error: unknown) => {
+    const definitive = error instanceof AsaasRequestError && [400, 401, 403, 404, 422].includes(error.httpStatus);
+    throw new AsaasPixCreationError(error instanceof Error ? error.message : "Pix em conferência. Aguarde antes de tentar novamente.", definitive);
   });
+  if (!payment.id) throw new AsaasPixCreationError("Pix em conferência. Aguarde antes de tentar novamente.", false);
   const pixQrCode = payment.id
     ? await getAsaasPixQrCode({
         accessToken: input.accessToken,
         mode: input.mode,
         apiBaseUrl: input.apiBaseUrl,
         paymentId: payment.id,
+      }).catch(() => {
+        throw new AsaasPixCreationError("O Pix foi criado, mas o código ainda está em conferência. Aguarde alguns instantes.", false, payment.id ?? null);
       })
     : null;
 
@@ -987,11 +1008,11 @@ async function requestAsaas<T>(input: {
   const body = await response.json().catch(() => null) as (T & { errors?: AsaasErrorItem[]; error?: string; message?: string }) | null;
 
   if (!response.ok || !body) {
-    throw new Error(readAsaasErrorMessage(body) ?? input.fallbackMessage);
+    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status);
   }
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
-    throw new Error(readAsaasErrorMessage(body) ?? input.fallbackMessage);
+    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status);
   }
 
   return body as T;
