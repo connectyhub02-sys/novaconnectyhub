@@ -1,3 +1,4 @@
+import { publicUsageCalculation } from "@/lib/billing/public-usage-calculation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -101,6 +102,8 @@ type CreditTransactionRow = {
 };
 
 type UsageEventRow = {
+  model_id?: string | null;
+  metadata?: JsonRecord | null;
   id: string;
   feature_code: string | null;
   input_units: number | string | null;
@@ -190,7 +193,7 @@ export async function GET() {
         .returns<CreditTransactionRow[]>(),
       client
         .from("usage_events")
-        .select("id, feature_code, input_units, output_units, connecty_charge_credits, occurred_at, created_at")
+        .select("id, feature_code, model_id, metadata, input_units, output_units, connecty_charge_credits, occurred_at, created_at")
         .eq("organization_id", operational ? organization.id : "00000000-0000-0000-0000-000000000000")
         .eq("organization_id", organization.id)
         .eq("status", "completed")
@@ -516,6 +519,8 @@ function mapCreditTransaction(row: CreditTransactionRow) {
 
 function mapUsageEvent(row: UsageEventRow) {
   return {
+    model:row.model_id??null,
+    calculation:publicUsageCalculation(row.metadata),
     id: row.id,
     featureCode: row.feature_code,
     publicCategory: usagePublicCategory(row.feature_code),

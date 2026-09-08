@@ -884,6 +884,7 @@ function CustomerControlModal({
             <p className="mt-1 text-[12px] text-slate-400">
               Plano atual {user.planCode ?? "sem plano"} / status {user.orgStatus ?? "sem status"} / {formatCredits(user.balanceCredits)} creditos.
             </p>
+            {user.organizationId && <a href={`/admin/contratos?organizationId=${user.organizationId}`} className="mt-2 inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800">Configurar contrato personalizado</a>}
           </div>
           <button
             type="button"

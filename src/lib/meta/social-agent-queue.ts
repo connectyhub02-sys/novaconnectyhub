@@ -538,7 +538,7 @@ async function loadMetaSocialChannelsEntitlement(client: SupabaseClient, organiz
   return resolveMetaSocialChannelsEntitlement({
     planCode: billing.planCode,
     organizationStatus: billing.organizationStatus,
-    billingState: billing.state,
+    billingState: billing.state, featureOverrides: billing.featureOverrides,
   });
 }
 

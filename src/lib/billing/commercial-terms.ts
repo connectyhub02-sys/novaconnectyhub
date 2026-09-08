@@ -30,7 +30,8 @@ export function snapshotPlanCommercialTerms(plan: Record<string, unknown>) {
   return { ...serializeCommercialTerms(terms), price_brl: (cents - Math.round(cents * annualPercent / 100)) / 100,
     list_price_brl: listPrice, annual_discount_percent: annualPercent,
     first_purchase_discount_percent: Number(plan.first_purchase_discount_percent ?? 0),
-    included_credits: Number(plan.included_credits ?? 0) };
+    included_credits: Number(plan.included_credits ?? 0),
+    ...(plan.custom_contract_id ? { custom_contract_id: plan.custom_contract_id, custom_contract_version: plan.custom_contract_version, name: plan.name, features: plan.features, resource_limits: plan.resource_limits } : {}) };
 }
 
 export function billingPeriodEnd(start: Date, terms: CommercialTerms): Date {

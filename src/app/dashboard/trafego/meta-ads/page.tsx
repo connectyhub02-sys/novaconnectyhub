@@ -47,7 +47,7 @@ export default async function ClientMetaAdsPage() {
   const entitlement = resolvePlanFeatureEntitlement("meta_ads_analytics", {
     isPlatformAdmin: workspace.profile.isPlatformAdmin,
     organizationStatus: workspace.organization.status,
-    planCode: workspace.organization.planCode,
+    planCode: workspace.organization.planCode, featureOverrides: workspace.organization.featureOverrides,
   });
 
   if (!entitlement.allowed) {

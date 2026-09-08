@@ -230,11 +230,11 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   payment_card_retry_failed:
     "{cliente}, tentamos renovar seu plano {plano} no cartao, mas o pagamento nao foi aprovado. Atualize o cartao ou pague por Pix antes de {data_vencimento}: {checkout_url}.",
   paid_low_credits_20:
-    "{cliente}, seus creditos ConnectyHub chegaram a {percentual_creditos}% do ciclo. Restam {creditos_restantes}. Recarregue agora para seus agentes nao pararem no meio dos atendimentos.",
+    "{cliente}, seu saldo está baixo: restam {creditos_restantes} créditos ConnectyHub. Eles são usados pela IA nos seus projetos e atendimentos. Acompanhe o consumo ou compre mais créditos: {checkout_url}.",
   paid_low_credits_10:
-    "{cliente}, alerta importante: restam apenas {creditos_restantes} creditos ({percentual_creditos}% do ciclo). Recarregue pelo painel para manter IA, voz e WhatsApp ativos.",
+    "{cliente}, restam apenas {creditos_restantes} créditos ConnectyHub. Recarregue para continuar as atividades de IA que utilizam saldo: {checkout_url}.",
   paid_no_credits:
-    "{cliente}, seus creditos acabaram. Seus agentes e recursos com custo ficam pausados ate uma recarga ou renovacao do plano.",
+    "{cliente}, seu saldo de créditos acabou. Novas atividades de IA que consomem saldo aguardam uma recarga. A mensalidade do plano é separada. Veja seu consumo e compre créditos: {checkout_url}.",
   subscription_paused:
     "{cliente}, sua assinatura ConnectyHub esta pausada. Acesse o painel para regularizar e manter os atendimentos ativos.",
   subscription_canceled:

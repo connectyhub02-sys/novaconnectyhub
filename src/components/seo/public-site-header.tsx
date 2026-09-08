@@ -16,6 +16,7 @@ const navItems = [
   { href: "/#como-funciona", label: "Como funciona", key: "home" },
   { href: "/#planos", label: "Planos", key: "home" },
   { href: "/solucoes", label: "Solucoes", key: "solutions" },
+  { href: "/solucoes-personalizadas", label: "Sob medida", key: "solutions" },
   { href: "/docs/api", label: "API", key: "api" },
   { href: "/#faq", label: "FAQ", key: "home" },
 ] as const;

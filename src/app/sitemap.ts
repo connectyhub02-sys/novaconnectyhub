@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { loadPublicCatalogIndex } from "@/lib/seo/public-index";
+
 import { buildCanonicalUrl } from "@/lib/seo/site";
 import { solutionPages } from "@/lib/seo/solution-pages";
 
@@ -15,6 +15,8 @@ const staticRoutes: Array<{
 }> = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
   { path: "/solucoes", changeFrequency: "weekly", priority: 0.9 },
+  { path: "/solucoes-personalizadas", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/docs/ia", changeFrequency: "monthly", priority: 0.8 },
   { path: "/docs/api", changeFrequency: "weekly", priority: 0.9 },
   { path: "/cadastro", changeFrequency: "monthly", priority: 0.8 },
   { path: "/privacidade", changeFrequency: "yearly", priority: 0.3 },
@@ -23,41 +25,18 @@ const staticRoutes: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-  const publicCatalog = await loadPublicCatalogIndex({ productLimit: 5000 });
+
   const entries: SitemapEntry[] = [
     ...staticRoutes.map((route) => ({
       url: buildCanonicalUrl(route.path),
-      lastModified: now,
+      ...(route.path === "/solucoes-personalizadas" || route.path === "/docs/ia" ? {lastModified: new Date("2026-09-08T00:00:00-03:00")} : {}),
       changeFrequency: route.changeFrequency,
       priority: route.priority,
     })),
     ...solutionPages.map((page) => ({
       url: buildCanonicalUrl(`/solucoes/${page.slug}`),
-      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.82,
-    })),
-    ...publicCatalog.stores.flatMap((store) => [
-      {
-        url: store.url,
-        lastModified: toSitemapDate(store.updatedAt) ?? now,
-        changeFrequency: "daily" as const,
-        priority: 0.72,
-      },
-      {
-        url: store.productsUrl,
-        lastModified: toSitemapDate(store.updatedAt) ?? now,
-        changeFrequency: "daily" as const,
-        priority: 0.68,
-      },
-    ]),
-    ...publicCatalog.products.map((product) => ({
-      url: product.url,
-      lastModified: toSitemapDate(product.updatedAt) ?? now,
-      changeFrequency: "weekly" as const,
-      priority: 0.62,
-      images: product.imageUrl ? [product.imageUrl] : undefined,
     })),
   ];
 
@@ -74,11 +53,4 @@ function dedupeSitemapEntries(entries: SitemapEntry[]) {
   }
 
   return Array.from(byUrl.values());
-}
-
-function toSitemapDate(value: string | null | undefined) {
-  if (!value) return null;
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }

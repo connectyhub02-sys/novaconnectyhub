@@ -182,8 +182,8 @@ export async function tokenizeAsaasBillingCard(input: AsaasDirectConnection & {c
 }
 
 /** No external subscription and no card on creation: the application owns the schedule. */
-export async function createManagedAsaasInvoice(input: AsaasDirectConnection & {customerId: string; amount: number; dueDate: string; reference: string}) {
-  const payment = safePayment(await request(input, "/payments", "POST", {customer: input.customerId, billingType: "CREDIT_CARD", value: input.amount, dueDate: input.dueDate, externalReference: input.reference, description: "Renovação ConnectyHub"}));
+export async function createManagedAsaasInvoice(input: AsaasDirectConnection & {customerId: string; amount: number; dueDate: string; reference: string; description?: string}) {
+  const payment = safePayment(await request(input, "/payments", "POST", {customer: input.customerId, billingType: "CREDIT_CARD", value: input.amount, dueDate: input.dueDate, externalReference: input.reference, description: input.description ?? "Renovação ConnectyHub"}));
   if (!payment.id || payment.externalReference !== input.reference || payment.customer !== input.customerId || Math.round(Number(payment.value)*100) !== Math.round(input.amount*100)) throw new AsaasDirectError(false, false);
   return payment;
 }

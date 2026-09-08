@@ -1,4 +1,5 @@
 "use client";
+import { CreditExplainer } from "./credit-explainer";
 
 import {
   useCallback,
@@ -150,6 +151,8 @@ type AccountData = {
     createdAt: string | null;
   }>;
   usageEvents: Array<{
+    model:string|null;
+    calculation:{rates:Array<{id:string;unit:string;units:number;price:number;minimum:number}>;minimum:number;adjusted:boolean;version:string|null};
     id: string;
     featureCode: string | null;
     publicCategory: string;
@@ -211,7 +214,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 });
 
 const creditsFormatter = new Intl.NumberFormat("pt-BR", {
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 6,
 });
 
 const billingTabs: Array<{ icon: LucideIcon; label: string; value: BillingTab }> = [
@@ -1428,11 +1431,12 @@ function CreditsTab({
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(transactions);
 
   if (!transactions.length && !usageEvents.length) {
-    return <EmptyState text="Nenhuma movimentação de créditos foi registrada ainda." />;
+    return <div className="space-y-4"><CreditExplainer/><EmptyState text="Nenhuma movimentação de créditos foi registrada ainda." /></div>;
   }
 
   return (
     <div className="space-y-5">
+      <CreditExplainer/>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <PlanMetric label="Saldo agora" value={formatCredits(usageSummary.balanceCredits)} />
         <PlanMetric label="Usado no ciclo" value={formatCredits(usageSummary.usedCredits)} />
@@ -1486,7 +1490,7 @@ function CreditsTab({
       </div>
 
       <div className="space-y-3">
-        <SectionLabel>Consumo recente dos agentes</SectionLabel>
+        <SectionLabel>Consumo recente dos agentes e projetos</SectionLabel>
         {usageEvents.length ? usageEvents.map((event) => (
           <article key={event.id} className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -1495,6 +1499,7 @@ function CreditsTab({
               <p className="mt-1 truncate text-xs text-slate-500">
                 {event.publicCategory}
               </p>
+              <details className="mt-2 text-xs leading-6 text-slate-600"><summary className="min-h-11 cursor-pointer py-2 font-semibold text-blue-800">Ver cálculo</summary><p>Modelo: {event.model??"Registro anterior"}</p>{event.calculation?.rates.length?event.calculation.rates.map((r,i)=><p key={i}>{r.unit==="input_token"?"Leitura":r.unit==="output_token"?"Resposta e raciocínio":r.unit}: {formatCredits(r.units)} × {formatCredits(r.price)} crédito por unidade. Tarifa: {r.id}</p>):<p>Este registro não contém o detalhamento da tarifa. O débito efetivo é o valor indicado na atividade.</p>}{event.calculation?.minimum>0&&<p>Mínimo da atividade: {formatCredits(event.calculation.minimum)} créditos.</p>}{event.calculation?.adjusted&&<p>O total foi limitado ao orçamento autorizado para esta chamada.</p>}<p className="break-all">Registro: {event.id}</p></details>
             </div>
             <div className="text-left sm:text-right">
               <p className="text-lg font-semibold text-rose-600">-{formatCredits(event.chargeCredits)}</p>
@@ -1517,6 +1522,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 function usageFeatureLabel(featureCode: string | null) {
   const labels: Record<string, string> = {
+    external_ai: "Resposta no projeto de IA",
     chat_completion: "Resposta do agente",
     voice_reply_whatsapp: "Resposta por audio",
     text_to_speech: "Audio gerado",

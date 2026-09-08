@@ -3,6 +3,7 @@ import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { buildCanonicalUrl, toAbsoluteUrl, truncateSeoText } from "@/lib/seo/site";
 import { createServiceClient } from "@/lib/supabase/service";
+import {getContractAccess} from "@/lib/billing/contract-access";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -51,20 +52,31 @@ export type PublicIndexProduct = {
   updatedAt: string | null;
 };
 
-export async function loadPublicCatalogIndex(input: { productLimit?: number } = {}) {
+export async function publicCatalogSitemapIds() {
+  const {count,error}=await createServiceClient().from("intelligence_memory").select("id",{count:"exact",head:true}).eq("scope","organization").eq("memory_type","sales_catalog_item").filter("metadata->>status","eq","active");
+  if(error)throw new Error("Não foi possível contar o catálogo público.");
+  return Array.from({length:Math.max(1,Math.ceil((count??0)/5000))},(_,id)=>({id}));
+}
+export async function loadPublicCatalogIndex(input: { productLimit?: number; offset?: number } = {}) {
   try {
     const client = createServiceClient();
-    const { data, error } = await client
+    const data:SalesCatalogMemoryRow[]=[];
+    const maximum=Math.min(45000,Math.max(1,input.productLimit??1200));
+    for(let offset=0;offset<maximum;offset+=500){
+    const page = await client
       .from("intelligence_memory")
       .select("id, organization_id, title, content, metadata, created_at, updated_at")
       .eq("scope", "organization")
       .eq("memory_type", "sales_catalog_item")
       .filter("metadata->>status", "eq", "active")
-      .order("updated_at", { ascending: false, nullsFirst: false })
-      .limit(input.productLimit ?? 1200)
+      .order("id")
+      .range((input.offset??0)+offset,(input.offset??0)+Math.min(offset+499,maximum-1))
       .returns<SalesCatalogMemoryRow[]>();
+    if(page.error)throw new Error("Catálogo público indisponível.");
+    data.push(...page.data??[]);if((page.data?.length??0)<500)break;
+    }
 
-    if (error || !data?.length) {
+    if (!data.length) {
       return { stores: [] as PublicIndexStore[], products: [] as PublicIndexProduct[] };
     }
 
@@ -77,14 +89,13 @@ export async function loadPublicCatalogIndex(input: { productLimit?: number } = 
       return { stores: [] as PublicIndexStore[], products: [] as PublicIndexProduct[] };
     }
 
-    const { data: organizations } = await client
-      .from("organizations")
-      .select("id, name, slug, status, metadata")
-      .in("id", organizationIds)
-      .returns<OrganizationRow[]>();
+    const organizations:OrganizationRow[]=[];
+    for(let start=0;start<organizationIds.length;start+=100){const result=await client.from("organizations").select("id,name,slug,status,metadata").in("id",organizationIds.slice(start,start+100)).returns<OrganizationRow[]>();if(result.error)throw new Error("Lojas indisponíveis.");organizations.push(...result.data??[]);}
+    const eligible=new Set<string>();
+    for(let i=0;i<organizations.length;i+=8){await Promise.all(organizations.slice(i,i+8).filter(isPublicOrganization).map(async org=>{const access=await getContractAccess(org.id,client);if(access.allowed)eligible.add(org.id);}));}
     const organizationById = new Map(
       (organizations ?? [])
-        .filter(isPublicOrganization)
+        .filter(organization=>eligible.has(organization.id))
         .map((organization) => [organization.id, organization]),
     );
     const products: PublicIndexProduct[] = [];

@@ -396,6 +396,11 @@ export function PricingPlansGrid({
         })}
       </div>
 
+      <div className={surface === "dashboard" ? "mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-6 text-slate-900" : "mt-6 rounded-2xl border border-emerald-300/25 bg-emerald-300/5 p-6 text-white"}>
+        <div className="flex flex-wrap items-center justify-between gap-5"><div><h3 className="text-xl font-bold">Soluções personalizadas</h3><p className={surface === "dashboard" ? "mt-2 max-w-2xl text-sm leading-6 text-slate-600" : "mt-2 max-w-2xl text-sm leading-6 text-slate-300"}>Sua ideia, seu próprio software. Desenvolvemos plataformas, aplicativos e sistemas sob medida para sua empresa.</p></div><a href="/solucoes-personalizadas" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-emerald-200">Saiba mais →</a></div>
+        <p className={surface === "dashboard" ? "mt-4 text-xs text-slate-600" : "mt-4 text-xs text-slate-300"}>Todos os planos também permitem usar o saldo em projetos externos pela <a href="/docs/ia" className="underline underline-offset-4">API de IA ConnectyHub</a>. API WhatsApp conforme os recursos contratados.</p>
+      </div>
+
       {catalogFailed && catalogPlans.length === 0 ? (
         <p className="mt-3 text-center font-mono text-[11px] text-amber-200">
           Planos exibidos em modo reserva. O checkout valida o valor atual antes do pagamento.

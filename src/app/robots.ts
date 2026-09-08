@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 import { buildCanonicalUrl, getConnectyhubSiteUrl } from "@/lib/seo/site";
+import {publicCatalogSitemapIds} from "@/lib/seo/public-index";
+export const revalidate=3600;
 
 const privatePaths = [
   "/admin",
@@ -17,7 +19,8 @@ const privatePaths = [
   "/r/",
 ];
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const ids=await publicCatalogSitemapIds();
   return {
     rules: [
       {
@@ -31,7 +34,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: privatePaths,
       },
     ],
-    sitemap: buildCanonicalUrl("/sitemap.xml"),
+    sitemap: [buildCanonicalUrl("/sitemap.xml"),...ids.map(({id})=>buildCanonicalUrl(`/catalogo/sitemap/${id}.xml`))],
     host: getConnectyhubSiteUrl(),
   };
 }

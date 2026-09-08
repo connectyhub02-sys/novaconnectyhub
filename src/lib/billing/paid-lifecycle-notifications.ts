@@ -1,4 +1,5 @@
 import "server-only";
+import { processWalletAlerts } from "./wallet-alerts";
 import { preparePlatformCampaign } from "@/lib/commerce/platform-campaigns";
 import { attemptManagedAsaasRenewal } from "./managed-asaas-renewals";
 import { billingLocalDate, billingPeriodEnd, isBillingDeadlineReached, readCommercialTerms } from "./commercial-terms";
@@ -210,24 +211,7 @@ export async function processPaidBillingLifecycleNotifications(
       }
 
       if (!deadlineEvent || deadlineEvent.eventType !== "paid_plan_expired") {
-        const creditEvent = pickCreditThresholdEvent(context);
-
-        if (creditEvent) {
-          const result = await sendLifecycleNotification(client, {
-            context,
-            eventType: creditEvent,
-            dedupeSuffix: context.cycle?.id ?? dateOnly(context.periodEnd) ?? "wallet",
-            source: "paid_credit_threshold_sweep",
-          });
-
-          if (result.status === "failed") {
-            summary.failed += 1;
-          } else if (result.status === "skipped") {
-            summary.skipped += 1;
-          } else {
-            summary.creditNotifications += 1;
-          }
-        }
+        summary.creditNotifications += (await processWalletAlerts(client, subscription.organization_id)).notices;
       }
     } catch (error) {
       summary.failed += 1;
@@ -295,9 +279,9 @@ function buildNotificationContext(input: {
   const plan = readPlanRelation(input.subscription.billing_plans);
   const periodEnd = readDate(input.subscription.current_period_end)
     ?? readDate(input.subscription.next_billing_at);
-  const includedCredits = toNumber(input.cycle?.included_credits)
-    || toNumber(plan?.included_credits)
-    || toNumber(input.subscription.included_credits_granted);
+  const includedCredits = toNumber(Number(input.cycle?.included_credits
+    ?? (input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.included_credits
+    ?? plan?.included_credits ?? input.subscription.included_credits_granted ?? 0));
   const balanceCredits = toNumber(input.wallet?.balance_credits);
   const usedCredits = toNumber(input.cycle?.used_credits)
     || Math.max(includedCredits - balanceCredits, 0)
@@ -323,7 +307,7 @@ function buildNotificationContext(input: {
     paymentMethod: resolveSubscriptionPaymentMethod(input.subscription, input.latestPayment),
     latestPayment: input.latestPayment,
     renewalPolicy: input.renewalPolicy,
-    planName: plan?.name?.trim() || input.subscription.plan_code,
+    planName: String((input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.name ?? plan?.name?.trim() ?? input.subscription.plan_code),
     amountBrl: toNumber(Number((input.subscription.metadata?.campaign_pricing as JsonRecord | undefined)?.next_price_brl ?? (input.subscription.metadata?.commercial_terms as JsonRecord | undefined)?.price_brl ?? plan?.monthly_price_brl)) + (Array.isArray(input.subscription.metadata?.selected_bumps) ? (input.subscription.metadata.selected_bumps as JsonRecord[]).filter(b=>b.recurrence!=="one_time").reduce((n,b)=>n+Number(b.price_brl??0),0):0),
   };
 }
@@ -363,28 +347,6 @@ function pickDeadlineEvent(
         ? `${periodDate}:${today}`
         : periodDate,
     };
-  }
-
-  return null;
-}
-
-function pickCreditThresholdEvent(context: ReturnType<typeof buildNotificationContext>) {
-  if (context.subscription.subscription_kind === "product" || context.includedCredits <= 0 || context.subscription.status !== "active") {
-    return null;
-  }
-
-  if (context.balanceCredits <= 0) {
-    return "paid_no_credits" satisfies PlatformBillingLifecycleNotificationType;
-  }
-
-  const percent = context.creditBalancePercent ?? 100;
-
-  if (percent <= 10) {
-    return "paid_low_credits_10" satisfies PlatformBillingLifecycleNotificationType;
-  }
-
-  if (percent <= 20) {
-    return "paid_low_credits_20" satisfies PlatformBillingLifecycleNotificationType;
   }
 
   return null;
@@ -502,13 +464,16 @@ async function sendLifecycleNotification(
   const periodEnd = context.periodEnd?.toISOString() ?? null;
   const checkoutPath = input.renewalCheckout?.checkoutPath ?? "/dashboard/planos";
   const checkoutUrl = input.renewalCheckout?.checkoutUrl ?? `${getAppBaseUrl()}/dashboard/planos`;
+  const invoice = input.renewalCheckout?.paymentId ? await client.from("billing_payments").select("amount_brl,payload").eq("id",input.renewalCheckout.paymentId).single() : null;
+  if(invoice?.error)throw new Error("Não foi possível conferir o valor do aviso de renovação.");
+  const invoiceTerms=invoice?.data?.payload?.commercial_terms as JsonRecord|undefined;
 
   return sendPlatformBillingLifecycleNotification(client, {
     organizationId: context.subscription.organization_id,
     subscriptionId: context.subscription.id,
     planCode: context.subscription.plan_code,
-    planName: context.planName,
-    amountBrl: context.amountBrl,
+    planName: String(invoiceTerms?.name??context.planName),
+    amountBrl: Number(invoice?.data?.amount_brl??context.amountBrl),
     includedCredits: context.includedCredits,
     balanceCredits: context.balanceCredits,
     usedCredits: context.usedCredits,
@@ -520,7 +485,7 @@ async function sendLifecycleNotification(
     metadata: {
       source: input.source,
       purchase_kind: context.subscription.subscription_kind,
-      commercial_terms: context.subscription.metadata?.commercial_terms,
+      commercial_terms: invoiceTerms??context.subscription.metadata?.commercial_terms,
       billing_provider: context.subscription.billing_provider,
       current_period_start: context.subscription.current_period_start,
       current_period_end: periodEnd,

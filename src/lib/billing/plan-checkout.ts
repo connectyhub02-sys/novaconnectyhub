@@ -175,6 +175,7 @@ export async function loadBillingCheckoutIntent(
     invoice: invoiceResult.data,
     payment: paymentResult.data,
     plan: { ...planResult.data,
+      name: typeof snapshot.name === "string" ? snapshot.name : planResult.data.name,
       monthly_price_brl: typeof snapshot.price_brl === "number" ? snapshot.price_brl : planResult.data.monthly_price_brl,
       included_credits: typeof snapshot.included_credits === "number" ? snapshot.included_credits : planResult.data.included_credits,
     },
@@ -589,7 +590,7 @@ function normalizeBillingProductInterval(value: unknown): BillingProductBillingI
   return "month";
 }
 
-function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, description: string) {
+export function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, description: string) {
   const explicit = toNumberOrNull(
     metadata.billing_credit_amount
     ?? metadata.order_bump_credit_amount
@@ -600,7 +601,7 @@ function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, descripti
     return explicit;
   }
 
-  const text = `${name} ${description}`.toLowerCase();
+  const text = `${name} ${description}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
   if (!text.includes("credito") && !text.includes("creditos")) {
     return null;

@@ -21,8 +21,7 @@ export const connectyhubSeoKeywords = [
 export function getConnectyhubSiteUrl() {
   const explicit =
     process.env.NEXT_PUBLIC_CONNECTYHUB_SITE_URL?.trim()
-    || process.env.NEXT_PUBLIC_APP_URL?.trim()
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+    || process.env.NEXT_PUBLIC_APP_URL?.trim();
 
   if (!explicit) return defaultConnectyhubSiteUrl;
 
@@ -33,7 +32,9 @@ export function buildCanonicalUrl(path = "/") {
   const baseUrl = getConnectyhubSiteUrl();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
-  return new URL(normalizedPath, `${baseUrl}/`).toString().replace(/\/$/, normalizedPath === "/" ? "/" : "");
+  const url = new URL(normalizedPath, `${baseUrl}/`);
+  url.search = "";
+  return url.toString().replace(/\/$/, normalizedPath === "/" ? "/" : "");
 }
 
 export function toAbsoluteUrl(value: string | null | undefined) {

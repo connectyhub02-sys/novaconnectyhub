@@ -22,7 +22,8 @@ export type PlanFeatureCode =
   | "meta_ads_analytics"
   | "google_ads_analytics"
   | "ai_traffic_manager"
-  | "connectyhub_api";
+  | "connectyhub_api"
+  | "llm_api";
 
 export type BillingAccessStateLike =
   | "trial_active"
@@ -39,6 +40,7 @@ export type PlanEntitlementInput = {
   organizationStatus?: string | null;
   billingState?: BillingAccessStateLike | null;
   isPlatformAdmin?: boolean | null;
+  featureOverrides?: Partial<Record<PlanFeatureCode, boolean>>;
 };
 
 export type PlanFeatureDefinition = {
@@ -59,6 +61,11 @@ const paidPlanRank: Record<Exclude<CommercialPlanCode, "trial">, number> = {
 };
 
 export const planFeatureDefinitions: Record<PlanFeatureCode, PlanFeatureDefinition> = {
+  llm_api: {
+    code: "llm_api", name: "API de IA", minimumPlanCode: "starter", minimumPlanLabel: "Start",
+    allowedTitle: "API de IA disponível", allowedDescription: "Use seus créditos ConnectyHub em projetos externos, com chaves e limites por projeto.",
+    blockedTitle: "Ative seu acesso à API de IA", blockedDescription: "Disponível no teste válido e em todos os planos ativos, usando o saldo da conta.",
+  },
   whatsapp_core: {
     code: "whatsapp_core",
     name: "Atendimento WhatsApp",
@@ -182,7 +189,7 @@ export function resolvePlanFeatureEntitlement(
       return blockedEntitlement(feature, "billing_blocked");
     }
 
-    return isPlanAllowed(planCode, feature)
+    return (input.featureOverrides?.[featureCode] ?? isPlanAllowed(planCode, feature))
       ? allowedEntitlement(feature, "allowed")
       : blockedEntitlement(feature, "plan_required");
   }
@@ -191,7 +198,7 @@ export function resolvePlanFeatureEntitlement(
     return allowedEntitlement(feature, "trial_active");
   }
 
-  if (isPlanAllowed(planCode, feature) && !isBlockedPaidStatus(organizationStatus)) {
+  if ((input.featureOverrides?.[featureCode] ?? isPlanAllowed(planCode, feature)) && !isBlockedPaidStatus(organizationStatus)) {
     return allowedEntitlement(feature, "allowed");
   }
 

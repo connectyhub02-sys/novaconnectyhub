@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const entitlement = resolvePlanFeatureEntitlement("ai_traffic_manager", {
       isPlatformAdmin: workspace.profile.isPlatformAdmin,
       organizationStatus: company.status,
-      planCode: company.planCode,
+      planCode: company.planCode, featureOverrides: company.featureOverrides,
     });
 
     if (!entitlement.allowed) {

@@ -34,9 +34,12 @@ export async function loadPlatformCustomerContext(client: SupabaseClient, leadId
   const accounts = [];
   for (const org of organizations.data ?? []) {
     const access = await getContractAccess(org.id, client);
+    const wallet=await client.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id",org.id).maybeSingle();
+    if(wallet.error)throw new Error("Não foi possível conferir o saldo atual.");
     const payments = await client.from("billing_payments").select("id,status,amount_brl,provider_status,paid_at,created_at,payload").eq("organization_id", org.id).order("created_at", { ascending: false }).limit(3);
     if (payments.error) throw new Error("Não foi possível conferir o pagamento atual.");
     accounts.push({ company: org.name, plan: access.plan_code, active: access.allowed, reason: access.reason, due: access.period_end, blockedAt: access.blocked_at,
+      credits:{balance:Number(wallet.data?.balance_credits??0),reserved:Number(wallet.data?.reserved_credits??0),available:Math.max(0,Number(wallet.data?.balance_credits??0)-Number(wallet.data?.reserved_credits??0)),topupUrl:getAppBaseUrl()+"/dashboard/creditos",guidance:"Saldo de IA é compartilhado entre agentes e API de IA. Uma recarga adiciona créditos e não regulariza mensalidade vencida."},
       payments: payments.data?.map(({ payload, ...payment }) => ({ ...payment, checkout_kind: payload?.checkout_kind, campaign_pricing: payload?.campaign_pricing, plan_pricing: payload?.checkout_kind === "initial" ? payload?.plan_pricing : null, commercial_terms: payload?.commercial_terms })) });
   }
   return JSON.stringify({ commercialPrograms:programs.data.map(a=>({subscriptionId:a.platform_subscription_id,status:a.state,paidPeriods:a.paid_cycles,nextInvoice:a.state==="ended"||a.cancel_at_period_end?"Sem próxima cobrança deste programa.":campaignPriceNotice(quoteCampaign(a.id,1,parseCampaign(a.configuration),a.option_id,a.paid_cycles))})), offers: (offers.data ?? []).map(p => ({...p, checkout: getAppBaseUrl()+"/dashboard/meus-produtos/comprar/"+p.id})), planCheckout:getAppBaseUrl()+"/dashboard/planos", checkedAt: new Date().toISOString(), renewalSchedule:{attemptDaysBeforeDue:[3,2,1],blockAtDue:true,cardAuthorizationRequired:true}, journey:journey.data, accounts, purchases: purchases.data,

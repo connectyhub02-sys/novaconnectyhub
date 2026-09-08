@@ -17,6 +17,7 @@ import {
   BrainCircuit,
   Building2,
   Camera,
+  CalendarDays,
   ChevronDown,
   CheckCircle2,
   CircleDollarSign,
@@ -204,11 +205,14 @@ const adminSections: NavSection[] = [
       { label: "Automacoes",         href: "/admin/automacoes",        icon: Zap, tone: "violet" },
       { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
+      { label: "Contratos personalizados", href: "/admin/contratos", icon: Coins, tone: "amber" },
+      { label: "Reuniões de projetos", href: "/admin/reunioes", icon: CalendarDays, tone: "emerald" },
       { label: "Campanhas comerciais", href: "/admin/campanhas-comerciais", icon: Coins, tone: "emerald" },
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
       { label: "Integracoes",       href: "/admin/clientes/integracoes", icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",      href: "/admin/api-whatsapp",      icon: PlugZap, tone: "emerald" },
+      { label: "API de IA",         href: "/admin/api-ia",            icon: PlugZap, tone: "emerald" },
     ],
   },
   {
@@ -246,6 +250,8 @@ const clientSections: NavSection[] = [
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
+      { label: "API de IA",        href: "/dashboard/api-ia",           icon: PlugZap, tone: "emerald" },
+      { label: "Créditos e recargas", href: "/dashboard/creditos", icon: Coins, tone: "amber" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
       { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },
     ],
@@ -1330,9 +1336,9 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
   const label = status ? formatShellCredits(status.balanceCredits) : "--";
 
   return (
-    <div
+    <Link href="/docs/ia#creditos" aria-label={`Saldo ${label} créditos. Como meus créditos são usados?`}
       className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide sm:px-3"
-      title="Creditos disponiveis"
+      title="Como meus créditos são usados?"
       style={{
         background: status?.canUseBillableFeatures === false ? "rgba(251,113,133,0.14)" : "var(--ch-surface-2)",
         border: `1px solid ${status?.canUseBillableFeatures === false ? "rgba(251,113,133,0.42)" : "var(--ch-border)"}`,
@@ -1342,7 +1348,7 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
       <Coins className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Creditos</span>
       <span>{label}</span>
-    </div>
+    </Link>
   );
 }
 

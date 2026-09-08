@@ -24,6 +24,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { preparePlanPurchaseDiscount } from "@/lib/billing/plan-discounts-server";
 import { preparePlatformCampaign } from "@/lib/commerce/platform-campaigns";
 import { retirePlatformCheckout } from "@/lib/commerce/invoice-retirement";
+import { loadCustomContract } from "@/lib/billing/custom-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -104,6 +105,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Plano nao encontrado, inativo ou indisponivel." }, { status: 404 });
     }
 
+    const custom = await loadCustomContract(client, organization.id);
+    if (custom?.base_plan_code === plan.plan_code) {
+      Object.assign(plan, { name: custom.name, monthly_price_brl: custom.monthly_price_brl, included_credits: custom.included_credits, billing_cycle: "recurring", billing_interval: "month", annual_discount_percent: 0, first_purchase_discount_percent: 0, custom_contract_id: custom.id, custom_contract_version: custom.version, features: custom.features, resource_limits: custom.resource_limits });
+      if (campaignSelection) return NextResponse.json({ error: "Este contrato já tem condições individuais. Não é possível somar uma campanha pública." }, { status:422 });
+    }
     let amountBrl = snapshotPlanCommercialTerms(plan).price_brl;
     const payerEmail = workspace.profile.email ?? workspace.user.email ?? null;
 
@@ -414,12 +420,6 @@ function readDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  next.setMonth(next.getMonth() + months);
-  return next;
-}
-
 async function loadBlockingSubscription(client: ReturnType<typeof createServiceClient>, organizationId: string) {
   const { data, error } = await client
     .from("organization_subscriptions")
@@ -447,7 +447,7 @@ function isRenewableSubscription(status: string) {
 }
 
 async function loadPlatformBillingProvider(client: ReturnType<typeof createServiceClient>): Promise<BillingCheckoutProvider> {
-  const { data, error } = await client
+  const { error } = await client
     .from("platform_billing_settings")
     .select("recurring_provider")
     .eq("setting_key", "default")

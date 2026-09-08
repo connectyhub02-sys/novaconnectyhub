@@ -145,7 +145,7 @@ async function requireWritableTrafficCompany(input: {
   const entitlement = resolvePlanFeatureEntitlement("ai_traffic_manager", {
     isPlatformAdmin: input.isPlatformAdmin,
     organizationStatus: company.status,
-    planCode: company.planCode,
+    planCode: company.planCode, featureOverrides: company.featureOverrides,
   });
 
   if (!entitlement.allowed) {

@@ -50,6 +50,7 @@ type BillingRateRow = {
   connecty_price_per_unit: number | string | null;
   minimum_charge_credits: number | string | null;
   effective_from: string | null;
+  effective_to?: string | null;
 };
 
 type AgentRunUsageRow = {
@@ -374,7 +375,7 @@ export function estimateTokensFromText(value: string | null | undefined) {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-async function resolveActiveBillingRates(
+export async function resolveActiveBillingRates(
   client: SupabaseClient,
   input: {
     provider: BillingProvider;
@@ -410,7 +411,7 @@ async function resolveActiveBillingRates(
       .limit(500),
     client
       .from("billing_rates")
-      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from")
+      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to")
       .eq("cost_center_id", costCenter.id)
       .eq("active", true)
       .limit(500),
@@ -435,6 +436,8 @@ async function resolveActiveBillingRates(
   const featureById = new Map(features.map((item) => [item.id, item]));
   const modelById = new Map(models.map((item) => [item.id, item]));
   const rankedRates = ((ratesResult.data ?? []) as BillingRateRow[])
+    .filter((rate) => !rate.effective_from || new Date(rate.effective_from).getTime() <= Date.now())
+    .filter((rate) => !rate.effective_to || new Date(rate.effective_to).getTime() > Date.now())
     .map((rate) => ({ rate, score: scoreBillingRate(rate, { feature, model, featureById, modelById, ...input }) }))
     .filter((item) => item.score >= 0)
     .sort((a, b) => b.score - a.score || compareEffectiveFrom(b.rate.effective_from, a.rate.effective_from));

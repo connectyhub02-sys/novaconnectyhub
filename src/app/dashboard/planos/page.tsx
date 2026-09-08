@@ -9,6 +9,8 @@ import { loadPendingPlan } from "@/lib/billing/pending-plan";
 import { loadPublicPricingPlans } from "@/lib/billing/public-pricing-server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { loadCustomContract } from "@/lib/billing/custom-contracts";
+import { CustomContractOffer } from "@/components/connectyhub-os/custom-contract-offer";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,7 @@ export default async function DashboardPlanosPage() {
     loadPublicPricingPlans(client),
   ]);
   const currentPlanCode = getCurrentPurchasablePlanCode(organization?.planCode, organization?.status);
+  const custom = organization ? await loadCustomContract(client,organization.id) : null;
 
   return (
     <ConnectyShell
@@ -54,6 +57,7 @@ export default async function DashboardPlanosPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <section className="space-y-6">
+        {custom && <CustomContractOffer name={custom.name} price={Number(custom.monthly_price_brl)} credits={Number(custom.included_credits)} planCode={custom.base_plan_code}/>}
         {pendingPlan ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-slate-900">
           <div><h2 className="font-bold">{pendingPlan.renewal ? "Regularize seu plano" : "Conclua o pagamento do plano"}</h2>
             <p className="mt-1 text-sm">{pendingPlan.planName} · {pendingPlan.amountBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>

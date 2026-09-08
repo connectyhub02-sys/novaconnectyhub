@@ -47,7 +47,7 @@ export default async function OrganicTrafficPage() {
   const entitlement = resolvePlanFeatureEntitlement("meta_organic_insights", {
     isPlatformAdmin: workspace.profile.isPlatformAdmin,
     organizationStatus: workspace.organization.status,
-    planCode: workspace.organization.planCode,
+    planCode: workspace.organization.planCode, featureOverrides: workspace.organization.featureOverrides,
   });
 
   if (!entitlement.allowed) {

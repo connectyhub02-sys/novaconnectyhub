@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient }>();
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
+import { customSoftwareContext } from "./custom-software";
 import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-catalog/checkout-customer";
 import { paymentEvidenceIntent, selectPaymentEvidenceOrder } from "@/lib/sales-catalog/payment-evidence";
 import { deliverPaymentReviewNotification, getLeadPaymentReviews, loadOrderFinancialSummary, refreshLeadOrderFinance } from "@/lib/sales-catalog/payment-reviews";
@@ -706,6 +707,20 @@ async function processWhatsappAgentRunWithScope(input: {
       context,
       userText,
     });
+
+    if (readRecord(context.instance.metadata)?.platform_whatsapp === true && lead?.id) {
+      await assertRunStillTargetsLatestInbound(client,context,latestInbound);
+      const custom = await customSoftwareContext(client,{organizationId:organization.id,leadId:lead.id,conversationId:context.conversationId,text:userText}).catch(()=>({instruction:"A consulta de agenda está temporariamente indisponível. Registre a preferência do interessado para a equipe. Não confirme horário nem apresente preço para desenvolvimento personalizado.",reply:null}));
+      if(custom){
+        context.knowledge.unshift({id:"custom-software-live",title:"SOLUÇÕES PERSONALIZADAS — REUNIÃO",content:custom.instruction,metadata:{extracted_text:true},created_at:new Date().toISOString()});
+        if(custom.reply){
+          await assertRunStillTargetsLatestInbound(client,context,latestInbound);
+          const sent=await sendAgentResponse({client,context,token,phone,text:custom.reply});
+          for(const message of sent)if(!message.persisted)await saveOutboundMessage(client,context,message);
+          return await completeRun(client,run.id,custom.reply,{sent:true,reason:"custom_software_meeting",messages:sent.length,mode:"text"});
+        }
+      }
+    }
 
     const financialReply = await handleLeadFinancialEvidence({
       client,

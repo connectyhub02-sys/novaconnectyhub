@@ -397,6 +397,8 @@ export async function debitCredits(client: SupabaseClient, input: CreditDebitInp
       .catch(() => null);
   }
 
+  await import("./wallet-alerts").then(({processWalletAlerts})=>processWalletAlerts(client,walletOrganizationId)).catch(()=>null);
+
   return String(data);
 }
 

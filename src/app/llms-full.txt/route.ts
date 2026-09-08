@@ -22,6 +22,8 @@ export async function GET() {
     `- Sitemap: ${buildCanonicalUrl("/sitemap.xml")}`,
     `- Robots: ${buildCanonicalUrl("/robots.txt")}`,
     `- API docs: ${buildCanonicalUrl("/docs/api")}`,
+    `- Custom software development: ${buildCanonicalUrl("/solucoes-personalizadas")} — Platforms, applications and systems designed with the business. Schedule a meeting; no public project prices.`,
+    `- AI API: ${buildCanonicalUrl("/docs/ia")} — Project keys, shared credits, usage, limits and idempotency.`,
     `- OpenAPI JSON: ${buildCanonicalUrl("/docs/api/openapi.json")}`,
     "",
     "## Solutions",

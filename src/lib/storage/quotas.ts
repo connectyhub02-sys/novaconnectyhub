@@ -113,7 +113,9 @@ export async function getOrganizationStorageState(input: {
     });
   }
 
-  const { data: usageData, error: usageError } = await client
+  const scope=await client.from("organizations").select("id").or(`id.eq.${entitlementRow.organization_id},billing_organization_id.eq.${entitlementRow.organization_id}`);
+  if(scope.error)throw new Error("Não foi possível conferir o armazenamento da conta.");
+  const { data: usageRows, error: usageError } = await client
     .from("organization_storage_usage")
     .select(
       [
@@ -128,15 +130,15 @@ export async function getOrganizationStorageState(input: {
         "updated_at",
       ].join(", "),
     )
-    .eq("organization_id", input.organizationId)
-    .maybeSingle<StorageUsageRow>();
+    .in("organization_id",(scope.data??[]).map(o=>o.id))
+    .returns<StorageUsageRow[]>();
 
   if (usageError) {
     throw new Error(`Nao foi possivel carregar o uso de armazenamento: ${usageError.message}`);
   }
 
   const entitlement = mapEntitlement(entitlementRow);
-  const usage = mapUsage(usageData);
+  const usage = (usageRows??[]).map(mapUsage).reduce((total,item)=>({usedBytes:total.usedBytes+item.usedBytes,billableFileCount:total.billableFileCount+item.billableFileCount,productMediaBytes:total.productMediaBytes+item.productMediaBytes,knowledgeBytes:total.knowledgeBytes+item.knowledgeBytes,importSourceBytes:total.importSourceBytes+item.importSourceBytes,generatedMediaBytes:total.generatedMediaBytes+item.generatedMediaBytes,leadFileBytes:total.leadFileBytes+item.leadFileBytes,otherBytes:total.otherBytes+item.otherBytes,updatedAt:(total.updatedAt??"")>(item.updatedAt??"")?total.updatedAt:item.updatedAt}),mapUsage(null));
   const availableBytes = Math.max(0, entitlement.totalStorageLimitBytes - usage.usedBytes);
   const availableFileCount = Math.max(0, entitlement.totalStorageFileLimit - usage.billableFileCount);
   const usedPercent = entitlement.totalStorageLimitBytes > 0

@@ -1215,7 +1215,7 @@ export async function updateClientWhatsappPrompt(input: {
 
   if (hasChannelConfig) {
     const metaEntitlement = resolveMetaSocialChannelsEntitlement({
-      planCode: input.organization.planCode,
+      planCode: input.organization.planCode, featureOverrides: input.organization.featureOverrides,
       organizationStatus: input.organization.status,
     });
 
@@ -2528,7 +2528,7 @@ function buildState(
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
   const metaSocialChannels = resolveMetaSocialChannelsEntitlement({
-    planCode: organization.planCode,
+    planCode: organization.planCode, featureOverrides: organization.featureOverrides,
     organizationStatus: organization.status,
   });
 

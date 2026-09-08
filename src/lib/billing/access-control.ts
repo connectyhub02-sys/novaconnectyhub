@@ -14,7 +14,6 @@ import {
   type PlanFeatureEntitlement,
 } from "@/lib/billing/plan-entitlements";
 import {
-  assertBillableAccess,
   BillingAccessError,
   formatBillingAccessError,
   getOrganizationBillingAccess,
@@ -23,6 +22,7 @@ import {
 } from "@/lib/billing/trial";
 import { createServiceClient } from "@/lib/supabase/service";
 import { assertContractAccess, ContractAccessError } from "./contract-access";
+
 
 export class PlanFeatureAccessError extends Error {
   entitlement: PlanFeatureEntitlement;
@@ -69,6 +69,7 @@ export async function assertOrganizationFeatureAccess(input: {
     planCode: billingAccess.planCode,
     organizationStatus: billingAccess.organizationStatus,
     billingState: billingAccess.state,
+    featureOverrides: billingAccess.featureOverrides,
   });
 
   if (!entitlement.allowed) {

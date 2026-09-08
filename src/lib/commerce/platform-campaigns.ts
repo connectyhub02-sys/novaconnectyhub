@@ -220,6 +220,10 @@ export async function preparePlatformCampaign(
     throw new Error("Não foi possível conferir a oferta desta cobrança.");
   const p = payment.data,
     payload = (p.payload ?? {}) as Json;
+  if ((payload.commercial_terms as Json | undefined)?.custom_contract_id) {
+    if (selection) throw new Error("Este contrato possui condições individuais e não acumula campanhas públicas.");
+    return null;
+  }
   if (payload.campaign_pricing) {
     const accepted = payload.campaign_pricing as CampaignPricing;
     if (

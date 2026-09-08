@@ -1,5 +1,6 @@
 import "server-only";
 import { assertContractAccess } from "@/lib/billing/contract-access";
+import {loadAcceptedCustomTerms} from "@/lib/billing/custom-contracts";
 
 import type { User } from "@supabase/supabase-js";
 import { readAuthUserAvatarUrl } from "@/lib/account/profile-avatar-sync";
@@ -23,6 +24,7 @@ export type CurrentProfile = {
 };
 
 export type CurrentOrganization = {
+  featureOverrides?: Record<string,boolean>;
   id: string;
   name: string;
   slug: string | null;
@@ -94,6 +96,10 @@ export async function getCurrentWorkspace(options: { allowRestricted?: boolean }
   const profile = await getOrCreateProfile(user);
   const organization = await getPrimaryOrganization(user.id);
   if (organization && !profile.isPlatformAdmin && !options.allowRestricted) await assertContractAccess(organization.id);
+  if(organization&&!options.allowRestricted&&organization.planCode!=="internal"){
+    const terms=await loadAcceptedCustomTerms(createServiceClient(),organization.id);
+    if(terms)organization.featureOverrides=terms.features;
+  }
 
   return {
     user,

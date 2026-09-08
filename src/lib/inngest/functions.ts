@@ -45,6 +45,10 @@ import {
 } from "@/lib/whatsapp/proactive-followup";
 import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
 import { processPaidBillingLifecycleNotifications } from "@/lib/billing/paid-lifecycle-notifications";
+import { processWalletAlerts } from "@/lib/billing/wallet-alerts";
+import { reconcileAiRequests } from "@/lib/ai-api/reconciliation";
+import { processAutomaticTopups } from "@/lib/billing/automatic-topups";
+import {processCustomMeetingReminders} from "@/lib/whatsapp/custom-meeting-reminders";
 import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
 import { syncConnectyhubApiAccessGuards } from "@/lib/connectyhub-api/access-sync";
 import {
@@ -556,12 +560,17 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
 
       const { data: archived, error: archiveError } = await client.rpc("archive_platform_customer_journey", { p_limit: 500 });
       if (archiveError) throw new Error("A jornada financeira será retomada: " + archiveError.message);
-      return { trial, paidLifecycle, billing, archived };
-    });
+        return { trial, paidLifecycle, billing, archived };
+      });
+      const walletAlerts = await step.run("process-wallet-alerts", () => processWalletAlerts(createServiceClient()));
+      const ai = await step.run("reconcile-external-ai", () => reconcileAiRequests(createServiceClient()));
+      const topups = await step.run("process-authorized-topups", () => processAutomaticTopups(createServiceClient()));
+      const meetings = await step.run("send-meeting-reminders", () => processCustomMeetingReminders(createServiceClient()));
 
-    return {
-      status: "swept",
-      summary,
+      return {
+        status: "swept",
+        summary,
+        walletAlerts, ai, topups, meetings,
     };
   },
 );

@@ -21,6 +21,7 @@ export type BillingAccessState =
   | "inactive";
 
 export type BillingAccessStatus = {
+  featureOverrides?: Record<string, boolean>;
   organizationId: string;
   planCode: string | null;
   organizationStatus: string | null;
@@ -168,7 +169,16 @@ export async function enqueueTrialNoCreditsMessage(input: {
   return data ? String(data) : null;
 }
 
-export async function getOrganizationBillingAccess(input: {
+export async function getOrganizationBillingAccess(input: {organizationId:string;now?:Date;client?:SupabaseClient}):Promise<BillingAccessStatus>{
+ const base=await getOrganizationBillingAccessBase(input);
+ if(["paid_active","paid_no_credits"].includes(base.state)&&base.planCode!=="internal"){
+  const {loadAcceptedCustomTerms}=await import("./custom-contracts");
+  const terms=await loadAcceptedCustomTerms(input.client??createServiceClient(),input.organizationId);
+  if(terms)return {...base,featureOverrides:terms.features,includedCredits:Number(terms.included_credits)};
+ }
+ return base;
+}
+async function getOrganizationBillingAccessBase(input: {
   organizationId: string;
   now?: Date;
   client?: SupabaseClient;
@@ -469,10 +479,11 @@ export async function getOrganizationPlanLimits(input: {
   client?: SupabaseClient;
 }): Promise<OrganizationPlanLimits> {
   const client = input.client ?? createServiceClient();
+  const access = await getContractAccess(input.organizationId,client);
   const { data: organization, error: organizationError } = await client
     .from("organizations")
     .select("plan_code")
-    .eq("id", input.organizationId)
+    .eq("id", access.billing_organization_id)
     .maybeSingle<{ plan_code: string | null }>();
 
   if (organizationError) {
@@ -499,7 +510,7 @@ export async function getOrganizationPlanLimits(input: {
     client
       .from("organization_billing_limits")
       .select("metadata")
-      .eq("organization_id", input.organizationId)
+      .eq("organization_id", access.billing_organization_id)
       .maybeSingle<BillingLimitsOverrideRow>(),
   ]);
 
@@ -512,14 +523,16 @@ export async function getOrganizationPlanLimits(input: {
   }
 
   const overrides = readResourceLimitOverrides(billingLimits?.metadata);
+  const { loadAcceptedCustomTerms } = await import("./custom-contracts");
+  const custom = await loadAcceptedCustomTerms(client, input.organizationId);
   const planAgentLimit = positiveLimit(plan?.agent_limit, fallbackAgentLimit(planCode));
   const planWhatsappLimit = positiveLimit(plan?.whatsapp_instance_limit, fallbackWhatsappLimit(planCode));
 
   return {
     planCode,
-    agentLimit: resolveManualLimit(overrides.agentLimit, planAgentLimit),
-    whatsappInstanceLimit: resolveManualLimit(overrides.whatsappInstanceLimit, planWhatsappLimit),
-    includedCredits: toNumber(plan?.included_credits),
+    agentLimit: custom?.resource_limits?.agent_limit ?? resolveManualLimit(overrides.agentLimit, planAgentLimit),
+    whatsappInstanceLimit: custom?.resource_limits?.whatsapp_instance_limit ?? resolveManualLimit(overrides.whatsappInstanceLimit, planWhatsappLimit),
+    includedCredits: custom?.included_credits ?? toNumber(plan?.included_credits),
   };
 }
 
