@@ -130,6 +130,9 @@ type MetaReviewSnapshot = {
 const asaasInstallmentOptions = Array.from({ length: 21 }, (_, index) => index + 1);
 const asaasProductionApiKeyUrl = "https://www.asaas.com/customerApiAccessToken/index";
 const asaasSandboxApiKeyUrl = "https://sandbox.asaas.com/customerApiAccessToken/index";
+const asaasTokenizationRequestUrl = `https://api.whatsapp.com/send?phone=5508000090037&text=${encodeURIComponent(
+  "Olá! Utilizo a ConnectyHub para vender pelo meu checkout e preciso habilitar a tokenização de cartão de crédito na minha conta Asaas em produção, para cobranças recorrentes e renovações autorizadas pelos clientes. Poderiam encaminhar a solicitação ao meu gerente de contas e informar os requisitos e o prazo para liberação?",
+)}`;
 
 type MetaWebhookSimulationScenario =
   | "facebook_comment"
@@ -2144,7 +2147,7 @@ function AsaasGuidedCard({
             <p className="text-[13px] font-semibold text-slate-100">Conectar Asaas</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
           </div>
-          <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
+          <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "conectado" : "pendente"}</NeonBadge>
         </div>
 
         {lastError ? (
@@ -2294,6 +2297,38 @@ function AsaasGuidedCard({
             onChange={(event) => onPreferenceChange({ recurringEnabled: event.target.checked })}
           />
         </label>
+
+        <aside aria-label="Liberação de cobranças recorrentes no Asaas" className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>Liberação para recorrência no cartão</p>
+              <p className="mt-1 text-[12px] leading-5" style={{ color: "var(--ch-muted)" }}>
+                Para vender assinaturas e renovar cobranças automaticamente pelo Asaas em produção, sua conta precisa ter a tokenização de cartão habilitada. Se ainda não estiver liberada, solicite ao seu gerente de contas.
+              </p>
+              <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--ch-muted)" }}>
+                Conectar a API Key ou ativar o pagamento recorrente aqui não libera esse recurso no Asaas. A habilitação depende da análise de cada conta.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <a
+                  href={asaasTokenizationRequestUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-3 py-2 text-center text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200"
+                >
+                  <ExternalLink aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  Solicitar liberação no Asaas
+                </a>
+                <a href="https://docs.asaas.com/reference/tokenizacao-de-cartao-de-credito" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-[11px] underline underline-offset-4" style={{ color: "var(--ch-muted)" }}>
+                  Ver orientação oficial
+                </a>
+              </div>
+              <p className="mt-2 text-[11px] leading-5" style={{ color: "var(--ch-muted)" }}>
+                O botão abre o WhatsApp do Asaas com uma mensagem pronta. Revise e envie para solicitar a análise.
+              </p>
+            </div>
+          </div>
+        </aside>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <label className="block">
