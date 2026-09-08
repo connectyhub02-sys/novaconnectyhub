@@ -1742,6 +1742,7 @@ async function enqueuePlatformBillingNotification(
       provider_status: input.providerStatus,
       provider_reference: input.providerReference,
       plan_code: input.planCode,
+      plan_name: input.planName,
       amount_brl: input.amountBrl,
       included_credits: input.includedCredits,
     },
@@ -2124,6 +2125,11 @@ async function sendBillingNotificationNow(
       message: input.message,
       button,
       pixCode: readString(currentEvent?.metadata?.pix_copy_code),
+      paymentSummary: {
+        amount: Number(currentEvent?.metadata?.amount_brl),
+        itemName: readString(currentEvent?.metadata?.plan_name) ?? readString(currentEvent?.metadata?.plan_code) ?? "Compra ConnectyHub",
+        invoiceNumber: (currentEvent?.invoice_id ?? currentEvent?.subscription_id ?? input.eventId).slice(0, 8).toUpperCase(),
+      },
       trackId: `billing_notice_${input.eventId}`,
     });
 
@@ -2177,7 +2183,7 @@ type BillingCheckoutActionButton = {
 
 type BillingWhatsappNoticeResult = {
   providerResponse: Awaited<ReturnType<typeof callUazapi>>;
-  deliveryMode: "button" | "text" | "text_fallback";
+  deliveryMode: "payment_request" | "button" | "text" | "text_fallback";
   message: string;
   button: BillingCheckoutActionButton | null;
   fallbackError: string | null;
@@ -2186,11 +2192,12 @@ type BillingWhatsappNoticeResult = {
 async function loadBillingNotificationDeliveryContext(client: SupabaseClient, eventId: string) {
   const { data, error } = await client
     .from("billing_notification_events")
-    .select("event_type, subscription_id, metadata")
+    .select("event_type, subscription_id, invoice_id, metadata")
     .eq("id", eventId)
     .maybeSingle<{
       event_type: string | null;
       subscription_id: string | null;
+      invoice_id: string | null;
       metadata: JsonRecord | null;
     }>();
 
@@ -2208,10 +2215,44 @@ async function sendBillingWhatsappNotice(input: {
   message: string;
   button: BillingCheckoutActionButton | null;
   pixCode?: string | null;
+  paymentSummary?: { amount: number; itemName: string; invoiceNumber: string };
   trackId: string;
 }): Promise<BillingWhatsappNoticeResult> {
+  let paymentRequestError: string | null = null;
+  if (input.button && input.pixCode && input.paymentSummary && Number.isFinite(input.paymentSummary.amount) && input.paymentSummary.amount > 0) {
+    // The total is the invoice amount after discounts/add-ons, never the plan's list price.
+    const message = `${input.message}\n\nCopie o Pix pelo botão ou abra os dados da cobrança para acessar o checkout ConnectyHub.`;
+    try {
+      const providerResponse = await callUazapi(input.credentials, "/send/request-payment", {
+        method: "POST",
+        token: input.token,
+        body: {
+          number: input.phone,
+          title: "Pagamento ConnectyHub",
+          text: message,
+          footer: "ConnectyHub",
+          itemName: input.paymentSummary.itemName,
+          invoiceNumber: input.paymentSummary.invoiceNumber,
+          amount: Number(input.paymentSummary.amount.toFixed(2)),
+          pixCode: input.pixCode,
+          paymentLink: input.button.url,
+          readchat: true,
+          readmessages: true,
+          track_source: "connectyhub",
+          track_id: input.trackId,
+        },
+      });
+      return { providerResponse, deliveryMode: "payment_request", message, button: input.button, fallbackError: null };
+    } catch (error) {
+      if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
+      paymentRequestError = error.message;
+    }
+  }
+
   if (input.button) {
-    const buttonMessage = buildCheckoutButtonMessage(input.message, input.button.url);
+    const buttonMessage = input.pixCode
+      ? `${input.message}${input.message.includes(input.button.url) ? "" : `\n\nFinalizar no checkout: ${input.button.url}`}\n\nCopie o Pix pelo botão abaixo para pagar no seu banco.`
+      : buildCheckoutButtonMessage(input.message, input.button.url);
 
     try {
       const providerResponse = await callUazapi(input.credentials, "/send/menu", {
@@ -2226,7 +2267,7 @@ async function sendBillingWhatsappNotice(input: {
           readchat: true,
           readmessages: true,
           track_source: "connectyhub",
-          track_id: input.trackId,
+          track_id: paymentRequestError ? `${input.trackId}_copy` : input.trackId,
         },
       });
 
@@ -2235,17 +2276,18 @@ async function sendBillingWhatsappNotice(input: {
         deliveryMode: "button",
         message: buttonMessage,
         button: input.button,
-        fallbackError: null,
+        fallbackError: paymentRequestError,
       };
     } catch (error) {
       if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
-      const fallbackError = error instanceof Error ? error.message : "Falha ao enviar botao WhatsApp.";
+      const fallbackError = [paymentRequestError, error.message].filter(Boolean).join("; ");
+      const fallbackMessage = input.pixCode ? `${input.message}${input.message.includes(input.button.url) ? "" : `\n\nFinalizar no checkout: ${input.button.url}`}\n\nPix copia e cola:\n${input.pixCode}` : input.message;
       const providerResponse = await callUazapi(input.credentials, "/send/text", {
         method: "POST",
         token: input.token,
         body: {
           number: input.phone,
-          text: input.pixCode ? `${input.message}\n\nPix copia e cola:\n${input.pixCode}` : input.message,
+          text: fallbackMessage,
           linkPreview: false,
           track_source: "connectyhub",
           track_id: `${input.trackId}_fallback`,
@@ -2255,7 +2297,7 @@ async function sendBillingWhatsappNotice(input: {
       return {
         providerResponse,
         deliveryMode: "text_fallback",
-        message: input.message,
+        message: fallbackMessage,
         button: input.button,
         fallbackError,
       };
@@ -2455,7 +2497,7 @@ async function callUazapi(
   const data = await readResponse(response);
 
   if (!response.ok) {
-    throw new BillingNoticeProviderError(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`, response.status >= 400 && response.status < 500);
+    throw new BillingNoticeProviderError(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`, response.status >= 400 && response.status < 500 && response.status !== 408);
   }
 
   return { ok: response.ok, status: response.status, data };

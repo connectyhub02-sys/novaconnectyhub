@@ -32,6 +32,7 @@ const exposed = [
   "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction",
   "persistCloneRealTestTurn", "extractCloneMemory", "detectSalesCatalogPreferredPaymentMethod",
   "needsSalesCatalogCheckoutTotalConfirmation", "resolveInitialSalesCatalogOrderShipping", "buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt",
+  "sendSalesCatalogPixDirectWhatsapp",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}};`, {
