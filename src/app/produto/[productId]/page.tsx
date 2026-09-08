@@ -21,7 +21,6 @@ import {
   Search,
   ShieldCheck,
   ShoppingCart,
-  Star,
   Store,
   Truck,
 } from "lucide-react";
@@ -263,7 +262,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     && price !== null
     && !(item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder);
   const priceLabel = price !== null ? formatCurrency(price) : "Sob consulta";
-  const installments = price !== null ? formatCurrency(price / 6) : null;
+
   const galleryMedia = item.media.filter((media) => media.kind === "image" || media.kind === "video");
   const documents = item.media.filter((media) => media.kind === "document");
   const publicTrackingContext = buildProductPublicTrackingContext({
@@ -345,9 +344,6 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const importantNotice = item.pageContent.importantNotice
     ?? "Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.";
   const highlights = buildProductHighlights(item, descriptionPreview);
-  const sku = item.skus.find((entry) => entry.status === "active")?.skuCode
-    ?? item.platformProductCode
-    ?? item.tag;
   const brand = findAttributeValue(item, "marca") ?? inferBrandFromTitle(item.title);
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
   const quickDetails = buildProductQuickDetails(item, brand, application);
@@ -404,25 +400,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               {item.title}
             </h1>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-              <div className="flex items-center gap-1 text-[#ffc633]" aria-label="Produto em destaque da loja">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Star key={index} className="h-4 w-4 fill-current" />
-                ))}
-              </div>
-              <span className="font-semibold text-[color:var(--store-text-muted)]">4.8/5</span>
-              <span className="hidden h-4 w-px bg-slate-200 sm:block" />
-              <span className="font-mono text-xs font-semibold text-[color:var(--store-text-muted)]">SKU: {sku}</span>
-            </div>
-
             <p className="mt-4 text-[32px] font-semibold leading-none text-[color:var(--store-text)]">{priceLabel}</p>
-            {installments ? (
-              <p className="mt-2 text-sm font-medium text-[color:var(--store-text-muted)]">
-                ou 6x de <span className="font-semibold text-[color:var(--store-text)]">{installments}</span> sem juros
-              </p>
-            ) : null}
-
-            <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
+           <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
               {descriptionPreview}
             </p>
 
@@ -447,9 +426,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
         <section className="mt-8 grid grid-cols-2 gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
           <Benefit icon={<LockKeyhole className="h-6 w-6" />} title="Checkout seguro" subtitle="Ambiente criptografado" />
-          <Benefit icon={<Truck className="h-6 w-6" />} title="Envio discreto" subtitle="Pedido acompanhado" />
-          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Produto original" subtitle="Catálogo da loja" />
-          <Benefit icon={<PackageCheck className="h-6 w-6" />} title="Pedido rastreado" subtitle="Acompanhe em tempo real" />
+          <Benefit icon={<Truck className="h-6 w-6" />} title="Entrega ou retirada" subtitle="Confira as condições" />
+          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Compra na loja" subtitle="Atendimento pelo WhatsApp" />
+          <Benefit icon={<PackageCheck className="h-6 w-6" />} title="Pedido acompanhado" subtitle="Atualizações pelo WhatsApp" />
         </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
@@ -819,15 +798,12 @@ function ProductTopBar({
             <Link className="font-medium hover:opacity-70" href={`${storeUrl}#categorias`}>Categorias</Link>
           </nav>
 
-          <label className="relative hidden min-h-12 flex-1 lg:block">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/40" />
-            <input
-              readOnly
-              className="h-12 w-full rounded-full border-0 bg-[#f0f0f0] px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
-              value=""
-              placeholder="Buscar produtos..."
-            />
-          </label>
+          <form action={new URL(productsUrl, "https://connectyhub.com.br").pathname} method="get" role="search" className="relative hidden min-h-12 flex-1 lg:block" data-track-event="sales_catalog_product_search_submitted">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/50" />
+            {Array.from(new URL(productsUrl, "https://connectyhub.com.br").searchParams.entries()).filter(([key]) => key !== "q").map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)}
+            <input name="q" type="search" aria-label="Buscar produtos na loja" className="h-12 w-full rounded-full border border-slate-200 bg-slate-50 pl-12 pr-20 text-sm text-slate-950 outline-none focus:border-blue-500" placeholder="Buscar produtos…" />
+            <button type="submit" className="absolute right-2 top-1 min-h-10 rounded-full bg-white px-3 text-xs font-semibold text-slate-700">Buscar</button>
+          </form>
 
           <div className="flex shrink-0 items-center justify-end gap-3">
             <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5" aria-label="Carrinho">
@@ -984,16 +960,6 @@ function RelatedProductCard({
         <strong className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--store-card-text)] xl:text-lg">
           {item.title}
         </strong>
-        <span className="mt-1 flex items-end">
-          <span className="flex items-center gap-0.5 text-[#ffc633]">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Star className="h-4 w-4 fill-current" key={index} />
-            ))}
-          </span>
-          <span className="ml-[11px] pb-0.5 text-xs text-black xl:ml-[13px] xl:text-sm">
-            4.8<span className="text-black/60">/5</span>
-          </span>
-        </span>
         <span className="mt-1 text-xl font-semibold text-[color:var(--store-card-text)] xl:text-2xl">{formatProductPrice(item)}</span>
       </Link>
     );
@@ -1096,9 +1062,7 @@ function PublicStoreFooter({
               Checkout seguro pela ConnectyHub. {footerContactText}
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              {productPaymentBadges.map((item) => (
-                <ProductPaymentBadge key={item.label} label={item.label} tone={item.tone} />
-              ))}
+              <span className="text-xs text-slate-600">Formas de pagamento disponíveis no checkout.</span>
             </div>
           </div>
         </div>
@@ -1121,33 +1085,6 @@ function FooterStoreLogo({ branding }: { branding: OrganizationBranding }) {
       ) : (
         <Store className="h-5 w-5 text-[color:var(--store-accent)]" />
       )}
-    </span>
-  );
-}
-
-type ProductPaymentBadgeTone = "visa" | "mastercard" | "pix" | "paypal" | "gpay";
-
-const productPaymentBadges: Array<{ label: string; tone: ProductPaymentBadgeTone }> = [
-  { label: "Visa", tone: "visa" },
-  { label: "Mastercard", tone: "mastercard" },
-  { label: "Pix", tone: "pix" },
-  { label: "PayPal", tone: "paypal" },
-  { label: "G Pay", tone: "gpay" },
-];
-
-function ProductPaymentBadge({ label, tone }: { label: string; tone: ProductPaymentBadgeTone }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
-        tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
-        tone === "mastercard" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
-        tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-        tone === "paypal" && "border-[#003087]/20 bg-[#003087] text-white",
-        tone === "gpay" && "border-black/10 bg-white text-black",
-      )}
-    >
-      {label}
     </span>
   );
 }

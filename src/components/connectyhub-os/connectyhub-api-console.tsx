@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import Image from "next/image";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -696,7 +697,7 @@ export function ConnectyHubApiConsole({
             </NeonBadge>
             {notice.secret && (
               <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">chave exibida uma unica vez</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">chave exibida uma unica vez</p>
                 <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{notice.secret}</code>
               </div>
             )}
@@ -704,7 +705,7 @@ export function ConnectyHubApiConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-2 xl:grid-cols-4 2xl:grid-cols-7 2xl:gap-4">
+      <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 xl:grid-cols-4 2xl:grid-cols-7 2xl:gap-4">
         <MetricTile icon={PlugZap} label="Empresas com acesso" value={String(state.summary.clients)} detail={`${state.summary.activeClients} ativas`} tone="cyan" />
         <MetricTile icon={KeyRound} label="Usando API" value={String(clientsUsingApi.length)} detail={`${state.summary.activeKeys} chaves ativas`} tone="green" />
         <MetricTile icon={MessageCircle} label="Instancias API" value={String(state.summary.apiInstances)} detail={`${state.summary.connectedApiInstances} conectadas`} tone="green" />
@@ -726,7 +727,7 @@ export function ConnectyHubApiConsole({
               <button
                 key={tab.id}
                 type="button"
-                className={`flex h-10 items-center gap-2 rounded-xl px-4 font-mono text-[10px] uppercase tracking-widest transition ${
+                className={`flex h-10 items-center gap-2 rounded-xl px-4 font-mono text-[11px] uppercase tracking-widest transition ${
                   selected
                     ? "bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-400/40"
                     : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
@@ -736,7 +737,7 @@ export function ConnectyHubApiConsole({
                 <Icon className="h-3.5 w-3.5" />
                 <span>{tab.label}</span>
                 {tab.id === "webhooks" && state.summary.webhookFailures24h > 0 && (
-                  <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[9px] text-amber-200">
+                  <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] text-amber-200">
                     {state.summary.webhookFailures24h}
                   </span>
                 )}
@@ -1414,7 +1415,7 @@ function AccordionGroupCard({
             <span className="block truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
               {title}
             </span>
-            <span className="mt-1 block truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+            <span className="mt-1 block truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
               {subtitle}
             </span>
           </span>
@@ -1429,12 +1430,12 @@ function AccordionGroupCard({
 function WebhookEventPicker() {
   return (
     <div className="space-y-3">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Eventos</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Eventos</p>
       {webhookEventGroups.map((group) => (
         <div key={group.title} className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.title}</span>
-            <span className="font-mono text-[9px] text-slate-600">{group.events.length}</span>
+            <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{group.title}</span>
+            <span className="font-mono text-[11px] text-slate-600">{group.events.length}</span>
           </div>
           <div className="grid grid-cols-1 gap-2">
             {group.events.map((event) => (
@@ -1448,7 +1449,7 @@ function WebhookEventPicker() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate" style={{ color: "var(--ch-text)" }}>{event.label}</span>
-                  <span className="block truncate font-mono text-[8px] uppercase tracking-wider text-slate-600">{event.value}</span>
+                  <span className="block truncate font-mono text-[11px] uppercase tracking-wider text-slate-600">{event.value}</span>
                 </span>
               </label>
             ))}
@@ -1466,7 +1467,7 @@ function ApiTrafficPanel({ state }: { state: AdminGatewayState }) {
 
   return (
     <Panel className="mb-5" title="Telemetria da API" eyebrow="trafego / consumo / qualidade">
-      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 xl:gap-4">
         <MetricTile
           icon={Activity}
           label="Sucesso 24h"
@@ -1507,7 +1508,7 @@ function ApiTrafficPanel({ state }: { state: AdminGatewayState }) {
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Endpoints mais usados</p>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Endpoints mais usados</p>
             <NeonBadge tone="cyan">{traffic.topEndpoints.length} rotas</NeonBadge>
           </div>
           {hasEndpointRows ? (
@@ -1528,7 +1529,7 @@ function ApiTrafficPanel({ state }: { state: AdminGatewayState }) {
 
         <div className="rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Clientes com trafego</p>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Clientes com trafego</p>
             <NeonBadge tone="green">{traffic.topClients.length} clientes</NeonBadge>
           </div>
           {hasClientRows ? (
@@ -1567,7 +1568,7 @@ function MetricTile({
   return (
     <div className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 sm:flex">
           <Icon className="h-4 w-4 text-cyan-300" />
         </div>
@@ -1594,8 +1595,8 @@ function InstanceIdentityCell({
       <WhatsappAvatar fallback={title} imageUrl={imageUrl ?? null} />
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-        <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{subtitle}</p>
-        {imageStatus && <p className="mt-0.5 truncate font-mono text-[8px] uppercase tracking-wider text-cyan-500/80">{imageStatus}</p>}
+        <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{subtitle}</p>
+        {imageStatus && <p className="mt-0.5 truncate font-mono text-[11px] uppercase tracking-wider text-cyan-500/80">{imageStatus}</p>}
       </div>
     </div>
   );
@@ -1621,7 +1622,7 @@ function TextCell({ value, muted }: { value: string; muted?: string | null }) {
   return (
     <div className="min-w-[130px]">
       <p className="truncate text-[12px]" style={{ color: "var(--ch-text)" }}>{value}</p>
-      {muted && <p className="mt-1 max-w-[220px] truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{muted}</p>}
+      {muted && <p className="mt-1 max-w-[220px] truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{muted}</p>}
     </div>
   );
 }
@@ -1629,7 +1630,7 @@ function TextCell({ value, muted }: { value: string; muted?: string | null }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</span>
+      <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -1653,7 +1654,7 @@ function ActionButton({ children, loading }: { children: string; loading: boolea
     <button
       type="submit"
       disabled={loading}
-      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[10px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-55"
+      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[11px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-55"
     >
       {loading ? "Executando..." : children}
     </button>
@@ -1672,7 +1673,7 @@ function MigrationAssistModal({
   onCopyCredential: (kind: MigrationCredentialKind) => void;
 }) {
   return (
-    <div
+    <DialogFrame onClose={loading ? () => undefined : onClose}
       aria-labelledby="admin-api-passkey-migration-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
@@ -1701,7 +1702,7 @@ function MigrationAssistModal({
         <h3 id="admin-api-passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold text-white">
           Migracao assistida
         </h3>
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-cyan-300">
+        <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-cyan-300">
           {getAdminInstanceDisplayTitle(instance)}
         </p>
         <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -1746,7 +1747,7 @@ function MigrationAssistModal({
           O token nao fica visivel no painel. Ele e copiado diretamente para uso na extensao indicada.
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1807,7 +1808,7 @@ function InlineActionButton({
       disabled={disabled || loading}
       onClick={onClick}
       title={label}
-      className={`inline-flex h-8 min-w-20 items-center justify-center gap-1.5 rounded-xl border px-2 font-mono text-[9px] uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
+      className={`inline-flex h-8 min-w-20 items-center justify-center gap-1.5 rounded-xl border px-2 font-mono text-[11px] uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
     >
       <Icon className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
       <span>{loading ? "..." : label}</span>

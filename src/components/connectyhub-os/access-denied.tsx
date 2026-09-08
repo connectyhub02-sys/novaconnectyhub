@@ -8,7 +8,7 @@ export function AccessDenied() {
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-md border border-amber-200 bg-amber-50 text-amber-700">
           <LockKeyhole size={22} />
         </span>
-        <p className="mt-5 font-mono text-[10px] uppercase text-amber-700">Acesso restrito</p>
+        <p className="mt-5 font-mono text-[11px] uppercase text-amber-700">Acesso restrito</p>
         <h1 className="mt-2 text-2xl font-semibold text-foreground">Este setor pertence aos administradores da ConnectyHub.</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           Sua conta está ativa como cliente. Você pode continuar no painel da sua empresa, mas não acessar a diretoria/admin.

@@ -384,7 +384,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
             className="rounded-xl p-3"
             style={{ background: "rgba(1,0,76,0.04)", border: "1px solid rgba(1,0,76,0.12)" }}
           >
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">proximo clique</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">proximo clique</p>
             <p className="mt-2 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
               Sequencia segura
             </p>
@@ -454,7 +454,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                       <p className="mt-1 max-w-2xl text-[11px] leading-4 text-slate-500">
                         {feature.description ?? "Ferramenta de audio liberada conforme plano do cliente."}
                       </p>
-                      <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                      <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
                         {feature.featureCode} / {formatUnit(feature.unit)}
                       </p>
                     </div>
@@ -477,7 +477,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                   </div>
 
                   <div className="mt-3">
-                    <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                    <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
                       Liberar nos planos
                     </p>
                     <div className="grid gap-2 sm:grid-cols-4">
@@ -541,7 +541,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
           <button
             type="button"
             onClick={() => setShowAdvancedRates((current) => !current)}
-            className="flex h-8 items-center gap-2 rounded-xl px-3 font-mono text-[10px] uppercase tracking-wide transition hover:opacity-80"
+            className="flex h-8 items-center gap-2 rounded-xl px-3 font-mono text-[11px] uppercase tracking-wide transition hover:opacity-80"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
           >
             {showAdvancedRates ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -602,7 +602,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                         {rate.modelName ? ` / ${rate.modelName}` : ""} / {formatUnit(rate.unit)}
                       </p>
                     </div>
-                    <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    <label className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
                       <input
                         type="checkbox"
                         checked={draft?.active ?? true}
@@ -839,7 +839,7 @@ function MoneyInput({
 function FieldLabel({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
+      <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -848,7 +848,7 @@ function FieldLabel({ label, children }: { label: string; children: ReactNode })
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[14px] font-bold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );

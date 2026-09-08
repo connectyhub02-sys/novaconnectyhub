@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
@@ -2067,7 +2068,7 @@ export function WhatsAppConsole({
                   </div>
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Presenca WhatsApp</h3>
+                      <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Presenca WhatsApp</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Define como o agente aparece online antes, durante e depois do atendimento.</p>
                     </div>
                     <ModeSelector<WhatsappPresenceMode>
@@ -2102,7 +2103,7 @@ export function WhatsAppConsole({
                 <div className="grid gap-3 xl:grid-cols-2">
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Modo de conversa</h3>
+                      <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Modo de conversa</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Define se o agente responde por texto, audio ou segue o formato usado pelo lead.</p>
                     </div>
                     <ModeSelector<WhatsappResponseMode>
@@ -2118,7 +2119,7 @@ export function WhatsAppConsole({
 
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Rapport adaptativo</h3>
+                      <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Rapport adaptativo</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quanto o agente adapta linguagem, formalidade e tom ao perfil do lead.</p>
                     </div>
                     <ModeSelector<WhatsappRapportMode>
@@ -2147,7 +2148,7 @@ export function WhatsAppConsole({
                 <div className="grid gap-3">
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Citar mensagens</h3>
+                      <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Citar mensagens</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quando a resposta deve sair citando uma mensagem especifica do lead.</p>
                     </div>
                     <ModeSelector<WhatsappQuoteReplyMode>
@@ -2581,7 +2582,7 @@ function MetaChannelsComingSoonModal({
   onClose: () => void;
 }) {
   return (
-    <div
+    <DialogFrame onClose={onClose}
       aria-labelledby="meta-coming-soon-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
@@ -2611,7 +2612,7 @@ function MetaChannelsComingSoonModal({
           <MessageCircle className="h-6 w-6" />
         </div>
 
-        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700">
+        <p className="mt-4 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">
           Em breve
         </p>
         <h3 id="meta-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
@@ -2632,7 +2633,7 @@ function MetaChannelsComingSoonModal({
           Entendi
         </button>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -2679,7 +2680,7 @@ function CompanyRequiredState({ variant }: { variant: WhatsappConsoleVariant }) 
             {variant.missingEntityDescription}
           </p>
           <Link
-            className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110"
+            className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:brightness-110"
             href={variant.missingEntityHref}
             style={{ background: "linear-gradient(135deg, var(--ch-whatsapp-deep), var(--ch-whatsapp))" }}
           >
@@ -2840,12 +2841,12 @@ function WhatsappConsoleTabs({
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-white" : "text-slate-800")}>{tab.label}</span>
                   {comingSoon ? (
-                    <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase leading-none text-amber-700">
+                    <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase leading-none text-amber-700">
                       Em breve
                     </span>
                   ) : null}
                 </span>
-                <span className={cn("mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest sm:block", active ? "text-white/75" : "text-slate-500")}>{tab.description}</span>
+                <span className={cn("mt-0.5 hidden truncate font-mono text-[11px] uppercase tracking-widest sm:block", active ? "text-white/75" : "text-slate-500")}>{tab.description}</span>
               </span>
             </button>
           );
@@ -2911,7 +2912,7 @@ function SummaryPill({
         borderColor: toneStyle.borderColor,
       }}
     >
-      <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
       <p
         className="mt-1 truncate text-[12px] font-semibold leading-4"
         style={{ color: toneStyle.color }}
@@ -3084,7 +3085,7 @@ function ClientAgentsManager({
                       <p className="mt-1 truncate text-[11px] text-slate-400">
                         {agent.companyName} / {agent.sectorName}
                       </p>
-                      <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
+                      <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-slate-500">
                         <UserRound className="h-3 w-3 shrink-0" />
                         {summarizeResponsibleHumans(agent.responsibleHumans, agent.responsibleHuman)}
                       </p>
@@ -3171,7 +3172,7 @@ function ClientAgentsManager({
         <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
               <select
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 value={selectedCompanyId}
@@ -3185,7 +3186,7 @@ function ClientAgentsManager({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
               <select
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 value={agentTemplateId}
@@ -3199,7 +3200,7 @@ function ClientAgentsManager({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Gustavo Vendas"
@@ -3208,7 +3209,7 @@ function ClientAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Vendas, Suporte, Financeiro"
@@ -3235,7 +3236,7 @@ function ClientAgentsManager({
         <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Clonar configuracao</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Clonar configuracao</p>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{cloneSource.name}</p>
               <p className="mt-1 text-[11px] text-slate-400">O clone copia prompt e controles, mas nasce sem instancia WhatsApp.</p>
             </div>
@@ -3243,7 +3244,7 @@ function ClientAgentsManager({
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa destino</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa destino</span>
               <select
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 value={cloneCompanyId}
@@ -3257,7 +3258,7 @@ function ClientAgentsManager({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do clone</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do clone</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 value={cloneName}
@@ -3265,7 +3266,7 @@ function ClientAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor destino</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor destino</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 value={cloneSectorName}
@@ -3341,14 +3342,14 @@ function ClientAgentInlineEditor({
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Editar agente</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Editar agente</p>
           <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
         </div>
         <SecondaryAction icon={X} label="Fechar" disabled={disabled} onClick={onCancel} />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa</span>
           <select
             className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
             disabled={disabled}
@@ -3363,7 +3364,7 @@ function ClientAgentInlineEditor({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
           <input
             className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
             disabled={disabled}
@@ -3372,7 +3373,7 @@ function ClientAgentInlineEditor({
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
           <input
             className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
             disabled={disabled}
@@ -3381,7 +3382,7 @@ function ClientAgentInlineEditor({
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Funcao</span>
           <input
             className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
             disabled={disabled}
@@ -3512,7 +3513,7 @@ function InternalAgentsManager({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(180px,auto)]">
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Agente / setor ativo</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Agente / setor ativo</span>
             <select
               className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
               disabled={companies.length === 0}
@@ -3588,7 +3589,7 @@ function InternalAgentsManager({
         >
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome interno</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome interno</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Agente validacao"
@@ -3597,7 +3598,7 @@ function InternalAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome/persona</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome/persona</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Ana ConnectyHub"
@@ -3606,7 +3607,7 @@ function InternalAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Funcao</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Agente de onboarding"
@@ -3615,7 +3616,7 @@ function InternalAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Descricao</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Descricao</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Envia codigos e lembretes"
@@ -3660,7 +3661,7 @@ function InternalAgentsManager({
         >
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor interno</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor interno</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Suporte comercial"
@@ -3669,7 +3670,7 @@ function InternalAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Lucas Atendimento"
@@ -3678,7 +3679,7 @@ function InternalAgentsManager({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Descricao</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Descricao</span>
               <input
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 placeholder="Ex: Atende novos leads"
@@ -3822,7 +3823,7 @@ function AgentCreationGate({
           >
             <div className="grid gap-3">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
                 <select
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                   value={selectedCompanyId}
@@ -3836,7 +3837,7 @@ function AgentCreationGate({
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
                 <select
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                   value={agentTemplateId}
@@ -3850,7 +3851,7 @@ function AgentCreationGate({
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
                 <input
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                   placeholder="Ex: Agente comercial"
@@ -3859,7 +3860,7 @@ function AgentCreationGate({
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
                 <input
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                   placeholder="Ex: Vendas, Suporte, Financeiro"
@@ -3934,7 +3935,7 @@ function AgentIdentityCard({
           )}
           style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
         >
-          <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</span>
+          <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Agente</span>
           <input
             aria-invalid={agentNameInvalid}
             className="mt-1 block h-5 w-full min-w-0 bg-transparent p-0 text-[12px] font-semibold leading-4 outline-none placeholder:text-slate-500"
@@ -3946,7 +3947,7 @@ function AgentIdentityCard({
             onChange={(event) => onAgentNameChange?.(event.target.value)}
           />
           {agentNameInvalid || agentNameChanged ? (
-            <span className={cn("mt-1 block text-[10px] leading-4", agentNameInvalid ? "text-rose-600" : "text-amber-600")}>
+            <span className={cn("mt-1 block text-[11px] leading-4", agentNameInvalid ? "text-rose-600" : "text-amber-600")}>
               {agentNameInvalid ? "Informe pelo menos 2 caracteres." : "Nome alterado, salve para aplicar."}
             </span>
           ) : null}
@@ -4050,7 +4051,7 @@ function GuidedPromptBuilder({
       <div className="grid gap-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
           <label className="block">
-            <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
               Nicho / profissao do agente
               <InfoHint text="Esse modelo cria a base do prompt. O usuario ainda pode ajustar campos e o comportamento do agente nas outras abas." />
             </span>
@@ -4068,7 +4069,7 @@ function GuidedPromptBuilder({
           </label>
 
           <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
-            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{template.niche}</p>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{template.niche}</p>
             <p className="mt-1 text-[12px] leading-5 text-slate-300">{template.summary}</p>
           </div>
         </div>
@@ -4186,7 +4187,7 @@ function PromptBox({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      <span className="mb-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {label}
         {description ? <InfoHint text={description} /> : null}
       </span>
@@ -4197,7 +4198,7 @@ function PromptBox({
         className="min-h-[240px] w-full resize-y rounded-xl border px-3 py-3 font-mono text-[12px] leading-5 outline-none sm:min-h-[320px] sm:px-4"
         placeholder="Defina o comportamento do agente."
       />
-      <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">{helper}</span>
+      <span className="mt-2 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{helper}</span>
     </label>
   );
 }
@@ -4238,7 +4239,7 @@ function CloneProfileEditor({
             onChange={() => onChange({ enabled: !profile.enabled, source: "manual" })}
           />
           <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
-            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Resumo</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <PromptCheck label={profile.enabled ? "DNA ativo" : "DNA pausado"} active={profile.enabled} />
               <PromptCheck label={`${activeFields}/12 campos`} active={activeFields >= 4} />
@@ -4249,7 +4250,7 @@ function CloneProfileEditor({
           <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Historico</p>
                 <p className="mt-1 text-[11px] leading-4 text-slate-400">
                   {formatCloneProfileImportStatus(status)}
                 </p>
@@ -4264,15 +4265,15 @@ function CloneProfileEditor({
               />
             </div>
             {status?.status === "succeeded" ? (
-              <p className="mt-2 text-[10px] leading-4 text-emerald-700">
+              <p className="mt-2 text-[11px] leading-4 text-emerald-700">
                 {status.outboundSamples} saidas usadas em {status.sampledChats} chats.
               </p>
             ) : null}
             {status?.status === "failed" && status.error ? (
-              <p className="mt-2 text-[10px] leading-4 text-rose-700">{status.error}</p>
+              <p className="mt-2 text-[11px] leading-4 text-rose-700">{status.error}</p>
             ) : null}
             {!canImport ? (
-              <p className="mt-2 text-[10px] leading-4 text-amber-700">Conecte o WhatsApp para liberar a leitura do historico.</p>
+              <p className="mt-2 text-[11px] leading-4 text-amber-700">Conecte o WhatsApp para liberar a leitura do historico.</p>
             ) : null}
           </div>
         </div>
@@ -4403,13 +4404,13 @@ function CloneRealTestPanel({
                     <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{event.summary || "Resposta sem resumo salvo."}</p>
                   </div>
                   <span className={cn(
-                    "shrink-0 rounded-md px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-widest",
+                    "shrink-0 rounded-md px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-widest",
                     event.reviewFlags.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
                   )}>
                     {formatCloneScore(event.humanizationScore ?? event.score)}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                   <span>{formatDate(event.createdAt)}</span>
                   <span>{event.outboundMessages} msg</span>
                   <span>{event.outboundModes.join(", ") || "texto"}</span>
@@ -4427,8 +4428,8 @@ function CloneRealTestPanel({
                         title={metric.reason}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[10px] font-semibold text-slate-600">{metric.label}</span>
-                          <span className={cn("font-mono text-[9px] font-bold", getHumanizationMetricTextColor(metric.status))}>
+                          <span className="truncate text-[11px] font-semibold text-slate-600">{metric.label}</span>
+                          <span className={cn("font-mono text-[11px] font-bold", getHumanizationMetricTextColor(metric.status))}>
                             {formatCloneScore(metric.score)}
                           </span>
                         </div>
@@ -4445,7 +4446,7 @@ function CloneRealTestPanel({
                 {event.reviewFlags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {event.reviewFlags.map((flag) => (
-                      <span key={flag} className="rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-amber-800">
+                      <span key={flag} className="rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-amber-800">
                         {formatCloneReviewFlag(flag)}
                       </span>
                     ))}
@@ -4502,10 +4503,10 @@ function CloneMemoryPanel({
             ) : null}
             {groups.map((group) => (
               <div key={group.label} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.label}</p>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{group.label}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {group.values.map((value) => (
-                    <span key={`${group.label}-${value}`} className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] leading-4 text-indigo-700">
+                    <span key={`${group.label}-${value}`} className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] leading-4 text-indigo-700">
                       {value}
                     </span>
                   ))}
@@ -4535,11 +4536,11 @@ function KnowledgeFilesPanel({
   return (
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+        <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
           Materiais de conhecimento
           <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
         </p>
-        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100">
+        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100">
           {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
           Anexar
           <input
@@ -4561,7 +4562,7 @@ function KnowledgeFilesPanel({
               <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 {file.title}
               </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                 {formatBytes(file.size)} / {formatDate(file.createdAt)}
               </p>
             </div>
@@ -4591,7 +4592,7 @@ function NoAgentState() {
           Crie um agente e escolha o atendimento que ele vai assumir.
         </p>
         <Link
-          className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 sm:w-auto"
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 sm:w-auto"
           href="/dashboard/whatsapp"
           style={{ background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" }}
         >
@@ -4621,12 +4622,12 @@ function BehaviorSection({
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 sm:px-4">
-        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
+        <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
           {title}
           {description ? <InfoHint text={description} /> : null}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500 group-open:hidden">abrir</span>
-        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-blue-700 group-open:inline">fechar</span>
+        <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500 group-open:hidden">abrir</span>
+        <span className="hidden font-mono text-[11px] uppercase tracking-widest text-blue-700 group-open:inline">fechar</span>
       </summary>
       <div className="border-t px-3 py-3 sm:px-4 sm:py-4" style={{ borderColor: "var(--ch-border)" }}>
         {children}
@@ -4948,14 +4949,14 @@ function VoiceSelector({
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
             Voz do agente
             <InfoHint text="A voz selecionada sera usada nas respostas em audio do agente." />
           </p>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
             {selectedVoice?.name ?? "Nenhuma voz disponivel"}
           </p>
-          <p className="mt-1 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {voices.length.toLocaleString("pt-BR")} vozes liberadas
           </p>
         </div>
@@ -5017,14 +5018,14 @@ function VoiceSelector({
               <span className="block text-[11px] text-slate-500">Clone de voz entra como Audio premium.</span>
             </span>
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-indigo-700">{cloneOpen ? "fechar" : "abrir"}</span>
+          <span className="font-mono text-[11px] uppercase tracking-widest text-indigo-700">{cloneOpen ? "fechar" : "abrir"}</span>
         </button>
 
         {cloneOpen ? (
           <div className="border-t p-3" style={{ borderColor: "var(--ch-border)" }}>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome da voz</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome da voz</span>
                 <input
                   value={cloneName}
                   onChange={(event) => setCloneName(event.target.value)}
@@ -5034,7 +5035,7 @@ function VoiceSelector({
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Audios de amostra</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Audios de amostra</span>
                 <input
                   accept="audio/*,.aac,.m4a,.mp3,.oga,.ogg,.opus,.wav,.webm"
                   className="block w-full rounded-lg border px-3 py-2 text-[12px] file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-indigo-700"
@@ -5054,7 +5055,7 @@ function VoiceSelector({
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     <span className="min-w-0 truncate text-slate-600">{file.name}</span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-slate-500">{formatBytes(file.size)}</span>
+                    <span className="shrink-0 font-mono text-[11px] uppercase tracking-widest text-slate-500">{formatBytes(file.size)}</span>
                   </div>
                 ))}
               </div>
@@ -5095,7 +5096,7 @@ function VoiceSelector({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[11px] font-bold uppercase tracking-widest text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 disabled={!canClone}
                 onClick={submitVoiceClone}
                 style={{ background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" }}
@@ -5105,7 +5106,7 @@ function VoiceSelector({
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-blue-700 transition hover:bg-blue-50 sm:w-auto"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 font-mono text-[11px] font-bold uppercase tracking-widest text-blue-700 transition hover:bg-blue-50 sm:w-auto"
                 onClick={() => {
                   setCloneOpen(false);
                   setCloneError(null);
@@ -5123,7 +5124,7 @@ function VoiceSelector({
       {voices.length > 0 ? (
         <>
           <label className="mt-3 block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Buscar voz</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Buscar voz</span>
             <input
               value={voiceSearch}
               onChange={(event) => setVoiceSearch(event.target.value)}
@@ -5151,7 +5152,7 @@ function VoiceSelector({
                     <Volume2 className={cn("h-3.5 w-3.5 shrink-0", active ? "text-indigo-700" : "text-slate-500")} />
                     <span className="min-w-0">
                       <span className="block truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{voice.name}</span>
-                      <span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                      <span className="mt-0.5 block truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">
                         {formatVoiceDetails(voice)}
                       </span>
                     </span>
@@ -5159,7 +5160,7 @@ function VoiceSelector({
                   <span className="flex items-center gap-1.5">
                     {voice.source === "customer" ? (
                       <span className={cn(
-                        "rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest",
+                        "rounded-md px-2 py-1 font-mono text-[11px] uppercase tracking-widest",
                         voice.status === "verification_required"
                           ? "bg-amber-50 text-amber-700"
                           : "bg-emerald-50 text-emerald-700",
@@ -5167,7 +5168,7 @@ function VoiceSelector({
                         {voice.status === "verification_required" ? "pendente" : "pronta"}
                       </span>
                     ) : null}
-                    <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
+                    <span className={cn("rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
                       {formatVoiceSource(voice)}
                     </span>
                     {(voice.source === "customer" || (voice.category === "cloned" && !voice.isDefault)) ? (
@@ -5175,7 +5176,7 @@ function VoiceSelector({
                         <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
-                            className="rounded-md bg-rose-50 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                            className="rounded-md bg-rose-50 px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-rose-700 hover:bg-rose-100 disabled:opacity-50"
                             disabled={deletingVoiceId === voice.voiceId}
                             onClick={(event) => { event.stopPropagation(); deleteVoice(voice.voiceId); }}
                           >
@@ -5183,7 +5184,7 @@ function VoiceSelector({
                           </button>
                           <button
                             type="button"
-                            className="connecty-dark-chip rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest hover:brightness-110"
+                            className="connecty-dark-chip rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-widest hover:brightness-110"
                             onClick={(event) => { event.stopPropagation(); setConfirmDeleteId(null); }}
                           >
                             nao
@@ -5253,7 +5254,7 @@ function VoiceProviderButton({
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
-        <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
+        <span className={cn("rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
           {active ? "ativo" : "selecionar"}
         </span>
       </span>
@@ -5345,7 +5346,7 @@ function TextField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {label}
         {description ? <InfoHint text={description} /> : null}
       </span>
@@ -5375,7 +5376,7 @@ function TextAreaField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {label}
         {description ? <InfoHint text={description} /> : null}
       </span>
@@ -5423,7 +5424,7 @@ function LeadQualificationEditor({
           />
           <div className="grid gap-3 lg:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Produto ou oferta</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Produto ou oferta</span>
               <input
                 className="h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
                 value={normalized.productName}
@@ -5438,7 +5439,7 @@ function LeadQualificationEditor({
             </div>
           </div>
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Objetivo comercial</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Objetivo comercial</span>
             <textarea
               className="min-h-20 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
               value={normalized.commercialObjective}
@@ -5469,7 +5470,7 @@ function LeadQualificationEditor({
             >
               <div className="grid gap-2 xl:grid-cols-[170px_minmax(320px,1fr)_106px_118px_34px] xl:items-end">
                 <label className="block">
-                  <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-blue-700">Pergunta {index + 1} · Rotulo</span>
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-blue-700">Pergunta {index + 1} · Rotulo</span>
                   <input
                     className="h-9 w-full rounded-md border px-2.5 text-[12px] font-semibold outline-none"
                     value={question.label}
@@ -5477,7 +5478,7 @@ function LeadQualificationEditor({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-slate-500">Pergunta ao lead</span>
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Pergunta ao lead</span>
                   <input
                     className="h-9 w-full rounded-md border px-2.5 text-[12px] outline-none"
                     value={question.question}
@@ -5485,7 +5486,7 @@ function LeadQualificationEditor({
                   />
                 </label>
                 <div className="block">
-                  <span className="mb-1 flex items-center gap-1.5 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+                  <span className="mb-1 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
                     Peso
                     <InfoHint text="Pontos somados quando o campo for respondido." />
                   </span>
@@ -5546,14 +5547,14 @@ function LeadQualificationEditor({
                 </button>
               </div>
               <details className="group mt-1.5">
-                <summary className="flex cursor-pointer list-none items-center gap-2 font-mono text-[8px] uppercase tracking-widest text-slate-500 transition hover:text-blue-700">
+                <summary className="flex cursor-pointer list-none items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-slate-500 transition hover:text-blue-700">
                   <span>Campo interno</span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[8px] normal-case tracking-normal text-slate-500">{question.crmField || "sem campo"}</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] normal-case tracking-normal text-slate-500">{question.crmField || "sem campo"}</span>
                   <span className="group-open:hidden">editar</span>
                   <span className="hidden text-blue-700 group-open:inline">fechar</span>
                 </summary>
                 <label className="mt-2 block max-w-sm">
-                  <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-slate-500">Campo CRM interno</span>
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Campo CRM interno</span>
                   <input
                     className="h-8 w-full rounded-md border px-2.5 font-mono text-[11px] outline-none"
                     value={question.crmField}
@@ -5566,7 +5567,7 @@ function LeadQualificationEditor({
 
           <button
             type="button"
-            className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
+            className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
             onClick={onAddQuestion}
           >
             <Plus className="h-4 w-4" />
@@ -5606,7 +5607,7 @@ function LeadQualificationListEditor({
 }) {
   return (
     <label className="block rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {label}
         <InfoHint text={description} />
       </span>
@@ -5627,7 +5628,7 @@ function LeadQualificationSummary({ config, changed }: { config: LeadQualificati
 
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label={playbookActive ? "Qualificacao ativa" : normalized.enabled ? "Qualificacao sem perguntas" : "Qualificacao pausada"} active={playbookActive} />
         <PromptCheck label={`${normalized.questions.length} perguntas configuradas`} active={normalized.questions.length >= 4} />
@@ -5670,7 +5671,7 @@ function BehaviorSummary({
 
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 6} />
@@ -5915,7 +5916,7 @@ function CompactConnectionCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+          <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
             Conexao WhatsApp
             <InfoHint text={enabled ? "Gera o QR Code para conectar o numero e mostra o status atual da instancia." : disabledReason ?? "Conexao indisponivel neste ambiente."} />
           </p>
@@ -6013,7 +6014,7 @@ function CompactConnectionCard({
         <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
           <button
             className={cn(
-              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[11px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
               connectMode === "qr" ? "shadow-sm" : "text-slate-500 hover:bg-blue-50 hover:text-slate-700",
             )}
             disabled={!enabled || running === "connect"}
@@ -6026,7 +6027,7 @@ function CompactConnectionCard({
           </button>
           <button
             className={cn(
-              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[11px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
               connectMode === "phone" ? "shadow-sm" : "text-slate-500 hover:bg-blue-50 hover:text-slate-700",
             )}
             disabled={!enabled || running === "connect"}
@@ -6042,7 +6043,7 @@ function CompactConnectionCard({
         {phoneModeSelected ? (
           <div className="grid gap-2">
             <label className="grid gap-1">
-              <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-slate-500">
+              <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase text-slate-500">
                 Telefone com DDI
                 <InfoHint text="Use somente numeros, incluindo pais e DDD. Exemplo: 5511999999999." />
               </span>
@@ -6357,12 +6358,12 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
     <div className="mt-3 rounded-lg border p-3" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Diagnostico</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Diagnostico</p>
           <p className={cn("mt-1 text-[12px] font-semibold leading-4", tone.text)}>
             {formatConnectionFinalStatus(attempt.finalStatus, attempt.mode)}
           </p>
         </div>
-        <span className={cn("rounded-full px-2 py-1 font-mono text-[9px] font-semibold uppercase", tone.badge)}>
+        <span className={cn("rounded-full px-2 py-1 font-mono text-[11px] font-semibold uppercase", tone.badge)}>
           {attempt.mode === "phone" ? "codigo" : "qr"}
         </span>
       </div>
@@ -6381,7 +6382,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
 
       {attempt.finalStatus === "passkey_blocked" ? (
         <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-2">
-          <p className="font-mono text-[9px] uppercase text-amber-700">Conexao assistida recomendada</p>
+          <p className="font-mono text-[11px] uppercase text-amber-700">Conexao assistida recomendada</p>
           <p className="mt-1 text-[11px] leading-4 text-amber-800">
             {PASSKEY_CONNECTION_ASSISTED_TEXT} A validacao deve ser concluida no WhatsApp Web oficial antes de migrar a sessao autenticada.
           </p>
@@ -6389,7 +6390,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
       ) : null}
 
       {attempt.scanDetected !== null ? (
-        <p className="mt-2 text-[10px] leading-4 text-slate-500">
+        <p className="mt-2 text-[11px] leading-4 text-slate-500">
           {attempt.mode === "phone"
             ? attempt.scanDetected ? "Pareamento por codigo detectado" : "Pareamento por codigo nao confirmado"
             : attempt.scanDetected ? "Leitura do QR detectada" : "Leitura do QR nao confirmada"}
@@ -6399,7 +6400,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
       {latestEvents.length > 0 ? (
         <div className="mt-3 grid gap-1.5">
           {latestEvents.map((event) => (
-            <div key={`${event.type}-${event.at}`} className="flex items-center justify-between gap-2 text-[10px] leading-4">
+            <div key={`${event.type}-${event.at}`} className="flex items-center justify-between gap-2 text-[11px] leading-4">
               <span className="truncate text-slate-400">{formatConnectionEventType(event.type)}</span>
               <span className="shrink-0 font-mono text-slate-600">{formatConnectionEventTime(event.at)}</span>
             </div>
@@ -6413,7 +6414,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
 function ConnectionDiagnosticCounter({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-md bg-white px-2 py-1.5">
-      <p className="font-mono text-[9px] uppercase text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase text-slate-500">{label}</p>
       <p className="mt-0.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{value.toLocaleString("pt-BR")}</p>
     </div>
   );
@@ -6422,7 +6423,7 @@ function ConnectionDiagnosticCounter({ label, value }: { label: string; value: n
 function StatusInfoTile({ connected }: { connected: boolean }) {
   return (
     <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Status</p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Status</p>
       <p
         className={cn(
           "mt-1 inline-flex items-center gap-2 break-words text-[12px] font-semibold leading-4",
@@ -6445,7 +6446,7 @@ function StatusInfoTile({ connected }: { connected: boolean }) {
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 break-words text-[12px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
@@ -6489,7 +6490,7 @@ function ActionButton({
       disabled={disabled || loading}
       onClick={onClick}
       data-connecty-contrast="dark"
-      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
       style={actionTheme}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
@@ -6524,7 +6525,7 @@ function SecondaryAction({
       disabled={disabled || loading}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto",
+        "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto",
         tone === "danger" ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-blue-100 bg-white text-blue-700 hover:border-blue-200 hover:bg-blue-50",
       )}
     >

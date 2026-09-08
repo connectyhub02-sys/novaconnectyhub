@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -493,7 +494,7 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
         </div>
       )}
 
-      <div className="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
+      <div aria-label="Indicadores dos clientes" className="mb-5 grid grid-flow-col auto-cols-[minmax(140px,1fr)] gap-3 overflow-x-auto pb-2 md:grid-flow-row md:auto-cols-auto md:grid-cols-4 2xl:grid-cols-8">
         <UsersStatCard label="Usuarios" value={summary.totalUsers} tone="cyan" />
         <UsersStatCard label="Admins" value={summary.platformAdmins} tone="amber" />
         <UsersStatCard label="Empresas" value={summary.linkedOrganizations} tone="green" />
@@ -508,14 +509,14 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
         title={`${filtered.length} usuario${filtered.length !== 1 ? "s" : ""}`}
         eyebrow="plataforma / clientes"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <NeonBadge tone={loading ? "amber" : "green"}>{loading ? "Carregando" : "Ao vivo"}</NeonBadge>
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar..."
-              className="h-8 rounded-lg border px-3 font-mono text-[11px] outline-none"
+              className="h-8 min-w-0 flex-1 rounded-lg border px-3 font-mono text-[11px] outline-none"
               style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
             />
           </div>
@@ -616,7 +617,7 @@ function UsersStatCard({
       className="min-w-0 rounded-xl px-3 py-3"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={cn("mt-1 truncate font-mono text-[20px] font-bold leading-none", statToneClass(tone))}>
         {typeof value === "number" ? formatNumber(value) : value}
       </p>
@@ -711,7 +712,7 @@ function DeleteUserModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 px-3 py-6 backdrop-blur-sm">
+    <DialogFrame onClose={loading ? () => undefined : onClose} aria-label="Excluir cliente" className="fixed inset-0 z-50 grid place-items-center bg-black/75 px-3 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
         className="w-full max-w-2xl rounded-2xl border shadow-2xl"
@@ -722,7 +723,7 @@ function DeleteUserModal({
           style={{ borderColor: "var(--ch-border)" }}
         >
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-rose-300">exclusão administrativa</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-rose-300">exclusão administrativa</p>
             <h2 className="mt-1 truncate text-[18px] font-bold text-white">Excluir {displayName}</h2>
             <p className="mt-1 text-[12px] leading-5 text-slate-400">
               Esta ação remove acesso e dados vinculados conforme a opção escolhida.
@@ -839,7 +840,7 @@ function DeleteUserModal({
           </div>
         </div>
       </form>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -867,7 +868,7 @@ function CustomerControlModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-3 py-6 backdrop-blur-sm">
+    <DialogFrame onClose={loading ? () => undefined : onClose} aria-label="Configurações do cliente" className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-3 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
         className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border shadow-2xl"
@@ -878,7 +879,7 @@ function CustomerControlModal({
           style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border)" }}
         >
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-300">controle administrativo</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-amber-300">controle administrativo</p>
             <h2 className="mt-1 truncate text-[18px] font-bold text-white">{user.orgName || user.companyName || user.email}</h2>
             <p className="mt-1 text-[12px] text-slate-400">
               Plano atual {user.planCode ?? "sem plano"} / status {user.orgStatus ?? "sem status"} / {formatCredits(user.balanceCredits)} creditos.
@@ -935,7 +936,7 @@ function CustomerControlModal({
           <div className="space-y-4 rounded-2xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex items-center gap-2">
               <WalletCards className="h-4 w-4 text-cyan-300" />
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">configuracao da acao</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">configuracao da acao</p>
             </div>
 
             {(draft.action === "activate_plan" || draft.action === "renew_plan") && (
@@ -1065,7 +1066,7 @@ function CustomerControlModal({
           </div>
         </div>
       </form>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1074,7 +1075,7 @@ const controlInputClass = "h-10 w-full rounded-lg border border-slate-700/70 bg-
 function ControlField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -1091,8 +1092,8 @@ function ControlToggle({ label, checked, onChange }: { label: string; checked: b
 
 function ControlStat({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-xl border", compact ? "p-2" : "p-3")} style={{ background: "rgba(15,23,42,0.45)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+    <div className={cn("rounded-xl border", compact ? "p-2" : "p-3")} style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={cn("mt-1 truncate font-mono font-bold text-cyan-100", compact ? "text-[13px]" : "text-[16px]")}>{value}</p>
     </div>
   );
@@ -1182,14 +1183,14 @@ function UserRow({
 
   return (
     <div
-      className="flex min-h-[68px] items-center gap-3 rounded-xl border px-4"
+      className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-center gap-3 rounded-xl border p-4 2xl:flex"
       style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
     >
       <UserAvatar user={user} displayName={displayName} initials={initials} />
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 break-words">
         <div className="flex items-center gap-2">
-          <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+          <p className="line-clamp-2 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
             {displayName}
           </p>
           {user.isPlatformAdmin && (
@@ -1197,25 +1198,25 @@ function UserRow({
           )}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <p className="font-mono text-[10px] text-slate-500">{user.email}</p>
+          <p className="font-mono text-[11px] text-slate-500">{user.email}</p>
           {user.phoneNormalized && (
-            <p className="font-mono text-[10px] text-cyan-300/70">{formatPhonePreview(user.phoneNormalized)}</p>
+            <p className="font-mono text-[11px] text-cyan-300/70">{formatPhonePreview(user.phoneNormalized)}</p>
           )}
           {user.orgName && (
-            <p className="font-mono text-[10px] text-slate-600">{user.orgName}</p>
+            <p className="font-mono text-[11px] text-slate-600">{user.orgName}</p>
           )}
           {user.orgStatus && (
-            <span className={cn("rounded-full border px-2 py-px font-mono text-[9px] font-semibold uppercase tracking-wide", statusColor)}>
-              {user.orgStatus}
+            <span className={cn("rounded-full border px-2 py-px font-mono text-[11px] font-semibold uppercase tracking-wide", statusColor)}>
+              {({ active: "Ativo", past_due: "Pagamento pendente", inactive: "Inativo", suspended: "Suspenso", blocked: "Bloqueado", trialing: "Em teste", trial: "Em teste", trial_expired: "Teste encerrado", archived: "Arquivado" } as Record<string, string>)[user.orgStatus] ?? user.orgStatus}
             </span>
           )}
           {user.planCode && (
-            <span className="font-mono text-[9px] uppercase tracking-wide text-slate-600">
+            <span className="font-mono text-[11px] uppercase tracking-wide text-slate-600">
               {user.planCode}
             </span>
           )}
           {user.avatarSource === "whatsapp_profile" && (
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-px font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-px font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
               foto wa
             </span>
           )}
@@ -1227,12 +1228,12 @@ function UserRow({
       )}
 
       {user.lastSignInAt && (
-        <p className="hidden shrink-0 font-mono text-[9px] text-slate-600 lg:block">
+        <p className="hidden shrink-0 font-mono text-[11px] text-slate-600 2xl:block">
           {formatShortDate(user.lastSignInAt)}
         </p>
       )}
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-2 border-t border-slate-200 pt-3 2xl:shrink-0 2xl:border-0 2xl:pt-0">
         <button
           type="button"
           disabled={!canSyncAvatar || isSyncingAvatar || isSendingLink || isAccessingPanel || isDeleting}
@@ -1253,7 +1254,7 @@ function UserRow({
           type="button"
           disabled={!user.organizationId || isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
           onClick={onOpenControl}
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Settings2 className="h-3 w-3" />
           Controle
@@ -1264,7 +1265,7 @@ function UserRow({
           disabled={isSendingLink || isAccessingPanel || isSyncingAvatar || isDeleting}
           onClick={onSendLink}
           className={cn(
-            "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
             isCopied
               ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-200"
               : "border-cyan-400/25 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/15",
@@ -1282,7 +1283,7 @@ function UserRow({
           type="button"
           disabled={isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
           onClick={onAccessPanel}
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isAccessingPanel ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1297,7 +1298,7 @@ function UserRow({
           disabled={user.isPlatformAdmin || isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
           onClick={onOpenDelete}
           title={user.isPlatformAdmin ? "Administradores da plataforma não podem ser excluídos por aqui" : "Excluir usuário ou cliente"}
-          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
           Excluir
@@ -1312,13 +1313,13 @@ function StorageUsageInline({ user }: { user: PlatformUser }) {
   const usagePercent = getStorageUsagePercent(user);
 
   return (
-    <div className="hidden w-[150px] shrink-0 xl:block" title={`${formatStorageBytes(user.storageUsedBytes)} usados de ${formatStorageBytes(user.storageLimitBytes)}`}>
+    <div className="hidden w-[150px] shrink-0 2xl:block" title={`${formatStorageBytes(user.storageUsedBytes)} usados de ${formatStorageBytes(user.storageLimitBytes)}`}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[8px] uppercase tracking-[0.14em] text-slate-500">
+        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">
           <HardDrive className="h-3 w-3 shrink-0" />
           Storage
         </span>
-        <span className={cn("font-mono text-[9px] font-bold", storageToneClass(tone))}>{usagePercent.label}</span>
+        <span className={cn("font-mono text-[11px] font-bold", storageToneClass(tone))}>{usagePercent.label}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
@@ -1326,7 +1327,7 @@ function StorageUsageInline({ user }: { user: PlatformUser }) {
           style={{ width: `${usagePercent.visualValue}%` }}
         />
       </div>
-      <p className="mt-1 truncate font-mono text-[9px] text-slate-500">
+      <p className="mt-1 truncate font-mono text-[11px] text-slate-500">
         {formatStorageBytes(user.storageUsedBytes)} / {formatStorageBytes(user.storageLimitBytes)}
       </p>
     </div>

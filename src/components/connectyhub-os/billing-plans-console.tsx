@@ -242,7 +242,7 @@ export function BillingPlansConsole({
                 <button
                   type="button"
                   onClick={() => selectPlan(null)}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition hover:opacity-90"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[11px] font-bold uppercase tracking-wide transition hover:opacity-90"
                   style={{ background: "var(--ch-accent)", color: "#061015" }}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -271,14 +271,14 @@ export function BillingPlansConsole({
                             </p>
                             {plan.highlighted ? <NeonBadge tone="amber">destaque</NeonBadge> : null}
                           </div>
-                          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+                          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
                             {plan.planCode}
                           </p>
                         </div>
                         <StatusBadge status={plan.status === "active" ? "online" : plan.status === "draft" ? "warning" : "idle"} label={plan.status} />
                       </div>
 
-                      <div className="mt-4 grid grid-cols-4 gap-2">
+                      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <MiniValue label={billingTermsLabel(plan)} value={formatMoney(plan.monthlyPriceBrl)} />
                         <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
                         <MiniValue label="Storage" value={formatStorageBytes(plan.storageLimitBytes)} />
@@ -450,7 +450,7 @@ export function BillingPlansConsole({
                         Isto vira a regra comercial para liberar recursos no painel do cliente.
                       </p>
                     </div>
-                    <label className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-slate-400">
+                    <label className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-slate-400">
                       <input
                         type="checkbox"
                         checked={draft.highlighted}
@@ -597,7 +597,7 @@ function PlanMetric({
   return (
     <div className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
           <Icon className="h-4 w-4" />
         </div>
@@ -613,7 +613,7 @@ function PlanMetric({
 function MiniValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg px-2.5 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
@@ -622,7 +622,7 @@ function MiniValue({ label, value }: { label: string; value: string }) {
 function CostValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(16,185,129,0.22)" }}>
-      <p className="text-[10px] font-semibold uppercase text-emerald-700/70">{label}</p>
+      <p className="text-[11px] font-semibold uppercase text-emerald-700/70">{label}</p>
       <p className="mt-1 truncate font-mono text-[15px] font-bold text-slate-950">{value}</p>
     </div>
   );
@@ -631,7 +631,7 @@ function CostValue({ label, value }: { label: string; value: string }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
       {children}
     </label>
   );

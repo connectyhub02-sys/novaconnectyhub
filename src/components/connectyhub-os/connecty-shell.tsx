@@ -1,7 +1,9 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { useDialogFocus } from "@/hooks/use-dialog-focus";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -151,10 +153,10 @@ type AccentPalette = {
 };
 
 const neutralAccentPalette: AccentPalette = {
-  accent: "#111827",
-  accentRgb: "17,24,39",
-  accent2: "#52525b",
-  accent2Rgb: "82,82,91",
+  accent: "#1d4ed8",
+  accentRgb: "29,78,216",
+  accent2: "#1e40af",
+  accent2Rgb: "30,64,175",
 };
 
 const accentPalettes: Record<AccentTone, AccentPalette> = {
@@ -344,6 +346,15 @@ function ConnectyShellRoot({
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    function updateKeyboard() {
+      document.documentElement.dataset.mobileKeyboard = viewport && viewport.height < window.innerHeight - 150 ? "open" : "closed";
+    }
+    viewport?.addEventListener("resize", updateKeyboard);
+    updateKeyboard();
+    return () => { viewport?.removeEventListener("resize", updateKeyboard); delete document.documentElement.dataset.mobileKeyboard; };
+  }, []);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [comingSoonItem, setComingSoonItem] = useState<NavItem | null>(null);
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
@@ -651,32 +662,32 @@ function ConnectyShellRoot({
   }
 
   const shellTheme = {
-    background: "linear-gradient(180deg, #ffffff 0%, #f7f7f8 48%, #f3f4f6 100%)",
+    background: "#f5f7fb",
     colorScheme: "light",
-    "--ch-bg":         "#f7f7f8",
+    "--ch-bg":         "#f5f7fb",
     "--ch-surface":    "rgba(255,255,255,0.96)",
-    "--ch-surface-2":  "#fafafa",
-    "--ch-surface-3":  "#f4f4f5",
+    "--ch-surface-2":  "#f8fafc",
+    "--ch-surface-3":  "#f1f5f9",
     "--ch-border":     "rgba(24,24,27,0.10)",
     "--ch-border-soft":"rgba(24,24,27,0.07)",
     "--ch-border-strong":"rgba(24,24,27,0.14)",
-    "--ch-brand-blue": "#111827",
-    "--ch-brand-blue-rgb": "17,24,39",
-    "--ch-brand-primary": "#111827",
-    "--ch-brand-primary-rgb": "17,24,39",
-    "--ch-brand-action": "#27272a",
-    "--ch-brand-action-rgb": "39,39,42",
-    "--ch-brand-soft": "#f4f4f5",
+    "--ch-brand-blue": "#1d4ed8",
+    "--ch-brand-blue-rgb": "29,78,216",
+    "--ch-brand-primary": "#1d4ed8",
+    "--ch-brand-primary-rgb": "29,78,216",
+    "--ch-brand-action": "#6d28d9",
+    "--ch-brand-action-rgb": "109,40,217",
+    "--ch-brand-soft": "#f1f5f9",
     "--ch-whatsapp": "#16a34a",
     "--ch-whatsapp-rgb": "22,163,74",
     "--ch-whatsapp-deep": "#166534",
     "--ch-whatsapp-deep-rgb": "22,101,52",
     "--ch-whatsapp-soft": "#f0fdf4",
-    "--ch-ai": "#27272a",
-    "--ch-ai-rgb": "39,39,42",
+    "--ch-ai": "#6d28d9",
+    "--ch-ai-rgb": "109,40,217",
     "--ch-ai-cyan": "#71717a",
     "--ch-ai-cyan-rgb": "113,113,122",
-    "--ch-ai-soft": "#f4f4f5",
+    "--ch-ai-soft": "#f1f5f9",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
     "--ch-accent-2":   accent2,
@@ -697,16 +708,16 @@ function ConnectyShellRoot({
     "--ch-danger-rgb": "220,38,38",
     "--ch-info": "#52525b",
     "--ch-info-rgb": "82,82,91",
-    "--ch-chart-1": "#111827",
-    "--ch-chart-2": "#52525b",
-    "--ch-chart-3": "#71717a",
-    "--ch-chart-4": "#a1a1aa",
-    "--ch-chart-5": "#d4d4d8",
+    "--ch-chart-1": "#1d4ed8",
+    "--ch-chart-2": "#047857",
+    "--ch-chart-3": "#7c3aed",
+    "--ch-chart-4": "#b45309",
+    "--ch-chart-5": "#0e7490",
     "--ch-chart-warning": "#d97706",
     "--ch-chart-danger": "#e11d48",
     "--ch-chart-grid": "#e4e4e7",
     "--ch-chart-axis": "#71717a",
-    "--background":    "#f7f7f8",
+    "--background":    "#f5f7fb",
     "--foreground":    "#0f172a",
     "--card":          "#ffffff",
     "--card-foreground":"#0f172a",
@@ -714,11 +725,11 @@ function ConnectyShellRoot({
     "--popover-foreground":"#0f172a",
     "--primary":       accent,
     "--primary-foreground":"#ffffff",
-    "--secondary":     "#fafafa",
+    "--secondary":     "#f8fafc",
     "--secondary-foreground":"#0f172a",
-    "--muted":         "#f4f4f5",
+    "--muted":         "#f1f5f9",
     "--muted-foreground":"#475569",
-    "--accent":        "#f4f4f5",
+    "--accent":        "#f1f5f9",
     "--accent-foreground":"#0f172a",
     "--border":        "rgba(15,23,42,0.10)",
     "--input":         "rgba(15,23,42,0.14)",
@@ -767,7 +778,7 @@ function ConnectyShellRoot({
         >
           <Link href="/" className="min-w-0 flex-1">
             <ConnectyLogo className="h-[24px] w-[182px]" imageClassName="connecty-shell-logo-image" tone={logoTone} type="full" />
-            <div className="font-mono text-[9px] uppercase tracking-widest" style={{ color: "var(--ch-accent)" }}>
+            <div className="font-mono text-[11px] uppercase tracking-widest" style={{ color: "var(--ch-accent)" }}>
               {mode === "admin" ? "Admin OS" : "Client OS"}
             </div>
           </Link>
@@ -782,7 +793,7 @@ function ConnectyShellRoot({
           {sections.map((section) => (
             <div key={section.label}>
               <div
-                className="mb-2 px-2 font-mono text-[9px] uppercase tracking-[0.2em]"
+                className="mb-2 px-2 font-mono text-[11px] uppercase tracking-[0.2em]"
                 style={{ color: "var(--ch-subtle)" }}
               >
                 {section.label}
@@ -819,7 +830,7 @@ function ConnectyShellRoot({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{name}</div>
-                  <div className="truncate font-mono text-[9px]" style={{ color: "var(--ch-muted)" }}>{role}</div>
+                  <div className="truncate font-mono text-[11px]" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </div>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--ch-muted)" }} />
               </button>
@@ -916,7 +927,7 @@ function ConnectyShellRoot({
 
           <div className="min-w-0 lg:hidden">
             <div className="truncate text-[13px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{pageLabel}</div>
-            <div className="truncate font-mono text-[8px] uppercase tracking-widest" style={{ color: "var(--ch-muted)" }}>
+            <div className="truncate font-mono text-[11px] uppercase tracking-widest" style={{ color: "var(--ch-muted)" }}>
               {mode === "admin" ? "Admin OS" : "Client OS"}
             </div>
           </div>
@@ -924,7 +935,7 @@ function ConnectyShellRoot({
           {/* Page title */}
           <div className="hidden lg:block">
             <div className="text-[15px] font-semibold" style={{ color: "var(--ch-text)" }}>{pageLabel}</div>
-            <div className="font-mono text-[9px]" style={{ color: "var(--ch-muted)" }}>
+            <div className="font-mono text-[11px]" style={{ color: "var(--ch-muted)" }}>
               {mode === "admin" ? "admin" : "workspace"} / {pageLabel.toLowerCase()}
             </div>
           </div>
@@ -965,7 +976,7 @@ function ConnectyShellRoot({
                 <Bell className="h-4 w-4" style={{ color: notificationCount > 0 ? "var(--ch-accent)" : "var(--ch-muted)" }} />
                 {notificationCount > 0 ? (
                   <span
-                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 font-mono text-[8px] font-bold leading-none text-slate-950"
+                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 font-mono text-[11px] font-bold leading-none text-slate-950"
                     style={{ background: "var(--ch-accent)", boxShadow: `0 0 8px var(--ch-accent)` }}
                   >
                     {notificationCount > 9 ? "9+" : notificationCount}
@@ -990,7 +1001,7 @@ function ConnectyShellRoot({
                       <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                         Notificacoes
                       </p>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-muted)" }}>
+                      <p className="font-mono text-[11px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-muted)" }}>
                         {notificationCount > 0 ? `${notificationCount} alerta${notificationCount === 1 ? "" : "s"}` : "sem alertas"}
                       </p>
                     </div>
@@ -1034,7 +1045,7 @@ function ConnectyShellRoot({
                                 {notification.description}
                               </p>
                               {notification.meta ? (
-                                <p className="mt-2 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                                <p className="mt-2 truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
                                   {notification.meta}
                                 </p>
                               ) : null}
@@ -1062,7 +1073,7 @@ function ConnectyShellRoot({
             {canSwitch && (
               <Link
                 href={switchTo}
-                className="hidden h-8 items-center rounded-lg px-3 font-mono text-[10px] uppercase tracking-wide transition md:flex"
+                className="hidden h-8 items-center rounded-lg px-3 font-mono text-[11px] uppercase tracking-wide transition md:flex"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
               >
                 {switchLbl}
@@ -1071,7 +1082,7 @@ function ConnectyShellRoot({
 
             {/* Mode badge */}
             <span
-              className="hidden h-7 items-center rounded-lg px-3 font-mono text-[10px] uppercase tracking-wider md:flex"
+              className="hidden h-7 items-center rounded-lg px-3 font-mono text-[11px] uppercase tracking-wider md:flex"
               style={{
                 background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(var(--ch-accent-2-rgb),0.10))",
                 border:     `1px solid rgba(var(--ch-accent-rgb),0.34)`,
@@ -1103,7 +1114,7 @@ function ConnectyShellRoot({
                   style={{ background: "rgba(var(--ch-accent-rgb),0.08)" }}
                 >
                   <div className="truncate text-[14px] font-bold leading-5" style={{ color: "var(--ch-text)" }}>{name}</div>
-                  <div className="truncate font-mono text-[10px] font-normal uppercase tracking-wide" style={{ color: "var(--ch-muted)" }}>{role}</div>
+                  <div className="truncate font-mono text-[11px] font-normal uppercase tracking-wide" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="my-2" style={{ background: "var(--ch-border)" }} />
                 {mode === "client" && (
@@ -1256,7 +1267,7 @@ function ShellComingSoonModal({
   const Icon = item.icon;
 
   return (
-    <div
+    <DialogFrame onClose={onClose}
       aria-labelledby="shell-coming-soon-title"
       aria-modal="true"
       className="fixed inset-0 z-[9999] flex items-center justify-center px-4 backdrop-blur-sm"
@@ -1289,7 +1300,7 @@ function ShellComingSoonModal({
           <Icon className="h-6 w-6" />
         </div>
 
-        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-700">
+        <p className="mt-4 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-700">
           Em breve
         </p>
         <h3 id="shell-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
@@ -1310,7 +1321,7 @@ function ShellComingSoonModal({
           Entendi
         </button>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1320,7 +1331,7 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
 
   return (
     <div
-      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[10px] font-bold uppercase tracking-wide sm:px-3"
+      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide sm:px-3"
       title="Creditos disponiveis"
       style={{
         background: status?.canUseBillableFeatures === false ? "rgba(251,113,133,0.14)" : "var(--ch-surface-2)",
@@ -1367,7 +1378,7 @@ function BillingHeaderSummary({ status }: { status: BillingAccessClientStatus | 
             <p className="truncate text-[12px] font-bold" style={{ color: "var(--ch-text)" }} title={status.bannerTitle}>
               {status.bannerTitle}
             </p>
-            <span className="hidden shrink-0 font-mono text-[9px] uppercase tracking-wide text-slate-500 xl:inline">
+            <span className="hidden shrink-0 font-mono text-[11px] uppercase tracking-wide text-slate-500 xl:inline">
               {progressLabel}
             </span>
           </div>
@@ -1379,7 +1390,7 @@ function BillingHeaderSummary({ status }: { status: BillingAccessClientStatus | 
         </div>
         <Link
           href={status.ctaHref}
-          className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg px-3 font-mono text-[9px] font-black uppercase tracking-wide transition hover:opacity-90"
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg px-3 font-mono text-[11px] font-black uppercase tracking-wide transition hover:opacity-90"
           style={{ background: tone.color, color: "#061015" }}
         >
           {status.ctaLabel}
@@ -1392,7 +1403,7 @@ function BillingHeaderSummary({ status }: { status: BillingAccessClientStatus | 
 function AccountCompletionPill() {
   return (
     <div
-      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[10px] font-bold uppercase tracking-wide sm:px-3"
+      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide sm:px-3"
       title="Cadastro pendente"
       style={{
         background: "rgba(251,113,133,0.14)",
@@ -1695,7 +1706,7 @@ function AccountCompletionModal({
               <UserCheck className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-rose-300">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-rose-300">
                 Cadastro obrigatorio
               </p>
               <h2 className="mt-1 text-2xl font-bold leading-7" style={{ color: "var(--ch-text)" }}>Complete seu cadastro</h2>
@@ -1799,7 +1810,7 @@ function AccountCompletionModal({
                 Validar WhatsApp
               </button>
               <button
-                className="h-12 rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
+                className="h-12 rounded-xl border border-cyan-300/30 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
                 onClick={() => setStep("profile")}
                 type="button"
               >
@@ -1838,7 +1849,7 @@ function TrialWelcomeModal({
     : `Você recebeu ${formatShellCredits(bonusCredits)} créditos para testar a ConnectyHub por ${daysRemaining} dias. O saldo que sobrar pode acumular com o plano escolhido.`;
 
   return (
-    <div
+    <DialogFrame onClose={onClose}
       className="fixed inset-0 z-[10000] grid place-items-center px-4 py-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
@@ -1863,7 +1874,7 @@ function TrialWelcomeModal({
               <Coins className="h-6 w-6" />
             </span>
             <div className="min-w-0">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: tone.color }}>
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: tone.color }}>
                 {isUsageReminder ? "Bonus em uso" : "Bonus ativado"}
               </p>
               <h2 className="mt-1 text-2xl font-bold leading-8" style={{ color: "var(--ch-text)" }}>{title}</h2>
@@ -1914,21 +1925,21 @@ function TrialWelcomeModal({
           </Link>
           <button
             type="button"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-300/30 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
             onClick={onClose}
           >
             Continuar testando
           </button>
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
 function TrialWelcomeMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border px-3 py-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 font-mono text-[16px] font-bold text-emerald-700">{value}</p>
     </div>
   );
@@ -1971,7 +1982,7 @@ function AccountCompletionBadge({ label, ok }: { label: string; ok: boolean }) {
       borderColor: ok ? "rgba(5,150,105,0.24)" : "rgba(225,29,72,0.24)",
       color: ok ? "#047857" : "#be123c",
     }}>
-      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em]">{label}</p>
+      <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em]">{label}</p>
       <p className="mt-0.5 text-[11px] font-semibold">{ok ? "OK" : "Pendente"}</p>
     </div>
   );
@@ -1991,7 +2002,7 @@ function AccountCompletionTypeControl({
 
   return (
     <div>
-      <span className="mb-1.5 block font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+      <span className="mb-1.5 block font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
         Tipo de cadastro
       </span>
       <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-300 bg-slate-100 p-1">
@@ -2042,7 +2053,7 @@ function AccountCompletionInput({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+      <span className="mb-1.5 block font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
         {label}
       </span>
       <input
@@ -2119,7 +2130,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
             <Coins className="h-6 w-6" />
           </span>
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: tone.color }}>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: tone.color }}>
               {reason}
             </p>
             <h2 className="mt-1 text-[20px] font-bold leading-tight">{status.bannerTitle}</h2>
@@ -2154,7 +2165,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
 function LockMetric({ label, tone, value }: { label: string; tone: string; value: string }) {
   return (
     <div className="rounded-xl border px-3 py-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 font-mono text-[16px] font-bold" style={{ color: tone }}>{value}</p>
     </div>
   );
@@ -2226,7 +2237,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
               <div className="h-2 overflow-hidden rounded-full bg-slate-900/10">
                 <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tone.color }} />
               </div>
-              <span className="font-mono text-[10px] uppercase tracking-wide text-slate-400">
+              <span className="font-mono text-[11px] uppercase tracking-wide text-slate-400">
                 {progressLabel}
               </span>
             </div>
@@ -2235,7 +2246,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
 
         <a
           href={status.ctaHref}
-          className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-xl px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition hover:opacity-90"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-xl px-4 font-mono text-[11px] font-bold uppercase tracking-wide transition hover:opacity-90"
           style={{ background: tone.color, color: "#061015" }}
         >
           {status.ctaLabel}
@@ -2312,7 +2323,7 @@ function AdminImpersonationBanner() {
         }}
       >
         <div className="min-w-0">
-          <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-700">
+          <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-amber-700">
             Acesso administrativo ativo
           </div>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
@@ -2324,7 +2335,7 @@ function AdminImpersonationBanner() {
 
         <button
           type="button"
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60"
           disabled={returning}
           onClick={handleReturnToAdmin}
           style={{
@@ -2512,7 +2523,7 @@ function SidebarLink({
       <span className="flex-1 truncate font-medium">{item.label}</span>
       {badge && (
         <span
-          className="rounded-md px-1.5 py-0.5 font-mono text-[9px] leading-none"
+          className="rounded-md px-1.5 py-0.5 font-mono text-[11px] leading-none"
           style={
             item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
             item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
@@ -2529,222 +2540,36 @@ function SidebarLink({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function MobileAppMenu({
-  active,
-  activeItem,
-  logoTone,
-  mode,
-  name,
-  pageLabel,
-  role,
-  sections,
-  onComingSoonClick,
-  onClose,
-}: {
-  active: string;
-  activeItem?: NavItem;
-  logoTone: "blue" | "white";
-  mode: "admin" | "client";
-  name: string;
-  pageLabel: string;
-  role: string;
-  sections: NavSection[];
-  onComingSoonClick: (item: NavItem) => void;
-  onClose: () => void;
+function MobileAppMenu({ active, mode, sections, onComingSoonClick, onClose }: {
+  active: string; activeItem?: NavItem; logoTone: "blue" | "white"; mode: "admin" | "client";
+  name: string; pageLabel: string; role: string; sections: NavSection[];
+  onComingSoonClick: (item: NavItem) => void; onClose: () => void;
 }) {
+  const menuRef = useDialogFocus(onClose);
   const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const quickItems = getMobileDockItems(sections, mode);
-  const filteredSections = useMemo(() => {
-    if (!normalizedQuery) {
-      return sections;
-    }
-
-    return sections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) =>
-          `${section.label} ${item.label} ${item.href}`.toLowerCase().includes(normalizedQuery),
-        ),
-      }))
-      .filter((section) => section.items.length > 0);
-  }, [normalizedQuery, sections]);
-
-  return (
-    <div
-      id="connecty-mobile-menu"
-      className="fixed inset-x-0 bottom-0 top-16 z-50 overflow-y-auto px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 lg:hidden"
-      data-connecty-mobile-menu="true"
-      style={{
-        background: "linear-gradient(180deg, #fbfcff 0%, var(--ch-bg) 100%)",
-      }}
-    >
-      <div className="mx-auto grid max-w-[440px] gap-3">
-        <div
-          className="rounded-2xl p-3"
-          style={{
-            background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94)), var(--ch-surface)",
-            border: "1px solid var(--ch-border-strong)",
-            boxShadow: "0 18px 42px rgba(15,23,42,0.08)",
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-                style={{ background: "rgba(var(--ch-accent-rgb),0.14)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
-              >
-                <ConnectyLogo className="h-7 w-7" imageClassName="connecty-shell-logo-image" tone={logoTone} type="mark" />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-[15px] font-bold leading-5" style={{ color: "var(--ch-text)" }}>{name}</p>
-                <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em]" style={{ color: "var(--ch-muted)" }}>
-                  {role} / {mode === "admin" ? "Admin OS" : "Client OS"}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              aria-label="Fechar menu"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition"
-              onClick={onClose}
-              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-            >
-              <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
-            </button>
-          </div>
-
-          <div className="mt-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em]" style={{ color: "var(--ch-subtle)" }}>Tela atual</p>
-            <p className="mt-1 truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{pageLabel}</p>
-            {activeItem ? (
-              <Link
-                href={activeItem.href}
-                className="mt-2 inline-flex h-8 items-center gap-2 rounded-lg px-3 font-mono text-[9px] font-bold uppercase tracking-wide"
-                onClick={(event) => {
-                  if (activeItem.comingSoon || isMetaComingSoonClientHref(activeItem.href)) {
-                    event.preventDefault();
-                    onComingSoonClick(activeItem);
-                    return;
-                  }
-
-                  onClose();
-                }}
-                style={{ background: "rgba(var(--ch-accent-rgb),0.16)", color: "var(--ch-accent)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
-              >
-                {activeItem.comingSoon || isMetaComingSoonClientHref(activeItem.href) ? "Em breve" : "Abrir novamente"}
-              </Link>
-            ) : null}
-          </div>
+  const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
+  const filtered = sections.map(section => ({ ...section, items: section.items.filter(item =>
+    !normalizedQuery || `${section.label} ${item.label}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery)
+  ) })).filter(section => section.items.length);
+  return <div ref={menuRef} id="connecty-mobile-menu" role="dialog" aria-modal="true" aria-label="Menu de navegação" tabIndex={-1}
+    data-connecty-mobile-menu="true" className="fixed inset-x-0 bottom-0 top-16 z-50 overflow-y-auto bg-slate-50 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden">
+    <div className="mx-auto max-w-lg">
+      <div className="sticky top-0 z-10 space-y-3 bg-slate-50 py-3">
+        <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{mode === "admin" ? "Administração" : "Seu painel"}</h2>
+          <button type="button" aria-label="Fechar menu" onClick={onClose} className="grid size-11 place-items-center rounded-xl border border-slate-200 bg-white"><X className="size-5" /></button>
         </div>
-
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
-          <input
-            className="h-12 w-full rounded-xl pl-11 pr-4 text-[16px] outline-none"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar no menu..."
-            type="search"
-            value={query}
-            style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border-strong)", color: "var(--ch-text)" }}
-          />
+        <label className="relative block"><Search className="absolute left-3 top-3 size-5 text-slate-500" /><span className="sr-only">Buscar no menu</span>
+          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar uma função…" className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3" />
         </label>
-
-        {!normalizedQuery ? (
-          <div className="grid grid-cols-2 gap-2">
-            {quickItems.map((item) => (
-              <MobileMenuQuickLink
-                key={item.href}
-                active={isActive(item.href, active)}
-                item={item}
-                label={dockLabel(item, mode)}
-                onComingSoonClick={onComingSoonClick}
-                onClick={onClose}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        <nav className="grid gap-3" aria-label="Menu principal">
-          {filteredSections.length > 0 ? filteredSections.map((section) => (
-            <div key={section.label} className="rounded-2xl p-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-subtle)" }}>{section.label}</p>
-                <span className="font-mono text-[9px]" style={{ color: "var(--ch-muted)" }}>{section.items.length}</span>
-              </div>
-              <div className="grid gap-1.5">
-                {section.items.map((item) => (
-                  <MobileMenuLink
-                    key={item.href}
-                    item={item}
-                    isActive={item.href === activeItem?.href}
-                    onComingSoonClick={onComingSoonClick}
-                    onClick={onClose}
-                  />
-                ))}
-              </div>
-            </div>
-          )) : (
-            <div className="rounded-2xl px-4 py-8 text-center text-[13px]" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}>
-              Nenhum item encontrado.
-            </div>
-          )}
-        </nav>
       </div>
+      <nav aria-label="Todas as funções" className="space-y-5 py-3">
+        {filtered.map(section => <section key={section.label}><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{section.label}</h3>
+          <div className="grid gap-2">{section.items.map(item => <MobileMenuLink key={item.href} item={item} isActive={isActive(item.href, active)} onComingSoonClick={onComingSoonClick} onClick={onClose} />)}</div>
+        </section>)}
+        {!filtered.length && <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Nenhuma função encontrada. Tente outro termo.</p>}
+      </nav>
     </div>
-  );
-}
-
-function MobileMenuQuickLink({
-  active,
-  item,
-  label,
-  onComingSoonClick,
-  onClick,
-}: {
-  active: boolean;
-  item: NavItem;
-  label: string;
-  onComingSoonClick: (item: NavItem) => void;
-  onClick: () => void;
-}) {
-  const Icon = item.icon;
-  const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
-
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className="grid min-h-[92px] gap-2 rounded-2xl p-3 transition"
-      onClick={(event) => {
-        if (comingSoon) {
-          event.preventDefault();
-          onComingSoonClick(item);
-          return;
-        }
-
-        onClick();
-      }}
-      style={active ? {
-        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
-        border: "1px solid rgba(var(--ch-accent-rgb),0.62)",
-        color: "#ffffff",
-        boxShadow: "0 16px 32px rgba(var(--ch-accent-rgb),0.20)",
-      } : {
-        background: "linear-gradient(135deg, rgba(255,255,255,0.78), rgba(17,17,17,0.018)), var(--ch-surface)",
-        border: "1px solid var(--ch-border)",
-        color: "var(--ch-text)",
-      }}
-    >
-      <span
-        className="grid h-9 w-9 place-items-center rounded-xl"
-        style={{ background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)", color: active ? "#ffffff" : "var(--ch-muted)" }}
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="self-end truncate text-[13px] font-semibold">{comingSoon ? "Em breve" : label}</span>
-    </Link>
-  );
+  </div>;
 }
 
 function MobileMenuLink({
@@ -2775,7 +2600,7 @@ function MobileMenuLink({
 
         onClick();
       }}
-      className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
+      className="grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
         background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
         border:     "1px solid rgba(var(--ch-accent-rgb),0.62)",
@@ -2799,7 +2624,7 @@ function MobileMenuLink({
       <span className="min-w-0 truncate font-semibold">{item.label}</span>
       {badge ? (
         <span
-          className="rounded-md px-1.5 py-0.5 font-mono text-[9px] leading-none"
+          className="rounded-md px-1.5 py-0.5 font-mono text-[11px] leading-none"
           style={
             item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
             item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
@@ -2832,7 +2657,7 @@ function MobileDock({
   return (
     <nav className="connecty-mobile-dock fixed inset-x-0 bottom-0 z-40 lg:hidden" aria-label="Navegacao principal">
       <div
-        className="mx-auto mb-2 grid w-[min(calc(100vw-24px),440px)] grid-cols-5 gap-1 rounded-2xl p-1.5 shadow-2xl"
+        className="mx-auto mb-2 grid w-[min(calc(100vw-24px),440px)] grid-flow-col auto-cols-fr gap-1 rounded-2xl p-1.5 shadow-2xl"
         style={{
           background: "rgba(255,255,255,0.92)",
           border: "1px solid var(--ch-border-strong)",
@@ -2860,7 +2685,7 @@ function MobileDock({
           }}
         >
           <Menu className="h-4 w-4" />
-          <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">Menu</span>
+          <span className="max-w-full text-[11px] font-medium leading-tight">Menu</span>
         </button>
       </div>
     </nav>
@@ -2897,7 +2722,7 @@ function MobileDockLink({
       style={active ? {
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.96), rgba(var(--ch-accent-2-rgb),0.86))",
         border: "1px solid rgba(255,255,255,0.24)",
-        color: "#061015",
+        color: "#ffffff",
         boxShadow: "0 10px 28px rgba(var(--ch-accent-rgb),0.20)",
       } : {
         background: "transparent",
@@ -2906,7 +2731,7 @@ function MobileDockLink({
       }}
     >
       <Icon className="h-4 w-4" />
-      <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">{comingSoon ? "Breve" : label}</span>
+      <span className="max-w-full text-[11px] font-medium leading-tight">{comingSoon ? "Breve" : label}</span>
     </Link>
   );
 }
@@ -2917,9 +2742,8 @@ function getMobileDockItems(sections: NavSection[], mode: "admin" | "client") {
     : ["/dashboard", "/dashboard/atendimento", "/dashboard/links", "/dashboard/minha-conta"];
   const items = sections.flatMap((section) => section.items);
 
-  return dockHrefs
-    .map((href) => items.find((item) => item.href === href))
-    .filter((item): item is NavItem => Boolean(item));
+  const preferred = dockHrefs.map(href => items.find(item => item.href === href)).filter((item): item is NavItem => Boolean(item));
+  return [...preferred, ...items.filter(item => !preferred.some(entry => entry.href === item.href))].slice(0, 4);
 }
 
 function dockLabel(item: NavItem, mode: "admin" | "client") {
@@ -2928,7 +2752,7 @@ function dockLabel(item: NavItem, mode: "admin" | "client") {
   }
 
   if (mode === "admin") {
-    if (item.href === "/admin/whatsapp/atendimento") return "WhatsApp";
+    if (item.href === "/admin/whatsapp/atendimento") return "Atender";
     if (item.href === "/admin/clientes") return "Clientes";
     if (item.href === "/admin/leads") return "Leads";
   }

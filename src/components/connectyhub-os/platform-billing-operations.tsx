@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -660,7 +661,7 @@ export function PlatformBillingOperations({
                     type="button"
                     onClick={runOperationalHealth}
                     disabled={testing !== null}
-                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: "rgba(6,182,212,0.14)", border: "1px solid rgba(6,182,212,0.28)", color: "#67e8f9" }}
                   >
                     <Activity className="h-4 w-4" />
@@ -670,7 +671,7 @@ export function PlatformBillingOperations({
                     type="button"
                     onClick={sendOperationalNotification}
                     disabled={testing !== null || !selectedTestOrganizationId}
-                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
                   >
                     <Send className="h-4 w-4" />
@@ -740,7 +741,7 @@ export function PlatformBillingOperations({
 
               <Link
                 href="/admin/maintenance#credenciais-do-sistema"
-                className="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-semibold transition hover:opacity-90"
+                className="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[11px] font-semibold transition hover:opacity-90"
                 style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               >
                 <PlugZap className="h-4 w-4" />
@@ -815,7 +816,7 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{plan.planCode}</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{plan.planCode}</p>
                 </div>
                 <StatusBadge status={mapped ? "online" : "warning"} />
               </div>
@@ -823,7 +824,7 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
                 <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
                 <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
               </div>
-              <p className="mt-2 truncate font-mono text-[9px] text-slate-500">
+              <p className="mt-2 truncate font-mono text-[11px] text-slate-500">
                 {providerDetail}
               </p>
             </div>
@@ -853,7 +854,7 @@ function MercadoPagoBillingConnectionCard({
           <p className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
             Conta recebedora ConnectyHub
           </p>
-          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-slate-500">
+          <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
             {connection.connected
               ? `${connection.mode ?? "production"} / ${connection.accountId ?? "conta conectada"}`
               : `Configure ${connection.providerLabel} no cofre`}
@@ -879,7 +880,7 @@ function MercadoPagoBillingConnectionCard({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <a
           href={connection.provider === "mercado_pago" ? "/api/admin/billing/mercado-pago/connect" : "/admin/maintenance#credenciais-do-sistema"}
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition hover:opacity-90"
           style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
         >
           <ExternalLink className="h-3.5 w-3.5" />
@@ -893,7 +894,7 @@ function MercadoPagoBillingConnectionCard({
             type="button"
             onClick={onDisconnect}
             disabled={disconnecting}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.22)", color: "#fda4af" }}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${disconnecting ? "animate-spin" : ""}`} />
@@ -927,7 +928,7 @@ function CredentialStatusGrid({
               style={{ background: field.configured ? "#10b981" : field.requirement === "required" ? "#fb7185" : "#f59e0b" }}
             />
           </div>
-          <p className="mt-1 truncate font-mono text-[8px] uppercase tracking-wide text-slate-500">
+          <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">
             {field.configured ? field.displayValue : field.requirement === "required" ? "obrigatorio" : "opcional"}
           </p>
         </div>
@@ -1090,7 +1091,7 @@ function RefundConfirmationModal({
   }
 
   return (
-    <div
+    <DialogFrame onClose={loading ? () => undefined : onClose}
       aria-labelledby="billing-refund-title"
       aria-modal="true"
       className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4 py-6 backdrop-blur-sm"
@@ -1114,7 +1115,7 @@ function RefundConfirmationModal({
           style={{ borderColor: "var(--ch-border)" }}
         >
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-rose-300">estorno mercado pago</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-rose-300">estorno mercado pago</p>
             <h2 id="billing-refund-title" className="mt-1 text-[20px] font-black text-white">Confirmar estorno</h2>
             <p className="mt-1 text-[12px] leading-5 text-slate-400">
               Esta acao estorna o pagamento, cancela a recorrencia e remove os creditos do plano quando houver saldo.
@@ -1211,7 +1212,7 @@ function RefundConfirmationModal({
           ) : null}
         </div>
       </form>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1221,7 +1222,7 @@ function RefundSummaryStat({ label, value, accent = false }: { label: string; va
       className="min-w-0 rounded-xl border p-3"
       style={{ background: accent ? "rgba(244,63,94,0.10)" : "var(--ch-surface-2)", borderColor: accent ? "rgba(244,63,94,0.24)" : "var(--ch-border)" }}
     >
-      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
       <p className={`mt-1 truncate font-mono text-[12px] font-black ${accent ? "text-rose-100" : "text-slate-100"}`}>{value}</p>
     </div>
   );
@@ -1248,7 +1249,7 @@ function BillingOpsMetric({
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
         <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex" style={{ background: `${color}18`, color }}>
           <Icon className="h-4 w-4" />
         </div>
@@ -1264,7 +1265,7 @@ function BillingOpsMetric({
 function FieldLabel({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -1377,7 +1378,7 @@ function MessageTemplatesEditor({
 
       <div className="grid gap-2 border-t border-white/10 p-3">
         <div
-          className="rounded-lg px-2.5 py-2 text-[10px] leading-4 text-slate-500"
+          className="rounded-lg px-2.5 py-2 text-[11px] leading-4 text-slate-500"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           Variaveis: {PLATFORM_BILLING_MESSAGE_VARIABLES.join(" ")}
@@ -1394,11 +1395,11 @@ function MessageTemplatesEditor({
                 <span className="block text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>
                   {definition.label}
                 </span>
-                <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">
+                <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
                   {definition.description}
                 </span>
               </span>
-              <span className="shrink-0 rounded-full border border-white/10 px-2 py-1 font-mono text-[9px] uppercase text-slate-500">
+              <span className="shrink-0 rounded-full border border-white/10 px-2 py-1 font-mono text-[11px] uppercase text-slate-500">
                 {templates[definition.eventType].length}/{PLATFORM_BILLING_MESSAGE_TEMPLATE_MAX_LENGTH}
               </span>
             </summary>
@@ -1413,13 +1414,13 @@ function MessageTemplatesEditor({
                 style={inputStyle}
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] leading-4 text-slate-500">
+                <p className="text-[11px] leading-4 text-slate-500">
                   Evento: <span className="font-mono text-slate-400">{definition.eventType}</span>
                 </p>
                 <button
                   type="button"
                   onClick={() => onReset(definition.eventType)}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition hover:opacity-90"
                   style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)", color: "#cbd5e1" }}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -1492,10 +1493,10 @@ function OrderBumpProductsEditor({
                       label={availabilityLabel}
                     />
                   </span>
-                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+                  <span className="mt-1 block text-[11px] leading-4 text-slate-500">
                     {product.description}
                   </span>
-                  <span className="mt-1 block font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                  <span className="mt-1 block font-mono text-[11px] uppercase tracking-wide text-slate-500">
                     {product.productCode}
                     {product.creditAmount ? ` / ${formatCredits(product.creditAmount)} creditos` : ""}
                     {product.billingCycle === "recurring" ? " / recorrente" : " / unico"}
@@ -1525,7 +1526,7 @@ function getOrderBumpAvailabilityLabel(product: PlatformBillingOperationsCatalog
 function MiniValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
@@ -1575,7 +1576,7 @@ function BillingSyncActions({
           href={checkoutUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition hover:opacity-90"
           style={{ background: "rgba(6,182,212,0.12)", border: "1px solid rgba(6,182,212,0.25)", color: "#67e8f9" }}
         >
           <ExternalLink className="h-3.5 w-3.5" />
@@ -1586,7 +1587,7 @@ function BillingSyncActions({
         type="button"
         onClick={onReconcile}
         disabled={disabled || loading}
-        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-45"
+        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-45"
         style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.24)", color: "#86efac" }}
       >
         <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -1597,7 +1598,7 @@ function BillingSyncActions({
           type="button"
           onClick={onRefund}
           disabled={refundDisabled || refundLoading}
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-45"
           style={{ background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.26)", color: "#fda4af" }}
         >
           <RotateCcw className={`h-3.5 w-3.5 ${refundLoading ? "animate-spin" : ""}`} />

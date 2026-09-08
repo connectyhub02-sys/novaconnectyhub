@@ -6,6 +6,7 @@ import * as icons from "lucide-react";
 import { buildBillingPaymentFailureCopy } from "../src/lib/billing/payment-feedback";
 import { classifyAsaasFailure } from "../src/lib/sales-catalog/payment-diagnostics";
 import { serverModuleHarness } from "./helpers/server-module-harness";
+import { DialogFrame } from "../src/components/ui/dialog-frame";
 
 describe("checkout payment feedback", () => {
   it("preserves a safe tokenization permission diagnostic without the provider body", () => {
@@ -31,7 +32,7 @@ describe("checkout payment feedback", () => {
   });
   it("renders the actual billing modal with provider failure and a non-retry action", () => {
     const { CheckoutPaymentFeedbackModal } = serverModuleHarness<{CheckoutPaymentFeedbackModal: React.ComponentType<Record<string,unknown>>}>("src/components/connectyhub-os/billing-plan-checkout.tsx", {
-      react:React,"react/jsx-runtime":jsx,"lucide-react":icons,"@/lib/utils":{cn:(...values:unknown[])=>values.filter(Boolean).join(" ")},
+      react:React,"react/jsx-runtime":jsx,"lucide-react":icons,"@/lib/utils":{cn:(...values:unknown[])=>values.filter(Boolean).join(" ")}, "@/components/ui/dialog-frame": { DialogFrame },
     }, ["CheckoutPaymentFeedbackModal"]);
     const rejection=buildBillingPaymentFailureCopy("asaas","error",{category:"integration",httpStatus:403});
     const html=renderToStaticMarkup(React.createElement(CheckoutPaymentFeedbackModal,{feedback:{kind:"rejected",rejection},onClose:()=>{},onRetryCard:()=>{},onUsePix:()=>{},onGoDashboard:()=>{}}));

@@ -38,7 +38,7 @@ export function LeadFinancialArchive({ companyId, leadId }: { companyId: string;
       <details className="mt-3"><summary className="cursor-pointer font-semibold">Mensagens e mídias preservadas</summary>
         <p className="mt-2 text-slate-500">Versões recebidas, atualizações e arquivos, inclusive durante atendimento humano.</p>
         {data.archive.map(entry => <div key={entry.id} className="mt-2 border-t border-slate-100 pt-2">
-          <p className="text-[10px] text-slate-500">{new Date(entry.created_at).toLocaleString("pt-BR")} · {entry.direction === "inbound" ? "Lead" : "Atendimento"} · {entry.operation === "updated" ? "Atualizada" : entry.operation === "deleted" ? "Removida na origem" : "Recebida"}</p>
+          <p className="text-[11px] text-slate-500">{new Date(entry.created_at).toLocaleString("pt-BR")} · {entry.direction === "inbound" ? "Lead" : "Atendimento"} · {entry.operation === "updated" ? "Atualizada" : entry.operation === "deleted" ? "Removida na origem" : "Recebida"}</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{entry.text || entry.messageType || "Mensagem"}</p>
           {entry.media_status === "stored" ? <a href={`/api/dashboard/lead-archive/${entry.id}/file`} className="mt-1 inline-block text-blue-700 underline">Abrir arquivo preservado</a> : entry.media_status === "retry" ? <p className="mt-1 text-amber-700">Gravação da mídia pendente. Recuperação automática em andamento.</p> : null}
         </div>)}

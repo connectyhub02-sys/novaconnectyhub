@@ -183,7 +183,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
         description="Rascunhos, aprovacao e envio para Instagram e Facebook."
         actions={
           <button
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
             disabled={workingAction === "refresh"}
             onClick={() => void refresh()}
             type="button"
@@ -219,7 +219,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             ) : null}
 
             <label className="grid gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Titulo</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Titulo</span>
               <input
                 className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
                 maxLength={140}
@@ -230,7 +230,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             </label>
 
             <label className="grid gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Legenda</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Legenda</span>
               <textarea
                 className="min-h-[170px] resize-y rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3 text-[13px] leading-5 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
                 maxLength={2200}
@@ -241,7 +241,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             </label>
 
             <label className="grid gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Midia publica</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Midia publica</span>
               <input
                 className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
                 onChange={(event) => setDraft((current) => ({ ...current, mediaUrl: event.target.value }))}
@@ -251,8 +251,8 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             </label>
 
             <label className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Upload de imagem</span>
-              <span className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15">
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Upload de imagem</span>
+              <span className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15">
                 {uploadingMedia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
                 {uploadingMedia ? "Enviando" : "Selecionar imagem"}
               </span>
@@ -274,7 +274,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             />
 
             <label className="grid gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Link</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Link</span>
               <input
                 className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
                 onChange={(event) => setDraft((current) => ({ ...current, linkUrl: event.target.value }))}
@@ -284,7 +284,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             </label>
 
             <label className="grid gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Agendar para</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Agendar para</span>
               <input
                 className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 font-mono text-[12px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-violet-300/45"
                 min={getDatetimeLocalMin()}
@@ -310,7 +310,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
             </div>
 
             <button
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={workingAction === "create_draft:new"}
               onClick={() => void submitDraft()}
               type="button"
@@ -380,17 +380,17 @@ function OrganicPostItem({
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status={item.status} text={item.statusLabel} warning={Boolean(item.lastError)} />
           {item.surfaceLabels.map((label) => (
-            <span key={label} className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">
+            <span key={label} className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-400">
               {label}
             </span>
           ))}
-          <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
             {formatDateTime(item.publishedAt ?? item.scheduledFor ?? item.approvedAt ?? item.createdAt)}
           </span>
         </div>
 
         {item.scheduledFor && item.status === "scheduled" ? (
-          <div className="inline-flex items-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/10 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-violet-100">
+          <div className="inline-flex items-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/10 px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wide text-violet-100">
             <Clock3 className="h-3.5 w-3.5" />
             {formatDateTime(item.scheduledFor)}
           </div>
@@ -416,12 +416,12 @@ function OrganicPostItem({
 
         <div className="flex flex-wrap gap-1.5">
           {item.providerIds.slice(0, 3).map((id) => (
-            <span key={id} className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+            <span key={id} className="rounded-md border border-white/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
               ID {id}
             </span>
           ))}
           {item.audit[0] ? (
-            <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+            <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
               {formatAudit(item.audit[0].type)}
             </span>
           ) : null}
@@ -431,7 +431,7 @@ function OrganicPostItem({
       <div className="grid content-start gap-2">
         {canApprove ? (
           <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={workingAction === approveKey}
             onClick={() => void onApprove()}
             type="button"
@@ -442,7 +442,7 @@ function OrganicPostItem({
         ) : null}
         {canPublish ? (
           <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-300/15 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-300/15 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={workingAction === publishKey}
             onClick={() => void onPublish()}
             type="button"
@@ -453,7 +453,7 @@ function OrganicPostItem({
         ) : null}
         {canArchive ? (
           <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={workingAction === archiveKey}
             onClick={() => void onArchive()}
             type="button"
@@ -463,7 +463,7 @@ function OrganicPostItem({
           </button>
         ) : null}
         {!canApprove && !canPublish && !canArchive ? (
-          <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">
+          <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-500">
             <Archive className="h-3.5 w-3.5" />
             Sem acao
           </span>
@@ -489,7 +489,7 @@ function MediaLibrary({
   return (
     <div className="grid gap-2 rounded-xl border border-white/10 bg-slate-950/35 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Biblioteca</span>
+        <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Biblioteca</span>
         <NeonBadge tone="violet">{media.length} midias</NeonBadge>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -510,7 +510,7 @@ function MediaLibrary({
                 src={asset.storageUrl}
               />
             </span>
-            <span className="min-w-0 truncate font-mono text-[8px] uppercase tracking-wide text-slate-500 group-hover:text-violet-100">
+            <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500 group-hover:text-violet-100">
               {formatBytes(asset.bytesSize)}
             </span>
           </button>
@@ -537,7 +537,7 @@ function EditorialCalendar({ items }: { items: ClientMetaOrganicPost[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="inline-flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-violet-200" />
-          <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-violet-100">Calendario editorial</span>
+          <span className="font-mono text-[11px] font-bold uppercase tracking-wide text-violet-100">Calendario editorial</span>
         </div>
         <NeonBadge tone="violet">{calendarItems.length} datas</NeonBadge>
       </div>
@@ -549,13 +549,13 @@ function EditorialCalendar({ items }: { items: ClientMetaOrganicPost[] }) {
               className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-2 rounded-xl border border-white/10 bg-slate-950/35 p-2"
               key={`${item.id}:${date}`}
             >
-              <div className="grid h-14 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-center font-mono text-[10px] font-bold uppercase leading-4 text-violet-100">
+              <div className="grid h-14 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-center font-mono text-[11px] font-bold uppercase leading-4 text-violet-100">
                 {formatCalendarDate(date)}
               </div>
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <StatusPill status={item.status} text={item.statusLabel} warning={Boolean(item.lastError)} />
-                  <span className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{formatDateTime(date)}</span>
+                  <span className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{formatDateTime(date)}</span>
                 </div>
                 <p className="mt-1 truncate text-[12px] font-semibold text-white">{item.title}</p>
                 <p className="truncate text-[11px] text-slate-500">{item.surfaceLabels.join(" + ")}</p>
@@ -588,7 +588,7 @@ function ChannelToggle({
   return (
     <button
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        "inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide transition",
         active
           ? "border-cyan-300/35 bg-cyan-300/15 text-cyan-100"
           : "border-white/10 bg-white/[0.02] text-slate-500 hover:bg-white/[0.05]",
@@ -617,7 +617,7 @@ function StatusPill({
 function ExternalBadge({ href, icon, label }: { href: string; icon: ReactNode; label: string }) {
   return (
     <a
-      className="inline-flex h-8 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15"
+      className="inline-flex h-8 items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15"
       href={href}
       rel="noreferrer"
       target="_blank"

@@ -342,7 +342,7 @@ export function PricingPlansGrid({
               {plan.popular ? <span className="popular-badge">Mais popular</span> : null}
               {plan.premium ? <span className="premium-badge">Mais completo</span> : null}
               {isPending ? (
-                <span className="absolute right-4 top-11 rounded border border-amber-300/35 bg-amber-400/10 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-amber-200">
+                <span className="absolute right-4 top-11 rounded border border-amber-300/35 bg-amber-400/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-amber-200">
                   Pagamento pendente
                 </span>
               ) : null}
@@ -410,7 +410,7 @@ export function PricingPlansGrid({
                 <AlertTriangle className="h-5 w-5" />
               </span>
               <div>
-                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
+                <div className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-amber-700">
                   Pagamento pendente
                 </div>
                 <h2 className="mt-2 text-xl font-black text-slate-950">Trocar plano escolhido?</h2>
@@ -499,10 +499,10 @@ function PlanStorageSummary({ storage }: { storage: PublicPricingStorageSummary 
   return (
     <div className="mt-4 rounded-[8px] border border-cyan-300/18 bg-cyan-300/[0.045] p-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200/80">
+        <span className="font-mono text-[11px] font-black uppercase tracking-[0.2em] text-cyan-200/80">
           Armazenamento
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-wide text-emerald-100">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-emerald-100">
           <HardDrive className="h-3.5 w-3.5" />
           {storage.limitLabel}
         </span>
@@ -515,7 +515,7 @@ function PlanStorageSummary({ storage }: { storage: PublicPricingStorageSummary 
             return (
               <span
                 key={detail.label}
-                className="inline-flex min-h-7 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2 font-mono text-[10px] font-semibold leading-4 text-slate-300"
+                className="inline-flex min-h-7 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2 font-mono text-[11px] font-semibold leading-4 text-slate-300"
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-cyan-200/75" />
                 <span className="min-w-0 truncate">{detail.label}</span>

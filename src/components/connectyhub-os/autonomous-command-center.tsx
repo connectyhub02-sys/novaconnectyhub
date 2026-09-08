@@ -193,7 +193,7 @@ function CreativeActionButton({
 
 function AutonomousKpis({ overview }: { overview: AutonomousAdminOverview }) {
   return (
-    <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
+    <div className="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
       <SignalCard
         icon={Bot}
         label="Operarios IA"
@@ -305,7 +305,7 @@ function SectorAgentCluster({ group }: { group: AgentSectorGroup }) {
           <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
             {group.sectorName}
           </p>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {group.agents.length} {group.agents.length === 1 ? "agente responsavel" : "agentes responsaveis"}
           </p>
         </div>
@@ -372,13 +372,13 @@ function InstancesView({ overview }: { overview: AutonomousAdminOverview }) {
                 {instance.phoneNumber ?? "Sem numero"}
               </span>,
               <StatusBadge key="status" status={instanceStatusTone(instance.status)} label={instance.status} />,
-              <span key="provider" className="font-mono text-[10px] uppercase text-slate-500">
+              <span key="provider" className="font-mono text-[11px] uppercase text-slate-500">
                 {instance.provider}
               </span>,
               <span key="last" className="text-[12px] text-slate-500">
                 {formatDate(instance.lastMessageAt)}
               </span>,
-              <span key="webhook" className="font-mono text-[10px] text-slate-500">
+              <span key="webhook" className="font-mono text-[11px] text-slate-500">
                 {instance.webhookUrl ? "Configurado" : "Pendente"}
               </span>,
             ])}
@@ -580,7 +580,7 @@ function CreativeCommandPanel({
 
         <div className="grid content-between gap-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Maturidade do pipeline</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Maturidade do pipeline</p>
             <p className="mt-1 text-[13px] font-semibold text-white">{readiness.label}</p>
             <p className="mt-2 text-[11px] leading-4 text-slate-500">
               {schemaReady ? "Banco pronto para registrar criativos, agentes e execucoes." : "Aguardando schema autonomo para ativar o fluxo completo."}
@@ -617,9 +617,9 @@ function CreativeMetricCard({
         <Icon className={cn("h-4 w-4 shrink-0", styles.text)} />
         <span className={cn("h-2 w-2 shrink-0 rounded-full", styles.dot)} />
       </div>
-      <p className="mt-3 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-3 truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
       <p className={cn("mt-2 truncate font-mono text-[22px] font-bold leading-none", styles.text)}>{value}</p>
-      <p className="mt-2 truncate text-[10px] text-slate-500">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -646,7 +646,7 @@ function CreativeSignal({
     >
       <div className="flex items-center gap-2">
         <Icon className={cn("h-4 w-4", styles.text)} />
-        <p className="truncate font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
       </div>
       <p className="mt-2 truncate text-[15px] font-semibold" style={{ color: "var(--ch-text)" }}>
         {value}
@@ -714,7 +714,7 @@ function SignalCard({
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex" style={{ background: `${color}18`, color }}>
           <Icon className="h-4 w-4" />
         </div>
@@ -738,7 +738,7 @@ function AgentOperatingCard({ agent }: { agent: AdminAgent }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge status={agentStatusTone(agent.status)} label={agent.status} />
-            <span className="rounded-lg px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500" style={{ border: "1px solid var(--ch-border)" }}>
+            <span className="rounded-lg px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500" style={{ border: "1px solid var(--ch-border)" }}>
               {agent.llmProvider}
             </span>
           </div>
@@ -746,7 +746,7 @@ function AgentOperatingCard({ agent }: { agent: AdminAgent }) {
               {agent.personaName}
           </p>
           <p className="truncate text-[12px] text-slate-500">{agent.name}</p>
-          <p className="truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <p className="truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {agent.roleTitle}
           </p>
           <AgentAvatarUpload agentId={agent.id} agentName={agent.personaName} />
@@ -755,7 +755,7 @@ function AgentOperatingCard({ agent }: { agent: AdminAgent }) {
           className="rounded-xl px-2.5 py-2 text-right"
           style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
         >
-          <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">auto</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">auto</p>
           <p className="font-mono text-[14px] font-bold" style={{ color: agent.autonomyLevel >= 70 ? "#34d399" : "#fbbf24" }}>
             {agent.autonomyLevel}%
           </p>
@@ -773,7 +773,7 @@ function AgentOperatingCard({ agent }: { agent: AdminAgent }) {
       />
 
       <div className="mt-3">
-        <div className="mb-1.5 flex justify-between font-mono text-[9px] uppercase tracking-widest text-slate-500">
+        <div className="mb-1.5 flex justify-between font-mono text-[11px] uppercase tracking-widest text-slate-500">
           <span>Autonomia</span>
           <span>{agent.requiresHumanApproval ? "com aprovacao" : "autonomo"}</span>
         </div>
@@ -799,7 +799,7 @@ function AgentMini({ agent }: { agent: AdminAgent }) {
             <p className="text-[11px] text-slate-500">{agent.name}</p>
             <p className="mt-1 text-[12px] text-slate-500">{agent.profileBio ?? agent.description}</p>
             {(agent.scheduleRrule || agent.inngestEventName) && (
-              <p className="mt-2 font-mono text-[9px] uppercase tracking-wider text-slate-500">
+              <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
                 {formatSchedule(agent.scheduleRrule)} / {agent.inngestEventName ?? "sem evento"}
               </p>
             )}
@@ -871,12 +871,12 @@ function RunRow({ run }: { run: { runStatus: string; triggerSource: string | nul
     >
       <div className="flex items-center justify-between gap-3">
         <StatusBadge status={runStatusTone(run.runStatus)} label={run.runStatus} />
-        <span className="font-mono text-[10px] text-slate-500">{formatDate(run.startedAt)}</span>
+        <span className="font-mono text-[11px] text-slate-500">{formatDate(run.startedAt)}</span>
       </div>
       <p className="mt-2 text-[12px] leading-5 text-slate-500">
         {run.outputSummary ?? run.errorMessage ?? run.triggerSource ?? "Execucao registrada sem resumo."}
       </p>
-      <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+      <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {run.costCredits} creditos
       </p>
     </div>
@@ -910,12 +910,12 @@ function EventRow({ event }: { event: IntelligenceEvent }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {event.sourceType} / {event.eventType}
           </p>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{event.title}</p>
         </div>
-        <span className="font-mono text-[10px] text-slate-500">{formatDate(event.occurredAt)}</span>
+        <span className="font-mono text-[11px] text-slate-500">{formatDate(event.occurredAt)}</span>
       </div>
       <p className="mt-2 text-[12px] leading-5 text-slate-500">{event.summary ?? "Evento sem resumo."}</p>
       <TagRow tags={event.tags} />
@@ -937,7 +937,7 @@ function ContentCard({ item }: { item: ContentPipelineItem }) {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={statusTone} label={item.status} />
             <span
-              className="rounded-lg px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500"
+              className="rounded-lg px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500"
               style={{ border: "1px solid var(--ch-border)" }}
             >
               {contentKind}
@@ -961,7 +961,7 @@ function ContentCard({ item }: { item: ContentPipelineItem }) {
             href={item.sourceUrl}
             target="_blank"
             rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-cyan-400 transition hover:text-cyan-200"
+            className="mt-3 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-cyan-400 transition hover:text-cyan-200"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Fonte do briefing
@@ -978,7 +978,7 @@ function InstanceName({ instance }: { instance: AdminWhatsappInstance }) {
       <p className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
         {instance.organizationName}
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
         {instance.organizationPlan ?? instance.planCode ?? "sem plano"}
       </p>
     </div>
@@ -1012,7 +1012,7 @@ function TagRow({ tags }: { tags: string[] }) {
       {visibleTags.map((tag) => (
         <span
           key={tag}
-          className="rounded-md px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500"
+          className="rounded-md px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500"
           style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
         >
           {tag}

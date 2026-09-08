@@ -164,7 +164,7 @@ export function ClientProductsMarketplace({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-4 gap-2 md:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 md:gap-4">
             <Metric icon={ShoppingBag} label="Disponiveis" value={String(metrics.available)} detail="produtos ConnectyHub" />
             <Metric icon={CheckCircle2} label="Importados" value={String(metrics.imported)} detail={selectedCompany?.name ?? "empresa selecionada"} />
             <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} />
@@ -175,7 +175,7 @@ export function ClientProductsMarketplace({
             title="Empresa de venda"
             eyebrow="separacao por agente/operacao"
             action={
-              <Link href="/dashboard/links" className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
+              <Link href="/dashboard/links" className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
                 <ExternalLink className="h-3.5 w-3.5" />
                 Catalogo de Vendas
               </Link>
@@ -183,7 +183,7 @@ export function ClientProductsMarketplace({
           >
             <div className="grid gap-3 lg:grid-cols-[minmax(260px,420px)_minmax(0,1fr)]">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Empresa</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Empresa</span>
                 <select
                   value={selectedCompanyId}
                   onChange={(event) => setSelectedCompanyId(event.target.value)}
@@ -258,7 +258,7 @@ export function ClientProductsMarketplace({
               </Panel>
 
               <Panel title="Comissoes" eyebrow="repasse ConnectyHub">
-                <div className="mb-3 grid grid-cols-4 gap-1.5 sm:gap-2">
+                <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
                   <CommissionSummaryTile label="Pendente" value={formatMoney(metrics.pendingCommission)} detail={`${metrics.pendingCount} aguardando prazo`} />
                   <CommissionSummaryTile label="Liberada" value={formatMoney(metrics.availableCommission)} detail={`${metrics.availableCount} pronta para repasse`} />
                   <CommissionSummaryTile label="Paga" value={formatMoney(metrics.paidCommission)} detail={`${metrics.paidCount} repasse(s)`} />
@@ -341,13 +341,13 @@ function MarketplaceProductCard({
             type="button"
             disabled={loading || disabled}
             onClick={onImport}
-            className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
             {imported ? "Atualizar importacao" : "Importar"}
           </button>
-          <button type="button" onClick={onCopy} className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" onClick={onCopy} className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
             <Copy className="h-3.5 w-3.5" />
             Tag
           </button>
@@ -386,9 +386,9 @@ function CommissionRow({ commission, product }: { commission: PlatformProductCom
 function CommissionSummaryTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded-xl border px-2.5 py-3 sm:px-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.13em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.13em] text-slate-500 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
       <p className="mt-2 truncate font-mono text-[14px] font-bold text-cyan-100 sm:text-[17px]">{value}</p>
-      <p className="mt-1 truncate text-[10px] text-slate-500 sm:text-[11px]">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-[11px]">{detail}</p>
     </div>
   );
 }
@@ -409,20 +409,20 @@ function Metric({
   return (
     <div className="min-w-0 rounded-2xl p-2.5 sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-2">
-        <p className="truncate font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-9 w-9 items-center justify-center rounded-xl sm:flex" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
       <p className="mt-2 truncate font-mono text-[17px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: "var(--ch-text)" }}>{mobileValue ?? value}</p>
-      <p className="mt-1 truncate text-[10px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
     </div>
   );
 }
 
 function MiniTag({ icon: Icon, children, className }: { icon: LucideIcon; children: ReactNode; className?: string }) {
   return (
-    <span className={cn("inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400", className)} style={{ borderColor: "var(--ch-border)" }}>
+    <span className={cn("inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400", className)} style={{ borderColor: "var(--ch-border)" }}>
       <Icon className="h-3 w-3 shrink-0" />
       <span className="truncate">{children}</span>
     </span>

@@ -3,7 +3,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *):not([data-connecty-mode] *));
 
 :root {
   --card: oklch(1 0 0);
@@ -4339,3 +4339,101 @@ html {
     @apply font-sans;
   }
 }
+
+/* Shared SaaS surfaces. Explicit dark previews keep their own theme. */
+[data-connecty-mode] {
+  --ch-action: #1d4ed8;
+  --ch-action-hover: #1e40af;
+  --ch-action-text: #ffffff;
+  --ch-focus: #2563eb;
+  font-size: 14px;
+  line-height: 1.5;
+}
+[data-connecty-mode] .connecty-account-console {
+  --ch-accent: #1d4ed8;
+  --ch-accent-rgb: 29,78,216;
+  --ch-accent-2: #1e40af;
+}
+.ch-surface { background: var(--ch-surface, #fff); color: var(--ch-text, #0f172a); }
+.ch-surface-muted { background: #f1f5f9; color: #334155; }
+[data-connecty-mode] :is(.text-emerald-400, .text-emerald-500):not([data-connecty-contrast="dark"] *) { color: #047857 !important; }
+[data-connecty-mode] :is(.text-amber-400, .text-amber-500):not([data-connecty-contrast="dark"] *) { color: #92400e !important; }
+[data-connecty-mode] :is(.text-rose-400, .text-rose-500):not([data-connecty-contrast="dark"] *) { color: #be123c !important; }
+[data-connecty-mode] .ch-action,
+[data-connecty-mode] .ch-action * {
+  background-color: var(--ch-action);
+  color: var(--ch-action-text) !important;
+}
+[data-connecty-mode] .ch-action:hover { background-color: var(--ch-action-hover); }
+[data-connecty-mode] :is(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--ch-focus);
+  outline-offset: 3px;
+}
+[data-connecty-mode] :is(input, textarea, select) { border-radius: 10px; }
+[data-connecty-mode] button:disabled { cursor: not-allowed; }
+[data-connecty-mode] :is(main, section, article, aside, form) { min-width: 0; }
+.ch-dialog-frame {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding-top: max(16px, env(safe-area-inset-top)) !important;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+  background: rgba(15,23,42,.55) !important;
+  backdrop-filter: blur(4px);
+}
+.ch-dialog-frame > :not(.pointer-events-none) {
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ch-attendance-grid { height: var(--attendance-height, 70dvh); min-width: 0; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1280px) {
+  .ch-attendance-grid { grid-template-columns: 320px minmax(0,1fr) 300px; }
+}
+@media (min-width: 1600px) {
+  .ch-attendance-grid { grid-template-columns: 360px minmax(0,1fr) 340px; }
+}
+@media (max-width: 1023px) {
+  .connecty-shell-content, .connecty-shell-content.connecty-shell-content--compact {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+  [data-connecty-mode] button:not([role="switch"]):not([role="checkbox"]),
+  [data-connecty-mode] [role="tab"], [data-connecty-mode] summary {
+    min-height: 44px;
+  }
+  [data-connecty-mode] button[aria-label]:not([role="switch"]):not([role="checkbox"]) { min-width: 44px; }
+  [data-connecty-mode] button[class~="text-[11px]"] { font-size: 12px; }
+  [data-connecty-mode] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select) { min-height: 44px; }
+  [data-connecty-mode] :is(input, textarea, select) { font-size: 16px !important; }
+  [data-connecty-mobile-menu] { overscroll-behavior: contain; }
+  .connecty-mobile-dock { padding-bottom: env(safe-area-inset-bottom); }
+  [data-mobile-keyboard="open"] .connecty-mobile-dock { display: none; }
+  [data-mobile-keyboard="open"] .connecty-shell-content { padding-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-connecty-mode] *, [data-connecty-mode] *::before, [data-connecty-mode] *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Legacy surfaces still in module screens, mapped to the same semantic light palette. */
+[data-connecty-mode] .bg-slate-950\/40:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/45:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/55:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/60:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/70:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/72:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/82:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .bg-slate-950\/90:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *) { background-color: var(--ch-surface-2, #f8fafc) !important; }
+[data-connecty-mode] .text-emerald-100\/80:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *) { color: #047857 !important; }
+[data-connecty-mode] .text-amber-100\/90:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-amber-200\/80:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-amber-50\/85:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *) { color: #92400e !important; }
+[data-connecty-mode] .text-cyan-100\/75:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-cyan-100\/80:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-cyan-200\/70:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-cyan-200\/75:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-cyan-200\/80:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
+[data-connecty-mode] .text-cyan-300\/70:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *) { color: var(--ch-accent, #1d4ed8) !important; }

@@ -25,7 +25,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
 
   if (!activeMedia) {
     return (
-      <div className="grid min-h-[320px] w-full place-items-center rounded-[20px] border border-black/10 bg-[#f0f0f0] sm:min-h-[520px]">
+      <div className="grid min-h-[160px] w-full place-items-center rounded-[20px] border border-black/10 bg-[#f0f0f0] sm:min-h-[400px]">
         <Package className="h-20 w-20 text-black/25" aria-hidden="true" />
       </div>
     );

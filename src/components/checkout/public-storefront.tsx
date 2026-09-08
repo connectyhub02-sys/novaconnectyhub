@@ -1,12 +1,11 @@
 "use client";
 
+import { useDialogFocus } from "@/hooks/use-dialog-focus";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   Home,
   Loader2,
   Menu,
@@ -19,7 +18,6 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Sparkles,
-  Star,
   Store,
   X,
 } from "lucide-react";
@@ -111,6 +109,7 @@ type CartLine = PublicStorefrontCartLine;
 type PublicStorefrontProps = {
   mode?: StorefrontMode;
   initialCartOpen?: boolean;
+  initialSearch?: string;
   storeSlug: string;
   branding: PublicStorefrontBranding;
   storefront: PublicStorefrontSettings;
@@ -144,6 +143,7 @@ const genericStoreCategoryLabels = new Set(["produto", "produtos"]);
 export function PublicStorefront({
   mode = "home",
   initialCartOpen = false,
+  initialSearch = "",
   storeSlug,
   branding,
   storefront,
@@ -152,7 +152,7 @@ export function PublicStorefront({
 }: PublicStorefrontProps) {
   const router = useRouter();
   const [category, setCategory] = useState(ALL_CATEGORY);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [sortMode, setSortMode] = useState<StoreSortMode>("featured");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(initialCartOpen);
@@ -644,7 +644,7 @@ export function PublicStorefront({
               <EmptyCatalog branding={branding} />
             )}
 
-            <StoreReviews branding={branding} />
+
           </section>
         </>
       ) : (
@@ -880,12 +880,12 @@ function StorefrontHero({
   return (
     <header className="overflow-hidden bg-[#f2f0f1]">
       <div className="mx-auto grid w-full max-w-[1240px] grid-cols-1 md:grid-cols-2">
-        <section className="px-4 pb-8 pt-10 md:pb-0 md:pt-24">
-          <h1 className="mb-5 max-w-[580px] text-[30px] font-semibold leading-[34px] text-[color:var(--store-text)] md:mb-8 md:text-[42px] md:leading-[46px] xl:text-[46px] xl:leading-[50px]">
+        <section className="px-4 pb-5 pt-6 md:pb-8 md:pt-16">
+          <h1 className="mb-3 max-w-[580px] text-[28px] font-semibold leading-[34px] text-[color:var(--store-text)] md:mb-8 md:text-[42px] md:leading-[46px] xl:text-[46px] xl:leading-[50px]">
             <span className="block text-[color:var(--store-hero-title)]">{heroTitle}</span>
             {heroHighlight ? <span className="block text-[color:var(--store-hero-highlight)]">{heroHighlight}</span> : null}
           </h1>
-          <p className="mb-6 max-w-[545px] text-sm leading-6 text-[color:var(--store-text-muted)] lg:mb-8 lg:text-base">
+          <p className="mb-4 max-w-[545px] text-sm leading-6 text-[color:var(--store-text-muted)] lg:mb-8 lg:text-base">
             {heroSubtitle}
           </p>
           <a
@@ -900,9 +900,9 @@ function StorefrontHero({
             Ver produtos
           </a>
         </section>
-        <section className="relative min-h-[448px] px-4">
-          <Sparkles className="absolute right-10 top-12 h-20 w-20 animate-spin text-[color:var(--store-accent)] md:right-0 md:h-24 md:w-24" />
-          <Sparkles className="absolute left-6 top-44 h-11 w-11 animate-spin text-[color:var(--store-accent)] opacity-80 md:left-0 md:top-56 md:h-14 md:w-14" />
+        <section className="relative hidden min-h-[400px] px-4 md:block">
+          <Sparkles className="absolute right-10 top-12 h-20 w-20 text-[color:var(--store-accent)] md:right-0 md:h-24 md:w-24" />
+          <Sparkles className="absolute left-6 top-44 h-11 w-11 text-[color:var(--store-accent)] opacity-80 md:left-0 md:top-56 md:h-14 md:w-14" />
           <HeroProductPanel activeIndex={activeFeaturedIndex} branding={branding} product={featuredProduct} total={featuredCount} />
         </section>
       </div>
@@ -1298,18 +1298,8 @@ function ProductCard({ product }: { product: PublicStorefrontProduct }) {
       <strong className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--store-card-text)] xl:text-lg">
         {product.title}
       </strong>
-      <span className="mt-1 flex items-end">
-        <span className="flex items-center gap-0.5 text-[#ffc633]">
-          {[0, 1, 2, 3, 4].map((item) => (
-            <Star className="h-4 w-4 fill-current" key={item} />
-          ))}
-        </span>
-        <span className="ml-[11px] pb-0.5 text-xs text-black xl:ml-[13px] xl:text-sm">
-          4.8<span className="text-black/60">/5</span>
-        </span>
-      </span>
       <span className="mt-1 flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1">
-        <span className="text-xl font-semibold text-[color:var(--store-card-text)] xl:text-2xl">{product.priceLabel}</span>
+        <span className="max-w-full break-words text-base font-semibold tracking-tight text-[color:var(--store-card-text)] sm:text-xl xl:text-2xl">{product.priceLabel}</span>
         {product.compareAtLabel ? (
           <>
             <span className="text-xl font-bold text-black/40 line-through xl:text-2xl">{product.compareAtLabel}</span>
@@ -1357,121 +1347,6 @@ function ProductImage({
       src={product.coverUrl}
       unoptimized
     />
-  );
-}
-
-function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
-  const reviews = useMemo(() => [
-    {
-      name: "Cliente verificado",
-      text: `Atendimento rápido da ${branding.displayName}, produto bem apresentado e compra fácil pelo WhatsApp.`,
-    },
-    {
-      name: "Compra acompanhada",
-      text: "Gostei de conseguir tirar dúvidas antes de finalizar. O checkout ficou simples e direto.",
-    },
-    {
-      name: "Pedido concluído",
-      text: "A vitrine mostra as informações principais sem confundir. Ajuda muito na decisão de compra.",
-    },
-  ], [branding.displayName]);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
-
-  useEffect(() => {
-    if (reviews.length < 2) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const timer = window.setInterval(() => {
-      setActiveReviewIndex((current) => (current + 1) % reviews.length);
-    }, 4200);
-
-    return () => window.clearInterval(timer);
-  }, [reviews.length]);
-
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    const firstCard = scroller?.querySelector<HTMLElement>("[data-store-review-card]");
-
-    if (!scroller || !firstCard) return;
-
-    const styles = window.getComputedStyle(scroller);
-    const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
-    scroller.scrollTo({
-      behavior: "smooth",
-      left: activeReviewIndex * (firstCard.offsetWidth + gap),
-    });
-  }, [activeReviewIndex]);
-
-  function selectReview(index: number) {
-    setActiveReviewIndex((index + reviews.length) % reviews.length);
-  }
-
-  return (
-    <section className="mt-16">
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <h2 className="text-[24px] font-semibold leading-[29px] text-[color:var(--store-text)] md:text-[32px] md:leading-[38px]">
-          Clientes satisfeitos
-        </h2>
-        <div className="hidden items-center gap-4 text-[color:var(--store-text)] sm:flex">
-          <ArrowGlyph direction="left" onClick={() => selectReview(activeReviewIndex - 1)} />
-          <ArrowGlyph direction="right" onClick={() => selectReview(activeReviewIndex + 1)} />
-        </div>
-      </div>
-      <div
-        className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
-        ref={scrollerRef}
-      >
-        {reviews.map((review) => (
-          <StoreReviewCard key={review.name} review={review} />
-        ))}
-      </div>
-      <div className="mt-4 flex justify-center gap-2">
-        {reviews.map((review, index) => (
-          <button
-            aria-label={`Mostrar depoimento: ${review.name}`}
-            className={cn(
-              "h-2 rounded-full transition-all",
-              index === activeReviewIndex
-                ? "w-6 bg-[color:var(--store-button)]"
-                : "w-2 bg-black/20",
-            )}
-            key={review.name}
-            onClick={() => selectReview(index)}
-            type="button"
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function StoreReviewCard({ review }: { review: { name: string; text: string } }) {
-  return (
-    <article className="min-h-[196px] w-[calc(100vw-2rem)] max-w-[370px] shrink-0 snap-start rounded-[8px] border border-black/10 bg-white p-6 text-left sm:w-[360px] lg:w-[420px]" data-store-review-card>
-      <div className="flex text-[#ffc633]">
-        {[0, 1, 2, 3, 4].map((item) => (
-          <Star className="h-5 w-5 fill-current" key={item} />
-        ))}
-      </div>
-      <h3 className="mt-4 text-base font-semibold text-[color:var(--store-card-text)]">{review.name}</h3>
-      <p className="mt-3 text-sm leading-6 text-[color:var(--store-card-text-muted)]">{review.text}</p>
-    </article>
-  );
-}
-
-function ArrowGlyph({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
-  const Icon = direction === "left" ? ChevronLeft : ChevronRight;
-
-  return (
-    <button
-      aria-label={direction === "left" ? "Depoimento anterior" : "Próximo depoimento"}
-      className="grid h-9 w-9 place-items-center rounded-full border border-black/10 transition hover:bg-black/5"
-      onClick={onClick}
-      type="button"
-    >
-      <Icon className="h-4 w-4" />
-    </button>
   );
 }
 
@@ -1546,11 +1421,7 @@ function StoreFooter({
               <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
                 Checkout seguro pela ConnectyHub. {footerContactText}
               </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {paymentBadges.map((item) => (
-                  <PaymentBadge key={item.label} label={item.label} tone={item.tone} />
-                ))}
-              </div>
+              <p className="mt-3 text-xs leading-5 text-[color:var(--store-text-muted)]">Consulte as formas de pagamento disponíveis no checkout.</p>
             </div>
           </div>
         </div>
@@ -1562,29 +1433,6 @@ function StoreFooter({
         </a>
       </p>
     </footer>
-  );
-}
-
-type PaymentBadgeTone = "asaas" | "card" | "pix";
-
-const paymentBadges: Array<{ label: string; tone: PaymentBadgeTone }> = [
-  { label: "Asaas", tone: "asaas" },
-  { label: "Cartao", tone: "card" },
-  { label: "Pix", tone: "pix" },
-];
-
-function PaymentBadge({ label, tone }: { label: string; tone: PaymentBadgeTone }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
-        tone === "asaas" && "border-[#0030b9]/20 bg-[#0030b9] text-white",
-        tone === "card" && "border-slate-200 bg-white text-slate-900",
-        tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-      )}
-    >
-      {label}
-    </span>
   );
 }
 
@@ -1671,6 +1519,7 @@ export function CartDrawer({
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onCheckout: () => void;
 }) {
+  const dialogRef = useDialogFocus(closeCartDrawer, open);
   const [editingLeadContact, setEditingLeadContact] = useState(false);
   const hasPrefilledPhone = leadContactPrefilled && Boolean(customerPhone.trim());
   const needsCustomerName = !customerName.trim();
@@ -1685,9 +1534,9 @@ export function CartDrawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button aria-label="Fechar carrinho" className="absolute inset-0 bg-slate-950/45" onClick={closeCartDrawer} type="button" />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/30">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Carrinho de compras" tabIndex={-1} className="fixed inset-0 z-50">
+      <button tabIndex={-1} aria-label="Fechar carrinho" className="absolute inset-0 bg-slate-950/45" onClick={closeCartDrawer} type="button" />
+      <aside className="absolute right-0 top-0 flex h-dvh w-full max-w-md flex-col bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-slate-950/30">
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <BrandLogo branding={branding} compact />
@@ -1878,7 +1727,7 @@ function MobileBottomNav({
   onHome: () => void;
 }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-[#e5e2d8] bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)] grid grid-cols-3 border-t border-[#e5e2d8] bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] lg:hidden">
       <MobileNavButton active icon={<Home className="h-5 w-5" />} label="Início" onClick={onHome} />
       <MobileNavButton icon={<Store className="h-5 w-5" />} label="Categorias" onClick={onCategories} />
       <MobileNavButton badge={totalItems} icon={<ShoppingCart className="h-5 w-5" />} label="Carrinho" onClick={onCart} />

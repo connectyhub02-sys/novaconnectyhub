@@ -140,8 +140,8 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
           </div>
 
           <div className="mb-3 flex items-center justify-between px-1">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">Endpoints</p>
-            <span className="font-mono text-[10px] text-slate-500">{catalog.stats.endpoints}</span>
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">Endpoints</p>
+            <span className="font-mono text-[11px] text-slate-500">{catalog.stats.endpoints}</span>
           </div>
 
           <nav className="space-y-1">
@@ -159,7 +159,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
                   >
                     <ChevronDown className={`h-3.5 w-3.5 transition ${isOpen ? "rotate-0" : "-rotate-90"}`} />
                     <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">{group.endpoints.length}</span>
+                    <span className="font-mono text-[11px] text-slate-500">{group.endpoints.length}</span>
                   </button>
                   {isOpen ? (
                     <div className="ml-4 mt-1 space-y-1 border-l border-white/10 pl-2">
@@ -186,8 +186,8 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
 
           <div className="mt-8">
             <div className="mb-3 flex items-center justify-between px-1">
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">Schemas</p>
-              <span className="font-mono text-[10px] text-slate-500">{catalog.schemas.length}</span>
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-500">Schemas</p>
+              <span className="font-mono text-[11px] text-slate-500">{catalog.schemas.length}</span>
             </div>
             <div className="space-y-1">
               {catalog.schemas.map((schema) => (
@@ -199,7 +199,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
                 >
                   <Database className="h-3.5 w-3.5" />
                   <span className="min-w-0 flex-1 truncate">{schema.name}</span>
-                  <span className="font-mono text-[10px] text-slate-500">{schema.fields.length}</span>
+                  <span className="font-mono text-[11px] text-slate-500">{schema.fields.length}</span>
                 </button>
               ))}
             </div>
@@ -243,7 +243,7 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
         </p>
       </header>
 
-      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">
         <MetricCard label="Endpoints" value={catalog.stats.endpoints} tone="cyan" />
         <MetricCard label="Rotas nativas" value={catalog.stats.nativeEndpoints} tone="emerald" />
         <MetricCard label="Avancados" value={catalog.stats.advancedEndpoints} tone="violet" />
@@ -302,7 +302,7 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {catalog.webhookEvents.map((event) => (
-            <span key={event} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 font-mono text-[10px] text-cyan-100">
+            <span key={event} className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 font-mono text-[11px] text-cyan-100">
               {event}
             </span>
           ))}
@@ -316,7 +316,7 @@ function TagView({ group, onSelectEndpoint }: { group: ApiDocGroup; onSelectEndp
   return (
     <div>
       <header className="mb-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-200">
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-200">
           TAG
         </div>
         <h2 className="mt-4 text-3xl font-black tracking-tight text-white">{group.name}</h2>
@@ -397,7 +397,7 @@ function EndpointView({ endpoint }: { endpoint: ApiDocEndpoint }) {
 function SchemaView({ schema }: { schema: ApiDocSchema }) {
   return (
     <article>
-      <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-400/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-violet-100">
+      <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-400/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-violet-100">
         Schema
       </div>
       <h2 className="mt-4 text-3xl font-black tracking-tight text-white">{schema.name}</h2>
@@ -433,7 +433,7 @@ function SidePanel({
       <div className="rounded-lg border border-white/10 bg-slate-950/70 p-5">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-cyan-200" />
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">Console API</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">Console API</p>
         </div>
         <p className="mt-3 text-sm leading-6 text-slate-400">
           Selecione um endpoint para testar chamadas reais usando sua chave ConnectyHub.
@@ -746,7 +746,7 @@ function ParameterSection({
           <label key={`${title}-${field.name}`} className="block rounded-lg border border-white/10 bg-white/[0.03] p-3">
             <span className="mb-2 flex items-center justify-between gap-2">
               <span className="font-mono text-[11px] font-bold text-slate-200">{parameterLabel(field)}</span>
-              {field.required ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold text-rose-100">required</span> : null}
+              {field.required ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-bold text-rose-100">required</span> : null}
             </span>
             <input
               className="h-9 w-full rounded-md border border-white/10 bg-black px-2 font-mono text-xs text-slate-100 outline-none transition placeholder:text-slate-700 focus:border-cyan-300/40"
@@ -788,11 +788,11 @@ function ResponsePanel({ result }: { result: TryResult | null }) {
       ) : null}
       <div className="space-y-3 p-3">
         <div>
-          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">URL</p>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">URL</p>
           <code className="block break-all rounded-md bg-white/[0.04] p-2 font-mono text-[11px] text-slate-300">{result.url}</code>
         </div>
         <div>
-          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">Response</p>
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Response</p>
           <CodeBlock code={result.body || "{}"} />
         </div>
         {Object.keys(result.headers).length ? (
@@ -843,8 +843,8 @@ function FieldSection({ empty, fields, title }: { empty: string; fields: ApiDocF
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <code className="break-all font-mono text-sm font-bold text-white">{field.name}</code>
-                  <span className="font-mono text-[10px] text-slate-500">{field.type}</span>
-                  {field.required ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-100">required</span> : null}
+                  <span className="font-mono text-[11px] text-slate-500">{field.type}</span>
+                  {field.required ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-bold text-rose-100">required</span> : null}
                 </div>
               </div>
               <div className="min-w-0 text-sm leading-6 text-slate-400">
@@ -915,7 +915,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 
 function MethodBadge({ compact, method }: { compact?: boolean; method: ApiDocEndpoint["method"] }) {
   return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-md border font-mono font-black ${compact ? "min-w-10 px-1.5 py-0.5 text-[9px]" : "px-3 py-1.5 text-xs"} ${methodTone(method)}`}>
+    <span className={`inline-flex shrink-0 items-center justify-center rounded-md border font-mono font-black ${compact ? "min-w-10 px-1.5 py-0.5 text-[11px]" : "px-3 py-1.5 text-xs"} ${methodTone(method)}`}>
       {method}
     </span>
   );
@@ -965,7 +965,7 @@ function MiniStat({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <div className="font-mono text-lg font-black text-emerald-200">{value}</div>
-      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
     </div>
   );
 }
@@ -982,7 +982,7 @@ function MetricCard({ label, tone, value }: { label: string; tone: "cyan" | "eme
   return (
     <div className={`min-w-0 rounded-lg border px-2 py-2 sm:p-4 ${tones[tone]}`}>
       <div className="truncate font-mono text-[16px] font-black sm:text-3xl">{value}</div>
-      <div className="mt-1 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-400 sm:mt-2 sm:text-[10px] sm:tracking-[0.16em]">{label}</div>
+      <div className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-400 sm:mt-2 sm:text-[11px] sm:tracking-[0.16em]">{label}</div>
     </div>
   );
 }

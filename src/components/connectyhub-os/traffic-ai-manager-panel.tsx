@@ -358,7 +358,7 @@ export function TrafficAiManagerPanel({
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <BrainCircuit className={cn("h-4 w-4 shrink-0", toneClass(tone).text)} />
-                <p className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">prioridade atual</p>
+                <p className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">prioridade atual</p>
               </div>
               <p className="mt-2 text-[18px] font-semibold leading-tight text-white">{plan.summary}</p>
               <p className="mt-2 text-[12px] leading-5 text-slate-500">{plan.nextAction}</p>
@@ -378,7 +378,7 @@ export function TrafficAiManagerPanel({
         <div className="grid gap-3 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">analise generativa</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">analise generativa</p>
               <p className="mt-1 text-[13px] font-semibold text-white">{generatedAt ? formatDateTime(generatedAt) : "Sob demanda"}</p>
             </div>
             <button
@@ -437,7 +437,7 @@ export function TrafficAiManagerPanel({
         <div className="grid content-start gap-2 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div className="mb-1 flex items-center gap-2">
             <Target className={cn("h-4 w-4", toneClass("amber").text)} />
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">foco de verba</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">foco de verba</p>
           </div>
           {plan.budgetFocus.map((item) => (
             <div key={`${item.label}-${item.value}`} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-[11px]" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -492,9 +492,9 @@ function DiagnosticTile({
 }) {
   return (
     <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <p className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
       <p className={cn("mt-1 truncate font-mono text-[18px] font-bold", toneClass(tone).text)}>{value}</p>
-      <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -531,15 +531,15 @@ function RecommendationRow({
           <p className="mt-2 text-[12px] leading-5 text-slate-300">{recommendation.action}</p>
         </div>
         <div className="grid shrink-0 gap-1 rounded-lg px-3 py-2 md:w-32" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-          <p className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{recommendation.metricLabel}</p>
+          <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{recommendation.metricLabel}</p>
           <p className={cn("truncate font-mono text-[16px] font-bold", toneClass(tone).text)}>{recommendation.metricValue}</p>
-          <p className="truncate text-[10px] text-slate-500">{recommendation.impact}</p>
+          <p className="truncate text-[11px] text-slate-500">{recommendation.impact}</p>
           <button
             type="button"
             onClick={onQueue}
             disabled={queued || busy}
             className={cn(
-              "mt-1 inline-flex h-7 items-center justify-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+              "mt-1 inline-flex h-7 items-center justify-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
               toneClass(queued ? "green" : tone).border,
               toneClass(queued ? "green" : tone).bg,
               toneClass(queued ? "green" : tone).text,
@@ -581,7 +581,7 @@ function ActionQueuePanel({
         <div className="flex min-w-0 items-center gap-2">
           <ListChecks className={cn("h-4 w-4 shrink-0", toneClass("cyan").text)} />
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">fila operacional</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">fila operacional</p>
             <p className="truncate text-[13px] font-semibold text-white">{actionItems.length} acao(oes)</p>
           </div>
         </div>
@@ -671,7 +671,7 @@ function AnalysisHistoryPanel({
       <div className="mb-3 flex items-center gap-2">
         <Clock3 className={cn("h-4 w-4", toneClass("violet").text)} />
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">historico de analises</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">historico de analises</p>
           <p className="truncate text-[13px] font-semibold text-white">{loading ? "Carregando" : `${analyses.length} registro(s)`}</p>
         </div>
       </div>
@@ -684,7 +684,7 @@ function AnalysisHistoryPanel({
             <div key={analysis.id} className="rounded-lg px-3 py-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
               <div className="flex items-center justify-between gap-3">
                 <p className="font-mono text-[11px] font-semibold text-cyan-200">{analysis.score}/100</p>
-                <p className="shrink-0 text-[10px] text-slate-500">{formatDateTime(analysis.createdAt)}</p>
+                <p className="shrink-0 text-[11px] text-slate-500">{formatDateTime(analysis.createdAt)}</p>
               </div>
               <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-300">{analysis.summary}</p>
             </div>
@@ -716,7 +716,7 @@ function ExecutionDraftsPanel({
         <div className="flex min-w-0 items-center gap-2">
           <FileText className={cn("h-4 w-4 shrink-0", toneClass("violet").text)} />
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">execucao assistida</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">execucao assistida</p>
             <p className="truncate text-[13px] font-semibold text-white">{drafts.length} rascunho(s)</p>
           </div>
         </div>
@@ -776,7 +776,7 @@ function ExecutionDraftCard({
         <div className="rounded-lg px-3 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
           <div className="mb-2 flex items-center gap-2">
             <ShieldCheck className={cn("h-3.5 w-3.5", toneClass("green").text)} />
-            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">passos</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">passos</p>
           </div>
           <div className="grid gap-1">
             {draft.steps.slice(0, 4).map((step, index) => (
@@ -785,8 +785,8 @@ function ExecutionDraftCard({
           </div>
         </div>
         <div className="rounded-lg px-3 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">payload proposto</p>
-          <p className="mt-2 line-clamp-4 font-mono text-[10px] leading-4 text-slate-400">{formatPayloadPreview(draft.proposedPayload)}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">payload proposto</p>
+          <p className="mt-2 line-clamp-4 font-mono text-[11px] leading-4 text-slate-400">{formatPayloadPreview(draft.proposedPayload)}</p>
         </div>
       </div>
 
@@ -816,7 +816,7 @@ function QueueButton({
       onClick={onClick}
       disabled={busy || disabled}
       className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+        "inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
         toneClass(tone).border,
         toneClass(tone).bg,
         toneClass(tone).text,

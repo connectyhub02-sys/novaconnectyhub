@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -980,11 +981,11 @@ export function ClientWhatsappAutomationStudio({
                         <div key={item.id} className="mb-2 grid gap-2 rounded-lg border border-slate-200 bg-white p-2 last:mb-0">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</span>
-                            <span className="font-mono text-[10px] text-slate-500">D{item.day} / {formatGrowthPlanType(item.type)} / {formatDateTime(item.scheduledFor)}</span>
+                            <span className="font-mono text-[11px] text-slate-500">D{item.day} / {formatGrowthPlanType(item.type)} / {formatDateTime(item.scheduledFor)}</span>
                           </div>
                           <p className="line-clamp-3 text-[12px] leading-5 text-slate-600">{item.text}</p>
                           {item.pollChoices.length && item.type === "poll" ? (
-                            <p className="truncate text-[10px] text-cyan-700">{item.pollChoices.join(" / ")}</p>
+                            <p className="truncate text-[11px] text-cyan-700">{item.pollChoices.join(" / ")}</p>
                           ) : null}
                         </div>
                       ))}
@@ -1146,7 +1147,7 @@ export function ClientWhatsappAutomationStudio({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <NeonBadge tone={item.status === "published" ? "green" : item.status === "review" ? "rose" : "amber"}>{item.status}</NeonBadge>
-                  <span className="font-mono text-[10px] text-slate-500">{formatDateTime(item.scheduledFor ?? item.publishedAt)}</span>
+                  <span className="font-mono text-[11px] text-slate-500">{formatDateTime(item.scheduledFor ?? item.publishedAt)}</span>
                 </div>
               </button>
             )) : (
@@ -1192,8 +1193,8 @@ function FeatureGates({
           gate.active ? "border-emerald-500/25 bg-emerald-500/10" : "border-slate-200 bg-slate-50",
         )}>
           <div className="min-w-0">
-            <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{gate.label}</p>
-            <p className="mt-1 truncate text-[10px] text-slate-500">{gate.detail}</p>
+            <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{gate.label}</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">{gate.detail}</p>
             <p className={cn("mt-1 text-sm font-semibold", gate.active ? "text-emerald-700" : "text-slate-500")}>{gate.active ? "Ativo" : "Pausado"}</p>
           </div>
           <button
@@ -1201,7 +1202,7 @@ function FeatureGates({
             disabled={disabled || loading}
             onClick={() => onToggle(gate.capability, !gate.active)}
             className={cn(
-              "inline-flex min-h-8 items-center justify-center rounded-lg border bg-white/70 px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+              "inline-flex min-h-8 items-center justify-center rounded-lg border bg-white/70 px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
               gate.active
                 ? "border-slate-300 text-slate-500 hover:bg-slate-100"
                 : "border-emerald-500/25 text-emerald-700 hover:bg-emerald-500/10",
@@ -1236,11 +1237,11 @@ function HistoryInsightDrawer({
     : item.campaignTracking?.sent ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-3 sm:p-5">
+    <DialogFrame onClose={loading ? () => undefined : onClose} aria-label="Histórico" className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-3 sm:p-5">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Raio-x da campanha</p>
+            <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Raio-x da campanha</p>
             <h3 className="mt-1 truncate text-base font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</h3>
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
               {formatHistoryOperation(item.operation)} / {formatDateTime(item.publishedAt ?? item.scheduledFor)}
@@ -1279,7 +1280,7 @@ function HistoryInsightDrawer({
               <div className="mt-2 grid gap-2">
                 {insights.samples.length ? insights.samples.map((sample, index) => (
                   <div key={`${sample.source}-${sample.id ?? sample.occurredAt ?? index}`} className="rounded-lg border border-slate-200 bg-white p-2">
-                    <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                    <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">
                       {formatInsightSource(sample.source)} / {formatDateTime(sample.occurredAt)} / {sample.status ?? sample.type ?? "sinal"}
                     </p>
                     <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
@@ -1337,7 +1338,7 @@ function HistoryInsightDrawer({
           <ActionButton icon={BarChart3} label="Atualizar metricas" loading={loading} onClick={onSync} />
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1355,7 +1356,7 @@ function InsightStat({
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
         <Icon className="h-4 w-4 text-emerald-600" />
       </div>
       <p className="mt-2 text-lg font-black text-emerald-700">{value}</p>
@@ -1366,7 +1367,7 @@ function InsightStat({
 
 function HistoryMetricPill({ label, value }: { label: string; value: string }) {
   return (
-    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
       {label}: {value}
     </span>
   );
@@ -1431,7 +1432,7 @@ function CampaignDestinationSelector({
                 <Icon className="h-4 w-4" />
                 {option.label}
               </span>
-              <span className="text-[10px] leading-4 text-slate-500">{option.detail}</span>
+              <span className="text-[11px] leading-4 text-slate-500">{option.detail}</span>
             </button>
           );
         })}
@@ -1495,7 +1496,7 @@ function ProductPicker({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{product.title}</span>
-                <span className="mt-0.5 block truncate text-[10px] text-slate-500">{product.price ? `${product.price} ${product.currency}` : "sem preco"} / {product.media.length} midia(s)</span>
+                <span className="mt-0.5 block truncate text-[11px] text-slate-500">{product.price ? `${product.price} ${product.currency}` : "sem preco"} / {product.media.length} midia(s)</span>
               </span>
             </button>
           );
@@ -1551,10 +1552,10 @@ function WhatsappCampaignPreview({
       <div className="rounded-[28px] border border-slate-300 bg-slate-950 p-2 shadow-sm">
         <div className="overflow-hidden rounded-[22px] bg-[#e8f5e9]">
           <div className="flex items-center gap-2 bg-emerald-700 px-3 py-2 text-white">
-            <div className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-[10px] font-black">CH</div>
+            <div className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-[11px] font-black">CH</div>
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold">{previewTitle}</p>
-              <p className="text-[9px] text-emerald-100">{formatGrowthPlanType(effectiveFormat)}</p>
+              <p className="text-[11px] text-emerald-100">{formatGrowthPlanType(effectiveFormat)}</p>
             </div>
           </div>
           <div className="grid min-h-[320px] content-end gap-2 px-3 py-4">
@@ -1566,7 +1567,7 @@ function WhatsappCampaignPreview({
                   <div className="h-1 flex-1 rounded-full bg-slate-200">
                     <div className="h-1 w-2/3 rounded-full bg-emerald-500" />
                   </div>
-                  <span className="font-mono text-[9px] text-slate-500">0:22</span>
+                  <span className="font-mono text-[11px] text-slate-500">0:22</span>
                 </div>
               ) : null}
               {mediaUrl && effectiveFormat !== "audio" && effectiveFormat !== "poll" ? (
@@ -1575,7 +1576,7 @@ function WhatsappCampaignPreview({
               {effectiveFormat === "carousel" ? (
                 <div className="mb-2 flex gap-1 overflow-hidden">
                   {products.slice(0, 3).map((item) => (
-                    <div key={item.id} className="h-12 min-w-12 rounded-md bg-emerald-100 px-1 py-2 text-center text-[8px] font-semibold text-emerald-800">
+                    <div key={item.id} className="h-12 min-w-12 rounded-md bg-emerald-100 px-1 py-2 text-center text-[11px] font-semibold text-emerald-800">
                       {item.title.slice(0, 16)}
                     </div>
                   ))}
@@ -1585,21 +1586,21 @@ function WhatsappCampaignPreview({
               {effectiveFormat === "poll" ? (
                 <div className="mt-2 grid gap-1">
                   {pollChoices.slice(0, 4).map((choice) => (
-                    <div key={choice} className="rounded-full border border-emerald-500/25 px-2 py-1 text-[10px] text-emerald-700">{choice}</div>
+                    <div key={choice} className="rounded-full border border-emerald-500/25 px-2 py-1 text-[11px] text-emerald-700">{choice}</div>
                   ))}
                 </div>
               ) : null}
               {showsInteractiveButton ? (
-                <div className="mt-2 rounded-md border border-emerald-500/25 px-2 py-1 text-center text-[10px] font-semibold text-emerald-700">
+                <div className="mt-2 rounded-md border border-emerald-500/25 px-2 py-1 text-center text-[11px] font-semibold text-emerald-700">
                   {buttonLabel || "Comprar agora"}
                 </div>
               ) : null}
-              <p className="mt-1 text-right font-mono text-[9px] text-slate-400">10:30</p>
+              <p className="mt-1 text-right font-mono text-[11px] text-slate-400">10:30</p>
             </div>
           </div>
         </div>
       </div>
-      <p className="text-center font-mono text-[9px] uppercase tracking-wide text-slate-500">
+      <p className="text-center font-mono text-[11px] uppercase tracking-wide text-slate-500">
         Previa WhatsApp
       </p>
       <div className="grid gap-2 rounded-xl border border-slate-200 bg-white/70 p-3">
@@ -1635,7 +1636,7 @@ function MiniList({
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white/60 p-3">
-      <p className="mb-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-slate-500">{title}</p>
       {items.length ? (
         <div className="grid gap-2">
           {items.map((item) => (
@@ -1656,7 +1657,7 @@ function Metric({ detail, icon: Icon, label, value }: { detail: string; icon: Lu
   return (
     <div className="rounded-xl border border-slate-200 bg-white/60 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
         <Icon className="h-4 w-4 text-emerald-600" />
       </div>
       <p className="mt-2 text-lg font-black text-emerald-700">{value}</p>
@@ -1683,7 +1684,7 @@ function ActionButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-center font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-center font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       {label}
@@ -1858,7 +1859,7 @@ function EmptyState({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <span className="mb-1 block font-mono text-[9px] uppercase tracking-wide text-slate-500">{children}</span>;
+  return <span className="mb-1 block font-mono text-[11px] uppercase tracking-wide text-slate-500">{children}</span>;
 }
 
 function buildLocalDateTime(offsetMinutes: number) {

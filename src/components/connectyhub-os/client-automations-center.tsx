@@ -293,7 +293,7 @@ export function ClientAutomationsCenter({
       >
         <div className="mb-3 flex flex-wrap gap-2">
           {variableChips.map((variable) => (
-            <span key={variable} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[10px] font-semibold text-blue-700">
+            <span key={variable} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[11px] font-semibold text-blue-700">
               {variable}
             </span>
           ))}
@@ -306,7 +306,7 @@ export function ClientAutomationsCenter({
                   <FieldLabel>{field.title}</FieldLabel>
                   <span className="mt-0.5 block text-[11px] font-medium text-slate-500">{field.event}</span>
                 </span>
-                <span className="font-mono text-[10px] font-semibold text-slate-500">
+                <span className="font-mono text-[11px] font-semibold text-slate-500">
                   {draft.messageTemplates[field.key].length}/{field.maxLength}
                 </span>
               </span>
@@ -319,7 +319,7 @@ export function ClientAutomationsCenter({
           ))}
         </div>
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700">Preview pagamento aprovado</p>
+          <p className="font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview pagamento aprovado</p>
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-800">{messagePreview}</p>
         </div>
       </Panel>
@@ -332,7 +332,7 @@ function Metric({ detail, icon: Icon, label, value }: { detail: string; icon: Lu
   return (
     <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3">
       <div className="flex items-start justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
         <Icon className="h-4 w-4 text-cyan-300" />
       </div>
       <p className="mt-2 truncate text-lg font-black text-white">{value}</p>
@@ -372,7 +372,7 @@ function ToggleRow({
 }
 
 function FieldLabel({ children }: { children: string }) {
-  return <span className="font-mono text-[10px] uppercase tracking-wide text-slate-500">{children}</span>;
+  return <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{children}</span>;
 }
 
 function buildDraft(settings: ClientSalesCatalogSettings | null): AutomationsDraft {

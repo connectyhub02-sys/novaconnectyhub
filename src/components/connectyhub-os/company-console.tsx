@@ -340,7 +340,7 @@ export function CompanyConsole() {
           eyebrow="workspace"
           action={
             <button
-              className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 sm:w-auto"
+              className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 sm:w-auto"
               type="button"
               onClick={() => setShowForm(true)}
             >
@@ -392,7 +392,7 @@ export function CompanyConsole() {
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome da empresa</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome da empresa</span>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -402,14 +402,14 @@ export function CompanyConsole() {
             </label>
             <div className="flex flex-col gap-2 sm:flex-row lg:items-end">
               <button
-                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
                 type="button"
                 onClick={() => setShowForm(false)}
               >
                 Cancelar
               </button>
               <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={creating}
                 type="button"
                 onClick={createCompany}
@@ -500,7 +500,7 @@ function CompanyBlock({
           {editing ? (
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome da empresa</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome da empresa</span>
                 <input
                   value={editName}
                   onChange={(event) => onEditNameChange(event.target.value)}
@@ -509,7 +509,7 @@ function CompanyBlock({
               </label>
               <div className="flex gap-2 sm:items-end">
                 <button
-                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 sm:flex-none"
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 sm:flex-none"
                   type="button"
                   onClick={onCloseEdit}
                 >
@@ -517,7 +517,7 @@ function CompanyBlock({
                   Cancelar
                 </button>
                 <button
-                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                   disabled={updating}
                   type="button"
                   onClick={onSaveEdit}
@@ -532,7 +532,7 @@ function CompanyBlock({
               <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 {company.name}
               </p>
-              <p className="mt-1 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-widest text-slate-500">
                 {agents.length === 1 ? "1 setor cadastrado" : `${agents.length} setores cadastrados`}
               </p>
             </>
@@ -542,7 +542,7 @@ function CompanyBlock({
         {!editing ? (
           <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
             <button
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
               type="button"
               onClick={onOpenEdit}
             >
@@ -550,7 +550,7 @@ function CompanyBlock({
               Editar
             </button>
             <button
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15"
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15"
               type="button"
               onClick={onOpenSector}
             >
@@ -559,7 +559,7 @@ function CompanyBlock({
             </button>
             <button
               className={cn(
-                "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+                "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
                 confirmDelete
                   ? "border-rose-400/40 bg-rose-400/15 text-rose-200"
                   : "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15",
@@ -573,7 +573,7 @@ function CompanyBlock({
             </button>
             <label
               className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#0f62fe] bg-[#0f62fe] px-3 font-mono text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-blue-900/15 transition hover:border-[#0b55df] hover:bg-[#0b55df]",
+                "inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#0f62fe] bg-[#0f62fe] px-3 font-mono text-[11px] font-black uppercase tracking-wide text-white shadow-lg shadow-blue-900/15 transition hover:border-[#0b55df] hover:bg-[#0b55df]",
                 logoUploading && "pointer-events-none opacity-60",
               )}
             >
@@ -598,7 +598,7 @@ function CompanyBlock({
       <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--ch-border)" }}>
         <div className="mb-3 flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-emerald-300" />
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Setores e atendentes</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Setores e atendentes</p>
         </div>
 
         {agents.length > 0 ? (
@@ -621,7 +621,7 @@ function CompanyBlock({
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <NeonBadge tone={agent.status === "active" ? "green" : "amber"}>{agent.status}</NeonBadge>
                     <Link
-                      className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                      className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
                       href="/dashboard/whatsapp"
                     >
                       Editar / mover
@@ -642,7 +642,7 @@ function CompanyBlock({
         <div className="mt-4 rounded-xl border p-4" style={{ background: "rgba(var(--ch-accent-rgb),0.06)", borderColor: "rgba(var(--ch-accent-rgb),0.24)" }}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Novo setor</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-cyan-300">Novo setor</p>
               <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 {company.name}
               </p>
@@ -659,7 +659,7 @@ function CompanyBlock({
 
           <div className="grid gap-3 lg:grid-cols-3">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do setor</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do setor</span>
               <input
                 value={sectorName}
                 onChange={(event) => onSectorNameChange(event.target.value)}
@@ -668,7 +668,7 @@ function CompanyBlock({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do atendente</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do atendente</span>
               <input
                 value={sectorAgentName}
                 onChange={(event) => onSectorAgentNameChange(event.target.value)}
@@ -677,7 +677,7 @@ function CompanyBlock({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Funcao</span>
               <input
                 value={sectorRoleTitle}
                 onChange={(event) => onSectorRoleTitleChange(event.target.value)}
@@ -689,14 +689,14 @@ function CompanyBlock({
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
               type="button"
               onClick={onCloseSector}
             >
               Cancelar
             </button>
             <button
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={creatingSector}
               type="button"
               onClick={onSaveSector}

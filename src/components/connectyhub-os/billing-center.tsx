@@ -193,7 +193,7 @@ export function BillingCenter({
                         <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                           {provider.label}
                         </p>
-                        <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                        <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-slate-500">
                           {formatNumber(provider.events)} eventos / {formatCredits(provider.chargeCredits)} creditos apurados
                         </p>
                       </div>
@@ -424,7 +424,7 @@ function ExecutiveCostSummary({ summary }: { summary: BillingAdminSummary }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{provider.label}</p>
-                  <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                  <p className="mt-0.5 truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
                     {formatProviderUnits(provider)} / {formatCredits(provider.chargeCredits)} cr
                   </p>
                 </div>
@@ -450,7 +450,7 @@ function ExecutiveCostSummary({ summary }: { summary: BillingAdminSummary }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
-                  <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                  <p className="mt-0.5 truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
                     {formatMoney(plan.monthlyPriceBrl)} / {formatCredits(plan.includedCredits)} cr
                   </p>
                 </div>
@@ -582,7 +582,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Leitura de margem</p>
-              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-slate-500">
                 {current.scopeLabel}
               </p>
             </div>
@@ -806,7 +806,7 @@ function TariffName({
       <span className="block truncate font-semibold" style={{ color: muted ? "var(--ch-muted)" : "var(--ch-text)" }}>
         {title}
       </span>
-      {detail ? <span className="mt-0.5 block truncate text-[10px] text-slate-500">{detail}</span> : null}
+      {detail ? <span className="mt-0.5 block truncate text-[11px] text-slate-500">{detail}</span> : null}
     </span>
   );
 }
@@ -832,7 +832,7 @@ function BillingMetric({
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
         <div
           className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-md xl:flex"
           style={{ background: `${color}18`, color }}
@@ -843,7 +843,7 @@ function BillingMetric({
       <p className="mt-1.5 truncate font-mono text-[16px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -869,7 +869,7 @@ function CommercialMetric({
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
         <div
           className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex"
           style={{ background: `${color}18`, color }}
@@ -891,7 +891,7 @@ function ProviderValue({ label, value }: { label: string; value: string }) {
       className="rounded-lg px-2.5 py-2"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
@@ -903,11 +903,11 @@ function CompactValue({ label, value, detail }: { label: string; value: string; 
       className="min-w-0 rounded-lg px-2.5 py-2"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[17px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -915,7 +915,7 @@ function CompactValue({ label, value, detail }: { label: string; value: string; 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="truncate font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-0.5 truncate font-mono text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );

@@ -405,7 +405,7 @@ export function ClientAgentsConsole() {
           <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa</span>
                 <select
                   value={companyId}
                   onChange={(event) => setCompanyId(event.target.value)}
@@ -418,7 +418,7 @@ export function ClientAgentsConsole() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -428,7 +428,7 @@ export function ClientAgentsConsole() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
                 <input
                   value={sectorName}
                   onChange={(event) => setSectorName(event.target.value)}
@@ -440,7 +440,7 @@ export function ClientAgentsConsole() {
                     {selectedCompanySectors.map((sector) => (
                       <button
                         key={sector}
-                        className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-cyan-200"
+                        className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-cyan-200"
                         type="button"
                         onClick={() => setSectorName(sector)}
                       >
@@ -452,7 +452,7 @@ export function ClientAgentsConsole() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Funcao</span>
                 <input
                   value={roleTitle}
                   onChange={(event) => setRoleTitle(event.target.value)}
@@ -469,7 +469,7 @@ export function ClientAgentsConsole() {
 
               {selectedCompany ? (
                 <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-                  <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Atende</p>
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Atende</p>
                   <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{selectedCompany.name}</p>
                 </div>
               ) : null}
@@ -477,13 +477,13 @@ export function ClientAgentsConsole() {
 
             <div>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Prompt do agente</span>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Prompt do agente</span>
                 <textarea
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
                   className="min-h-[280px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
                 />
-                <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">
+                <span className="mt-2 block font-mono text-[11px] uppercase tracking-widest text-slate-500">
                   {prompt.length.toLocaleString("pt-BR")} caracteres
                 </span>
               </label>
@@ -491,7 +491,7 @@ export function ClientAgentsConsole() {
               <div className="mt-4 flex flex-wrap gap-2">
                 {agents.length > 0 ? (
                   <button
-                    className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
                     type="button"
                     onClick={() => setShowForm(false)}
                   >
@@ -499,7 +499,7 @@ export function ClientAgentsConsole() {
                   </button>
                 ) : null}
                 <button
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={creating || !createAgentFormComplete}
                   type="button"
                   onClick={createAgent}
@@ -520,7 +520,7 @@ export function ClientAgentsConsole() {
             eyebrow="whatsapp"
             action={
               <button
-                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
                 type="button"
                 onClick={() => setShowForm(true)}
               >
@@ -622,7 +622,7 @@ function NoCompanyState() {
           O agente precisa estar vinculado a uma empresa para atender os leads certos.
         </p>
         <Link
-          className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+          className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
           href="/dashboard/empresa"
         >
           <Plus className="h-4 w-4" />
@@ -648,7 +648,7 @@ function EmptyAgentsState({ onCreate }: { onCreate: () => void }) {
           Crie o primeiro agente e escolha qual empresa ele vai atender no WhatsApp.
         </p>
         <button
-          className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+          className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
           type="button"
           onClick={onCreate}
         >
@@ -698,7 +698,7 @@ function AgentCard({
       <div className="mt-3 rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
         <div className="flex items-center gap-2">
           <UserRound className="h-3.5 w-3.5 text-cyan-300" />
-          <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Responsavel humano</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Responsavel humano</p>
         </div>
         <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
           {summarizeResponsibleHumans(agent.responsibleHumans, agent.responsibleHuman)}
@@ -707,7 +707,7 @@ function AgentCard({
       <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-slate-500">{agent.prompt}</p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <button
-          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={testing || deleting}
           type="button"
           onClick={onTest}
@@ -716,7 +716,7 @@ function AgentCard({
           Testar
         </button>
         <button
-          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
           type="button"
           onClick={onEdit}
         >
@@ -724,7 +724,7 @@ function AgentCard({
           Editar
         </button>
         <button
-          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15"
+          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15"
           type="button"
           onClick={onClone}
         >
@@ -733,7 +733,7 @@ function AgentCard({
         </button>
         <button
           className={cn(
-            "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
             confirmDelete
               ? "border-rose-400/40 bg-rose-400/15 text-rose-200"
               : "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15",
@@ -811,7 +811,7 @@ function AgentMutationForm({
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-cyan-300">
             {mode === "clone" ? "Clonar agente" : "Editar agente"}
           </p>
           <p className="mt-1 text-[12px] leading-5 text-slate-500">
@@ -833,7 +833,7 @@ function AgentMutationForm({
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)]">
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa</span>
             <select
               value={companyId}
               onChange={(event) => onCompanyChange(event.target.value)}
@@ -846,7 +846,7 @@ function AgentMutationForm({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
             <input
               value={sectorName}
               onChange={(event) => onSectorNameChange(event.target.value)}
@@ -858,7 +858,7 @@ function AgentMutationForm({
                 {sectors.map((sector) => (
                   <button
                     key={sector}
-                    className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-cyan-200"
+                    className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-cyan-200"
                     type="button"
                     onClick={() => onSectorNameChange(sector)}
                   >
@@ -870,7 +870,7 @@ function AgentMutationForm({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
             <input
               value={name}
               onChange={(event) => onNameChange(event.target.value)}
@@ -880,7 +880,7 @@ function AgentMutationForm({
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Funcao</span>
             <input
               value={roleTitle}
               onChange={(event) => onRoleTitleChange(event.target.value)}
@@ -901,13 +901,13 @@ function AgentMutationForm({
         </div>
 
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Prompt</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Prompt</span>
           <textarea
             value={prompt}
             onChange={(event) => onPromptChange(event.target.value)}
             className="min-h-[245px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
           />
-          <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">
+          <span className="mt-2 block font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {prompt.length.toLocaleString("pt-BR")} caracteres
           </span>
         </label>
@@ -915,14 +915,14 @@ function AgentMutationForm({
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <button
-          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+          className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
           type="button"
           onClick={onCancel}
         >
           Cancelar
         </button>
         <button
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabled || !formComplete}
           type="button"
           onClick={onSave}
@@ -938,7 +938,7 @@ function AgentMutationForm({
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );

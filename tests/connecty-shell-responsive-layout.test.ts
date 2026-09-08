@@ -23,20 +23,25 @@ describe("Connecty shell responsive layout", () => {
     const shellTheme = sourceBetween(shellSource, "const shellTheme = {", "const accountDropdownStyle = {");
     const contentLayout = sourceBetween(shellSource, "connecty-shell-content mx-auto", "{children}");
 
-    expect(shellTheme).toContain("linear-gradient(180deg, #ffffff 0%, #f7f7f8");
-    expect(shellTheme).toContain('"--ch-brand-primary": "#111827"');
-    expect(shellTheme).toContain('"--ch-chart-1": "#111827"');
+    expect(shellTheme).toContain('background: "#f5f7fb"');
+    expect(shellTheme).toContain('"--ch-brand-primary": "#1d4ed8"');
+    expect(shellTheme).toContain('"--ch-chart-1": "#1d4ed8"');
     expect(shellTheme).not.toContain("radial-gradient(circle");
     expect(shellTheme).not.toContain("#1877f2");
     expect(shellTheme).not.toContain("#4f46e5");
     expect(contentLayout).toContain('isAttendancePage ? "max-w-none lg:px-4 xl:px-5" : "max-w-[1480px]"');
   });
 
-  it("maps every route tone to the same neutral dashboard accent", () => {
+  it("keeps consistent navigation colors with readable white action labels", () => {
     const palettes = sourceBetween(shellSource, "const neutralAccentPalette", "// ─── Navigation");
 
-    expect(palettes).toContain('accent: "#111827"');
-    expect(palettes).toContain('accent2: "#52525b"');
+    for (const key of ["accent", "accent2"]) {
+      const hex = palettes.match(new RegExp(`${key}: "#([a-f0-9]{6})"`))?.[1];
+      expect(hex).toBeDefined();
+      const channels = hex!.match(/.{2}/g)!.map(value => parseInt(value, 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+      const luminance = channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+      expect(1.05 / (luminance + .05)).toBeGreaterThanOrEqual(4.5);
+    }
     expect(palettes).toContain("blue: neutralAccentPalette");
     expect(palettes).toContain("emerald: neutralAccentPalette");
     expect(palettes).toContain("violet: neutralAccentPalette");

@@ -106,7 +106,7 @@ export default async function StorePage({ params, searchParams }: StorePageProps
         }}
       />
       <PublicTrackingContextBridge context={data.publicTrackingContext} />
-      <PublicStorefront
+      <PublicStorefront initialSearch={typeof (await searchParams)?.q === "string" ? String((await searchParams)?.q) : ""}
         mode="home"
         storeSlug={data.storeSlug}
         branding={data.branding}

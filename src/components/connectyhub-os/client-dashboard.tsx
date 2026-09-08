@@ -158,7 +158,7 @@ export function ClientDashboard({
             className="mt-3 rounded-xl px-3 py-2.5"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
           >
-            <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">recomendacao</p>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">recomendacao</p>
             <p className="mt-1 text-[11px] leading-4 text-slate-500">{recommendation}</p>
           </div>
         </Panel>
@@ -233,7 +233,7 @@ export function ClientDashboard({
                         </span>
                       </div>
                       <p className="mt-1 text-[11px] leading-4 text-slate-500">{lead.summary}</p>
-                      <div className="mt-1 flex gap-3 font-mono text-[9px] text-slate-400">
+                      <div className="mt-1 flex gap-3 font-mono text-[11px] text-slate-400">
                         <span className="flex items-center gap-1">
                           <MapPin className="h-2.5 w-2.5" />
                           {lead.source}
@@ -248,7 +248,7 @@ export function ClientDashboard({
                       <span className="font-mono text-[16px] font-bold" style={{ color: "var(--ch-accent)" }}>
                         {lead.score}
                       </span>
-                      <div className="font-mono text-[9px] text-slate-400">score</div>
+                      <div className="font-mono text-[11px] text-slate-400">score</div>
                     </div>
                   </div>
                 </div>
@@ -271,11 +271,11 @@ export function ClientDashboard({
                       <span className="text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>
                         {conversation.leadName}
                       </span>
-                      <span className="font-mono text-[10px]" style={{ color: "var(--ch-accent)" }}>
+                      <span className="font-mono text-[11px]" style={{ color: "var(--ch-accent)" }}>
                         {conversation.score}
                       </span>
                     </div>
-                    <div className="font-mono text-[9px] uppercase tracking-wide text-slate-400">
+                    <div className="font-mono text-[11px] uppercase tracking-wide text-slate-400">
                       {conversation.channel}
                     </div>
                     <p className="mt-1 text-[11px] leading-4 text-slate-500">{conversation.summary}</p>
@@ -291,7 +291,7 @@ export function ClientDashboard({
               style={{ background: "rgba(6,182,212,0.05)", border: "1px solid rgba(6,182,212,0.2)" }}
             >
               <div
-                className="mb-3 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest"
+                className="mb-3 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest"
                 style={{ color: "var(--ch-accent)" }}
               >
                 <MessageCircle className="h-3 w-3" />
@@ -310,7 +310,7 @@ export function ClientDashboard({
                 className="mt-3 rounded-xl p-3"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
               >
-                <p className="mb-1.5 font-mono text-[9px] uppercase tracking-widest text-emerald-500">
+                <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-emerald-500">
                   rascunho gerado
                 </p>
                 <p className="text-[11px] leading-4 text-slate-500">{insight.draft}</p>
@@ -323,7 +323,7 @@ export function ClientDashboard({
                   <button
                     key={button.label}
                     type="button"
-                    className="flex-1 rounded-xl py-2 font-mono text-[10px] uppercase tracking-wide transition"
+                    className="flex-1 rounded-xl py-2 font-mono text-[11px] uppercase tracking-wide transition"
                     style={
                       button.accent
                         ? { background: "var(--ch-accent)", color: "#fff" }
@@ -355,7 +355,7 @@ export function ClientDashboard({
                 >
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{company.name}</p>
-                    <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
                       {company.planCode} / {company.status}
                     </p>
                   </div>
@@ -441,7 +441,7 @@ function ReportCard({
       style={{ background: "var(--ch-panel)", border: `1px solid color-mix(in srgb, ${color} 34%, transparent)` }}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
         <span
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
           style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, color }}
@@ -477,7 +477,7 @@ function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardO
             <HardDrive className="h-4 w-4" style={{ color: "var(--ch-accent)" }} />
           </div>
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
               armazenamento / {storage.planName}
             </p>
             <p className="mt-1 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
@@ -491,8 +491,8 @@ function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardO
 
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">uso atual</span>
-            <span className="font-mono text-[10px] font-semibold" style={{ color: "var(--ch-accent)" }}>
+            <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">uso atual</span>
+            <span className="font-mono text-[11px] font-semibold" style={{ color: "var(--ch-accent)" }}>
               {usagePercent.label}
             </span>
           </div>

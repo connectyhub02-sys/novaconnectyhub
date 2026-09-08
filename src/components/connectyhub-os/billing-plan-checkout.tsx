@@ -2,6 +2,8 @@
 import { billingBumpLabel } from "@/lib/billing/plan-checkout-catalog";
 import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
 
+import { billingCheckoutPresentation } from "@/lib/billing/checkout-presentation";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 import Image from "next/image";
 import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -137,6 +139,7 @@ export function BillingPlanCheckout({
   const approvalRefreshQueuedRef = useRef(false);
   const shownFeedbackKeysRef = useRef(new Set<string>());
   const lastRejectionRef = useRef<RejectedPaymentCopy | null>(initialPaymentFailure);
+  const [paymentFailure, setPaymentFailure] = useState<RejectedPaymentCopy | null>(initialPaymentFailure);
   const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
   const [paymentStatusOverride, setPaymentStatusOverride] = useState<string | null>(null);
   const [providerPaymentId, setProviderPaymentId] = useState<string | null>(initialProviderPaymentId);
@@ -165,6 +168,7 @@ export function BillingPlanCheckout({
     && ["pending", "rejected", "in_process"].includes(currentPaymentStatus);
   const paymentRejected = currentPaymentStatus === "rejected";
   const checkoutConfirmed = currentPaymentStatus === "approved";
+  const checkoutPresentation = billingCheckoutPresentation(currentPaymentStatus, canPay, paymentFailure);
   const shouldPollExistingProviderPayment = Boolean(providerPaymentId)
     && ["pending", "in_process"].includes(currentPaymentStatus)
     && !checkoutConfirmed
@@ -205,7 +209,10 @@ export function BillingPlanCheckout({
   }, [includedCredits, planName, providerPaymentId, subscriptionId, totalAmount]);
 
   const openRejectedFeedback = useCallback((rejection?: RejectedPaymentCopy | null) => {
-    if (rejection) lastRejectionRef.current = rejection;
+    if (rejection) {
+      lastRejectionRef.current = rejection;
+      setPaymentFailure(rejection);
+    }
     const resolved = lastRejectionRef.current ?? (billingProvider === "mercado_pago"
       ? buildRejectedPaymentCopy(null, "Pagamento não concluído.")
       : buildBillingPaymentFailureCopy(billingProvider));
@@ -293,14 +300,12 @@ export function BillingPlanCheckout({
   }, [openApprovedFeedback, openRejectedFeedback, providerLabel, queueCheckoutRefresh, subscriptionId]);
 
   useEffect(() => {
-    if (checkoutConfirmed) {
-      openApprovedFeedback();
-      return;
-    }
-
-    if (paymentRejected) {
-      openRejectedFeedback();
-    }
+    // Present feedback after the updated checkout has painted; cancel stale transitions.
+    const timer = window.setTimeout(() => {
+      if (checkoutConfirmed) openApprovedFeedback();
+      else if (paymentRejected) openRejectedFeedback();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [checkoutConfirmed, openApprovedFeedback, openRejectedFeedback, paymentRejected]);
 
   useEffect(() => {
@@ -504,7 +509,7 @@ export function BillingPlanCheckout({
         <div className="rounded-[8px] border border-cyan-400/25 bg-slate-950/72 p-5 shadow-xl shadow-black/20">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200">
+              <div className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200">
                 Checkout ConnectyHub
               </div>
               <h2 className="mt-2 text-2xl font-black text-white">{planName}</h2>
@@ -522,7 +527,7 @@ export function BillingPlanCheckout({
               ) : null}
             </div>
             <span className={cn(
-              "rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wide",
+              "rounded-full border px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wide",
               checkoutConfirmed
                 ? "border-emerald-300/35 bg-emerald-400/10 text-emerald-100"
                 : paymentRejected
@@ -531,7 +536,7 @@ export function BillingPlanCheckout({
                 ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-200"
                 : "border-cyan-300/30 bg-cyan-400/10 text-cyan-100",
             )}>
-              {checkoutConfirmed ? "Pagamento aprovado" : paymentRejected ? "Pagamento recusado" : canPay ? "Aguardando pagamento" : "Checkout fechado"}
+              {checkoutPresentation.title}
             </span>
           </div>
         </div>
@@ -542,10 +547,10 @@ export function BillingPlanCheckout({
           <div className="relative flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">
+                <div className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">
                   Aumento de carrinho
                 </div>
-                <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-100">
+                <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100">
                   Oferta extra no checkout
                 </span>
               </div>
@@ -559,9 +564,9 @@ export function BillingPlanCheckout({
 
           <div className="relative mt-4 flex items-center gap-3">
             <span className="h-px flex-1 bg-gradient-to-r from-emerald-300/50 via-cyan-300/20 to-transparent" />
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-100/80">1 clique para adicionar</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100/80">1 clique para adicionar</span>
             {cartSyncing ? (
-              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-100/80">salvando</span>
+              <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100/80">salvando</span>
             ) : null}
           </div>
 
@@ -579,17 +584,17 @@ export function BillingPlanCheckout({
                     "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
                     selected
                       ? "border-emerald-300/80 bg-emerald-400/12 shadow-lg shadow-emerald-950/30"
-                      : "border-slate-700 bg-slate-900/70 hover:border-emerald-300/45 hover:bg-slate-900",
+                      : "border-slate-700 bg-slate-100 hover:border-emerald-300/45 hover:bg-slate-900",
                     !canPay ? "cursor-not-allowed opacity-60" : "",
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="flex flex-wrap gap-1.5">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300">
                         {bump.badge}
                       </span>
                       {bump.highlightLabel ? (
-                        <span className="rounded-full border border-amber-300/35 bg-amber-300/15 px-2 py-1 font-mono text-[9px] font-black uppercase tracking-wide text-amber-100">
+                        <span className="rounded-full border border-amber-300/35 bg-amber-300/15 px-2 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-amber-100">
                           {bump.highlightLabel}
                         </span>
                       ) : null}
@@ -606,7 +611,7 @@ export function BillingPlanCheckout({
                   <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">{bump.description}</p>
                   <p className="mt-auto pt-3 font-mono text-sm font-black text-cyan-100">
                     {formatMoney(bump.priceBrl)}
-                    <span className="ml-1 text-[10px] font-semibold text-slate-500">
+                    <span className="ml-1 text-[11px] font-semibold text-slate-500">
                       {billingBumpLabel(bump.recurrence)}
                     </span>
                   </p>
@@ -618,13 +623,13 @@ export function BillingPlanCheckout({
         ) : null}
       </section>
 
-      <aside className="rounded-[8px] border border-cyan-400/25 bg-slate-950/82 p-5 shadow-xl shadow-black/25">
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200">
+      <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200">
           Carrinho
         </div>
         <div className="mt-4 space-y-3">
           <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
-          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto anual"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
+          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto nesta compra"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
           {selectedBumps.map((bump) => (
             <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
           ))}
@@ -642,7 +647,7 @@ export function BillingPlanCheckout({
 
         {canPay ? (
           <>
-            <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-900/70 p-1">
+            <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-100 p-1">
               <PaymentMethodButton
                 active={method === "card"}
                 disabled={!cardEnabled}
@@ -706,19 +711,14 @@ export function BillingPlanCheckout({
             )}
           </>
         ) : (
-          <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
-            <p className="font-semibold text-white">
-              {checkoutConfirmed ? "Pagamento confirmado" : "Compra em processamento"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-emerald-50/80">
-              {checkoutConfirmed
-                ? "Pagamento confirmado. Sua compra está registrada no painel."
-                : "Se o pagamento ja foi aprovado, os creditos entram automaticamente no painel."}
-            </p>
+          <div role="status" className={cn("mt-5 rounded-xl border p-4", checkoutPresentation.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : checkoutPresentation.tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-700")}>
+            <p className="font-semibold">{checkoutPresentation.title}</p>
+            <p className="mt-2 text-sm leading-6">{checkoutPresentation.description}</p>
+            {!checkoutConfirmed && currentPaymentStatus !== "in_process" ? <a href="/dashboard/planos" className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 font-semibold text-white">Ver planos</a> : null}
           </div>
         )}
 
-        {activeNotice ? (
+        {activeNotice && (canPay || notice) ? (
           <div className={cn(
             "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
             activeNotice.tone === "success"
@@ -769,16 +769,17 @@ function CheckoutStorageSummary({
   ].filter((item): item is { icon: LucideIcon; label: string } => Boolean(item));
 
   return (
-    <div className="mt-4 rounded-[8px] border border-cyan-300/20 bg-cyan-300/[0.055] p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-2 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100">
+    <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] font-black uppercase tracking-[0.2em] text-cyan-100">
           <HardDrive className="h-4 w-4 text-cyan-200" />
           Armazenamento incluso
         </span>
         <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-emerald-100">
           {formatStorageBytes(storageLimitBytes)}
         </span>
-      </div>
+        <span className="text-xs font-medium text-blue-700">Ver detalhes</span>
+      </summary>
       {details.length > 0 ? (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {details.map((detail) => {
@@ -787,7 +788,7 @@ function CheckoutStorageSummary({
             return (
               <span
                 key={detail.label}
-                className="inline-flex min-h-8 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2.5 font-mono text-[10px] font-semibold leading-4 text-slate-300"
+                className="inline-flex min-h-8 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2.5 font-mono text-[11px] font-semibold leading-4 text-slate-300"
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-cyan-200/80" />
                 <span className="min-w-0 truncate">{detail.label}</span>
@@ -796,7 +797,7 @@ function CheckoutStorageSummary({
           })}
         </div>
       ) : null}
-    </div>
+    </details>
   );
 }
 
@@ -824,7 +825,7 @@ function CheckoutPaymentFeedbackModal({
 
   if (feedback.kind === "success") {
     return (
-      <div
+      <DialogFrame onClose={onClose}
         className="fixed inset-0 z-[10000] grid place-items-center overflow-hidden bg-black/75 px-4 py-6 backdrop-blur-md"
         role="dialog"
         aria-modal="true"
@@ -846,7 +847,7 @@ function CheckoutPaymentFeedbackModal({
             <div className="mx-auto grid h-16 w-16 place-items-center rounded-[8px] border border-emerald-300/40 bg-emerald-400/15 text-emerald-100 shadow-lg shadow-emerald-950/30">
               <Trophy className="h-8 w-8" />
             </div>
-            <p className="mt-5 font-mono text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200">
+            <p className="mt-5 font-mono text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200">
               Pagamento aprovado
             </p>
             <h2 id="billing-success-title" className="mx-auto mt-2 max-w-xl text-[28px] font-black leading-tight text-white sm:text-[34px]">
@@ -867,7 +868,7 @@ function CheckoutPaymentFeedbackModal({
                 <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" />
                 <div>
                   <p className="text-sm font-bold text-white">Boas vendas a partir de agora</p>
-                  <p className="mt-1 text-sm leading-6 text-cyan-50/80">
+                  <p className="mt-1 text-sm leading-6 text-blue-800">
                     Sua estrutura esta ativa. Use os creditos para atender melhor, responder com velocidade e transformar cada conversa em uma oportunidade real de crescimento.
                   </p>
                 </div>
@@ -893,7 +894,7 @@ function CheckoutPaymentFeedbackModal({
             </button>
           </div>
         </div>
-      </div>
+      </DialogFrame>
     );
   }
 
@@ -901,7 +902,7 @@ function CheckoutPaymentFeedbackModal({
     const rejection = feedback.rejection;
 
     return (
-      <div
+      <DialogFrame onClose={onClose}
         className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
         role="dialog"
         aria-modal="true"
@@ -914,7 +915,7 @@ function CheckoutPaymentFeedbackModal({
                 <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-rose-200">
                   {rejection.label ?? "Pagamento não concluído"}
                 </p>
                 <h2 id="billing-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-white">
@@ -956,8 +957,8 @@ function CheckoutPaymentFeedbackModal({
               </p>
             </div>
 
-            <div className="rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+            <div className="rounded-[8px] border border-slate-700 bg-slate-100 p-4">
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">
                 Proximos passos
               </p>
               <div className="mt-3 space-y-2">
@@ -969,7 +970,7 @@ function CheckoutPaymentFeedbackModal({
                 ))}
               </div>
               {rejection.statusDetail ? (
-                <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                <p className="mt-3 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   Codigo do provedor: {rejection.statusDetail}
                 </p>
               ) : null}
@@ -998,12 +999,12 @@ function CheckoutPaymentFeedbackModal({
             </button>
           </div>
         </div>
-      </div>
+      </DialogFrame>
     );
   }
 
   return (
-    <div
+    <DialogFrame onClose={onClose}
       className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
@@ -1018,7 +1019,7 @@ function CheckoutPaymentFeedbackModal({
           </div>
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -1052,7 +1053,7 @@ function SuccessCelebration() {
 function SuccessMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[8px] border border-emerald-300/25 bg-emerald-400/10 p-3 text-left">
-      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-200">{label}</p>
+      <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200">{label}</p>
       <p className="mt-2 truncate text-sm font-black text-white">{value}</p>
     </div>
   );
@@ -1075,7 +1076,7 @@ function FeedbackFact({
         : "border-rose-300/30 bg-rose-400/10",
     )}>
       <p className={cn(
-        "font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
+        "font-mono text-[11px] font-bold uppercase tracking-[0.18em]",
         tone === "success" ? "text-emerald-200" : "text-rose-200",
       )}>
         {label}
@@ -1148,7 +1149,7 @@ function PaymentMethodButton({
 
 function CartRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[8px] border border-slate-700/70 bg-slate-900/70 px-3 py-3">
+    <div className="flex items-center justify-between gap-3 rounded-[8px] border border-slate-700/70 bg-slate-100 px-3 py-3">
       <span className="text-xs font-semibold text-slate-300">{label}</span>
       <span className="font-mono text-xs font-bold text-cyan-100">{value}</span>
     </div>
@@ -1227,7 +1228,7 @@ function PixPanel({
       {pix.qrCode ? (
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300" htmlFor="billing-pix-code">
+            <label className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300" htmlFor="billing-pix-code">
               Pix copia e cola
             </label>
             <button

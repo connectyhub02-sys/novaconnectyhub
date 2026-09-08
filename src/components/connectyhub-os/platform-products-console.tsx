@@ -698,7 +698,7 @@ export function PlatformProductsConsole({
           {activeTab === "commissions" ? (
             <div className="space-y-5">
               <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace" tone="green" compact>
-                <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
                   <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} tone="cyan" />
                   <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} tone="amber" />
                   <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} tone="green" />
@@ -729,7 +729,7 @@ export function PlatformProductsConsole({
                     type="button"
                     disabled={batchPaying || availableCommissionIds.length === 0}
                     onClick={payAvailableCommissions}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 self-end rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex min-h-10 items-center justify-center gap-2 self-end rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     {batchPaying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -773,12 +773,12 @@ export function PlatformProductsConsole({
 
                       <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_130px_130px_150px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                         <div className="min-w-0">
-                          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">modelo</p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">modelo</p>
                           <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{formatBusinessType(settingsDraft.businessType)}</p>
                         </div>
                         <MiniValue label="categorias" value={String(categoryRows.length)} />
                         <MiniValue label="variacoes" value={String(settingsDraft.attributes.length)} />
-                        <button disabled={savingSettings} type="button" onClick={saveSettings} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                        <button disabled={savingSettings} type="button" onClick={saveSettings} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
                           {savingSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                           Salvar
                         </button>
@@ -815,7 +815,7 @@ export function PlatformProductsConsole({
                       {setupFormTab === "categories" ? (
                       <Block id="platform-products-tour-categories" icon={Tags} title="Categorias" tone="green">
                         <div className="mb-3 flex justify-end">
-                          <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                          <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
                             Nova categoria
                           </button>
@@ -836,7 +836,7 @@ export function PlatformProductsConsole({
                       {setupFormTab === "variations" ? (
                       <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet">
                         <div className="mb-3 flex flex-wrap justify-end gap-2">
-                          <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                          <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
                             Manual
                           </button>
@@ -869,17 +869,17 @@ export function PlatformProductsConsole({
 
                       <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_120px_120px_120px_140px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                         <div className="min-w-0">
-                          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">produto</p>
                           <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{draft.name.trim() || "Novo produto"}</p>
                         </div>
                         <MiniValue label="preco" value={draft.price.trim() || "Sem preco"} />
                         <MiniValue label="cobranca" value={formatBillingCycle(draft.billingCycle)} />
                         <MiniValue label="status" value={draft.status} />
-                        <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                        <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-3.5 w-3.5" />
                           {files.length + editingMedia.length} midias
                         </button>
-                        <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                        <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
                           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                           Salvar
                         </button>
@@ -1062,7 +1062,7 @@ export function PlatformProductsConsole({
                         ) : (
                           <>
                             <div className="mb-3 flex flex-wrap gap-2">
-                              <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                              <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
                                 + variacao
                               </button>
                             </div>
@@ -1106,7 +1106,7 @@ export function PlatformProductsConsole({
 
                       <Block icon={Tags} title="SKUs e variacoes vendaveis" tone="violet">
                         <div className="mb-3 flex justify-end">
-                          <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                          <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
                             Adicionar SKU
                           </button>
@@ -1581,17 +1581,17 @@ function ProductCard({
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {!isVisibleToClients && product.salesChannelType !== "direct" ? (
-            <button type="button" disabled={publishing} onClick={onPublish} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+            <button type="button" disabled={publishing} onClick={onPublish} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
               {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Publicar
             </button>
           ) : null}
-          <button type="button" onClick={onEdit} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" onClick={onEdit} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
             <Save className="h-3.5 w-3.5" />
             Editar
           </button>
           <a href={`/admin/produtos-connectyhub/${product.id}/conteudo`} className="inline-flex min-h-9 items-center rounded-lg border px-3 text-xs font-semibold">Conteúdo comprado</a>
-          <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
             <Copy className="h-3.5 w-3.5" />
             Copiar tag
           </button>
@@ -1600,7 +1600,7 @@ function ProductCard({
             disabled={deleting}
             onClick={onDelete}
             className={cn(
-              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60",
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60",
               confirmDelete
                 ? "border-rose-400/45 bg-rose-400/15 text-rose-100"
                 : "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15",
@@ -1660,19 +1660,19 @@ function CommissionCard({
 
       <div className="mt-3 flex flex-wrap gap-2">
         {commission.status === "pending" ? (
-          <button type="button" disabled={loading} onClick={() => onStatus("available")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" disabled={loading} onClick={() => onStatus("available")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             Liberar
           </button>
         ) : null}
         {commission.status === "pending" || commission.status === "available" ? (
-          <button type="button" disabled={loading} onClick={() => onStatus("paid")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" disabled={loading} onClick={() => onStatus("paid")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             Pago
           </button>
         ) : null}
         {commission.status === "pending" || commission.status === "available" ? (
-          <button type="button" disabled={loading} onClick={() => onStatus("blocked")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" disabled={loading} onClick={() => onStatus("blocked")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
             Bloquear
           </button>
         ) : null}
@@ -1692,7 +1692,7 @@ function SettlementMetric({ label, value, detail, tone = "cyan" }: { label: stri
         background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
       }}
     >
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
       <p className={cn("mt-1 truncate font-mono text-[13px] font-bold sm:mt-2 sm:text-[18px]", toneStyle.text)}>{value}</p>
       <p className="mt-1 hidden truncate text-[11px] text-slate-500 sm:block">{detail}</p>
     </div>
@@ -1726,7 +1726,7 @@ function Metric({
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="truncate font-mono text-[8px] uppercase tracking-wide text-slate-500 md:text-[10px] md:tracking-widest">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500 md:text-[11px] md:tracking-widest">{label}</p>
         <div
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl md:h-9 md:w-9"
           style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
@@ -1746,7 +1746,7 @@ function Metric({
 function MiniValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 truncate text-[12px] font-semibold text-slate-200">{value}</p>
     </div>
   );
@@ -1757,7 +1757,7 @@ function Field({ label, children, help }: { label: string; children: ReactNode; 
 
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">
         {label}
         {helpText ? <HelpHint title={label}>{helpText}</HelpHint> : null}
       </span>
@@ -1795,7 +1795,7 @@ function SetupFormTabs({
             type="button"
             onClick={() => onChange(tab.id)}
             className={cn(
-              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition",
               active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
             )}
           >
@@ -1829,7 +1829,7 @@ function ProductFormTabs({
             type="button"
             onClick={() => onChange(tab.id)}
             className={cn(
-              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition",
               active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
             )}
           >
@@ -1881,7 +1881,7 @@ function Block({
           >
             <Icon className="h-3.5 w-3.5" />
           </span>
-          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-400">
+          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">
             <span className="truncate">{title}</span>
             {helpText ? <HelpHint title={title}>{helpText}</HelpHint> : null}
           </span>
@@ -1925,7 +1925,7 @@ function CatalogTabButton({ active, icon: Icon, label, onClick }: { active: bool
 
 function MiniTag({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
       <Icon className="h-3 w-3 shrink-0" />
       <span className="truncate">{children}</span>
     </span>

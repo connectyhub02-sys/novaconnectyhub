@@ -95,7 +95,7 @@ export function AdminCustomerWhatsappActions({
         <div className="grid gap-1">
           {agents.length > 1 ? (
             <select
-              className="h-8 rounded-lg border border-white/10 bg-white/[0.04] px-2 font-mono text-[10px] uppercase text-slate-300 outline-none"
+              className="h-8 rounded-lg border border-white/10 bg-white/[0.04] px-2 font-mono text-[11px] uppercase text-slate-300 outline-none"
               disabled={running !== null}
               onChange={(event) => setSelectedAgentId(event.target.value)}
               value={selectedAgentId}
@@ -118,7 +118,7 @@ export function AdminCustomerWhatsappActions({
           </button>
         </div>
       ) : (
-        <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">sem agente</p>
+        <p className="font-mono text-[11px] uppercase tracking-wider text-slate-600">sem agente</p>
       )}
     </div>
   );
@@ -126,7 +126,7 @@ export function AdminCustomerWhatsappActions({
 
 function actionButtonClass(tone: "danger" | "warning") {
   return cn(
-    "inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-60",
+    "inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[11px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-60",
     tone === "danger"
       ? "border-rose-300/25 bg-rose-300/10 text-rose-200 hover:bg-rose-300/15"
       : "border-amber-300/25 bg-amber-300/10 text-amber-200 hover:bg-amber-300/15",

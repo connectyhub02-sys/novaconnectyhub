@@ -221,13 +221,13 @@ function TrafficStat({
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="truncate font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500 sm:text-[10px]">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-[11px]">{label}</p>
         <div className={cn("hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex", t.bg)}>
           <Icon className={cn("h-4 w-4", t.text)} />
         </div>
       </div>
       <p className={cn("mt-3 truncate font-mono text-[19px] font-bold leading-none sm:text-[26px]", t.text)}>{value}</p>
-      <p className="mt-2 truncate text-[10px] text-slate-500 sm:text-[12px]">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-slate-500 sm:text-[12px]">{detail}</p>
     </div>
   );
 }
@@ -245,7 +245,7 @@ function MiniMetric({
 
   return (
     <div className="min-w-0 rounded-xl px-2 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500">{label}</p>
       <p className={cn("mt-1 truncate font-mono text-[13px] font-bold", t.text)}>{value}</p>
     </div>
   );
@@ -273,7 +273,7 @@ function campaignRow(campaign: TrafficCampaign) {
   return [
     <div key="campaign" className="min-w-0">
       <div className="truncate text-[13px] font-medium text-white">{campaign.name}</div>
-      <div className="font-mono text-[10px] text-slate-600">{campaign.id}</div>
+      <div className="font-mono text-[11px] text-slate-600">{campaign.id}</div>
     </div>,
     <span key="source" className="font-mono text-[11px] text-slate-400">{campaign.platform}</span>,
     <span key="spend" className="font-mono text-[12px] text-emerald-400">{formatMoney(campaign.spend)}</span>,

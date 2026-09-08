@@ -58,7 +58,7 @@ export function AdminWhatsappCampaignsConsole({
       <div className="rounded-2xl border border-emerald-200 bg-white/90 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.05)] sm:p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
           <label className="block">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Agente executor</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-slate-500">Agente executor</span>
             <select
               value={selectedAgent?.id ?? ""}
               onChange={(event) => setSelectedAgentId(event.target.value)}
@@ -126,7 +126,7 @@ function SummaryTile({
     <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-emerald-600" />
-        <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
+        <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
       </div>
       <p className="mt-1 max-w-[220px] truncate text-sm font-semibold text-slate-900">{value}</p>
     </div>

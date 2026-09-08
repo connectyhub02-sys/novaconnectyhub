@@ -1508,7 +1508,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         </div>
       ) : null}
 
-      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
         <Metric icon={PlugZap} label="Catalogo" value={String(metrics.providers)} detail="integracoes mapeadas" tone="cyan" />
         <Metric icon={CheckCircle2} label="Conectadas" value={String(metrics.connected)} detail={selectedCompany?.name ?? "empresa"} tone="green" />
         <Metric icon={ShieldCheck} label="Ativas" value={String(metrics.active)} detail="prontas ou internas" tone="violet" />
@@ -1520,7 +1520,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
       >
         <label className="block">
-          <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Empresa</span>
+          <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Empresa</span>
           <select
             value={selectedCompanyId}
             onChange={(event) => {
@@ -1650,7 +1650,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">entrada externa</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">entrada externa</p>
                 <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Webhook Universal</h2>
                 <p className="mt-2 text-[12px] leading-5 text-slate-400">
                   Crie uma URL assinada para receber leads e eventos de qualquer sistema que ainda nao tem integracao nativa.
@@ -1661,7 +1661,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <button
                 className={cn(
-                  "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide",
+                  "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide",
                   state.schemaReady ? "text-cyan-100 hover:bg-cyan-400/10" : "cursor-not-allowed text-amber-200 opacity-70",
                 )}
                 disabled={!state.schemaReady || creatingWebhook}
@@ -1801,7 +1801,7 @@ function IntegrationCard({
 
       <div className="flex flex-wrap gap-1.5">
         {provider.items.map((item) => (
-          <span key={item} className="rounded-lg border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+          <span key={item} className="rounded-lg border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
             {item}
           </span>
         ))}
@@ -1810,7 +1810,7 @@ function IntegrationCard({
       <div className="grid grid-cols-3 gap-1.5">
         {provider.metrics.slice(0, 3).map((metric) => (
           <div key={metric} className="rounded-xl px-2 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-            <p className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500">{metric}</p>
+            <p className="truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500">{metric}</p>
           </div>
         ))}
       </div>
@@ -1844,7 +1844,7 @@ function ProviderAction({
   creatingWebhook: boolean;
   onCreateWebhook: () => void;
 }) {
-  const className = "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition";
+  const className = "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide transition";
 
   if (provider.id === "meta-ads" || provider.id === "google-growth") {
     const href = provider.id === "meta-ads" ? "/dashboard/trafego/meta-ads" : "/dashboard/trafego/google-ads";
@@ -1919,7 +1919,7 @@ function CredentialFields({
     <div className="rounded-2xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">credenciais da empresa</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">credenciais da empresa</p>
           <p className="mt-1 text-[12px] text-slate-400">{configuredCount}/{definitions.length} campo(s) configurado(s)</p>
         </div>
         <StatusBadge status={configuredCount > 0 ? "online" : "warning"} label={configuredCount > 0 ? "com dados" : "pendente"} />
@@ -1934,8 +1934,8 @@ function CredentialFields({
           return (
             <label key={definition.envName} className="block">
               <span className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{definition.label}</span>
-                <span className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{definition.label}</span>
+                <span className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[11px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
                   {definition.requirement}
                 </span>
               </span>
@@ -1947,14 +1947,14 @@ function CredentialFields({
                 value={draftValue}
                 style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               />
-              <span className="mt-1 block text-[10px] leading-4 text-slate-600">{definition.help}</span>
+              <span className="mt-1 block text-[11px] leading-4 text-slate-600">{definition.help}</span>
             </label>
           );
         })}
       </div>
 
       <button
-        className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isSaving}
         onClick={onSave}
         style={{ borderColor: "var(--ch-border)" }}
@@ -1975,12 +1975,12 @@ function WebhookEndpointCard({ endpoint }: { endpoint: ClientIntegrationWebhookE
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-[12px] font-semibold text-slate-100">{endpoint.label}</p>
-          <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{endpointUrl}</p>
+          <p className="mt-1 truncate font-mono text-[11px] text-slate-500">{endpointUrl}</p>
         </div>
         <StatusBadge status={endpoint.status === "active" ? "online" : "idle"} label={endpoint.status} />
       </div>
       <div className="mt-3 grid grid-cols-[minmax(0,1fr)_36px] gap-2">
-        <div className="min-w-0 rounded-lg px-2 py-2 font-mono text-[10px] text-slate-400" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+        <div className="min-w-0 rounded-lg px-2 py-2 font-mono text-[11px] text-slate-400" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
           <span className="block truncate">{endpointUrl}</span>
         </div>
         <button
@@ -1993,7 +1993,7 @@ function WebhookEndpointCard({ endpoint }: { endpoint: ClientIntegrationWebhookE
           <Copy className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
         <span>{endpoint.receivedCount} evento(s)</span>
         {endpoint.lastReceivedAt ? <span>ultimo {formatShortDate(endpoint.lastReceivedAt)}</span> : null}
       </div>
@@ -2004,7 +2004,7 @@ function WebhookEndpointCard({ endpoint }: { endpoint: ClientIntegrationWebhookE
 function SecretBox({ secret }: { secret: string }) {
   return (
     <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
-      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">segredo exibido uma vez</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-amber-200">segredo exibido uma vez</p>
       <div className="mt-2 grid grid-cols-[minmax(0,1fr)_36px] gap-2">
         <code className="min-w-0 truncate rounded-lg px-2 py-2 font-mono text-[11px] text-amber-100" style={{ background: "rgba(0,0,0,0.22)" }}>
           {secret}
@@ -2038,7 +2038,7 @@ function MetaIntegrationComingSoonCard() {
     <section id="meta-ads-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
           <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Meta Ads / Instagram</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">{metaFeatureComingSoonMessage}</p>
         </div>
@@ -2125,7 +2125,7 @@ function AsaasGuidedCard({
     <section id="asaas-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">gateway recomendado</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">gateway recomendado</p>
           <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Asaas</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">
             Use a API Key da conta Asaas da loja. Pix fica no WhatsApp como copia e cola; cartao segue por checkout seguro rastreado.
@@ -2239,7 +2239,7 @@ function AsaasGuidedCard({
       <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">checkout Asaas</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-200">checkout Asaas</p>
             <p className="mt-1 text-[13px] font-semibold text-slate-100">Preferencias de pagamento</p>
           </div>
           <QrCode className="h-4 w-4 shrink-0 text-emerald-200" />
@@ -2276,7 +2276,7 @@ function AsaasGuidedCard({
           >
             <CreditCard className="h-3.5 w-3.5" />
             Cartao de debito
-            <span className="rounded-full border px-1.5 py-0.5 text-[9px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            <span className="rounded-full border px-1.5 py-0.5 text-[11px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
               em validacao
             </span>
           </button>
@@ -2449,7 +2449,7 @@ function AsaasGuidedCard({
 
 function PaymentPreferenceLabel({ children }: { children: string }) {
   return (
-    <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">
+    <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">
       {children}
     </span>
   );
@@ -2632,7 +2632,7 @@ function GuidedOAuthCard({
     <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{config.eyebrow}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{config.eyebrow}</p>
           <h2 className="mt-1 text-[16px] font-semibold text-slate-100">{config.title}</h2>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">{config.body}</p>
         </div>
@@ -2693,7 +2693,7 @@ function GuidedOAuthCard({
 
         <Link
           href={config.dashboardHref}
-          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
           style={{ borderColor: "var(--ch-border)" }}
         >
           <BarChart3 className="h-3.5 w-3.5" />
@@ -2715,7 +2715,7 @@ function GuidedOAuthCard({
           <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">conta usada nos dashboards</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">conta usada nos dashboards</p>
                 <p className="mt-1 text-[11px] leading-4 text-slate-500">Escolha qual ativo desta empresa alimenta os mostradores.</p>
               </div>
               <NeonBadge tone="cyan">{selectionGroups.length} seletor(es)</NeonBadge>
@@ -2724,7 +2724,7 @@ function GuidedOAuthCard({
             <div className="grid gap-2">
               {selectionGroups.map((group) => (
                 <label key={group.field} className="block">
-                  <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{group.label}</span>
+                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{group.label}</span>
                   <select
                     value={group.value}
                     onChange={(event) => onSelectionChange({ ...currentSelection, [group.field]: event.target.value })}
@@ -2744,7 +2744,7 @@ function GuidedOAuthCard({
               type="button"
               disabled={savingSelection || !requiredSelectionReady}
               onClick={() => onSaveSelection(currentSelection)}
-              className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
               style={{ borderColor: "var(--ch-border)" }}
             >
               {savingSelection ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -2813,7 +2813,7 @@ function GrowthAssetsPanel({
     <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">assets normalizados</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">assets normalizados</p>
           <p className="mt-1 text-[11px] leading-4 text-slate-500">
             {kind === "meta"
               ? "Contas, paginas e Instagram descobertos no OAuth."
@@ -2841,7 +2841,7 @@ function GrowthAssetsPanel({
           >
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold text-slate-100">{asset.label}</p>
-              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+              <p className="mt-0.5 truncate text-[11px] text-slate-500">
                 {formatGrowthAssetType(asset.assetType)} / {asset.externalId}
               </p>
             </div>
@@ -2854,7 +2854,7 @@ function GrowthAssetsPanel({
         type="button"
         disabled={syncing}
         onClick={onQueueSync}
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         style={{ borderColor: "var(--ch-border)" }}
       >
         {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
@@ -2867,7 +2867,7 @@ function GrowthAssetsPanel({
 function MiniAssetMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
-      <p className="font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
       <p className="mt-1 text-[13px] font-bold text-slate-100">{value}</p>
     </div>
   );
@@ -2930,7 +2930,7 @@ function MetaReadinessPanel({
     <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">readiness Meta</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">readiness Meta</p>
           <p className="mt-1 text-[11px] leading-4 text-slate-500">
             {summary
               ? `${summary.ready}/${summary.total} checks prontos`
@@ -2995,7 +2995,7 @@ function MetaReadinessPanel({
       <div className="mt-3 border-t border-white/10 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">ativacao webhooks</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">ativacao webhooks</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">
               {activation ? formatShortDate(activation.activatedAt) : "Aguardando assinatura da Pagina"}
             </p>
@@ -3004,7 +3004,7 @@ function MetaReadinessPanel({
             type="button"
             disabled={!connected || actionRunning || !onActivateWebhooks}
             onClick={onActivateWebhooks}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {metaWebhookAction === "subscribe_page" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlugZap className="h-3.5 w-3.5" />}
@@ -3021,11 +3021,11 @@ function MetaReadinessPanel({
               </NeonBadge>
             </div>
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{activation.detail}</p>
-            <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+            <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">
               {activation.subscribedFields.length ? activation.subscribedFields.join(", ") : "sem confirmacao de campos"}
             </p>
             {activation.instagramAppDashboardRequired ? (
-              <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1.5 text-[10px] leading-4 text-amber-100">
+              <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1.5 text-[11px] leading-4 text-amber-100">
                 Instagram Direct e comentarios seguem pelo App Dashboard da Meta.
               </p>
             ) : null}
@@ -3042,7 +3042,7 @@ function MetaReadinessPanel({
                 type="button"
                 disabled={!connected || actionRunning || !onSimulateWebhook}
                 onClick={() => onSimulateWebhook?.(scenario.id)}
-                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[8px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-emerald-400/10 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-emerald-400/10 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: "var(--ch-border)" }}
               >
                 {metaWebhookAction === key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
@@ -3056,7 +3056,7 @@ function MetaReadinessPanel({
           <div className="mt-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="truncate text-[12px] font-semibold text-slate-100">{formatMetaWebhookScenario(simulation.scenario)}</p>
-              <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{formatShortDate(simulation.simulatedAt)}</span>
+              <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{formatShortDate(simulation.simulatedAt)}</span>
             </div>
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{simulation.detail}</p>
             <div className="mt-2 grid grid-cols-3 gap-2">
@@ -3071,7 +3071,7 @@ function MetaReadinessPanel({
       <div className="mt-3 border-t border-white/10 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">monitor operacional</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">monitor operacional</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">
               {monitor ? `${monitor.summary.total} evento(s), ${monitor.summary.failed} falha(s)` : "Eventos Meta reais e simulados"}
             </p>
@@ -3080,7 +3080,7 @@ function MetaReadinessPanel({
             type="button"
             disabled={!connected || loadingMonitor || !onRefreshMonitor}
             onClick={onRefreshMonitor}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {loadingMonitor ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
@@ -3090,7 +3090,7 @@ function MetaReadinessPanel({
 
         {monitor ? (
           <div className="mt-3 grid gap-3">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <ReadinessMiniStat label="Total" value={String(monitor.summary.total)} tone="green" />
               <ReadinessMiniStat label="OK" value={String(monitor.summary.processed)} tone="green" />
               <ReadinessMiniStat label="Replay" value={String(monitor.summary.replayable)} tone={monitor.summary.replayable > 0 ? "amber" : "green"} />
@@ -3103,13 +3103,13 @@ function MetaReadinessPanel({
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-[11px] font-semibold text-slate-200">{diagnostic.label}</p>
                     <span className={cn(
-                      "shrink-0 font-mono text-[8px] uppercase tracking-wide",
+                      "shrink-0 font-mono text-[11px] uppercase tracking-wide",
                       diagnostic.status === "ok" ? "text-emerald-300" : diagnostic.status === "warning" ? "text-amber-300" : "text-rose-300",
                     )}>
                       {diagnostic.status === "ok" ? "ok" : diagnostic.status === "warning" ? "atencao" : "critico"}
                     </span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{diagnostic.detail}</p>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{diagnostic.detail}</p>
                 </div>
               ))}
             </div>
@@ -3118,8 +3118,8 @@ function MetaReadinessPanel({
               {monitor.channels.filter((channel) => channel.total > 0).slice(0, 5).map((channel) => (
                 <div key={channel.channel} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-white/10 pt-1.5">
                   <p className="truncate text-[11px] text-slate-300">{formatMetaMonitorChannel(channel.channel)}</p>
-                  <span className="font-mono text-[9px] uppercase text-emerald-300">{channel.processed} ok</span>
-                  <span className={cn("font-mono text-[9px] uppercase", channel.failed > 0 ? "text-rose-300" : "text-slate-500")}>
+                  <span className="font-mono text-[11px] uppercase text-emerald-300">{channel.processed} ok</span>
+                  <span className={cn("font-mono text-[11px] uppercase", channel.failed > 0 ? "text-rose-300" : "text-slate-500")}>
                     {channel.failed} falha(s)
                   </span>
                 </div>
@@ -3154,14 +3154,14 @@ function MetaReadinessPanel({
         <div className="mt-3 border-t border-white/10 pt-3">
           <div className="mb-2 flex items-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-cyan-200" />
-            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">ultimos logs Meta</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">ultimos logs Meta</p>
           </div>
           <div className="grid gap-1.5">
             {actionLogs.map((log) => (
               <div key={log.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--ch-border)" }}>
-                <span className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{log.action}</span>
+                <span className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{log.action}</span>
                 <span className={cn(
-                  "shrink-0 font-mono text-[9px] uppercase",
+                  "shrink-0 font-mono text-[11px] uppercase",
                   log.status === "success" ? "text-emerald-300" : log.status === "warning" ? "text-amber-300" : "text-rose-300",
                 )}>
                   {formatShortDate(log.createdAt ?? "")}
@@ -3196,7 +3196,7 @@ function MetaLiveDispatchPanel({
     <div className="mt-3 border-t border-white/10 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">envio social live</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">envio social live</p>
           <p className="mt-1 truncate text-[11px] text-slate-500">
             {activation
               ? `${activation.readyChannels}/${activation.enabledChannels || enabledCount} canal(is) pronto(s)`
@@ -3215,7 +3215,7 @@ function MetaLiveDispatchPanel({
         />
         <span className="min-w-0">
           <span className="block text-[12px] font-semibold text-slate-100">App Meta em Live Mode e App Review aprovado</span>
-          <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+          <span className="mt-1 block text-[11px] leading-4 text-slate-500">
             Esta confirmacao libera apenas a trava operacional da empresa; o servidor ainda precisa estar em modo live.
           </span>
         </span>
@@ -3244,15 +3244,15 @@ function MetaLiveDispatchPanel({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-[12px] font-semibold text-slate-100">{item.label}</span>
-                    <span className={cn("shrink-0 font-mono text-[8px] uppercase tracking-wide", metaLiveChannelStatusClass(channel?.status ?? "disabled"))}>
+                    <span className={cn("shrink-0 font-mono text-[11px] uppercase tracking-wide", metaLiveChannelStatusClass(channel?.status ?? "disabled"))}>
                       {formatMetaLiveChannelStatus(channel?.status ?? "disabled")}
                     </span>
                   </span>
-                  <span className="mt-1 line-clamp-2 block text-[10px] leading-4 text-slate-500">
+                  <span className="mt-1 line-clamp-2 block text-[11px] leading-4 text-slate-500">
                     {channel?.detail ?? "Aguardando primeira ativacao."}
                   </span>
                   {channel?.missingPermissions.length || channel?.missingAssets.length ? (
-                    <span className="mt-1 block truncate font-mono text-[8px] uppercase tracking-wide text-amber-300">
+                    <span className="mt-1 block truncate font-mono text-[11px] uppercase tracking-wide text-amber-300">
                       {[...channel.missingAssets, ...channel.missingPermissions].join(", ")}
                     </span>
                   ) : null}
@@ -3273,7 +3273,7 @@ function MetaLiveDispatchPanel({
         type="button"
         disabled={!connected || saving || !onSave}
         onClick={() => onSave?.(draft)}
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         style={{ borderColor: "var(--ch-border)" }}
       >
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -3320,7 +3320,7 @@ function MetaCanaryDispatchPanel({
     <div className="mt-3 border-t border-white/10 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">canario de envio</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">canario de envio</p>
           <p className="mt-1 truncate text-[11px] text-slate-500">
             {result ? `${formatMetaCanaryStatus(result.status)} / ${formatShortDate(result.ranAt)}` : "Disparo controlado pelo dispatcher real"}
           </p>
@@ -3332,7 +3332,7 @@ function MetaCanaryDispatchPanel({
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Canal</span>
+          <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">Canal</span>
           <select
             value={draft.channel}
             onChange={(event) => setDraft((current) => ({
@@ -3350,7 +3350,7 @@ function MetaCanaryDispatchPanel({
         </label>
 
         <label className="block">
-          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">
+          <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">
             {commentChannel ? "ID do comentario" : "ID do lead"}
           </span>
           <input
@@ -3364,7 +3364,7 @@ function MetaCanaryDispatchPanel({
 
         {commentChannel ? (
           <label className="block">
-            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Modo</span>
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">Modo</span>
             <select
               value={draft.replyMode}
               onChange={(event) => setDraft((current) => ({ ...current, replyMode: event.target.value as "private" | "public" }))}
@@ -3378,7 +3378,7 @@ function MetaCanaryDispatchPanel({
         ) : null}
 
         <label className="block">
-          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Data do evento</span>
+          <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">Data do evento</span>
           <input
             type="datetime-local"
             value={draft.occurredAt}
@@ -3390,7 +3390,7 @@ function MetaCanaryDispatchPanel({
       </div>
 
       <label className="mt-2 block">
-        <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Texto</span>
+        <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">Texto</span>
         <textarea
           value={draft.text}
           onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
@@ -3409,7 +3409,7 @@ function MetaCanaryDispatchPanel({
         <div className="mt-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="truncate text-[12px] font-semibold text-slate-100">{result.channelLabel}</p>
-            <span className={cn("font-mono text-[9px] uppercase tracking-wide", metaCanaryStatusClass(result.status))}>
+            <span className={cn("font-mono text-[11px] uppercase tracking-wide", metaCanaryStatusClass(result.status))}>
               {formatMetaCanaryStatus(result.status)}
             </span>
           </div>
@@ -3426,7 +3426,7 @@ function MetaCanaryDispatchPanel({
         type="button"
         disabled={!connected || running || !onRun}
         onClick={handleRun}
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
         style={{ borderColor: "var(--ch-border)" }}
       >
         {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -3453,7 +3453,7 @@ function MetaOperationalChecklistPanel({
     <div className="mt-3 border-t border-white/10 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">pacote final de testes</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">pacote final de testes</p>
           <p className="mt-1 truncate text-[11px] text-slate-500">
             {checklist
               ? `${checklist.ready} pronto(s), ${checklist.warning} alerta(s), ${checklist.blocked} bloqueio(s)`
@@ -3468,7 +3468,7 @@ function MetaOperationalChecklistPanel({
             type="button"
             disabled={!connected || loading || !onRefresh}
             onClick={onRefresh}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}
@@ -3479,7 +3479,7 @@ function MetaOperationalChecklistPanel({
 
       {checklist ? (
         <div className="mt-3 grid gap-3">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <ReadinessMiniStat label="OK" value={String(checklist.ready)} tone="green" />
             <ReadinessMiniStat label="Alertas" value={String(checklist.warning)} tone={checklist.warning > 0 ? "amber" : "green"} />
             <ReadinessMiniStat label="Bloqueios" value={String(checklist.blocked)} tone={checklist.blocked > 0 ? "rose" : "green"} />
@@ -3497,13 +3497,13 @@ function MetaOperationalChecklistPanel({
                       <AlertTriangle className={cn("h-3.5 w-3.5", item.status === "blocked" ? "text-rose-300" : "text-amber-300")} />
                     )}
                     <p className="truncate text-[12px] font-semibold text-slate-100">{item.label}</p>
-                    <span className={cn("font-mono text-[8px] uppercase tracking-wide", metaOperationalChecklistItemStatusClass(item.status))}>
+                    <span className={cn("font-mono text-[11px] uppercase tracking-wide", metaOperationalChecklistItemStatusClass(item.status))}>
                       {formatMetaOperationalChecklistItemStatus(item.status)}
                     </span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.detail}</p>
                 </div>
-                <p className="text-[10px] leading-4 text-slate-500 sm:max-w-52 sm:text-right">
+                <p className="text-[11px] leading-4 text-slate-500 sm:max-w-52 sm:text-right">
                   {item.action}
                 </p>
               </div>
@@ -3540,7 +3540,7 @@ function ReadinessMiniStat({
 
   return (
     <div className="rounded-lg border px-2 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-      <p className="font-mono text-[8px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className={cn("mt-1 font-mono text-[15px] font-bold", className)}>{value}</p>
     </div>
   );
@@ -3553,7 +3553,7 @@ function MetaReviewResultRow({ result }: { result: ReviewTestResult }) {
         <div className="flex flex-wrap items-center gap-2">
           {result.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-300" />}
           <p className="truncate text-[12px] font-semibold text-slate-100">{result.label}</p>
-          <span className="rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+          <span className="rounded-md border px-1.5 py-0.5 font-mono text-[11px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
             {result.surface ?? "meta"}
           </span>
         </div>
@@ -3561,7 +3561,7 @@ function MetaReviewResultRow({ result }: { result: ReviewTestResult }) {
       </div>
       <div className="flex items-center gap-2 sm:justify-end">
         <span className={cn(
-          "rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-wide",
+          "rounded-md border px-2 py-1 font-mono text-[11px] uppercase tracking-wide",
           result.ok ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-200" : "border-amber-300/20 bg-amber-300/10 text-amber-200",
         )}>
           {result.ok ? "ok" : result.severity === "recommended" ? "alerta" : "acao"}
@@ -3585,30 +3585,30 @@ function MetaWebhookEventRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className={cn(
-            "rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase",
+            "rounded-md border px-1.5 py-0.5 font-mono text-[11px] uppercase",
             metaMonitorStatusClass(event.status),
           )}>
             {formatMetaMonitorStatus(event.status)}
           </span>
           <p className="truncate text-[11px] font-semibold text-slate-100">{formatMetaMonitorChannel(event.channel)}</p>
-          <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">{event.origin}</span>
+          <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{event.origin}</span>
         </div>
-        <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">
+        <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">
           {event.textPreview ?? event.errorMessage ?? event.eventType}
         </p>
-        <p className="mt-1 truncate font-mono text-[8px] uppercase tracking-wide text-slate-600">
+        <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-600">
           {event.leadIdentity ?? event.assetId ?? event.sourceEventId ?? event.id}
         </p>
       </div>
       <div className="flex items-center justify-between gap-2 sm:justify-end">
-        <span className="shrink-0 font-mono text-[9px] uppercase text-slate-500">
+        <span className="shrink-0 font-mono text-[11px] uppercase text-slate-500">
           {formatShortDate(event.receivedAt ?? "")}
         </span>
         <button
           type="button"
           disabled={!event.replayable || replaying || !onReplay}
           onClick={() => onReplay?.(event.id)}
-          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[8px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: "var(--ch-border)" }}
         >
           {replaying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
@@ -3634,14 +3634,14 @@ function PaymentGuideStep({
     <div className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
       <div className="flex items-center gap-2">
         <span className={cn(
-          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-bold",
+          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] font-bold",
           done ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "border-cyan-300/40 bg-cyan-300/10 text-cyan-100",
         )}>
           {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : index}
         </span>
         <p className="truncate text-[12px] font-semibold text-slate-100">{title}</p>
       </div>
-      <p className="mt-1 truncate pl-8 text-[10px] leading-4 text-slate-500">{body}</p>
+      <p className="mt-1 truncate pl-8 text-[11px] leading-4 text-slate-500">{body}</p>
     </div>
   );
 }
@@ -3669,13 +3669,13 @@ function Metric({
   return (
     <div className="min-w-0 rounded-2xl p-2.5 sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-2">
-        <p className="truncate font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-9 w-9 items-center justify-center rounded-xl sm:flex" style={{ background: `rgba(${colors},0.14)`, color: `rgb(${colors})` }}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
       <p className="mt-2 truncate font-mono text-[17px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: `rgb(${colors})` }}>{value}</p>
-      <p className="mt-1 truncate text-[10px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
     </div>
   );
 }

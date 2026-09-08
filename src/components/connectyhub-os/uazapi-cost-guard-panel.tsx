@@ -140,7 +140,7 @@ export function UazapiCostGuardPanel({
 
           <div className="grid gap-2 md:grid-cols-4">
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Status</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Status</span>
               <span className="inline-flex h-10 items-center gap-2">
                 <input
                   checked={enabled}
@@ -154,7 +154,7 @@ export function UazapiCostGuardPanel({
             </label>
 
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Horario diario</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Horario diario</span>
               <input
                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
@@ -165,7 +165,7 @@ export function UazapiCostGuardPanel({
             </label>
 
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Carencia trial</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Carencia trial</span>
               <input
                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
@@ -178,7 +178,7 @@ export function UazapiCostGuardPanel({
             </label>
 
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Limite por run</span>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Limite por run</span>
               <input
                 className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
@@ -239,7 +239,7 @@ export function UazapiCostGuardPanel({
           <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
             <div className="flex items-center gap-2">
               <Clock3 className="h-4 w-4 text-blue-600" />
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Agenda</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Agenda</p>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <InfoTile label="Agora" value={state.scheduler.currentLocalTime || "--:--"} />
@@ -252,7 +252,7 @@ export function UazapiCostGuardPanel({
           <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-blue-600" />
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Ultima leitura</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Ultima leitura</p>
             </div>
             {latestSummary ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -274,7 +274,7 @@ export function UazapiCostGuardPanel({
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2">
-      <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[12px] font-bold text-slate-800">{value}</p>
     </div>
   );
@@ -282,7 +282,7 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 
 function buttonClass(tone: "primary" | "ghost" | "danger") {
   return cn(
-    "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
     tone === "primary"
       ? "bg-blue-600 text-white shadow-lg shadow-blue-600/15 hover:bg-blue-500"
       : tone === "danger"

@@ -69,13 +69,13 @@ export function SyncWhatsAppInstancesButton({
           type="button"
           onClick={handleSync}
           disabled={loading}
-          className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
           Sincronizar Uazapi
         </button>
         {state.message ? (
-          <p className={cn("max-w-[280px] text-right text-[10px] leading-4", messageClass)}>
+          <p className={cn("max-w-[280px] text-right text-[11px] leading-4", messageClass)}>
             {state.message}
           </p>
         ) : null}
@@ -89,7 +89,7 @@ export function SyncWhatsAppInstancesButton({
         type="button"
         onClick={handleSync}
         disabled={loading}
-        className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-cyan-400 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-cyan-400 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
         Sincronizar Uazapi

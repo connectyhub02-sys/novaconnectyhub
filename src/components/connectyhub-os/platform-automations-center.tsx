@@ -198,7 +198,7 @@ export function PlatformAutomationsCenter({
             <button
               type="button"
               onClick={startCreate}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 font-mono text-[10px] font-bold uppercase tracking-widest text-cyan-200 transition hover:bg-cyan-500/20"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-200 transition hover:bg-cyan-500/20"
             >
               <Plus className="h-3.5 w-3.5" />
               Nova automacao
@@ -241,7 +241,7 @@ export function PlatformAutomationsCenter({
             type="button"
             disabled={savingPolicy || !catalog.schemaReady || !policyChanged}
             onClick={saveRenewalPolicy}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-300 px-3 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-300 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />
             {savingPolicy ? "Salvando" : "Salvar regua"}
@@ -349,7 +349,7 @@ export function PlatformAutomationsCenter({
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-semibold text-slate-950">{flow.name}</p>
-                    <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                    <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">
                       {flow.eventLabel} / {flow.audienceType}
                     </p>
                   </div>
@@ -375,7 +375,7 @@ export function PlatformAutomationsCenter({
                 <button
                   type="submit"
                   disabled={saving || !canSave}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-400 px-3 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-400 px-3 font-mono text-[11px] font-bold uppercase tracking-widest text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
                   {saving ? "Salvando" : "Salvar"}
@@ -508,7 +508,7 @@ export function PlatformAutomationsCenter({
                             ...current,
                             messageTemplate: `${current.messageTemplate}${current.messageTemplate.endsWith(" ") ? "" : " "}${variable}`,
                           }))}
-                          className="rounded-full border border-blue-200 bg-white px-2 py-1 font-mono text-[9px] text-blue-700 transition hover:bg-blue-100"
+                          className="rounded-full border border-blue-200 bg-white px-2 py-1 font-mono text-[11px] text-blue-700 transition hover:bg-blue-100"
                         >
                           {variable}
                         </button>
@@ -652,10 +652,10 @@ export function PlatformAutomationsCenter({
               rows={catalog.notifications.map((item) => [
                 <span key="customer" className="font-semibold text-slate-950">{item.organizationName}</span>,
                 <span key="flow" className="text-slate-600">{item.automationFlowName ?? "Template legado"}</span>,
-                <span key="event" className="font-mono text-[10px] text-blue-700">{item.eventLabel}</span>,
+                <span key="event" className="font-mono text-[11px] text-blue-700">{item.eventLabel}</span>,
                 <FlowStatusPill key="status" status={item.status} />,
                 <span key="agent" className="text-slate-600">{item.agentName ?? "Global"}</span>,
-                <span key="date" className="font-mono text-[10px] text-slate-400">{formatDateTime(item.createdAt)}</span>,
+                <span key="date" className="font-mono text-[11px] text-slate-400">{formatDateTime(item.createdAt)}</span>,
               ])}
             />
           ) : (
@@ -676,7 +676,7 @@ export function PlatformAutomationsCenter({
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[12px] font-semibold text-slate-950">{event.label}</p>
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-indigo-700">
+                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-indigo-700">
                     {event.category}
                   </span>
                 </div>
@@ -703,7 +703,7 @@ export function PlatformAutomationsCenter({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-1.5">
-      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -841,7 +841,7 @@ function FlowJourneyCanvas({
     >
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-blue-700">jornada visual</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-blue-700">jornada visual</p>
           <p className="mt-1 text-[13px] font-semibold text-slate-950">Como este fluxo se conecta</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -863,7 +863,7 @@ function FlowJourneyCanvas({
       <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">logica do fluxo</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">logica do fluxo</p>
             <p className="mt-1 text-[12px] leading-5 text-slate-600">
               Se o evento acontecer e as regras baterem, o agente envia a mensagem. Se as regras nao baterem, o envio para antes de gastar atendimento.
             </p>
@@ -920,13 +920,13 @@ function FlowStepCard({ step, index }: { step: FlowStep; index: number }) {
           <Icon className="h-4 w-4" style={{ color: palette.fill }} />
         </div>
         <span
-          className="rounded-full border px-2 py-1 font-mono text-[8px] font-bold uppercase tracking-widest"
+          className="rounded-full border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-widest"
           style={{ borderColor: `${palette.fill}45`, color: palette.fill, background: `${palette.fill}10` }}
         >
           {String(index).padStart(2, "0")}
         </span>
       </div>
-      <p className="mt-3 font-mono text-[8px] uppercase tracking-[0.18em] text-slate-500">{step.eyebrow}</p>
+      <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{step.eyebrow}</p>
       <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-4 text-slate-950">{step.title}</p>
       <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-slate-400">{step.detail}</p>
     </div>
@@ -957,7 +957,7 @@ function MiniFlowChain({ flow }: { flow: PlatformAutomationFlow }) {
     <div className="flex w-full min-w-0 items-center gap-1 overflow-hidden">
       {labels.map((label, index) => (
         <FragmentWithMiniConnector key={`${label}-${index}`} showConnector={index < labels.length - 1}>
-          <span className="max-w-[92px] truncate rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+          <span className="max-w-[92px] truncate rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] uppercase tracking-widest text-slate-500">
             {label}
           </span>
         </FragmentWithMiniConnector>
@@ -1006,7 +1006,7 @@ function AutomationMetric({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+          <p className="truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
           <p className="mt-1 truncate font-mono text-[20px] font-bold leading-none" style={{ color: palette.fill }}>{value}</p>
         </div>
         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: `${palette.fill}18` }}>
@@ -1032,7 +1032,7 @@ function FlowStatusPill({ status }: { status: string }) {
         : "text-slate-600 border-slate-200 bg-slate-50";
 
   return (
-    <span className={cn("rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest", tone)}>
+    <span className={cn("rounded-full border px-2 py-1 font-mono text-[11px] uppercase tracking-widest", tone)}>
       {status}
     </span>
   );
@@ -1043,7 +1043,7 @@ function SmallInfo({ label, value, tone }: { label: string; value: string; tone:
 
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: `${palette.fill}55`, background: `${palette.fill}12` }}>
-      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[13px] font-bold uppercase" style={{ color: palette.fill }}>{value}</p>
     </div>
   );

@@ -113,7 +113,7 @@ export function AdminCustomerWhatsappConsole({
       </div>
 
       <Panel className="mb-5" title="Telemetria WhatsApp" eyebrow="mensagens / midia / agentes">
-        <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
           <KpiStat label="mensagens" value={String(workspace.summary.messagesTotal)} tone="cyan" />
           <KpiStat label="recebidas" value={String(workspace.summary.inboundMessages)} tone="green" />
           <KpiStat label="enviadas" value={String(workspace.summary.outboundMessages)} tone="violet" />
@@ -207,7 +207,7 @@ function MetricTile({
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 sm:flex">
           <Icon className="h-4 w-4 text-cyan-300" />
         </div>
@@ -264,7 +264,7 @@ function InstanceIdentity({ instance }: { instance: AdminCustomerWhatsappInstanc
           <p className="truncate text-[11px] text-slate-500">
             {primaryAgentName}
           </p>
-          <p className="font-mono text-[8px] uppercase tracking-wider text-slate-600">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-slate-600">
             {instance.profileImageUrl ? "foto whatsapp" : "foto pendente"}
           </p>
         </div>
@@ -318,7 +318,7 @@ function AgentsCell({ instance }: { instance: AdminCustomerWhatsappInstance }) {
         </div>
       ))}
       {instance.agents.length > 2 && (
-        <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+        <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
           +{instance.agents.length - 2} agentes
         </p>
       )}
@@ -332,7 +332,7 @@ function CountCell({ total, active, activeLabel }: { total: number; active: numb
       <p className="font-mono text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
         {total}
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
         {active} {activeLabel}
       </p>
     </div>
@@ -345,10 +345,10 @@ function MessageTelemetryCell({ instance }: { instance: AdminCustomerWhatsappIns
       <p className="font-mono text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
         {instance.messageCount}
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
         {instance.inboundMessageCount} in / {instance.outboundMessageCount} out
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-600">
         {instance.audioMessageCount} audio / {instance.mediaMessageCount} midia
       </p>
     </div>
@@ -371,13 +371,13 @@ function AgentTelemetryCell({ instance }: { instance: AdminCustomerWhatsappInsta
           label={instance.lastAgentRunStatus ?? "ia"}
         />
       </div>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
         {instance.completedAgentRunCount} ok / {instance.failedAgentRunCount} falhas
       </p>
       {instance.internalInstanceBlockedRunCount > 0 ? (
         <NeonBadge tone="amber">{instance.internalInstanceBlockedRunCount} eco</NeonBadge>
       ) : null}
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-600">
         media {formatDuration(instance.averageAgentRunSeconds)}
       </p>
     </div>
@@ -393,7 +393,7 @@ function WebhookCell({ instance }: { instance: AdminCustomerWhatsappInstance }) 
         status={hasError ? "critical" : instance.webhookConfigured ? "online" : "warning"}
         label={hasError ? "erro" : instance.webhookConfigured ? "configurado" : "pendente"}
       />
-      <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+      <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">
         {instance.lastWebhookStatus ?? "sem evento"}
       </p>
     </div>
@@ -406,7 +406,7 @@ function LastSignalCell({ instance }: { instance: AdminCustomerWhatsappInstance 
       <p className="text-[12px]" style={{ color: "var(--ch-text)" }}>
         {formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)}
       </p>
-      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
         {instance.lastMessageAt ? "mensagem" : instance.lastHeartbeatAt ? "heartbeat" : "atualizacao"}
       </p>
     </div>

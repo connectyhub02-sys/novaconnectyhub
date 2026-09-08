@@ -63,7 +63,7 @@ export function AreaChartPanel({
       >
         <div>
           {eyebrow && (
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
           )}
           <p className={cn("font-semibold", compact ? "text-[13px]" : "text-[14px]")} style={{ color: "var(--ch-text)" }}>{title}</p>
         </div>
@@ -71,7 +71,7 @@ export function AreaChartPanel({
           {trend && (
             <span className={cn(
               "flex items-center gap-1 rounded-lg font-mono",
-              compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[11px]",
+              compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[11px]",
               isUp ? "bg-emerald-500/10 text-emerald-700" : "bg-rose-500/10 text-rose-700",
             )}>
               {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -86,10 +86,10 @@ export function AreaChartPanel({
                   type="button"
                   className={cn(
                     "rounded-lg font-mono transition",
-                    compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[10px]",
+                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[11px]",
                     i === 0 ? "" : "text-slate-500 hover:text-slate-700",
                   )}
-                  style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)", color } : undefined}
+                  style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)", color: "var(--ch-text)" } : undefined}
                 >
                   {f}
                 </button>
@@ -156,7 +156,7 @@ export function BarChartPanel({
       >
         <div>
           {eyebrow && (
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
           )}
           <p className={cn("font-semibold", compact ? "text-[13px]" : "text-[14px]")} style={{ color: "var(--ch-text)" }}>{title}</p>
         </div>
@@ -169,7 +169,7 @@ export function BarChartPanel({
                   type="button"
                   className={cn(
                     "rounded-lg font-mono transition",
-                    compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[10px]",
+                    compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[11px]",
                     i === 0 ? "" : "text-slate-500",
                   )}
                   style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)", color } : undefined}

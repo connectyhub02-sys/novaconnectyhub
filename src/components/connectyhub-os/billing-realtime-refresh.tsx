@@ -46,7 +46,7 @@ export function BillingRealtimeRefresh({
   return (
     <button
       type="button"
-      className="inline-flex min-h-8 items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/15"
+      className="inline-flex min-h-8 items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/15"
       onClick={refresh}
     >
       <RefreshCw className={cn("h-3.5 w-3.5", isPending ? "animate-spin" : "")} />

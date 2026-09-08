@@ -87,7 +87,7 @@ export function AgentPromptEditor({
     <div className="mt-3 rounded-lg p-2.5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Prompt base</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Prompt base</p>
           <p
             className="mt-1 text-[11px] leading-4 text-slate-600"
             style={!open ? {
@@ -105,7 +105,7 @@ export function AgentPromptEditor({
           variant="outline"
           size="xs"
           onClick={() => setOpen((value) => !value)}
-          className="border-indigo-500/30 bg-indigo-500/5 font-mono text-[9px] uppercase tracking-widest text-indigo-700 hover:bg-indigo-500/10"
+          className="border-indigo-500/30 bg-indigo-500/5 font-mono text-[11px] uppercase tracking-widest text-indigo-700 hover:bg-indigo-500/10"
         >
           {open ? <X className="h-3 w-3" /> : <PencilLine className="h-3 w-3" />}
           {open ? "Fechar" : "Editar prompt"}
@@ -126,7 +126,7 @@ export function AgentPromptEditor({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span
               className={[
-                "font-mono text-[9px] uppercase tracking-widest",
+                "font-mono text-[11px] uppercase tracking-widest",
                 state.status === "error" ? "text-rose-500" : "text-slate-500",
               ].join(" ")}
             >

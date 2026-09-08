@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import Image from "next/image";
@@ -3294,7 +3295,7 @@ export function SalesCatalogConsole({
         </div>
       ) : null}
 
-      <div className="mb-2 grid grid-cols-5 gap-1.5 sm:gap-2">
+      <div className="mb-2 grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2">
         <StatTile icon={PackagePlus} label="Ativos" value={String(stats.active)} tone="green" />
         <StatTile icon={CheckCircle2} label="Prontos" value={String(stats.ready)} tone="cyan" />
         <StatTile icon={Upload} label="Arquivos" value={String(stats.media)} tone="amber" />
@@ -3302,7 +3303,7 @@ export function SalesCatalogConsole({
         <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} tone="rose" />
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2">
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
         <CommerceTile label="Venda propria" value={String(stats.clientDirectOrders)} tone="green" />
         <CommerceTile label="Revenda CH" value={String(stats.connectyHubResaleOrders)} tone="cyan" />
         <CommerceTile label="Direta CH" value={String(stats.connectyHubDirectOrders)} tone="violet" />
@@ -3316,13 +3317,13 @@ export function SalesCatalogConsole({
               <Store className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Loja publica</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Loja publica</p>
               <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{selectedCompany?.name ?? "Empresa"}</p>
               <p className="mt-1 text-[11px] leading-4 text-slate-500">
                 {selectedStorePath ? selectedStorePath : "Escolha uma empresa para liberar o link da loja."}
               </p>
               <div className="mt-3 max-w-3xl rounded-lg border border-emerald-300/25 bg-emerald-300/5 px-3 py-2">
-                <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-emerald-200">Identidade publica</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-emerald-200">Identidade publica</p>
                 <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-4 text-slate-100">{storefrontHeaderText}</p>
                 <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-slate-400">{storefrontFooterContactText}</p>
               </div>
@@ -3335,7 +3336,7 @@ export function SalesCatalogConsole({
             <button
               type="button"
               onClick={openStorefrontSettings}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"
             >
               <PencilLine className="h-3.5 w-3.5" />
               Loja publica
@@ -3345,14 +3346,14 @@ export function SalesCatalogConsole({
                 <button
                   type="button"
                   onClick={copyStoreLink}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                   style={{ borderColor: "var(--ch-border)" }}
                 >
                   <Copy className="h-3.5 w-3.5" />
                   Copiar link
                 </button>
                 <Link
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300"
                   href={selectedStorePath}
                   target="_blank"
                 >
@@ -3413,7 +3414,7 @@ export function SalesCatalogConsole({
                   <button
                     type="button"
                     onClick={() => addCategoryRow()}
-                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -3476,11 +3477,11 @@ export function SalesCatalogConsole({
 
                         <div className="mt-2">
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
+                            <span className="block font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
                             <div className="flex items-center gap-1.5">
                               {categorySelectedOnHome && typeof homeCategoryOrder === "number" ? (
                                 <>
-                                  <span className="rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+                                  <span className="rounded-full border border-emerald-300/25 px-2 py-1 text-[11px] font-semibold text-emerald-100">
                                     Ordem {homeCategoryOrder + 1}
                                   </span>
                                   <button
@@ -3503,7 +3504,7 @@ export function SalesCatalogConsole({
                                   </button>
                                 </>
                               ) : null}
-                              <label className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+                              <label className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 px-2 py-1 text-[11px] font-semibold text-emerald-100">
                                 <input
                                   checked={categorySelectedOnHome}
                                   className="h-3.5 w-3.5"
@@ -3526,7 +3527,7 @@ export function SalesCatalogConsole({
                               </span>
                               <span className="min-w-0">
                                 <span className="block truncate font-semibold text-slate-200">{getCategoryIconOptionLabel(categoryIconId)}</span>
-                                <span className="block truncate text-[10px] text-slate-500">Clique para escolher na grade</span>
+                                <span className="block truncate text-[11px] text-slate-500">Clique para escolher na grade</span>
                               </span>
                             </span>
                             <PencilLine className="h-3.5 w-3.5 shrink-0 text-emerald-200" />
@@ -3575,7 +3576,7 @@ export function SalesCatalogConsole({
                   <button
                     type="button"
                     onClick={addAttribute}
-                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -3932,14 +3933,14 @@ export function SalesCatalogConsole({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200">Logotipo publico</p>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-emerald-200">Logotipo publico</p>
                     <p className="mt-1 truncate text-[12px] font-semibold text-slate-100">{storefrontDisplayName}</p>
                     <p className="mt-1 text-[11px] leading-4 text-slate-500">Aparece na loja, produto, checkout e confirmacao.</p>
                   </div>
                 </div>
                 <label
                   className={cn(
-                    "mt-3 inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[10px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300",
+                    "mt-3 inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[11px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300",
                     logoUploadingId === selectedCompany?.id && "pointer-events-none opacity-60",
                   )}
                 >
@@ -4142,7 +4143,7 @@ export function SalesCatalogConsole({
 
               <div className="grid gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="min-w-0">
-                  <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
+                  <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
                     Loja oficial
                   </p>
                   <h3 className="mt-2 text-2xl font-semibold leading-tight sm:text-[28px]" style={{ fontFamily: storefrontHeadingFontFamily }}>
@@ -4183,7 +4184,7 @@ export function SalesCatalogConsole({
                     color: storefrontCategoryTextColor,
                   }}
                 >
-                  <p className="text-center font-mono text-[8px] font-semibold uppercase tracking-[0.24em] opacity-75">Compre por categoria</p>
+                  <p className="text-center font-mono text-[11px] font-semibold uppercase tracking-[0.24em] opacity-75">Compre por categoria</p>
                   <div className="mt-3 flex gap-3 overflow-hidden">
                     {storefrontPreviewCategories.map((categoryName) => {
                       const iconId = resolveSalesCatalogCategoryIconId(
@@ -4193,7 +4194,7 @@ export function SalesCatalogConsole({
 
                       return (
                         <span className="grid w-16 shrink-0 place-items-center gap-1 text-center" key={categoryName}>
-                          <span className="line-clamp-1 w-full text-[10px] font-semibold">{categoryName}</span>
+                          <span className="line-clamp-1 w-full text-[11px] font-semibold">{categoryName}</span>
                           <span className="grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-white/10" style={{ color: storefrontCategoryIconColor }}>
                             <SalesCatalogCategoryIconGlyph className="h-5 w-5" id={iconId} />
                           </span>
@@ -4237,7 +4238,7 @@ export function SalesCatalogConsole({
                 <p className="text-[13px] font-semibold">{storefrontDisplayName}</p>
                 <p className="mt-1 line-clamp-3 text-[12px] leading-5 opacity-75">{storefrontFooterText}</p>
                 <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontAccentColor }}>{storefrontFooterContactText}</p>
-                <p className="mt-3 text-[10px] font-bold uppercase tracking-wide opacity-55">Desenvolvido por ConnectyHub</p>
+                <p className="mt-3 text-[11px] font-bold uppercase tracking-wide opacity-55">Desenvolvido por ConnectyHub</p>
               </div>
             </div>
           </div>
@@ -4294,11 +4295,11 @@ export function SalesCatalogConsole({
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Estados ativos</p>
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Estados ativos</p>
                       <p className="mt-2 font-mono text-[24px] font-bold text-cyan-200">{shippingDraft.rules.filter((rule) => rule.active).length}</p>
                     </div>
                     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Status</p>
+                      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Status</p>
                       <p className="mt-2 text-[13px] font-semibold text-slate-200">{selectedShippingSettings?.configured ? "Configurado" : "Pendente"}</p>
                     </div>
                   </div>
@@ -4340,7 +4341,7 @@ export function SalesCatalogConsole({
 
               {shippingDraft.localDeliveryEnabled ? (
                 <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">Zonas locais</p>
+                  <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Zonas locais</p>
                   <p className="mt-2 font-mono text-[24px] font-bold text-emerald-200">{shippingDraft.localDeliveryZones.filter((zone) => zone.active).length}</p>
                   <p className="mt-1 text-[12px] leading-5 text-slate-500">O agente confere bairro, endereco ou localizacao antes de confirmar a entrega local.</p>
                 </div>
@@ -4403,7 +4404,7 @@ export function SalesCatalogConsole({
                 <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
                 <div className="overflow-visible md:overflow-x-auto">
                   <div className="min-w-0 md:min-w-[1200px]">
-                    <div className="hidden grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                    <div className="hidden grid-cols-[72px_minmax(178px,1.1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[11px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                       <span>Estado</span>
                       <span>Entrega</span>
                       <span>CEP ini. opc.</span>
@@ -4429,7 +4430,7 @@ export function SalesCatalogConsole({
                           >
                             <div>
                               <p className="font-mono text-[12px] font-bold text-cyan-200">{rule.uf}</p>
-                              <p className="truncate text-[10px] text-slate-500">{rule.state}</p>
+                              <p className="truncate text-[11px] text-slate-500">{rule.state}</p>
                             </div>
                             <div className="grid grid-cols-2 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
                               <button
@@ -4510,7 +4511,7 @@ export function SalesCatalogConsole({
                               disabled={!rule.active}
                               onClick={() => setSelectedShippingUf(rule.uf)}
                               className={cn(
-                                "h-10 min-w-0 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-45",
+                                "h-10 min-w-0 rounded-lg border px-2 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-45",
                                 selectedShippingUf === rule.uf ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
                               )}
                               style={{ borderColor: selectedShippingUf === rule.uf ? undefined : "var(--ch-border)" }}
@@ -4578,7 +4579,7 @@ export function SalesCatalogConsole({
 
                       <div className="mt-3 overflow-visible md:overflow-x-auto">
                         <div className="grid min-w-0 gap-2 md:min-w-[520px]">
-                          <div className="hidden grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] gap-2 px-1 font-mono text-[8px] uppercase tracking-widest text-slate-500 md:grid">
+                          <div className="hidden grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] gap-2 px-1 font-mono text-[11px] uppercase tracking-widest text-slate-500 md:grid">
                             <span></span>
                             <span>Faixa</span>
                             <span>Peso</span>
@@ -4649,7 +4650,7 @@ export function SalesCatalogConsole({
                       <button
                         type="button"
                         onClick={() => addWeightTier(selectedShippingRule.uf, service.id)}
-                        className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                        className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                         style={{ borderColor: "var(--ch-border)" }}
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -4702,7 +4703,7 @@ export function SalesCatalogConsole({
                         {quoteResult.destination ? `${quoteResult.destination.uf} - ${quoteResult.destination.state}` : "Destino nao identificado"}
                       </p>
                       {quoteResult.item ? (
-                        <p className="font-mono text-[10px] uppercase tracking-wide text-slate-500">
+                        <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
                           {formatSalesCatalogWeight(quoteResult.item.weightGrams)}
                           {quoteResult.item.weightSource === "default" ? " estimado" : ""}
                         </p>
@@ -5053,7 +5054,7 @@ export function SalesCatalogConsole({
                 <button
                   type="button"
                   onClick={() => setActiveTab("setup")}
-                  className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-300/10"
+                  className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-300/10"
                   style={{ borderColor: "rgba(252, 211, 77, 0.35)" }}
                 >
                   <Settings2 className="h-3.5 w-3.5" />
@@ -5159,7 +5160,7 @@ export function SalesCatalogConsole({
               <button
                 type="button"
                 onClick={resetForm}
-                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-600 transition hover:bg-slate-900/5 hover:text-slate-950"
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-600 transition hover:bg-slate-900/5 hover:text-slate-950"
                 style={{ borderColor: "var(--ch-border)" }}
               >
                 <X className="h-3.5 w-3.5" />
@@ -5184,17 +5185,17 @@ export function SalesCatalogConsole({
 
             <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_120px_130px_110px_130px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">produto</p>
                 <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{title.trim() || "Novo produto"}</p>
               </div>
               <MiniStat label="preco" value={price.trim() || "Sem preco"} />
               <MiniStat label="cobranca" value={formatBillingCycleWithInterval(billingCycle, billingInterval)} />
               <MiniStat label="status" value={status} />
-              <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+              <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
                 <Upload className="h-3.5 w-3.5" />
                 {files.length + editingMedia.length} midias
               </button>
-              <button type="button" disabled={!canCreate} onClick={createItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="button" disabled={!canCreate} onClick={createItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50">
                 {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Salvar
               </button>
@@ -5575,7 +5576,7 @@ export function SalesCatalogConsole({
                     type="button"
                     onClick={addPageQuickDetail}
                     disabled={pageQuickDetails.length >= 8}
-                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -5730,7 +5731,7 @@ export function SalesCatalogConsole({
                 <button
                   type="button"
                   onClick={addSkuDraft}
-                  className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                   style={{ borderColor: "var(--ch-border)" }}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -6020,7 +6021,7 @@ export function SalesCatalogConsole({
                           <button
                             type="button"
                             onClick={() => moveEditingMediaToCover(media.id)}
-                            className="inline-flex h-7 items-center justify-center rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/10"
+                            className="inline-flex h-7 items-center justify-center rounded-md border px-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/10"
                             style={{ borderColor: "var(--ch-border)" }}
                             title="Usar como capa"
                           >
@@ -6211,12 +6212,12 @@ function CategoryIconPickerModal({
   }, [searchTerm]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Escolher figurinha da categoria ${categoryName}`}>
+    <DialogFrame onClose={onClose} className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Escolher figurinha da categoria ${categoryName}`}>
       <button className="absolute inset-0 cursor-default" type="button" aria-label="Fechar seletor de figurinha" onClick={onClose} />
       <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-emerald-300/20 bg-slate-950 shadow-2xl shadow-black/40">
         <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-300">Figurinha da categoria</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-300">Figurinha da categoria</p>
             <h2 className="mt-1 truncate text-lg font-black text-white">{categoryName}</h2>
             <p className="mt-1 text-[12px] leading-5 text-slate-400">Escolha um icone visual para aparecer na loja publica.</p>
           </div>
@@ -6283,7 +6284,7 @@ function CategoryIconPickerModal({
                     )}>
                       <SalesCatalogCategoryIconGlyph className="h-6 w-6" id={option.id} />
                     </span>
-                    <span className="line-clamp-2 text-[10px] font-bold leading-3">{option.label}</span>
+                    <span className="line-clamp-2 text-[11px] font-bold leading-3">{option.label}</span>
                   </button>
                 );
               })}
@@ -6298,7 +6299,7 @@ function CategoryIconPickerModal({
           )}
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -6698,14 +6699,14 @@ function WhatsAppCatalogBridgePanel({
         <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">revisao whatsapp</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">revisao whatsapp</p>
               <p className="mt-1 text-[11px] text-slate-500">{importJobs.length} sincronizacao(oes) recentes</p>
             </div>
             <button
               type="button"
               disabled={loadingImports}
               onClick={onRefreshImportJobs}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
               style={{ borderColor: "var(--ch-border)" }}
             >
               {loadingImports ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -6797,7 +6798,7 @@ function WhatsAppCatalogBridgePanel({
                       />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold text-slate-200">{item.title}</span>
-                        <span className="block truncate text-[10px] text-slate-500">{item.price ? `${item.price} ${item.currency}` : item.category ?? item.tag}</span>
+                        <span className="block truncate text-[11px] text-slate-500">{item.price ? `${item.price} ${item.currency}` : item.category ?? item.tag}</span>
                       </span>
                       {assignedToSelected ? <NeonBadge tone="green">vinculado</NeonBadge> : null}
                     </label>
@@ -7051,14 +7052,14 @@ function SalesCatalogImportPanel({
 
         <div className="flex items-center justify-between gap-3 pt-2">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">importacoes</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">importacoes</p>
             <p className="mt-1 text-[11px] text-slate-500">{jobs.length} job(s) recentes</p>
           </div>
           <button
             type="button"
             disabled={loading}
             onClick={onRefresh}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -7114,7 +7115,7 @@ function ImportChoiceButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition",
         active ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "text-slate-500 hover:bg-emerald-400/10 hover:text-emerald-100",
       )}
       style={{ borderColor: active ? undefined : "var(--ch-border)" }}
@@ -7141,7 +7142,7 @@ function DuplicateActionButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition",
         active ? "border-amber-300/70 bg-amber-300/20 text-amber-900" : "text-slate-600 hover:bg-amber-400/10 hover:text-amber-900",
       )}
       style={{ borderColor: active ? undefined : "var(--ch-border)" }}
@@ -7195,11 +7196,11 @@ function CatalogImportProgressModal({
     } satisfies ClientSalesCatalogImportEvent];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+    <DialogFrame onClose={loading ? () => undefined : onClose} aria-label="Importação do catálogo" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-500">
+            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-blue-500">
               {whatsappImport ? "sincronizacao whatsapp" : "importacao com ia"}
             </p>
             <h3 className="mt-1 truncate text-xl font-bold text-slate-950">{monitor.title}</h3>
@@ -7214,7 +7215,7 @@ function CatalogImportProgressModal({
                 type="button"
                 disabled={canceling || loading}
                 onClick={() => onCancel(job)}
-                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-rose-200 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-rose-200 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
               >
                 {canceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                 Cancelar
@@ -7235,7 +7236,7 @@ function CatalogImportProgressModal({
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">progresso</span>
+                <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">progresso</span>
                 {active || loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -7275,7 +7276,7 @@ function CatalogImportProgressModal({
             ) : null}
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">atividade</p>
+              <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">atividade</p>
               <div className="mt-3 grid gap-2">
                 {activityItems.map((event) => (
                   <div key={event.id} className="grid grid-cols-[10px_minmax(0,1fr)] gap-2">
@@ -7288,7 +7289,7 @@ function CatalogImportProgressModal({
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold text-slate-900">{event.title}</p>
                       {event.summary ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500">{event.summary}</p> : null}
-                      {event.createdAt ? <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">{formatDateTime(event.createdAt)}</p> : null}
+                      {event.createdAt ? <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-slate-400">{formatDateTime(event.createdAt)}</p> : null}
                     </div>
                   </div>
                 ))}
@@ -7299,7 +7300,7 @@ function CatalogImportProgressModal({
               type="button"
               disabled={loading}
               onClick={onRefresh}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Atualizar leitura
@@ -7309,7 +7310,7 @@ function CatalogImportProgressModal({
           <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50">
             <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
-                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">produtos encontrados</p>
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">produtos encontrados</p>
                 <p className="text-xs text-slate-500">{formatImportPlatform(monitor.sourcePlatform)} / {formatImportSourceKind(monitor.sourceKind)}</p>
               </div>
               {active ? <span className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_18px_rgba(24,119,242,0.8)]" /> : null}
@@ -7372,7 +7373,7 @@ function CatalogImportProgressModal({
           </div>
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -7503,7 +7504,7 @@ function CatalogImportJobCard({
         <button
           type="button"
           onClick={onOpenMonitor}
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
           style={{ borderColor: "var(--ch-border)" }}
         >
           <Eye className="h-3.5 w-3.5" />
@@ -7514,7 +7515,7 @@ function CatalogImportJobCard({
             type="button"
             disabled={saving || publishing}
             onClick={onSaveReview}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {saving ? (
@@ -7532,7 +7533,7 @@ function CatalogImportJobCard({
             type="button"
             disabled={canceling || saving || publishing}
             onClick={onCancel}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
           >
             {canceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
             Cancelar
@@ -7542,7 +7543,7 @@ function CatalogImportJobCard({
           type="button"
           disabled={!canDelete || deleting}
           onClick={onDelete}
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
           Excluir
@@ -7552,7 +7553,7 @@ function CatalogImportJobCard({
             type="button"
             disabled={!canPublish}
             onClick={onPublish}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             Publicar
@@ -7639,7 +7640,7 @@ function CatalogImportItemEditor({
         <div className="flex flex-wrap gap-1.5">
           <NeonBadge tone={importItemStatusTone(item.status)}>{formatImportItemStatus(item.status)}</NeonBadge>
           <NeonBadge tone={importDestinationTone(item.salesDestination)}>{formatImportDestination(item.salesDestination)}</NeonBadge>
-          <span className="inline-flex items-center rounded-md border px-2 py-1 font-mono text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+          <span className="inline-flex items-center rounded-md border px-2 py-1 font-mono text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
             {Math.round(item.confidence * 100)}%
           </span>
         </div>
@@ -7650,7 +7651,7 @@ function CatalogImportItemEditor({
         <div className="mb-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2.5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-amber-800">possivel duplicidade</p>
+              <p className="font-mono text-[11px] font-bold uppercase tracking-wide text-amber-800">possivel duplicidade</p>
               <p className="mt-1 text-[11px] text-slate-700">
                 Encontramos produto parecido no catálogo. Por segurança, a ação inicial é ignorar até você decidir.
               </p>
@@ -7834,7 +7835,7 @@ function CatalogImportItemEditor({
       {item.warnings.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {item.warnings.map((warning) => (
-            <span key={warning} className="inline-flex max-w-full rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100">
+            <span key={warning} className="inline-flex max-w-full rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-100">
               <span className="truncate">{warning}</span>
             </span>
           ))}
@@ -7878,9 +7879,9 @@ function CheckoutMetric({
         borderColor: `rgba(${toneStyle.rgb},0.34)`,
       }}
     >
-      <p className="truncate font-mono text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
       <p className={cn("mt-1 font-mono text-[18px] font-bold leading-none", toneStyle.text)}>{value}</p>
-      <p className="mt-1 truncate text-[10px] text-slate-500">{hint}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{hint}</p>
     </div>
   );
 }
@@ -7905,7 +7906,7 @@ function CheckoutStageFilterBar({
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition",
               active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
             )}
             style={{ borderColor: active ? undefined : "var(--ch-border)" }}
@@ -7956,9 +7957,9 @@ function CheckoutRecordCard({ record }: { record: SalesCatalogCheckoutRecord }) 
           ) : null}
         </div>
         <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Valor</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Valor</p>
           <p className="mt-1 font-mono text-[18px] font-bold text-cyan-200">{formatCurrency(record.amount)}</p>
-          <p className="mt-1 text-[10px] leading-4 text-slate-500">
+          <p className="mt-1 text-[11px] leading-4 text-slate-500">
             {record.status.stage === "abandoned" ? `Parado ha mais de ${record.abandonedMinutes} min.` : record.paymentSession ? "Checkout rastreado" : "Sem sessao de checkout"}
           </p>
         </div>
@@ -7970,14 +7971,14 @@ function CheckoutRecordCard({ record }: { record: SalesCatalogCheckoutRecord }) 
             <button
               type="button"
               onClick={() => navigator.clipboard.writeText(checkoutUrl)}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
               style={{ borderColor: "var(--ch-border)" }}
             >
               <Copy className="h-3.5 w-3.5" />
               Copiar checkout
             </button>
             <a
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
               href={checkoutUrl}
               rel="noreferrer"
               target="_blank"
@@ -7990,7 +7991,7 @@ function CheckoutRecordCard({ record }: { record: SalesCatalogCheckoutRecord }) 
         ) : null}
         {record.order.leadId ? (
           <Link
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
             href="/dashboard/atendimento"
             style={{ borderColor: "var(--ch-border)" }}
           >
@@ -8057,7 +8058,7 @@ function OrderCard({
         {order.items.some((item) => item.productOriginType !== "client" || item.commissionEligible) ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {order.items.map((item) => (
-              <span key={item.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span key={item.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <BadgePercent className="h-3 w-3 shrink-0" />
                 <span className="truncate">
                   {item.title}: {formatCommercialFlowLabel(item.commercialFlowType)}
@@ -8083,14 +8084,14 @@ function OrderCard({
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(paymentSession.checkoutUrl!)}
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                   style={{ borderColor: "var(--ch-border)" }}
                 >
                   <Copy className="h-3.5 w-3.5" />
                   Copiar link
                 </button>
                 <a
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
                   href={paymentSession.checkoutUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -8105,7 +8106,7 @@ function OrderCard({
                 type="button"
                 disabled={paymentLoading || !order.total}
                 onClick={onCreatePayment}
-                className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50"
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50"
                 style={{ borderColor: "var(--ch-border)" }}
               >
                 {paymentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
@@ -8115,7 +8116,7 @@ function OrderCard({
           </div>
         </div>
       {paymentSession?.pixQrCode ? (
-        <p className="mt-2 line-clamp-2 break-all font-mono text-[10px] text-slate-500">{paymentSession.pixQrCode}</p>
+        <p className="mt-2 line-clamp-2 break-all font-mono text-[11px] text-slate-500">{paymentSession.pixQrCode}</p>
       ) : null}
       </div>
 
@@ -8124,7 +8125,7 @@ function OrderCard({
       {order.items.some((item) => item.attributes.length > 0) ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {order.items.flatMap((item) => item.attributes.map((attribute) => (
-            <span key={`${item.id}-${attribute.id}`} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+            <span key={`${item.id}-${attribute.id}`} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
               <SlidersHorizontal className="h-3 w-3 shrink-0" />
               <span className="truncate">{attribute.name}: {attribute.values.join(", ")}</span>
             </span>
@@ -8267,11 +8268,11 @@ function OperationStep({
   return (
     <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
         <Icon className="h-3.5 w-3.5 text-cyan-300" />
       </div>
       <p className="mt-2 text-[12px] font-semibold text-slate-100">{value}</p>
-      <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{hint}</p>
+      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{hint}</p>
       <div className="mt-2">
         <NeonBadge tone={tone}>{operationToneLabel(tone)}</NeonBadge>
       </div>
@@ -8304,14 +8305,14 @@ function PaymentSessionCard({ session }: { session: ClientSalesCatalogPaymentSes
           <button
             type="button"
             onClick={() => navigator.clipboard.writeText(session.checkoutUrl!)}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
             style={{ borderColor: "var(--ch-border)" }}
           >
             <Copy className="h-3.5 w-3.5" />
             Copiar checkout
           </button>
           <a
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
             href={session.checkoutUrl}
             rel="noreferrer"
             target="_blank"
@@ -8396,23 +8397,23 @@ function CatalogItemCard({
         {hasOfferDetails(item) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.price && item.offer.salePrice ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 de {item.price}
               </span>
             ) : null}
             {item.offer.salePrice ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                 <BadgePercent className="h-3 w-3" />
                 {item.offer.salePrice}
               </span>
             ) : null}
             {item.offer.couponCode ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[11px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
                 {item.offer.couponCode}
               </span>
             ) : null}
             {formatOfferWindow(item) ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 {formatOfferWindow(item)}
               </span>
             ) : null}
@@ -8422,7 +8423,7 @@ function CatalogItemCard({
         {item.attributes.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.attributes.slice(0, 5).map((attribute) => (
-              <span key={attribute.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span key={attribute.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <SlidersHorizontal className="h-3 w-3 shrink-0" />
                 <span className="truncate">{attribute.name}: {attribute.values.join(", ")}</span>
               </span>
@@ -8433,7 +8434,7 @@ function CatalogItemCard({
         {item.skus.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.skus.slice(0, 6).map((sku) => (
-              <span key={sku.id ?? sku.skuCode} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+              <span key={sku.id ?? sku.skuCode} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[11px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                 <Tags className="h-3 w-3 shrink-0" />
                 <span className="truncate">{sku.skuCode}</span>
               </span>
@@ -8443,17 +8444,17 @@ function CatalogItemCard({
 
         {hasFulfillmentDetails(item) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+            <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
               <Truck className="h-3 w-3" />
               {formatSalesCatalogFulfillmentMode(item.fulfillment.mode)}
             </span>
             {item.fulfillment.schedulingRequired ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 agendamento
               </span>
             ) : null}
             {item.fulfillment.serviceDuration ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 {item.fulfillment.serviceDuration}
               </span>
             ) : null}
@@ -8463,23 +8464,23 @@ function CatalogItemCard({
         {hasInventoryDetails(item) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.inventory.quantity !== null ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <PackagePlus className="h-3 w-3" />
                 {item.inventory.quantity} un.
               </span>
             ) : null}
             {item.inventory.lowStockThreshold !== null ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 alerta {item.inventory.lowStockThreshold}
               </span>
             ) : null}
             {item.inventory.allowBackorder ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 encomenda
               </span>
             ) : null}
             {item.inventory.notes ? (
-              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <span className="truncate">{item.inventory.notes}</span>
               </span>
             ) : null}
@@ -8489,18 +8490,18 @@ function CatalogItemCard({
         {hasShippingDetails(item) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.shipping.weightGrams ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <Truck className="h-3 w-3" />
                 {formatSalesCatalogWeight(item.shipping.weightGrams)}
               </span>
             ) : null}
             {formatDimensions(item) ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 {formatDimensions(item)}
               </span>
             ) : null}
             {item.shipping.profile !== "default" ? (
-              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 {item.shipping.profile === "free" ? "frete gratis" : "frete a combinar"}
               </span>
             ) : null}
@@ -8510,13 +8511,13 @@ function CatalogItemCard({
         {item.salesDestination === "external_site" && (item.productUrl || item.externalLinkButtonTag) ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {item.externalLinkButtonTag ? (
-              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-violet-200" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[11px] text-violet-200" style={{ borderColor: "var(--ch-border)" }}>
                 <ExternalLink className="h-3 w-3 shrink-0" />
                 <span className="truncate">{item.externalLinkButtonTag}</span>
               </span>
             ) : null}
             {item.productUrl ? (
-              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <span className="truncate">{item.productUrl}</span>
               </span>
             ) : null}
@@ -8525,7 +8526,7 @@ function CatalogItemCard({
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           {item.media.slice(0, 6).map((media) => (
-            <span key={media.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+            <span key={media.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
               <MediaIcon media={media} />
               {media.fileName}
             </span>
@@ -8536,7 +8537,7 @@ function CatalogItemCard({
           <button
             type="button"
             onClick={onCopy}
-            className="inline-flex min-h-9 min-w-0 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+            className="inline-flex min-h-9 min-w-0 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
             style={{ borderColor: "var(--ch-border)" }}
             title={item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag}
           >
@@ -8548,7 +8549,7 @@ function CatalogItemCard({
               type="button"
               onClick={() => onWhatsappVisibility(item.whatsappCatalogHidden)}
               disabled={visibilityLoading}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50"
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50"
               style={{ borderColor: "var(--ch-border)" }}
             >
               {visibilityLoading ? (
@@ -8564,7 +8565,7 @@ function CatalogItemCard({
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
             style={{ borderColor: "var(--ch-border)" }}
           >
             <PencilLine className="h-3.5 w-3.5" />
@@ -8575,7 +8576,7 @@ function CatalogItemCard({
             onClick={onDelete}
             disabled={deleting}
             className={cn(
-              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:opacity-50",
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:opacity-50",
               confirmDelete ? "border-rose-400/35 bg-rose-400/10 text-rose-100" : "text-slate-400 hover:bg-rose-400/10 hover:text-rose-100",
             )}
             style={{ borderColor: confirmDelete ? undefined : "var(--ch-border)" }}
@@ -8643,7 +8644,7 @@ function CompanyLocationPolicyEditor({
             <Store className="h-3.5 w-3.5" />
           </span>
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">Localizacao da empresa</span>
+            <span className="block font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Localizacao da empresa</span>
             <span className="block truncate text-[11px] text-slate-400">
               {configuredCount > 0 ? primaryLocationSummary : "Obrigatorio: informe uma sede/base ou marque Sem sede fixa."}
             </span>
@@ -8670,7 +8671,7 @@ function CompanyLocationPolicyEditor({
             >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-slate-500">
                     {location.isPrimary ? "referencia principal" : `referencia ${index + 1}`}
                   </span>
                   <p className="mt-1 text-[11px] font-semibold text-cyan-100">
@@ -8682,7 +8683,7 @@ function CompanyLocationPolicyEditor({
                     <button
                       type="button"
                       onClick={() => onPrimary(index)}
-                      className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                      className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
                       style={{ borderColor: "var(--ch-border)" }}
                     >
                       <ShieldCheck className="h-3.5 w-3.5" />
@@ -8693,7 +8694,7 @@ function CompanyLocationPolicyEditor({
                     type="button"
                     disabled={locations.length === 1 && !isCompanyLocationDraftMeaningful(location)}
                     onClick={() => onRemove(index)}
-                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-rose-100 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-45"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -8846,7 +8847,7 @@ function CompanyLocationPolicyEditor({
         type="button"
         disabled={locations.length >= 8}
         onClick={onAdd}
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
         style={{ borderColor: "var(--ch-border)" }}
       >
         <Plus className="h-3.5 w-3.5" />
@@ -8976,7 +8977,7 @@ function LocalDeliveryZonesEditor({
           <button
             type="button"
             onClick={() => onAddZone("radius")}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
             style={{ borderColor: "var(--ch-border)" }}
           >
             <Navigation className="h-3.5 w-3.5" />
@@ -8985,7 +8986,7 @@ function LocalDeliveryZonesEditor({
           <button
             type="button"
             onClick={() => onAddZone("neighborhoods")}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
             style={{ borderColor: "var(--ch-border)" }}
           >
             <Tags className="h-3.5 w-3.5" />
@@ -8994,7 +8995,7 @@ function LocalDeliveryZonesEditor({
           <button
             type="button"
             onClick={() => onAddZone("polygon")}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10"
             style={{ borderColor: "var(--ch-border)" }}
           >
             <MapPin className="h-3.5 w-3.5" />
@@ -9387,7 +9388,7 @@ function AccordionSection({
           >
             <Icon className="h-3.5 w-3.5" />
           </span>
-          <span className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-slate-400">{title}</span>
+          <span className="truncate font-mono text-[11px] uppercase tracking-[0.18em] text-slate-400">{title}</span>
         </span>
         <ChevronDown className={cn("h-4 w-4 shrink-0 transition", open ? "rotate-180" : "", toneStyle.label)} />
       </button>
@@ -9413,7 +9414,7 @@ function StatTile({ icon: Icon, label, value, tone = "cyan" }: { icon: typeof Pa
       }}
     >
       <div className="flex min-w-0 items-center justify-between gap-1.5">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
         <span
           className="hidden h-6 w-6 shrink-0 place-items-center rounded-lg sm:grid"
           style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
@@ -9446,9 +9447,9 @@ function CommerceTile({
       }}
     >
       <div className="flex min-w-0 items-center justify-between gap-1.5">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.10em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.10em] text-slate-500 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
         <span
-          className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 font-mono text-[9px] font-bold"
+          className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 font-mono text-[11px] font-bold"
           style={{ background: `rgba(${toneStyle.rgb},0.15)`, color: toneStyle.fill }}
         >
           {value}
@@ -9478,7 +9479,7 @@ function CommercialFlowFilterBar({
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition",
               active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
             )}
             style={{ borderColor: active ? undefined : "var(--ch-border)" }}
@@ -9494,7 +9495,7 @@ function CommercialFlowFilterBar({
 function CommerceRevenueOverview({ summary }: { summary: CommerceSummary }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 xl:gap-3">
         <RevenueMetric label="Pedidos criados" value={formatCurrency(summary.orderAmount)} hint={`${summary.orderCount} pedido(s)`} tone="cyan" />
         <RevenueMetric label="Pagamentos aprovados" value={formatCurrency(summary.approvedAmount)} hint={`${summary.approvedPayments} checkout(s)`} tone="green" />
         <RevenueMetric label="Aguardando pagamento" value={formatCurrency(summary.pendingAmount)} hint={`${summary.pendingPayments} pendente(s)`} tone="amber" />
@@ -9551,7 +9552,7 @@ function RevenueMetric({
   return (
     <div className="min-w-0 rounded-xl border px-2 py-2 sm:px-3 sm:py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
       <div className="flex min-w-0 items-center justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <span className="hidden sm:inline-flex"><NeonBadge tone={tone}>{hint}</NeonBadge></span>
       </div>
       <p className="mt-1 truncate font-mono text-[13px] font-bold text-slate-100 sm:mt-3 sm:text-[20px]">{value}</p>
@@ -9564,7 +9565,7 @@ function CommerceFlowCard({ flow }: { flow: CommerceFlowSummary }) {
     <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
       <div className="flex items-center justify-between gap-2">
         <NeonBadge tone={commercialFlowTone(flow.flow)}>{formatCommercialFlowLabel(flow.flow)}</NeonBadge>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{flow.orders} pedido(s)</span>
+        <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{flow.orders} pedido(s)</span>
       </div>
       <p className="mt-3 font-mono text-[18px] font-bold text-slate-100">{formatCurrency(flow.approvedAmount)}</p>
       <p className="mt-1 text-[11px] text-slate-500">{formatCommercialFlowDescription(flow.flow)}</p>
@@ -9663,7 +9664,7 @@ function getPagBankConnectionErrorMessage(reason: string | null) {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 truncate text-[12px] font-semibold text-slate-200">{value}</p>
     </div>
   );
@@ -9702,7 +9703,7 @@ function SalesProductFormTabs({
             type="button"
             onClick={() => onChange(tab.id)}
             className={cn(
-              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition",
               active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
             )}
           >
@@ -9736,7 +9737,7 @@ function TabButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-[10px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-10 sm:w-auto sm:gap-2 sm:px-3 sm:text-[12px]",
+        "inline-flex min-h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-10 sm:w-auto sm:gap-2 sm:px-3 sm:text-[12px]",
         active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
       )}
       style={{ borderColor: active ? undefined : "var(--ch-border)" }}
@@ -9998,7 +9999,7 @@ function FieldLabel({ children, help }: { children: string; help?: string }) {
   const helpText = help ?? salesCatalogHelpText[children];
 
   return (
-    <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+    <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
       {children}
       {helpText ? <HelpHint title={children}>{helpText}</HelpHint> : null}
     </span>

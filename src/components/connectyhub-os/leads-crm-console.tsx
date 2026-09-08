@@ -1,6 +1,8 @@
 "use client";
 import { LeadFinancialArchive } from "./lead-financial-archive";
 
+import { useAvailablePaneHeight } from "@/hooks/use-available-pane-height";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -453,7 +455,7 @@ export function LeadCrmConsole({
                 </p>
               </div>
               <Link
-                className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
+                className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
                 href="/dashboard/empresa"
               >
                 Nova empresa
@@ -641,7 +643,7 @@ function LeadsView({
                 <InfoMini label="Ultimo sinal" value={formatTime(lead.lastMessageAt ?? lead.updatedAt)} />
               </div>
 
-              <span className={cn("inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+              <span className={cn("inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wide", temperature.className)}>
                 Ver arquivo do lead
               </span>
             </button>
@@ -652,7 +654,7 @@ function LeadsView({
 
       <div className="mt-4 hidden overflow-x-auto md:block">
         <div className="min-w-[1320px]">
-          <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-slate-200 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-slate-200 px-3 pb-3 font-mono text-[11px] uppercase tracking-widest text-slate-500">
             <span>Nome</span>
             <span>Contato</span>
             <span>Perfil / persona</span>
@@ -680,14 +682,14 @@ function LeadsView({
                     {lead.email ? <p className="mt-1 truncate text-slate-500">{lead.email}</p> : null}
                   </div>
                   <div className="min-w-0">
-                    <span className={cn("inline-flex rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+                    <span className={cn("inline-flex rounded-lg border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide", temperature.className)}>
                       {temperature.label}
                     </span>
                     <p className="mt-1 truncate text-[11px] text-slate-400">Score {lead.score}/100</p>
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold text-slate-950">{lead.agentName ?? "Sem agente"}</p>
-                    <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{lead.companyName}</p>
+                    <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{lead.companyName}</p>
                   </div>
                   <StatusPill status={lead.status} />
                   <div className="min-w-0 text-[12px] text-slate-600">
@@ -702,7 +704,7 @@ function LeadsView({
                     <p className="truncate font-mono text-[11px] text-slate-400">{lead.technical.ipAddress ?? "-"}</p>
                     <p className="mt-1 text-slate-500">{formatDate(lead.lastMessageAt ?? lead.updatedAt)}</p>
                   </div>
-                  <span className="justify-self-end rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-blue-700">
+                  <span className="justify-self-end rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wide text-blue-700">
                     Ver arquivo
                   </span>
                 </button>
@@ -763,7 +765,7 @@ function CrmView({
                     <InfoPanel title="Resumo inteligente" text={lead.summary} />
                     <QualificationGrid lead={lead} />
                     <button
-                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
                       onClick={() => setDetailsLeadId(lead.id)}
                       type="button"
                     >
@@ -907,12 +909,12 @@ function ConversationsView({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-[13px] font-semibold text-slate-950">{lead.name}</p>
-                      <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
                     </div>
                     <p className="mt-1 truncate text-[12px] text-slate-400">{lead.conversation.preview ?? lead.summary}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <StatusPill status={lead.status} />
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         {lead.companyName}
                       </span>
                     </div>
@@ -932,8 +934,9 @@ function ConversationsView({
             selectedLead ? (
               <div className="flex items-center gap-2">
                 <button
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 xl:hidden"
-                  onClick={() => setConversationPane("inbox")}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 xl:hidden"
+                  aria-label="Voltar às conversas"
+                      onClick={() => setConversationPane("inbox")}
                   type="button"
                 >
                   <ChevronDown className="h-3.5 w-3.5 rotate-90" />
@@ -953,7 +956,7 @@ function ConversationsView({
                 </div>
                 <div className="mt-3 grid gap-2 sm:hidden">
                   <button
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700"
                     onClick={() => setDetailsLeadId(selectedLead.id)}
                     type="button"
                   >
@@ -1012,6 +1015,8 @@ function AttendanceCenterView({
   workspace: ClientLeadCrmWorkspace;
 }) {
   const router = useRouter();
+  const paneRef = useAvailablePaneHeight();
+  const [mobileBagOpen, setMobileBagOpen] = useState(false);
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [manualReply, setManualReply] = useState("");
   const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
@@ -1030,10 +1035,10 @@ function AttendanceCenterView({
     busy: false,
     dismissed: false,
     message: null,
-    permission: readAttendancePushPermissionState(),
+    permission: "unsupported",
     visible: false,
   }));
-  const [soundPermission, setSoundPermission] = useState<AttendanceSoundPermissionState>(() => readAttendanceSoundPermissionState());
+  const [soundPermission, setSoundPermission] = useState<AttendanceSoundPermissionState>("unknown");
   const manualReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
@@ -1477,6 +1482,7 @@ function AttendanceCenterView({
 
     const refreshPermission = () => {
       const permission = readAttendancePushPermissionState();
+      setSoundPermission(readAttendanceSoundPermissionState());
 
       setPushPrompt((current) => current.permission === permission
         ? current
@@ -1693,18 +1699,18 @@ function AttendanceCenterView({
         className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
         style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
       >
-        <div className="grid h-[calc(100svh-300px)] min-h-[620px] max-h-[900px] xl:grid-cols-[360px_minmax(0,1fr)_340px]">
+        <div ref={paneRef} className="ch-attendance-grid grid">
           <aside
             className={cn(
-              "flex h-full min-h-0 flex-col border-b bg-white xl:border-b-0 xl:border-r",
-              conversationPane === "chat" && "hidden xl:block",
+              "flex h-full min-h-0 min-w-0 flex-col border-b bg-white xl:border-b-0 xl:border-r",
+              (conversationPane === "chat" || mobileBagOpen) && "hidden xl:flex",
             )}
             style={{ borderColor: "var(--ch-border)" }}
           >
             <div className="border-b bg-[#f0f2f5] px-4 py-4" style={{ borderColor: "#d1d7db" }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#25D366]">Central WhatsApp</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#25D366]">Central WhatsApp</p>
                   <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
                   <p className="mt-1 text-[11px] text-slate-500">
                     {queueThreads.length} conversas / {queueThreads.filter((thread) => thread.lead.status === "active").length} em atendimento
@@ -1739,7 +1745,7 @@ function AttendanceCenterView({
                     >
                       {queue.key !== "all" ? <AgentAvatar avatarUrl={queue.avatarUrl} name={queue.label} size="xs" /> : null}
                       <span className="truncate">{queue.label}</span>
-                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-slate-700" : "text-slate-400")}>
+                      <span className={cn("font-mono text-[11px]", effectiveQueueKey === queue.key ? "text-slate-700" : "text-slate-400")}>
                         {queue.count}
                       </span>
                     </button>
@@ -1772,7 +1778,7 @@ function AttendanceCenterView({
                     type="button"
                   >
                     {item.label}
-                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-slate-700" : "text-slate-400")}>{item.count}</span>
+                    <span className={cn("font-mono text-[11px]", inboxTab === item.value ? "text-slate-700" : "text-slate-400")}>{item.count}</span>
                   </button>
                 ))}
               </div>
@@ -1828,7 +1834,7 @@ function AttendanceCenterView({
             </div>
           </aside>
 
-          <main className={cn("min-h-0 bg-[#efeae2]", conversationPane === "inbox" && "hidden xl:block")}>
+          <main className={cn("min-h-0 min-w-0 bg-[#efeae2]", (conversationPane === "inbox" || mobileBagOpen) && "hidden xl:block")}>
             {activeLead ? (
               <div className="flex h-full min-h-0 flex-col">
                 <div className="flex min-h-[70px] flex-col gap-3 border-b bg-[#f0f2f5] px-4 py-3 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: "#d1d7db" }}>
@@ -1870,12 +1876,15 @@ function AttendanceCenterView({
                       {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
                     </button>
                     <button
-                      className="hidden h-9 items-center gap-2 rounded-full border border-[#25D366]/45 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-[#25D366] hover:bg-[#effff4] hover:text-[#075E54] sm:inline-flex"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[#25D366]/45 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-[#25D366] hover:bg-[#effff4] hover:text-[#075E54]"
                       onClick={() => setDetailsLeadId(activeLead.id)}
                       type="button"
                     >
                       <FileText className="h-4 w-4" />
                       CRM do lead
+                    </button>
+                    <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 xl:hidden" onClick={() => setMobileBagOpen(true)}>
+                      {commerceEnabled ? "Sacola / pedido" : "Conta do cliente"}
                     </button>
                   </div>
                 </div>
@@ -1950,7 +1959,9 @@ function AttendanceCenterView({
             )}
           </main>
 
-          <aside className="hidden min-h-0 border-l bg-white xl:block" style={{ borderColor: "var(--ch-border)" }}>
+          <aside className={cn("min-h-0 min-w-0 flex-col border-l bg-white xl:flex", mobileBagOpen ? "flex" : "hidden")} style={{ borderColor: "var(--ch-border)" }}>
+            <button type="button" onClick={() => setMobileBagOpen(false)} className="min-h-11 shrink-0 border-b border-slate-200 px-4 text-left font-semibold text-blue-700 xl:hidden">← Voltar à conversa</button>
+            <div className="min-h-0 flex-1 overflow-y-auto">
             {activeLead ? (
               commerceEnabled ? (
                 <AttendanceSalesBagPanel
@@ -1982,6 +1993,7 @@ function AttendanceCenterView({
                 <EmptyState title="Sem lead" detail="Selecione uma conversa para ver detalhes." />
               </div>
             )}
+            </div>
           </aside>
         </div>
       </div>
@@ -2025,7 +2037,7 @@ function AttendanceHeaderNotices({
         >
           <PauseCircle className="h-3.5 w-3.5" />
           IA pausada
-          <span className="font-mono text-[10px] text-emerald-700">
+          <span className="font-mono text-[11px] text-emerald-700">
             {countdown ?? "sem prazo"}
           </span>
         </span>
@@ -2158,7 +2170,7 @@ function AttendanceAdminContextPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
-        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Atendimento admin</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Atendimento admin</p>
         <div className="mt-1 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-[18px] font-bold text-slate-950">Contexto da conversa</h3>
@@ -2174,7 +2186,7 @@ function AttendanceAdminContextPanel({
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Lead</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Lead</p>
           <h4 className="mt-2 truncate text-[15px] font-bold text-slate-950">{lead.name}</h4>
           <div className="mt-3 space-y-2">
             <AdminContextLine icon={Building2} label="Empresa" value={lead.companyName} />
@@ -2185,7 +2197,7 @@ function AttendanceAdminContextPanel({
         </section>
 
         <section className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-blue-500">Intervencao humana</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-blue-500">Intervencao humana</p>
           <div className="mt-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-[14px] font-bold text-slate-950">
@@ -2211,7 +2223,7 @@ function AttendanceAdminContextPanel({
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-3">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Historico</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Historico</p>
           <div className="mt-3 space-y-2">
             <AdminContextLine icon={MessageCircle} label="Mensagens" value={String(conversation?.messageCount ?? lead.conversation.messageCount ?? 0)} />
             <AdminContextLine icon={Clock} label="Ultima mensagem" value={formatDateTime(conversation?.lastMessageAt ?? lead.lastMessageAt)} />
@@ -2236,7 +2248,7 @@ function AdminContextLine({
     <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
       <Icon className="h-3.5 w-3.5 shrink-0 text-blue-600" />
       <span className="min-w-0">
-        <span className="block font-mono text-[8px] uppercase tracking-wide text-slate-400">{label}</span>
+        <span className="block font-mono text-[11px] uppercase tracking-wide text-slate-400">{label}</span>
         <span className="block truncate text-[12px] font-semibold text-slate-950">{value}</span>
       </span>
     </div>
@@ -2338,7 +2350,7 @@ function AttendanceSalesBagPanel({
       <div className="border-b px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Venda manual</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Venda manual</p>
             <h3 className="mt-1 truncate text-[18px] font-bold text-slate-950">Sacola do lead</h3>
           </div>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-[0_14px_30px_rgba(24,119,242,0.18)]">
@@ -2352,15 +2364,15 @@ function AttendanceSalesBagPanel({
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-            <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Total</span>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Total</span>
             <span className="truncate text-[12px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</span>
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-            <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Itens</span>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-slate-500">Itens</span>
             <span className="text-[12px] font-black text-slate-950">{cartItems.reduce((total, item) => total + item.quantity, 0)}</span>
           </span>
           <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1">
-            <span className="font-mono text-[8px] uppercase tracking-wide text-blue-500">Fechamento</span>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-blue-500">Fechamento</span>
             <span className="truncate text-[12px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</span>
           </span>
         </div>
@@ -2417,14 +2429,14 @@ function AttendanceSalesBagPanel({
                   <div className="min-w-0">
                     <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         {product.category}
                       </span>
                       {productDescription ? (
                         <button
                           aria-expanded={productExpanded}
                           aria-label={`${productExpanded ? "Ocultar" : "Ver"} detalhes de ${product.name}`}
-                          className="inline-flex h-6 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-bold text-blue-600 transition hover:border-blue-200 hover:bg-blue-50"
+                          className="inline-flex h-6 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-bold text-blue-600 transition hover:border-blue-200 hover:bg-blue-50"
                           onClick={() => toggleProductDescription(product.id)}
                           type="button"
                         >
@@ -2472,12 +2484,12 @@ function AttendanceSalesBagPanel({
                     </p>
                   ) : null}
                   {confirmingDelete ? (
-                    <p className="col-span-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-600">
+                    <p className="col-span-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-600">
                       Clique na lixeira novamente para excluir este produto do catalogo.
                     </p>
                   ) : null}
                   {!hasPrice ? (
-                    <p className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold leading-4 text-amber-700">
+                    <p className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold leading-4 text-amber-700">
                       Produto sem preco cadastrado. Edite no Catalogo de Vendas para liberar a adicao na sacola do lead.
                     </p>
                   ) : null}
@@ -2510,7 +2522,7 @@ function AttendanceSalesBagPanel({
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Item personalizado</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Item personalizado</p>
           <form className="mt-3 space-y-2" onSubmit={handleAddManualItem}>
             <input
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
@@ -2553,7 +2565,7 @@ function AttendanceSalesBagPanel({
         <section>
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Pedido atual</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Pedido atual</p>
               <h4 className="mt-1 text-[14px] font-bold text-slate-950">Carrinho manual</h4>
             </div>
             {cartItems.length ? (
@@ -2606,7 +2618,7 @@ function AttendanceSalesBagPanel({
                     </button>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-[10px] text-slate-500">{formatCurrencyCents(item.unitPriceCents)} un.</p>
+                    <p className="font-mono text-[11px] text-slate-500">{formatCurrencyCents(item.unitPriceCents)} un.</p>
                     <p className="font-mono text-[13px] font-black text-slate-950">{formatCurrencyCents(item.unitPriceCents * item.quantity)}</p>
                   </div>
                 </div>
@@ -3351,10 +3363,10 @@ function SocialApprovalQueue({
               <div className="min-w-0 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
-                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                     {item.companyName}
                   </span>
-                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                     {formatDateTime(item.preparedAt ?? item.createdAt)}
                   </span>
                 </div>
@@ -3365,14 +3377,14 @@ function SocialApprovalQueue({
                     <p className="mt-1 truncate text-[11px] text-slate-400">{item.leadPhone ?? item.providerChatId ?? "Contato social"}</p>
                   </div>
                   <div className="min-w-0 text-left sm:text-right">
-                    <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
+                    <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">Agente</p>
                     <p className="truncate text-[12px] font-semibold text-slate-950">{item.agentName}</p>
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Mensagem do lead</p>
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Mensagem do lead</p>
                     {item.publicSurface ? <ShieldCheck className="h-3.5 w-3.5 text-amber-600" /> : <MessageCircle className="h-3.5 w-3.5 text-emerald-700" />}
                   </div>
                   <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-700">{item.leadMessage}</p>
@@ -3381,7 +3393,7 @@ function SocialApprovalQueue({
                 {item.approvalReasons.length ? (
                   <div className="flex flex-wrap gap-1.5">
                     {item.approvalReasons.slice(0, 4).map((reason) => (
-                      <span key={reason} className="rounded-md border border-amber-200 bg-amber-100 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-amber-800">
+                      <span key={reason} className="rounded-md border border-amber-200 bg-amber-100 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-amber-800">
                         {formatApprovalReason(reason)}
                       </span>
                     ))}
@@ -3390,7 +3402,7 @@ function SocialApprovalQueue({
 
                 {item.leadId ? (
                   <button
-                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
                     onClick={() => onSelectLead(item.leadId!)}
                     type="button"
                   >
@@ -3402,7 +3414,7 @@ function SocialApprovalQueue({
 
               <div className="grid min-w-0 gap-2">
                 <label className="grid gap-2">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Rascunho</span>
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Rascunho</span>
                   <textarea
                     className="min-h-[126px] resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-[13px] leading-5 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
                     disabled={isReviewing}
@@ -3414,7 +3426,7 @@ function SocialApprovalQueue({
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isReviewing}
                     onClick={() => reviewApproval(item, "approve")}
                     type="button"
@@ -3423,7 +3435,7 @@ function SocialApprovalQueue({
                     Aprovar rascunho
                   </button>
                   <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isReviewing}
                     onClick={() => reviewApproval(item, "reject")}
                     type="button"
@@ -3514,7 +3526,7 @@ function SocialDispatchMonitorPanel({
             {monitor.summary.failed ? `${monitor.summary.failed} falhas` : `${monitor.summary.sent} enviados`}
           </NeonBadge>
           <button
-            className="inline-flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-55"
             disabled={refreshing}
             onClick={() => void refresh()}
             type="button"
@@ -3558,10 +3570,10 @@ function SocialDispatchMonitorPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <MetaDispatchStatusPill label={item.dispatchStatusLabel} status={item.dispatchStatus} />
                       <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
-                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         {item.companyName}
                       </span>
-                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         {formatDateTime(item.sentAt ?? item.failedAt ?? item.startedAt ?? item.approvedAt ?? item.createdAt)}
                       </span>
                     </div>
@@ -3572,7 +3584,7 @@ function SocialDispatchMonitorPanel({
                         <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-400">{item.approvedReply}</p>
                       </div>
                       <div className="min-w-0 text-left sm:text-right">
-                        <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
+                        <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">Agente</p>
                         <p className="truncate text-[12px] font-semibold text-slate-950">{item.agentName}</p>
                       </div>
                     </div>
@@ -3584,24 +3596,24 @@ function SocialDispatchMonitorPanel({
                     ) : null}
 
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         Tentativas {item.attempts}
                       </span>
-                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         Retry {item.retryCount}
                       </span>
                       {item.httpStatus ? (
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                           HTTP {item.httpStatus}
                         </span>
                       ) : null}
                       {item.targetKind ? (
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                           {formatDispatchTarget(item.targetKind)}
                         </span>
                       ) : null}
                       {lastAudit ? (
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                           {formatDispatchAuditType(lastAudit.type)}
                         </span>
                       ) : null}
@@ -3611,7 +3623,7 @@ function SocialDispatchMonitorPanel({
                   <div className="grid content-start gap-2">
                     {item.leadId ? (
                       <button
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
                         onClick={() => onSelectLead(item.leadId!)}
                         type="button"
                       >
@@ -3621,7 +3633,7 @@ function SocialDispatchMonitorPanel({
                     ) : null}
                     {item.retryable ? (
                       <button
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={isRetrying || refreshing}
                         onClick={() => void retryDispatch(item)}
                         type="button"
@@ -3630,7 +3642,7 @@ function SocialDispatchMonitorPanel({
                         Reenfileirar
                       </button>
                     ) : (
-                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-500">
                         <Send className="h-3.5 w-3.5" />
                         Sem acao
                       </span>
@@ -3667,7 +3679,7 @@ function SocialDispatchMetric({
 
   return (
     <div className={cn("rounded-xl border px-3 py-3", toneClassName)}>
-      <p className="font-mono text-[9px] uppercase tracking-widest opacity-75">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest opacity-75">{label}</p>
       <p className="mt-1 font-mono text-[20px] font-bold leading-none">{value}</p>
     </div>
   );
@@ -3692,6 +3704,7 @@ function LeadDetailsModal({
   lead: ClientLeadRecord;
   onClose: () => void;
 }) {
+  const [mobileTab, setMobileTab] = useState<"details" | "messages">("details");
   const history = useAttendanceHistory(liveLead.id, null, "events");
   const activities = mergeLeadActivities(history.activities, liveLead.activities);
   const trackingEvents = mergeLeadActivities(history.trackingEvents, liveLead.leadFile.trackingEvents);
@@ -3711,7 +3724,7 @@ function LeadDetailsModal({
     ?? null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-0 backdrop-blur-sm sm:p-4">
+    <DialogFrame onClose={onClose} aria-label="Arquivo inteligente do lead" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-0 sm:p-4">
       <div className="connecty-lead-file-modal flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-blue-100 bg-white text-slate-950 shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -3746,8 +3759,11 @@ function LeadDetailsModal({
           </button>
         </div>
 
+        <div role="tablist" aria-label="Seções do arquivo do lead" className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 p-2 lg:hidden">
+          {(["details", "messages"] as const).map(tab => <button key={tab} role="tab" aria-selected={mobileTab === tab} aria-controls={`lead-file-${tab}`} id={`lead-file-tab-${tab}`} tabIndex={mobileTab === tab ? 0 : -1} onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const next = event.key === "Home" ? "details" : event.key === "End" ? "messages" : tab === "details" ? "messages" : "details"; setMobileTab(next); document.getElementById(`lead-file-tab-${next}`)?.focus(); } }} onClick={() => setMobileTab(tab)} className={cn("min-h-11 rounded-lg px-3 text-sm font-semibold", mobileTab === tab ? "ch-action" : "bg-slate-100 text-slate-700")}>{tab === "details" ? "Dados e jornada" : "Conversas"}</button>)}
+        </div>
         <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[370px_minmax(0,1fr)] lg:overflow-hidden">
-          <aside className="min-h-0 border-b border-slate-200 bg-slate-50 p-3 sm:p-4 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          <aside id="lead-file-details" aria-labelledby="lead-file-tab-details" className={cn("min-h-0 border-b border-slate-200 bg-slate-50 p-3 sm:p-4 lg:block lg:overflow-y-auto lg:border-b-0 lg:border-r", mobileTab !== "details" && "hidden")}>
             <div className="space-y-3">
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
               <QualificationGrid lead={lead} />
@@ -3760,8 +3776,8 @@ function LeadDetailsModal({
               <HistoryPageControl history={history} label="Consultar eventos anteriores" />
             </div>
           </aside>
-          <main className="min-h-0 bg-white p-3 sm:p-4 lg:overflow-hidden">
-            <div className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white lg:h-full lg:min-h-[640px]">
+          <main id="lead-file-messages" aria-labelledby="lead-file-tab-messages" className={cn("min-h-0 bg-white p-3 sm:p-4 lg:block lg:overflow-hidden", mobileTab !== "messages" && "hidden")}>
+            <div className="flex min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white lg:h-full lg:min-h-[420px]">
               <ConversationHeader lead={lead} conversation={selectedConversation} />
               <div
                 className="min-h-0 flex-1 overflow-y-auto border-t border-slate-200 p-3 sm:p-5"
@@ -3785,7 +3801,7 @@ function LeadDetailsModal({
           </main>
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -3839,7 +3855,7 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
       <LeadAvatar lead={lead} />
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold text-slate-950">{lead.name}</p>
-        <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+        <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">
           {lead.channel} / {lead.leadFile.messageCount} mensagens
         </p>
       </div>
@@ -3884,7 +3900,7 @@ function AgentAvatar({
     lg: "text-[14px]",
     md: "text-[13px]",
     sm: "text-[11px]",
-    xs: "text-[9px]",
+    xs: "text-[11px]",
   }[size];
   const imageSize = {
     lg: "48px",
@@ -3934,7 +3950,7 @@ function StatusPill({ status }: { status: ClientLeadStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide",
+        "inline-flex w-fit items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide",
         lightToneClassName[meta.tone],
       )}
     >
@@ -3951,7 +3967,7 @@ function ScoreRing({ score }: { score: number }) {
         {score}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Score</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Score</p>
         <ProgressBar value={score} tone={score >= 70 ? "green" : score >= 35 ? "cyan" : "amber"} />
       </div>
     </div>
@@ -3961,7 +3977,7 @@ function ScoreRing({ score }: { score: number }) {
 function InfoPanel({ title, text }: { title: string; text: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">{title}</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">{title}</p>
       <p className="mt-3 text-[12px] leading-5 text-slate-600">{redactInternalProviderNames(text)}</p>
     </div>
   );
@@ -3972,7 +3988,7 @@ function LeadFileSnapshot({ lead }: { lead: ClientLeadRecord }) {
     <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Dossie do lead</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">Dossie do lead</p>
           <p className="mt-1 text-[13px] font-semibold text-slate-950">CRM, conversas e rastreamento</p>
         </div>
         <Archive className="h-5 w-5 text-blue-600" />
@@ -3997,7 +4013,7 @@ function LeadCheckoutSnapshot({ records }: { records: LeadCheckoutRecord[] }) {
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-700">Checkouts do lead</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-emerald-700">Checkouts do lead</p>
           <p className="mt-1 text-[13px] font-semibold text-slate-950">Pedidos, pagamentos e abandono</p>
         </div>
         <CreditCard className="h-5 w-5 text-emerald-700" />
@@ -4034,7 +4050,7 @@ function LeadCheckoutMiniList({ records }: { records: LeadCheckoutRecord[] }) {
   return (
     <div className="mt-3 rounded-2xl border border-emerald-200 bg-white p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-700">Checkouts</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-emerald-700">Checkouts</p>
         <NeonBadge tone={getLeadCheckoutStageTone(latest[0].status.stage)}>{latest[0].status.label}</NeonBadge>
       </div>
       <div className="mt-2 space-y-1.5">
@@ -4057,14 +4073,14 @@ function LeadCheckoutRecordRow({ compact = false, record }: { compact?: boolean;
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-[12px] font-semibold text-slate-950">{record.itemSummary}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-slate-500">
             <span>{formatCurrencyCents(record.totalCents)}</span>
             <span>#{record.order.id.slice(0, 8)}</span>
             {paymentDetails ? <span>{paymentDetails}</span> : null}
             {record.latestAt ? <span>{formatDateTime(record.latestAt)}</span> : null}
           </p>
         </div>
-        <span className={cn("shrink-0 rounded-lg border px-2 py-1 font-mono text-[8px] font-bold uppercase tracking-wide", lightToneClassName[getLeadCheckoutStageTone(record.status.stage)])}>
+        <span className={cn("shrink-0 rounded-lg border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide", lightToneClassName[getLeadCheckoutStageTone(record.status.stage)])}>
           {record.status.label}
         </span>
       </div>
@@ -4074,7 +4090,7 @@ function LeadCheckoutRecordRow({ compact = false, record }: { compact?: boolean;
           {record.checkoutUrl ? (
             <a
               aria-label="Abrir checkout do lead"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100"
               href={record.checkoutUrl}
               rel="noreferrer"
               target="_blank"
@@ -4121,7 +4137,7 @@ function ConversationSelector({
             {selectedConversation ? formatConversationLabel(selectedConversation) : "Historico geral"}
           </span>
         )}
-        <span className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+        <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-slate-500">
           {selectedConversation?.messageCount ?? 0} mensagens
         </span>
       </div>
@@ -4199,7 +4215,7 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-amber-700">Atividade no site</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-amber-700">Atividade no site</p>
         <NeonBadge tone="amber">{events.length}</NeonBadge>
       </div>
       <div className="mt-3 space-y-2">
@@ -4207,7 +4223,7 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
           <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(event.title)}</p>
-              <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDateTime(event.occurredAt)}</span>
+              <span className="shrink-0 font-mono text-[11px] text-slate-500">{formatDateTime(event.occurredAt)}</span>
             </div>
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(event.summary)}</p>
           </div>
@@ -4233,21 +4249,21 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Panorama de qualificacao</p>
-        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">Panorama de qualificacao</p>
+        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide", temperature.className)}>
           {temperature.label}
         </span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-slate-500">
             <Activity className="h-3.5 w-3.5 text-blue-600" />
             Score
           </div>
           <p className="mt-2 text-[12px] font-semibold text-slate-950">{lead.score}/100</p>
         </div>
         <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 md:col-span-2">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-slate-500">
             <Target className="h-3.5 w-3.5 text-indigo-600" />
             Proxima acao
           </div>
@@ -4260,7 +4276,7 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 
           return (
             <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                 <Icon className="h-3.5 w-3.5 text-blue-600" />
                 {item.label}
               </div>
@@ -4272,7 +4288,7 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 
       {lead.qualification.nextBestQuestion ? (
         <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-emerald-700">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-emerald-700">
             <MessageCircle className="h-3.5 w-3.5" />
             Proxima pergunta sugerida
           </div>
@@ -4282,7 +4298,7 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 
       {lead.qualification.nextStepAcceptance ? (
         <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-slate-500">
             <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
             Aceite do proximo passo
           </div>
@@ -4292,11 +4308,11 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 
       {lead.qualification.fields.length ? (
         <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Campos personalizados capturados</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Campos personalizados capturados</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {lead.qualification.fields.map((field) => (
               <div key={field.key} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{field.label}</p>
+                <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{field.label}</p>
                 <p className="mt-1 text-[12px] font-semibold leading-5 text-slate-950">{field.value}</p>
               </div>
             ))}
@@ -4316,7 +4332,7 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 function InfoMini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(value)}</p>
     </div>
   );
@@ -4357,7 +4373,7 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Ficha tecnica</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">Ficha tecnica</p>
       <div className="mt-3 space-y-2">
         {rows.map((row) => {
           const Icon = row.icon;
@@ -4381,7 +4397,7 @@ function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) 
   const [visibleCount, setVisibleCount] = useState(10);
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Atividade no ecossistema</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">Atividade no ecossistema</p>
       <div className="mt-3 space-y-2">
         {activities.slice(0, visibleCount).map((activity) => (
           <div key={activity.id} className="grid grid-cols-[10px_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -4389,7 +4405,7 @@ function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) 
             <div className="min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(activity.title)}</p>
-                <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDate(activity.occurredAt)}</span>
+                <span className="shrink-0 font-mono text-[11px] text-slate-500">{formatDate(activity.occurredAt)}</span>
               </div>
               <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(activity.summary)}</p>
             </div>
@@ -4593,13 +4609,13 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
             >
               <div className="mb-1 flex items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate font-mono text-[9px] uppercase tracking-wide opacity-60">
+                  <span className="truncate font-mono text-[11px] uppercase tracking-wide opacity-60">
                     {label}
                   </span>
                   {originLabel ? (
                     <span
                       className={cn(
-                        "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wide",
+                        "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wide",
                         getMessageOriginBadgeClass(message),
                       )}
                       title={formatMessageOriginTitle(message)}
@@ -4608,7 +4624,7 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                     </span>
                   ) : null}
                 </span>
-                <span className="font-mono text-[9px] opacity-55">
+                <span className="font-mono text-[11px] opacity-55">
                   {message.type !== "text" ? `${message.type} · ` : null}
                   {formatTime(message.occurredAt)}
                 </span>
@@ -4623,11 +4639,11 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+                    <span className="truncate font-mono text-[11px] font-bold uppercase tracking-wide text-[#128C7E]">
                       {quotedLabel}
                     </span>
                     {message.quotedMessage.type && message.quotedMessage.type !== "text" ? (
-                      <span className="shrink-0 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-slate-500">
                         {message.quotedMessage.type}
                       </span>
                     ) : null}
@@ -4644,7 +4660,7 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
               )}
               {!isAudio && message.mediaUrl ? (
                 <a
-                  className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
+                  className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
                   href={message.mediaUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -4678,12 +4694,12 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
         )}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-[#128C7E]">
             <PlayCircle className="h-3.5 w-3.5" />
             {audioLabel}
           </span>
           {message.mediaMimeType ? (
-            <span className="shrink-0 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wide text-slate-500">
               {formatAudioMimeLabel(message.mediaMimeType)}
             </span>
           ) : null}
@@ -4705,7 +4721,7 @@ function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; messag
           isOutbound ? "border-[#25D366] bg-white/45" : "border-[#25D366] bg-[#f0fdf4]",
         )}
       >
-        <span className="font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-wide text-[#128C7E]">
           Transcrição
         </span>
         <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-slate-700">
@@ -4720,7 +4736,7 @@ function MiniChat({ lead, messages }: { lead: ClientLeadRecord; messages: Client
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Ultimas mensagens</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Ultimas mensagens</p>
         <span className="text-[11px] text-slate-500">{lead.conversation.status ?? "sem status"}</span>
       </div>
       <ChatMessages messages={messages} />
@@ -4746,7 +4762,7 @@ function LeadSideFile({
       <LeadTechnicalFile lead={lead} />
       {checkoutRecords?.length ? <LeadCheckoutMiniList records={checkoutRecords} /> : null}
       <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
         onClick={onDetails}
         type="button"
       >
@@ -4763,8 +4779,8 @@ function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Qualificacao</p>
-        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-blue-700">Qualificacao</p>
+        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide", temperature.className)}>
           {temperature.label}
         </span>
       </div>

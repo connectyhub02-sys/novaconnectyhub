@@ -45,14 +45,14 @@ export function MetaComingSoonPanel({
         </div>
 
         <div className="rounded-xl border border-white/10 bg-slate-950/45 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">lancamento atual</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">lancamento atual</p>
           <p className="mt-2 text-[14px] font-semibold text-white">WhatsApp liberado</p>
           <p className="mt-2 text-[12px] leading-5 text-slate-400">
             {metaFeatureComingSoonDetail}
           </p>
           <Link
             href="/dashboard/whatsapp"
-            className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15"
+            className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15"
           >
             <MessageCircle className="h-4 w-4" />
             Abrir WhatsApp
@@ -79,7 +79,7 @@ function ComingSoonItem({
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
           <p className="mt-1 text-[12px] font-semibold leading-5 text-slate-200">{value}</p>
         </div>
       </div>

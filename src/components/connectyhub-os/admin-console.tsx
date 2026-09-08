@@ -108,7 +108,7 @@ export function AdminConsole({
         >
           <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-end">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">operacao / hoje</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">operacao / hoje</p>
               <h2 className="mt-1 text-[20px] font-semibold leading-tight" style={{ color: "var(--ch-text)" }}>ConnectyHub OS</h2>
               <p className="mt-0.5 max-w-2xl text-[11px] leading-4 text-slate-500">
                 Receita, clientes, creditos e riscos em uma leitura curta.
@@ -248,7 +248,7 @@ function ExecutiveMetric({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-mono text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <p className="truncate font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
           <p className={cn("mt-1.5 truncate font-mono text-[20px] font-bold leading-none", colors.text)}>{value}</p>
         </div>
         <div className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", colors.bg)}>
@@ -257,8 +257,8 @@ function ExecutiveMetric({
       </div>
       <MetricMicroBars data={series} tone={tone} />
       <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span className="truncate text-[10px] text-slate-500">{detail}</span>
-        <span className={cn("shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[8px]", colors.bg, colors.text)}>{trend}</span>
+        <span className="truncate text-[11px] text-slate-500">{detail}</span>
+        <span className={cn("shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px]", colors.bg, colors.text)}>{trend}</span>
       </div>
     </div>
   );
@@ -300,7 +300,7 @@ function HealthDialCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">saude</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">saude</p>
           <p className="mt-0.5 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Plataforma</p>
         </div>
         <NeonBadge tone={tone}>{score}%</NeonBadge>
@@ -319,7 +319,7 @@ function HealthDialCard({
           >
             <div>
               <p className="font-mono text-[22px] font-bold leading-none" style={{ color: colors.fill }}>{score}%</p>
-              <p className="mt-0.5 text-[9px] text-slate-500">operacional</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">operacional</p>
             </div>
           </div>
         </div>
@@ -328,7 +328,7 @@ function HealthDialCard({
       <div className="space-y-1.5">
         {health.slice(0, 4).map((item) => (
           <div key={item.name} className="flex items-center justify-between gap-2">
-            <span className="truncate text-[10px] text-slate-400">{item.name}</span>
+            <span className="truncate text-[11px] text-slate-400">{item.name}</span>
             <TinyStatusPill status={item.status} />
           </div>
         ))}
@@ -336,7 +336,7 @@ function HealthDialCard({
 
       {warnings.length ? (
         <div
-          className="mt-2 rounded-lg px-2 py-1.5 text-[10px] text-amber-300"
+          className="mt-2 rounded-lg px-2 py-1.5 text-[11px] text-amber-300"
           title={warnings.join("\n")}
           style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.16)" }}
         >
@@ -349,7 +349,7 @@ function HealthDialCard({
 
 function ClientStatusGrid({ items }: { items: AdminDashboardOverview["clientStatus"] }) {
   return (
-    <div className="mb-2 grid grid-cols-4 gap-1.5">
+    <div className="mb-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
       {items.map((item) => (
         <div
           key={item.label}
@@ -375,12 +375,12 @@ function ClientList({ clients }: { clients: AdminDashboardOverview["clients"] })
         <div key={`${client.id}-${client.company}`} className="grid grid-cols-[1fr_auto] gap-2 py-2 first:pt-0 last:pb-0">
           <div className="min-w-0">
             <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{client.company}</p>
-            <p className="truncate font-mono text-[9px] text-slate-600">{client.owner}</p>
-            <p className="truncate text-[9px] text-slate-600">{client.plan} / {client.tokens}</p>
+            <p className="truncate font-mono text-[11px] text-slate-600">{client.owner}</p>
+            <p className="truncate text-[11px] text-slate-600">{client.plan} / {client.tokens}</p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <TinyStatusPill status={client.status} />
-            <span className="font-mono text-[10px]" style={{ color: "var(--ch-success)" }}>{client.mrr}</span>
+            <span className="font-mono text-[11px]" style={{ color: "var(--ch-success)" }}>{client.mrr}</span>
           </div>
         </div>
       ))}
@@ -404,11 +404,11 @@ function CompactAgentList({ agents }: { agents: AdminDashboardOverview["internal
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
-              <p className="truncate font-mono text-[8px] uppercase tracking-wide text-slate-500">{agent.sector} / {agent.role}</p>
+              <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{agent.sector} / {agent.role}</p>
             </div>
             <TinyStatusPill status={agent.status} />
           </div>
-          <p className="line-clamp-1 text-[10px] leading-4 text-slate-500">{agent.task}</p>
+          <p className="line-clamp-1 text-[11px] leading-4 text-slate-500">{agent.task}</p>
           <div className="mt-2 h-1 overflow-hidden rounded-full" style={{ background: "var(--ch-border)" }}>
             <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(agent.accuracy, 100))}%`, background: "var(--ch-ai-cyan)" }} />
           </div>
@@ -440,7 +440,7 @@ function CeoBrief({
             <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
               <Check className="h-2.5 w-2.5 text-emerald-400" />
             </div>
-            <span className="line-clamp-1 text-[10px] leading-4 text-slate-400">{item}</span>
+            <span className="line-clamp-1 text-[11px] leading-4 text-slate-400">{item}</span>
           </div>
         ))}
       </div>
@@ -457,9 +457,9 @@ function CeoBrief({
             <div key={approval.id} className="py-2 first:pt-0 last:pb-0">
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-[11px] font-medium" style={{ color: "var(--ch-text)" }}>{approval.client}</p>
-                <span className={cn("font-mono text-[9px]", colors.text)}>{approval.submitted}</span>
+                <span className={cn("font-mono text-[11px]", colors.text)}>{approval.submitted}</span>
               </div>
-              <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-500">{approval.request}</p>
+              <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{approval.request}</p>
             </div>
           );
         })}
@@ -475,7 +475,7 @@ function CeoActivityPanel({ items }: { items: AdminDashboardOverview["ceoActivit
         {items.length ? items.slice(0, 4).map((item) => (
           <div key={`${item.time}-${item.label}`} className="flex items-start justify-between gap-2 py-2 first:pt-0 last:pb-0">
             <span className="min-w-0 truncate text-[11px] text-slate-500">{item.label}</span>
-            <span className="shrink-0 font-mono text-[10px] text-slate-600">{item.time}</span>
+            <span className="shrink-0 font-mono text-[11px] text-slate-600">{item.time}</span>
           </div>
         )) : (
           <p className="py-4 text-[12px] text-slate-500">Nenhuma decisao operacional registrada.</p>
@@ -499,7 +499,7 @@ function MaintenanceGrid({ items }: { items: AdminDashboardOverview["maintenance
             <Wrench className="h-3.5 w-3.5 text-slate-700" />
           </div>
           <p className="text-[11px] font-medium" style={{ color: "var(--ch-text)" }}>{item.area}</p>
-          <p className="mt-0.5 font-mono text-[9px]" style={{ color: "var(--ch-info)" }}>{item.target}</p>
+          <p className="mt-0.5 font-mono text-[11px]" style={{ color: "var(--ch-info)" }}>{item.target}</p>
         </div>
       ))}
     </div>
@@ -548,7 +548,7 @@ function TinyStatusPill({ status }: { status: StatusTone }) {
   const colors = toneClass(tone);
 
   return (
-    <span className={cn("inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 font-mono text-[8px] uppercase", colors.bg, colors.text)}>
+    <span className={cn("inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] uppercase", colors.bg, colors.text)}>
       {label}
     </span>
   );
@@ -594,7 +594,7 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
           className="rounded-xl p-2.5"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          <p className="mb-1.5 font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">Sinais</p>
+          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">Sinais</p>
           <div className="divide-y divide-blue-100">
             {marketing.recentEvents.length ? marketing.recentEvents.slice(0, 3).map((event) => {
               const tone = toneClass(event.tone);
@@ -602,8 +602,8 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
               return (
                 <div key={event.id} className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} />
-                  <p className="min-w-0 flex-1 truncate text-[10px] text-slate-500">{event.title}</p>
-                  <span className="shrink-0 font-mono text-[8px] text-slate-600">
+                  <p className="min-w-0 flex-1 truncate text-[11px] text-slate-500">{event.title}</p>
+                  <span className="shrink-0 font-mono text-[11px] text-slate-600">
                     {formatShortDate(event.occurredAt)}
                   </span>
                 </div>
@@ -637,7 +637,7 @@ function MarketingStat({
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
       <div className="mb-1 flex min-w-0 items-center justify-between gap-1.5">
-        <p className="min-w-0 truncate font-mono text-[7px] uppercase tracking-[0.1em] text-slate-500 sm:text-[8px]">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[7px] uppercase tracking-[0.1em] text-slate-500 sm:text-[11px]">{label}</p>
         <div className={cn("hidden h-6 w-6 shrink-0 items-center justify-center rounded-md sm:flex", colors.bg)}>
           <Icon className={cn("h-3 w-3", colors.text)} />
         </div>
@@ -653,12 +653,12 @@ function MarketingBucketList({ title, items }: { title: string; items: AdminMark
       className="rounded-xl p-2.5"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <p className="mb-1.5 font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">{title}</p>
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{title}</p>
       <div className="space-y-1.5">
         {items.length ? items.map((item) => (
           <div key={item.label} className="flex items-center justify-between gap-2">
-            <span className="truncate text-[10px] text-slate-400">{item.label}</span>
-            <span className="shrink-0 font-mono text-[10px]" style={{ color: "var(--ch-text)" }}>{formatNumber(item.value)}</span>
+            <span className="truncate text-[11px] text-slate-400">{item.label}</span>
+            <span className="shrink-0 font-mono text-[11px]" style={{ color: "var(--ch-text)" }}>{formatNumber(item.value)}</span>
           </div>
         )) : (
           <span className="text-[11px] text-slate-600">Sem dados.</span>

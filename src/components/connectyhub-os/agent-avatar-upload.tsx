@@ -82,7 +82,7 @@ export function AgentAvatarUpload({
         size="xs"
         disabled={state.status === "uploading"}
         onClick={() => inputRef.current?.click()}
-        className="border-emerald-500/30 bg-emerald-500/5 font-mono text-[9px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10"
+        className="border-emerald-500/30 bg-emerald-500/5 font-mono text-[11px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10"
       >
         {state.status === "uploading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImagePlus className="h-3 w-3" />}
         Trocar foto
@@ -90,7 +90,7 @@ export function AgentAvatarUpload({
       {state.message && (
         <span
           className={[
-            "font-mono text-[9px] uppercase tracking-widest",
+            "font-mono text-[11px] uppercase tracking-widest",
             state.status === "error" ? "text-rose-500" : "text-slate-500",
           ].join(" ")}
         >

@@ -177,7 +177,7 @@ export function GuidedTour({
       <button
         type="button"
         onClick={start}
-        className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+        className="inline-flex min-h-8 shrink-0 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
         style={{ borderColor: "var(--ch-border)" }}
       >
         <Map className="h-3.5 w-3.5" />
@@ -191,7 +191,7 @@ export function GuidedTour({
               className="fixed z-[1] rounded-2xl border-2 border-cyan-300 bg-cyan-300/5 shadow-[0_0_0_9999px_rgba(2,6,23,0.62),0_0_34px_rgba(34,211,238,0.48)]"
               style={targetStyle}
             >
-              <span className="absolute -top-3 left-4 inline-flex min-h-6 items-center rounded-full border border-cyan-200/60 bg-cyan-300 px-2.5 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-950 shadow-lg">
+              <span className="absolute -top-3 left-4 inline-flex min-h-6 items-center rounded-full border border-cyan-200/60 bg-cyan-300 px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 shadow-lg">
                 Olhe aqui
               </span>
             </div>
@@ -205,7 +205,7 @@ export function GuidedTour({
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">Tour guiado</p>
+                <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.2em] text-cyan-300">Tour guiado</p>
                 <h2 className="text-[16px] font-bold leading-tight text-slate-50">{step.title}</h2>
               </div>
               <button
@@ -219,13 +219,13 @@ export function GuidedTour({
               </button>
             </div>
 
-            <p className="mb-2 inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-100">
+            <p className="mb-2 inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100">
               Area marcada em azul
             </p>
             <p className="text-[13px] leading-6 text-slate-300">{step.body}</p>
 
             <div className="mt-4 flex items-center justify-between gap-3">
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-100">
                 {progressLabel}
               </span>
               <div className="flex items-center gap-2">

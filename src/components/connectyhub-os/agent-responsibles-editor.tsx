@@ -136,7 +136,7 @@ export function AgentResponsiblesEditor({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <UserRound className="h-4 w-4 text-cyan-300" />
-            <p className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
+            <p className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
               Responsaveis humanos
             </p>
           </div>
@@ -147,7 +147,7 @@ export function AgentResponsiblesEditor({
         <div className="flex flex-wrap gap-2">
           {onTest ? (
             <button
-              className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={disabled || testDisabled || testing}
               type="button"
               onClick={onTest}
@@ -157,7 +157,7 @@ export function AgentResponsiblesEditor({
             </button>
           ) : null}
           <button
-            className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}
             type="button"
             onClick={addDraft}
@@ -172,7 +172,7 @@ export function AgentResponsiblesEditor({
         {drafts.map((draft, index) => (
           <div key={draft.id} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-widest text-slate-500">
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">
                 Responsavel {index + 1}
               </span>
               <input
@@ -184,7 +184,7 @@ export function AgentResponsiblesEditor({
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[8px] uppercase tracking-widest text-slate-500">
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">
                 WhatsApp responsavel
               </span>
               <input

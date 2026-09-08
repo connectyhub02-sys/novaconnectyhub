@@ -189,7 +189,7 @@ export function AdminAdsPlatformDashboard({
 
           <div className="grid content-between gap-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Ultima atualizacao</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Ultima atualizacao</p>
               <p className="mt-1 text-[13px] font-semibold text-white">{formatDateTime(overview.generatedAt)}</p>
               <p className="mt-2 text-[11px] leading-4 text-slate-500">{paidProvider.detail}</p>
             </div>
@@ -354,7 +354,7 @@ export function AdminAdsPlatformDashboard({
 function TrackingField({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="min-w-0 rounded-xl p-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <p className="truncate font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-2 truncate font-mono text-[13px] font-semibold text-white">{value ?? "Nao configurado"}</p>
     </div>
   );
@@ -408,7 +408,7 @@ function LinkButton({ href, icon: Icon, label, tone }: { href: string; icon: Luc
   return (
     <Link
       href={href}
-      className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 font-mono text-[10px] uppercase tracking-wide", t.border, t.bg, t.text)}
+      className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 font-mono text-[11px] uppercase tracking-wide", t.border, t.bg, t.text)}
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
@@ -439,7 +439,7 @@ function ConnectionGuidanceCard({
             <AlertTriangle className={cn("h-5 w-5", t.text)} />
           </span>
           <div className="min-w-0">
-            <p className={cn("font-mono text-[10px] uppercase tracking-[0.16em]", t.text)}>status da conexao</p>
+            <p className={cn("font-mono text-[11px] uppercase tracking-[0.16em]", t.text)}>status da conexao</p>
             <h2 className="mt-1 text-[15px] font-semibold text-white">{guidance.title}</h2>
             <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">{guidance.detail}</p>
           </div>
@@ -481,7 +481,7 @@ function NoticeCard({
     <div className="min-w-0 rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-center gap-3">
         <Icon className={cn("h-4 w-4 shrink-0", t.text)} />
-        <p className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
       </div>
       <p className="mt-2 truncate text-[15px] font-semibold text-white">{value}</p>
       <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
@@ -510,9 +510,9 @@ function TrafficStat({
         <Icon className={cn("h-4 w-4 shrink-0", t.text)} />
         <span className={cn("h-2 w-2 shrink-0 rounded-full", t.dot)} />
       </div>
-      <p className="mt-4 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-4 truncate font-mono text-[11px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
       <p className={cn("mt-2 truncate font-mono text-[19px] font-bold leading-none", t.text)}>{value}</p>
-      <p className="mt-2 truncate text-[10px] text-slate-500">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -522,7 +522,7 @@ function ExecutiveCard({ label, text, tone, value }: { label: string; text: stri
 
   return (
     <div className="min-w-0 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={cn("mt-2 truncate font-mono text-[20px] font-bold", t.text)}>{value}</p>
       <p className="mt-2 text-[11px] leading-4 text-slate-500">{text}</p>
     </div>
@@ -762,7 +762,7 @@ function campaignRow(campaign: TrafficCampaign) {
   return [
     <div key="campaign" className="min-w-0">
       <div className="truncate text-[13px] font-medium text-white">{campaign.name}</div>
-      <div className="font-mono text-[10px] text-slate-600">{campaign.id}</div>
+      <div className="font-mono text-[11px] text-slate-600">{campaign.id}</div>
     </div>,
     <span key="status" className="font-mono text-[11px] text-slate-400">{campaign.status}</span>,
     <span key="spend" className="font-mono text-[12px] text-emerald-400">{formatMoney(campaign.spend)}</span>,

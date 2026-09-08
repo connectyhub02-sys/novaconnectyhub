@@ -221,7 +221,7 @@ export function AdminSectorsConsole() {
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
             >
               <Plus className="h-3.5 w-3.5" />
               Novo setor
@@ -257,7 +257,7 @@ export function AdminSectorsConsole() {
                       </NeonBadge>
                       <Link
                         href="/admin/whatsapp/atendimento"
-                        className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+                        className="inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
                       >
                         Criar agente
                         <ArrowRight className="h-3.5 w-3.5" />
@@ -268,7 +268,7 @@ export function AdminSectorsConsole() {
                         onClick={() => deleteSector(sector, agentCount)}
                         title={agentCount > 0 ? "Exclua os agentes vinculados antes de remover este setor." : "Excluir setor"}
                         className={cn(
-                          "inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60",
+                          "inline-flex min-h-8 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60",
                           confirmDeleteId === sector.id
                             ? "border-rose-400/45 bg-rose-400/15 text-rose-100"
                             : "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15",
@@ -294,7 +294,7 @@ export function AdminSectorsConsole() {
         >
           <div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do setor</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do setor</span>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -303,7 +303,7 @@ export function AdminSectorsConsole() {
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Contexto do setor</span>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Contexto do setor</span>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
@@ -316,7 +316,7 @@ export function AdminSectorsConsole() {
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200"
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
             >
               Cancelar
             </button>
@@ -324,7 +324,7 @@ export function AdminSectorsConsole() {
               type="button"
               disabled={creating}
               onClick={createSector}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar setor

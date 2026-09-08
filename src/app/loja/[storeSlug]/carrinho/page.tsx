@@ -64,7 +64,7 @@ export default async function StoreCartPage({ params, searchParams }: StoreCartP
         }}
       />
       <PublicTrackingContextBridge context={data.publicTrackingContext} />
-      <PublicStorefront
+      <PublicStorefront initialSearch={typeof (await searchParams)?.q === "string" ? String((await searchParams)?.q) : ""}
         mode="shop"
         initialCartOpen
         storeSlug={data.storeSlug}

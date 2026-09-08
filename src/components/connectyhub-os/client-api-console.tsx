@@ -1,4 +1,5 @@
 "use client";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -349,7 +350,7 @@ export function ClientApiConsole({
             <button
               key={tab.id}
               className={cn(
-                "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] uppercase tracking-wide transition",
+                "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 font-mono text-[11px] uppercase tracking-wide transition",
                 active ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-200" : "border-slate-700 bg-slate-950/35 text-slate-500 hover:text-slate-200",
               )}
               onClick={() => setActiveTab(tab.id)}
@@ -610,7 +611,7 @@ function ClientTrafficPanel({ state }: { state: ClientGatewayState }) {
 
   return (
     <Panel className="mb-5" title="Telemetria da API" eyebrow="trafego / consumo / qualidade">
-      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 xl:gap-4">
         <MetricTile
           icon={Activity}
           label="Sucesso 24h"
@@ -650,7 +651,7 @@ function ClientTrafficPanel({ state }: { state: ClientGatewayState }) {
 
       <div className="mt-4 rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Rotas mais usadas</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Rotas mais usadas</p>
           <NeonBadge tone="cyan">{traffic.topEndpoints.length} rotas</NeonBadge>
         </div>
         {traffic.topEndpoints.length > 0 ? (
@@ -724,7 +725,7 @@ function MigrationAssistModal({
   onCopyCredential: (kind: MigrationCredentialKind) => void;
 }) {
   return (
-    <div
+    <DialogFrame onClose={loading ? () => undefined : onClose}
       aria-labelledby="api-passkey-migration-title"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
@@ -753,7 +754,7 @@ function MigrationAssistModal({
         <h3 id="api-passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold text-white">
           Migracao assistida
         </h3>
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-cyan-300">
+        <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-cyan-300">
           {getInstanceDisplayTitle(instance)}
         </p>
         <p className="mt-3 text-sm leading-6 text-slate-300">
@@ -798,7 +799,7 @@ function MigrationAssistModal({
           O token nao fica visivel no painel. Ele e copiado diretamente para uso na extensao indicada.
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 }
 
@@ -835,7 +836,7 @@ function CopyBox({ label, once, value }: { label: string; once?: boolean; value:
   return (
     <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}{once ? " exibido uma unica vez" : ""}</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}{once ? " exibido uma unica vez" : ""}</p>
         <IconButton icon={Copy} label="Copiar" onClick={() => copyText(value)} tone="cyan" />
       </div>
       <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{value}</code>
@@ -899,12 +900,12 @@ function KeyActions({
 function WebhookEventPicker() {
   return (
     <div className="space-y-3">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Eventos</p>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Eventos</p>
       {webhookEventGroups.map((group) => (
         <div key={group.title} className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.title}</span>
-            <span className="font-mono text-[9px] text-slate-600">{group.events.length}</span>
+            <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{group.title}</span>
+            <span className="font-mono text-[11px] text-slate-600">{group.events.length}</span>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {group.events.map((event) => (
@@ -918,7 +919,7 @@ function WebhookEventPicker() {
                 />
                 <span className="min-w-0">
                   <span className="block truncate" style={{ color: "var(--ch-text)" }}>{event.label}</span>
-                  <span className="block truncate font-mono text-[8px] uppercase tracking-wider text-slate-600">{event.value}</span>
+                  <span className="block truncate font-mono text-[11px] uppercase tracking-wider text-slate-600">{event.value}</span>
                 </span>
               </label>
             ))}
@@ -945,7 +946,7 @@ function MetricTile({
   return (
     <div className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-widest">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[11px] uppercase tracking-[0.11em] text-slate-500 sm:text-[11px] sm:tracking-widest">{label}</p>
         <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 sm:flex">
           <Icon className="h-4 w-4 text-cyan-300" />
         </div>
@@ -964,7 +965,7 @@ function IdentityCell({ title, subtitle, icon: Icon }: { title: string; subtitle
       </span>
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-        <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{subtitle}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{subtitle}</p>
       </div>
     </div>
   );
@@ -978,7 +979,7 @@ function InstanceCell({ instance }: { instance: ClientGatewayInstance }) {
       <WhatsappAvatar fallback={label} imageUrl={instance.profileImageUrl} />
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</p>
-        <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{instance.id}</p>
+        <p className="truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{instance.id}</p>
       </div>
     </div>
   );
@@ -1014,7 +1015,7 @@ function TextCell({ value, muted }: { value: string; muted?: string | null }) {
   return (
     <div className="min-w-[130px]">
       <p className="truncate text-[12px]" style={{ color: "var(--ch-text)" }}>{value}</p>
-      {muted && <p className="mt-1 max-w-[260px] truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{muted}</p>}
+      {muted && <p className="mt-1 max-w-[260px] truncate font-mono text-[11px] uppercase tracking-wider text-slate-500">{muted}</p>}
     </div>
   );
 }
@@ -1023,7 +1024,7 @@ function InfoTile({ label, value, copyValue }: { label: string; value: string; c
   return (
     <div className="rounded-xl px-3 py-2.5" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-600">{label}</p>
+        <p className="font-mono text-[11px] uppercase tracking-widest text-slate-600">{label}</p>
         {copyValue && <IconButton icon={Copy} label="Copiar" onClick={() => copyText(copyValue)} tone="cyan" />}
       </div>
       <p className="mt-1 break-all font-mono text-[12px] text-slate-200">{value}</p>
@@ -1034,7 +1035,7 @@ function InfoTile({ label, value, copyValue }: { label: string; value: string; c
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</span>
+      <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -1055,7 +1056,7 @@ function ActionButton({
 }) {
   return (
     <button
-      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[10px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-55"
+      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[11px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:opacity-55"
       disabled={disabled || loading}
       onClick={onClick}
       type={type}
@@ -1089,7 +1090,7 @@ function IconButton({
 
   return (
     <button
-      className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 font-mono text-[9px] uppercase tracking-wide transition disabled:opacity-45", toneClass)}
+      className={cn("inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-45", toneClass)}
       disabled={disabled || loading}
       onClick={onClick}
       title={label}
@@ -1157,7 +1158,7 @@ function RowActions({ children }: { children: ReactNode }) {
 function LinkButton({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
   return (
     <a
-      className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[10px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15"
+      className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 font-mono text-[11px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15"
       href={href}
     >
       <Icon className="h-3.5 w-3.5" />

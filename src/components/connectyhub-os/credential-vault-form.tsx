@@ -394,7 +394,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
         </div>
         <div className="flex items-center gap-2">
           <span
-            className="rounded-lg px-2.5 py-1 font-mono text-[10px]"
+            className="rounded-lg px-2.5 py-1 font-mono text-[11px]"
             style={{ background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
           >
             {configuredFields}/{fieldTotal} salvas
@@ -402,7 +402,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
           <button
             type="button"
             onClick={() => void refresh()}
-            className="flex h-8 items-center gap-1.5 rounded-lg px-3 font-mono text-[10px] uppercase tracking-wide transition"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-3 font-mono text-[11px] uppercase tracking-wide transition"
             style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
           >
             {listStatus === "loading"
@@ -467,7 +467,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                     {isMercadoPagoBilling && (
                       <a
                         href="/api/admin/billing/mercado-pago/connect"
-                        className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition hover:opacity-90"
+                        className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition hover:opacity-90"
                         style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#10b981" }}
                       >
                         <ExternalLink className="h-3 w-3" />
@@ -478,7 +478,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                       type="button"
                       onClick={() => void handleTestConnection(integration)}
                       disabled={connectionTest.status === "testing"}
-                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-60"
+                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-60"
                       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
                     >
                       {connectionTest.status === "testing"
@@ -489,7 +489,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-60"
+                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-60"
                       style={{
                         background: "var(--ch-accent)",
                         color:      "#fff",
@@ -543,7 +543,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                             type="button"
                             onClick={() => void refreshGeminiModels()}
                             disabled={!geminiApiCredentialKey || geminiModelsState.status === "loading"}
-                            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-55"
+                            className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide transition disabled:opacity-55"
                             style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
                           >
                             {geminiModelsState.status === "loading"
@@ -592,7 +592,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                       >
                         {/* Field header */}
                         {field.section && (
-                          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">
+                          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.14em] text-slate-500">
                             {field.section}
                           </p>
                         )}
@@ -605,7 +605,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                             >
                               {field.label}
                             </label>
-                            <p className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-slate-400">
+                            <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-slate-400">
                               {field.env}
                             </p>
                           </div>
@@ -819,7 +819,7 @@ function ConnectionBadge({ savedCount, total }: { savedCount: number; total: num
   const saved = savedCount > 0;
   return (
     <span
-      className="inline-flex items-center rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide"
+      className="inline-flex items-center rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
       style={saved
         ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981" }
         : { background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
@@ -840,7 +840,7 @@ function ConnectionTestBadge({ test }: { test: ConnectionTest }) {
 
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide"
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
       style={{ background: style.bg, border: `1px solid ${style.border}`, color: style.color }}
     >
       {test.status === "testing"
@@ -856,7 +856,7 @@ function ConnectionTestBadge({ test }: { test: ConnectionTest }) {
 function SavedBadge({ saved }: { saved: boolean }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide"
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
       style={saved
         ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981" }
         : { background: "var(--ch-hover)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
@@ -876,7 +876,7 @@ function RequirementBadge({ requirement }: { requirement: CredentialRequirement 
   const s = styles[requirement];
   return (
     <span
-      className="inline-flex items-center rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide"
+      className="inline-flex items-center rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide"
       style={{ background: s.bg, border: `1px solid ${s.border}`, color: s.color }}
     >
       {getRequirementLabel(requirement)}
@@ -915,7 +915,7 @@ function OAuthAppNotice({ integrationId }: { integrationId: string }) {
             {config.items.map((item) => (
               <span
                 key={item}
-                className="rounded-lg px-2.5 py-1 font-mono text-[9px] uppercase tracking-wide"
+                className="rounded-lg px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide"
                 style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
               >
                 {item}
@@ -958,8 +958,8 @@ function CodeHint({ label, value }: { label: string; value: string }) {
       className="min-w-0 rounded-lg px-3 py-2"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 truncate font-mono text-[10px] text-slate-300">{value}</p>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-[11px] text-slate-300">{value}</p>
     </div>
   );
 }
@@ -977,18 +977,18 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
         className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
         style={{ borderBottom: "1px solid var(--ch-border)" }}
       >
-        <p className="font-mono text-[10px] uppercase tracking-wide" style={{ color: "var(--ch-muted)" }}>
+        <p className="font-mono text-[11px] uppercase tracking-wide" style={{ color: "var(--ch-muted)" }}>
           Modelos retornados pela API
         </p>
         <div className="flex flex-wrap gap-1.5">
           <span
-            className="rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide text-emerald-600"
+            className="rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-emerald-600"
             style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}
           >
             {available} disponiveis
           </span>
           <span
-            className="rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide text-rose-600"
+            className="rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-rose-600"
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
           >
             {unavailable} indisponiveis
@@ -1014,10 +1014,10 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
                   <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
                     {model.displayName || model.id}
                   </p>
-                  <p className="mt-0.5 break-all font-mono text-[10px] text-slate-500">{model.id}</p>
+                  <p className="mt-0.5 break-all font-mono text-[11px] text-slate-500">{model.id}</p>
                 </div>
                 <span
-                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[9px] uppercase tracking-wide ${availableForAgents ? "text-emerald-600" : "text-rose-600"}`}
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide ${availableForAgents ? "text-emerald-600" : "text-rose-600"}`}
                   style={availableForAgents
                     ? { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }
                     : { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
@@ -1028,14 +1028,14 @@ function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) 
                   {availableForAgents ? "Disponivel" : replacement ? "Substituido" : "Indisponivel"}
                 </span>
               </div>
-              <p className={`mt-1 text-[10px] leading-4 ${availableForAgents ? "text-emerald-700" : "text-rose-600"}`}>
+              <p className={`mt-1 text-[11px] leading-4 ${availableForAgents ? "text-emerald-700" : "text-rose-600"}`}>
                 {availableForAgents
                   ? "Pode ser usado como modelo global dos agentes."
                   : replacement
                     ? `Nao entra no seletor para novas chaves. Use ${replacement}.`
                     : "Nao entra no seletor porque nao suporta generateContent para atendimento."}
               </p>
-              <p className="mt-1 text-[10px] leading-4 text-slate-500">
+              <p className="mt-1 text-[11px] leading-4 text-slate-500">
                 {[
                   formatTokenLimit(model.inputTokenLimit, "entrada"),
                   formatTokenLimit(model.outputTokenLimit, "saida"),
