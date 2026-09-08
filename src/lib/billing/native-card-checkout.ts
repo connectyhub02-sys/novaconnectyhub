@@ -6,7 +6,8 @@ import { payExistingAsaasBillingCard, findAsaasSubscriptionCycle } from "@/lib/s
 import { billingPeriodEnd, billingTermsLabel, readCommercialTerms } from "./commercial-terms";
 import { readCheckoutCommercialTerms } from "./plan-checkout";
 import { readCheckoutPlanAmounts } from "./plan-discounts";
-import { paymentOutcomeCopy } from "@/lib/sales-catalog/payment-diagnostics";
+import { paymentOutcomeCopy, type PaymentDiagnostic } from "@/lib/sales-catalog/payment-diagnostics";
+import { buildBillingPaymentFailureCopy } from "./payment-feedback";
 import { isIP } from "node:net";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -17,7 +18,7 @@ import { CheckoutError, directPaymentState } from "@/lib/sales-catalog/transpare
 import { loadBillingCheckoutIntent, resolveBillingCheckoutProvider, isBillingCheckoutPayable, loadBillingCheckoutBumps, readSelectedBillingCheckoutBumpCodesForCatalog, type BillingCheckoutIntent } from "./plan-checkout";
 import { processPlatformBillingAsaasWebhook, notifyNativeBillingOutcome } from "./platform-billing-webhook";
 
-export type Attempt = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; amount: number; recurring_amount: number; external_reference: string; state: string; stage: string; provider_subscription_id: string | null; provider_payment_id: string | null; previous_subscription_id: string | null; updated_at: string; created_at: string; managed_renewal?: boolean; effects_completed_state: string | null; effects_claimed_at: string | null };
+export type Attempt = { id: string; organization_id: string; subscription_id: string; invoice_id: string; payment_id: string; amount: number; recurring_amount: number; external_reference: string; state: string; stage: string; diagnostic?: PaymentDiagnostic | null; provider_subscription_id: string | null; provider_payment_id: string | null; previous_subscription_id: string | null; updated_at: string; created_at: string; managed_renewal?: boolean; effects_completed_state: string | null; effects_claimed_at: string | null };
 const activeStates = ["processing", "unknown", "pending"];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -166,7 +167,9 @@ async function applyNativeBillingEffects(client: SupabaseClient, attempt: Attemp
 }
 
 export function billingAttemptResult(attempt: Attempt) {
-  return { ok: true, status: attempt.state, approved: attempt.state === "approved", rejected: ["rejected", "error", "cancelled"].includes(attempt.state), providerPaymentId: attempt.provider_payment_id, message: attempt.state === "approved" ? "Pagamento confirmado. Sua compra está sendo liberada no painel." : paymentOutcomeCopy(attempt.state) };
+  const rejected = ["rejected", "error", "cancelled"].includes(attempt.state);
+  const rejection = rejected ? buildBillingPaymentFailureCopy("asaas", attempt.state, attempt.diagnostic) : null;
+  return { ok: true, status: attempt.state, approved: attempt.state === "approved", rejected, rejection, providerPaymentId: attempt.provider_payment_id, message: attempt.state === "approved" ? "Pagamento confirmado. Sua compra está sendo liberada no painel." : rejection?.inlineMessage ?? paymentOutcomeCopy(attempt.state, attempt.diagnostic) };
 }
 
 export async function processNativeBillingWebhook(client: SupabaseClient, payload: Record<string, unknown>, header: string | null) {

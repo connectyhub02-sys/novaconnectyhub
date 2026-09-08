@@ -1,5 +1,6 @@
 "use client";
 import { billingBumpLabel } from "@/lib/billing/plan-checkout-catalog";
+import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
 
 import Image from "next/image";
 import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
@@ -43,6 +44,7 @@ type BillingPlanCheckoutProps = {
   payerPhone: string | null;
   subscriptionStatus: string;
   paymentStatus: string;
+  initialPaymentFailure?: RejectedPaymentCopy | null;
   initialProviderPaymentId: string | null;
   billingProvider: "mercado_pago" | "pagbank" | "asaas";
   cardPublicKey: string | null;
@@ -94,6 +96,7 @@ type CheckoutStatusResponse = {
   providerStatus?: string | null;
   providerPaymentId?: string | null;
   confirmed?: boolean;
+  rejection?: RejectedPaymentCopy | null;
   pixQrCode?: string | null;
   pixQrCodeBase64?: string | null;
   pixTicketUrl?: string | null;
@@ -120,6 +123,7 @@ export function BillingPlanCheckout({
   payerPhone,
   subscriptionStatus,
   paymentStatus,
+  initialPaymentFailure = null,
   initialProviderPaymentId,
   billingProvider,
   cardPublicKey,
@@ -132,6 +136,7 @@ export function BillingPlanCheckout({
   const router = useRouter();
   const approvalRefreshQueuedRef = useRef(false);
   const shownFeedbackKeysRef = useRef(new Set<string>());
+  const lastRejectionRef = useRef<RejectedPaymentCopy | null>(initialPaymentFailure);
   const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
   const [paymentStatusOverride, setPaymentStatusOverride] = useState<string | null>(null);
   const [providerPaymentId, setProviderPaymentId] = useState<string | null>(initialProviderPaymentId);
@@ -200,19 +205,19 @@ export function BillingPlanCheckout({
   }, [includedCredits, planName, providerPaymentId, subscriptionId, totalAmount]);
 
   const openRejectedFeedback = useCallback((rejection?: RejectedPaymentCopy | null) => {
-    const fallbackRejection = buildRejectedPaymentCopy(
-      null,
-      "Pagamento recusado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
-    );
-    const feedbackKey = `rejected:${providerPaymentId ?? subscriptionId}:${rejection?.statusDetail ?? "unknown"}`;
+    if (rejection) lastRejectionRef.current = rejection;
+    const resolved = lastRejectionRef.current ?? (billingProvider === "mercado_pago"
+      ? buildRejectedPaymentCopy(null, "Pagamento não concluído.")
+      : buildBillingPaymentFailureCopy(billingProvider));
+    const feedbackKey = `rejected:${providerPaymentId ?? subscriptionId}:${resolved.statusDetail ?? resolved.description}`;
     if (shownFeedbackKeysRef.current.has(feedbackKey)) return;
 
     shownFeedbackKeysRef.current.add(feedbackKey);
     setFeedbackModal({
       kind: "rejected",
-      rejection: rejection ?? fallbackRejection,
+      rejection: resolved,
     });
-  }, [providerPaymentId, subscriptionId]);
+  }, [billingProvider, providerPaymentId, subscriptionId]);
 
   const checkPaymentStatus = useCallback(async ({ manual = false }: { manual?: boolean } = {}) => {
     if (manual) {
@@ -261,7 +266,8 @@ export function BillingPlanCheckout({
 
       if (data?.paymentStatus === "rejected") {
         setCardStatusPolling(false);
-        openRejectedFeedback();
+        openRejectedFeedback(data.rejection);
+        return;
       }
 
       if (manual) {
@@ -322,7 +328,8 @@ export function BillingPlanCheckout({
     }
 
     if (result.status) {
-      setPaymentStatusOverride(result.status);
+      // Native preparation errors share the payable rejected state in billing.
+      setPaymentStatusOverride(result.status === "error" ? "rejected" : result.status);
     }
 
     if (result.approved) {
@@ -340,7 +347,7 @@ export function BillingPlanCheckout({
       setCardStatusPolling(false);
       setNotice({
         tone: "error",
-        message: "Pagamento recusado. Nenhuma cobranca foi concluida. Veja a orientacao na tela ou escolha Pix para liberar o plano.",
+        message: result.rejection?.inlineMessage ?? "Pagamento não concluído. Confira a orientação antes de tentar novamente.",
       });
       openRejectedFeedback(result.rejection);
       return;
@@ -908,7 +915,7 @@ function CheckoutPaymentFeedbackModal({
               </div>
               <div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
-                  Pagamento recusado
+                  {rejection.label ?? "Pagamento não concluído"}
                 </p>
                 <h2 id="billing-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-white">
                   {rejection.title}
@@ -933,10 +940,10 @@ function CheckoutPaymentFeedbackModal({
               <FeedbackFact
                 label="Cobranca"
                 tone="success"
-                value="Nenhuma cobranca foi concluida"
+                value="Pagamento não confirmado"
               />
               <FeedbackFact
-                label="Motivo provavel"
+                label="Informação disponível"
                 tone="error"
                 value={rejection.reason}
               />
@@ -972,11 +979,11 @@ function CheckoutPaymentFeedbackModal({
           <div className="grid gap-2 border-t border-slate-700/80 p-5 sm:grid-cols-2">
             <button
               type="button"
-              onClick={onRetryCard}
+              onClick={rejection.retryCardAllowed === false ? onClose : onRetryCard}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] border border-slate-600 px-4 text-sm font-bold text-slate-100 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
             >
               <RefreshCw className="h-4 w-4" />
-              Tentar outro cartao
+              {rejection.retryCardAllowed === false ? "Entendi" : "Tentar outro cartão"}
             </button>
             <button
               type="button"
@@ -1159,7 +1166,7 @@ function buildPaymentStatusNotice(paymentStatus: string, providerLabel: string):
   if (paymentStatus === "rejected") {
     return {
       tone: "error",
-      message: "Pagamento recusado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
+      message: "Pagamento não concluído. Confira a orientação antes de tentar novamente.",
     };
   }
 

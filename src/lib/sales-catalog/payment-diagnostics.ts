@@ -1,15 +1,15 @@
 export type PaymentDiagnostic = {
   category: "declined" | "validation" | "integration" | "unknown";
-  stage: "customer_lookup" | "customer_create" | "payment_create" | "reconcile";
+  stage: "customer_lookup" | "customer_create" | "card_tokenization" | "payment_create" | "reconcile";
   code: string;
   httpStatus: number | null;
 };
 
-const allowedCodes = new Set(["invalid_creditCard", "invalid_creditCardHolderInfo", "invalid_cpfCnpj", "invalid_customer", "invalid_value", "invalid_installmentCount", "invalid_access_token", "access_token_not_found", "invalid_object", "invalid_action", "invalid_payment"]);
+const allowedCodes = new Set(["forbidden", "invalid_creditCard", "invalid_creditCardHolderInfo", "invalid_cpfCnpj", "invalid_customer", "invalid_value", "invalid_installmentCount", "invalid_access_token", "access_token_not_found", "invalid_object", "invalid_action", "invalid_payment"]);
 
 /** Provider descriptions can echo submitted data. Keep an allowlisted code, never the raw body. */
 export function classifyAsaasFailure(status: number | null, endpoint: string, method: string, body?: unknown): PaymentDiagnostic {
-  const stage = endpoint.startsWith("/customers") ? method === "POST" ? "customer_create" : "customer_lookup" : method === "POST" && ["/payments", "/subscriptions"].includes(endpoint) ? "payment_create" : "reconcile";
+  const stage = endpoint === "/creditCard/tokenizeCreditCard" ? "card_tokenization" : endpoint.startsWith("/customers") ? method === "POST" ? "customer_create" : "customer_lookup" : method === "POST" && ["/payments", "/subscriptions"].includes(endpoint) ? "payment_create" : "reconcile";
   const errors = body && typeof body === "object" && "errors" in body && Array.isArray(body.errors) ? body.errors : [];
   const code = errors.map(entry => entry && typeof entry === "object" && "code" in entry ? entry.code : null).find(value => typeof value === "string" && allowedCodes.has(value)) ?? "not_informed";
   const declined = stage === "payment_create" && status === 400 && code === "invalid_creditCard";

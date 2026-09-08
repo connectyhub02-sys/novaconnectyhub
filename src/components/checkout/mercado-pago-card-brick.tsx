@@ -69,6 +69,8 @@ type ThreeDSChallenge = {
 };
 
 export type RejectedPaymentCopy = {
+  label?: string;
+  retryCardAllowed?: boolean;
   inlineMessage: string;
   title: string;
   description: string;

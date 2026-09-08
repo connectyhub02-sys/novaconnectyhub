@@ -22,6 +22,7 @@ import {
 import { loadMercadoPagoPlatformBillingConfig, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,14 @@ export default async function DashboardBillingCheckoutPage({
   if (intent) await recordPlatformCustomerEvent(client, { userId: workspace.user.id, eventType: "checkout_viewed", sourceId: intent.payment.id, payload: { subscription_id: intent.subscription.id, product_id: intent.payment.payload?.purchase_product_id ?? null } });
   const availableBumps = await loadBillingCheckoutBumps(client, intent ?? undefined);
   const billingProvider = resolveBillingCheckoutProvider(intent);
+  const failedAttempt = intent?.payment.status === "rejected" && billingProvider === "asaas"
+    ? await client.from("billing_card_attempts").select("state,diagnostic")
+        .eq("organization_id", organization.id).eq("payment_id", intent.payment.id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle()
+    : null;
+  const initialPaymentFailure = failedAttempt?.data
+    ? buildBillingPaymentFailureCopy("asaas", failedAttempt.data.state, failedAttempt.data.diagnostic)
+    : null;
   const publicKey = billingProvider === "mercado_pago"
     ? await loadMercadoPagoPlatformBillingConfig({ client })
         .then((config) => config.publicKey)
@@ -164,6 +173,7 @@ export default async function DashboardBillingCheckoutPage({
             payerPhone={workspace.profile.phone}
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
+            initialPaymentFailure={initialPaymentFailure}
             initialProviderPaymentId={intent.payment.provider_payment_id}
             billingProvider={billingProvider}
             cardPublicKey={publicKey}

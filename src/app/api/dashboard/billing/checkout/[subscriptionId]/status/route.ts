@@ -16,6 +16,8 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadNativeBillingSnapshot, processNativeBillingWebhook, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
 import { loadAsaasPlatformBillingConfig } from "@/lib/sales-catalog/asaas";
+import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
+import type { RejectedPaymentCopy } from "@/components/checkout/mercado-pago-card-brick";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,6 +46,7 @@ export async function GET(
     }
 
     let nativeAttempt = false;
+    let rejection: RejectedPaymentCopy | null = null;
     if (resolveBillingCheckoutProvider(intent) === "asaas") {
       const snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
       const managedReference = intent.payment.payload?.managed_external_reference;
@@ -55,7 +58,11 @@ export async function GET(
       } else if (snapshot.attempt) {
         nativeAttempt = true;
         await reconcileNativeBillingAttempt(client, snapshot.attempt.id);
-        intent = (await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId)).intent;
+        const refreshed = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
+        intent = refreshed.intent;
+        if (intent.payment.status === "rejected" && refreshed.attempt) {
+          rejection = buildBillingPaymentFailureCopy("asaas", refreshed.attempt.state, refreshed.attempt.diagnostic);
+        }
       }
     }
     const providerPaymentId = readProviderPaymentId(intent);
@@ -117,6 +124,7 @@ export async function GET(
       provider: resolveBillingCheckoutProvider(intent),
       payable: isBillingCheckoutPayable(intent),
       confirmed: isCheckoutConfirmed(intent),
+      rejection,
       reconciliation,
       ...readBillingCheckoutPixData(intent),
     });

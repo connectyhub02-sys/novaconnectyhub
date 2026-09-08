@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, QrCode, RefreshCw, Rocket, ShieldAlert, Trophy, X } from "lucide-react";
-import { buildRejectedPaymentCopy, type RejectedPaymentCopy } from "./mercado-pago-card-brick";
+import type { RejectedPaymentCopy } from "./mercado-pago-card-brick";
+import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
 import { cn } from "@/lib/utils";
 
 export type CheckoutPaymentFeedbackStatus = "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
@@ -63,10 +64,7 @@ export function CheckoutPaymentFeedbackModal({
   const rejection = useMemo(() => {
     if (!feedback || feedback.status === "approved" || feedback.status === "refunded") return null;
 
-    return feedback.rejection ?? buildRejectedPaymentCopy(
-      feedback.providerStatusDetail,
-      "Pagamento nao concluido. Nenhuma cobranca foi finalizada. Tente outro cartao ou use Pix.",
-    );
+    return feedback.rejection ?? buildBillingPaymentFailureCopy("unknown", feedback.status);
   }, [feedback]);
 
   if (!feedback || !open) return null;

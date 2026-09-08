@@ -3,7 +3,7 @@ import { managedRenewalConsent, managedRenewalConsentVersion } from "@/lib/billi
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { LockKeyhole } from "lucide-react";
 import { parseCheckoutCard, type CheckoutCardHolder } from "@/lib/sales-catalog/card-input";
-import type { CardPaymentStatusChange } from "@/components/checkout/mercado-pago-card-brick";
+import type { CardPaymentStatusChange, RejectedPaymentCopy } from "@/components/checkout/mercado-pago-card-brick";
 
 type Quote = { campaignNotice?: string | null; amount: number; recurringAmount: number; recurrenceLabel: string; revision: number; holder: CheckoutCardHolder; paid: boolean; attempt: { id: string; state: string } | null };
 const money = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
@@ -49,7 +49,7 @@ export function BillingAsaasCardForm({ subscriptionId, cartSyncing, onBusyChange
       if (!response.ok) { setMessage(data.error ?? "Não foi possível concluir o pagamento."); await load(); return; }
       setMessage(data.message ?? "Pagamento em conferência.");
       await load();
-      onStatusChange(statusChange(data.status, data.providerPaymentId));
+      onStatusChange(statusChange(data.status, data.providerPaymentId, data.rejection));
     } catch { setUncertain(true); setMessage("A conexão foi interrompida. Estamos verificando o resultado; não repita a cobrança."); }
     finally { for (const name of ["number", "holderName", "expiry", "ccv"]) { const input = formRef.current?.elements.namedItem(name); if (input instanceof HTMLInputElement) input.value = ""; } locked.current = false; setSending(false); }
   }
@@ -71,7 +71,7 @@ export function BillingAsaasCardForm({ subscriptionId, cartSyncing, onBusyChange
   </form>;
 }
 
-function statusChange(state: string, paymentId: string | null = null): CardPaymentStatusChange {
+function statusChange(state: string, paymentId: string | null = null, rejection: RejectedPaymentCopy | null = null): CardPaymentStatusChange {
  const rejected = ["rejected", "error", "cancelled"].includes(state);
- return { status: state === "unknown" ? "in_process" : state, providerStatus: state, providerStatusDetail: null, providerPaymentId: paymentId, checkoutUrl: null, approved: state === "approved", rejected, pending: !rejected && state !== "approved", hasThreeDSChallenge: false, rejection: null };
+ return { status: state === "unknown" ? "in_process" : state, providerStatus: state, providerStatusDetail: null, providerPaymentId: paymentId, checkoutUrl: null, approved: state === "approved", rejected, pending: !rejected && state !== "approved", hasThreeDSChallenge: false, rejection };
 }
