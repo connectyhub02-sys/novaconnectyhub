@@ -30,6 +30,7 @@ const exposed = [
   "maybeSendExistingSalesCatalogCheckoutLink", "buildConfiguredNicheCareLines",
   "prepareSalesCatalogDeliveryText", "hasSalesCatalogOrderIntent", "hasSalesCatalogCheckoutConfirmationIntent",
   "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction",
+  "buildSalesCatalogOrderIntentText",
   "persistCloneRealTestTurn", "extractCloneMemory", "detectSalesCatalogPreferredPaymentMethod",
   "needsSalesCatalogCheckoutTotalConfirmation", "resolveInitialSalesCatalogOrderShipping", "buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt",
   "sendSalesCatalogPixDirectWhatsapp",

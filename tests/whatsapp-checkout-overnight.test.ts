@@ -41,6 +41,85 @@ function fixture(reply = "sim") {
 }
 
 describe("checkout recovery after the conversation resumes hours later", () => {
+  it.each(["o código Pix", "Pix", "o link do cartão de crédito"])("resumes a fragmented payment request and completes checkout: %s", async reply => {
+    const { context, db, requests, createPayment, send } = fixture(reply);
+    context.messages.splice(-1, 0, { ...msg("inbound", "me manda o código para eu pagar", 272), id: "payment-request",
+      occurred_at: new Date(Date.parse(context.messages.at(-1)!.occurred_at) - 4000).toISOString() });
+    const replies = await send("Opa, tá na mão! Pode usar o botão abaixo para pagar. {{produto_kit}}");
+    const text = replies.map(message => message.text).join("\n");
+    expect(text).toContain("Kit de escritório");
+    expect(text).toContain("Posso usar esse mesmo endereço");
+    expect(text).not.toContain("Ainda preciso concluir");
+    expect(createPayment).not.toHaveBeenCalled();
+    const card = reply.includes("cartão");
+    context.messages.push(msg("outbound", text, 273), msg("inbound", card ? "sim, cartão de crédito" : "sim, Pix", 274));
+    context.run.id = "confirmed-fragmented-turn";
+    db.tables.conversation_messages = [{ ...context.messages.at(-1), conversation_id: "conversation", whatsapp_instance_id: "instance" }];
+    requests.length = 0;
+    await send("Fechado, já vou te passar.");
+    expect(createPayment).toHaveBeenCalledOnce();
+    expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ preferredMethod: card ? "card" : "pix" }));
+    expect(db.tables.sales_catalog_orders).toHaveLength(1);
+    expect(requests).toHaveLength(1);
+    if (card) expect(requests[0].body.choices).toEqual(["Finalizar pedido|https://loja.example/checkout/test?payment_method=card"]);
+    else expect(requests[0]).toMatchObject({ url: "https://whatsapp.invalid/send/request-payment", body: { pixCode: "000201-TEST-NOT-PAYABLE", amount: 90 } });
+  });
+  it.each(["o código Pix", "Pix", "o link do cartão", "me passa o Pix", "mande o código Pix", "me passa o Pix?", "pode me passar o link do cartão?"])("understands contextual payment requests without requiring a particular verb: %s", async reply => {
+    const { send, createPayment } = fixture(reply);
+    const text = (await send("Já vou te passar.")).map(message => message.text).join("\n");
+    expect(text).toContain("Kit de escritório");
+    expect(text).toContain("Posso usar esse mesmo endereço");
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it.each(["não", "não, espera", "amanhã", "mas quanto demora a entrega?", "tira um item", "quero falar com um atendente"])("lets a later interruption override the payment request: %s", async reply => {
+    const { context, send, createPayment } = fixture(reply);
+    context.messages.splice(-1, 0, { ...msg("inbound", "sim, pode gerar o Pix", 272), id: "previous-request",
+      occurred_at: new Date(Date.parse(context.messages.at(-1)!.occurred_at) - 4000).toISOString() });
+    const text = (await send("Certo, vamos ver isso.")).map(message => message.text).join("\n");
+    expect(text).toBe("Certo, vamos ver isso.");
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it("keeps the clone's greeting when discarding an invented payment promise", async () => {
+    const { send, createPayment } = fixture("bom dia");
+    const text = (await send("Bom dia! Tudo joia por aí?\n\nTô enviando o botão do Pix aqui novamente.\n\n{{produto_kit}}\n\nAssim que pagar, me avisa."))
+      .map(message => message.text).join("\n");
+    expect(text).toBe("Bom dia! Tudo joia por aí?");
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it.each(["Opa! Como você tá?", "Show, combinado!", "Pode deixar, vou te explicar direitinho."])("preserves ordinary clone responses verbatim: %s", async response => {
+    const { send, createPayment } = fixture("bom dia");
+    expect((await send(response)).map(message => message.text).join("\n")).toBe(response);
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it("preserves the clone's explanation about payment while removing only a false sending claim", async () => {
+    const { send, createPayment } = fixture("Pix tem desconto?");
+    const text = (await send("No Pix o valor é o mesmo. Tô enviando o botão do Pix.\nO Kit de escritório vem com três peças."))
+      .map(message => message.text).join("\n");
+    expect(text).toBe("No Pix o valor é o mesmo.\nO Kit de escritório vem com três peças.");
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it("does not borrow an old or already answered payment request", () => {
+    const { context, call } = fixture("obrigado");
+    const latest = context.messages.at(-1)!;
+    context.messages.splice(-1, 0, msg("inbound", "pode gerar Pix", 200));
+    expect(call("buildSalesCatalogOrderIntentText", latest, "", context)).toBe("obrigado");
+    context.messages.splice(-1, 0, { ...msg("inbound", "pode gerar Pix", 272), id: "answered-request",
+      occurred_at: new Date(Date.parse(latest.occurred_at) - 4000).toISOString() },
+    { ...msg("outbound", "Aqui está o pagamento.", 272), id: "answer",
+      occurred_at: new Date(Date.parse(latest.occurred_at) - 2000).toISOString() });
+    expect(call("buildSalesCatalogOrderIntentText", latest, "", context)).toBe("obrigado");
+  });
+  it("keeps an affirmative reply even when the burst starts with a conversational interjection", async () => {
+    const { context, db, createPayment, send } = fixture("o código Pix");
+    const text = (await send("Já vou te passar.")).map(message => message.text).join("\n");
+    context.messages.push(msg("outbound", text, 273),
+      { ...msg("inbound", "meu fi", 274), occurred_at: new Date(Date.parse(msg("inbound", "", 274).occurred_at) - 4000).toISOString() },
+      { ...msg("inbound", "sim", 274), id: "affirmation" });
+    context.run.id = "affirmed";
+    db.tables.conversation_messages = [{ ...context.messages.at(-1), conversation_id: "conversation", whatsapp_instance_id: "instance" }];
+    await send("Fechado!");
+    expect(createPayment).toHaveBeenCalledOnce();
+  });
   it.each(["Tô liberando o botão do Pix abaixo para você realizar o pagamento", "Pode clicar no botão abaixo para pagar via Pix", "Seu Pix está disponível no botão abaixo"])("blocks an unsupported payment button claim: %s", text => {
     const { call, context } = fixture();
     expect(call("guardUnexecutedCheckoutClaim", text, context)).toBeTruthy();

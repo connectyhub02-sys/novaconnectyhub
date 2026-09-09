@@ -16,7 +16,7 @@ export function requiresCommerceConversationReply(text: string) {
   if (/\b(?:mais um|mais uma|tambem quero|quero tambem|so que|mas sem|porem|em vez|ao inves)\b/.test(normalized)) return true;
 
   // A polite request to send payment may end with "?". Other questions stay with the clone.
-  const paymentRequest = /\b(?:manda|mandar|envia|enviar|envie|gera|gerar|gere|reenvia|reenviar|pode fechar|pode finalizar|pode concluir|pode prosseguir|pode continuar|pode seguir)\b/.test(normalized)
+  const paymentRequest = /\b(?:manda|mande|mandar|passa|passe|passar|envia|enviar|envie|gera|gerar|gere|reenvia|reenviar|pode fechar|pode finalizar|pode concluir|pode prosseguir|pode continuar|pode seguir)\b/.test(normalized)
     && /\b(?:pix|pagamento|checkout|link|pedido|codigo)\b/.test(normalized);
   return text.includes("?") && !paymentRequest;
 }

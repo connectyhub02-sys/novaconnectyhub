@@ -5770,8 +5770,9 @@ function buildGlobalCheckoutConfirmationLines() {
     "- A previa deve conter itens, quantidades, plano/servico quando aplicavel e total quando houver preco. Pergunte claramente se pode fechar e gerar o pagamento.",
     "- So gere Pix, checkout/link ou botao de finalizar depois de confirmacao clara do lead, como sim, confirmo, e isso mesmo, pode fechar, pode mandar, yes ou si.",
     "- Se houver mais de uma forma de pagamento habilitada e o lead confirmar sem escolher, pergunte a forma de pagamento antes de gerar Pix, checkout, boleto ou link.",
-    "- Se o lead corrigir qualquer item, quantidade, variacao, endereco, plano ou forma de pagamento, atualize a previa e peca nova confirmacao antes do pagamento.",
+    "- Se o lead corrigir item, quantidade, variacao, endereco ou plano, atualize a previa e peca nova confirmacao antes do pagamento. Trocar apenas a forma de pagamento preserva os dados e o pedido confirmado; o sistema confere a disponibilidade do metodo.",
     "- Nunca reutilize link, Pix ou pagamento antigo ou de outro lead. Gere ou use apenas a cobranca do pedido confirmado na conversa atual.",
+    "- Promessas de Pix ou botao no historico nao comprovam que foram gerados. Responda saudacoes e duvidas normalmente, no seu tom; nao anuncie reenvio de pagamento por causa de uma promessa antiga. A geracao e a entrega dependem do resultado registrado pelo sistema.",
   ];
 }
 
@@ -7887,7 +7888,7 @@ async function sendAgentResponse(input: {
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
-  const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
+  const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText, context);
   await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
   const hasPendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
@@ -7973,7 +7974,9 @@ async function sendAgentResponse(input: {
   const unresolvedCheckoutPrompt = hasConfirmedCheckoutIntent && checkoutOrderSelections.length === 0
     ? "Antes de gerar o pagamento, preciso confirmar os produtos desse resumo. Me confirma o nome e a versão de cada item que você escolheu?"
     : null;
-  const unexecutedClaimPrompt = guardUnexecutedCheckoutClaim(cleanText, context);
+  const unexecutedClaimPrompt = guardUnexecutedCheckoutClaim(cleanText, context)
+    ? buildUnexecutedCheckoutReply(cleanText, context, orderIntentText)
+    : null;
   const recoveryPrompt = recoveryRequested
     ? recoverySelections.length > 0
       ? buildSalesCatalogOrderConfirmationPrompt({
@@ -9987,6 +9990,9 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
     return false;
   }
 
+  const turnParts = text.split(/\n+/).map(part => part.trim()).filter(Boolean);
+  if (turnParts.length > 1) return turnParts.some(hasSalesCatalogCheckoutConfirmationIntent);
+
   return (
     /^(?:sim|s|quero|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
     || /\b(?:pode fechar|pode finalizar|pode concluir|pode prosseguir|pode continuar|pode seguir|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
@@ -10522,8 +10528,17 @@ function hasRuntimeCheckoutRecoveryIntent(context: NonNullable<Awaited<ReturnTyp
   const paymentContext = recoveryPrompt || /\b(?:pix|pagamento|checkout)\b/.test(normalizedBlock);
   if (isRuntimeMissingPaymentRequest(text)) return paymentContext;
   if (requiresCommerceConversationReply(text)) return false;
+  const normalized = normalizeSearch(text);
+  if (/^nao(?:\s|$)/.test(normalized)) return false;
+  // A method/code named after a recovery prompt is a request to resume, not proof of consent.
+  // The recovered cart still goes through current price, delivery and confirmation checks.
+  const paymentFragment = /^(?:(?:o|a|meu|minha|por|no|pelo|com)\s+)*(?:pix|codigo(?:\s+(?:do\s+)?pix)?|copia e cola|qr code|qrcode|cartao(?:\s+de\s+credito)?|credito|link(?:\s+(?:de|do|para))?\s*(?:pagamento|checkout|cartao(?:\s+de\s+credito)?)?)(?:\s+por favor)?$/.test(normalized);
+  const storedDraft = readRecord(readRecord(context.lead?.metadata)?.checkout_cart_draft);
+  const hasScopedDraft = storedDraft?.organization_id === context.organization.id
+    && storedDraft?.conversation_id === context.conversationId && storedDraft?.instance_id === context.instance.id;
+  if (paymentFragment && (paymentContext || hasScopedDraft)) return true;
   return ((recoveryPrompt || guardUnexecutedCheckoutClaim(lastBlock, context)) && hasSalesCatalogCheckoutConfirmationIntent(text))
-    || /\b(?:manda|mandar|envia|enviar|envie|reenvia|reenviar|gera|gerar|retomar)\b.{0,50}\b(?:pix|codigo|pagamento|checkout|link|pedido)\b/.test(normalizeSearch(text));
+    || /\b(?:manda|mande|mandar|passa|passe|passar|envia|enviar|envie|reenvia|reenviar|gera|gere|gerar|retomar)\b.{0,60}\b(?:pix|codigo|pagamento|pagar|checkout|link|pedido|cartao)\b/.test(normalized);
 }
 
 function resolveRuntimeRecoverableCheckoutDraft(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, ignoreOrderBoundary = false): RuntimeSalesCatalogOrderSelection[] {
@@ -10613,9 +10628,53 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
   return "Ainda preciso concluir a etapa de pagamento no sistema. Não tenho confirmação de envio do Pix nesta tentativa. Vamos retomar o pedido para disponibilizar o pagamento?";
 }
 
-function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, _assistantText: string) {
+function buildSalesCatalogOrderIntentText(
+  latestInbound: ConversationMessageRow | null,
+  _assistantText: string,
+  context?: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
   void _assistantText;
-  return latestInbound?.text_content?.trim() ?? "";
+  const latestText = latestInbound?.text_content?.trim() ?? "";
+  if (!context || !latestInbound) return latestText;
+  const latestIndex = context.messages.findIndex(message => message.id === latestInbound.id);
+  const latestAt = Date.parse(latestInbound.occurred_at);
+  if (latestIndex < 0 || !Number.isFinite(latestAt)) return latestText;
+  const windowMs = Math.min(120, Math.max(30, context.behavior?.timingTextBurstSeconds ?? 0)) * 1000;
+  const texts: string[] = [];
+  // Only the current, unanswered inbound burst participates. Assistant claims are never consent.
+  for (let index = latestIndex; index >= 0 && texts.length < 10; index--) {
+    const message = context.messages[index];
+    const age = latestAt - Date.parse(message.occurred_at);
+    if (message.direction !== "inbound" || !Number.isFinite(age) || age < 0 || age > windowMs) break;
+    if (message.text_content?.trim()) texts.unshift(message.text_content.trim());
+  }
+  // A standalone "não" must also stop earlier consent in this burst.
+  const stopped = texts.find(text => /^(?:nao|negativo)(?:\s+(?:obrigad[oa]|valeu))?$/.test(normalizeSearch(text)));
+  if (stopped) return stopped;
+  return texts.join("\n") || latestText;
+}
+
+function buildUnexecutedCheckoutReply(
+  text: string,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  intentText: string,
+) {
+  if (hasSalesCatalogOrderIntent(intentText) && !requiresCommerceConversationReply(intentText)) {
+    return "Me confirma os produtos e as quantidades que você quer levar para eu conferir o pagamento?";
+  }
+  // Preserve the clone's own greeting/explanation. Remove only the unsupported payment part
+  // and its orphaned product/instruction lines; do not restart checkout after a greeting.
+  const retained = text.split(/\n+/).map(line => {
+    if (context.salesCatalog.some(item => normalizeSearch(line) === normalizeSearch(formatSalesCatalogCustomerMention(item)))) return "";
+    return line.split(/(?<=[!?])\s+|(?<=[^\d]\.)\s+/).filter(sentence => {
+      const normalized = normalizeSearch(sentence);
+      return !guardUnexecutedCheckoutClaim(sentence, context)
+        && !/\b(?:use|utilize|clique|clica|copie|copiar|escaneie|acesse)\b.{0,70}\b(?:botao|codigo|qr code|link)\b/.test(normalized)
+        && !/^(?:assim que|quando voce)\b.{0,60}\b(?:pagar|finalizar|concluir|pagamento)\b/.test(normalized)
+        && !/\bpedido\b.{0,30}\b(?:confirmado|fechado|registrado|criado)\b/.test(normalized);
+    }).join(" ");
+  }).filter(Boolean).join("\n").trim();
+  return retained || "Estou por aqui. Me diz como posso te ajudar.";
 }
 
 async function recordSalesCatalogOrderIntent(input: {
@@ -11123,6 +11182,8 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   latestInbound: ConversationMessageRow | null;
   userText: string;
 }): Promise<OutboundMessage | null> {
+  if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
+  input = { ...input, userText: buildSalesCatalogOrderIntentText(input.latestInbound, "", input.context) || input.userText };
   if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
   const cartText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, input.latestInbound)
     || buildRecentSalesCatalogCartSelectionText(input.context, input.latestInbound);
@@ -11692,6 +11753,7 @@ async function deliverSalesCatalogPaymentLink(input: {
     });
     interactiveButton = true;
   } catch (error) {
+    if (!(error instanceof UazapiRuntimeRequestError && error.definitive)) throw error;
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
     messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({

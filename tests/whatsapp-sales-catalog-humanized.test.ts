@@ -82,7 +82,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     );
 
     expect(delivery).toContain("shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)");
-    expect(delivery).toContain("buildSalesCatalogOrderIntentText(latestInbound, cleanText)");
+    expect(delivery).toContain("buildSalesCatalogOrderIntentText(latestInbound, cleanText, context)");
     expect(delivery).toContain("intentText: orderIntentText");
     expect(catalogRuntime).toContain("attachments.length >= 2");
     expect(catalogRuntime).toContain("function shouldSendSalesCatalogMediaAttachments");
