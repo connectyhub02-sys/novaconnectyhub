@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
-vi.mock("@/lib/billing/contract-access", () => ({ assertContractAccess: vi.fn(async () => ({allowed:true})) }));
+vi.mock("@/lib/billing/contract-access", () => ({
+  assertContractAccess: vi.fn(async () => ({ allowed: true })),
+  getContractAccess: vi.fn(async () => ({ allowed: true, subscription_id: null })),
+}));
 vi.mock("@/lib/billing/trial", () => ({
   grantTrialCredits: vi.fn(),
   scheduleTrialConversionMessages: vi.fn(),

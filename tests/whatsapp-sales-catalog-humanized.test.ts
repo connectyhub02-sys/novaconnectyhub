@@ -232,7 +232,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(delivery).toContain("shouldWaitForPaymentMethodChoice");
     expect(delivery).toContain("shouldWaitForDeliveryDetails");
     expect(delivery).toContain("shouldUseControlledPaymentStepText");
-    expect(delivery).toContain("paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText");
+    expect(delivery).toContain("paymentMethodChoicePrompt ?? unexecutedClaimPrompt ?? prepareSalesCatalogDeliveryText");
     expect(delivery).toContain("return [await sendSalesCatalogPaymentLink({");
     expect(checkoutRuntime).toContain("function buildSalesCatalogPaymentMethodChoicePrompt");
     expect(checkoutRuntime).toContain("function buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt");

@@ -266,6 +266,7 @@ type SalesCatalogPaymentLinkResult = {
   paymentDeferredReason?: string | null;
   preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
   failureReason?: string | null;
+  confirmationPending?: boolean;
 };
 
 type SalesCatalogPaymentSessionLinkRow = {
@@ -280,6 +281,9 @@ type SalesCatalogPaymentSessionLinkRow = {
   provider_status: string | null;
   provider_status_detail: string | null;
   failure_reason: string | null;
+  status?: string | null;
+  expires_at?: string | null;
+  provider_payment_id?: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -1088,7 +1092,7 @@ async function processWhatsappAgentRunWithScope(input: {
     extractNegotiationState(client, context).catch(() => {});
     scheduleProactiveFollowUp(context).catch(() => {});
 
-    return await completeRun(client, run.id, preview(aiText, 500), {
+    return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
       messages: outbound.length,
       mode: outbound[0]?.mode ?? "text",
@@ -2154,6 +2158,8 @@ async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
   const savedAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
 
+  await persistRuntimeSavedDeliveryConsent(input.client, input.context);
+
   if (!savedAddress || !isRuntimeSavedDeliveryAffirmation(input.userText)) {
     return null;
   }
@@ -2166,7 +2172,11 @@ async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
   if (!shippingSettings?.configured) return null;
 
   const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
+    item.paymentStatus === "pending"
+    && !item.latestPaymentSessionId
+    && Date.parse(item.createdAt ?? "") >= Date.parse(input.latestInbound?.occurred_at ?? "") - salesCatalogCheckoutConfirmationWindowMs
+    && Date.parse(item.createdAt ?? "") <= Date.parse(input.latestInbound?.occurred_at ?? "")
+    && item.status !== "cancelled"
     && item.status !== "delivered"
     && item.fulfillmentStatus !== "fulfilled"
     && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
@@ -2782,7 +2792,7 @@ async function persistLeadCustomerNameSnapshot(input: {
 
 function calculateRuntimeOrderTotalWithShipping(order: RuntimeSalesCatalogOrder, shippingTotal: string | null) {
   const subtotal = normalizeCurrencyAmount(order.subtotal) ?? normalizeCurrencyAmount(order.total);
-  const shipping = normalizeCurrencyAmount(shippingTotal);
+  const shipping = normalizeRuntimeShippingAmount(shippingTotal);
 
   if (typeof subtotal !== "number" || typeof shipping !== "number") {
     return null;
@@ -2919,7 +2929,14 @@ function resolveInitialSalesCatalogOrderShipping(input: {
 }
 
 function isRuntimeResolvedShippingPrice(price: string) {
-  return normalizeCurrencyAmount(price) !== null || /^(?:R\$\s*)?0+(?:[.,]0+)?$/i.test(price.trim());
+  return normalizeRuntimeShippingAmount(price) !== null;
+}
+
+// Free delivery is a resolved quote. Keep the positive-only payment validator
+// separate so accepting zero freight cannot authorize a zero-value charge.
+function normalizeRuntimeShippingAmount(value: string | null) {
+  if (value && /^(?:R\$\s*)?0+(?:[.,]0+)?$/i.test(value.trim())) return 0;
+  return normalizeCurrencyAmount(value);
 }
 
 function buildSalesCatalogShippingIntentText(
@@ -2956,8 +2973,7 @@ function resolveSavedSalesCatalogOrderShipping(input: {
   intentText: string;
 }) {
   if (
-    !isRuntimeSavedDeliveryAffirmation(input.intentText)
-    || !hasRecentSavedDeliveryConfirmationPrompt(input.context.messages, findLatestInbound(input.context.messages))
+    !resolveRuntimeSavedDeliveryConsent(input.context)
   ) {
     return null;
   }
@@ -3336,6 +3352,57 @@ function isRuntimeSavedDeliveryAffirmation(text: string) {
     || /\b(?:pode usar|usa esse|usar esse|mesmo endereco|mesmo endereço|entrega ai|entrega aí)\b/.test(normalized);
 }
 
+function resolveRuntimeSavedDeliveryConsent(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const address = readLeadSavedDeliveryAddress(context.lead?.metadata);
+  const latest = findLatestInbound(context.messages);
+  if (!address || !latest) return null;
+  const latestMs = Date.parse(latest.occurred_at);
+  const fingerprint = createHash("sha256").update(JSON.stringify(address)).digest("hex");
+  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders);
+  const recent = context.messages.filter(message => message.direction === "inbound"
+    && Date.parse(message.occurred_at) <= latestMs
+    && (!boundary || Date.parse(message.occurred_at) > boundary)
+    && !isSalesCatalogMessageOutsideCartWindow(message, latestMs));
+  const stored = readRecord(readRecord(context.lead?.metadata)?.checkout_delivery_consent);
+  const candidates = recent.filter(message => isRuntimeSavedDeliveryAffirmation(message.text_content ?? "")
+    && !requiresCommerceConversationReply(message.text_content ?? "")
+    && hasRecentSavedDeliveryConfirmationPrompt(context.messages, message))
+    .map(message => ({ conversation_id: context.conversationId, address_fingerprint: fingerprint,
+      confirmed_at: message.occurred_at, message_id: message.id }));
+  if (stored?.conversation_id === context.conversationId && stored.address_fingerprint === fingerprint
+    && typeof stored.confirmed_at === "string" && typeof stored.message_id === "string") {
+    candidates.push({ conversation_id: context.conversationId, address_fingerprint: fingerprint,
+      confirmed_at: stored.confirmed_at, message_id: stored.message_id });
+  }
+  const consent = candidates.sort((a, b) => Date.parse(b.confirmed_at) - Date.parse(a.confirmed_at))[0];
+  if (!consent) return null;
+  const confirmedMs = Date.parse(consent.confirmed_at);
+  if (!Number.isFinite(confirmedMs) || confirmedMs > latestMs
+    || latestMs - confirmedMs > salesCatalogCheckoutConfirmationWindowMs
+    || (boundary && confirmedMs <= boundary)) return null;
+  // A new destination, pickup or correction invalidates earlier consent.
+  if (recent.some(message => Date.parse(message.occurred_at) >= confirmedMs
+    && (extractRuntimeAddress(null, message.text_content ?? "")
+      || extractFirstBrazilianCep(message.text_content ?? "")
+      || hasSalesCatalogPickupSignal(message.text_content ?? "")
+      || /\b(?:troca|muda|altera|outro|outra|novo|nova)\b/.test(normalizeSearch(message.text_content ?? ""))))) return null;
+  return consent;
+}
+
+async function persistRuntimeSavedDeliveryConsent(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.lead?.id) return;
+  const consent = resolveRuntimeSavedDeliveryConsent(context);
+  const previous = readRecord(readRecord(context.lead.metadata)?.checkout_delivery_consent);
+  if (!consent || previous?.message_id === consent.message_id) return;
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => ({ metadata: { ...metadata, checkout_delivery_consent: consent } }),
+  });
+  context.lead.metadata = saved.metadata;
+}
+
 function hasRecentSavedDeliveryConfirmationPrompt(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
@@ -3349,7 +3416,8 @@ function hasRecentSavedDeliveryConfirmationPrompt(
     return false;
   }
 
-  return messages.some((message) => {
+  const lastBlock = buildRecentOutboundMessageBlocks(messages, latestInbound)[0];
+  return (lastBlock ? [{ ...lastBlock.firstMessage, text_content: lastBlock.text }] : []).some((message) => {
     if (message.direction !== "outbound" || !message.text_content?.trim()) {
       return false;
     }
@@ -6142,6 +6210,7 @@ function buildSalesCatalogCheckoutStateLines(lead: LeadRow | null) {
   const document = normalizeRuntimeCustomerDocument(findString(lead.metadata, ["cpf_cnpj", "customer_document"]));
   const address = findString(lead.metadata, ["billing_address", "delivery_address", "destination_address", "address"]);
   const cep = findString(lead.metadata, ["billing_cep", "delivery_cep", "destination_cep", "cep"]);
+  const checkoutState = readRecord(readRecord(lead.metadata)?.checkout_runtime_state);
   return [
     "",
     "DADOS JA CAPTURADOS PARA O PAGAMENTO:",
@@ -6154,6 +6223,7 @@ function buildSalesCatalogCheckoutStateLines(lead: LeadRow | null) {
     cep ? `- CEP ja informado: ${cep}. Nao solicite novamente.` : "- CEP ainda nao informado.",
     "- Use os dados salvos e o pedido atual. Durante a cobranca, nao reinicie a qualificacao nem sugira mais produtos.",
     "- O sistema informa o que falta e entrega o botao. Nunca afirme que um Pix foi gerado ou pago sem o resultado correspondente.",
+    checkoutState ? `- Última etapa registrada pelo sistema: ${asString(checkoutState.stage)}, pedido ${asString(checkoutState.order_id)}, em ${asString(checkoutState.updated_at)}. payment_sent indica envio do pagamento, nunca recebimento do dinheiro. Se a etapa indicar falha ou entrega não confirmada, reconheça a falha e consulte o pedido existente; não reinicie o cadastro nem invente sucesso.` : "",
   ];
 }
 
@@ -7896,6 +7966,7 @@ async function sendAgentResponse(input: {
   const unresolvedCheckoutPrompt = hasConfirmedCheckoutIntent && checkoutOrderSelections.length === 0
     ? "Antes de gerar o pagamento, preciso confirmar os produtos desse resumo. Me confirma o nome e a versão de cada item que você escolheu?"
     : null;
+  const unexecutedClaimPrompt = guardUnexecutedCheckoutClaim(cleanText, context);
   const rawDeliveryText = unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? (
     shouldRequestCheckoutConfirmation
       ? buildSalesCatalogOrderConfirmationPrompt({
@@ -7904,7 +7975,7 @@ async function sendAgentResponse(input: {
           selections: checkoutOrderSelections,
           intentText: orderIntentText,
         })
-      : paymentMethodChoicePrompt ?? prepareSalesCatalogDeliveryText({
+      : paymentMethodChoicePrompt ?? unexecutedClaimPrompt ?? prepareSalesCatalogDeliveryText({
           text: cleanText,
           items: deliveryCatalogItems,
           hasOrderIntent,
@@ -9159,13 +9230,6 @@ function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
     return false;
   }
 
-  if (
-    isRuntimeSavedDeliveryAffirmation(input.intentText)
-    && hasRecentSavedDeliveryConfirmationPrompt(input.context.messages, input.latestInbound)
-  ) {
-    return false;
-  }
-
   if (hasRecentResolvedSalesCatalogOrderForSelections(input.context.salesCatalogOrders, input.selections, input.latestInbound)) {
     return false;
   }
@@ -9900,7 +9964,7 @@ function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
 
   return (
     /^(?:sim|s|quero|ok|okay|certo|certinho|correto|isso|isso mesmo|e isso|fechado|confirmo|confirmado|confirmar|pode|manda|envia|envie|bora|vamos|top|perfeito|show|beleza|blz|combinado)\b/.test(normalized)
-    || /\b(?:pode fechar|pode continuar|pode seguir|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
+    || /\b(?:pode fechar|pode finalizar|pode concluir|pode prosseguir|pode continuar|pode seguir|pode mandar|pode enviar|pode gerar|manda o link|me manda o link|manda pra mim|manda para mim|envia o link|envie o link|fechar o pedido)\b/.test(normalized)
     || /^(?:yes|yep|yeah|sure|confirmed|confirm|go ahead|send it)\b/.test(normalized)
     || /\b(?:yes please|send the link|close the order)\b/.test(normalized)
     || /^(?:si|dale|correcto|confirmo|confirmado|eso|es eso|esta bien)\b/.test(normalized)
@@ -10418,6 +10482,16 @@ function shouldSendSalesCatalogProductPageLinks(latestInbound: ConversationMessa
   ].some((pattern) => pattern.test(normalized));
 }
 
+function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  if (!context.salesCatalog.some(item => item.salesDestination === "connectyhub_checkout")) return null;
+  const normalized = normalizeSearch(text);
+  const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
+    || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado)\b/.test(normalized);
+  const claimsNewOrder = /\bpedido\b.{0,30}\b(?:fechado|registrado|criado)\b.{0,20}\bsucesso\b/.test(normalized);
+  if (!claimsPayment && !claimsNewOrder) return null;
+  return "Ainda preciso concluir a etapa de pagamento no sistema. Não tenho confirmação de envio do Pix nesta tentativa. Vamos retomar o pedido para disponibilizar o pagamento?";
+}
+
 function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, _assistantText: string) {
   void _assistantText;
   return latestInbound?.text_content?.trim() ?? "";
@@ -10481,20 +10555,33 @@ async function recordSalesCatalogOrderIntent(input: {
     return null;
   }
 
+  const confirmationPreview = findRecentSalesCatalogCheckoutConfirmationPreview(input.context.messages, latestInbound);
+  // Stable across run retries and repeated confirmations of the same preview.
+  // The existing primary key makes reservation atomic even across workers.
+  const intentHash = createHash("sha256").update(JSON.stringify([
+    input.context.organization.id, input.context.lead?.id, input.context.conversationId,
+    confirmationPreview?.id ?? latestInbound?.id ?? input.context.run.id,
+  ])).digest("hex");
+  const orderId = `${intentHash.slice(0, 8)}-${intentHash.slice(8, 12)}-5${intentHash.slice(13, 16)}-a${intentHash.slice(17, 20)}-${intentHash.slice(20, 32)}`;
   const { data: existingData, error: existingOrderError } = await input.client
     .from("sales_catalog_orders")
-    .select("id")
+    .select("id, total, status, payment_status, metadata")
     .eq("organization_id", input.context.organization.id)
-    .eq("metadata->>agent_run_id", input.context.run.id)
+    .eq("id", orderId)
     .limit(1)
     .maybeSingle();
   if (existingOrderError) {
     throw new Error(`Não foi possível verificar se o pedido já existe: ${existingOrderError.message}`);
   }
-  const existing = existingData as unknown as { id: string } | null;
+  const existing = existingData as unknown as { id: string; total: string | null; status: string; payment_status: string; metadata: JsonRecord } | null;
 
   if (existing?.id) {
-    return null;
+    if (existing.metadata?.checkout_items_ready !== true || existing.status !== "pending_payment"
+      || existing.payment_status !== "pending") {
+      return unavailableRuntimePayment(existing.id, existing.total, paymentPreference, "O pedido existente precisa ser conferido antes de retomar a cobrança.", true);
+    }
+    return maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context,
+      orderId: existing.id, total: existing.total, preferredMethod: paymentPreference });
   }
 
   let customerName = input.context.lead
@@ -10577,6 +10664,7 @@ async function recordSalesCatalogOrderIntent(input: {
   const { data: orderData, error: orderError } = await input.client
     .from("sales_catalog_orders")
     .insert({
+      id: orderId,
       organization_id: input.context.organization.id,
       lead_id: input.context.lead?.id ?? null,
       conversation_id: input.context.conversationId,
@@ -10604,6 +10692,8 @@ async function recordSalesCatalogOrderIntent(input: {
         agent_run_id: input.context.run.id,
         checkout_confirmed_at: latestInbound?.occurred_at ?? now,
         checkout_confirmed_message_id: latestInbound?.id ?? null,
+        checkout_preview_message_id: confirmationPreview?.id ?? null,
+        checkout_items_ready: false,
         preferred_payment_method: paymentPreference,
         agent_id: input.context.agent.id,
         whatsapp_instance_id: input.context.instance.id,
@@ -10640,6 +10730,9 @@ async function recordSalesCatalogOrderIntent(input: {
   const order = orderData as unknown as { id: string } | null;
 
   if (orderError || !order?.id) {
+    if (orderError?.code === "23505") {
+      return unavailableRuntimePayment(orderId, payableTotal, paymentPreference, "Outra execução já está finalizando este pedido. Confira a tentativa existente.", true);
+    }
     throw new Error(`Não foi possível salvar o pedido: ${orderError?.message ?? "pedido sem identificador"}`);
   }
 
@@ -10731,6 +10824,13 @@ async function recordSalesCatalogOrderIntent(input: {
       .eq("id", order.id).eq("organization_id", input.context.organization.id);
     throw new Error(`Não foi possível salvar os itens do pedido: ${orderItemsError.message}`);
   }
+  const { data: savedOrder, error: orderReadError } = await input.client.from("sales_catalog_orders")
+    .select("metadata").eq("id", order.id).eq("organization_id", input.context.organization.id).single();
+  if (orderReadError || !savedOrder) throw new Error("Não foi possível conferir os itens do pedido salvo.");
+  const { error: readyError } = await input.client.from("sales_catalog_orders")
+    .update({ metadata: { ...(readRecord(savedOrder.metadata) ?? {}), checkout_items_ready: true } })
+    .eq("id", order.id).eq("organization_id", input.context.organization.id);
+  if (readyError) throw new Error("Não foi possível confirmar os itens do pedido salvo.");
   input.context.salesCatalogOrders = await loadOrganizationSalesCatalogOrders(input.client, {
     organizationId: input.context.organization.id,
     leadId: input.context.lead?.id ?? null,
@@ -10788,6 +10888,23 @@ async function recordSalesCatalogOrderIntent(input: {
 
 }
 
+function unavailableRuntimePayment(orderId: string, total: string | null, preferredMethod: SalesCatalogRuntimePaymentPreference | null | undefined,
+  failureReason: string, confirmationPending = false): SalesCatalogPaymentLinkResult {
+  return { orderId, amount: total, preferredMethod, provider: null, providerLabel: "Provedor de pagamento",
+    checkoutUrl: "", trackingUrl: null, pixQrCode: null, pixTicketUrl: null, gatewayUnavailable: true, failureReason, confirmationPending };
+}
+
+function runtimePaymentFromSession(data: SalesCatalogPaymentSessionLinkRow, orderId: string,
+  preferredMethod?: SalesCatalogRuntimePaymentPreference | null): SalesCatalogPaymentLinkResult {
+  const metadata = readRecord(data.metadata) ?? {};
+  return { orderId, amount: data.amount == null ? null : String(data.amount), provider: data.provider,
+    providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(data.provider),
+    checkoutUrl: (data.method === "card" ? asString(metadata.public_checkout_url) : null) ?? data.checkout_url ?? "",
+    trackingUrl: (data.method === "card" ? asString(metadata.public_checkout_tracking_url) : null)
+      ?? asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url),
+    pixQrCode: data.pix_qr_code, pixTicketUrl: data.pix_ticket_url, preferredMethod };
+}
+
 async function maybeCreateSalesCatalogPaymentLink(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -10800,6 +10917,29 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   }
 
   try {
+    const { data: sessions, error: sessionError } = await input.client.from("sales_catalog_payment_sessions")
+      .select("id, order_id, provider, method, amount, status, expires_at, provider_payment_id, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, failure_reason, metadata")
+      .eq("organization_id", input.context.organization.id).eq("order_id", input.orderId)
+      .order("created_at", { ascending: false }).limit(10);
+    if (sessionError) throw new Error("Não foi possível conferir as tentativas anteriores de pagamento.");
+    const previous = (sessions ?? []) as SalesCatalogPaymentSessionLinkRow[];
+    if (previous.some(session => readRecord(session.metadata)?.gateway_request_inflight === true
+      || ["paid", "approved", "confirmed", "refunded"].includes(session.status ?? ""))) {
+      return unavailableRuntimePayment(input.orderId, input.total, input.preferredMethod,
+        "Existe uma tentativa que precisa de conferência. Não gere outra cobrança antes de consultar o resultado.", true);
+    }
+    const active = previous.find(session => session.method === (input.preferredMethod ?? "pix")
+      && !["error", "failed", "cancelled", "expired", "rejected"].includes(session.status ?? "")
+      && !["payment_deferred", "gateway_error", "gateway_unavailable"].includes(session.provider_status ?? "")
+      && normalizeCurrencyAmount(session.amount) === normalizeCurrencyAmount(input.total)
+      && (!session.expires_at || Date.parse(session.expires_at) > Date.now())
+      && session.checkout_url && (session.method === "card" || session.pix_qr_code));
+    if (active) return runtimePaymentFromSession(active, input.orderId, input.preferredMethod);
+    if (previous.some(session => session.provider_payment_id
+      && !["cancelled", "expired", "rejected", "failed"].includes(session.status ?? ""))) {
+      return unavailableRuntimePayment(input.orderId, input.total, input.preferredMethod,
+        "Confira a cobrança anterior no provedor antes de substituir o pagamento.", true);
+    }
     const result = await createSalesCatalogPixPaymentSession({
       client: input.client,
       organizationId: input.context.organization.id,
@@ -10821,6 +10961,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       pixQrCode: result.pixQrCode,
       pixTicketUrl: result.pixTicketUrl,
       gatewayUnavailable: result.gatewayUnavailable === true,
+      confirmationPending: result.gatewayUnavailable === true && result.session.providerStatus === "gateway_error",
       paymentDeferred: result.paymentDeferred === true,
       paymentDeferredReason: result.paymentDeferredReason ?? null,
       preferredMethod: input.preferredMethod ?? null,
@@ -10838,14 +10979,18 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       summary: error instanceof Error ? error.message : "Falha ao gerar pagamento automatico.",
       confidence: 0.7,
       visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "whatsapp"],
+      tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "lead_tracking"],
       payload: {
         order_id: input.orderId,
         agent_run_id: input.context.run.id,
+        lead_id: input.context.lead?.id ?? null,
+        conversation_id: input.context.conversationId,
+        stage: "payment_generation_failed",
       },
     });
 
-    return null;
+    return unavailableRuntimePayment(input.orderId, input.total, input.preferredMethod,
+      error instanceof Error ? error.message : "Falha ao preparar o pagamento.");
   }
 }
 
@@ -10858,7 +11003,16 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   userText: string;
 }): Promise<OutboundMessage | null> {
   if (requiresCommerceConversationReply(input.userText)) return null;
-  const order = findRecentPendingSalesCatalogCheckoutOrder(input.context.salesCatalogOrders, input.latestInbound);
+  const cartText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, input.latestInbound)
+    || buildRecentSalesCatalogCartSelectionText(input.context, input.latestInbound);
+  const cartItems = selectSalesCatalogItemsForOrderText(input.context.salesCatalog, cartText);
+  const cartSelections = cartText ? resolveSalesCatalogOrderSelections({ context: input.context, currentItems: [],
+    responseText: "", intentText: input.userText }) : [];
+  const orders = cartItems.length ? input.context.salesCatalogOrders.filter(order =>
+    order.items.length === cartItems.length && cartItems.every(item => order.items.some(line => line.catalogItemId === item.id))
+    && cartSelections.every(selection => order.items.some(line => line.catalogItemId === selection.item.id && line.quantity === selection.quantity)))
+    : input.context.salesCatalogOrders;
+  const order = findRecentPendingSalesCatalogCheckoutOrder(orders, input.latestInbound);
 
   if (
     !order
@@ -10914,13 +11068,14 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   const { data, error } = await input.client
     .from("sales_catalog_payment_sessions")
-    .select("id, order_id, provider, method, amount, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, failure_reason, metadata")
+    .select("id, order_id, provider, method, amount, status, expires_at, provider_payment_id, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, failure_reason, metadata")
     .eq("id", paymentSessionId)
     .eq("organization_id", input.context.organization.id)
     .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
 
   if (error || !data) {
-    return null;
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, null,
+      "Não foi possível conferir a tentativa existente. É necessário consultar o pagamento antes de tentar novamente.", true) });
   }
 
   const metadata = readRecord(data.metadata) ?? {};
@@ -10928,7 +11083,8 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     ?? asString(data.checkout_url);
 
   if (!checkoutUrl) {
-    return null;
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, null,
+      "A tentativa existente não possui um checkout disponível.", true) });
   }
 
   const trackingUrl = (data.method === "card" ? asString(metadata.public_checkout_tracking_url) : null)
@@ -10946,46 +11102,20 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     ?? readStoredSalesCatalogPaymentPreference(metadata)
     ?? (asString(data.pix_qr_code) ? "pix" : null);
   const currentMethod = resolveSalesCatalogPaymentSessionPreference(data, metadata);
+  if (metadata.gateway_request_inflight === true
+    || ["paid", "approved", "confirmed", "refunded", "cancelled", "expired", "rejected", "failed"].includes(data.status ?? "")
+    || (data.expires_at && Date.parse(data.expires_at) <= Date.now())) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
+      "Confira o estado atual da tentativa no provedor antes de reenviar ou substituir a cobrança.", true) });
+  }
 
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
 
   if (preferredMethod && currentMethod !== preferredMethod) {
-    const methodPayment = await createSalesCatalogPixPaymentSession({
-      client: input.client,
-      organizationId: input.context.organization.id,
-      orderId: order.id,
-      amount: order.total ?? data.amount,
-      payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
-      preferredMethod,
-      source: "whatsapp_agent",
-      actorId: null,
-    }).catch(() => null);
-
-    if (!methodPayment) {
-      return null;
-    }
-
-    return sendSalesCatalogPaymentLink({
-      client: input.client,
-      context: input.context,
-      token: input.token,
-      phone: input.phone,
-      payment: {
-        orderId: order.id,
-        amount: methodPayment.session.amount ?? order.total ?? (data.amount !== null && data.amount !== undefined ? String(data.amount) : null),
-        provider: methodPayment.session.provider,
-        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(methodPayment.session.provider),
-        checkoutUrl: methodPayment.checkoutUrl,
-        trackingUrl: methodPayment.trackingUrl ?? null,
-        pixQrCode: methodPayment.pixQrCode,
-        pixTicketUrl: methodPayment.pixTicketUrl,
-        gatewayUnavailable: methodPayment.gatewayUnavailable === true,
-        paymentDeferred: methodPayment.paymentDeferred === true,
-        paymentDeferredReason: methodPayment.paymentDeferredReason ?? null,
-        preferredMethod,
-        failureReason: methodPayment.session.failureReason ?? null,
-      },
-    });
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context,
+      orderId: order.id, total: order.total ?? (data.amount == null ? null : String(data.amount)), preferredMethod });
+    if (!payment) return null;
+    return sendSalesCatalogPaymentLink({ ...input, payment });
   }
 
   if (
@@ -11021,43 +11151,10 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   }
 
   if (paymentDeferred || gatewayUnavailable) {
-    const refreshedPayment = await createSalesCatalogPixPaymentSession({
-      client: input.client,
-      organizationId: input.context.organization.id,
-      orderId: order.id,
-      amount: order.total ?? data.amount,
-      payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
-      preferredMethod,
-      source: "whatsapp_agent",
-      actorId: null,
-    })
-      .catch(() => null);
-
-    if (!refreshedPayment) {
-      return null;
-    }
-
-    return sendSalesCatalogPaymentLink({
-      client: input.client,
-      context: input.context,
-      token: input.token,
-      phone: input.phone,
-      payment: {
-        orderId: order.id,
-        amount: refreshedPayment.session.amount ?? order.total ?? (data.amount !== null && data.amount !== undefined ? String(data.amount) : null),
-        provider: refreshedPayment.session.provider,
-        providerLabel: formatSalesCatalogRuntimePaymentProviderLabel(refreshedPayment.session.provider),
-        checkoutUrl: refreshedPayment.checkoutUrl,
-        trackingUrl: refreshedPayment.trackingUrl ?? null,
-        pixQrCode: refreshedPayment.pixQrCode,
-        pixTicketUrl: refreshedPayment.pixTicketUrl,
-        gatewayUnavailable: refreshedPayment.gatewayUnavailable === true,
-        paymentDeferred: refreshedPayment.paymentDeferred === true,
-        paymentDeferredReason: refreshedPayment.paymentDeferredReason ?? null,
-        preferredMethod,
-        failureReason: refreshedPayment.session.failureReason ?? null,
-      },
-    });
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context,
+      orderId: order.id, total: order.total ?? (data.amount == null ? null : String(data.amount)), preferredMethod });
+    if (!payment) return null;
+    return sendSalesCatalogPaymentLink({ ...input, payment });
   }
 
   return sendSalesCatalogPaymentLink({
@@ -11378,6 +11475,53 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  try {
+    const message = await deliverSalesCatalogPaymentLink(input);
+    const delivery = asString(readRecord(message.providerResponse)?.delivery);
+    const stage = input.payment.confirmationPending ? "payment_confirmation_pending"
+      : input.payment.gatewayUnavailable || delivery === "whatsapp_pix_code_missing" ? "payment_generation_failed"
+      : input.payment.paymentDeferred ? "payment_data_pending" : "payment_sent";
+    await persistRuntimeCheckoutProgress(input, stage);
+    return message;
+  } catch (error) {
+    await persistRuntimeCheckoutProgress(input, "payment_delivery_unconfirmed");
+    // A network failure may have delivered the message. Preserve the charge and
+    // escalate instead of retrying through another format or creating a charge.
+    await notifyResponsibleHumanAboutPaymentIssue({ ...input, reason: "gateway_unavailable",
+      payment: { ...input.payment, failureReason: "O pagamento foi preparado, mas não foi possível confirmar a entrega da mensagem no WhatsApp. Confira a tentativa existente antes de reenviar." },
+    }).catch(async handoffError => persistPaymentIssueHumanHandoffFailure(input.client, input.context, input.payment, handoffError));
+    throw error;
+  }
+}
+
+async function persistRuntimeCheckoutProgress(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  payment: SalesCatalogPaymentLinkResult;
+}, stage: string) {
+  const state = { stage, order_id: input.payment.orderId, conversation_id: input.context.conversationId,
+    agent_run_id: input.context.run.id, updated_at: new Date().toISOString() };
+  await input.client.from("intelligence_events").insert({ scope: "organization", organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order", source_id: input.payment.orderId, producer_agent_id: input.context.agent.id,
+    event_type: `sales_catalog.${stage}`, title: "Etapa do pagamento pelo WhatsApp", summary: stage,
+    visibility: "organization", confidence: 1, tags: ["sales_catalog", "payment", "whatsapp", "lead_tracking"],
+    payload: { ...state, lead_id: input.context.lead?.id ?? null, checkout_url: input.payment.checkoutUrl },
+  });
+  if (input.context.lead?.id) {
+    const saved = await updateLeadMetadata({ client: input.client, organizationId: input.context.organization.id,
+      leadId: input.context.lead.id, buildUpdate: metadata => ({ metadata: { ...metadata, checkout_runtime_state: state } }),
+    }).catch(() => null);
+    if (saved) input.context.lead.metadata = saved.metadata;
+  }
+}
+
+async function deliverSalesCatalogPaymentLink(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  payment: SalesCatalogPaymentLinkResult;
+}): Promise<OutboundMessage> {
   if (input.payment.paymentDeferred) {
     return sendSalesCatalogPaymentDeferredWhatsapp(input);
   }
@@ -11607,7 +11751,9 @@ async function sendSalesCatalogPaymentUnavailableWhatsapp(input: {
 }, options: { reason?: SalesCatalogHumanInterventionIssueReason } = {}): Promise<OutboundMessage> {
   const isPixCodeMissing = options.reason === "pix_code_missing";
   const messageText = [
-    isPixCodeMissing
+    input.payment.confirmationPending
+      ? "Preciso conferir a tentativa de pagamento do seu pedido antes de enviar outra cobrança."
+      : isPixCodeMissing
       ? "Pedido registrado, mas não consegui gerar o código Pix agora."
       : "Pedido registrado, mas não consegui gerar o pagamento online agora.",
     "Vou chamar uma pessoa do time para ajustar o pagamento e te passar o próximo passo por aqui.",
@@ -12368,7 +12514,7 @@ function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
 
 function addRuntimeMoney(baseValue: string | null, incrementValue: string | null) {
   const base = normalizeCurrencyAmount(baseValue);
-  const increment = normalizeCurrencyAmount(incrementValue);
+  const increment = normalizeRuntimeShippingAmount(incrementValue);
 
   if (typeof base !== "number" || typeof increment !== "number") {
     return null;

@@ -10,10 +10,12 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
       let operation = "select";
       let payload: Row | Row[] = {};
       const filters: Array<(row: Row) => boolean> = [];
+      let sorting: { key: string; ascending: boolean } | null = null;
+      let maximum = Infinity;
       const query = {
         select: () => query,
-        order: () => query,
-        limit: () => query,
+        order: (key: string, options?: { ascending?: boolean }) => { sorting = { key, ascending: options?.ascending !== false }; return query; },
+        limit: (value: number) => { maximum = value; return query; },
         eq(key: string, value: unknown) {
           filters.push(row => {
             const [field, child] = key.split("->>");
@@ -50,8 +52,16 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return { data: [] as Row[], error: { message: "Simulated database failure" } };
         }
         let selected = tables[table].filter(row => filters.every(filter => filter(row)));
+        if (sorting) {
+          const { key, ascending } = sorting;
+          selected.sort((a, b) => String(a[key] ?? "").localeCompare(String(b[key] ?? "")) * (ascending ? 1 : -1));
+        }
+        selected = selected.slice(0, maximum);
         if (operation === "insert") {
           selected = (Array.isArray(payload) ? payload : [payload]).map(row => ({ id: `row-${++sequence}`, ...row }));
+          if (selected.some(row => tables[table].some(existing => existing.id === row.id))) {
+            return { data: [] as Row[], error: { code: "23505", message: "Duplicate primary key" } };
+          }
           tables[table].push(...selected);
         }
         if (operation === "update") selected.forEach(row => {

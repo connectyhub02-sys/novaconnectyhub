@@ -3,6 +3,7 @@ export function requiresCommerceConversationReply(text: string) {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (!normalized) return false;
+  if (/\b(?:depois|amanha|mais tarde|outro dia|vou pensar|ainda nao|agora nao)\b/.test(normalized)) return true;
 
   // Questions, objections and requests for a person take precedence over checkout shortcuts.
   if (/\b(?:humano|atendente|pessoa do time|falar com alguem|duvida|explica|explicar|explique|entender|saber|me conta|me diga|me diz|antes disso|antes de pagar|calma|espera|aguarda)\b/.test(normalized)) return true;
@@ -15,7 +16,7 @@ export function requiresCommerceConversationReply(text: string) {
   if (/\b(?:mais um|mais uma|tambem quero|quero tambem|so que|mas sem|porem|em vez|ao inves)\b/.test(normalized)) return true;
 
   // A polite request to send payment may end with "?". Other questions stay with the clone.
-  const paymentRequest = /\b(?:manda|mandar|envia|enviar|envie|gera|gerar|gere|reenvia|reenviar|pode fechar|pode continuar|pode seguir)\b/.test(normalized)
+  const paymentRequest = /\b(?:manda|mandar|envia|enviar|envie|gera|gerar|gere|reenvia|reenviar|pode fechar|pode finalizar|pode concluir|pode prosseguir|pode continuar|pode seguir)\b/.test(normalized)
     && /\b(?:pix|pagamento|checkout|link|pedido|codigo)\b/.test(normalized);
   return text.includes("?") && !paymentRequest;
 }
@@ -31,5 +32,6 @@ export function buildCommerceConversationInstruction() {
     "- Recomende com base na necessidade e nos fatos do catalogo. Sugira um complemento somente quando fizer sentido e aguarde aceite; nunca acrescente produtos por conta propria.",
     "- Depois de confirmar o pedido, preserve os itens e as quantidades. Uma mudanca solicitada pelo lead precisa de uma previa atualizada antes da cobranca.",
     "- Se o lead disser que ja informou os dados, reconheca e aproveite os dados salvos. Nao repita a mesma lista de cadastro nem reinicie a qualificacao.",
+    "- Nao afirme que criou um pedido, gerou ou enviou um Pix sem o resultado registrado da ferramenta. O sistema executa o fechamento e envia o pagamento; uma promessa em texto nao executa essa acao.",
   ];
 }
