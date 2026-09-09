@@ -107,33 +107,51 @@ describe("Pix payment card across the platform and storefronts", () => {
     expect(p.requests[0].body.text).toContain(billingInput.button.url);
   });
 
-  it("uses the native card first for stores and persists its lead, order and tracked checkout", async () => {
+  it("sends only Copiar Pix for stores and keeps reconciliation data internal", async () => {
     const p = provider(), s = store(p.fetch);
     await s.send();
     expect(p.requests).toHaveLength(1);
-    expect(p.requests[0]).toMatchObject({ path: "/send/request-payment", body: {
-      amount: 573.8, pixCode: s.payment.pixQrCode, paymentLink: s.payment.trackingUrl,
-      itemName: "Produto A + Produto B", footer: "Loja teste", invoiceNumber: "ORDER-12",
+    expect(p.requests[0]).toMatchObject({ path: "/send/menu", body: {
+      type: "button", choices: [`Copiar Pix|copy:${s.payment.pixQrCode}`], footerText: "Loja teste",
     } });
+    expect(p.requests[0].body).not.toHaveProperty("paymentLink");
+    expect(p.requests[0].body.text).toContain("573,80");
+    expect(p.requests[0].body.text).not.toMatch(/checkout|https?:|revisar|abrir link/i);
     const message = s.saved.find(r => r.table === "conversation_messages")?.value;
     expect(message).toMatchObject({ lead_id: "lead-1", conversation_id: "conversation-1", organization_id: "store-1" });
     expect(message?.payload).toMatchObject({ provider_response: {
-      delivery: "whatsapp_pix_payment_request", orderId: "order-123", amount: 573.8, trackingUrl: s.payment.trackingUrl,
+      delivery: "whatsapp_pix_copy_button", orderId: "order-123", amount: 573.8, trackingUrl: s.payment.trackingUrl,
     } });
   });
 
-  it("preserves the store checkout and its tracking when falling back to copy", async () => {
+  it("sends the exact code alone after definitive copy rejection, without a checkout detour", async () => {
     const p = provider([400, 200]), s = store(p.fetch);
     await s.send();
-    expect(p.requests.map(r => r.path)).toEqual(["/send/request-payment", "/send/menu"]);
-    expect(p.requests[1].body.text).toContain(s.payment.trackingUrl);
-    expect(s.saved.find(r => r.table === "conversation_messages")?.value.text_content).toBe(p.requests[1].body.text);
+    expect(p.requests.map(r => r.path)).toEqual(["/send/menu", "/send/text", "/send/text"]);
+    expect(p.requests[1].body.text).not.toMatch(/checkout|https?:|revisar/i);
+    expect(p.requests[2].body.text).toBe(s.payment.pixQrCode);
+    const messages = s.saved.filter(r => r.table === "conversation_messages");
+    expect(messages.map(r => r.value.text_content)).toEqual(p.requests.slice(1).map(r => r.body.text));
+    expect(messages[1].value.payload).toMatchObject({ interactive_button: false, button_fallback: true,
+      provider_response: { delivery: "whatsapp_pix_code_separate_message", orderId: s.payment.orderId } });
   });
 
-  it("does not duplicate a store message when native delivery is uncertain", async () => {
-    const p = provider([500]), s = store(p.fetch);
+  it.each([408, 500])("does not duplicate a store message when copy delivery is uncertain (%s)", async status => {
+    const p = provider([status]), s = store(p.fetch);
     await expect(s.send()).rejects.toThrow();
     expect(p.requests).toHaveLength(1);
     expect(s.saved).toHaveLength(0);
+  });
+  it("preserves punctuation and case in the gateway code, removing only transport newlines", async () => {
+    const p = provider(), s = store(p.fetch);
+    s.payment.pixQrCode = "  000201AbC./:xyz\r\n6304EF12  ";
+    await s.send();
+    expect(p.requests[0].body.choices).toEqual(["Copiar Pix|copy:000201AbC./:xyz6304EF12"]);
+  });
+  it.each(["", "\r\n"])("never sends an empty copy code", async code => {
+    const p = provider(), s = store(p.fetch);
+    s.payment.pixQrCode = code;
+    await expect(s.send()).rejects.toThrow("Pix sem código");
+    expect(p.requests).toHaveLength(0);
   });
 });

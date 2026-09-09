@@ -109,8 +109,8 @@ describe("physical WhatsApp checkout after a natural multipart summary", () => {
     expect(db.tables.sales_catalog_orders).toHaveLength(1);
     expect(db.tables.sales_catalog_order_items.map(item => [item.catalog_item_id, item.quantity])).toEqual([["serum", 1], ["oleo", 1]]);
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe(`https://whatsapp.invalid/send/${method === "pix" ? "request-payment" : "menu"}`);
-    expect(method === "pix" ? requests[0].body.pixCode : (requests[0].body.choices as string[])[0]).toContain(method === "pix" ? "000201pix-ficticio" : "payment_method=card");
+    expect(requests[0].url).toBe("https://whatsapp.invalid/send/menu");
+    expect((requests[0].body.choices as string[])[0]).toContain(method === "pix" ? "000201pix-ficticio" : "payment_method=card");
   });
 
   it.each(["1x Oleo 10ml", "1x Produto inexistente"]) ("does not silently charge a partial or ambiguous cart: %s", line => {

@@ -113,8 +113,8 @@ describe("checkout continuation without repeating confirmed steps", () => {
     expect(createPayment).toHaveBeenCalledOnce();
     expect(result).toHaveLength(1);
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe("https://whatsapp.invalid/send/request-payment");
-    expect(requests[0].body).toMatchObject({ pixCode: "000201-TEST-NOT-PAYABLE", amount: 90 });
+    expect(requests[0].url).toBe("https://whatsapp.invalid/send/menu");
+    expect(requests[0].body).toMatchObject({ choices: ["Copiar Pix|copy:000201-TEST-NOT-PAYABLE"] });
   });
 });
 
@@ -204,7 +204,7 @@ describe("payment recovery and duplicate prevention", () => {
     await expect(call<Promise<unknown>>("sendSalesCatalogPaymentLink", { client: db.client, context: ctx, token: "fake", phone: "5511999999999",
       payment: { orderId: "order", amount: "90,00", provider: "asaas", providerLabel: "Asaas", preferredMethod: "pix",
         checkoutUrl: "https://loja.example/checkout/session", pixQrCode: "000201-TEST-NOT-PAYABLE" } })).rejects.toThrow();
-    expect(requests).toEqual(["https://whatsapp.invalid/send/request-payment"]);
+    expect(requests).toEqual(["https://whatsapp.invalid/send/menu"]);
     expect(db.tables.leads[0].metadata).toMatchObject({ checkout_runtime_state: { stage: "payment_delivery_unconfirmed", order_id: "order" } });
     expect(db.tables.intelligence_events.some(event => event.event_type === "whatsapp.handoff.payment_issue_requested")).toBe(true);
   });

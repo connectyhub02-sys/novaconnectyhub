@@ -41,6 +41,31 @@ function fixture(reply = "sim") {
 }
 
 describe("checkout recovery after the conversation resumes hours later", () => {
+  it("recovers a transcribed resend request whose last complaint ends with não", async () => {
+    const { context, db, send, createPayment, requests } = fixture("Cara, manda de novo pra mim aqui que eu não tô conseguindo não. Manda de novo o Pix pra mim aí, o botão do Pix");
+    context.messages.at(-1)!.message_type = "AudioMessage";
+    const response = (await send("Opa, tranquilo! Deixa eu mandar de novo para você agora mesmo.\n{{produto_kit}}\nAssim que der certo o pagamento, me avisa."))
+      .map(message => message.text).join("\n");
+    expect(response).toContain("Posso usar esse mesmo endereço");
+    expect(response).toContain("Kit de escritório");
+    expect(response).not.toContain("Deixa eu mandar");
+    expect(createPayment).not.toHaveBeenCalled();
+    context.messages.push(msg("outbound", response, 273), msg("inbound", "sim, pode mandar o Pix", 274));
+    context.run.id = "audio-recovery-confirmed";
+    db.tables.conversation_messages = [{ ...context.messages.at(-1), conversation_id: "conversation", whatsapp_instance_id: "instance" }];
+    requests.length = 0;
+    await send("Fechado!");
+    expect(createPayment).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body.choices).toEqual(["Copiar Pix|copy:000201-TEST-NOT-PAYABLE"]);
+  });
+  it("removes the invented button above from a greeting without changing the clone's voice", async () => {
+    const { send, createPayment } = fixture("Fala, você tá bom, meu amigo? Como é que tá aí?");
+    const response = (await send("Fala! Tudo ótimo por aqui, e com você?\nO botão do Pix tá logo aí em cima. Me avisa assim que fizer!"))
+      .map(message => message.text).join("\n");
+    expect(response).toBe("Fala! Tudo ótimo por aqui, e com você?");
+    expect(createPayment).not.toHaveBeenCalled();
+  });
   it.each(["o código Pix", "Pix", "o link do cartão de crédito"])("resumes a fragmented payment request and completes checkout: %s", async reply => {
     const { context, db, requests, createPayment, send } = fixture(reply);
     context.messages.splice(-1, 0, { ...msg("inbound", "me manda o código para eu pagar", 272), id: "payment-request",
@@ -62,7 +87,7 @@ describe("checkout recovery after the conversation resumes hours later", () => {
     expect(db.tables.sales_catalog_orders).toHaveLength(1);
     expect(requests).toHaveLength(1);
     if (card) expect(requests[0].body.choices).toEqual(["Finalizar pedido|https://loja.example/checkout/test?payment_method=card"]);
-    else expect(requests[0]).toMatchObject({ url: "https://whatsapp.invalid/send/request-payment", body: { pixCode: "000201-TEST-NOT-PAYABLE", amount: 90 } });
+    else expect(requests[0]).toMatchObject({ url: "https://whatsapp.invalid/send/menu", body: { choices: ["Copiar Pix|copy:000201-TEST-NOT-PAYABLE"] } });
   });
   it.each(["o código Pix", "Pix", "o link do cartão", "me passa o Pix", "mande o código Pix", "me passa o Pix?", "pode me passar o link do cartão?"])("understands contextual payment requests without requiring a particular verb: %s", async reply => {
     const { send, createPayment } = fixture(reply);
@@ -142,7 +167,7 @@ describe("checkout recovery after the conversation resumes hours later", () => {
     expect(createPayment).toHaveBeenCalledOnce();
     expect(db.tables.sales_catalog_orders).toHaveLength(1);
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ url: "https://whatsapp.invalid/send/request-payment", body: { pixCode: "000201-TEST-NOT-PAYABLE", amount: 90 } });
+    expect(requests[0]).toMatchObject({ url: "https://whatsapp.invalid/send/menu", body: { choices: ["Copiar Pix|copy:000201-TEST-NOT-PAYABLE"] } });
   });
   it.each(["mas cadê", "cadê?", "não apareceu o botão", "sim"])("recovers after an unsupported button promise: %s", async reply => {
     const { context, createPayment, send } = fixture(reply);

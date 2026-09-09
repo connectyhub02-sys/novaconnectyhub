@@ -86,7 +86,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order", preferredMethod, amount: "573,80" }));
     expect(requests).toHaveLength(1);
     expect(result.text).not.toContain("não consegui");
-    expect(preferredMethod === "pix" ? requests[0].pixCode : (requests[0].choices as string[])[0]).toContain(preferredMethod === "card" ? "/r/tracked?payment_method=card" : "test-pix");
+    expect((requests[0].choices as string[])[0]).toContain(preferredMethod === "card" ? "/r/tracked?payment_method=card" : "test-pix");
   });
   it("captures the explicit name when the billing reply starts with Pix on its own line", () => {
     const call = runtimeHarness();
@@ -113,7 +113,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     await call("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: reply, token: "fake", phone: "5500000000000" });
     expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order", preferredMethod }));
     expect(requests).toHaveLength(1);
-    expect(preferredMethod === "pix" ? requests[0].pixCode : (requests[0].choices as string[])[0]).toContain(preferredMethod === "pix" ? "pix-atual" : "payment_method=card");
+    expect((requests[0].choices as string[])[0]).toContain(preferredMethod === "pix" ? "pix-atual" : "payment_method=card");
   });
 
   it("treats already-sent data as payment recovery, only in an active checkout context", () => {
@@ -165,8 +165,8 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     expect(db.tables.sales_catalog_order_items.map(row => [row.catalog_item_id, row.quantity])).toEqual([["pizza", 1], ["bebida", 1]]);
     expect(createPayment).toHaveBeenCalledOnce();
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe(`https://whatsapp.invalid/send/${method === "pix" ? "request-payment" : "menu"}`);
-    const choice = method === "pix" ? requests[0].body.pixCode : (requests[0].body.choices as string[])[0];
+    expect(requests[0].url).toBe("https://whatsapp.invalid/send/menu");
+    const choice = (requests[0].body.choices as string[])[0];
     expect(choice).toContain(method === "pix" ? "000201pix-ficticio" : "/checkout/teste?payment_method=card");
     expect(requests[0].body.text).not.toMatch(/me envie|nome completo|cpf|e-mail/i);
   });

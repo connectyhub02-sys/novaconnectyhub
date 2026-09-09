@@ -10621,6 +10621,8 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
   const normalized = normalizeSearch(text);
   const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
     || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado|disponivel|liberado)\b/.test(normalized)
+    || (/\b(?:pix|pagamento|pagar|checkout)\b/.test(normalized)
+      && /\b(?:botao|codigo|link|pix|qr code)\b.{0,45}\b(?:esta|ta|ficou|fica|segue)\b.{0,30}\b(?:acima|abaixo|em cima|aqui|ali)\b/.test(normalized))
     || /\b(?:liberando|liberei|enviando|segue|aqui esta|ta aqui|ta na mao)\b.{0,80}\b(?:botao|pix|qr code|checkout)\b/.test(normalized)
     || /\b(?:clicar|clique|clica|copiar|copie|escaneie)\b.{0,60}\b(?:botao|codigo|qr code|link)\b.{0,80}\b(?:abaixo|acima|pix|pagar|pagamento)\b/.test(normalized);
   const claimsNewOrder = /\bpedido\b.{0,30}\b(?:fechado|registrado|criado)\b.{0,20}\bsucesso\b/.test(normalized);
@@ -10671,6 +10673,7 @@ function buildUnexecutedCheckoutReply(
       return !guardUnexecutedCheckoutClaim(sentence, context)
         && !/\b(?:use|utilize|clique|clica|copie|copiar|escaneie|acesse)\b.{0,70}\b(?:botao|codigo|qr code|link)\b/.test(normalized)
         && !/^(?:assim que|quando voce)\b.{0,60}\b(?:pagar|finalizar|concluir|pagamento)\b/.test(normalized)
+        && !/^me avisa\b.{0,30}\b(?:fizer|pagar|concluir)\b/.test(normalized)
         && !/\bpedido\b.{0,30}\b(?:confirmado|fechado|registrado|criado)\b/.test(normalized);
     }).join(" ");
   }).filter(Boolean).join("\n").trim();
@@ -12142,186 +12145,86 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
 }): Promise<OutboundMessage> {
   const pixCode = normalizeSalesCatalogPixCopyCode(input.payment.pixQrCode);
   const amount = normalizeCurrencyAmount(input.payment.amount);
-  const order = input.context.salesCatalogOrders.find((item) => item.id === input.payment.orderId) ?? null;
-  const paymentUrl = input.payment.trackingUrl ?? input.payment.checkoutUrl;
+  if (!pixCode) throw new Error("Pix sem código copia e cola para montar botão de copiar.");
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Pedido sem valor valido para montar botao de Pix.");
+  }
   let messageText = buildSalesCatalogPixDirectWhatsappText(input.payment);
   let providerResponse: unknown;
-  let interactiveButton = false;
   let buttonFallback = false;
-
+  // Keep checkout/tracking for internal reconciliation, never as another customer action.
+  const paymentMetadata = {
+    provider: input.payment.provider,
+    providerLabel: input.payment.providerLabel,
+    orderId: input.payment.orderId,
+    amount,
+    checkoutUrl: input.payment.checkoutUrl,
+    trackingUrl: input.payment.trackingUrl,
+    pixTicketUrl: input.payment.pixTicketUrl,
+  };
   try {
-    if (!pixCode) {
-      throw new Error("Pix sem código copia e cola para montar botão de copiar.");
-    }
-
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-      throw new Error("Pedido sem valor valido para montar botao nativo de Pix.");
-    }
-
-    const paymentRequestProviderResponse = await sendWhatsappPaymentRequest({
+    // Native request-payment may render "Revisar e pagar". The copy action is explicit here.
+    const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
       credentials: input.context.credentials,
       token: input.token,
       phone: input.phone,
-      title: "Pagamento do pedido",
       text: messageText,
+      choices: [buildSalesCatalogPixCopyButtonChoice(pixCode)],
       footerText: resolveInteractiveButtonFooterText(input.context.organization),
-      itemName: buildSalesCatalogPixPaymentRequestItemName(order, input.payment),
-      invoiceNumber: input.payment.orderId.slice(0, 8).toUpperCase(),
-      amount,
-      pixCode,
-      paymentLink: paymentUrl,
-      trackId: `agent_pix_payment_request_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      trackId: `agent_pix_copy_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
       mentions: resolveGroupMentions(input.context),
     });
-    providerResponse = {
-      delivery: "whatsapp_pix_payment_request",
-      provider: input.payment.provider,
-      providerLabel: input.payment.providerLabel,
-      orderId: input.payment.orderId,
-      amount,
-      checkoutUrl: input.payment.checkoutUrl,
-      trackingUrl: input.payment.trackingUrl,
-      pixTicketUrl: input.payment.pixTicketUrl,
-      paymentRequestProviderResponse,
-    };
-    interactiveButton = true;
-  } catch (paymentRequestError) {
-    // A timeout may already have delivered the card. Do not send a second message blindly.
-    if (!(paymentRequestError instanceof UazapiRuntimeRequestError && paymentRequestError.definitive)) throw paymentRequestError;
-    const paymentRequestErrorMessage = describeRuntimeError(paymentRequestError, "Falha desconhecida ao enviar solicitacao nativa de Pix.");
-
-    try {
-      messageText = `${buildSalesCatalogPixDirectWhatsappText(input.payment, { copyFallback: true })}${paymentUrl ? `\n\nFinalizar no checkout: ${paymentUrl}` : ""}`;
-      const copyButtonProviderResponse = await sendWhatsappInteractiveButtons({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        text: messageText,
-        choices: [buildSalesCatalogPixCopyButtonChoice(pixCode)],
-        footerText: resolveInteractiveButtonFooterText(input.context.organization),
-        trackId: `agent_pix_copy_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-        mentions: resolveGroupMentions(input.context),
-      });
-      providerResponse = {
-        delivery: "whatsapp_pix_copy_button",
-        provider: input.payment.provider,
-        providerLabel: input.payment.providerLabel,
-        orderId: input.payment.orderId,
-        amount,
-        checkoutUrl: input.payment.checkoutUrl,
-        trackingUrl: input.payment.trackingUrl,
-        pixTicketUrl: input.payment.pixTicketUrl,
-        paymentRequestFallback: true,
-        paymentRequestError: paymentRequestErrorMessage,
-        copyButtonProviderResponse,
-      };
-      interactiveButton = true;
-      buttonFallback = true;
-    } catch (copyButtonError) {
-      if (!(copyButtonError instanceof UazapiRuntimeRequestError && copyButtonError.definitive)) throw copyButtonError;
-      const copyButtonErrorMessage = describeRuntimeError(copyButtonError, "Falha desconhecida ao enviar botao de copiar Pix.");
-      const fallbackIntroText = `${buildSalesCatalogPixDirectWhatsappText(input.payment, { textFallback: true })}${paymentUrl ? `\n\nFinalizar no checkout: ${paymentUrl}` : ""}`;
-      const introProviderResponse = await sendWhatsappText({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        text: fallbackIntroText,
-        trackId: `agent_pix_payment_fallback_intro_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-        mentions: resolveGroupMentions(input.context),
-        linkPreview: false,
-      });
-
-      await saveOutboundMessage(input.client, input.context, {
-        text: fallbackIntroText,
-        mode: "text",
-        providerResponse: {
-          fallback: true,
-          delivery: "whatsapp_pix_code_intro",
-          reason: "pix_copy_button_and_payment_request_failed",
-          copyButtonError: copyButtonErrorMessage,
-          paymentRequestError: paymentRequestErrorMessage,
-          provider: input.payment.provider,
-          providerLabel: input.payment.providerLabel,
-          orderId: input.payment.orderId,
-          checkoutUrl: input.payment.checkoutUrl,
-          trackingUrl: input.payment.trackingUrl,
-          pixTicketUrl: input.payment.pixTicketUrl,
-          introProviderResponse,
-        },
-        interactiveButton: false,
-        buttonFallback: true,
-        persisted: true,
-      });
-
-      await sleep(900);
-
-      messageText = buildSalesCatalogPixCodeOnlyWhatsappText(pixCode);
-      const codeProviderResponse = await sendWhatsappText({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        text: messageText,
-        trackId: `agent_pix_payment_fallback_code_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-        mentions: resolveGroupMentions(input.context),
-        linkPreview: false,
-      });
-
-      providerResponse = {
-        fallback: true,
-        delivery: "whatsapp_pix_code_separate_message",
-        reason: "pix_copy_button_and_payment_request_failed",
-        copyButtonError: copyButtonErrorMessage,
-        paymentRequestError: paymentRequestErrorMessage,
-        provider: input.payment.provider,
-        providerLabel: input.payment.providerLabel,
-        orderId: input.payment.orderId,
-        checkoutUrl: input.payment.checkoutUrl,
-        trackingUrl: input.payment.trackingUrl,
-        pixTicketUrl: input.payment.pixTicketUrl,
-        introProviderResponse,
-        codeProviderResponse,
-      };
-      buttonFallback = true;
-      await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-        chunkIndex: 2,
-        chunksTotal: 2,
-        errorMessage: `${copyButtonErrorMessage}; ${paymentRequestErrorMessage}`,
-        providerResponse,
-      });
-    }
+    providerResponse = { ...paymentMetadata, delivery: "whatsapp_pix_copy_button", copyButtonProviderResponse };
+  } catch (copyButtonError) {
+    // A timeout may already have delivered the button. Do not send a duplicate blindly.
+    if (!(copyButtonError instanceof UazapiRuntimeRequestError && copyButtonError.definitive)) throw copyButtonError;
+    const copyButtonErrorMessage = describeRuntimeError(copyButtonError, "Falha desconhecida ao enviar botao de copiar Pix.");
+    const fallbackMetadata = { ...paymentMetadata, fallback: true, reason: "pix_copy_button_failed", copyButtonError: copyButtonErrorMessage };
+    const fallbackIntroText = buildSalesCatalogPixDirectWhatsappText(input.payment, { textFallback: true });
+    const introProviderResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: fallbackIntroText,
+      trackId: `agent_pix_payment_fallback_intro_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+      linkPreview: false,
+    });
+    await saveOutboundMessage(input.client, input.context, {
+      text: fallbackIntroText,
+      mode: "text",
+      providerResponse: { ...fallbackMetadata, delivery: "whatsapp_pix_code_intro", introProviderResponse },
+      interactiveButton: false,
+      buttonFallback: true,
+      persisted: true,
+    });
+    await sleep(900);
+    messageText = buildSalesCatalogPixCodeOnlyWhatsappText(pixCode);
+    const codeProviderResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      trackId: `agent_pix_payment_fallback_code_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+      linkPreview: false,
+    });
+    providerResponse = { ...fallbackMetadata, delivery: "whatsapp_pix_code_separate_message", introProviderResponse, codeProviderResponse };
+    buttonFallback = true;
+    await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+      chunkIndex: 2, chunksTotal: 2, errorMessage: copyButtonErrorMessage, providerResponse,
+    });
   }
   const message: OutboundMessage = {
-    text: messageText,
-    mode: "text",
-    providerResponse,
-    interactiveButton,
-    buttonFallback,
-    persisted: true,
+    text: messageText, mode: "text", providerResponse,
+    interactiveButton: !buttonFallback, buttonFallback, persisted: true,
   };
-
   await saveOutboundMessage(input.client, input.context, message);
-
   return message;
 }
 
-function buildSalesCatalogPixPaymentRequestItemName(
-  order: RuntimeSalesCatalogOrder | null,
-  payment: SalesCatalogPaymentLinkResult,
-) {
-  const titles = (order?.items ?? [])
-    .map((item) => preview(item.title, 34))
-    .filter(Boolean);
-
-  if (titles.length === 0) {
-    return `Pedido ${payment.orderId.slice(0, 8).toUpperCase()}`;
-  }
-
-  const suffix = titles.length > 2 ? ` +${titles.length - 2}` : "";
-  return preview(`${titles.slice(0, 2).join(" + ")}${suffix}`, 60);
-}
-
 function buildSalesCatalogPixCopyButtonChoice(pixCode: string) {
-  return `Copiar código Pix|copy:${pixCode}`;
+  return `Copiar Pix|copy:${pixCode}`;
 }
 
 function normalizeSalesCatalogPixCopyCode(value: string | null | undefined) {
@@ -12334,7 +12237,7 @@ function buildSalesCatalogPixCodeOnlyWhatsappText(pixCode: string) {
 
 function buildSalesCatalogPixDirectWhatsappText(
   payment: SalesCatalogPaymentLinkResult,
-  options: { textFallback?: boolean; copyFallback?: boolean } = {},
+  options: { textFallback?: boolean } = {},
 ) {
   const amount = formatSalesCatalogWhatsappPaymentAmount(payment.amount);
 
@@ -12343,9 +12246,7 @@ function buildSalesCatalogPixDirectWhatsappText(
     amount ? `Valor: ${amount}` : "",
     options.textFallback
       ? "Vou te mandar o código Pix sozinho na próxima mensagem para ficar fácil copiar."
-      : options.copyFallback
-        ? "Copie o Pix pelo botão abaixo para pagar no seu banco."
-        : "Copie o Pix pelo botão abaixo ou abra os dados da cobrança para acessar o checkout da loja.",
+      : "Toque em Copiar Pix e cole o código no aplicativo do seu banco.",
     "Assim que você realizar o pagamento, eu te atualizo por aqui.",
   ].filter(Boolean).join("\n");
 }
@@ -13731,46 +13632,6 @@ async function sendWhatsappText(input: {
       number: input.phone,
       text,
       linkPreview: input.linkPreview ?? true,
-      readchat: true,
-      readmessages: true,
-      ...(input.replyId ? { replyid: input.replyId } : {}),
-      ...(input.mentions ? { mentions: input.mentions } : {}),
-      track_source: "connectyhub",
-      track_id: input.trackId,
-    },
-  });
-}
-
-async function sendWhatsappPaymentRequest(input: {
-  credentials: UazapiCredentials;
-  token: string;
-  phone: string;
-  title: string;
-  text: string;
-  footerText?: string;
-  itemName: string;
-  invoiceNumber: string;
-  amount: number;
-  pixCode: string;
-  paymentLink?: string | null;
-  trackId: string;
-  replyId?: string;
-  mentions?: string;
-}) {
-  return callUazapi(input.credentials, "/send/request-payment", {
-    method: "POST",
-    token: input.token,
-    timeoutMs: outboundTextDeliveryTimeoutMs,
-    body: {
-      number: input.phone,
-      title: normalizeOutboundLanguageText(input.title),
-      text: normalizeOutboundLanguageText(input.text),
-      footer: input.footerText ?? "ConnectyHub",
-      itemName: normalizeOutboundLanguageText(input.itemName),
-      invoiceNumber: input.invoiceNumber,
-      amount: Number(input.amount.toFixed(2)),
-      pixCode: input.pixCode,
-      ...(input.paymentLink ? { paymentLink: input.paymentLink } : {}),
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),

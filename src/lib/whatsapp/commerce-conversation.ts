@@ -8,7 +8,11 @@ export function requiresCommerceConversationReply(text: string) {
   // Questions, objections and requests for a person take precedence over checkout shortcuts.
   if (/\b(?:humano|atendente|pessoa do time|falar com alguem|duvida|explica|explicar|explique|entender|saber|me conta|me diga|me diz|antes disso|antes de pagar|calma|espera|aguarda)\b/.test(normalized)) return true;
   if (/\b(?:como|quando|quanto|quantos|quantas|qual|quais|porque|por que|onde|serve|funciona|contem|tem desconto|tem garantia|tem acucar|tem lactose|tem gluten|tem efeito|tem risco|posso usar|posso tomar|posso consumir|e seguro)\b/.test(normalized)) return true;
-  if (/\b(?:nao quero|nao vou|nao pode|nao gera|nao gere|nao manda|nao envie|nao fecha|nao feche|cancela|cancelar|desisti|desistir|pare|parar)\b/.test(normalized)) return true;
+  // Keep sentence boundaries: "não consigo não. Manda o Pix" is not "não manda".
+  // Commas still belong to a command ("não, manda o Pix" remains ambiguous).
+  const sentences = text.split(/[.!?;]+/).map(sentence => sentence.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim());
+  if (sentences.some(sentence => /\b(?:nao quero|nao vou|nao pode|nao gera|nao gere|nao manda|nao mande|nao envia|nao envie|nao fecha|nao feche|cancela|cancelar|desisti|desistir|pare|parar)\b/.test(sentence))) return true;
 
   // Method changes preserve the cart; changes to products, quantities or delivery need a new preview.
   const withoutMethodSwitch = normalized.replace(/\b(?:troca|trocar|muda|mudar|altera|alterar)\s+(?:(?:a forma|o metodo)\s+de\s+pagamento\s+)?(?:(?:de|o|do)\s+)?(?:pix|cartao|credito|debito)?\s*(?:para|por|pra|pro|no|em)\s+(?:o\s+)?(?:pix|cartao|credito|debito)\b/g, "");
