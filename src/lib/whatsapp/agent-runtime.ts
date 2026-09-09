@@ -2805,6 +2805,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   selections: Array<{ item: RuntimeSalesCatalogItem; quantity?: number; mentionText?: string | null }>;
   intentText: string;
+  previewSavedAddress?: boolean;
 }) {
   const physicalSelections = input.selections.filter(selection => selection.item.fulfillment.mode === "physical");
   const firstPhysicalItem = physicalSelections[0]?.item;
@@ -2848,6 +2849,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
     context: input.context,
     physicalItem,
     intentText: input.intentText,
+    previewSavedAddress: input.previewSavedAddress,
   });
 
   if (savedDeliveryShipping) {
@@ -2971,9 +2973,10 @@ function resolveSavedSalesCatalogOrderShipping(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   physicalItem: RuntimeSalesCatalogItem;
   intentText: string;
+  previewSavedAddress?: boolean;
 }) {
   if (
-    !resolveRuntimeSavedDeliveryConsent(input.context)
+    !input.previewSavedAddress && !resolveRuntimeSavedDeliveryConsent(input.context)
   ) {
     return null;
   }
@@ -7885,9 +7888,13 @@ async function sendAgentResponse(input: {
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
+  await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
   const hasPendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
   const hasConfirmedCartOfferIntent = hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
+  const recoveryRequested = !hasConfirmedCheckoutIntent && hasRuntimeCheckoutRecoveryIntent(context, orderIntentText)
+    && selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText).length === 0;
+  const recoverySelections = recoveryRequested ? resolveRuntimeRecoverableCheckoutDraft(context) : [];
   const hasOrderIntent = !requiresCommerceConversationReply(orderIntentText) && (hasSalesCatalogOrderIntent(orderIntentText)
     || hasConfirmedCheckoutIntent
     || hasPendingDeliveryDetailsIntent
@@ -7967,7 +7974,14 @@ async function sendAgentResponse(input: {
     ? "Antes de gerar o pagamento, preciso confirmar os produtos desse resumo. Me confirma o nome e a versão de cada item que você escolheu?"
     : null;
   const unexecutedClaimPrompt = guardUnexecutedCheckoutClaim(cleanText, context);
-  const rawDeliveryText = unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? (
+  const recoveryPrompt = recoveryRequested
+    ? recoverySelections.length > 0
+      ? buildSalesCatalogOrderConfirmationPrompt({
+          context, latestInbound, selections: recoverySelections, intentText: orderIntentText, recoverSavedAddress: true,
+        })
+      : "O pagamento ainda não foi enviado. Preciso conferir qual pedido você quer retomar: me confirma os produtos e as quantidades?"
+    : null;
+  const rawDeliveryText = recoveryPrompt ?? unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? (
     shouldRequestCheckoutConfirmation
       ? buildSalesCatalogOrderConfirmationPrompt({
           context,
@@ -7981,20 +7995,24 @@ async function sendAgentResponse(input: {
           hasOrderIntent,
         })
   );
+  if (recoveryRequested ? recoverySelections.length > 0 : shouldRequestCheckoutConfirmation || shouldWaitForDeliveryDetails) {
+    await persistRuntimeCheckoutDraft(input.client, context, recoverySelections.length > 0 ? recoverySelections : checkoutOrderSelections);
+  }
   const deliveryText = normalizeTemporalGreetingInOutboundText(
     suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems),
     context.behavior,
   );
-  const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation
+  const shouldOfferProductPageLinks = !recoveryRequested && !shouldRequestCheckoutConfirmation
     && !shouldWaitForDeliveryDetails
     && !shouldWaitForPaymentMethodChoice
     && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
   const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
+    && !recoveryRequested
     && !shouldRequestCheckoutConfirmation
     && !shouldWaitForDeliveryDetails
     ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
-  const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;
+  const hasCatalogAction = recoveryRequested || hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, deliveryText, hasCatalogAction);
   const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && !hasCatalogAction
     ? splitChunksAroundLinkLines(chunks, context)
@@ -9332,6 +9350,7 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
   latestInbound: ConversationMessageRow | null;
   selections: RuntimeSalesCatalogOrderSelection[];
   intentText: string;
+  recoverSavedAddress?: boolean;
 }) {
   const selections = input.selections;
   const previewItems = selections.map((selection) => buildSalesCatalogOrderPreviewItem(selection));
@@ -9344,6 +9363,7 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     context: input.context,
     selections,
     intentText: shippingIntentText,
+    previewSavedAddress: input.recoverSavedAddress,
   });
   const shippingLine = buildSalesCatalogOrderConfirmationShippingLine(shipping);
   const shouldHoldFinalTotal = hasPhysicalSalesCatalogSelection(selections)
@@ -9361,7 +9381,12 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     shippingLine,
     shouldHoldFinalTotal ? "Ainda preciso calcular a entrega antes do total final." : "",
     totalLine,
-    "Posso fechar seu pedido e gerar o pagamento?",
+    input.recoverSavedAddress && shipping?.destinationAddress ? `Endereço salvo: ${shipping.destinationAddress}.` : "",
+    input.recoverSavedAddress && shouldHoldFinalTotal
+      ? "Me confirma o endereço de entrega e o CEP para calcular o frete e conferir o total?"
+      : input.recoverSavedAddress && shipping?.destinationAddress
+        ? "Posso usar esse mesmo endereço, fechar seu pedido e gerar o pagamento?"
+        : "Posso fechar seu pedido e gerar o pagamento?",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -10482,11 +10507,107 @@ function shouldSendSalesCatalogProductPageLinks(latestInbound: ConversationMessa
   ].some((pattern) => pattern.test(normalized));
 }
 
+// A draft is memory of the cart, never evidence of consent or a generated payment.
+const runtimeCheckoutDraftLifetimeMs = 7 * 24 * 60 * 60 * 1000;
+
+function isRuntimeMissingPaymentRequest(text: string) {
+  return /^(?:(?:mas|e|entao|o|ainda)\s+)*(?:(?:cade|kd)(?:\s+(?:o|a|esse|este|meu))?(?:\s+(?:pix|botao|codigo|link|pagamento))?|nao\s+(?:recebi|chegou|apareceu)(?:\s+(?:o|a))?(?:\s+(?:pix|botao|codigo|link|pagamento))?)$/.test(normalizeSearch(text).replace(/[?!.]+/g, "").trim());
+}
+
+function hasRuntimeCheckoutRecoveryIntent(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, text: string) {
+  const latestInbound = findLatestInbound(context.messages);
+  const lastBlock = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0]?.text ?? "";
+  const normalizedBlock = normalizeSearch(lastBlock);
+  const recoveryPrompt = /\b(?:vamos|quer|posso)\b.{0,40}\bretomar\b.{0,60}\b(?:pedido|pagamento)\b/.test(normalizedBlock);
+  const paymentContext = recoveryPrompt || /\b(?:pix|pagamento|checkout)\b/.test(normalizedBlock);
+  if (isRuntimeMissingPaymentRequest(text)) return paymentContext;
+  if (requiresCommerceConversationReply(text)) return false;
+  return ((recoveryPrompt || guardUnexecutedCheckoutClaim(lastBlock, context)) && hasSalesCatalogCheckoutConfirmationIntent(text))
+    || /\b(?:manda|mandar|envia|enviar|envie|reenvia|reenviar|gera|gerar|retomar)\b.{0,50}\b(?:pix|codigo|pagamento|checkout|link|pedido)\b/.test(normalizeSearch(text));
+}
+
+function resolveRuntimeRecoverableCheckoutDraft(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, ignoreOrderBoundary = false): RuntimeSalesCatalogOrderSelection[] {
+  const latestInbound = findLatestInbound(context.messages);
+  if (!latestInbound) return [];
+  const now = Date.parse(latestInbound.occurred_at);
+  const draft = readRecord(readRecord(context.lead?.metadata)?.checkout_cart_draft);
+  const storedAt = Date.parse(typeof draft?.updated_at === "string" ? draft.updated_at : "");
+  const block = buildRecentOutboundMessageBlocks(context.messages, latestInbound, runtimeCheckoutDraftLifetimeMs)
+    .find(candidate => isSalesCatalogCheckoutConfirmationPreviewText(candidate.text)
+      || isSalesCatalogCartDraftPreviewText(candidate.text) || isSalesCatalogDeliveryDetailsPromptText(candidate.text));
+  const blockAt = Date.parse(block?.firstMessage.occurred_at ?? "");
+  const storedMatches = draft?.conversation_id === context.conversationId && draft?.instance_id === context.instance.id
+    && draft?.organization_id === context.organization.id && storedAt < now && now - storedAt <= runtimeCheckoutDraftLifetimeMs;
+  const useStored = storedMatches && (!Number.isFinite(blockAt) || storedAt >= blockAt);
+  const sourceAt = useStored ? storedAt : blockAt;
+  if (!Number.isFinite(sourceAt) || sourceAt >= now || now - sourceAt > runtimeCheckoutDraftLifetimeMs) return [];
+  // A later order or changed/cancelled cart supersedes this draft, even if it is still in the model's history.
+  if (!ignoreOrderBoundary && context.salesCatalogOrders.some(order => Date.parse(order.createdAt ?? "") >= sourceAt)) return [];
+  if (context.messages.some(message => message.direction === "inbound" && Date.parse(message.occurred_at) > sourceAt
+    && isRuntimeCheckoutDraftChange(message.text_content ?? "", context))) return [];
+  if (!useStored) {
+    const selections = block ? selectSalesCatalogOrderSelectionsFromText(context.salesCatalog, block.text, "confirmation_preview") : [];
+    return selections.every(isRuntimeCheckoutOrderSelection) ? selections : [];
+  }
+  if (!Array.isArray(draft?.items) || draft.items.length === 0 || draft.items.length > salesCatalogCheckoutItemLimit) return [];
+  const selections: RuntimeSalesCatalogOrderSelection[] = [];
+  for (const entry of draft.items) {
+    const row = readRecord(entry);
+    const item = context.salesCatalog.find(candidate => candidate.id === row?.id);
+    if (!item || typeof row?.quantity !== "number" || !Number.isInteger(row.quantity) || row.quantity < 1) return [];
+    const selection: RuntimeSalesCatalogOrderSelection = { item, quantity: row.quantity, source: "cart_draft",
+      mentionText: typeof row.mention_text === "string" ? row.mention_text : null, quantitySignal: null, fractionalQuantity: null };
+    if (!isRuntimeCheckoutOrderSelection(selection) || !isSalesCatalogItemSellable(item)) return [];
+    selections.push(selection);
+  }
+  return selections;
+}
+
+function isRuntimeCheckoutDraftChange(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const normalized = normalizeSearch(text);
+  if (/\b(?:cancela|cancelar|desisti|desistir|nao quero|nao vou comprar|novo pedido|outro pedido|troca|trocar|muda|mudar|altera|alterar|corrige|corrigir|remove|remover|tira|tirar|adiciona|adicionar|inclui|incluir|acrescenta|acrescentar|mais um|mais uma)\b/.test(normalized)) {
+    return !detectSalesCatalogPreferredPaymentMethod(text) || requiresCommerceConversationReply(text);
+  }
+  return selectSalesCatalogItemsFromText(context.salesCatalog, text).length > 0 && /\b(?:quero|compra|comprar|leva|levar|pedido)\b/.test(normalized);
+}
+
+async function persistRuntimeCheckoutDraft(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, selections: RuntimeSalesCatalogOrderSelection[]) {
+  const latestInbound = findLatestInbound(context.messages);
+  if (!context.lead?.id || !latestInbound || selections.length === 0) return;
+  const draft = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
+    updated_at: latestInbound.occurred_at, items: selections.map(selection => ({ id: selection.item.id,
+      quantity: selection.quantity, mention_text: selection.mentionText })) };
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => {
+      const current = readRecord(metadata.checkout_cart_draft);
+      const currentAt = Date.parse(typeof current?.updated_at === "string" ? current.updated_at : "");
+      return { metadata: currentAt > Date.parse(draft.updated_at) ? metadata : { ...metadata, checkout_cart_draft: draft } };
+    },
+  });
+  context.lead.metadata = saved.metadata;
+}
+
+async function invalidateRuntimeCheckoutDraft(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, text: string) {
+  if (!context.lead?.id || !readRecord(context.lead.metadata)?.checkout_cart_draft || !isRuntimeCheckoutDraftChange(text, context)) return;
+  const latestAt = Date.parse(findLatestInbound(context.messages)?.occurred_at ?? "");
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => {
+      const current = readRecord(metadata.checkout_cart_draft);
+      const currentAt = Date.parse(typeof current?.updated_at === "string" ? current.updated_at : "");
+      return { metadata: current?.conversation_id === context.conversationId && currentAt <= latestAt
+        ? { ...metadata, checkout_cart_draft: null } : metadata };
+    },
+  });
+  context.lead.metadata = saved.metadata;
+}
+
 function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
   if (!context.salesCatalog.some(item => item.salesDestination === "connectyhub_checkout")) return null;
   const normalized = normalizeSearch(text);
   const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
-    || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado)\b/.test(normalized);
+    || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado|disponivel|liberado)\b/.test(normalized)
+    || /\b(?:liberando|liberei|enviando|segue|aqui esta|ta aqui|ta na mao)\b.{0,80}\b(?:botao|pix|qr code|checkout)\b/.test(normalized)
+    || /\b(?:clicar|clique|clica|copiar|copie|escaneie)\b.{0,60}\b(?:botao|codigo|qr code|link)\b.{0,80}\b(?:abaixo|acima|pix|pagar|pagamento)\b/.test(normalized);
   const claimsNewOrder = /\bpedido\b.{0,30}\b(?:fechado|registrado|criado)\b.{0,20}\bsucesso\b/.test(normalized);
   if (!claimsPayment && !claimsNewOrder) return null;
   return "Ainda preciso concluir a etapa de pagamento no sistema. Não tenho confirmação de envio do Pix nesta tentativa. Vamos retomar o pedido para disponibilizar o pagamento?";
@@ -11002,12 +11123,21 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   latestInbound: ConversationMessageRow | null;
   userText: string;
 }): Promise<OutboundMessage | null> {
-  if (requiresCommerceConversationReply(input.userText)) return null;
+  if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
   const cartText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, input.latestInbound)
     || buildRecentSalesCatalogCartSelectionText(input.context, input.latestInbound);
-  const cartItems = selectSalesCatalogItemsForOrderText(input.context.salesCatalog, cartText);
+  const recoveredSelections = !cartText ? resolveRuntimeRecoverableCheckoutDraft(input.context, true) : [];
+  const cartItems = cartText ? selectSalesCatalogItemsForOrderText(input.context.salesCatalog, cartText)
+    : recoveredSelections.map(selection => selection.item);
   const cartSelections = cartText ? resolveSalesCatalogOrderSelections({ context: input.context, currentItems: [],
-    responseText: "", intentText: input.userText }) : [];
+    responseText: "", intentText: input.userText }) : recoveredSelections;
+  const draft = readRecord(readRecord(input.context.lead?.metadata)?.checkout_cart_draft);
+  const recoveryBlock = buildRecentOutboundMessageBlocks(input.context.messages, input.latestInbound, runtimeCheckoutDraftLifetimeMs)
+    .find(block => isSalesCatalogCheckoutConfirmationPreviewText(block.text) || isSalesCatalogCartDraftPreviewText(block.text));
+  const hasRecoveryCart = Boolean(recoveryBlock || (draft?.conversation_id === input.context.conversationId
+    && draft?.instance_id === input.context.instance.id && draft?.organization_id === input.context.organization.id));
+  // An unresolved cart must not fall through to an unrelated historical charge.
+  if ((cartText || hasRecoveryCart) && cartSelections.length === 0) return null;
   const orders = cartItems.length ? input.context.salesCatalogOrders.filter(order =>
     order.items.length === cartItems.length && cartItems.every(item => order.items.some(line => line.catalogItemId === item.id))
     && cartSelections.every(selection => order.items.some(line => line.catalogItemId === selection.item.id && line.quantity === selection.quantity)))
@@ -11345,7 +11475,7 @@ function isSalesCatalogPaymentLinkFollowUp(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
-  if (requiresCommerceConversationReply(userText)) return false;
+  if (requiresCommerceConversationReply(userText) && !isRuntimeMissingPaymentRequest(userText)) return false;
   const rawText = userText.trim();
   const normalized = normalizeSearch(rawText);
 
@@ -11432,6 +11562,8 @@ function hasRecentSalesCatalogCheckoutPromise(
     }
 
     const normalized = normalizeSearch(message.text_content);
+    if (/\b(?:botao|qr code)\b.{0,100}\b(?:pix|pagamento|pagar)\b/.test(normalized)
+      || /\b(?:pix|pagamento)\b.{0,100}\b(?:botao|qr code)\b/.test(normalized)) return true;
     const promisedCheckout = normalized.includes("checkout")
       || normalized.includes("link de pagamento")
       || normalized.includes("finalizar pedido")

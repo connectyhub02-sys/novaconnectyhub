@@ -527,11 +527,11 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function recordSalesCatalogOrderIntent",
     );
 
-    expect(delivery).toContain("const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation");
+    expect(delivery).toContain("const shouldOfferProductPageLinks = !recoveryRequested && !shouldRequestCheckoutConfirmation");
     expect(delivery).toContain("&& !shouldWaitForPaymentMethodChoice");
     expect(delivery).toContain("&& shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
     expect(delivery).toContain("!hasOrderIntent && shouldOfferProductPageLinks");
-    expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
+    expect(delivery).toContain("const hasCatalogAction = recoveryRequested || hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
     expect(renderer).toContain("if (input.text.trim()) return input.text;");
     expect(renderer).not.toContain("ensureSalesCatalogConsultativeContinuation(input.text, items)");
     expect(renderer).toContain("suppressDuplicateSalesCatalogCustomerMentions");
