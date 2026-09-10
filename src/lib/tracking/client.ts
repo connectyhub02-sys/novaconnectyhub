@@ -1,6 +1,6 @@
 const visitorCookieName = "connecty_visitor_id";
 const sessionCookieName = "connecty_session_id";
-const consentCookieName = "connecty_tracking_consent";
+const consentCookieName = "connecty_tracking_explicit_consent";
 const disabledCookieName = "connecty_tracking_disabled";
 const firstTouchCookieName = "connecty_first_touch";
 const lastTouchCookieName = "connecty_last_touch";
@@ -95,7 +95,6 @@ export function getVisitorId() {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
   setCookie(visitorCookieName, generated);
-  setCookie(consentCookieName, "true");
 
   return generated;
 }

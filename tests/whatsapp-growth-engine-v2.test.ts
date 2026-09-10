@@ -72,7 +72,9 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).not.toContain("Agente executor");
     expect(studioSource).toContain("Ativar responder grupos");
     expect(studioSource).toContain("set_automation_capability");
-    expect(studioSource).toContain("Desativar");
+    expect(studioSource).toContain("Permissões e pausas");
+    expect(studioSource).toContain('role="switch"');
+    expect(studioSource).toContain("Pausado");
     expect(studioSource).toContain("Resumo da rotina");
     expect(studioSource).toContain("Envio real");
     expect(studioSource).toContain("Misto revisavel");

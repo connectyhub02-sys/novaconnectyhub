@@ -775,7 +775,27 @@ export const connectyhubWhatsappContractGuard = inngest.createFunction(
   async ({ step }) => step.run("pause-suspended-provider-campaigns", () => pauseSuspendedWhatsappCampaigns(createServiceClient())),
 );
 
+export const connectyhubIntelligentAutomationSweep = inngest.createFunction(
+  { id: "connectyhub-intelligent-automation-sweep", name: "ConnectyHub Intelligent Automation Dispatch", retries: 1, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
+  async ({ step }) => step.run("dispatch-due-follow-ups", async () => {
+    const { sweepFollowUpDispatches } = await import("@/lib/automations/dispatch");
+    return sweepFollowUpDispatches(createServiceClient());
+  }),
+);
+
+export const connectyhubCustomerAgendaSweep = inngest.createFunction(
+  { id: "connectyhub-customer-agenda", name: "ConnectyHub Agenda Notifications", retries: 1, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
+  async ({ step }) => {
+    await step.run("prepare-agenda-notices", async () => { const { prepareAgendaNotifications } = await import("@/lib/automations/agenda-notifications"); return prepareAgendaNotifications(createServiceClient()); });
+    return step.run("queue-agenda-notices", async () => { const { queueAgendaNotifications } = await import("@/lib/automations/agenda-notifications"); return queueAgendaNotifications(createServiceClient()); });
+  },
+);
+
 export const functions = [
+  inngest.createFunction({id:"connectyhub-agenda-notice",name:"ConnectyHub Agenda Notice",retries:1,concurrency:{limit:1,key:"event.data.organizationId"},triggers:[{event:"connectyhub/agenda.notice"}]},async({event,step})=>step.run("deliver-agenda-notice",async()=>{const {dispatchAgendaNotifications}=await import("@/lib/automations/agenda-notifications");return dispatchAgendaNotifications(createServiceClient(),event.data.noticeId);})),
+  inngest.createFunction({id:"connectyhub-lead-relationships",name:"ConnectyHub Lead Relationships",retries:1,concurrency:{limit:1},triggers:[{cron:"*/10 * * * *"}]},async({step})=>step.run("plan-relationships",async()=>{const {planLeadRelationships}=await import("@/lib/automations/relationship-profile");return planLeadRelationships(createServiceClient());})),
+  connectyhubIntelligentAutomationSweep,
+  connectyhubCustomerAgendaSweep,
   inngest.createFunction({id:"connectyhub-store-subscription-renewals",name:"Renovações das assinaturas das lojas",retries:2,concurrency:{limit:1},triggers:[{cron:"*/5 * * * *"}]},async({step})=>step.run("prepare-store-renewals",()=>processStoreRenewals(createServiceClient()))),
   connectyhubWhatsappContractGuard,
   connectyhubLeadMediaArchive,

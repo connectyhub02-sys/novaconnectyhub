@@ -125,6 +125,14 @@ export async function GET(request: NextRequest) {
     const client = createServiceClient();
     const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id, context.selectedAgentId);
 
+    if (whatsapp.instance.status === "connected") {
+      const discovery = await client.rpc("claim_automation_destination_discovery", { p_org: context.organization.id, p_instance: whatsapp.instance.id });
+      if (discovery.data === true) {
+        const results = await Promise.allSettled([fetchWhatsappGroups(whatsapp), fetchWhatsappNewsletters(whatsapp)]);
+        for (const result of results) if (result.status === "rejected") console.error("WhatsApp destination discovery failed", result.reason instanceof Error ? result.reason.message : "provider_unavailable");
+      }
+    }
+
     return NextResponse.json({
       operations: await getWhatsappOperationsDashboard(client, whatsapp),
     });

@@ -2164,7 +2164,9 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
+              {variant.entityIdKey === "companyId" ? (
+                <div className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-600">Retomadas de conversa e recuperação de compras ficam em <a href="/dashboard/automacoes" className="font-semibold text-blue-700 underline">Automações → Follow-up inteligente</a>.</div>
+              ) : <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={Forward} label="Follow-up automatico" description="Envia mensagem de retomada quando o lead silencia apos engajamento." checked={behaviorDraft.proactiveFollowUp} onChange={() => updateBehavior("proactiveFollowUp", !behaviorDraft.proactiveFollowUp)} />
                   <NumberField label="Delay (min)" description="Minutos de silencio do lead antes de enviar o follow-up." value={behaviorDraft.followUpDelayMinutes} min={30} max={1440} onChange={(value) => updateBehavior("followUpDelayMinutes", value)} />
@@ -2174,7 +2176,7 @@ export function WhatsAppConsole({
                   <TextField label="Janela inicio" description="Horario minimo para enviar follow-up (ex: 09:00)." value={behaviorDraft.followUpTimeWindowStart} onChange={(value) => updateBehavior("followUpTimeWindowStart", value)} />
                   <TextField label="Janela fim" description="Horario maximo para enviar follow-up (ex: 20:00)." value={behaviorDraft.followUpTimeWindowEnd} onChange={(value) => updateBehavior("followUpTimeWindowEnd", value)} />
                 </div>
-              </BehaviorSection>
+              </BehaviorSection>}
 
               <BehaviorSection title="Audio e midia com IA" description="Define quais tipos de midia a IA pode interpretar antes de responder o lead.">
                 <div className="grid gap-2 md:grid-cols-3">

@@ -1,6 +1,11 @@
 import "server-only";
+import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { getContractAccess } from "@/lib/billing/contract-access";
-import { getLeadPaymentReviews } from "@/lib/sales-catalog/payment-reviews";
+import { getLeadPaymentReviews, refreshLeadOrderFinance } from "@/lib/sales-catalog/payment-reviews";
+import { loadAutomationPolicy, persistFollowUpDispatch, updateDispatch } from "@/lib/automations/dispatch";
+import { isContactWindow, nextContactWindow } from "@/lib/automations/contact-window";
+import { relationshipContext } from "@/lib/automations/relationship-context";
+import { checkContactPreferences } from "@/lib/automations/contact-preferences";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -19,6 +24,7 @@ type JsonRecord = Record<string, unknown>;
 
 type WhatsappInstanceRow = {
   id: string;
+  status: string;
   organization_id: string;
   phone_number: string | null;
   display_name: string | null;
@@ -63,6 +69,13 @@ type FollowUpGenerationResult = {
 export const whatsappFollowUpEventName = "connectyhub/whatsapp.followup.scheduled";
 
 export type WhatsappFollowUpEventData = {
+  dispatchId?: string;
+  claimToken?: string;
+  returnId?: string;
+  initialReturn?: boolean;
+  recommendationProductId?: string;
+  recommendationPeriod?: string;
+  referenceMessageId?: string;
   organizationId: string;
   whatsappInstanceId: string;
   conversationId: string;
@@ -77,17 +90,43 @@ export async function enqueueWhatsappFollowUp(
   data: WhatsappFollowUpEventData,
   delayMinutes: number,
 ) {
-  const ts = Date.now() + delayMinutes * 60 * 1000;
+  const ts = Date.now() + Math.max(1, delayMinutes) * 60 * 1000;
+  const task = await persistFollowUpDispatch(createServiceClient(), data, new Date(ts));
+  if (task.status !== "pending") return;
   await inngest.send({
     name: whatsappFollowUpEventName,
-    data,
-    ts,
+    data: { ...data, dispatchId: task.id },
+    ts: new Date(task.scheduled_for).getTime(),
   });
 }
 
 export async function processWhatsappProactiveFollowUp(input: {
   data: WhatsappFollowUpEventData;
   client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  if (!(await getContractAccess(input.data.organizationId, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
+  const taskId = input.data.dispatchId ?? (await persistFollowUpDispatch(client, input.data, new Date())).id;
+  const claimed = await client.rpc("claim_automation_dispatch", { p_id: taskId });
+  if (claimed.error) throw new Error(claimed.error.message);
+  if (!claimed.data) return { status: "skipped", reason: "not_claimed" };
+  const data = { ...claimed.data.event_data, dispatchId: taskId, claimToken: claimed.data.claim_token } as WhatsappFollowUpEventData;
+  try {
+    const lifetime=claimed.data.journey==="recovery"?86400000:7*86400000;
+    if(Date.parse(claimed.data.created_at)<Date.now()-lifetime){await updateDispatch(client,taskId,{status:"skipped",reason:"opportunity_expired",lease_until:null},data.claimToken);return {status:"skipped",reason:"opportunity_expired"};}
+    const result = await executeWhatsappProactiveFollowUp({ client, data });
+    if (result.status === "skipped") await updateDispatch(client, taskId, { status: "skipped", reason: result.reason, lease_until: null }, data.claimToken);
+    return result;
+  } catch (error) {
+    // Sending remains unresolved if confirmation could not be persisted.
+    await client.from("automation_dispatches").update({ status: "failed", reason: error instanceof Error ? error.message.slice(0, 250) : "execution_failed", updated_at: new Date().toISOString() }).eq("id", taskId).eq("claim_token", data.claimToken).eq("status", "processing");
+    throw error;
+  }
+}
+
+async function executeWhatsappProactiveFollowUp(input: {
+  data: WhatsappFollowUpEventData;
+  client: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
   const { data: eventData } = input;
@@ -97,17 +136,43 @@ export async function processWhatsappProactiveFollowUp(input: {
 
   const instance = await loadInstance(client, eventData.whatsappInstanceId);
   if (!instance || instance.organization_id !== eventData.organizationId) return { status: "skipped", reason: "missing_instance" };
+  if (instance.status !== "connected") return { status: "skipped", reason: "whatsapp_disconnected" };
+  const assignedAgent = readRecord(instance.metadata)?.agent_id;
+  if (assignedAgent && assignedAgent !== eventData.agentId) return { status: "skipped", reason: "agent_assignment_changed" };
 
   const behavior = normalizeWhatsappBehaviorConfig(
     readRecord(instance.metadata)?.behavior_config,
   );
 
-  if (!behavior.proactiveFollowUp) {
+  const policy = await loadAutomationPolicy(client, eventData.organizationId);
+  if ((eventData.returnId || eventData.recommendationProductId) && !policy?.follow_up_enabled) return { status: "skipped", reason: "disabled" };
+  if (!behavior.agentEnabled || !(policy?.follow_up_enabled ?? behavior.proactiveFollowUp)) {
     return { status: "skipped", reason: "disabled" };
   }
 
-  if (!isWithinTimeWindow(behavior.followUpTimeWindowStart, behavior.followUpTimeWindowEnd, behavior.aiScheduleTimezone)) {
-    return { status: "skipped", reason: "outside_time_window" };
+  const start = policy?.window_start ?? behavior.followUpTimeWindowStart;
+  const end = policy?.window_end ?? behavior.followUpTimeWindowEnd;
+  const timezone = policy?.timezone ?? behavior.aiScheduleTimezone;
+  const preference=await checkContactPreferences(client,eventData.organizationId,eventData.leadId,timezone,start,end);
+  if(preference.reason)return {status:"skipped",reason:preference.reason};
+  if(preference.deferUntil){await updateDispatch(client,eventData.dispatchId!,{status:"pending",scheduled_for:preference.deferUntil,reason:"preferred_contact_window",lease_until:null},eventData.claimToken);return {status:"deferred",reason:"preferred_contact_window"};}
+  if (!isContactWindow(new Date(), start, end, timezone)) {
+    await updateDispatch(client, eventData.dispatchId!, { status: "pending", reason: "next_contact_window", scheduled_for: nextContactWindow(new Date(), start, end, timezone).toISOString(), lease_until: null }, eventData.claimToken);
+    return { status: "deferred", reason: "outside_time_window" };
+  }
+
+  const conversation = await client.from("conversations").select("id,status,metadata").eq("id", eventData.conversationId).eq("organization_id", eventData.organizationId).eq("lead_id", eventData.leadId).eq("whatsapp_instance_id", eventData.whatsappInstanceId).maybeSingle();
+  if (conversation.error) throw new Error(conversation.error.message);
+  if (!conversation.data || ["closed", "resolved", "archived", "human_handoff"].includes(conversation.data.status)) return { status: "skipped", reason: "conversation_unavailable" };
+  const pause = readRecord(readRecord(conversation.data.metadata)?.human_intervention);
+  if (typeof pause?.paused_until === "string" && new Date(pause.paused_until).getTime() > Date.now()) return { status: "skipped", reason: "human_intervention" };
+  const lead = await loadLead(client, eventData.leadId, eventData.organizationId);
+  const phone = lead?.phone_number;
+  if (!phone) return { status: "skipped", reason: "missing_phone" };
+  if (lead.status === "archived" || readRecord(lead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(lead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
+  if(eventData.salesCatalogFollowUpKind==="abandoned_order"){
+    const checkout=readRecord(readRecord(lead.metadata)?.checkout_runtime_state);
+    if(checkout?.stage!=="payment_sent" || checkout.order_id!==eventData.salesCatalogOrderId)return {status:"skipped",reason:"payment_delivery_not_confirmed"};
   }
 
   const billable = await assertBillableAccess({ organizationId: eventData.organizationId, client })
@@ -123,7 +188,10 @@ export async function processWhatsappProactiveFollowUp(input: {
 
   const messages = await loadRecentMessages(client, eventData.conversationId, eventData.whatsappInstanceId);
 
-  const referenceIndex = findFollowUpReferenceIndex(messages, eventData.agentRunId);
+  const referenceIndex = eventData.referenceMessageId ? messages.findIndex(message => message.id === eventData.referenceMessageId) : findFollowUpReferenceIndex(messages, eventData.agentRunId);
+  const initialReturn=Boolean(eventData.returnId&&eventData.initialReturn&&messages.length===0);
+  if (referenceIndex < 0 && !initialReturn) return { status: "skipped", reason: "reference_not_found" };
+  if (messages.slice(referenceIndex+1).some(message => message.direction === "outbound" && readRecord(message.payload)?.delivery_source !== "proactive_follow_up" && readRecord(message.payload)?.agent_run_id !== eventData.agentRunId)) return { status: "skipped", reason: "conversation_handled_after_reference" };
   const latestMessage = messages[messages.length - 1];
   if (referenceIndex >= 0 && messages.slice(referenceIndex + 1).some((message) => message.direction === "inbound")) {
     return { status: "skipped", reason: "lead_replied_after_reference" };
@@ -132,7 +200,9 @@ export async function processWhatsappProactiveFollowUp(input: {
     return { status: "skipped", reason: "lead_already_replied" };
   }
 
-  const followUpCount = messages.filter(
+  let lastInboundIndex = -1;
+  for (let index=messages.length-1;index>=0;index--) if (messages[index].direction === "inbound") { lastInboundIndex=index;break; }
+  const followUpCount = messages.slice(lastInboundIndex+1).filter(
     (m) => m.direction === "outbound" && readRecord(m.payload)?.delivery_source === "proactive_follow_up",
   ).length;
   if (followUpCount >= behavior.followUpMaxPerConversation) {
@@ -144,6 +214,11 @@ export async function processWhatsappProactiveFollowUp(input: {
   const agent = await loadAgent(client, eventData.agentId, eventData.organizationId);
   if (!agent) return { status: "skipped", reason: "missing_agent" };
 
+  if (eventData.salesCatalogOrderId) {
+    const finance = await refreshLeadOrderFinance(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId);
+    if (finance.unavailable) return { status: "skipped", reason: "payment_verification_unavailable" };
+  }
+
   const salesCatalogOrder = eventData.salesCatalogOrderId
     ? await loadSalesCatalogFollowUpOrder(client, eventData.salesCatalogOrderId, eventData.organizationId)
     : null;
@@ -152,6 +227,21 @@ export async function processWhatsappProactiveFollowUp(input: {
     : null;
   if (salesCatalogSkipReason) {
     return { status: "skipped", reason: salesCatalogSkipReason };
+  }
+  if (eventData.salesCatalogOrderId && !salesCatalogOrder) return { status: "skipped", reason: "order_missing" };
+
+  const relationship = await relationshipContext(client, eventData, timezone);
+  if (relationship.reason) return { status: "skipped", reason: relationship.reason };
+  if (relationship.deferUntil) {
+    await updateDispatch(client,eventData.dispatchId!,{status:"pending",scheduled_for:relationship.deferUntil,reason:"observed_contact_window",lease_until:null},eventData.claimToken);
+    return {status:"deferred",reason:"observed_contact_window"};
+  }
+  // An order recovery owns payment conversations; a generic silence timer must not compete with it.
+  if (!eventData.salesCatalogOrderId && !eventData.returnId && !eventData.recommendationProductId) {
+    if(readRecord(readRecord(lead.metadata)?.checkout_runtime_state)?.agent_run_id===eventData.agentRunId)return {status:"skipped",reason:"purchase_has_own_journey"};
+    const orders=await client.from("sales_catalog_orders").select("id").eq("organization_id",eventData.organizationId).eq("lead_id",eventData.leadId).gte("created_at",messages[referenceIndex].occurred_at ?? new Date().toISOString()).limit(1);
+    if(orders.error)throw new Error(orders.error.message);
+    if(orders.data?.length)return {status:"skipped",reason:"purchase_has_own_journey"};
   }
 
   const conversationText = messages
@@ -166,6 +256,7 @@ export async function processWhatsappProactiveFollowUp(input: {
   const followUpGeneration = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
+    relationshipContext: relationship.context,
   });
   if (!followUpGeneration?.text) return { status: "skipped", reason: "empty_generation" };
   const normalizedFollowUpGeneration = {
@@ -189,7 +280,7 @@ export async function processWhatsappProactiveFollowUp(input: {
         promptText: followUpGeneration.prompt,
         outputText: normalizedFollowUpGeneration.text,
         responseData: normalizedFollowUpGeneration.responseData,
-        requestId: `whatsapp-followup:${eventData.agentRunId}:gemini:follow_up_generation`,
+        requestId: `whatsapp-followup:${eventData.dispatchId}:gemini:follow_up_generation`,
         debitDescription: "Follow-up automatico WhatsApp",
         metadata: {
           source: "whatsapp_proactive_followup",
@@ -206,25 +297,61 @@ export async function processWhatsappProactiveFollowUp(input: {
       }))
     : null;
 
-  const lead = await loadLead(client, eventData.leadId);
-  const phone = lead?.phone_number;
-  if (!phone) return { status: "skipped", reason: "missing_phone" };
+  if (followUpText.includes("SEM_CONTATO")) return {status:"skipped",reason:"no_relevant_approach"};
+  const outgoingText=relationship.link ? `${followUpText.replace(/https?:\/\/\S+/g, "").trim()}\n\n${relationship.link}` : followUpText;
 
   if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
+  const latestMessages = await loadRecentMessages(client, eventData.conversationId, eventData.whatsappInstanceId);
+  if (latestMessages.at(-1)?.id !== messages.at(-1)?.id) return { status: "skipped", reason: "conversation_changed_during_generation" };
+  const latestPolicy = await loadAutomationPolicy(client, eventData.organizationId);
+  const latestInstance = await loadInstance(client, eventData.whatsappInstanceId);
+  const latestBehavior = normalizeWhatsappBehaviorConfig(readRecord(latestInstance?.metadata)?.behavior_config);
+  if (!latestInstance || latestInstance.status !== "connected" || !latestBehavior.agentEnabled || !(latestPolicy?.follow_up_enabled ?? latestBehavior.proactiveFollowUp)) return { status: "skipped", reason: "disabled_before_send" };
+  if (readRecord(latestInstance.metadata)?.agent_id !== eventData.agentId) return {status:"skipped",reason:"agent_assignment_changed"};
+  const currentStart=latestPolicy?.window_start??latestBehavior.followUpTimeWindowStart,currentEnd=latestPolicy?.window_end??latestBehavior.followUpTimeWindowEnd,currentTimezone=latestPolicy?.timezone??latestBehavior.aiScheduleTimezone;
+  if (!isContactWindow(new Date(),currentStart,currentEnd,currentTimezone)) {
+    await updateDispatch(client,eventData.dispatchId!,{status:"pending",scheduled_for:nextContactWindow(new Date(),currentStart,currentEnd,currentTimezone).toISOString(),reason:"next_contact_window",lease_until:null},eventData.claimToken);
+    return {status:"deferred",reason:"outside_time_window"};
+  }
+  const freshRelationship=await relationshipContext(client,eventData,currentTimezone);
+  const freshPreference=await checkContactPreferences(client,eventData.organizationId,eventData.leadId,currentTimezone,currentStart,currentEnd);
+  if(freshPreference.reason||freshPreference.deferUntil)return {status:"skipped",reason:freshPreference.reason??"contact_preference_changed"};
+  if(freshRelationship.reason || freshRelationship.deferUntil || freshRelationship.context!==relationship.context) return {status:"skipped",reason:freshRelationship.reason??"relationship_changed_before_send"};
+  if (eventData.salesCatalogOrderId) {
+    const currentOrder = await loadSalesCatalogFollowUpOrder(client, eventData.salesCatalogOrderId, eventData.organizationId);
+    if (!currentOrder || getSalesCatalogFollowUpSkipReason(currentOrder, eventData.salesCatalogFollowUpKind)) return { status: "skipped", reason: "order_changed_before_send" };
+  }
+  const currentReviews = await getLeadPaymentReviews(client, eventData.organizationId, eventData.leadId);
+  if (currentReviews.length) return { status: "skipped", reason: "financial_review_before_send" };
+  const latestConversation = await client.from("conversations").select("status,metadata").eq("organization_id", eventData.organizationId).eq("id", eventData.conversationId).single();
+  if (latestConversation.error) throw new Error(latestConversation.error.message);
+  const latestPause = readRecord(readRecord(latestConversation.data.metadata)?.human_intervention)?.paused_until;
+  if (latestConversation.data.status !== conversation.data.status || (typeof latestPause === "string" && Date.parse(latestPause) > Date.now())) return { status: "skipped", reason: "human_intervention" };
+  const latestLead = await loadLead(client, eventData.leadId, eventData.organizationId);
+  if (!latestLead || latestLead.status === "archived" || readRecord(latestLead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(latestLead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
+  await updateDispatch(client, eventData.dispatchId!, { status: "sending", send_started_at: new Date().toISOString(), lease_until: new Date(Date.now() + 120000).toISOString() }, eventData.claimToken);
   const providerResponse = await callUazapi(credentials, "/send/text", {
     method: "POST",
     token,
     body: {
       number: phone,
-      text: followUpText,
+      text: outgoingText,
       linkPreview: false,
       track_source: "connectyhub",
-      track_id: `proactive_followup_${eventData.conversationId}_${Date.now()}`,
+      track_id: `followup_${eventData.dispatchId}`,
     },
   });
 
+  if (!providerResponse.ok) {
+    const uncertain = providerResponse.status === 0 || providerResponse.status === 408 || providerResponse.status >= 500;
+    await updateDispatch(client, eventData.dispatchId!, { status: uncertain ? "uncertain" : "failed", reason: "provider_rejected_or_unconfirmed", provider_response: sanitize(providerResponse), lease_until: null }, eventData.claimToken);
+    return { status: uncertain ? "uncertain" : "failed", reason: "provider_rejected_or_unconfirmed" };
+  }
+
   const sentAt = new Date().toISOString();
-  await client.from("conversation_messages").insert({
+  await updateDispatch(client, eventData.dispatchId!, { status: "sent", sent_at: sentAt, provider_response: sanitize(providerResponse), lease_until: null }, eventData.claimToken);
+  if(eventData.returnId)await client.from("customer_lead_visits").update({return_status:"completed"}).eq("organization_id",eventData.organizationId).eq("id",eventData.returnId).in("return_status",["pending","scheduled"]);
+  const messageWrite = await client.from("conversation_messages").insert({
     conversation_id: eventData.conversationId,
     whatsapp_instance_id: eventData.whatsappInstanceId,
     organization_id: eventData.organizationId,
@@ -232,7 +359,7 @@ export async function processWhatsappProactiveFollowUp(input: {
     provider: "uazapi",
     direction: "outbound",
     message_type: "text",
-    text_content: followUpText,
+    text_content: outgoingText,
     occurred_at: sentAt,
     payload: {
       delivery_source: "proactive_follow_up",
@@ -256,6 +383,7 @@ export async function processWhatsappProactiveFollowUp(input: {
       provider_response: sanitize(providerResponse),
     },
   });
+  if (messageWrite.error) throw new Error("Envio aceito; falha ao registrar mensagem na conversa.");
 
   await client
     .from("conversations")
@@ -264,7 +392,7 @@ export async function processWhatsappProactiveFollowUp(input: {
       last_message_preview: preview(followUpText, 240),
       last_message_at: sentAt,
     })
-    .eq("id", eventData.conversationId);
+    .eq("id", eventData.conversationId).eq("organization_id",eventData.organizationId).lte("last_message_at", sentAt);
 
   await client
     .from("leads")
@@ -272,7 +400,7 @@ export async function processWhatsappProactiveFollowUp(input: {
       last_event_summary: preview(followUpText, 240),
       last_message_at: sentAt,
     })
-    .eq("id", lead.id);
+    .eq("id", lead.id).eq("organization_id",eventData.organizationId).lte("last_message_at", sentAt);
 
   await client.from("intelligence_events").insert({
     scope: "organization",
@@ -304,22 +432,6 @@ export async function processWhatsappProactiveFollowUp(input: {
   return { status: "sent", text: followUpText };
 }
 
-function isWithinTimeWindow(start: string, end: string, timezone: string) {
-  const tz = timezone || "America/Sao_Paulo";
-  let hour: number;
-  try {
-    hour = parseInt(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date()), 10);
-  } catch {
-    hour = new Date().getHours();
-  }
-  const [startH] = start.split(":").map(Number);
-  const [endH] = end.split(":").map(Number);
-  if (startH <= endH) {
-    return hour >= startH && hour < endH;
-  }
-  return hour >= startH || hour < endH;
-}
-
 async function generateFollowUpMessage(
   geminiCredentials: { apiKey: string; model: string },
   agent: { model_id: string | null; prompt: string | null; persona_name: string | null; name: string },
@@ -327,16 +439,20 @@ async function generateFollowUpMessage(
   options: {
     salesCatalogOrder?: SalesCatalogFollowUpOrder | null;
     salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
+    relationshipContext?: string;
   } = {},
 ): Promise<FollowUpGenerationResult | null> {
   const prompt = [
-    "Você é um vendedor brasileiro de WhatsApp. O lead parou de responder.",
+    "Continue o atendimento com a identidade e o estilo deste agente:",
+    agent.prompt ?? "Atenda com naturalidade, clareza e respeito.",
     "Gere UMA mensagem curta (1-2 frases) de follow-up natural e contextual.",
     "Nao seja generico ('oi, tudo bem?'). Retome algo especifico da conversa.",
-    "Exemplos de tom: 'e ai, pensou sobre aquilo?', 'achei uma novidade que combina com o que você estava procurando'.",
+    "Não invente novidades, descontos, clima, urgência, links ou códigos de pagamento. Não diga que enviou um botão ou reservou algo: esta mensagem não executa essas ações.",
+    "Se o lead recusou, pediu para parar ou não existe motivo comercial pertinente, responda somente SEM_CONTATO.",
     ...outboundLanguageQualityPromptLines,
     "Nao mencione que e follow-up, automacao, sistema ou IA.",
     ...buildSalesCatalogFollowUpPromptLines(options.salesCatalogOrder ?? null, options.salesCatalogFollowUpKind ?? null),
+    options.relationshipContext ?? "",
     "",
     `Agente: ${agent.persona_name ?? agent.name}`,
     "",
@@ -362,6 +478,7 @@ async function generateFollowUpMessage(
       },
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(45000),
   });
 
   if (!response.ok) return null;
@@ -384,14 +501,6 @@ function findFollowUpReferenceIndex(messages: ConversationMessageRow[], agentRun
     const message = messages[index];
     const payload = readRecord(message.payload);
     if (message.direction === "outbound" && payload?.agent_run_id === agentRunId) {
-      return index;
-    }
-  }
-
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    const payload = readRecord(message.payload);
-    if (message.direction === "outbound" && payload?.delivery_source !== "proactive_follow_up") {
       return index;
     }
   }
@@ -510,7 +619,7 @@ function decryptInstanceToken(instance: WhatsappInstanceRow): string | null {
 async function loadInstance(client: SupabaseClient, id: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, phone_number, display_name, instance_token_encrypted, metadata")
+    .select("id, organization_id, status, phone_number, display_name, instance_token_encrypted, metadata")
     .eq("id", id)
     .maybeSingle<WhatsappInstanceRow>();
   return data;
@@ -526,43 +635,27 @@ async function loadAgent(client: SupabaseClient, agentId: string, organizationId
   return data;
 }
 
-async function loadLead(client: SupabaseClient, leadId: string) {
+async function loadLead(client: SupabaseClient, leadId: string, organizationId: string) {
   const { data } = await client
     .from("leads")
-    .select("id, phone_number, display_name")
+    .select("id, phone_number, display_name, status, metadata")
     .eq("id", leadId)
-    .maybeSingle<{ id: string; phone_number: string | null; display_name: string | null }>();
+    .eq("organization_id", organizationId)
+    .maybeSingle<{ id: string; phone_number: string | null; display_name: string | null; status: string; metadata: JsonRecord | null }>();
   return data;
 }
 
 async function loadRecentMessages(client: SupabaseClient, conversationId: string, whatsappInstanceId: string) {
-  const { data } = await client
+  const { data, error } = await client
     .from("conversation_messages")
     .select("id, direction, text_content, occurred_at, payload")
     .eq("conversation_id", conversationId)
     .eq("whatsapp_instance_id", whatsappInstanceId)
-    .order("occurred_at", { ascending: true })
-    .limit(24);
-  return (data ?? []) as ConversationMessageRow[];
-}
-
-async function loadGeminiCredentials(client: SupabaseClient) {
-  const { data } = await client
-    .from("credential_vault")
-    .select("credential_key, credential_value_encrypted")
-    .in("credential_key", ["gemini_api_key", "gemini_model"])
-    .limit(2);
-
-  const entries = (data ?? []) as Array<{ credential_key: string; credential_value_encrypted: string }>;
-  const apiKeyRow = entries.find((r) => r.credential_key === "gemini_api_key");
-  const modelRow = entries.find((r) => r.credential_key === "gemini_model");
-
-  if (!apiKeyRow) return null;
-
-  return {
-    apiKey: decryptCredentialValue(apiKeyRow.credential_value_encrypted),
-    model: modelRow ? decryptCredentialValue(modelRow.credential_value_encrypted) : "gemini-2.0-flash",
-  };
+    .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(80);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ConversationMessageRow[]).reverse();
 }
 
 async function callUazapi(
@@ -570,6 +663,7 @@ async function callUazapi(
   path: string,
   options: { method: "POST"; body: unknown; token: string },
 ) {
+  try {
   const response = await fetch(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
@@ -579,8 +673,14 @@ async function callUazapi(
     },
     body: JSON.stringify(options.body),
     cache: "no-store",
+    signal: AbortSignal.timeout(30000),
   });
-  return readProviderResponse(response);
+  const data = await readProviderResponse(response);
+  const record = readRecord(data);
+  return { ok: response.ok && record !== null && record.error == null && record.success !== false, status: response.status, data };
+  } catch {
+    return { ok: false, status: 0, data: null };
+  }
 }
 
 async function readProviderResponse(response: Response) {

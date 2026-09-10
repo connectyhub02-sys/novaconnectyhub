@@ -1,10 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import type { LucideIcon } from "lucide-react";
 import {
-  Bot,
-  MessageSquareText,
   Save,
   Smartphone,
   ToggleLeft,
@@ -23,6 +20,8 @@ import {
   type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
+import { IntelligentFollowUpPanel } from "./intelligent-follow-up-panel";
+import { CustomerAgendaPanel } from "./customer-agenda-panel";
 
 type Notice = {
   tone: "success" | "error";
@@ -79,14 +78,13 @@ export function ClientAutomationsCenter({
   const companyProducts = _products.filter((product) => product.companyId === selectedCompanyId && product.status === "active");
   const companyWhatsappInstances = whatsappInstances.filter((instance) => instance.companyId === selectedCompanyId);
   const selectedWhatsapp = companyWhatsappInstances.find((instance) => instance.id === draft.automationSettings.defaultWhatsappInstanceId) ?? null;
-  const activeAutomations = [
-    draft.automationSettings.paymentStatusNotifications,
-    Boolean(draft.automationSettings.defaultWhatsappInstanceId),
-  ].filter(Boolean).length;
+  const [companyDrafts, setCompanyDrafts] = useState<Record<string, AutomationsDraft>>({});
+  const selectedAgent = agents.find((agent) => agent.id === selectedWhatsapp?.agentId);
 
   function selectCompany(companyId: string) {
+    setCompanyDrafts((current) => ({ ...current, [selectedCompanyId]: draft }));
     setSelectedCompanyId(companyId);
-    setDraft(buildDraft(findSettings(settings, companyId)));
+    setDraft(companyDrafts[companyId] ?? buildDraft(findSettings(settings, companyId)));
     setNotice(null);
   }
 
@@ -148,6 +146,7 @@ export function ClientAutomationsCenter({
 
       setSettings((current) => [data.settings!, ...current.filter((item) => item.companyId !== data.settings!.companyId)]);
       setDraft(buildDraft(data.settings));
+      setCompanyDrafts((current) => ({ ...current, [data.settings!.companyId]: buildDraft(data.settings!) }));
       setNotice({ tone: "success", message: "Automacoes salvas." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar automacoes." });
@@ -184,7 +183,7 @@ export function ClientAutomationsCenter({
       <PageHeader
         eyebrow="Workspace / automacoes"
         title="Automacoes"
-        description="Configure mensagens automaticas e o WhatsApp usado pelo atendimento."
+        description="Relacionamento, campanhas e mensagens dos seus pedidos em um só lugar."
         actions={
           <button
             type="submit"
@@ -192,7 +191,7 @@ export function ClientAutomationsCenter({
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Save className="h-4 w-4" />
-            {saving ? "Salvando" : "Salvar"}
+            {saving ? "Salvando" : "Salvar configurações"}
           </button>
         }
       />
@@ -210,15 +209,19 @@ export function ClientAutomationsCenter({
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Empresa" value={selectedCompany?.name ?? "Workspace"} detail="configuracao ativa" icon={Bot} />
-        <Metric label="Automacoes" value={String(activeAutomations)} detail="fluxos prontos" icon={MessageSquareText} />
-        <Metric label="WhatsApp" value={selectedWhatsapp?.status === "connected" ? "online" : selectedWhatsapp ? "configurado" : "pendente"} detail={selectedWhatsapp?.label ?? "sem padrao"} icon={Smartphone} />
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+        {companies.length > 1 ? (
+          <select aria-label="Empresa das automações" value={selectedCompanyId} disabled={saving} onChange={(event) => selectCompany(event.target.value)} className="max-w-full rounded-lg border border-slate-200 px-2 py-1">
+            {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </select>
+        ) : <strong>{selectedCompany?.name ?? "Workspace"}</strong>}
+        <span>{selectedAgent?.personaName || selectedAgent?.name || "WhatsApp da conversa"}</span>
+        <span className="inline-flex items-center gap-1.5 text-xs"><Smartphone className="h-4 w-4" />{selectedWhatsapp?.status === "connected" ? "Conectado" : selectedWhatsapp ? "Verificar conexão" : "Sem WhatsApp padrão"}</span>
       </div>
 
       <Panel
-        title="Base das automacoes"
-        eyebrow="empresa / agente / whatsapp"
+        title="Configurações de envio"
+        collapsible
         tone="cyan"
         action={<NeonBadge tone={draft.automationSettings.paymentStatusNotifications ? "green" : "amber"}>{draft.automationSettings.paymentStatusNotifications ? "ativo" : "pausado"}</NeonBadge>}
       >
@@ -227,6 +230,7 @@ export function ClientAutomationsCenter({
             <FieldLabel>Empresa</FieldLabel>
             <select
               value={selectedCompanyId}
+              disabled={saving}
               onChange={(event) => selectCompany(event.target.value)}
               className="h-11 w-full rounded-xl border bg-transparent px-3 text-sm outline-none"
               style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
@@ -254,7 +258,7 @@ export function ClientAutomationsCenter({
               <option value="">Usar somente o WhatsApp da conversa</option>
               {companyWhatsappInstances.map((instance) => (
                 <option key={instance.id} value={instance.id}>
-                  {instance.label}
+                  {agents.find((agent) => agent.id === instance.agentId)?.name ?? "WhatsApp"} · {instance.status === "connected" ? "conectado" : instance.status}
                 </option>
               ))}
             </select>
@@ -275,7 +279,11 @@ export function ClientAutomationsCenter({
         </div>
       </Panel>
 
+      <IntelligentFollowUpPanel key={selectedCompanyId} companyId={selectedCompanyId} />
+      <CustomerAgendaPanel key={`agenda:${selectedCompanyId}`} companyId={selectedCompanyId} agentId={selectedAgent?.id} />
+
       <ClientWhatsappAutomationStudio
+        key={`${selectedCompanyId}:${draft.automationSettings.defaultAgentId ?? "conversation"}`}
         agents={agents}
         companyId={selectedCompanyId}
         companyName={selectedCompany?.name ?? "Workspace"}
@@ -285,8 +293,7 @@ export function ClientAutomationsCenter({
       />
 
       <Panel
-        title="Mensagens automaticas"
-        eyebrow="checkout / whatsapp"
+        title="Mensagens de pedidos"
         tone="violet"
         action={<NeonBadge tone="violet">{messageTemplateFields.length} templates</NeonBadge>}
         collapsible
@@ -325,19 +332,6 @@ export function ClientAutomationsCenter({
       </Panel>
 
     </form>
-  );
-}
-
-function Metric({ detail, icon: Icon, label, value }: { detail: string; icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-        <Icon className="h-4 w-4 text-cyan-300" />
-      </div>
-      <p className="mt-2 truncate text-lg font-black text-white">{value}</p>
-      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
-    </div>
   );
 }
 

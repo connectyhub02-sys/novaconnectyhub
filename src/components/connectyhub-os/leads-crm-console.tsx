@@ -1,5 +1,6 @@
 "use client";
 import { LeadFinancialArchive } from "./lead-financial-archive";
+import { LeadReturnsPanel } from "./lead-returns-panel";
 
 import { useAvailablePaneHeight } from "@/hooks/use-available-pane-height";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -3769,6 +3770,7 @@ function LeadDetailsModal({
               <QualificationGrid lead={lead} />
               <LeadTechnicalFile lead={lead} />
               <LeadFinancialArchive key={lead.id} leadId={lead.id} companyId={lead.companyId} />
+              <LeadReturnsPanel key={`returns:${lead.id}`} leadId={lead.id} companyId={lead.companyId} />
               <TrackingArchive events={lead.leadFile.trackingEvents} />
               <LeadFileSnapshot lead={lead} />
               <LeadCheckoutSnapshot records={checkoutRecords} />

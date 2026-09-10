@@ -293,7 +293,6 @@ export function ClientWhatsappAutomationStudio({
   entityIdKey = "companyId",
   products,
   selectedAutomationAgentId,
-  selectedAutomationWhatsappLabel,
 }: Props) {
   const companyAgents = useMemo(() => agents.filter((agent) => agent.companyId === companyId), [agents, companyId]);
   const selectedAutomationAgent = companyAgents.find((agent) => agent.id === selectedAutomationAgentId) ?? null;
@@ -302,6 +301,10 @@ export function ClientWhatsappAutomationStudio({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"campaigns" | "schedule" | "activity" | "settings">("campaigns");
+  const [campaignEditorOpen, setCampaignEditorOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(10);
 
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [campaignDestinationMode, setCampaignDestinationMode] = useState<CampaignDestinationMode>("groups");
@@ -726,28 +729,12 @@ export function ClientWhatsappAutomationStudio({
   return (
     <Panel
       title="WhatsApp: grupos, canais e status"
-      eyebrow="automacoes / trafego relacional"
+      collapsible
       tone="green"
       action={<NeonBadge tone={connected ? "green" : "amber"}>{connected ? "WhatsApp online" : "pendente"}</NeonBadge>}
     >
       <div className="grid gap-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="rounded-xl border border-slate-200 bg-white/60 p-3">
-            <FieldLabel>Agente em uso</FieldLabel>
-            <p className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>
-              {selectedAutomationAgent ? `${selectedAutomationAgent.name} / ${selectedAutomationAgent.roleTitle}` : "Escolha o WhatsApp padrao acima"}
-            </p>
-            <p className="mt-1 truncate text-[11px] text-slate-500">
-              {selectedAutomationWhatsappLabel ?? "O bloco de grupos herda o agente e o numero definidos em Base das automacoes."}
-            </p>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Metric icon={Users} label="Destinos" value={`${groups.length}/${newsletters.length}`} detail="grupos / canais" />
-            <Metric icon={CalendarClock} label="Agenda" value={String(operations?.analytics.summary.scheduled ?? 0)} detail="envios futuros" />
-            <Metric icon={FileAudio} label="Midia" value={String((operations?.analytics.summary.withMedia ?? 0) + (operations?.analytics.summary.withAudio ?? 0))} detail="historico com midia" />
-          </div>
-        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600"><span aria-label="Agente em uso" className="font-medium text-slate-800">{selectedAutomationAgent?.name ?? "Escolha um agente"}</span><span>{groups.length} grupos · {newsletters.length} canais</span><span>{operations?.analytics.summary.scheduled ?? 0} envios programados</span></div>
 
         {notice ? (
           <div className={cn(
@@ -760,7 +747,13 @@ export function ClientWhatsappAutomationStudio({
           </div>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <nav aria-label="Áreas de grupos, canais e status" className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+          {([['campaigns', 'Campanhas'], ['schedule', 'Programação de grupos'], ['activity', 'Resultados e histórico'], ['settings', 'Destinos e configurações']] as const).map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={workspaceView === id} onClick={() => setWorkspaceView(id)} className={cn("rounded-lg px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-emerald-600", workspaceView === id ? "bg-emerald-50 font-semibold text-emerald-800" : "text-slate-600 hover:bg-slate-50")}>{label}</button>
+          ))}
+        </nav>
+        <div hidden={workspaceView !== "settings"}>
+        <div className="flex flex-wrap gap-2">
           <ActionButton icon={RefreshCcw} label="Atualizar" loading={runningAction === "load_channels"} onClick={refreshChannels} />
           <ActionButton icon={Users} label="Buscar grupos" disabled={!selectedAgentId} loading={runningAction === "refresh_groups"} onClick={() => runAction("refresh_groups")} />
           <ActionButton icon={Megaphone} label="Buscar canais" disabled={!selectedAgentId} loading={runningAction === "refresh_newsletters"} onClick={() => runAction("refresh_newsletters")} />
@@ -774,9 +767,18 @@ export function ClientWhatsappAutomationStudio({
           loading={runningAction === "set_automation_capability"}
           onToggle={setAutomationCapability}
         />
+        </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div hidden={workspaceView !== "campaigns"}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-600">Prepare uma rotina para os destinos escolhidos e acompanhe os resultados.</p>
+            <button type="button" onClick={() => setCampaignEditorOpen((value) => !value)} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">{campaignEditorOpen ? "Recolher editor" : "Criar campanha"}</button>
+          </div>
+        </div>
+        <div hidden={!(workspaceView === "campaigns" && campaignEditorOpen) && workspaceView !== "schedule"}>
+        <div className="grid gap-4">
           <div className="grid gap-4">
+            <div hidden={workspaceView !== "campaigns"}>
             <Section title="Destino da campanha" badge={campaignDestinationMode === "status" ? "status do agente" : `${selectedCampaignTargets.length} selecionado(s)`}>
               <div className="grid gap-2">
                 {campaignDestinationMode === "status" ? (
@@ -861,6 +863,8 @@ export function ClientWhatsappAutomationStudio({
               </div>
             </Section>
 
+            </div>
+            <div hidden={workspaceView !== "schedule"}>
             <Section title="Janela de grupo" badge="abrir / avisar / fechar">
               <div className="grid gap-3">
                 <label>
@@ -889,11 +893,12 @@ export function ClientWhatsappAutomationStudio({
                 </div>
               </div>
             </Section>
+            </div>
           </div>
 
-          <div className="grid gap-4">
+          <div hidden={workspaceView !== "campaigns"}>
             <Section title="Campanha automatica" badge="IA faz a copy">
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.48fr)]">
+              <div className={cn("grid gap-3", previewOpen && "xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.48fr)]")}>
                 <div className="grid gap-3">
                   <CampaignDestinationSelector
                     groupCount={groups.length}
@@ -953,7 +958,9 @@ export function ClientWhatsappAutomationStudio({
                     <ActionButton icon={CalendarClock} label="Agendar rotina" disabled={!scheduleGrowthPlanReady} loading={runningAction === "schedule_growth_plan"} onClick={scheduleGrowthPlan} />
                   </div>
                 </div>
-                <WhatsappCampaignPreview
+                <div>
+                <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700" onClick={() => setPreviewOpen((value) => !value)}>{previewOpen ? "Ocultar prévia" : "Ver prévia do WhatsApp"}</button>
+                {previewOpen && <WhatsappCampaignPreview
                   behavior={behavior}
                   buttonEnabled={campaignButtonEnabled}
                   buttonLabel={campaignButtonLabel}
@@ -964,7 +971,8 @@ export function ClientWhatsappAutomationStudio({
                   plan={growthPlan}
                   products={automaticCampaignProducts}
                   selectedTargets={selectedCampaignTargets}
-                />
+                />}
+                </div>
                 {growthPlan ? (
                   <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 xl:col-span-2">
                     <div className="min-w-0">
@@ -1091,6 +1099,8 @@ export function ClientWhatsappAutomationStudio({
           </div>
         </div>
 
+        </div>
+        <div hidden={workspaceView !== "activity"} className="space-y-4">
         <Section title="Inteligencia" badge={operations?.analytics.optimization.confidence ?? "low"}>
           <div className="grid gap-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1129,7 +1139,7 @@ export function ClientWhatsappAutomationStudio({
 
         <Section title="Historico recente" badge={`${operations?.history.length ?? 0} registros`}>
           <div className="grid gap-2">
-            {operations?.history.length ? operations.history.map((item) => (
+            {operations?.history.length ? operations.history.slice(0, historyLimit).map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -1155,6 +1165,8 @@ export function ClientWhatsappAutomationStudio({
             )}
           </div>
         </Section>
+        {(operations?.history.length ?? 0) > historyLimit && <button type="button" onClick={() => setHistoryLimit((value) => value + 10)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">Mostrar mais</button>}
+        </div>
         <HistoryInsightDrawer
           item={selectedHistoryItem}
           loading={runningAction === "sync_outbound_insights"}
@@ -1185,35 +1197,7 @@ function FeatureGates({
     { label: "Interacoes", detail: "botoes e enquetes", active: behavior?.interactiveMessages, capability: "interactive" },
   ] as const;
 
-  return (
-    <div className="grid gap-2 sm:grid-cols-5">
-      {gates.map((gate) => (
-        <div key={gate.label} className={cn(
-          "grid gap-2 rounded-xl border px-3 py-2",
-          gate.active ? "border-emerald-500/25 bg-emerald-500/10" : "border-slate-200 bg-slate-50",
-        )}>
-          <div className="min-w-0">
-            <p className="truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{gate.label}</p>
-            <p className="mt-1 truncate text-[11px] text-slate-500">{gate.detail}</p>
-            <p className={cn("mt-1 text-sm font-semibold", gate.active ? "text-emerald-700" : "text-slate-500")}>{gate.active ? "Ativo" : "Pausado"}</p>
-          </div>
-          <button
-            type="button"
-            disabled={disabled || loading}
-            onClick={() => onToggle(gate.capability, !gate.active)}
-            className={cn(
-              "inline-flex min-h-8 items-center justify-center rounded-lg border bg-white/70 px-2 font-mono text-[11px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
-              gate.active
-                ? "border-slate-300 text-slate-500 hover:bg-slate-100"
-                : "border-emerald-500/25 text-emerald-700 hover:bg-emerald-500/10",
-            )}
-          >
-            {loading ? "Salvando..." : gate.active ? "Desativar" : "Ativar"}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+  return <details className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium text-slate-700">Permissões e pausas</summary><p className="my-3 text-xs text-slate-500">Escolha os destinos de cada campanha. As pausas anteriores continuam valendo; descobrir um grupo não inicia atendimento nele.</p><div className="grid gap-2 sm:grid-cols-2">{gates.map(gate=><label key={gate.capability} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-2 text-sm"><span>{gate.label}</span><button type="button" role="switch" aria-checked={Boolean(gate.active)} aria-label={gate.label} disabled={disabled||loading} onClick={()=>onToggle(gate.capability,!gate.active)} className={cn("rounded-full px-3 py-1 text-xs",gate.active?"bg-emerald-50 text-emerald-800":"bg-slate-100 text-slate-600")}>{gate.active?"Permitido":"Pausado"}</button></label>)}</div></details>;
 }
 
 function HistoryInsightDrawer({

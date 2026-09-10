@@ -212,7 +212,7 @@ export async function createClientAgent(input: {
     updatedAt: new Date().toISOString(),
   }, { requireAtLeastOne: true, requireName: true });
   const responsibleHuman = responsibleHumans[0] as AgentResponsibleHuman;
-  const behaviorConfig = mergeResponsibleHumansIntoBehaviorConfig(defaultWhatsappBehaviorConfig, responsibleHumans);
+  const behaviorConfig = mergeResponsibleHumansIntoBehaviorConfig({ ...defaultWhatsappBehaviorConfig, interactiveMessages: true, statusBroadcasts: true, newsletterBroadcasts: true, campaignBroadcasts: true }, responsibleHumans);
 
   const { data, error } = await client
     .from("agent_registry")

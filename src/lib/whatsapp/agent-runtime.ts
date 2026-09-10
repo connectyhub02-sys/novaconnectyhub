@@ -609,12 +609,21 @@ async function processWhatsappAgentRunWithScope(input: {
       return await completeRun(client, run.id, "Mensagem interna entre instancias ignorada.", { skipped: true, reason: "internal_instance" });
     }
 
+    const latestInbound = findLatestInbound(context.messages);
+    if (latestInbound && JSON.stringify(latestInbound).includes("agenda-action:")) {
+      await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+      const { consumeAgendaAction } = await import("@/lib/automations/agenda-notifications");
+      const reply = await consumeAgendaAction(client, { organizationId: organization.id, phone, payload: latestInbound.payload, text: latestInbound.text_content ?? "" });
+      if (reply) {
+        const sent = await sendWhatsappText({ credentials: context.credentials, token, phone, text: reply, trackId: `agenda_action_${run.id}` });
+        await saveOutboundMessage(client, context, { text: reply, mode: "text", providerResponse: sent });
+        return await completeRun(client, run.id, reply, { sent: true, reason: "customer_agenda_action" });
+      }
+    }
     const conversationPaused = readHumanPauseUntil(context.conversationMetadata);
     if (behavior.humanIntervention && conversationPaused && conversationPaused.getTime() > Date.now()) {
       return await completeRun(client, run.id, "Conversa em atendimento humano.", { skipped: true, reason: "human_intervention_active" });
     }
-
-    const latestInbound = findLatestInbound(context.messages);
 
     if (await hasCompletedWhatsappRunForInbound(client, context, latestInbound)) {
       return await completeRun(client, run.id, "Mensagem WhatsApp ja respondida por outra execucao.", {
@@ -948,6 +957,16 @@ async function processWhatsappAgentRunWithScope(input: {
         }).catch(() => null)
       : null;
 
+    const agendaTurn = lead?.id && !isGroupChat
+      ? await import("@/lib/automations/agenda-agent").then(({ processAgendaTurn }) => processAgendaTurn({
+          client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
+          agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
+          messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
+        })).catch((error) => {
+          console.error("agenda_turn_failed", { runId: run.id, message: error instanceof Error ? error.message : "unknown" });
+          return { context: "Não foi possível consultar a agenda nesta tentativa. Não afirme que reservou, confirmou ou cancelou horário. Se a pessoa pedir agendamento, explique que precisa verificar a disponibilidade.", booked: false, fallback: "Preciso verificar a disponibilidade para confirmar esse horário com você." };
+        })
+      : null;
     const cachedAiResponse = readCachedRunResponse(context.run.metadata);
     const salesCatalogShippingQuotes = buildRuntimeSalesCatalogShippingQuoteContext({
       items: context.salesCatalog,
@@ -958,6 +977,7 @@ async function processWhatsappAgentRunWithScope(input: {
     let aiResponse = cachedAiResponse
       ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
       : await generateAgentResponse({
+          agendaContext: agendaTurn?.context,
           credentials: context.geminiCredentials,
           organization,
           agent,
@@ -988,6 +1008,7 @@ async function processWhatsappAgentRunWithScope(input: {
       context,
       cached: Boolean(cachedAiResponse),
       baseInput: {
+        agendaContext: agendaTurn?.context,
         credentials: context.geminiCredentials,
         organization,
         agent,
@@ -1015,6 +1036,9 @@ async function processWhatsappAgentRunWithScope(input: {
       response: aiResponse,
     });
 
+    if (agendaTurn && !agendaTurn.booked && /\b(agendei|reservei|marquei|hor[aá]rio (?:est[aá]|ficou) (?:reservado|agendado|confirmado))\b/i.test(aiResponse.text)) {
+      aiResponse = { ...aiResponse, text: agendaTurn.fallback };
+    }
     const aiText = aiResponse.text;
 
     if (!cachedAiResponse) {
@@ -1090,7 +1114,7 @@ async function processWhatsappAgentRunWithScope(input: {
     await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
     extractConversationArcSummary(client, context).catch(() => {});
     extractNegotiationState(client, context).catch(() => {});
-    scheduleProactiveFollowUp(context).catch(() => {});
+    await scheduleProactiveFollowUp(context).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
@@ -4005,6 +4029,7 @@ function mapRuntimeLinkButton(row: LinkButtonMemoryRow): RuntimeLinkButton {
 // loadGeminiCredentials imported from @/lib/gemini/credentials
 
 async function generateAgentResponse(input: {
+  agendaContext?: string;
   credentials: GeminiCredentials;
   organization: OrganizationRow;
   agent: AgentRow;
@@ -4265,6 +4290,7 @@ function extractGroundingKeywords(value: string) {
 }
 
 function buildSystemInstruction(input: {
+  agendaContext?: string;
   organization: OrganizationRow;
   agent: AgentRow;
   globalAgent: AgentRow | null;
@@ -4323,6 +4349,7 @@ function buildSystemInstruction(input: {
     ...buildCloneRealTestInstruction(input.behavior),
     "",
     "CONTEXTO DA EMPRESA:",
+    ...(input.agendaContext ? ["AGENDA: RESULTADO VERIFICADO NESTA TENTATIVA", input.agendaContext] : []),
     `- Empresa: ${input.organization.name}`,
     `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
     leadNameContext,
@@ -11055,12 +11082,6 @@ async function recordSalesCatalogOrderIntent(input: {
     },
   });
 
-  await scheduleSalesCatalogOrderAbandonedFollowUp({
-    client: input.client,
-    context: input.context,
-    orderId: order.id,
-  });
-
   return maybeCreateSalesCatalogPaymentLink({
     client: input.client,
     context: input.context,
@@ -11678,6 +11699,7 @@ async function sendSalesCatalogPaymentLink(input: {
       : input.payment.gatewayUnavailable || delivery === "whatsapp_pix_code_missing" ? "payment_generation_failed"
       : input.payment.paymentDeferred ? "payment_data_pending" : "payment_sent";
     await persistRuntimeCheckoutProgress(input, stage);
+    if(stage === "payment_sent")await scheduleSalesCatalogOrderAbandonedFollowUp({client:input.client,context:input.context,orderId:input.payment.orderId});
     return message;
   } catch (error) {
     await persistRuntimeCheckoutProgress(input, "payment_delivery_unconfirmed");
@@ -12627,17 +12649,19 @@ async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   orderId: string;
 }) {
-  const delayMinutes = input.context.salesCatalogSettings?.orderPolicy.abandonedCartMinutes;
+  let delayMinutes = input.context.salesCatalogSettings?.orderPolicy.abandonedCartMinutes;
   if (
-    !input.context.behavior.proactiveFollowUp
-    || !input.context.lead?.id
-    || !delayMinutes
-    || delayMinutes <= 0
+    !input.context.lead?.id
   ) {
     return;
   }
 
   try {
+    const { loadAutomationPolicy } = await import("@/lib/automations/dispatch");
+    const policy = await loadAutomationPolicy(input.client, input.context.organization.id);
+    if (!(policy?.follow_up_enabled ?? input.context.behavior.proactiveFollowUp)) return;
+    if(policy?.follow_up_enabled && (!delayMinutes || delayMinutes<=0))delayMinutes=15;
+    if(!delayMinutes || delayMinutes<=0)return;
     const { enqueueWhatsappFollowUp } = await import("./proactive-followup");
     await enqueueWhatsappFollowUp({
       organizationId: input.context.organization.id,
@@ -12671,8 +12695,8 @@ async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
         follow_up_kind: "abandoned_order",
       },
     });
-  } catch {
-    return;
+  } catch (error) {
+    console.error("order_follow_up_schedule_failed", {orderId: input.orderId, message: error instanceof Error ? error.message : "unknown"});
   }
 }
 
@@ -15530,7 +15554,10 @@ async function extractNegotiationState(
 async function scheduleProactiveFollowUp(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!context.behavior.proactiveFollowUp || !context.lead?.id) return;
+  if (!context.lead?.id || !context.behavior.agentEnabled) return;
+  const { loadAutomationPolicy } = await import("@/lib/automations/dispatch");
+  const policy = await loadAutomationPolicy(createServiceClient(), context.organization.id);
+  if (!(policy?.follow_up_enabled ?? context.behavior.proactiveFollowUp)) return;
 
   const latestMessage = context.messages[context.messages.length - 1];
   if (!latestMessage || latestMessage.direction !== "inbound") return;
@@ -15545,7 +15572,9 @@ async function scheduleProactiveFollowUp(
       agentId: context.agent.id,
       agentRunId: context.run.id,
     }, context.behavior.followUpDelayMinutes);
-  } catch {}
+  } catch (error) {
+    console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" });
+  }
 }
 
 function readCachedRunResponse(metadata: JsonRecord | null): AgentResponseResult | null {
