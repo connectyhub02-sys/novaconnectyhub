@@ -8,7 +8,7 @@ function renderBlock(block: AiDocBlock): string {
   return `### ${block.title}\n\n| ${block.columns.map(cell).join(" | ")} |\n| ${block.columns.map(() => "---").join(" | ")} |\n` + block.rows.map(row => `| ${row.map(cell).join(" | ")} |`).join("\n");
 }
 export function renderAiGuide() {
-  const header = `# Integração com a API de IA ConnectyHub\n\nReferência 1.4.0 · 10/09/2026\n\n- Página pública: https://www.connectyhub.com.br/docs/api#ia\n- OpenAPI JSON: https://www.connectyhub.com.br/docs/api/ia/openapi.json\n- Guia completo: https://www.connectyhub.com.br/docs/api/ia/guide.md\n- Base da API: ${aiBaseUrl}\n\nEste guia descreve o contrato público implementado. Exemplos de consumo são ilustrativos.\n\n## Navegação\n\n` + aiDocPages.map(page => `- [${page.label}](https://www.connectyhub.com.br/docs/api#${page.id})`).join("\n");
+  const header = `# Integração com a API de IA ConnectyHub\n\nReferência 1.5.0 · 10/09/2026\n\n- Página pública: https://www.connectyhub.com.br/docs/api#ia\n- OpenAPI JSON: https://www.connectyhub.com.br/docs/api/ia/openapi.json\n- Guia completo: https://www.connectyhub.com.br/docs/api/ia/guide.md\n- Base da API: ${aiBaseUrl}\n\nEste guia descreve o contrato público implementado. Exemplos de consumo são ilustrativos.\n\n## Navegação\n\n` + aiDocPages.map(page => `- [${page.label}](https://www.connectyhub.com.br/docs/api#${page.id})`).join("\n");
   return header + "\n\n" + aiDocPages.map(page => {
     const responses = aiEndpointResponses(page);
     const blocks = [...page.blocks];

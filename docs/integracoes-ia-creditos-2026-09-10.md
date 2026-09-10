@@ -84,9 +84,11 @@ Modelos suspensos no cadastro operacional continuam impedidos, mesmo com preço.
 
 ## Ativação operacional
 
-Esta entrega **não aplicou migrações no banco remoto nem publicou o código**.
+O código da primeira rodada foi publicado no commit `917410c`, e as migrations
+0119–0128 foram aplicadas conforme o registro no início deste relatório. A segunda
+rodada e a migration 0129 estão descritas em `segunda-rodada-api-ia-2026-09-10.md`.
 
-1. Aplicar em sequência as migrações pendentes, incluindo 0125, 0126, 0127 e 0128, junto à atualização do código. As alterações anteriores de WhatsApp 0123/0124 continuam presentes na árvore de trabalho.
+1. Manter o histórico de migrations sincronizado com o código; a aplicação até 0128 foi concluída.
 2. Conferir credenciais, disponibilidade dos modelos e tarifas na configuração comercial. Não usar `available=true` como substituto de teste de acesso no fornecedor.
 3. Publicar o processo WebSocket persistente e configurar as variáveis descritas no [roteiro do serviço](../services/ai-relay/README.md). Configurar apenas a URL não cria o servidor.
 4. Manter ativo o cron Inngest que concilia solicitações, recursos e sessões.
@@ -112,7 +114,7 @@ integral com todos os endpoints administrativos do fornecedor.
 - Testes de conexão WebSocket, sigilo de credenciais, modelo fixo e interrupção por falha de cobrança.
 - Página e downloads públicos verificados sem login em 1440 e 390 px; sem erros de JavaScript ou transbordamento horizontal.
 
-Resultado final local: **1.106 testes aprovados em 140 arquivos**, compilação de produção e TypeScript aprovados. ESLint sem erros; dois avisos preexistentes em funções antigas de cobrança. `git diff --check` sem erros. Não houve teste pago de todas as modalidades nem publicação remota.
+Resultado local da primeira rodada: **1.106 testes aprovados em 140 arquivos**, compilação de produção e TypeScript aprovados. ESLint sem erros; dois avisos preexistentes em funções antigas de cobrança. `git diff --check` sem erros. Não houve teste pago de todas as modalidades. Publicação posterior: commit `917410c` em master.
 
 ## Fontes primárias consultadas
 

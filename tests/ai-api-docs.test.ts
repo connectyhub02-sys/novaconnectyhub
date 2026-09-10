@@ -11,9 +11,9 @@ import { renderAiGuide } from "../src/lib/ai-api/guide";
 describe("Public AI OpenAPI contract", () => {
   it("documents only implemented public routes with an independent AI credential", () => {
     expect(aiOpenApiSpec.servers[0].url).toBe("https://www.connectyhub.com.br/api/v1/ai");
-    expect(Object.keys(aiOpenApiSpec.paths)).toHaveLength(31);
+    expect(Object.keys(aiOpenApiSpec.paths)).toHaveLength(37);
     for (const path of Object.keys(aiOpenApiSpec.paths)) {
-      const resource=['caches','batches','videos','stores','documents','interactions','agents','environments'].includes(path.split('/')[1]);
+      const resource=['caches','batches','videos','stores','documents','interactions','agents','environments','webhooks','triggers'].includes(path.split('/')[1]);
       const route = resource?'/[...resource]':path.startsWith("/models/") ? "/models/[operation]" : path.replace("{request_id}", "[requestId]").replace("{id}","[id]");
       expect(existsSync(`src/app/api/v1/ai${route}/route.ts`)).toBe(true);
     }

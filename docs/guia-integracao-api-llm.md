@@ -1,6 +1,6 @@
 # Integração com a API de IA ConnectyHub
 
-Referência 1.4.0 · 10/09/2026
+Referência 1.5.0 · 10/09/2026
 
 - Página pública: https://www.connectyhub.com.br/docs/api#ia
 - OpenAPI JSON: https://www.connectyhub.com.br/docs/api/ia/openapi.json
@@ -42,6 +42,88 @@ Este guia descreve o contrato público implementado. Exemplos de consumo são il
 - [Pesquisa em arquivos](https://www.connectyhub.com.br/docs/api#ia-search-files)
 - [Agentes e ambientes](https://www.connectyhub.com.br/docs/api#ia-managed)
 - [Tempo real](https://www.connectyhub.com.br/docs/api#ia-live)
+- [Qual integração usar](https://www.connectyhub.com.br/docs/api#ia-escolher-interface)
+- [Cobrança por recurso](https://www.connectyhub.com.br/docs/api#ia-creditos-detalhados)
+- [Webhooks de resultados](https://www.connectyhub.com.br/docs/api#ia-webhooks)
+- [Agendamentos cobrados](https://www.connectyhub.com.br/docs/api#ia-agendamentos)
+- [Estados e recuperação](https://www.connectyhub.com.br/docs/api#ia-estados-recuperacao)
+- [Integrar tempo real](https://www.connectyhub.com.br/docs/api#ia-tempo-real-guia)
+- [Documentos do começo ao fim](https://www.connectyhub.com.br/docs/api#ia-base-conhecimento)
+- [Versões e compatibilidade](https://www.connectyhub.com.br/docs/api#ia-versoes)
+- [Gerar uma imagem](https://www.connectyhub.com.br/docs/api#ia-exemplo-imagem)
+- [Transformar texto em voz](https://www.connectyhub.com.br/docs/api#ia-exemplo-voz)
+- [Gerar e acompanhar um vídeo](https://www.connectyhub.com.br/docs/api#ia-exemplo-video)
+- [Pesquisar na web com fontes](https://www.connectyhub.com.br/docs/api#ia-exemplo-pesquisa)
+- [Pesquisar lugares por localização](https://www.connectyhub.com.br/docs/api#ia-exemplo-mapas)
+- [Executar um cálculo com código](https://www.connectyhub.com.br/docs/api#ia-exemplo-codigo)
+- [Analisar o conteúdo de uma página](https://www.connectyhub.com.br/docs/api#ia-exemplo-url)
+- [Gerar uma música](https://www.connectyhub.com.br/docs/api#ia-exemplo-musica)
+- [Transcrever um áudio enviado](https://www.connectyhub.com.br/docs/api#ia-exemplo-transcricao)
+- [Processar vários itens em lote](https://www.connectyhub.com.br/docs/api#ia-exemplo-lote)
+- [Criar um contexto reutilizável](https://www.connectyhub.com.br/docs/api#ia-exemplo-cache)
+- [Criar vetores para busca semântica](https://www.connectyhub.com.br/docs/api#ia-exemplo-vetores)
+- [/webhooks](https://www.connectyhub.com.br/docs/api#ia-http-post-webhooks)
+- [/webhooks](https://www.connectyhub.com.br/docs/api#ia-http-get-webhooks)
+- [/webhooks/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-webhooks-id)
+- [/webhooks/{id}](https://www.connectyhub.com.br/docs/api#ia-http-patch-webhooks-id)
+- [/webhooks/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-webhooks-id)
+- [/webhooks/{id}/deliveries](https://www.connectyhub.com.br/docs/api#ia-http-get-webhooks-id-deliveries)
+- [/triggers](https://www.connectyhub.com.br/docs/api#ia-http-post-triggers)
+- [/triggers](https://www.connectyhub.com.br/docs/api#ia-http-get-triggers)
+- [/triggers/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-triggers-id)
+- [/triggers/{id}](https://www.connectyhub.com.br/docs/api#ia-http-patch-triggers-id)
+- [/triggers/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-triggers-id)
+- [/triggers/{id}/runs](https://www.connectyhub.com.br/docs/api#ia-http-get-triggers-id-runs)
+- [/caches](https://www.connectyhub.com.br/docs/api#ia-http-post-caches)
+- [/caches](https://www.connectyhub.com.br/docs/api#ia-http-get-caches)
+- [/caches/{id}](https://www.connectyhub.com.br/docs/api#ia-http-patch-caches-id)
+- [/caches/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-caches-id)
+- [/caches/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-caches-id)
+- [/batches](https://www.connectyhub.com.br/docs/api#ia-http-post-batches)
+- [/batches](https://www.connectyhub.com.br/docs/api#ia-http-get-batches)
+- [/batches/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-batches-id)
+- [/batches/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-batches-id)
+- [/videos](https://www.connectyhub.com.br/docs/api#ia-http-post-videos)
+- [/videos](https://www.connectyhub.com.br/docs/api#ia-http-get-videos)
+- [/videos/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-videos-id)
+- [/videos/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-videos-id)
+- [/stores](https://www.connectyhub.com.br/docs/api#ia-http-post-stores)
+- [/stores](https://www.connectyhub.com.br/docs/api#ia-http-get-stores)
+- [/stores/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-stores-id)
+- [/stores/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-stores-id)
+- [/documents](https://www.connectyhub.com.br/docs/api#ia-http-post-documents)
+- [/documents](https://www.connectyhub.com.br/docs/api#ia-http-get-documents)
+- [/documents/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-documents-id)
+- [/documents/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-documents-id)
+- [/interactions](https://www.connectyhub.com.br/docs/api#ia-http-post-interactions)
+- [/interactions](https://www.connectyhub.com.br/docs/api#ia-http-get-interactions)
+- [/interactions/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-interactions-id)
+- [/interactions/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-interactions-id)
+- [/agents](https://www.connectyhub.com.br/docs/api#ia-http-post-agents)
+- [/agents](https://www.connectyhub.com.br/docs/api#ia-http-get-agents)
+- [/agents/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-agents-id)
+- [/agents/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-agents-id)
+- [/environments](https://www.connectyhub.com.br/docs/api#ia-http-post-environments)
+- [/environments](https://www.connectyhub.com.br/docs/api#ia-http-get-environments)
+- [/environments/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-environments-id)
+- [/environments/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-environments-id)
+- [/batches/{id}/cancel](https://www.connectyhub.com.br/docs/api#ia-http-post-batches-id-cancel)
+- [/interactions/{id}/cancel](https://www.connectyhub.com.br/docs/api#ia-http-post-interactions-id-cancel)
+- [/videos/{id}/content](https://www.connectyhub.com.br/docs/api#ia-http-get-videos-id-content)
+- [/interactions/{id}/content](https://www.connectyhub.com.br/docs/api#ia-http-get-interactions-id-content)
+- [/environments/{id}/files](https://www.connectyhub.com.br/docs/api#ia-http-get-environments-id-files)
+- [/live](https://www.connectyhub.com.br/docs/api#ia-http-post-live)
+- [/models/{model}](https://www.connectyhub.com.br/docs/api#ia-http-get-models-model)
+- [/models/{model}:generateContent](https://www.connectyhub.com.br/docs/api#ia-http-post-models-modelgeneratecontent)
+- [/models/{model}:streamGenerateContent](https://www.connectyhub.com.br/docs/api#ia-http-post-models-modelstreamgeneratecontent)
+- [/embeddings](https://www.connectyhub.com.br/docs/api#ia-http-post-embeddings)
+- [/files](https://www.connectyhub.com.br/docs/api#ia-http-post-files)
+- [/files](https://www.connectyhub.com.br/docs/api#ia-http-get-files)
+- [/files/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-files-id)
+- [/files/{id}](https://www.connectyhub.com.br/docs/api#ia-http-delete-files-id)
+- [/models](https://www.connectyhub.com.br/docs/api#ia-http-get-models)
+- [/chat/completions](https://www.connectyhub.com.br/docs/api#ia-http-post-chat-completions)
+- [/requests/{request_id}](https://www.connectyhub.com.br/docs/api#ia-http-get-requests-request-id)
 
 ## Inteligência para seus projetos
 
@@ -138,7 +220,7 @@ A disponibilidade abaixo corresponde à API pública. Recursos do painel e dos a
 | Análise de imagens | Envie PNG, JPEG ou WebP inline em image_url. A resposta é textual. |
 | Respostas baseadas em seus dados | Busque os dados no seu sistema e inclua os trechos relevantes na mensagem. |
 | Variação da resposta | Ajuste temperature quando precisar; o preenchimento é opcional. |
-| Entrega por eventos SSE | Use stream=true. Os eventos chegam após a conclusão da geração. |
+| Entrega por eventos SSE | Use streamGenerateContent para partes incrementais; Chat Completions com stream=true entrega após concluir. |
 | Recuperação de operações | Use Idempotency-Key e GET /requests/{request_id}. |
 | Acompanhamento de consumo | Leia os créditos na resposta e acompanhe os gráficos no painel. |
 
@@ -400,7 +482,7 @@ O JSON completo deve ter até 2.000.000 bytes, incluindo imagens codificadas. A 
 | id | Identificador da resposta, com prefixo chatcmpl-. |
 | object | chat.completion. |
 | created | Data Unix em segundos. |
-| model | Identificador público connectyhub-auto. |
+| model | ID público do modelo utilizado pela chave. |
 | choices[0].message | role=assistant e content com o texto. |
 | choices[0].finish_reason | stop: concluída; length: resposta parcial; content_filter: sem texto disponível. |
 | connectyhub | request_id, project_id e credits da operação. |
@@ -1236,7 +1318,7 @@ Análise de áudio aceita WAV, MP3, MP4, AAC, OGG e FLAC. Vídeo aceita MP4, Web
 
 ### Entrega em eventos
 
-POST /models/{model}:streamGenerateContent devolve um evento SSE com a resposta completa e depois [DONE]. Esta entrega ocorre após a conclusão; não é uma sessão de áudio ou vídeo em tempo real.
+POST /models/{model}:streamGenerateContent entrega partes incrementais por SSE, seguidas de content.completed com os créditos confirmados e [DONE]. Partes recebidas antes da conclusão são provisórias. Chat Completions com stream=true mantém a entrega após concluir.
 
 ---
 
@@ -1360,7 +1442,7 @@ Use o arquivo JSON para consultar tipos, exemplos e respostas HTTP ou importar a
 
 ### Versão da referência
 
-OpenAPI 1.4.0: geração multimodal, Interações, recursos persistentes e tempo real com consumo em créditos. Confira a ativação operacional no catálogo antes de integrar.
+OpenAPI 1.5.0: geração multimodal, Interações, recursos persistentes e tempo real com consumo em créditos. Confira a ativação operacional no catálogo antes de integrar.
 
 Para compartilhar com outra equipe ou assistente de programação, baixe também o Guia de integração em Markdown. O guia e as páginas usam a mesma fonte de conteúdo.
 
@@ -1736,3 +1818,7153 @@ Conecte ao url retornado e envie {id, access_key} como primeira mensagem. Esse a
 A sessão reserva créditos e acompanha o conteúdo processado. Quando não houver saldo para continuar, a conexão é encerrada. Consulte /requests/{id} para conferir a conclusão. Quedas com consumo ainda não confirmado mantêm a operação em conferência.
 
 Para música em tempo real, use uma chave compatível e envie clientContent, musicGenerationConfig e playbackControl. A ativação do serviço de tempo real e a tarifa do modelo são verificadas no catálogo.
+
+---
+
+## Escolha o caminho para sua aplicação
+
+Comece pela tarefa. A chave define o modelo; cada interface tem um formato próprio.
+
+### Interfaces
+
+| Necessidade | Operação | Resultado |
+| --- | --- | --- |
+| Conversa simples ou cliente com messages | POST /chat/completions | choices[0].message; stream entrega após concluir. |
+| Controle multimodal e geração incremental | POST /models/{model}:generateContent ou :streamGenerateContent | candidates[].content.parts; SSE incremental na segunda rota. |
+| Ferramentas, pesquisa e continuação gerenciada | POST /interactions | Recurso consultável; resultado em result.steps. |
+| Vídeo assíncrono | POST /videos | Acompanhe até concluir e baixe com autenticação. |
+| Voz interativa | POST /live + WebSocket | Eventos bidirecionais; exige serviço ativo. |
+| Execução recorrente | POST /triggers | Cada ocorrência cria uma Interação cobrada. |
+
+Os formatos não são intercambiáveis: messages pertence a Chat Completions, contents à geração multimodal e input às Interações. Bibliotecas de terceiros só funcionam com o subconjunto que implementam e com a base correta. Não existe compatibilidade universal com qualquer SDK.
+
+---
+
+## Como cada recurso usa seus créditos
+
+A carteira da conta é compartilhada entre projetos. O sistema registra automaticamente o consumo das execuções faturáveis.
+
+### O que entra na conta
+
+| Recurso | Base do consumo | Quando é confirmado |
+| --- | --- | --- |
+| Texto, análise e raciocínio | Conteúdo processado e resposta; especialidade e esforço do modelo | Após receber a medição final. |
+| Imagem e voz | Entrada e mídia produzida, conforme modalidade | Após gerar e conferir a medição. |
+| Vídeo | Duração, resolução e saídas produzidas | Na conclusão da operação. |
+| Música | Músicas produzidas | Na conclusão. |
+| Pesquisa e mapas | Consultas executadas, além da geração | Na conclusão, com contagem das ferramentas. |
+| Vetores | Conteúdo de entrada e modalidade | Após a medição final. |
+| Lotes | Consumo de cada item processado; tarifa de lote | Na conferência dos resultados individuais. |
+| Cache | Leitura reutilizada e armazenamento por tamanho e tempo | Leitura na geração; armazenamento ao expirar ou encerrar. |
+| Indexação | Conteúdo medido na importação | Após indexar com sucesso. |
+| Agentes e agendamentos | Todas as etapas faturáveis de cada execução | Cada Interação tem seu próprio registro. |
+| Tempo real | Conteúdo processado durante a sessão | Acompanhamento durante a sessão e liquidação ao encerrar. |
+
+### Ciclo de uma operação
+
+1. A API verifica a chave, o projeto, o acesso e os preços do recurso.
+2. Antes de executar, separa uma estimativa do saldo disponível. Essa reserva não é uma cobrança adicional.
+3. A execução produz a medição do consumo.
+4. A API confirma o débito, libera eventual sobra da reserva e registra os créditos da operação.
+5. Se a medição estiver incompleta, a operação fica em conferência; não inicie outra execução equivalente sem consultar o estado.
+
+### Exemplo ilustrativo de uma geração concluída
+
+```json
+{
+  "connectyhub": {
+    "request_id": "00000000-0000-4000-8000-000000000001",
+    "project_id": "00000000-0000-4000-8000-000000000002",
+    "credits": 7.25
+  }
+}
+```
+
+Exemplo ilustrativo: se foram reservados 12 créditos e o consumo final foi 7,25, o débito é 7,25 e os 4,75 restantes voltam a ficar disponíveis. Não há cobrança de 12 mais 7,25. Se o consumo confirmado ultrapassar a reserva, a liquidação utiliza apenas saldo livre; sem saldo suficiente, aguarda regularização.
+
+### Operações administrativas
+
+Ler esta documentação, baixar o JSON, consultar modelos/resultados, configurar webhooks e cadastrar agendamentos não inicia uma geração. Upload não equivale a análise. O consumo ocorre nas execuções, ferramentas e armazenamento faturável descritos acima. Serviços externos conectados pelo cliente podem ter cobrança própria.
+
+O modelo, o conteúdo e a tarifa vigente determinam o consumo; os exemplos não são preços fixos. A tarifa usada fica associada à execução. Uma resposta parcial ou um cancelamento pode ter consumo já realizado. Repetir a consulta ou receber o mesmo webhook não duplica o débito.
+
+---
+
+## Receba avisos de conclusão no seu servidor
+
+A ConnectyHub envia eventos do projeto após registrar a situação financeira da solicitação.
+
+**POST /webhooks**
+
+### Cadastrar
+
+```json
+{
+  "url": "https://seu-sistema.example/api/avisos-ia",
+  "events": [
+    "request.completed",
+    "request.failed"
+  ]
+}
+```
+
+### Integração
+
+1. Cadastre uma URL HTTPS pública no servidor do seu sistema.
+2. Guarde signing_secret retornado na criação; ele não aparece na consulta posterior.
+3. Leia o corpo HTTP bruto e verifique a assinatura antes de interpretar o JSON.
+4. Registre o id do evento com unicidade, coloque seu processamento em uma fila e responda com HTTP 2xx.
+5. Consulte data.request_url com sua chave para buscar a resposta. O aviso não contém o conteúdo da conversa.
+
+### Evento
+
+```json
+{
+  "id": "00000000-0000-4000-8000-000000000003",
+  "type": "request.completed",
+  "created_at": "2026-09-10T12:00:00Z",
+  "data": {
+    "request_id": "00000000-0000-4000-8000-000000000001",
+    "project_id": "00000000-0000-4000-8000-000000000002",
+    "status": "completed",
+    "credits": 7.25,
+    "request_url": "/api/v1/ai/requests/00000000-0000-4000-8000-000000000001"
+  }
+}
+```
+
+### Validar assinatura · Node.js
+
+```javascript
+import { createHmac, timingSafeEqual } from 'node:crypto';
+export function validSignature(rawBody, headers, secret, now = Date.now()) {
+  const id = headers.get('x-connectyhub-event-id');
+  const timestamp = headers.get('x-connectyhub-timestamp');
+  const signature = headers.get('x-connectyhub-signature') ?? '';
+  if (!id || !/^\d+$/.test(timestamp ?? '') || Math.abs(now / 1000 - Number(timestamp)) > 300) return false;
+  if (!/^v1=[a-f0-9]{64}$/.test(signature)) return false;
+  const expected = createHmac('sha256', secret).update(id + '.' + timestamp + '.' + rawBody).digest();
+  return timingSafeEqual(expected, Buffer.from(signature.slice(3), 'hex'));
+}
+// rawBody é o texto exato recebido; não serialize novamente o JSON.
+// Depois de validar: confira id do corpo == id do cabeçalho e deduplique por id.
+// Guarde o evento de forma durável antes de responder 2xx.
+```
+
+Entrega pelo menos uma vez: o mesmo evento pode chegar novamente. Cada tentativa tem uma assinatura com horário atualizado e preserva o id. Falhas têm até oito tentativas automáticas; consulte GET /webhooks/{id}/deliveries. Não há garantia de ordem entre eventos. O worker processa a fila periodicamente, portanto o aviso não é instantâneo.
+
+### URLs e reativação
+
+São aceitos destinos HTTPS na porta padrão com DNS IPv4 público. Redirecionamentos não são seguidos. PATCH com enabled=false pausa o webhook; DELETE o desativa preservando o histórico. Para trocar o destino ou segredo, desative e crie outro. Não são enviados eventos anteriores ao cadastro.
+
+request.completed significa que a solicitação foi liquidada. Em lotes ou interações, confira o resultado interno: pode haver itens com falha, cancelamento ou necessidade de ação. Reentregar o aviso não executa a IA nem cobra a geração novamente.
+
+---
+
+## Execute tarefas automaticamente
+
+Defina quando a Interação deve ocorrer. Em cada execução, o sistema verifica novamente acesso, chave, modelo, preços e saldo.
+
+**POST /triggers**
+
+### Todo dia às 9h em São Paulo
+
+```json
+{
+  "display_name": "Resumo diário",
+  "schedule": "0 9 * * *",
+  "time_zone": "America/Sao_Paulo",
+  "interaction": {
+    "input": "Pesquise as notícias mais recentes sobre atendimento ao cliente e faça um resumo com fontes.",
+    "tools": [
+      {
+        "type": "web_search"
+      }
+    ]
+  }
+}
+```
+
+### Exemplos de cron
+
+| Expressão | Quando |
+| --- | --- |
+| 0 9 * * * | Todos os dias às 9h. |
+| 0 9 * * 1-5 | Dias úteis às 9h. |
+| 0 */6 * * * | A cada seis horas, na hora cheia. |
+| 30 8 1 * * | Dia 1 de cada mês às 8h30. |
+
+### Acompanhar
+
+1. Crie o agendamento com a chave do modelo que deseja utilizar.
+2. Confira next_run_at na resposta. Cadastrar não executa imediatamente.
+3. Consulte GET /triggers/{id}/runs para localizar request_id de cada ocorrência.
+4. Consulte /requests/{request_id} para a resposta, estado e créditos.
+5. Cadastre um webhook do projeto para receber os avisos de conclusão.
+
+### Cobrança automática
+
+Cada ocorrência é uma nova operação faturável e usa os créditos da conta. O agendamento não cria saldo. Uma chave revogada, acesso suspenso, ausência de preço ou saldo insuficiente impede o envio da nova execução. Repetições internas da mesma ocorrência preservam a identidade para evitar geração e débito duplicados.
+
+PATCH com enabled=false pausa; enabled=true agenda o próximo horário futuro. DELETE desativa e mantém o histórico. Horários perdidos durante indisponibilidade não são executados em massa depois. Uma ocorrência é ignorada se a anterior ainda estiver pendente, evitando sobreposição. Tarefas já enviadas precisam ser canceladas pela rota da Interação quando suportado.
+
+A precisão é de minutos e depende da fila. Não use para disparos com horário garantido. Para mudar instruções ou horário, pause a configuração anterior e crie outra; as execuções antigas permanecem vinculadas ao conteúdo original.
+
+---
+
+## Trate cada estado sem duplicar chamadas
+
+Uma falha de conexão não significa que a execução foi cancelada.
+
+### Estados
+
+| Estado | Significado | Ação |
+| --- | --- | --- |
+| preparing / reserved | Preparação e autorização financeira. | Guarde o identificador; aguarde. |
+| processing | Execução em andamento. | Consulte o mesmo recurso com intervalo. |
+| active | Arquivo, coleção, ambiente ou cache utilizável. | Use conforme validade e modelo. |
+| cancelling | Cancelamento solicitado. | Aguarde a conferência do consumo já realizado. |
+| settling | Conferência e débito em andamento. | Aguarde; não dispare outra execução. |
+| requires_action | Interação precisa do resultado de uma função. | Valide e execute no seu sistema; envie continuação. |
+| completed | Operação concluída e liquidada. | Leia a resposta e os créditos; confira resultados parciais internos. |
+| uncertain | Não foi possível confirmar resultado ou medição. | Consulte /requests/{request_id}; evite refazer. |
+| failed | Falha confirmada. | Corrija a causa; uma nova operação exige nova identidade. |
+| expired / deleted | Recurso encerrado. | Crie outro se precisar; o histórico de cobrança permanece. |
+
+Use a mesma Idempotency-Key e o mesmo corpo para recuperar uma execução. Se mudar o conteúdo com a mesma identidade, haverá conflito. A proteção é por projeto: duas operações de negócios diferentes precisam de identidades diferentes. Em operações administrativas como upload e cadastro de webhook, a criação gera outro recurso; confira a listagem antes de repetir.
+
+### Diagnóstico
+
+| HTTP | Verifique |
+| --- | --- |
+| 401 | Chave ausente, errada ou revogada. |
+| 402 | Saldo disponível e acesso da conta; reservas também ocupam saldo. |
+| 403 | Projeto pausado ou recurso fora do acesso contratado. |
+| 404 | ID e projeto da chave; outro projeto não pode acessar esse recurso. |
+| 409 | Execução em andamento, recurso em uso ou conflito de identidade. |
+| 413 | Tamanho do JSON ou da mídia; use /files quando apropriado. |
+| 422 | Campos aceitos, modelo da chave e compatibilidade das ferramentas. |
+| 502 / 503 | Registre request_id; consulte antes de repetir. |
+
+---
+
+## Do acesso descartável à sessão de voz
+
+Use um modelo Live liberado e um serviço WebSocket ativo. A chave permanente fica no backend.
+
+### Fluxo
+
+1. Seu backend chama POST /live com a chave permanente.
+2. Envie ao frontend somente url, id, access_key e expires_at da sessão.
+3. O frontend abre WebSocket e envia {id, access_key}. Esse acesso só pode ser usado uma vez e expira em 60 segundos.
+4. Espere setupComplete antes de enviar clientContent, realtimeInput ou toolResponse.
+5. Reproduza serverContent e trate interrupções. Ao finalizar, feche o socket.
+6. O backend consulta /requests/{id} para confirmar consumo e encerramento.
+
+### Frontend · sessão obtida do seu backend
+
+```javascript
+export function connectSession(session) {
+  const socket = new WebSocket(session.url);
+  socket.addEventListener('open', () => socket.send(JSON.stringify({id: session.id, access_key: session.access_key})));
+  socket.addEventListener('message', event => {
+    const data = JSON.parse(event.data);
+    if (data.setupComplete) socket.send(JSON.stringify({clientContent: {turns: [{role: 'user', parts: [{text: 'Olá, apresente-se em português.'}]}], turnComplete: true}}));
+    if (data.serverContent) console.log(data.serverContent);
+    if (data.toolCall) console.log('Valide a função no backend:', data.toolCall);
+  });
+  socket.addEventListener('close', () => console.log('Consulte o consumo da sessão no backend.'));
+  return socket;
+}
+```
+
+O exemplo registra os eventos; a reprodução de áudio precisa decodificar o formato informado. Entrada contínua usa realtimeInput.audio com dados PCM e tipo MIME correto. Vídeo usa quadros de imagem. Não envie um arquivo MP3 como se fosse PCM.
+
+### Saldo e reconexão
+
+O serviço acompanha e renova as reservas da sessão. Quando o saldo não cobre a continuidade, encerra a conexão. Uma conexão perdida não pode reutilizar o acesso descartável; confira a operação anterior antes de criar outra sessão. Música em tempo real tem eventos próprios e depende de liberação de acesso e preço.
+
+---
+
+## Monte uma base de conhecimento
+
+Upload, indexação e geração são operações distintas, todas isoladas por projeto.
+
+### 1. POST /files
+
+```json
+{
+  "display_name": "politica.txt",
+  "mime_type": "text/plain",
+  "data": "VHJvY2FzIGVtIHNldGUgZGlhcy4="
+}
+```
+
+### 2. POST /stores
+
+```json
+{
+  "display_name": "Políticas da empresa"
+}
+```
+
+### 3. POST /documents · substitua os IDs
+
+```json
+{
+  "store": "00000000-0000-4000-8000-000000000001",
+  "file": "00000000-0000-4000-8000-000000000002"
+}
+```
+
+### 4. POST /interactions · depois da indexação
+
+```json
+{
+  "input": "Qual é a política de trocas?",
+  "tools": [
+    {
+      "type": "file_search",
+      "stores": [
+        "00000000-0000-4000-8000-000000000001"
+      ]
+    }
+  ]
+}
+```
+
+Aguarde /files/{id} ficar active antes de indexar. Aguarde /documents/{id} concluir antes de pesquisar. Guarde request_id da indexação e da geração: são dois consumos diferentes. Cada consulta posterior é outra geração. Excluir a coleção não estorna importações e consultas já realizadas.
+
+---
+
+## Evolução da API
+
+A versão da documentação identifica o contrato publicado. O caminho /api/v1/ai continua sendo a base de integração.
+
+### Histórico
+
+| Versão | Mudança |
+| --- | --- |
+| 1.5.0 | Webhooks de solicitações e agendamentos com execução pela carteira. Referência por operação e exemplos completos. |
+| 1.4.0 | Recursos multimodais, Interações, lotes, cache, ambientes e protocolo de tempo real. |
+| 1.3.x | Catálogo por modelo, funções, arquivos, vetores e ampliação da referência pública. |
+
+Para atualizar uma integração, baixe o novo OpenAPI, revise os campos usados e teste com dados do seu projeto. Preserve a chave no servidor e mantenha identidades de operações pendentes. Não troque de interface apenas alterando a URL: adapte messages, contents ou input e a leitura da resposta.
+
+### Disponibilidade efetiva
+
+O catálogo pode listar modelos indisponíveis. available indica configuração operacional, não substitui testar sua tarefa. Acesso experimental, formatos de mídia e ferramentas variam por modelo. A documentação não garante recursos que o modelo selecionado não oferece.
+
+---
+
+## Gerar uma imagem
+
+A chave deve usar um modelo de imagem liberado. Para editar, acrescente uma parte inlineData com a imagem original. Resoluções aceitas dependem do modelo.
+
+### Antes de executar
+
+Modelo necessário: Imagem. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/models/connectyhub-auto:generateContent' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Um café brasileiro em uma xícara branca, fotografia de produto."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "TEXT",
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "1:1",
+      "imageSize": "1K"
+    }
+  }
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Imagem.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Um café brasileiro em uma xícara branca, fotografia de produto."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "TEXT",
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "1:1",
+      "imageSize": "1K"
+    }
+  }
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/models/connectyhub-auto:generateContent', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+console.log(JSON.stringify(result, null, 2));
+// candidates[0].content.parts: salve inlineData.data como base64 decodificado, usando inlineData.mimeType para escolher a extensão.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Um café brasileiro em uma xícara branca, fotografia de produto."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "TEXT",
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "1:1",
+      "imageSize": "1K"
+    }
+  }
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/models/connectyhub-auto:generateContent', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# candidates[0].content.parts: salve inlineData.data como base64 decodificado, usando inlineData.mimeType para escolher a extensão.
+```
+
+Onde ler o resultado: candidates[0].content.parts: salve inlineData.data como base64 decodificado, usando inlineData.mimeType para escolher a extensão.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Transformar texto em voz
+
+Use uma chave da família Voz. Para duas vozes, configure multiSpeakerVoiceConfig e identifique os personagens no texto.
+
+### Antes de executar
+
+Modelo necessário: Voz. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/models/connectyhub-auto:generateContent' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Leia em português brasileiro: Seu pedido está pronto para retirada."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "AUDIO"
+    ],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
+        }
+      }
+    }
+  }
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Voz.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Leia em português brasileiro: Seu pedido está pronto para retirada."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "AUDIO"
+    ],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
+        }
+      }
+    }
+  }
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/models/connectyhub-auto:generateContent', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+console.log(JSON.stringify(result, null, 2));
+// candidates[0].content.parts[].inlineData. Áudio PCM precisa de um contêiner WAV ou reprodução com a frequência e os canais corretos; não renomeie PCM para MP3.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Leia em português brasileiro: Seu pedido está pronto para retirada."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "AUDIO"
+    ],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
+        }
+      }
+    }
+  }
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/models/connectyhub-auto:generateContent', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# candidates[0].content.parts[].inlineData. Áudio PCM precisa de um contêiner WAV ou reprodução com a frequência e os canais corretos; não renomeie PCM para MP3.
+```
+
+Onde ler o resultado: candidates[0].content.parts[].inlineData. Áudio PCM precisa de um contêiner WAV ou reprodução com a frequência e os canais corretos; não renomeie PCM para MP3.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Gerar e acompanhar um vídeo
+
+O envio retorna antes da conclusão. Cobrança depende da duração, resolução e saídas produzidas. Para extensão, envie video com o ID de um vídeo concluído e resolução 720p.
+
+### Antes de executar
+
+Modelo necessário: Video. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/videos' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "prompt": "Uma câmera percorre uma cafeteria vazia ao amanhecer.",
+  "duration_seconds": 8,
+  "resolution": "720p",
+  "aspect_ratio": "16:9"
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Video.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "prompt": "Uma câmera percorre uma cafeteria vazia ao amanhecer.",
+  "duration_seconds": 8,
+  "resolution": "720p",
+  "aspect_ratio": "16:9"
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/videos', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/videos/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.videos[].url. Baixe esse caminho com Authorization da mesma chave; ele não é um link público para compartilhar.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "prompt": "Uma câmera percorre uma cafeteria vazia ao amanhecer.",
+  "duration_seconds": 8,
+  "resolution": "720p",
+  "aspect_ratio": "16:9"
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/videos', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/videos/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.videos[].url. Baixe esse caminho com Authorization da mesma chave; ele não é um link público para compartilhar.
+```
+
+Onde ler o resultado: result.videos[].url. Baixe esse caminho com Authorization da mesma chave; ele não é um link público para compartilhar.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Pesquisar na web com fontes
+
+Cada consulta executada entra no consumo além do processamento do conteúdo. O número de links da resposta não determina o número de consultas.
+
+### Antes de executar
+
+Modelo necessário: Conversas com pesquisa. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": "Pesquise três tendências atuais de atendimento ao cliente e apresente as fontes.",
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Conversas com pesquisa.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": "Pesquise três tendências atuais de atendimento ao cliente e apresente as fontes.",
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps: percorra as saídas textuais e os resultados da pesquisa. Preserve citações e atribuições.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": "Pesquise três tendências atuais de atendimento ao cliente e apresente as fontes.",
+  "tools": [
+    {
+      "type": "web_search"
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps: percorra as saídas textuais e os resultados da pesquisa. Preserve citações e atribuições.
+```
+
+Onde ler o resultado: result.steps: percorra as saídas textuais e os resultados da pesquisa. Preserve citações e atribuições.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Pesquisar lugares por localização
+
+Localização precisa ser fornecida pelo seu sistema com autorização do usuário. Maps está disponível em Interações; a rota generateContent não aceita essa ferramenta nesta versão.
+
+### Antes de executar
+
+Modelo necessário: Conversas com mapas. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": "Encontre cafeterias próximas e informe endereço e fontes.",
+  "tools": [
+    {
+      "type": "maps",
+      "latitude": -23.5505,
+      "longitude": -46.6333
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Conversas com mapas.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": "Encontre cafeterias próximas e informe endereço e fontes.",
+  "tools": [
+    {
+      "type": "maps",
+      "latitude": -23.5505,
+      "longitude": -46.6333
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps. Preserve fontes, links e atribuições dos lugares retornados.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": "Encontre cafeterias próximas e informe endereço e fontes.",
+  "tools": [
+    {
+      "type": "maps",
+      "latitude": -23.5505,
+      "longitude": -46.6333
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps. Preserve fontes, links e atribuições dos lugares retornados.
+```
+
+Onde ler o resultado: result.steps. Preserve fontes, links e atribuições dos lugares retornados.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Executar um cálculo com código
+
+O ambiente da ferramenta é separado do seu servidor. Conteúdo processado, etapas de raciocínio e resultados usados pelo modelo entram na geração cobrada.
+
+### Antes de executar
+
+Modelo necessário: Conversas com execução de código. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": "Calcule a média e o desvio padrão dos valores 10, 20, 30, 40 e explique o resultado.",
+  "tools": [
+    {
+      "type": "code_execution"
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Conversas com execução de código.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": "Calcule a média e o desvio padrão dos valores 10, 20, 30, 40 e explique o resultado.",
+  "tools": [
+    {
+      "type": "code_execution"
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps: saídas do modelo e resultados da execução.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": "Calcule a média e o desvio padrão dos valores 10, 20, 30, 40 e explique o resultado.",
+  "tools": [
+    {
+      "type": "code_execution"
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps: saídas do modelo e resultados da execução.
+```
+
+Onde ler o resultado: result.steps: saídas do modelo e resultados da execução.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Analisar o conteúdo de uma página
+
+Uma URL na instrução é conteúdo para a ferramenta. O campo uri de mídia continua reservado aos arquivos enviados pelo projeto.
+
+### Antes de executar
+
+Modelo necessário: Conversas com contexto de URLs. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": "Leia https://www.connectyhub.com.br e resuma os serviços apresentados.",
+  "tools": [
+    {
+      "type": "url_context"
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Conversas com contexto de URLs.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": "Leia https://www.connectyhub.com.br e resuma os serviços apresentados.",
+  "tools": [
+    {
+      "type": "url_context"
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps. Verifique a resposta antes de usá-la em decisões automáticas.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": "Leia https://www.connectyhub.com.br e resuma os serviços apresentados.",
+  "tools": [
+    {
+      "type": "url_context"
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps. Verifique a resposta antes de usá-la em decisões automáticas.
+```
+
+Onde ler o resultado: result.steps. Verifique a resposta antes de usá-la em decisões automáticas.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Gerar uma música
+
+Selecione uma chave Music. A cobrança considera as músicas produzidas. A especialidade do modelo não muda ao escrever outro tipo de pedido.
+
+### Antes de executar
+
+Modelo necessário: Music. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": "Crie uma música instrumental suave com violão e piano para uma apresentação."
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Music.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": "Crie uma música instrumental suave com violão e piano para uma apresentação."
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps[].content: áudio pode vir em data ou em uri de download autenticado.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": "Crie uma música instrumental suave com violão e piano para uma apresentação."
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps[].content: áudio pode vir em data ou em uri de download autenticado.
+```
+
+Onde ler o resultado: result.steps[].content: áudio pode vir em data ou em uri de download autenticado.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Transcrever um áudio enviado
+
+Antes de executar, envie o áudio por /files e substitua o ID do exemplo. Acompanhe o arquivo até active. A criação do arquivo não é a transcrição.
+
+### Antes de executar
+
+Modelo necessário: Transcrição. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/interactions' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": [
+    {
+      "type": "audio",
+      "uri": "files/00000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "generation_config": {
+    "transcription_config": {
+      "language_codes": [
+        "pt-BR"
+      ],
+      "mode": {
+        "type": "verbatim",
+        "diarization_mode": "speaker",
+        "timestamp_granularities": [
+          "word"
+        ]
+      }
+    }
+  }
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Transcrição.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": [
+    {
+      "type": "audio",
+      "uri": "files/00000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "generation_config": {
+    "transcription_config": {
+      "language_codes": [
+        "pt-BR"
+      ],
+      "mode": {
+        "type": "verbatim",
+        "diarization_mode": "speaker",
+        "timestamp_granularities": [
+          "word"
+        ]
+      }
+    }
+  }
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/interactions', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/interactions/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.steps: texto reconhecido e anotações disponíveis conforme o modelo.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": [
+    {
+      "type": "audio",
+      "uri": "files/00000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "generation_config": {
+    "transcription_config": {
+      "language_codes": [
+        "pt-BR"
+      ],
+      "mode": {
+        "type": "verbatim",
+        "diarization_mode": "speaker",
+        "timestamp_granularities": [
+          "word"
+        ]
+      }
+    }
+  }
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/interactions', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/interactions/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.steps: texto reconhecido e anotações disponíveis conforme o modelo.
+```
+
+Onde ler o resultado: result.steps: texto reconhecido e anotações disponíveis conforme o modelo.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Processar vários itens em lote
+
+Cada item bem-sucedido tem consumo apurado. Falhas parciais não anulam os itens concluídos. Cancelar não estorna processamento já realizado.
+
+### Antes de executar
+
+Modelo necessário: Modelo com batch. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/batches' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "display_name": "Descrições",
+  "requests": [
+    {
+      "key": "produto-a",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma camiseta azul."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "produto-b",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma mochila verde."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Modelo com batch.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "display_name": "Descrições",
+  "requests": [
+    {
+      "key": "produto-a",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma camiseta azul."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "produto-b",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma mochila verde."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/batches', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+// O acompanhamento não gera outra cobrança. Se demorar, guarde o ID e consulte depois.
+for (let attempt = 0; result.id && ['preparing','processing','cancelling','settling'].includes(result.status) && attempt < 30; attempt++) {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  result = await call('/batches/' + result.id);
+}
+console.log(JSON.stringify(result, null, 2));
+// result.results[]: associe cada item pela key, nunca apenas pela posição.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "display_name": "Descrições",
+  "requests": [
+    {
+      "key": "produto-a",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma camiseta azul."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "produto-b",
+      "request": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Descreva uma mochila verde."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/batches', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+for attempt in range(30):
+    if not result.get('id') or result.get('status') not in ['preparing','processing','cancelling','settling']:
+        break
+    time.sleep(2)
+    result = call('/batches/' + result['id'])
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# result.results[]: associe cada item pela key, nunca apenas pela posição.
+```
+
+Onde ler o resultado: result.results[]: associe cada item pela key, nunca apenas pela posição.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Criar um contexto reutilizável
+
+O exemplo curto mostra o formato; o modelo pode exigir um contexto mínimo. O armazenamento consome créditos enquanto ativo. PATCH altera a validade; DELETE encerra e calcula o período utilizado.
+
+### Antes de executar
+
+Modelo necessário: Modelo com cache. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/caches' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "display_name": "Manual",
+  "ttl_seconds": 3600,
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Substitua este texto pelo manual completo da sua empresa."
+        }
+      ]
+    }
+  ]
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Modelo com cache.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "display_name": "Manual",
+  "ttl_seconds": 3600,
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Substitua este texto pelo manual completo da sua empresa."
+        }
+      ]
+    }
+  ]
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/caches', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+console.log(JSON.stringify(result, null, 2));
+// id e expires_at. Em uma geração, use cachedContent: "caches/ID" junto com a pergunta.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "display_name": "Manual",
+  "ttl_seconds": 3600,
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Substitua este texto pelo manual completo da sua empresa."
+        }
+      ]
+    }
+  ]
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/caches', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# id e expires_at. Em uma geração, use cachedContent: "caches/ID" junto com a pergunta.
+```
+
+Onde ler o resultado: id e expires_at. Em uma geração, use cachedContent: "caches/ID" junto com a pergunta.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Criar vetores para busca semântica
+
+A consulta deve usar RETRIEVAL_QUERY. Gerar o vetor é cobrado pelo conteúdo processado; essa rota não armazena um banco vetorial para o cliente.
+
+### Antes de executar
+
+Modelo necessário: Embedding. Confira available, capabilities e usable_with_key em GET /models. Configure CONNECTYHUB_AI_API_KEY e CONNECTYHUB_OPERATION_ID. A identidade deve ser nova para uma nova execução e preservada ao recuperar a mesma operação. IDs e textos de referência precisam ser substituídos pelos seus dados.
+
+### cURL · Bash
+
+```bash
+curl --fail-with-body 'https://www.connectyhub.com.br/api/v1/ai/embeddings' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $CONNECTYHUB_OPERATION_ID" \
+  --data '{
+  "input": [
+    "Entrega em até três dias úteis.",
+    "Troca gratuita em até sete dias."
+  ],
+  "task_type": "RETRIEVAL_DOCUMENT",
+  "dimensions": 768
+}'
+```
+
+### JavaScript · Node.js
+
+```javascript
+// Node.js; execute no servidor. Use uma chave compatível com Embedding.
+const base = 'https://www.connectyhub.com.br/api/v1/ai';
+const key = process.env.CONNECTYHUB_AI_API_KEY;
+const operationId = process.env.CONNECTYHUB_OPERATION_ID;
+if (!key || !operationId) throw new Error('Configure a chave e uma identidade persistente para esta operação.');
+const body = {
+  "input": [
+    "Entrega em até três dias úteis.",
+    "Troca gratuita em até sete dias."
+  ],
+  "task_type": "RETRIEVAL_DOCUMENT",
+  "dimensions": 768
+};
+async function call(path, data) {
+  const response = await fetch(base + path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operationId},
+    ...(data === undefined ? {} : {body: JSON.stringify(data)}),
+    signal: AbortSignal.timeout(120000),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    console.error({http: response.status, error: result.error, requestId: response.headers.get('x-request-id')});
+    throw new Error('Confira a solicitação antes de iniciar outra execução.');
+  }
+  return result;
+}
+let result = await call('/embeddings', body);
+console.log('Operação registrada:', result.id ?? result.connectyhub?.request_id);
+console.log(JSON.stringify(result, null, 2));
+// data[].embedding. Armazene o vetor e o texto no seu banco; use o mesmo modelo e dimensão para as perguntas.
+```
+
+### Python
+
+```python
+# Python 3, biblioteca padrão. Execute no servidor.
+import json, os, time, urllib.request, urllib.error
+base = 'https://www.connectyhub.com.br/api/v1/ai'
+key = os.environ['CONNECTYHUB_AI_API_KEY']
+operation_id = os.environ['CONNECTYHUB_OPERATION_ID']
+body = json.loads(r'''{
+  "input": [
+    "Entrega em até três dias úteis.",
+    "Troca gratuita em até sete dias."
+  ],
+  "task_type": "RETRIEVAL_DOCUMENT",
+  "dimensions": 768
+}''')
+def call(path, data=None):
+    request = urllib.request.Request(base + path,
+        data=None if data is None else json.dumps(data).encode(),
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Idempotency-Key': operation_id},
+        method='GET' if data is None else 'POST')
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        print('HTTP', error.code, 'request_id', error.headers.get('x-request-id'))
+        print(error.read().decode())
+        raise
+result = call('/embeddings', body)
+print('Operação registrada:', result.get('id', result.get('connectyhub', {}).get('request_id')))
+print(json.dumps(result, ensure_ascii=False, indent=2))
+# data[].embedding. Armazene o vetor e o texto no seu banco; use o mesmo modelo e dimensão para as perguntas.
+```
+
+Onde ler o resultado: data[].embedding. Armazene o vetor e o texto no seu banco; use o mesmo modelo e dimensão para as perguntas.
+
+### Créditos
+
+Uma geração concluída informa o consumo em connectyhub.credits; recursos assíncronos usam result.connectyhub.credits. Consulte também GET /requests/{request_id}. Não some o valor da consulta ao valor da resposta: ambos descrevem a mesma operação. Cache tem armazenamento contínuo, apurado ao encerrar ou expirar.
+
+---
+
+## Cadastrar webhook
+
+Notifica alterações futuras das solicitações do projeto. Não executa IA. A chave de assinatura é exibida somente na criação.
+
+**POST /webhooks**
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| url | string | Sim | HTTPS público na porta 443, DNS IPv4 público, sem credenciais ou redirecionamento. · format: uri |
+| events | array | Não | minItems: 1 · Padrão: ["request.completed","request.failed"] |
+
+HTTP 200: Configuração criada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| url | string | Não | format: uri |
+| events | array | Não | Consulte o tipo e os campos relacionados. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| signing_secret | string | Não | Segredo de assinatura retornado somente na criação. Guarde no servidor. |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar webhooks
+
+Até 100 configurações recentes do projeto da chave, incluindo pausadas.
+
+**GET /webhooks**
+
+HTTP 200: Lista de configurações
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].project_id | string | Não | format: uuid |
+| data[].url | string | Não | format: uri |
+| data[].events | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar configuração
+
+Referência dos campos públicos desta operação.
+
+**GET /webhooks/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Configuração do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| url | string | Não | format: uri |
+| events | array | Não | Consulte o tipo e os campos relacionados. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Pausar ou reativar
+
+Envie enabled. Reativar um agendamento começa no próximo horário futuro; não recupera horários perdidos. Para mudar URL, segredo ou instruções, pause e crie outra configuração.
+
+**PATCH /webhooks/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| enabled | boolean | Sim | true ativa; false pausa novas execuções ou entregas. |
+
+HTTP 200: Configuração atualizada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| url | string | Não | format: uri |
+| events | array | Não | Consulte o tipo e os campos relacionados. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Desativar configuração
+
+Desativação preserva o histórico. Execuções já enviadas continuam com sua cobrança; desativar não estorna nem cancela uma geração em andamento.
+
+**DELETE /webhooks/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Configuração desativada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| url | string | Não | format: uri |
+| events | array | Não | Consulte o tipo e os campos relacionados. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Histórico de entregas
+
+Até 100 registros recentes. Consulte request_id na API de solicitações para o resultado financeiro e a resposta.
+
+**GET /webhooks/{id}/deliveries**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Histórico
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].request_id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].event_type | valor JSON | Não | Aceita: request.completed, request.failed |
+| data[].status | valor JSON | Não | Aceita: pending, delivered, failed, skipped |
+| data[].attempts | integer | Não | Consulte o tipo e os campos relacionados. |
+| data[].http_status | integer ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Criar agendamento
+
+Cada horário inicia uma Interação com a chave original, revalida o acesso e reserva créditos. Cadastrar não executa imediatamente. Uma nova criação é um novo agendamento; confira a listagem antes de repetir após perda de conexão.
+
+**POST /triggers**
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| display_name | string | Não | maxLength: 200 |
+| schedule | string | Sim | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. · Padrão: "America/Sao_Paulo" |
+| interaction | InteractionRequest | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| interaction.input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| interaction.input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| interaction.input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| interaction.input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| interaction.input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| interaction.input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| interaction.input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| interaction.input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| interaction.input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| interaction.generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| interaction.generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| interaction.generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa1.type | string | Sim | Valor: "function" |
+| interaction.tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| interaction.tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| interaction.tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| interaction.tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| interaction.tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| interaction.tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| interaction.tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| interaction.tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| interaction.tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| interaction.tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| interaction.tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| interaction.tools[].alternativa6.url | string | Sim | format: uri |
+| interaction.tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| interaction.tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+
+HTTP 200: Configuração criada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| schedule | string | Não | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. |
+| interaction | InteractionRequest | Não | Consulte o tipo e os campos relacionados. |
+| interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| interaction.input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| interaction.input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| interaction.input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| interaction.input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| interaction.input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| interaction.input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| interaction.input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| interaction.input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| interaction.input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| interaction.generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| interaction.generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| interaction.generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa1.type | string | Sim | Valor: "function" |
+| interaction.tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| interaction.tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| interaction.tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| interaction.tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| interaction.tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| interaction.tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| interaction.tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| interaction.tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| interaction.tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| interaction.tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| interaction.tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| interaction.tools[].alternativa6.url | string | Sim | format: uri |
+| interaction.tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| interaction.tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| next_run_at | string | Não | format: date-time |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar triggers
+
+Até 100 configurações recentes do projeto da chave, incluindo pausadas.
+
+**GET /triggers**
+
+HTTP 200: Lista de configurações
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].project_id | string | Não | format: uuid |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].schedule | string | Não | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| data[].time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. |
+| data[].interaction | InteractionRequest | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| data[].interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| data[].interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| data[].interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| data[].interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| data[].interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| data[].interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| data[].interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| data[].interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| data[].interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| data[].interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| data[].interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| data[].interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| data[].interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| data[].interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| data[].interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| data[].interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| data[].interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| data[].interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| data[].interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| data[].interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].next_run_at | string | Não | format: date-time |
+| data[].created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar configuração
+
+Referência dos campos públicos desta operação.
+
+**GET /triggers/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Configuração do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| schedule | string | Não | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. |
+| interaction | InteractionRequest | Não | Consulte o tipo e os campos relacionados. |
+| interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| interaction.input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| interaction.input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| interaction.input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| interaction.input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| interaction.input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| interaction.input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| interaction.input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| interaction.input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| interaction.input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| interaction.generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| interaction.generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| interaction.generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa1.type | string | Sim | Valor: "function" |
+| interaction.tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| interaction.tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| interaction.tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| interaction.tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| interaction.tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| interaction.tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| interaction.tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| interaction.tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| interaction.tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| interaction.tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| interaction.tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| interaction.tools[].alternativa6.url | string | Sim | format: uri |
+| interaction.tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| interaction.tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| next_run_at | string | Não | format: date-time |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Pausar ou reativar
+
+Envie enabled. Reativar um agendamento começa no próximo horário futuro; não recupera horários perdidos. Para mudar URL, segredo ou instruções, pause e crie outra configuração.
+
+**PATCH /triggers/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| enabled | boolean | Sim | true ativa; false pausa novas execuções ou entregas. |
+
+HTTP 200: Configuração atualizada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| schedule | string | Não | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. |
+| interaction | InteractionRequest | Não | Consulte o tipo e os campos relacionados. |
+| interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| interaction.input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| interaction.input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| interaction.input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| interaction.input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| interaction.input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| interaction.input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| interaction.input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| interaction.input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| interaction.input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| interaction.generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| interaction.generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| interaction.generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa1.type | string | Sim | Valor: "function" |
+| interaction.tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| interaction.tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| interaction.tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| interaction.tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| interaction.tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| interaction.tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| interaction.tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| interaction.tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| interaction.tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| interaction.tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| interaction.tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| interaction.tools[].alternativa6.url | string | Sim | format: uri |
+| interaction.tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| interaction.tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| next_run_at | string | Não | format: date-time |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Desativar configuração
+
+Desativação preserva o histórico. Execuções já enviadas continuam com sua cobrança; desativar não estorna nem cancela uma geração em andamento.
+
+**DELETE /triggers/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Configuração desativada
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| project_id | string | Não | format: uuid |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| schedule | string | Não | Cron de cinco campos: minuto, hora, dia do mês, mês e dia da semana. |
+| time_zone | string | Não | Fuso IANA, como America/Sao_Paulo. |
+| interaction | InteractionRequest | Não | Consulte o tipo e os campos relacionados. |
+| interaction.model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| interaction.input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| interaction.input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| interaction.input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| interaction.input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| interaction.input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| interaction.input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| interaction.input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| interaction.input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| interaction.input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| interaction.input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| interaction.input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| interaction.system_instruction | string | Não | Instruções fixas para esta execução. |
+| interaction.previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| interaction.agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| interaction.environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| interaction.response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| interaction.response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| interaction.response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| interaction.agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| interaction.agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| interaction.agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| interaction.agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| interaction.generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| interaction.generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| interaction.generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| interaction.generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| interaction.generation_config.speech_config.language | string | Não | Idioma da fala. |
+| interaction.generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| interaction.generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| interaction.generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| interaction.generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| interaction.generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| interaction.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa1.type | string | Sim | Valor: "function" |
+| interaction.tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| interaction.tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| interaction.tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| interaction.tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| interaction.tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| interaction.tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| interaction.tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| interaction.tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| interaction.tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| interaction.tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| interaction.tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| interaction.tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| interaction.tools[].alternativa6.url | string | Sim | format: uri |
+| interaction.tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| interaction.tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| interaction.tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+| enabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| next_run_at | string | Não | format: date-time |
+| created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Histórico de execuções
+
+Até 100 registros recentes. Consulte request_id na API de solicitações para o resultado financeiro e a resposta.
+
+**GET /triggers/{id}/runs**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Histórico
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | submitted informa despacho/recuperação da solicitação, não conclusão da geração. Consulte request_id. · Aceita: pending, submitted, failed, skipped |
+| data[].error_code | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 403: Projeto ou acesso suspenso
+
+HTTP 404: Recurso de outro projeto ou inexistente
+
+HTTP 422: Configuração inválida
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Criar cache
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /caches**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| contents | ContentRequestContents | Sim | minItems: 1 |
+| contents[].role | valor JSON | Não | Aceita: user, model |
+| contents[].parts | array | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.mimeType | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.data | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData.fileUri | string | Sim | Nome do arquivo deste projeto, retornado por /files. · pattern: ^files/[a-f0-9-]{36}$ |
+| contents[].parts[].functionCall | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.args | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
+| contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.endOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.fps | number | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| tools | array | Não | Consulte o tipo e os campos relacionados. |
+| ttl_seconds | number | Não | minimum: 1 · maximum: 604800 · Padrão: 3600 |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar cache
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /caches**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Alterar validade do cache
+
+Referência dos campos públicos desta operação.
+
+**PATCH /caches/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| ttl_seconds | integer | Sim | minimum: 1 · maximum: 604800 |
+
+HTTP 200: Validade atualizada com reserva de créditos
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Consultar cache
+
+Referência dos campos públicos desta operação.
+
+**GET /caches/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir cache
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /caches/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar lote
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /batches**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| requests | array | Sim | minItems: 1 · maxItems: 100 |
+| requests[].key | string | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request | ContentRequest ou EmbeddingRequest | Sim | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.contents | array | Sim | minItems: 1 |
+| requests[].request.alternativa1.systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| requests[].request.alternativa1.generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.candidateCount | number | Não | Valor: 1 |
+| requests[].request.alternativa1.generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
+| requests[].request.alternativa1.generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
+| requests[].request.alternativa1.generationConfig.responseSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.responseJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.responseModalities | array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.speechConfig | SpeechConfig | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.imageConfig | ImageConfig | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.thinkingConfig | ThinkingConfig | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.mediaResolution | string | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.presencePenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.generationConfig.frequencyPenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.cachedContent | string | Não | Nome caches/ID deste projeto. |
+| requests[].request.alternativa1.toolConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.safetySettings | array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.model | string | Não | Opcional; deve corresponder à chave. |
+| requests[].request.alternativa2.input | string ou array | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.content | object | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.content.parts | array | Sim | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.document_ocr | boolean | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.audio_track_extraction | boolean | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa2.dimensions | integer | Não | minimum: 1 · maximum: 3072 |
+| requests[].request.alternativa2.task_type | valor JSON | Não | Aceita: RETRIEVAL_QUERY, RETRIEVAL_DOCUMENT, SEMANTIC_SIMILARITY, CLASSIFICATION, CLUSTERING, QUESTION_ANSWERING, FACT_VERIFICATION, CODE_RETRIEVAL_QUERY |
+| requests[].request.alternativa2.title | string | Não | Somente com RETRIEVAL_DOCUMENT. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar lote
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /batches**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar lote
+
+Referência dos campos públicos desta operação.
+
+**GET /batches/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir lote
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /batches/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar vídeo
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /videos**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| prompt | string | Não | Consulte o tipo e os campos relacionados. |
+| duration_seconds | valor JSON | Não | Aceita: 4, 6, 8 · Padrão: 8 |
+| resolution | valor JSON | Não | Aceita: 720p, 1080p, 4k · Padrão: "720p" |
+| aspect_ratio | valor JSON | Não | Aceita: 16:9, 9:16 |
+| image | object | Não | Consulte o tipo e os campos relacionados. |
+| lastFrame | object | Não | Consulte o tipo e os campos relacionados. |
+| referenceImages | array | Não | Consulte o tipo e os campos relacionados. |
+| video | string | Não | ID de um vídeo concluído deste projeto para extensão. |
+| negative_prompt | string | Não | Consulte o tipo e os campos relacionados. |
+| seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| person_generation | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar vídeo
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /videos**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar vídeo
+
+Referência dos campos públicos desta operação.
+
+**GET /videos/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir vídeo
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /videos/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar coleção
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /stores**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar coleção
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /stores**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar coleção
+
+Referência dos campos públicos desta operação.
+
+**GET /stores/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir coleção
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /stores/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar documento indexado
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /documents**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| store | string | Sim | Consulte o tipo e os campos relacionados. |
+| file | string | Sim | Consulte o tipo e os campos relacionados. |
+| custom_metadata | array | Não | Consulte o tipo e os campos relacionados. |
+| chunking_config | object | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar documento indexado
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /documents**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar documento indexado
+
+Referência dos campos públicos desta operação.
+
+**GET /documents/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir documento indexado
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /documents/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar interação
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /interactions**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Opcional: ID público vinculado à chave; a omissão usa o modelo da chave. |
+| input | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| input.alternativa2[].alternativa1.type | string | Sim | Valor: "text" |
+| input.alternativa2[].alternativa1.text | string | Sim | Texto da pergunta ou do contexto. |
+| input.alternativa2[].alternativa2.type | valor JSON | Sim | Aceita: image, audio, video, document |
+| input.alternativa2[].alternativa2.data | string | Não | Conteúdo em base64 puro; use data ou uri. |
+| input.alternativa2[].alternativa2.uri | string | Não | Nome files/ID de um arquivo ativo deste projeto. URLs externas não são aceitas aqui. |
+| input.alternativa2[].alternativa2.mime_type | string | Não | Tipo MIME do conteúdo; por exemplo image/png ou audio/wav. |
+| input.alternativa2[].alternativa3.type | string | Sim | Valor: "function_result" |
+| input.alternativa2[].alternativa3.call_id | string | Sim | Identidade recebida na chamada de função. |
+| input.alternativa2[].alternativa3.name | string | Não | Nome da função executada. |
+| input.alternativa2[].alternativa3.result | string ou object | Sim | Consulte o tipo e os campos relacionados. |
+| input.alternativa2[].alternativa3.is_error | boolean | Não | true quando a execução no seu sistema falhou. |
+| system_instruction | string | Não | Instruções fixas para esta execução. |
+| previous_interaction_id | string | Não | Interação concluída ou aguardando ação, pertencente ao mesmo projeto. · format: uuid |
+| agent_id | string | Não | Agente ativo criado em /agents com o modelo da chave. · format: uuid |
+| environment_id | string | Não | Ambiente ativo deste projeto. · format: uuid |
+| response_format | object | Não | Consulte o tipo e os campos relacionados. |
+| response_format.type | valor JSON | Não | Aceita: json, text, image, audio, video |
+| response_format.schema | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| response_format.aspect_ratio | string | Não | Proporção da mídia, conforme o modelo. |
+| response_format.resolution | string | Não | Resolução de saída suportada pelo modelo. |
+| agent_config | object | Não | Opções exclusivas de pesquisa aprofundada, quando disponível para a chave. |
+| agent_config.collaborative_planning | boolean | Não | Consulte o tipo e os campos relacionados. |
+| agent_config.visualization | valor JSON | Não | Aceita: off, auto |
+| agent_config.thinking_summaries | valor JSON | Não | Aceita: none, auto |
+| generation_config | InteractionGenerationConfig | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.temperature | number | Não | Variação da resposta, conforme suporte do modelo. · minimum: 0 · maximum: 2 |
+| generation_config.top_p | number | Não | minimum: 0 · maximum: 1 |
+| generation_config.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.stop_sequences | array | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.thinking_level | valor JSON | Não | Esforço de raciocínio. Maior esforço pode consumir mais créditos. · Aceita: minimal, low, medium, high |
+| generation_config.speech_config | object | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.speech_config.voice | string | Não | Voz aceita pelo modelo. |
+| generation_config.speech_config.language | string | Não | Idioma da fala. |
+| generation_config.transcription_config | object | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.transcription_config.language_codes | array | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.transcription_config.custom_vocabulary | array | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.transcription_config.mode | object ou object | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.transcription_config.mode.alternativa1.type | string | Não | Valor: "smart" |
+| generation_config.transcription_config.mode.alternativa2.type | string | Não | Valor: "verbatim" |
+| generation_config.transcription_config.mode.alternativa2.diarization_mode | string | Não | Valor: "speaker" |
+| generation_config.transcription_config.mode.alternativa2.timestamp_granularities | array | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.video_config | object | Não | Consulte o tipo e os campos relacionados. |
+| generation_config.video_config.task | valor JSON | Não | Aceita: text_to_video, image_to_video, reference_to_video, edit, extend |
+| tools | array | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.type | string | Sim | Valor: "function" |
+| tools[].alternativa1.name | string | Sim | Identificador da função no seu sistema. |
+| tools[].alternativa1.description | string | Não | Quando e como a função deve ser usada. |
+| tools[].alternativa1.parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| tools[].alternativa2.type | valor JSON | Sim | Aceita: web_search, code_execution, url_context |
+| tools[].alternativa3.type | string | Sim | Valor: "maps" |
+| tools[].alternativa3.latitude | number | Não | minimum: -90 · maximum: 90 |
+| tools[].alternativa3.longitude | number | Não | minimum: -180 · maximum: 180 |
+| tools[].alternativa4.type | string | Sim | Valor: "file_search" |
+| tools[].alternativa4.stores | array | Sim | minItems: 1 |
+| tools[].alternativa5.type | string | Sim | Valor: "computer_use" |
+| tools[].alternativa5.environment | string | Sim | Valor: "browser" |
+| tools[].alternativa6.type | string | Sim | Valor: "mcp_server" |
+| tools[].alternativa6.url | string | Sim | format: uri |
+| tools[].alternativa6.name | string | Não | Nome público do servidor de ferramentas. |
+| tools[].alternativa6.allowed_tools | array | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.allowed_tools[].mode | valor JSON | Não | Aceita: auto, any, none, validated |
+| tools[].alternativa6.allowed_tools[].tools | array | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.headers | object | Não | Cabeçalhos do seu servidor MCP. Não envie sua chave ConnectyHub. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar interação
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /interactions**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar interação
+
+Referência dos campos públicos desta operação.
+
+**GET /interactions/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir interação
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /interactions/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar agente especializado
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /agents**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| system_instruction | string | Não | Consulte o tipo e os campos relacionados. |
+| environment_id | string | Não | Consulte o tipo e os campos relacionados. |
+| tools | array | Não | Consulte o tipo e os campos relacionados. |
+| network | object ou string | Não | Consulte o tipo e os campos relacionados. |
+| sources | array | Não | Consulte o tipo e os campos relacionados. |
+| sources[].type | string | Sim | Valor: "inline" |
+| sources[].content | string | Sim | Consulte o tipo e os campos relacionados. |
+| sources[].target | string | Sim | Consulte o tipo e os campos relacionados. |
+| sources[].encoding | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar agente especializado
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /agents**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar agente especializado
+
+Referência dos campos públicos desta operação.
+
+**GET /agents/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir agente especializado
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /agents/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Criar ambiente
+
+Recurso isolado por projeto. As execuções reservam créditos antes do envio e confirmam o consumo na conclusão. Consulte o estado retornado; não reenvie com outra identidade.
+
+**POST /environments**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| network | object ou string | Não | Consulte o tipo e os campos relacionados. |
+| sources | array | Não | Consulte o tipo e os campos relacionados. |
+| sources[].type | string | Sim | Valor: "inline" |
+| sources[].content | string | Sim | Consulte o tipo e os campos relacionados. |
+| sources[].target | string | Sim | Consulte o tipo e os campos relacionados. |
+| sources[].encoding | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Recurso registrado; execução pode estar em andamento
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar ambiente
+
+Até 100 recursos recentes do projeto da chave.
+
+**GET /environments**
+
+HTTP 200: Recursos do projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].object | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].kind | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| data[].request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+| data[].result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| data[].result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.object | string | Não | Valor: "interaction" |
+| data[].result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| data[].result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.object | string | Não | Valor: "video" |
+| data[].result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.object | string | Não | Valor: "batch" |
+| data[].result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| data[].result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| data[].result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| data[].result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| data[].result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| data[].result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar ambiente
+
+Referência dos campos públicos desta operação.
+
+**GET /environments/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resultado e créditos quando concluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir ambiente
+
+Cache é cobrado pelo período efetivamente armazenado. Excluir resultados concluídos não estorna o processamento já realizado. Cancele execuções ativas antes de excluir.
+
+**DELETE /environments/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Recurso excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Solicitar cancelamento
+
+O consumo confirmado até o cancelamento permanece cobrado. Aguarde a situação final; o pedido não garante interrupção imediata.
+
+**POST /batches/{id}/cancel**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Cancelamento solicitado
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Solicitar cancelamento
+
+O consumo confirmado até o cancelamento permanece cobrado. Aguarde a situação final; o pedido não garante interrupção imediata.
+
+**POST /interactions/{id}/cancel**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Cancelamento solicitado
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| object | string | Não | Consulte o tipo e os campos relacionados. |
+| kind | string | Não | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, cancelling, settling, completed, requires_action, failed, uncertain, deleted, expired |
+| request_id | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+| result | InteractionResult ou VideoResult ou BatchResult ou object | Não | Resultado após a conferência de consumo, conforme kind. |
+| result.alternativa1.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.object | string | Não | Valor: "interaction" |
+| result.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.status | valor JSON | Não | Aceita: completed, requires_action, failed, cancelled |
+| result.alternativa1.steps | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].type | string | Não | model_output, function_call, function_result, web_search_call, web_search_result, maps_call, maps_result e eventos de ferramentas compatíveis. |
+| result.alternativa1.steps[].id | string | Não | Identificador da etapa, quando disponível. |
+| result.alternativa1.steps[].call_id | string | Não | Identificador usado para devolver o resultado de uma função. |
+| result.alternativa1.steps[].name | string | Não | Nome da função. |
+| result.alternativa1.steps[].arguments | object | Não | Argumentos propostos; valide antes de executar no seu sistema. |
+| result.alternativa1.steps[].result | valor JSON | Não | Resultado da ferramenta, cujo formato depende da função. |
+| result.alternativa1.steps[].content | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.steps[].signature | string | Não | Contexto opaco que deve ser preservado quando retornado. |
+| result.alternativa1.steps[].is_error | boolean | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.object | string | Não | Valor: "video" |
+| result.alternativa2.videos | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.videos[].url | string | Não | Caminho de download autenticado pela chave do projeto. |
+| result.alternativa2.videos[].mime_type | string | Não | Valor: "video/mp4" |
+| result.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.object | string | Não | Valor: "batch" |
+| result.alternativa3.results | array | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].key | string | Não | Identidade original do item. |
+| result.alternativa3.results[].response | ContentResponse ou object | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error | AiError | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.results[].error.error | object | Sim | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| result.alternativa4.id | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.object | valor JSON | Não | Aceita: cache, document |
+| result.alternativa4.status | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.store | string | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| result.alternativa4.connectyhub.request_id | string | Sim | format: uuid |
+| result.alternativa4.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| result.alternativa4.connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Baixar vídeo concluído
+
+Referência dos campos públicos desta operação.
+
+**GET /videos/{id}/content**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+| index | query | Não |  {"type":"integer","minimum":0,"default":0} |
+
+HTTP 200: Arquivo MP4
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Baixar mídia da interação
+
+Referência dos campos públicos desta operação.
+
+**GET /interactions/{id}/content**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+| index | query | Não |  {"type":"integer","minimum":0} |
+
+HTTP 200: Arquivo gerado
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Consultar ou baixar arquivos do ambiente
+
+Referência dos campos públicos desta operação.
+
+**GET /environments/{id}/files**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+| path | query | Não | Caminho relativo; vazio lista a raiz. {"type":"string"} |
+| download | query | Não |  {"type":"boolean"} |
+| recursive | query | Não |  {"type":"boolean"} |
+| cursor | query | Não |  {"type":"string"} |
+
+HTTP 200: Arquivos do ambiente ou download autenticado
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Abrir sessão em tempo real
+
+Retorna endereço WebSocket e acesso descartável válido por 60 segundos. Envie {id, access_key} como primeira mensagem. Aguarde setupComplete; então envie clientContent, realtimeInput ou toolResponse. Música aceita clientContent, musicGenerationConfig e playbackControl. O consumo é acompanhado pela carteira; novas execuções param se o saldo não puder cobrir a sessão.
+
+**POST /live**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Use a mesma identidade e corpo para recuperar a operação. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Opcional; deve corresponder ao modelo da chave. |
+| config | object | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.responseModalities | array | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.speechConfig | SpeechConfig | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.speechConfig.languageCode | string | Não | Idioma da fala, conforme suporte. |
+| config.generationConfig.speechConfig.voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName | string | Sim | Voz selecionada, por exemplo Kore. |
+| config.generationConfig.speechConfig.multiSpeakerVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| config.generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs | array | Não | Consulte o tipo e os campos relacionados. |
+| config.systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| config.systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| config.systemInstruction.parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| config.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| config.tools[].functionDeclarations | array | Não | Consulte o tipo e os campos relacionados. |
+| config.tools[].functionDeclarations[].name | string | Não | Consulte o tipo e os campos relacionados. |
+| config.tools[].functionDeclarations[].description | string | Não | Consulte o tipo e os campos relacionados. |
+| config.tools[].functionDeclarations[].parameters | object | Não | JSON Schema definido pelo seu sistema. Descreva properties, required e additionalProperties conforme o resultado esperado. |
+| config.inputAudioTranscription | object | Não | Envie {} para solicitar transcrição da entrada, conforme o modelo. |
+| config.outputAudioTranscription | object | Não | Envie {} para solicitar transcrição da saída. |
+| config.realtimeInputConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| config.realtimeInputConfig.automaticActivityDetection | object | Não | Consulte o tipo e os campos relacionados. |
+| config.realtimeInputConfig.automaticActivityDetection.disabled | boolean | Não | Consulte o tipo e os campos relacionados. |
+| config.realtimeInputConfig.automaticActivityDetection.silenceDurationMs | integer | Não | Consulte o tipo e os campos relacionados. |
+| config.realtimeInputConfig.automaticActivityDetection.prefixPaddingMs | integer | Não | Consulte o tipo e os campos relacionados. |
+| config.realtimeInputConfig.activityHandling | valor JSON | Não | Aceita: START_OF_ACTIVITY_INTERRUPTS, NO_INTERRUPTION |
+| config.contextWindowCompression | object | Não | Consulte o tipo e os campos relacionados. |
+| config.contextWindowCompression.slidingWindow | object | Não | Consulte o tipo e os campos relacionados. |
+| config.proactivity | object | Não | Consulte o tipo e os campos relacionados. |
+| config.proactivity.proactiveAudio | boolean | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Sessão pronta para conexão
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | Consulte o tipo e os campos relacionados. |
+| url | string | Não | Consulte o tipo e os campos relacionados. |
+| access_key | string | Não | Acesso temporário exclusivo da sessão; não reutilize. |
+| expires_at | string | Não | format: date-time |
+
+HTTP 401: Chave inválida
+
+HTTP 402: Acesso ou créditos indisponíveis
+
+HTTP 404: Recurso não pertence ao projeto
+
+HTTP 409: Operação pendente ou em uso
+
+HTTP 422: Modelo ou configuração incompatível
+
+HTTP 503: Serviço indisponível; consulte a solicitação antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Consultar modelo e recursos
+
+Referência dos campos públicos desta operação.
+
+**GET /models/{model}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| model | path | Sim |  {"type":"string"} |
+
+HTTP 200: Modelo disponível e compatibilidade com a chave
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | Aceita: flash-2.5, pro-2.5, flash-2.5-preview-tts, pro-2.5-preview-tts, open-4-26b-a4b-it, open-4-31b-it, flash-latest, flash-lite-latest, pro-latest, flash-lite-2.5, flash-2.5-image, flash-3-preview, pro-3.1-preview, pro-3.1-preview-customtools, flash-lite-3.1-preview, flash-lite-3.1, pro-3-image-preview, pro-3-image, image-pro-preview, flash-3.1-image-preview, flash-3.1-image, flash-lite-3.1-image, flash-3.5, flash-lite-3.5, omni-flash-preview, omni-1.1-flash, 3.5-transcribe, flash-3.6, flash-3.7, flash-3.8, music-3-clip-preview, music-3-pro-preview, music-3.5, flash-3.1-tts-preview, robotics-er-2-preview, 2.5-computer-use-preview-10-2025, antigravity-preview-05-2026, deep-research-max-preview-04-2026, deep-research-preview-04-2026, deep-research-pro-preview-12-2025, embedding-001, embedding-2-preview, embedding-2, aqa, video-3.1-generate-preview, video-3.1-fast-generate-preview, video-3.1-lite-generate-preview, 3.5-transcribe-live, flash-2.5-native-audio-latest, flash-2.5-native-audio-preview-09-2025, flash-2.5-native-audio-preview-12-2025, flash-3.1-live-preview, robotics-er-2-streaming-preview, 3.5-live-translate-preview, music-realtime-exp |
+| object | string | Não | Valor: "model" |
+| name | string | Não | Consulte o tipo e os campos relacionados. |
+| family | string | Não | Consulte o tipo e os campos relacionados. |
+| profile | string | Não | Consulte o tipo e os campos relacionados. |
+| consumption | string | Não | Perfil de uso em créditos; não representa um valor fixo por chamada. |
+| recommended | boolean | Não | Consulte o tipo e os campos relacionados. |
+| available | boolean | Não | Consulte o tipo e os campos relacionados. |
+| capabilities | array | Não | Consulte o tipo e os campos relacionados. |
+| usable_with_key | boolean | Não | Consulte o tipo e os campos relacionados. |
+| unavailable_reason | string ou null | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Gerar conteúdo multimodal
+
+Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
+
+**POST /models/{model}:generateContent**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| model | path | Sim |  {"type":"string"} |
+| Idempotency-Key | header | Não | Identidade da operação. Preserve o mesmo corpo e esta identidade para recuperar sem duplicar a execução. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| contents | array | Sim | minItems: 1 |
+| contents[].role | valor JSON | Não | Aceita: user, model · Padrão: "user" |
+| contents[].parts | array | Sim | minItems: 1 |
+| contents[].parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.mimeType | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.data | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData.fileUri | string | Sim | Nome do arquivo deste projeto, retornado por /files. · pattern: ^files/[a-f0-9-]{36}$ |
+| contents[].parts[].functionCall | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.args | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
+| contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.endOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.fps | number | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction.parts[].text | string | Sim | Consulte o tipo e os campos relacionados. |
+| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.candidateCount | number | Não | Valor: 1 |
+| generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
+| generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
+| generationConfig.responseSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseModalities | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig | SpeechConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.languageCode | string | Não | Idioma da fala, conforme suporte. |
+| generationConfig.speechConfig.voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName | string | Sim | Voz selecionada, por exemplo Kore. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs[].speaker | string | Não | Nome do personagem no texto. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs[].voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.imageConfig | ImageConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.imageConfig.aspectRatio | valor JSON | Não | Aceita: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 |
+| generationConfig.imageConfig.imageSize | valor JSON | Não | Resoluções aceitas variam por modelo e têm consumo diferente. · Aceita: 512, 1K, 2K, 4K |
+| generationConfig.thinkingConfig | ThinkingConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.thinkingConfig.thinkingLevel | valor JSON | Não | Esforço de raciocínio conforme suporte do modelo. · Aceita: MINIMAL, LOW, MEDIUM, HIGH |
+| generationConfig.thinkingConfig.includeThoughts | boolean | Não | O contrato público não entrega raciocínio interno; use o resultado e as justificativas da resposta. |
+| generationConfig.mediaResolution | string | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.presencePenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.frequencyPenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| tools | array | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations | array | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].name | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].description | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].parameters | object | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].parametersJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa2.codeExecution | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa3.urlContext | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa4.webSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa5.computerUse | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.stores | array | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.metadataFilter | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| cachedContent | string | Não | Nome caches/ID deste projeto. |
+| toolConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings | array | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings[].category | string | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings[].threshold | string | Não | Consulte o tipo e os campos relacionados. |
+
+### Exemplo do corpo
+
+```json
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Calcule a média de 14, 27 e 43 usando código."
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "codeExecution": {}
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.3
+  }
+}
+```
+
+HTTP 200: Conteúdo e créditos confirmados
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | Consulte o tipo e os campos relacionados. |
+| object | string | Não | Valor: "content.response" |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| created | integer | Não | Data Unix em segundos. |
+| candidates | array | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].index | integer | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].finishReason | string | Não | Motivo da conclusão, por exemplo STOP, MAX_TOKENS ou SAFETY. Trate saída parcial antes de utilizá-la. |
+| candidates[].content | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.role | string | Não | Valor: "model" |
+| candidates[].content.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].inlineData | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].functionCall | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].functionResponse | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].executableCode | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].codeExecutionResult | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].content.parts[].thoughtSignature | string | Não | Contexto opaco; preserve em continuações de funções. Não é raciocínio legível. |
+| candidates[].grounding | AiGrounding | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.sources | array | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.sources[].url | string | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.sources[].title | string | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.sources[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.sources[].place_id | string | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.supports | array | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.supports[].segment | object | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.supports[].groundingChunkIndices | array | Não | Consulte o tipo e os campos relacionados. |
+| candidates[].grounding.attribution | string | Não | Atribuição da fonte quando retornada. Renderize de forma segura e preserve o conteúdo exigido. |
+| candidates[].grounding.maps_attribution | string | Não | Contexto de atribuição para mapas, quando aplicável. |
+| connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| connectyhub.request_id | string | Sim | format: uuid |
+| connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Receber conteúdo em SSE
+
+Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
+
+**POST /models/{model}:streamGenerateContent**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| model | path | Sim |  {"type":"string"} |
+| Idempotency-Key | header | Não | Identidade da operação. Preserve o mesmo corpo e esta identidade para recuperar sem duplicar a execução. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| contents | array | Sim | minItems: 1 |
+| contents[].role | valor JSON | Não | Aceita: user, model · Padrão: "user" |
+| contents[].parts | array | Sim | minItems: 1 |
+| contents[].parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.mimeType | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].inlineData.data | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].fileData.fileUri | string | Sim | Nome do arquivo deste projeto, retornado por /files. · pattern: ^files/[a-f0-9-]{36}$ |
+| contents[].parts[].functionCall | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionCall.args | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
+| contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.endOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].videoMetadata.fps | number | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| systemInstruction.parts[].text | string | Sim | Consulte o tipo e os campos relacionados. |
+| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.candidateCount | number | Não | Valor: 1 |
+| generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
+| generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
+| generationConfig.responseSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.responseModalities | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig | SpeechConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.languageCode | string | Não | Idioma da fala, conforme suporte. |
+| generationConfig.speechConfig.voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName | string | Sim | Voz selecionada, por exemplo Kore. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs | array | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs[].speaker | string | Não | Nome do personagem no texto. |
+| generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs[].voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.imageConfig | ImageConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.imageConfig.aspectRatio | valor JSON | Não | Aceita: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 |
+| generationConfig.imageConfig.imageSize | valor JSON | Não | Resoluções aceitas variam por modelo e têm consumo diferente. · Aceita: 512, 1K, 2K, 4K |
+| generationConfig.thinkingConfig | ThinkingConfig | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.thinkingConfig.thinkingLevel | valor JSON | Não | Esforço de raciocínio conforme suporte do modelo. · Aceita: MINIMAL, LOW, MEDIUM, HIGH |
+| generationConfig.thinkingConfig.includeThoughts | boolean | Não | O contrato público não entrega raciocínio interno; use o resultado e as justificativas da resposta. |
+| generationConfig.mediaResolution | string | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.presencePenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| generationConfig.frequencyPenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| tools | array | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations | array | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].name | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].description | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].parameters | object | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.functionDeclarations[].parametersJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa2.codeExecution | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa3.urlContext | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa4.webSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa5.computerUse | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.stores | array | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.metadataFilter | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa6.fileSearch.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| cachedContent | string | Não | Nome caches/ID deste projeto. |
+| toolConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings | array | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings[].category | string | Não | Consulte o tipo e os campos relacionados. |
+| safetySettings[].threshold | string | Não | Consulte o tipo e os campos relacionados. |
+
+### Exemplo do corpo
+
+```json
+{
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Calcule a média de 14, 27 e 43 usando código."
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "codeExecution": {}
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.3
+  }
+}
+```
+
+HTTP 200: Conteúdo e créditos confirmados
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Transformar conteúdo em vetores
+
+Use uma chave vinculada a um modelo Embedding. Texto único, lista com até 100 textos ou conteúdo multimodal nos modelos compatíveis. A ConnectyHub retorna o vetor e os créditos; o índice e a comparação ficam no seu sistema. O conteúdo não é truncado silenciosamente.
+
+**POST /embeddings**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Identidade da operação. Preserve o mesmo corpo e esta identidade para recuperar sem duplicar a execução. {"type":"string","maxLength":128} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| model | string | Não | Opcional; deve corresponder à chave. |
+| input | string ou array | Não | Consulte o tipo e os campos relacionados. |
+| content | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts | array | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].text | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].inlineData | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].inlineData.mimeType | string | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].inlineData.data | string | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].fileData | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].fileData.fileUri | string | Sim | Nome do arquivo deste projeto, retornado por /files. · pattern: ^files/[a-f0-9-]{36}$ |
+| content.parts[].functionCall | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionCall.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionCall.id | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionCall.args | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionResponse | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
+| content.parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].videoMetadata.endOffset | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].videoMetadata.fps | number | Não | Consulte o tipo e os campos relacionados. |
+| document_ocr | boolean | Não | Consulte o tipo e os campos relacionados. |
+| audio_track_extraction | boolean | Não | Consulte o tipo e os campos relacionados. |
+| dimensions | integer | Não | minimum: 1 · maximum: 3072 |
+| task_type | valor JSON | Não | Aceita: RETRIEVAL_QUERY, RETRIEVAL_DOCUMENT, SEMANTIC_SIMILARITY, CLASSIFICATION, CLUSTERING, QUESTION_ANSWERING, FACT_VERIFICATION, CODE_RETRIEVAL_QUERY |
+| title | string | Não | Somente com RETRIEVAL_DOCUMENT. |
+
+### Exemplo do corpo
+
+```json
+{
+  "input": "Mochila impermeável para notebook",
+  "task_type": "RETRIEVAL_DOCUMENT",
+  "title": "Mochila",
+  "dimensions": 768
+}
+```
+
+HTTP 200: Vetor e créditos confirmados
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | Consulte o tipo e os campos relacionados. |
+| object | string | Não | Valor: "embedding.list" |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].object | string | Não | Valor: "embedding" |
+| data[].index | integer | Não | Consulte o tipo e os campos relacionados. |
+| data[].embedding | array | Não | Consulte o tipo e os campos relacionados. |
+| connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| connectyhub.request_id | string | Sim | format: uuid |
+| connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Enviar arquivo do projeto
+
+Arquivo de até 20 MB em base64 puro (sem prefixo data:); JSON de até 28 MB. O arquivo precisa estar active antes do uso. Upload não gera conteúdo nem debita créditos; a análise é uma chamada cobrada. Cada envio cria um arquivo distinto.
+
+**POST /files**
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| data | string | Sim | Consulte o tipo e os campos relacionados. |
+| mime_type | valor JSON | Sim | Aceita: image/png, image/jpeg, image/webp, audio/mpeg, audio/mp4, audio/wav, audio/aac, audio/ogg, audio/flac, video/mp4, video/webm, video/quicktime, application/pdf, text/plain |
+| display_name | string | Não | maxLength: 200 |
+
+### Exemplo do corpo
+
+```json
+{
+  "display_name": "horarios.txt",
+  "mime_type": "text/plain",
+  "data": "U2VndW5kYSBhIHNleHRhOiA5aCDDoHMgMThoLg=="
+}
+```
+
+HTTP 201: Arquivo registrado
+
+### Resposta 201 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| name | string | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| mime_type | string | Não | Consulte o tipo e os campos relacionados. |
+| size_bytes | integer | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, failed, expired, deleted |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Listar arquivos do projeto
+
+Até 100 arquivos recentes, incluindo estados de processamento e expiração. Chaves do mesmo projeto compartilham arquivos.
+
+**GET /files**
+
+HTTP 200: Arquivos deste projeto
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "list" |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | format: uuid |
+| data[].name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].mime_type | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].size_bytes | integer | Não | Consulte o tipo e os campos relacionados. |
+| data[].status | valor JSON | Não | Aceita: preparing, processing, active, failed, expired, deleted |
+| data[].created_at | string | Não | format: date-time |
+| data[].expires_at | string ou null | Não | format: date-time |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Atualizar estado do arquivo
+
+Referência dos campos públicos desta operação.
+
+**GET /files/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado atualizado
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| name | string | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| mime_type | string | Não | Consulte o tipo e os campos relacionados. |
+| size_bytes | integer | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, failed, expired, deleted |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Excluir arquivo do projeto
+
+Referência dos campos públicos desta operação.
+
+**DELETE /files/{id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Arquivo excluído
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | format: uuid |
+| name | string | Não | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+| mime_type | string | Não | Consulte o tipo e os campos relacionados. |
+| size_bytes | integer | Não | Consulte o tipo e os campos relacionados. |
+| status | valor JSON | Não | Aceita: preparing, processing, active, failed, expired, deleted |
+| created_at | string | Não | format: date-time |
+| expires_at | string ou null | Não | format: date-time |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Chave inválida
+
+HTTP 402: Confira acesso e créditos
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Recurso não encontrado neste projeto
+
+HTTP 409: Operação em processamento ou identidade em conflito
+
+HTTP 413: Corpo acima do tamanho aceito
+
+HTTP 422: Configuração ou recurso não disponível no modelo
+
+HTTP 502: Execução não concluída; consulte a solicitação
+
+HTTP 503: Serviço indisponível
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Modelos disponíveis
+
+Lista modelos liberados, perfis, recursos e compatibilidade com a chave. Omita model para usar o modelo vinculado à chave. connectyhub-auto mantém compatibilidade com integrações anteriores.
+
+**GET /models**
+
+HTTP 200: Identificação disponível
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Sim | Valor: "list" |
+| selected_model | string | Sim | Consulte o tipo e os campos relacionados. |
+| data | array | Sim | Consulte o tipo e os campos relacionados. |
+| data[].id | string | Não | Aceita: flash-2.5, pro-2.5, flash-2.5-preview-tts, pro-2.5-preview-tts, open-4-26b-a4b-it, open-4-31b-it, flash-latest, flash-lite-latest, pro-latest, flash-lite-2.5, flash-2.5-image, flash-3-preview, pro-3.1-preview, pro-3.1-preview-customtools, flash-lite-3.1-preview, flash-lite-3.1, pro-3-image-preview, pro-3-image, image-pro-preview, flash-3.1-image-preview, flash-3.1-image, flash-lite-3.1-image, flash-3.5, flash-lite-3.5, omni-flash-preview, omni-1.1-flash, 3.5-transcribe, flash-3.6, flash-3.7, flash-3.8, music-3-clip-preview, music-3-pro-preview, music-3.5, flash-3.1-tts-preview, robotics-er-2-preview, 2.5-computer-use-preview-10-2025, antigravity-preview-05-2026, deep-research-max-preview-04-2026, deep-research-preview-04-2026, deep-research-pro-preview-12-2025, embedding-001, embedding-2-preview, embedding-2, aqa, video-3.1-generate-preview, video-3.1-fast-generate-preview, video-3.1-lite-generate-preview, 3.5-transcribe-live, flash-2.5-native-audio-latest, flash-2.5-native-audio-preview-09-2025, flash-2.5-native-audio-preview-12-2025, flash-3.1-live-preview, robotics-er-2-streaming-preview, 3.5-live-translate-preview, music-realtime-exp |
+| data[].object | string | Não | Valor: "model" |
+| data[].name | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].family | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].profile | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].consumption | string | Não | Perfil de uso em créditos; não representa um valor fixo por chamada. |
+| data[].recommended | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].available | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].capabilities | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].usable_with_key | boolean | Não | Consulte o tipo e os campos relacionados. |
+| data[].unavailable_reason | string ou null | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 401: Chave inválida ou revogada
+
+HTTP 402: Acesso da conta indisponível
+
+HTTP 403: Projeto pausado ou acesso bloqueado
+
+HTTP 503: Serviço temporariamente indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Enviar uma solicitação
+
+Envie texto, histórico ou imagens PNG/JPEG/WebP inline e receba uma resposta textual com os créditos utilizados. Corpo completo de até 2.000.000 bytes. Não há sessão automática: envie o contexto em cada chamada. A conta precisa de saldo disponível. Preserve a Idempotency-Key e o corpo nos reenvios para evitar duplicação. A ConnectyHub administra o processamento automaticamente.
+
+**POST /chat/completions**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| Idempotency-Key | header | Não | Recomendado: identificador único da operação no projeto. Reenvie a mesma chave e o mesmo corpo para recuperar o resultado. Sem ele, cada envio representa uma nova operação. {"type":"string","minLength":1,"maxLength":128,"pattern":"^[\\x21-\\x7e]{1,128}$"} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| messages | array | Sim | Conversa com ao menos uma mensagem user. Envie o histórico relevante em cada chamada; a API não mantém uma sessão de conversa automaticamente. · minItems: 1 · maxItems: 100 |
+| messages[].alternativa1.role | string | Sim | Valor: "assistant" |
+| messages[].alternativa1.content | string ou null | Não | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa1.tool_calls | array | Não | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa1.tool_calls[].id | string | Sim | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa1.tool_calls[].type | string | Sim | Valor: "function" |
+| messages[].alternativa1.tool_calls[].function | object | Sim | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa1.tool_calls[].context | string | Não | Se recebido, devolva este contexto opaco sem alteração no histórico. |
+| messages[].alternativa2.role | string | Sim | Valor: "tool" |
+| messages[].alternativa2.tool_call_id | string | Sim | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa2.content | string | Sim | Consulte o tipo e os campos relacionados. |
+| messages[].alternativa3.role | string | Sim | Aceita: system |
+| messages[].alternativa3.content | string | Sim | minLength: 1 · pattern: \S |
+| messages[].alternativa4.role | string | Sim | Valor: "user" |
+| messages[].alternativa4.content | string ou array | Sim | Consulte o tipo e os campos relacionados. |
+| model | string | Não | Opcional; use o ID do modelo da chave ou omita. Um ID diferente é recusado. · Padrão: "connectyhub-auto" |
+| tools | array | Não | minItems: 1 · maxItems: 64 |
+| tools[].alternativa1.type | string | Sim | Valor: "function" |
+| tools[].alternativa1.function | object | Sim | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.function.name | string | Sim | pattern: ^[A-Za-z_][A-Za-z0-9_.:-]{0,63}$ |
+| tools[].alternativa1.function.description | string | Não | Consulte o tipo e os campos relacionados. |
+| tools[].alternativa1.function.parameters | object | Não | JSON Schema dos argumentos. |
+| tools[].alternativa2.type | valor JSON | Sim | Aceita: code_execution, url_context |
+| tool_choice | valor JSON ou object | Não | Consulte o tipo e os campos relacionados. |
+| tool_choice.alternativa2.type | string | Sim | Valor: "function" |
+| tool_choice.alternativa2.function | object | Sim | Consulte o tipo e os campos relacionados. |
+| tool_choice.alternativa2.function.name | string | Sim | Consulte o tipo e os campos relacionados. |
+| response_format | ResponseFormat | Não | Consulte o tipo e os campos relacionados. |
+| response_format.alternativa1.type | valor JSON | Sim | Aceita: text, json_object |
+| response_format.alternativa2.type | string | Sim | Valor: "json_schema" |
+| response_format.alternativa2.json_schema | object | Sim | Consulte o tipo e os campos relacionados. |
+| response_format.alternativa2.json_schema.name | string | Não | Consulte o tipo e os campos relacionados. |
+| response_format.alternativa2.json_schema.schema | object | Sim | Consulte o tipo e os campos relacionados. |
+| temperature | number | Não | Variação da resposta. Valores menores favorecem respostas mais consistentes; valores maiores permitem maior diversidade. Não garante determinismo. · minimum: 0 · maximum: 2 · Padrão: 0.7 |
+| stream | boolean | Não | Opcional: entrega SSE após concluir. Não é entrega incremental. · Padrão: false |
+| stream_options | object | Não | Compatibilidade com clientes SSE. Use somente com stream=true. Os créditos são sempre informados no evento final, independentemente de include_usage. |
+| stream_options.include_usage | boolean | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Resposta concluída ou recuperada. stream=true entrega SSE após a conclusão, com créditos no evento final e data: [DONE].
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Sim | Consulte o tipo e os campos relacionados. |
+| object | string | Sim | Valor: "chat.completion" |
+| created | integer | Sim | Data Unix em segundos |
+| model | string | Sim | Consulte o tipo e os campos relacionados. |
+| choices | array | Sim | Consulte o tipo e os campos relacionados. |
+| choices[].index | integer | Sim | Valor: 0 |
+| choices[].message | object | Sim | Consulte o tipo e os campos relacionados. |
+| choices[].message.role | string | Sim | Valor: "assistant" |
+| choices[].message.content | string | Sim | Consulte o tipo e os campos relacionados. |
+| choices[].message.tool_calls | array | Não | Consulte o tipo e os campos relacionados. |
+| choices[].message.tool_calls[].id | string | Sim | Consulte o tipo e os campos relacionados. |
+| choices[].message.tool_calls[].type | string | Sim | Valor: "function" |
+| choices[].message.tool_calls[].function | object | Sim | Consulte o tipo e os campos relacionados. |
+| choices[].message.tool_calls[].context | string | Não | Se recebido, devolva este contexto opaco sem alteração no histórico. |
+| choices[].finish_reason | string | Sim | stop: concluída; length: resposta parcial; content_filter: sem texto disponível · Aceita: stop, length, content_filter, tool_calls |
+| connectyhub | CreditUsage | Sim | Consulte o tipo e os campos relacionados. |
+| connectyhub.request_id | string | Sim | format: uuid |
+| connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| connectyhub.project_id | string | Sim | format: uuid |
+
+HTTP 400: JSON inválido
+
+HTTP 401: Confira a chave do projeto
+
+HTTP 402: Confira o saldo disponível e o acesso da conta
+
+HTTP 403: Projeto pausado ou acesso bloqueado
+
+HTTP 409: Solicitação em andamento, em conferência, já falhou ou conflito de identidade
+
+HTTP 413: Envie um conteúdo menor
+
+HTTP 422: Confira o conteúdo e os campos enviados
+
+HTTP 499: Solicitação cancelada antes da execução
+
+HTTP 502: Não foi possível concluir; consulte a solicitação antes de repetir
+
+HTTP 503: Serviço temporariamente indisponível; confira o estado antes de repetir
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Consultar solicitação
+
+Consulte o UUID recebido em connectyhub.request_id ou X-Request-Id. A chave deve pertencer ao mesmo projeto. Em uncertain, aguarde conferência sem iniciar outra operação equivalente.
+
+**GET /requests/{request_id}**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| request_id | path | Sim |  {"type":"string","format":"uuid"} |
+
+HTTP 200: Estado, resposta e créditos
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Sim | format: uuid |
+| status | string | Sim | Aceita: preparing, reserved, processing, completed, failed, uncertain |
+| charged_credits | number | Sim | Consulte o tipo e os campos relacionados. |
+| reserved_credits | number | Sim | Créditos em processamento |
+| response | ChatCompletion ou ContentResponse ou EmbeddingResponse ou null | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.id | string | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.object | string | Sim | Valor: "chat.completion" |
+| response.alternativa1.created | integer | Sim | Data Unix em segundos |
+| response.alternativa1.model | string | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.choices | array | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.choices[].index | integer | Sim | Valor: 0 |
+| response.alternativa1.choices[].message | object | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.choices[].message.role | string | Sim | Valor: "assistant" |
+| response.alternativa1.choices[].message.content | string | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.choices[].message.tool_calls | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.choices[].finish_reason | string | Sim | stop: concluída; length: resposta parcial; content_filter: sem texto disponível · Aceita: stop, length, content_filter, tool_calls |
+| response.alternativa1.connectyhub | CreditUsage | Sim | Consulte o tipo e os campos relacionados. |
+| response.alternativa1.connectyhub.request_id | string | Sim | format: uuid |
+| response.alternativa1.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| response.alternativa1.connectyhub.project_id | string | Sim | format: uuid |
+| response.alternativa2.id | string | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.object | string | Não | Valor: "content.response" |
+| response.alternativa2.model | string | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.created | integer | Não | Data Unix em segundos. |
+| response.alternativa2.candidates | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].index | integer | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].finishReason | string | Não | Motivo da conclusão, por exemplo STOP, MAX_TOKENS ou SAFETY. Trate saída parcial antes de utilizá-la. |
+| response.alternativa2.candidates[].content | object | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].content.role | string | Não | Valor: "model" |
+| response.alternativa2.candidates[].content.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].grounding | AiGrounding | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].grounding.sources | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].grounding.supports | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.candidates[].grounding.attribution | string | Não | Atribuição da fonte quando retornada. Renderize de forma segura e preserve o conteúdo exigido. |
+| response.alternativa2.candidates[].grounding.maps_attribution | string | Não | Contexto de atribuição para mapas, quando aplicável. |
+| response.alternativa2.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa2.connectyhub.request_id | string | Sim | format: uuid |
+| response.alternativa2.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| response.alternativa2.connectyhub.project_id | string | Sim | format: uuid |
+| response.alternativa3.id | string | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.object | string | Não | Valor: "embedding.list" |
+| response.alternativa3.model | string | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.data | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.data[].object | string | Não | Valor: "embedding" |
+| response.alternativa3.data[].index | integer | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.data[].embedding | array | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.connectyhub | CreditUsage | Não | Consulte o tipo e os campos relacionados. |
+| response.alternativa3.connectyhub.request_id | string | Sim | format: uuid |
+| response.alternativa3.connectyhub.credits | number | Sim | Créditos ConnectyHub utilizados · minimum: 0 |
+| response.alternativa3.connectyhub.project_id | string | Sim | format: uuid |
+| error_code | string ou null | Sim | Consulte o tipo e os campos relacionados. |
+| created_at | string | Sim | format: date-time |
+
+HTTP 401: Confira a chave
+
+HTTP 402: Acesso da conta indisponível
+
+HTTP 403: Acesso bloqueado
+
+HTTP 404: Solicitação não encontrada neste projeto
+
+HTTP 503: Serviço temporariamente indisponível
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.

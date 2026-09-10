@@ -798,6 +798,8 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  inngest.createFunction({id:'connectyhub-ai-triggers',name:'Agendamentos da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('execute-billed-ai-schedules',async()=>{const {processAiTriggers}=await import('@/lib/ai-api/automation');return processAiTriggers(createServiceClient());})),
+  inngest.createFunction({id:'connectyhub-ai-webhooks',name:'Notificações da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('deliver-ai-results',async()=>{const {processAiWebhooks}=await import('@/lib/ai-api/automation');return processAiWebhooks(createServiceClient());})),
   inngest.createFunction({id:"connectyhub-agenda-notice",name:"ConnectyHub Agenda Notice",retries:1,concurrency:{limit:1,key:"event.data.organizationId"},triggers:[{event:"connectyhub/agenda.notice"}]},async({event,step})=>step.run("deliver-agenda-notice",async()=>{const {dispatchAgendaNotifications}=await import("@/lib/automations/agenda-notifications");return dispatchAgendaNotifications(createServiceClient(),event.data.noticeId);})),
   inngest.createFunction({id:"connectyhub-lead-relationships",name:"ConnectyHub Lead Relationships",retries:1,concurrency:{limit:1},triggers:[{cron:"*/10 * * * *"}]},async({step})=>step.run("plan-relationships",async()=>{const {planLeadRelationships}=await import("@/lib/automations/relationship-profile");return planLeadRelationships(createServiceClient());})),
   connectyhubIntelligentAutomationSweep,

@@ -29,7 +29,7 @@ export function AiDocsNavigation({ selected }: { selected: string }) {
     <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2"><Search className="h-4 w-4 shrink-0 text-slate-400" /><input aria-label="Buscar na documentação de IA" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar recurso, campo ou erro" className="min-h-9 min-w-0 w-full bg-transparent text-xs text-slate-200 outline-none" /></label>
     {!filtered.length && <p role="status" className="text-sm text-slate-400">Nenhuma seção encontrada. Tente outro termo.</p>}
     {groups.map(group => <div key={group}><p className="mb-2 px-3 font-mono text-[10px] uppercase tracking-widest text-slate-500">{group}</p><div className="space-y-1">{filtered.filter(page => page.group === group).map(section => <a key={section.id} href={`#${section.id}`} aria-current={selected === section.id ? "page" : undefined} className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm ${selected === section.id ? "bg-emerald-300/10 font-bold text-emerald-100" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-      {section.method ? <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-emerald-200">{section.method}</span> : <BookOpen className="h-4 w-4 shrink-0" />}{section.label}
+      {section.method ? <span className="shrink-0 rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-emerald-200">{section.method}</span> : <BookOpen className="h-4 w-4 shrink-0" />}<span className="min-w-0 break-all">{section.label}</span>
     </a>)}</div></div>)}
     <AiDocsDownload />
   </nav>;
@@ -48,7 +48,9 @@ export function AiApiDocs({ section }: { section: AiDocSection }) {
     <header><p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">API de IA ConnectyHub · {page.group}</p><h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">{page.title}</h2><p className={`mt-4 ${paragraph}`}>{page.description}</p></header>
     {page.path && <div className="flex min-w-0 flex-wrap gap-3 rounded-lg border border-white/10 p-4"><strong className="font-mono text-xs text-emerald-200">{page.method}</strong><code className="break-all text-sm">{page.path}</code></div>}
     {page.id === "ia" && <div className="grid gap-3 sm:grid-cols-3">{[[String(Object.keys(aiOpenApiSpec.paths).length), "Rotas públicas"], [String(aiDocPages.length), "Seções de referência"], ["Créditos", "Consumo da conta"]].map(([value, label]) => <div key={label} className={card}><strong className="text-2xl font-black text-emerald-200">{value}</strong><p className="mt-2 text-xs leading-5 text-slate-400">{label}</p></div>)}</div>}
-    {page.blocks.map((block, index) => <Block key={`${page.id}-${index}`} block={block} />)}
+    {page.group === 'Tutoriais completos' && page.blocks.filter(block=>block.kind==='code'&&['bash','javascript','python'].includes(block.language)).length>1
+      ? <TutorialBlocks key={page.id} blocks={page.blocks} />
+      : page.blocks.map((block, index) => <Block key={`${page.id}-${index}`} block={block} />)}
     {!!responses.length && <Rows title="Respostas HTTP" columns={["HTTP", "Descrição"]} rows={responses} />}
     {page.id === "ia-schemas" || page.id === "ia" ? <AiDocsDownload /> : null}
     <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-5"><a href="#ia-recursos" className={link}>Recursos disponíveis<ArrowRight className="h-4 w-4" /></a><a href="#ia-schemas" className={link}>Schemas e downloads<ArrowRight className="h-4 w-4" /></a></div>
@@ -62,6 +64,19 @@ function Block({ block }: { block: AiDocBlock }) {
   if (block.kind === "table") return <Rows {...block} />;
   if (block.kind === "steps") return <section className={card}><h3 className="text-lg font-bold text-white">{block.title}</h3><ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-7 text-slate-300">{block.items.map(item => <li key={item}>{item}</li>)}</ol></section>;
   return <aside className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.04] p-5"><h3 className="font-bold text-emerald-100">{block.title}</h3><p className={`mt-3 ${paragraph}`}>{block.text}</p></aside>;
+}
+function TutorialBlocks({blocks}:{blocks:AiDocBlock[]}) {
+  const examples=blocks.filter((block):block is Extract<AiDocBlock,{kind:'code'}>=>block.kind==='code'&&['bash','javascript','python'].includes(block.language));
+  const [selected,setSelected]=useState(0);
+  const first=blocks.indexOf(examples[0]);
+  return <>{blocks.map((block,index)=>{
+    if(index===first)return <section key={index} className="min-w-0 space-y-4">
+      <div aria-label="Linguagem do exemplo" className="flex flex-wrap gap-2">{examples.map((example,i)=><button type="button" key={example.language} aria-pressed={selected===i} onClick={()=>setSelected(i)} className={`min-h-11 rounded-lg border px-4 text-sm ${selected===i?'border-emerald-300/40 bg-emerald-300/10 text-emerald-200':'border-white/10 text-slate-300'}`}>{({bash:'cURL',javascript:'JavaScript',python:'Python'} as Record<string,string>)[example.language]}</button>)}</div>
+      <Code key={selected} {...examples[selected]} />
+    </section>;
+    if(examples.includes(block as typeof examples[number]))return null;
+    return <Block key={index} block={block} />;
+  })}</>;
 }
 function Rows({ title, columns, rows }: { title: string; columns: string[]; rows: string[][] }) {
   return <section className="min-w-0 space-y-4"><h3 className="text-lg font-bold text-white">{title}</h3><div className="overflow-x-auto rounded-xl border border-white/10"><table className="w-full text-left text-sm"><thead className="bg-white/5 text-xs text-slate-300"><tr>{columns.map(column => <th key={column} scope="col" className="px-4 py-3">{column}</th>)}</tr></thead><tbody className="divide-y divide-white/10">{rows.map((row, index) => <tr key={index}>{row.map((cell, col) => col === 0 ? <th key={col} scope="row" className="break-words px-4 py-4 align-top font-mono text-xs font-bold leading-6 text-emerald-200">{cell}</th> : <td key={col} className="min-w-40 px-4 py-4 align-top leading-7 text-slate-300">{cell}</td>)}</tr>)}</tbody></table></div></section>;

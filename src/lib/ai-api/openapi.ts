@@ -1,5 +1,7 @@
 import { advancedAiPaths, advancedAiSchemas } from "./advanced-openapi";
 import {resourceAiPaths,resourceAiSchemas} from './resource-openapi';
+import {aiAutomationPaths,aiAutomationSchemas} from './automation-openapi';
+import {detailedAiSchemas} from './detailed-schemas';
 import { aiResponseExample, aiRequestExamples, aiRequestExample, aiPendingRequestExample, aiModelListExample, aiSseExample } from "./examples";
 export { aiChatExample, aiResponseExample } from "./examples";
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
@@ -8,11 +10,12 @@ const errorResponse = (description: string) => ({ description, content: json(ref
 const stringError = (description: string) => ({ description, content: json(ref("SimpleError")) });
 export const aiOpenApiSpec = {
   openapi: "3.1.0",
-  info: { title: "ConnectyHub API de IA", version: "1.4.0", description: "Crie um projeto, copie a chave e conecte seu sistema. Escolha o modelo por chave. A API gera respostas, analisa arquivos e produz vetores, com consumo em créditos ConnectyHub. Documentação e JSON públicos; uso requer projeto ativo, acesso e saldo disponível. Exemplos de créditos são ilustrativos. A resposta utiliza um subconjunto de Chat Completions e informa o consumo exclusivamente em connectyhub.credits." },
+  info: { title: "ConnectyHub API de IA", version: "1.5.0", description: "Crie um projeto, copie a chave e conecte seu sistema. Escolha o modelo por chave. A API gera respostas, analisa arquivos e produz vetores, com consumo em créditos ConnectyHub. Documentação e JSON públicos; uso requer projeto ativo, acesso e saldo disponível. Exemplos de créditos são ilustrativos. A resposta utiliza um subconjunto de Chat Completions e informa o consumo exclusivamente em connectyhub.credits." },
   servers: [{ url: "https://www.connectyhub.com.br/api/v1/ai", description: "Produção" }],
   externalDocs: { url: "https://www.connectyhub.com.br/docs/api#ia", description: "Documentação pública" },
   security: [{ AiBearerAuth: [] }], tags: [{ name: "Geração", description: "Texto, conversas, análise de imagens e entrega SSE" }, { name: "Solicitações", description: "Consultar situação, resposta e créditos de uma operação" }, { name: "Identificação", description: "Identificador público para integração" }],
   paths: {
+    ...aiAutomationPaths,
     ...resourceAiPaths,
     ...advancedAiPaths,
     "/models": { get: { operationId: "listAiModels", tags: ["Identificação"], summary: "Modelos disponíveis", description: "Lista modelos liberados, perfis, recursos e compatibilidade com a chave. Omita model para usar o modelo vinculado à chave. connectyhub-auto mantém compatibilidade com integrações anteriores.", responses: { "200": { description: "Identificação disponível", content: { "application/json": { schema: ref("ModelList"), example: aiModelListExample } } }, "401": stringError("Chave inválida ou revogada"), "402": stringError("Acesso da conta indisponível"), "403": stringError("Projeto pausado ou acesso bloqueado"), "503": stringError("Serviço temporariamente indisponível") } } },
@@ -32,6 +35,10 @@ export const aiOpenApiSpec = {
     schemas: {
       ...resourceAiSchemas,
       ...advancedAiSchemas,
+      ...detailedAiSchemas,
+      ...aiAutomationSchemas,
+      AiResource:{...resourceAiSchemas.AiResource,properties:{...resourceAiSchemas.AiResource.properties,result:{description:'Resultado após a conferência de consumo, conforme kind.',oneOf:[ref('InteractionResult'),ref('VideoResult'),ref('BatchResult'),{type:'object',properties:{id:{type:'string'},object:{enum:['cache','document']},status:{type:'string'},store:{type:'string'},connectyhub:ref('CreditUsage')}}]}}},
+      ContentRequest:{...advancedAiSchemas.ContentRequest,properties:{...advancedAiSchemas.ContentRequest.properties,generationConfig:{...advancedAiSchemas.ContentRequest.properties.generationConfig,properties:{...advancedAiSchemas.ContentRequest.properties.generationConfig.properties,speechConfig:ref('SpeechConfig'),imageConfig:ref('ImageConfig'),thinkingConfig:ref('ThinkingConfig')}}}},
       ChatRequest: { type: "object", description: "Corpo JSON de até 2.000.000 bytes, incluindo imagens em base64. Referência dos campos públicos recomendados. Não envie parâmetros de outros contratos.", required: ["messages"], additionalProperties: false, allOf: [{ if: { required: ["stream_options"] }, then: { required: ["stream"], properties: { stream: { const: true } } } }], properties: {
         messages: { type: "array", minItems: 1, maxItems: 100, description: "Conversa com ao menos uma mensagem user. Envie o histórico relevante em cada chamada; a API não mantém uma sessão de conversa automaticamente.", items: ref("Message") },
         model: { type: "string", default: "connectyhub-auto", description: "Opcional; use o ID do modelo da chave ou omita. Um ID diferente é recusado." },

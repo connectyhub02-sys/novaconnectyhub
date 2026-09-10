@@ -51,7 +51,10 @@ async function dispatchResource(client:SupabaseClient,operation:AiOperation,kind
 }
 
 export async function createAiResource(client:SupabaseClient,request:Request,collection:string,input:unknown) {
-  const auth=await authenticateAi(request,client),body=record(input);
+  return createAuthorizedAiResource(client,request,await authenticateAi(request,client),collection,input);
+}
+export async function createAuthorizedAiResource(client:SupabaseClient,request:Request,auth:AiAuth,collection:string,input:unknown) {
+  const body=record(input);
   if(['agents','environments'].includes(collection))return createManagedAiResource(client,auth,collection,body);
   if(collection==='stores') {
     const saved=await client.from('ai_resources').insert({organization_id:auth.billingOrganizationId,project_id:auth.project.id,key_id:auth.key.id,
@@ -125,10 +128,24 @@ export async function createAiResource(client:SupabaseClient,request:Request,col
 }
 
 async function createInteraction(client:SupabaseClient,auth:AiAuth,operation:AiOperation,body:Row) {
+  const accepted=['model','input','system_instruction','response_format','agent_config','generation_config','previous_interaction_id','agent_id','environment_id','tools'];
+  if(Object.keys(body).some(key=>!accepted.includes(key)))throw new AiApiError('unsupported_parameter',422,'Campo não suportado em Interações. Consulte a referência desta operação.');
+  // Client-controlled routing and service tiers must never bypass the bound model's tariff.
+  if(Object.keys(record(body.agent_config)).some(key=>!['collaborative_planning','visualization','thinking_summaries'].includes(key)))throw new AiApiError('invalid_configuration',422,'Configuração do agente não suportada.');
+  if(body.tools!==undefined&&!Array.isArray(body.tools))throw new AiApiError('invalid_tool',422,'tools deve ser uma lista.');
   if(['embeddings','live'].includes(operation.model.family)||operation.model.providerId.startsWith('veo-'))throw new AiApiError('model_capability_unavailable',422,'Use a operação específica deste modelo.');
   if(!body.input)throw new AiApiError('invalid_input',422,'Informe input.');
   const provider:Row={input:structuredClone(body.input),store:true,background:true};
-  for(const field of ['system_instruction','response_format','agent_config'])if(body[field]!==undefined)provider[field]=body[field];
+  for(const field of ['system_instruction','response_format'])if(body[field]!==undefined)provider[field]=body[field];
+  if(body.agent_config!==undefined) {
+    const config=record(body.agent_config);
+    if(!operation.model.providerId.startsWith('deep-research')||body.agent_id||
+      (config.collaborative_planning!==undefined&&typeof config.collaborative_planning!=='boolean')||
+      (config.visualization!==undefined&&!['off','auto'].includes(String(config.visualization)))||
+      (config.thinking_summaries!==undefined&&!['none','auto'].includes(String(config.thinking_summaries))))
+      throw new AiApiError('invalid_configuration',422,'Estas opções exigem um modelo de pesquisa compatível.');
+    provider.agent_config={...config,type:'deep-research'};
+  }
   let agent=/^(deep-research|antigravity)/.test(operation.model.providerId);
   provider[agent?'agent':'model']=operation.model.providerId;
   if(body.agent_id) {
@@ -137,7 +154,7 @@ async function createInteraction(client:SupabaseClient,auth:AiAuth,operation:AiO
     agent=true;delete provider.model;provider.agent=owned.provider_name;
     provider.agent_config={type:'antigravity',model:operation.model.providerId,max_total_tokens:String(operation.model.inputCapacity)};
   }
-  if(body.environment_id){const owned=await getOwnedAiResource(client,auth,String(body.environment_id),'environment');if(owned.status!=='active')throw new AiApiError('resource_not_ready',422,'Ambiente indisponível.');provider.environment_id=owned.provider_name;}
+  if(body.environment_id){const owned=await getOwnedAiResource(client,auth,String(body.environment_id),'environment');if(owned.status!=='active')throw new AiApiError('resource_not_ready',422,'Ambiente indisponível.');provider.environment=owned.provider_name;}
   const output=positive(record(body.generation_config).max_output_tokens??Math.min(8192,operation.model.outputCapacity),operation.model.outputCapacity);
   if(!agent)provider.generation_config={...record(body.generation_config),max_output_tokens:output};
   else if(operation.model.providerId.startsWith('antigravity')&&record(provider.agent_config).model)throw new AiApiError('invalid_configuration',422,'Crie um agente com a chave do modelo escolhido para personalizar sua inteligência.');

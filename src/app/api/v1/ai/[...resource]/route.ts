@@ -5,6 +5,7 @@ import { createAiResource, listAiResources, refreshAiResource, resourceKinds } f
 import { getOwnedAiResource } from '@/lib/ai-api/files';
 import { downloadAiMedia, removeAiStoredResource,readAiEnvironmentFiles } from '@/lib/ai-api/resource-management';
 import {updateAiCache} from '@/lib/ai-api/cache-management';
+import {aiAutomationApi,automationCollections} from '@/lib/ai-api/automation';
 export const runtime='nodejs';
 export const maxDuration=120;
 type Context={params:Promise<{resource:string[]}>};
@@ -13,6 +14,7 @@ export async function POST(request:Request,context:Context) {
   try {
     const [collection,id,action]= (await context.params).resource;
     const client=createServiceClient();
+    if(automationCollections.includes(collection as never))return json(await aiAutomationApi(client,await authenticateAi(request,client),request,(await context.params).resource,await readAiJson(request,150_000)));
     if(id&&action==='cancel') {
       const auth=await authenticateAi(request,client),row=await getOwnedAiResource(client,auth,id,resourceKinds[collection]);
       return json(await refreshAiResource(client,row,true));
@@ -25,6 +27,7 @@ export async function GET(request:Request,context:Context) {
   try {
     const [collection,id,action]=(await context.params).resource;
     const client=createServiceClient(),auth=await authenticateAi(request,client);
+    if(automationCollections.includes(collection as never))return json(await aiAutomationApi(client,auth,request,(await context.params).resource));
     if(!id)return json(await listAiResources(client,auth,collection));
     const row=await getOwnedAiResource(client,auth,id,resourceKinds[collection]);
     if(action==='files'&&collection==='environments')return await readAiEnvironmentFiles(client,row,request);
@@ -38,6 +41,7 @@ export async function DELETE(request:Request,context:Context) {
     const [collection,id,action]=(await context.params).resource;
     if(!id||action)throw new AiApiError('resource_not_found',404,'Recurso não encontrado.');
     const client=createServiceClient(),auth=await authenticateAi(request,client);
+    if(automationCollections.includes(collection as never))return json(await aiAutomationApi(client,auth,request,(await context.params).resource));
     const row=await getOwnedAiResource(client,auth,id,resourceKinds[collection]);
     return json(await removeAiStoredResource(client,row));
   }catch(error){return aiHttpFailure(error);}
@@ -45,6 +49,7 @@ export async function DELETE(request:Request,context:Context) {
 export async function PATCH(request:Request,context:Context) {
   try {
     const [collection,id,action]=(await context.params).resource;
+    if(automationCollections.includes(collection as never)){const client=createServiceClient();return json(await aiAutomationApi(client,await authenticateAi(request,client),request,(await context.params).resource,await readAiJson(request,150_000)));}
     if(collection!=='caches'||!id||action)throw new AiApiError('resource_not_found',404,'Operação não encontrada.');
     const client=createServiceClient(),auth=await authenticateAi(request,client);
     const row=await getOwnedAiResource(client,auth,id,'cache');

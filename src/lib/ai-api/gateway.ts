@@ -31,6 +31,12 @@ export async function authenticateAi(request: Request, client = createServiceCli
   if (!secret) throw new AiApiError("invalid_api_key", 401, "Informe uma chave de API de IA ConnectyHub válida.");
   const { data: key, error } = await client.from("ai_api_keys").select("id,project_id,status,model_id").eq("key_hash", hashAiSecret(secret)).maybeSingle();
   if (error) throw new AiApiError("service_unavailable", 503, "Não foi possível verificar a chave.");
+  return authorizeAiKey(client, key);
+}
+
+// Server-only entry point for a persisted schedule. The worker reloads the key;
+// it never stores or synthesizes a customer's bearer credential.
+export async function authorizeAiKey(client: SupabaseClient, key: {id:string;project_id:string;status:string;model_id:string|null}|null) {
   if (!key || key.status !== "active") throw new AiApiError("invalid_api_key", 401, "Chave inválida ou revogada.");
   const { data: project } = await client.from("ai_projects").select("*").eq("id", key.project_id).single<AiProject>();
   if (!project || project.status !== "active") throw new AiApiError("project_paused", 403, "Este projeto está pausado.");
