@@ -126,7 +126,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
   it("keeps configured niche restrictions even when a stored generic prompt exists", () => {
     const call = runtimeHarness();
     const lines = call<string[]>("buildConfiguredNicheCareLines", { prompt: "Atendimento genérico", metadata: { prompt_builder_config: { templateId: "academia_suplementos", neverRules: "Não prescreva protocolos." } } });
-    expect(lines.join("\n")).toContain("Nao prescreva dose, ciclo, tratamento ou uso medico.");
+    expect(lines.join("\n")).toContain("Não prescreva exercícios ou suplementos, nem prometa emagrecimento ou ganho muscular.");
     expect(lines.join("\n")).toContain("Não prescreva protocolos.");
   });
 

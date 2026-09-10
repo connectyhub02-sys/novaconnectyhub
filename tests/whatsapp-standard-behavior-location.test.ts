@@ -78,10 +78,6 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.readReceiptDelay = true",
       "behavior.readReceiptMinSeconds = 3",
       "behavior.readReceiptMaxSeconds = 12",
-      "behavior.emojiReactions = true",
-      "behavior.spontaneousAudio = true",
-      "behavior.spontaneousAudioProbability = 15",
-      "behavior.mirrorTextFallbackProbability = 30",
       "behavior.circadianTiming = true",
       "behavior.naturalAudioFillers = true",
       "behavior.wpmTypingModel = true",
@@ -89,8 +85,6 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.intentionalTypos = false",
       "behavior.midMessageCorrections = false",
       "behavior.correctionFrequency = 0",
-      "behavior.reactionProbability = 40",
-      "behavior.stickerProbability = 20",
       "behavior.botLoopProtection = true",
       "behavior.allowInternalInstanceMessages = false",
       "behavior.cloneRealTestMode = false",
@@ -112,7 +106,6 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.topicShiftDetection = true",
       "behavior.promptInjectionGuard = true",
       "behavior.sharedCompanyContext = true",
-      "behavior.cloneMemory = true",
       "behavior.cloneConsistencyGuard = true",
       "behavior.mediaImage = true",
       "behavior.mediaDocument = true",
@@ -124,7 +117,7 @@ describe("WhatsApp standard behavior and company location", () => {
     ].forEach((line) => expect(standardizer).toContain(line));
   });
 
-  it("keeps humanized delivery variation enabled for every active agent", () => {
+  it("preserves explicit emoji and audio preferences for active agents", () => {
     const behavior = normalizeWhatsappBehaviorConfig({
       agentEnabled: true,
       emojiReactions: false,
@@ -135,11 +128,11 @@ describe("WhatsApp standard behavior and company location", () => {
       mirrorTextFallbackProbability: 0,
     });
 
-    expect(behavior.emojiReactions).toBe(true);
-    expect(behavior.reactionProbability).toBe(40);
-    expect(behavior.spontaneousAudio).toBe(true);
-    expect(behavior.spontaneousAudioProbability).toBe(15);
-    expect(behavior.mirrorTextFallbackProbability).toBe(30);
+    expect(behavior.emojiReactions).toBe(false);
+    expect(behavior.reactionProbability).toBe(0);
+    expect(behavior.spontaneousAudio).toBe(false);
+    expect(behavior.spontaneousAudioProbability).toBe(0);
+    expect(behavior.mirrorTextFallbackProbability).toBe(0);
   });
 
   it("keeps global WhatsApp sales behavior anchored in good service", () => {
@@ -240,7 +233,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).not.toContain("Erros intencionais");
     expect(behaviorPanel).toContain("Figurinhas");
     expect(behaviorPanel).toContain("Midia proativa");
-    expect(behaviorPanel).toContain("Small talk");
+    expect(behaviorPanel).toContain("Conversa leve");
 
     const aiWindowSection = sourceBetween(
       behaviorPanel,

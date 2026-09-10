@@ -1,5 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
+import { applyActivitySetup, resolveWhatsappBehavior } from "@/lib/whatsapp/activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -316,6 +317,7 @@ export async function createPlatformWhatsappConsoleSectorAgent(input: {
 }
 
 export async function updatePlatformWhatsappConsoleSettings(input: {
+  promptTemplateConfig?: unknown;
   sectorId: string;
   userId: string;
   agentPrompt?: string;
@@ -349,24 +351,38 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   }
 
   const currentBehavior = getBehaviorConfig(agent, instance);
-  const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? currentBehavior);
+  let nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? currentBehavior);
   const hasCloneProfile = input.cloneProfile !== undefined;
-  const nextCloneProfile = hasCloneProfile
+  let nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
     : getCloneProfileConfig(agent);
   const now = new Date().toISOString();
-  const nextQualificationConfig = input.qualificationConfig !== undefined
+  let nextQualificationConfig = input.qualificationConfig !== undefined
     ? markLeadQualificationConfigConfigured(input.qualificationConfig, now)
     : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true });
   const nextChannelConfig = input.channelConfig !== undefined
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
-  const nextPrompt = hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
+  const previousConfig = normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]);
+  const nextConfig = normalizeAgentPromptBuilderConfig(input.promptTemplateConfig ?? previousConfig);
+  if (hasAgentPrompt && input.promptTemplateConfig === undefined && agentPrompt !== agent.prompt?.trim()) nextConfig.mode = "manual";
+  if (input.promptTemplateConfig !== undefined && nextConfig.mode === "automatic"
+    && (previousConfig.templateId !== nextConfig.templateId || !previousConfig.profileVersion)) {
+    const setup = applyActivitySetup({ config: nextConfig, agentName: agent.persona_name || agent.name,
+      previousTemplateId: previousConfig.profileVersion ? previousConfig.templateId : undefined,
+      cloneProfile: nextCloneProfile, qualification: nextQualificationConfig, behavior: nextBehavior });
+    nextCloneProfile = setup.cloneProfile; nextQualificationConfig = setup.qualification; nextBehavior = setup.behavior;
+  }
+  const nextPrompt = nextConfig.mode === "automatic"
+    ? buildAgentPromptFromTemplate({ config: nextConfig, agentName: agent.persona_name || agent.name, companyName: sector.name })
+    : hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
+  if (nextPrompt.length > maxPromptLength) throw new Error(`As instruções ultrapassam ${maxPromptLength} caracteres. Reduza as regras ou o complemento.`);
   const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
   const metadata = {
     ...(agent.metadata ?? {}),
     whatsapp_behavior_config: nextBehavior,
     whatsapp_clone_profile: nextCloneProfile,
+    [promptBuilderMetadataKey]: nextConfig,
     multichannel_config: nextChannelConfig,
     [leadQualificationConfigKey]: nextQualificationConfig,
     prompt_control: {
@@ -2192,7 +2208,7 @@ function mapSectorEntity(row: SectorRow): PlatformWhatsappConsoleEntity {
 function getBehaviorConfig(agent: AgentRow | null, instance: WhatsappInstanceRow | null) {
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
-  return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? defaultWhatsappBehaviorConfig);
+  return resolveWhatsappBehavior({ instance: instanceConfig, agent: agentConfig, global: defaultWhatsappBehaviorConfig });
 }
 
 function getAgentChannelConfig(agent: AgentRow | null) {

@@ -22,6 +22,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type ActionBody = {
+  promptTemplateConfig?: unknown;
   action?: unknown;
   sectorId?: unknown;
   name?: unknown;
@@ -255,6 +256,7 @@ export async function PATCH(request: NextRequest) {
           : undefined,
       behavior: body?.behavior,
       cloneProfile: body?.cloneProfile,
+      promptTemplateConfig: body?.promptTemplateConfig,
       qualificationConfig: body?.qualificationConfig,
       channelConfig: body?.channelConfig,
       client: createServiceClient(),

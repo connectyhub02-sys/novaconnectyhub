@@ -40,7 +40,7 @@ describe("WhatsApp runtime external call timeouts", () => {
     const privacy = sourceBetween("async function ensureWhatsappPresencePrivacy", "async function setChatPresence");
     const presence = sourceBetween("async function setChatPresence", "async function setPresenceAvailable");
     const available = sourceBetween("async function setPresenceAvailable", "async function maybeSetInstanceAvailable");
-    const reaction = sourceBetween("async function sendEmojiReaction", "function pickContextualEmoji");
+    const reaction = sourceBetween("async function sendEmojiReaction", "function passesStableHumanizationChance");
 
     expect(runtimeSource).toContain("const whatsappPresenceTimeoutMs = 12000");
     expect(runtimeSource).toContain("const whatsappReactionTimeoutMs = 8000");

@@ -2,7 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
+import { leadQualificationConfigKey } from "@/lib/leads/qualification";
+import { applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 import {
   agentResponsibleHumanMetadataKey,
   agentResponsibleHumansMetadataKey,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/agents/responsible-human";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
-import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile, normalizeWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
+import { defaultWhatsappAgentPrompt, defaultWhatsappCloneMemory, normalizeWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
 import {
   buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
@@ -197,8 +198,11 @@ export async function createClientAgent(input: {
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
   const promptTemplateConfig = normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, {
+    mode: input.prompt ? "manual" : "automatic",
+    profileVersion: 1,
     updatedAt: new Date().toISOString(),
   });
+  if (typeof input.prompt === "string") promptTemplateConfig.mode = "manual";
   const generatedPrompt = buildAgentPromptFromTemplate({
     config: promptTemplateConfig,
     companyName: company.name,
@@ -212,7 +216,8 @@ export async function createClientAgent(input: {
     updatedAt: new Date().toISOString(),
   }, { requireAtLeastOne: true, requireName: true });
   const responsibleHuman = responsibleHumans[0] as AgentResponsibleHuman;
-  const behaviorConfig = mergeResponsibleHumansIntoBehaviorConfig({ ...defaultWhatsappBehaviorConfig, interactiveMessages: true, statusBroadcasts: true, newsletterBroadcasts: true, campaignBroadcasts: true }, responsibleHumans);
+  const setup = applyActivitySetup({ config: promptTemplateConfig, agentName: name });
+  const behaviorConfig = mergeResponsibleHumansIntoBehaviorConfig(setup.behavior, responsibleHumans);
 
   const { data, error } = await client
     .from("agent_registry")
@@ -248,10 +253,10 @@ export async function createClientAgent(input: {
         [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
         [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
         whatsapp_behavior_config: behaviorConfig,
-        whatsapp_clone_profile: defaultWhatsappCloneProfile,
+        whatsapp_clone_profile: setup.cloneProfile,
         whatsapp_clone_memory: defaultWhatsappCloneMemory,
         [promptBuilderMetadataKey]: promptTemplateConfig,
-        [leadQualificationConfigKey]: defaultLeadQualificationConfig,
+        [leadQualificationConfigKey]: setup.qualification,
       },
     })
     .select(agentListSelectColumns)
@@ -302,7 +307,7 @@ export async function updateClientAgent(input: {
   const sectorName = normalizeSectorName(input.sectorName);
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
-  const prompt = normalizePrompt(input.prompt);
+  let prompt = normalizePrompt(input.prompt ?? agent.prompt ?? undefined);
   const currentResponsibleHumans = readAgentResponsibleHumans(agent.metadata);
   const responsibleInput = input.responsibleHumans !== undefined
     ? input.responsibleHumans
@@ -323,10 +328,17 @@ export async function updateClientAgent(input: {
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]);
   const currentBehavior = normalizeWhatsappBehaviorConfig(agent.metadata?.whatsapp_behavior_config);
+  if (input.prompt !== undefined && input.prompt !== agent.prompt) promptTemplateConfig.mode = "manual";
+  const setup = applyActivitySetup({ config: promptTemplateConfig, agentName: name,
+    previousTemplateId: normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]).templateId,
+    cloneProfile: agent.metadata?.whatsapp_clone_profile, qualification: agent.metadata?.[leadQualificationConfigKey], behavior: currentBehavior });
+  if (promptTemplateConfig.mode === "automatic") prompt = normalizePrompt(buildAgentPromptFromTemplate({ config: promptTemplateConfig, companyName: targetCompany.name, agentName: name }));
+  if (setup.cloneProfile.useAgentName) setup.cloneProfile.displayName = name;
   const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName, {
     [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
     [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
-    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(currentBehavior, responsibleHumans),
+    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(setup.behavior, responsibleHumans),
+    ...(promptTemplateConfig.profileVersion ? { whatsapp_clone_profile: setup.cloneProfile, [leadQualificationConfigKey]: setup.qualification } : {}),
     [promptBuilderMetadataKey]: promptTemplateConfig,
   });
 
@@ -396,7 +408,7 @@ export async function cloneClientAgent(input: {
   const sectorName = normalizeSectorName(input.sectorName || sourceAgent.sector_name);
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle || sourceAgent.role_title);
-  const prompt = normalizePrompt(input.prompt || sourceAgent.prompt);
+  let prompt = normalizePrompt(input.prompt || sourceAgent.prompt);
   const sourceResponsibleHumans = readAgentResponsibleHumans(sourceAgent.metadata);
   const responsibleInput = input.responsibleHumans !== undefined
     ? input.responsibleHumans
@@ -417,13 +429,20 @@ export async function cloneClientAgent(input: {
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]);
   const currentBehavior = normalizeWhatsappBehaviorConfig(sourceAgent.metadata?.whatsapp_behavior_config);
+  if (input.prompt !== undefined && input.prompt !== sourceAgent.prompt) promptTemplateConfig.mode = "manual";
+  const setup = applyActivitySetup({ config: promptTemplateConfig, agentName: name,
+    previousTemplateId: normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]).templateId,
+    cloneProfile: sourceAgent.metadata?.whatsapp_clone_profile, qualification: sourceAgent.metadata?.[leadQualificationConfigKey], behavior: currentBehavior });
+  if (promptTemplateConfig.mode === "automatic") prompt = normalizePrompt(buildAgentPromptFromTemplate({ config: promptTemplateConfig, companyName: targetCompany.name, agentName: name }));
+  if (setup.cloneProfile.useAgentName) setup.cloneProfile.displayName = name;
   const metadata = mergeAgentMetadata(sourceAgent.metadata, targetCompany, sectorCode, sectorName, {
     cloned_from_agent_id: sourceAgent.id,
     cloned_from_agent_name: sourceAgent.name,
     cloned_at: new Date().toISOString(),
     [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
     [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
-    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(currentBehavior, responsibleHumans),
+    whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(setup.behavior, responsibleHumans),
+    ...(promptTemplateConfig.profileVersion ? { whatsapp_clone_profile: setup.cloneProfile, [leadQualificationConfigKey]: setup.qualification } : {}),
     [promptBuilderMetadataKey]: promptTemplateConfig,
   });
   if (targetCompany.id !== sourceAgent.organization_id) {

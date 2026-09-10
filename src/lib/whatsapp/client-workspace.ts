@@ -1,5 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
+import { applyActivitySetup, resolveWhatsappBehavior } from "./activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -222,6 +223,7 @@ export type ClientCloneRealTestSummary = {
 };
 
 export type ClientWhatsappState = {
+  defaultResponsible?: { name: string; phone: string };
   instance: {
     id: string;
     provider: "uazapi";
@@ -351,16 +353,21 @@ export async function getClientWhatsappState(input: {
     : rawInstance;
 
   const behavior = getBehaviorConfig(globalAgent, instance, agent);
-  const [audio, runtimeAlerts] = await Promise.all([
+  const [audio, runtimeAlerts, accountProfile] = await Promise.all([
     listWhatsappAudioVoices({ organizationId: input.organization.id, ownerUserId: input.userId, client }),
     listWhatsappRuntimeAlerts(client, {
       organizationId: input.organization.id,
       agentId: agent?.id ?? null,
       instanceId: instance?.id ?? null,
     }),
+    client.from("profiles").select("full_name, phone_normalized").eq("id", input.userId).maybeSingle<{ full_name: string | null; phone_normalized: string | null }>(),
   ]);
 
-  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, companyLocations, salesCatalog, cloneTest, runtimeAlerts);
+  return {
+    ...buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, companyLocations, salesCatalog, cloneTest, runtimeAlerts),
+    ...(accountProfile.data?.full_name && accountProfile.data.phone_normalized
+      ? { defaultResponsible: { name: accountProfile.data.full_name, phone: accountProfile.data.phone_normalized } } : {}),
+  };
 }
 
 export async function listWhatsappRuntimeAlerts(
@@ -1189,7 +1196,7 @@ export async function updateClientWhatsappPrompt(input: {
     getWorkspaceInstance(client, input.organization.id, agentForMetadata),
   ]);
   const resolvedInstance = instance && agentForMetadata ? await ensureInstanceAgentMetadata(client, instance, input.organization, agentForMetadata) : instance;
-  const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
+  let nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
   if (input.behavior !== undefined) {
     await assertWhatsappBehaviorVoiceAccess(client, {
       organizationId: input.organization.id,
@@ -1199,11 +1206,11 @@ export async function updateClientWhatsappPrompt(input: {
   }
   const now = new Date().toISOString();
   const hasCloneProfile = input.cloneProfile !== undefined;
-  const nextCloneProfile = hasCloneProfile
+  let nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
     : getCloneProfileConfig(agent);
   const hasQualificationConfig = input.qualificationConfig !== undefined;
-  const nextQualificationConfig = hasQualificationConfig
+  let nextQualificationConfig = hasQualificationConfig
     ? markLeadQualificationConfigConfigured(input.qualificationConfig, now)
     : getLeadQualificationConfig(agent);
   const hasChannelConfig = input.channelConfig !== undefined;
@@ -1214,6 +1221,21 @@ export async function updateClientWhatsappPrompt(input: {
   const nextPromptTemplateConfig = hasPromptTemplateConfig
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : getPromptTemplateConfig(agent);
+  const previousTemplateConfig = getPromptTemplateConfig(agent);
+  if (hasAgentPrompt && !hasPromptTemplateConfig && agentPrompt !== agent.prompt?.trim()) nextPromptTemplateConfig.mode = "manual";
+  const appliesActivityProfile = hasPromptTemplateConfig && nextPromptTemplateConfig.mode === "automatic"
+    && (previousTemplateConfig.templateId !== nextPromptTemplateConfig.templateId || !previousTemplateConfig.profileVersion);
+  if (appliesActivityProfile) {
+    const setup = applyActivitySetup({
+      config: nextPromptTemplateConfig, agentName: nextAgentName || agent.name,
+      previousTemplateId: previousTemplateConfig.profileVersion ? previousTemplateConfig.templateId : undefined,
+      cloneProfile: nextCloneProfile, qualification: nextQualificationConfig, behavior: nextBehavior,
+    });
+    nextCloneProfile = setup.cloneProfile;
+    nextQualificationConfig = setup.qualification;
+    nextBehavior = setup.behavior;
+  }
+  if (nextCloneProfile.useAgentName) nextCloneProfile.displayName = nextAgentName || agent.name;
   const hasCompanyLocations = input.companyLocations !== undefined;
 
   if (hasChannelConfig) {
@@ -1234,7 +1256,10 @@ export async function updateClientWhatsappPrompt(input: {
     : nextBehavior;
 
   if (hasAgentName || hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig || hasPromptTemplateConfig) {
-    const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
+    const promptToSave = nextPromptTemplateConfig.mode === "automatic"
+      ? buildAgentPromptFromTemplate({ config: nextPromptTemplateConfig, companyName: input.organization.name, agentName: nextAgentName || agent.name })
+      : hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
+    if (promptToSave.length > maxPromptLength) throw new Error(`As instruções ultrapassam ${maxPromptLength} caracteres. Reduza as regras ou o complemento.`);
     const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
       .from("agent_registry")
@@ -1324,8 +1349,8 @@ export async function updateClientWhatsappPrompt(input: {
 
   }
 
-  if (resolvedInstance && input.behavior !== undefined) {
-    await client
+  if (resolvedInstance && (input.behavior !== undefined || hasPromptTemplateConfig)) {
+    const { error: instanceSettingsError } = await client
       .from("whatsapp_instances")
       .update({
         metadata: {
@@ -1337,6 +1362,7 @@ export async function updateClientWhatsappPrompt(input: {
         },
       })
       .eq("id", resolvedInstance.id);
+    if (instanceSettingsError) throw new Error("As configurações do agente foram gravadas, mas não foi possível sincronizar o WhatsApp. Salve novamente para concluir.");
   }
 
   if (hasCompanyLocations) {
@@ -2625,7 +2651,7 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
 
-  return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? globalConfig);
+  return resolveWhatsappBehavior({ instance: instanceConfig, agent: agentConfig, global: globalConfig });
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
@@ -2658,7 +2684,7 @@ function resolveAgentPrompt(
 ) {
   const storedPrompt = agent?.prompt?.trim();
 
-  if (storedPrompt) {
+  if (storedPrompt && getPromptTemplateConfig(agent).mode !== "automatic") {
     return storedPrompt;
   }
 

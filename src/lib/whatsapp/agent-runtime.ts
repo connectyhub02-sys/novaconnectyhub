@@ -2,6 +2,8 @@ import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
+import { resolveWhatsappBehavior } from "./activity-setup";
+import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
@@ -91,7 +93,6 @@ import {
   defaultWhatsappGlobalPrompt,
   normalizeWhatsappCloneMemory,
   normalizeWhatsappCloneProfile,
-  normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
 import {
@@ -105,6 +106,7 @@ import {
 } from "./outbound-language";
 import {
   buildAgentPromptFromTemplate,
+  activityWhatsappGlobalPrompt,
   getAgentPromptTemplate,
   normalizeAgentPromptBuilderConfig,
   promptBuilderMetadataKey,
@@ -1093,7 +1095,7 @@ async function processWhatsappAgentRunWithScope(input: {
       }
     }
 
-    if (behavior.cloneRealTestMode) {
+    if (behavior.qualityMetrics || behavior.cloneRealTestMode) {
       await persistCloneRealTestTurn(client, context, {
         userText,
         aiText,
@@ -1225,11 +1227,8 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge.unshift({id:"store-commercial-live",title:"CONTRATOS E BENEFÍCIOS DO LEAD",content:commercial,metadata:{extracted_text:true,commercial_live:true},created_at:new Date().toISOString()});
   }
 
-  const behavior = normalizeWhatsappBehaviorConfig(
-    instanceMetadata?.behavior_config ??
-      readRecord(globalAgent?.metadata)?.whatsapp_behavior_config ??
-      readRecord(agent.metadata)?.whatsapp_behavior_config,
-  );
+  const behavior = resolveWhatsappBehavior({ instance: instanceMetadata?.behavior_config,
+    agent: readRecord(agent.metadata)?.whatsapp_behavior_config, global: readRecord(globalAgent?.metadata)?.whatsapp_behavior_config });
 
   const learnings = behavior.agentLearning
     ? await loadAgentLearnings(client, run.organization_id, isPlatformWhatsapp)
@@ -1312,11 +1311,8 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
     run.agent_id ? loadRuntimeAgent(client, run.agent_id, run.organization_id) : Promise.resolve(null),
   ]);
 
-  const behavior = normalizeWhatsappBehaviorConfig(
-    readRecord(instance?.metadata)?.behavior_config ??
-      readRecord(globalAgent?.metadata)?.whatsapp_behavior_config ??
-      readRecord(agent?.metadata)?.whatsapp_behavior_config,
-  );
+  const behavior = resolveWhatsappBehavior({ instance: readRecord(instance?.metadata)?.behavior_config,
+    agent: readRecord(agent?.metadata)?.whatsapp_behavior_config, global: readRecord(globalAgent?.metadata)?.whatsapp_behavior_config });
   const recentInboundMessages = conversationId
     ? await loadRecentInboundMessagesForDelay(client, conversationId)
     : [];
@@ -4316,7 +4312,8 @@ function buildSystemInstruction(input: {
 }) {
   const agentPrompt = renderPromptVariables(resolveRuntimeAgentPrompt(input), input);
   const isElianeAgent = isElianeRuntimeAgent(input.agent);
-  const globalPrompt = isElianeAgent ? elianeWhatsappGlobalPrompt : defaultWhatsappGlobalPrompt;
+  const activityConfigured = normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).mode === "automatic";
+  const globalPrompt = isElianeAgent ? elianeWhatsappGlobalPrompt : activityConfigured ? activityWhatsappGlobalPrompt : defaultWhatsappGlobalPrompt;
   const customGlobalPrompt = input.globalAgent?.prompt?.trim();
   const shouldAppendCustomGlobalPrompt = Boolean(
     customGlobalPrompt
@@ -4345,6 +4342,7 @@ function buildSystemInstruction(input: {
     ...buildGlobalCheckoutConfirmationLines(),
     "",
     ...buildCloneProfileLines(input.agent),
+    ...conversationStyleInstructions(input.behavior),
     ...buildCloneMemoryLines(input.agent, input.behavior),
     ...buildCloneConsistencyInstruction(input.agent, input.behavior),
     ...buildCloneRealTestInstruction(input.behavior),
@@ -4451,7 +4449,7 @@ function resolveRuntimeAgentPrompt(input: {
 }) {
   const storedPrompt = input.agent.prompt?.trim();
 
-  if (storedPrompt) {
+  if (storedPrompt && normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).mode !== "automatic") {
     return storedPrompt;
   }
 
@@ -5290,7 +5288,7 @@ function buildConversationArcInstruction(behavior: WhatsappBehaviorConfig, conve
     "ARCO DA CONVERSA (resumo acumulado):",
     `- ${arcSummary}`,
     "- Use este contexto para continuidade. Retome de onde pararam, nao pergunte o que ja foi discutido.",
-    "- Se o lead voltar dias depois, faca referencia natural: 'e ai, conseguiu pensar sobre...', 'lembra que a gente tava vendo...'.",
+    "- Se o lead voltar dias depois, retome o assunto com linguagem adequada à atividade e ao tom escolhido, sem frases fixas.",
   ];
 }
 
@@ -5306,8 +5304,8 @@ function buildNegotiationStateInstruction(behavior: WhatsappBehaviorConfig, conv
   const stageGuide: Record<string, string> = {
     discovery: "Faca perguntas abertas. Descubra necessidade, orcamento, urgencia. Nao empurre produto ainda.",
     qualification: "Valide se o lead tem perfil. Confirme dados e expectativas antes de apresentar solucao.",
-    objection: "Escute a objecao com empatia. Reformule o valor, use prova social. Nao force.",
-    negotiation: "Explore flexibilidade. Oferte condicoes, prazos, bonus. Crie urgencia sem pressao.",
+    objection: "Acolha a dúvida e siga a abordagem de objeções da atividade. Use apenas informações comprovadas, sem insistir.",
+    negotiation: "Confira condições já cadastradas e encaminhe exceções ao responsável. Não invente bônus, desconto ou urgência.",
     closing: "Confirme decisao. Simplifique proximo passo. Evite reabrir negociacao.",
     post_sale: "Agradeca, confirme entrega, ofereca suporte. Plante semente para indicacao.",
   };
@@ -7915,7 +7913,7 @@ async function sendAgentResponse(input: {
   });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
-  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
+  const cleanText = applyTextEmojiPreference(normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context)), context.behavior);
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText, context);
   await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
   const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
@@ -8646,6 +8644,7 @@ async function sendTextOutboundChunk(input: {
   mentionMessage?: ConversationMessageRow | null;
   trackIdPrefix: string;
 }) {
+  input = { ...input, text: applyTextEmojiPreference(input.text, input.context.behavior) };
   const interactiveMenu = buildInteractiveLinkMenu(input.text, input.context);
   const messageText = normalizeOutboundLanguageText(input.text);
   let providerResponse: unknown;
@@ -8731,7 +8730,7 @@ async function sendAudioReplyFallbackText(input: {
   error: unknown;
 }) {
   const errorMessage = describeRuntimeError(input.error, "Falha desconhecida ao enviar resposta em audio.");
-  const fallbackText = normalizeOutboundLanguageText(input.text);
+  const fallbackText = applyTextEmojiPreference(normalizeOutboundLanguageText(input.text), input.context.behavior);
 
   await setChatPresence(input.context.credentials, input.token, input.phone, "composing", 10000).catch(() => {});
 
@@ -14691,7 +14690,7 @@ async function handleLeadHumanHandoffRequest(input: {
   };
   const notificationResult = await sendHumanHandoffNotificationNowOrQueue(client, context, notificationData);
 
-  if (context.behavior.cloneRealTestMode) {
+  if (context.behavior.qualityMetrics || context.behavior.cloneRealTestMode) {
     await persistCloneRealTestTurn(client, context, {
       userText: requestText,
       aiText: handoffText,
@@ -15959,7 +15958,8 @@ async function sendEmojiReaction(input: {
   if (!input.behavior.emojiReactions) return;
   if (!passesStableHumanizationChance(input.behavior.reactionProbability, "emoji_reaction", input.phone, input.messageId, input.userText)) return;
 
-  const emoji = pickContextualEmoji(input.userText);
+  const emoji = selectConversationReaction(input.userText, input.behavior.conversationStyle);
+  if (!emoji) return;
 
   try {
     await callUazapi(input.credentials, "/message/react", {
@@ -15994,18 +15994,6 @@ function stableHumanizationPercent(parts: Array<string | null | undefined>) {
   return (hash.readUInt32BE(0) / 0x100000000) * 100;
 }
 
-function pickContextualEmoji(text: string): string {
-  const n = text.toLowerCase();
-  if (/obrigad|valeu|vlw|agradec/.test(n)) return "❤️";
-  if (/kkk|haha|rsrs|😂|🤣|engracad/.test(n)) return "😂";
-  if (/bom dia|boa tarde|boa noite|^oi\b|^ola\b|^eai\b|^fala\b/.test(n)) return "👋";
-  if (/top|show|otimo|perfeito|massa|dahora|legal|excelente|incrivel/.test(n)) return "🔥";
-  if (/triste|ruim|problema|dificil|complicad|pena/.test(n)) return "😔";
-  if (/\?|duvida|como|quando|onde|qual|quanto/.test(n)) return "🤔";
-  const defaults = ["👍", "✅", "😊", "🙌", "💪"];
-  return defaults[Math.floor(Math.random() * defaults.length)];
-}
-
 async function sendContextualSticker(
   credentials: UazapiCredentials,
   token: string,
@@ -16014,6 +16002,7 @@ async function sendContextualSticker(
   behavior: WhatsappBehaviorConfig,
 ) {
   if (!behavior.sendStickers) return;
+  if (behavior.conversationStyle === "discreet") return;
   if (Math.random() * 100 >= behavior.stickerProbability) return;
 
   const stickerUrl = pickContextualStickerUrl(responseText);

@@ -1,5 +1,7 @@
 "use client";
 import { DialogFrame } from "@/components/ui/dialog-frame";
+import { ActivitySelect } from "./activity-select";
+import { applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
@@ -8,6 +10,7 @@ import {
   AudioLines,
   Bell,
   Bot,
+  Brain,
   Building2,
   CheckCircle2,
   CircleHelp,
@@ -81,6 +84,8 @@ import type { OrganizationLocation } from "@/lib/company-locations/shared";
 import {
   agentPromptTemplates,
   buildAgentPromptFromTemplate,
+  createActivityPromptConfig,
+  switchActivityPromptConfig,
   defaultAgentPromptTemplateId,
   isAgentPromptBuilderConfigEqual,
   normalizeAgentPromptBuilderConfig,
@@ -229,6 +234,7 @@ type ClientWhatsappAgent = {
 };
 
 type WhatsappState = {
+  defaultResponsible?: { name: string; phone: string };
   companies: ClientCompany[];
   agents?: ClientWhatsappAgent[];
   selectedCompanyId: string | null;
@@ -587,7 +593,7 @@ export function WhatsAppConsole({
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
-  const [agentName, setAgentName] = useState("");
+  const [agentName, setAgentName] = useState("Assistente");
   const [agentSectorName, setAgentSectorName] = useState(agentPromptTemplates[0].sectorName);
   const [agentResponsibles, setAgentResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const [agentTemplateId, setAgentTemplateId] = useState<AgentPromptTemplateId>(defaultAgentPromptTemplateId);
@@ -652,6 +658,9 @@ export function WhatsAppConsole({
     setState(nextState);
     setSelectedCompanyId(nextCompanyId);
     setSelectedAgentId(nextAgentId);
+    if (nextState.defaultResponsible) {
+      setAgentResponsibles((current) => current.some((person) => person.name.trim() || person.phone.trim()) ? current : [createResponsibleHumanDraft(nextState.defaultResponsible)]);
+    }
 
     if (!options?.preserveDrafts) {
       const nextPrompt = nextState.agent?.prompt ?? "";
@@ -832,8 +841,12 @@ export function WhatsAppConsole({
   const agentNameInvalid = canEditSelectedAgentName
     ? selectedAgentNameNormalized.length < 2 || selectedAgentNameNormalized.length > agentNameMaxLength
     : false;
-  const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
-  const promptTooLong = promptDraft.length > agentPromptMaxLength;
+  const effectivePrompt = promptTemplateDraft.mode === "automatic"
+    ? buildAgentPromptFromTemplate({ config: promptTemplateDraft, agentName: selectedAgentNameNormalized || state?.agent?.name || "Agente",
+        companyName: state?.companies.find((company) => company.id === selectedCompanyId)?.name || "{{empresa}}" })
+    : promptDraft;
+  const promptChanged = state?.agent ? effectivePrompt.trim() !== state.agent.prompt.trim() : false;
+  const promptTooLong = effectivePrompt.length > agentPromptMaxLength;
   const promptTemplateChanged = state?.agent
     ? !isAgentPromptBuilderConfigEqual(promptTemplateDraft, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
     : false;
@@ -859,10 +872,10 @@ export function WhatsAppConsole({
     : needsAgent
       ? variant.headerDescriptions.needsAgent
       : variant.headerDescriptions.ready;
-  const promptHelper = `${promptDraft.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres`;
+  const promptHelper = `${effectivePrompt.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres · ${promptTemplateDraft.mode === "automatic" ? "Atualizado automaticamente pela atividade" : "Instruções personalizadas preservadas"}`;
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
-    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value, customizedStyleFields: [...new Set([...(current.customizedStyleFields ?? []), key])] }));
   }
 
   function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
@@ -907,6 +920,7 @@ export function WhatsAppConsole({
   }
 
   function updatePromptDraft(value: string) {
+    setPromptTemplateDraft((current) => ({ ...current, mode: "manual" }));
     setPromptDraft(value.slice(0, agentPromptMaxLength));
   }
 
@@ -918,26 +932,23 @@ export function WhatsAppConsole({
   }
 
   function updatePromptTemplateDraft(patch: Partial<AgentPromptBuilderConfig>) {
-    setPromptTemplateDraft((current) => {
-      const nextTemplateId = patch.templateId ?? current.templateId;
-      const templateChanged = patch.templateId && patch.templateId !== current.templateId;
-      const template = agentPromptTemplates.find((item) => item.id === nextTemplateId);
-
-      return normalizeAgentPromptBuilderConfig({
-        ...current,
-        ...(templateChanged && template
-          ? {
-              tone: template.defaultTone,
-              objective: template.defaultObjective,
-              audience: template.defaultAudience,
-              salesRules: template.salesPlaybook.join("\n"),
-              neverRules: template.careRules.join("\n"),
-            }
-          : {}),
-        ...patch,
-        updatedAt: new Date().toISOString(),
-      });
+    const templateChanged = patch.templateId && patch.templateId !== promptTemplateDraft.templateId;
+    const next = normalizeAgentPromptBuilderConfig({
+      ...(templateChanged ? switchActivityPromptConfig(promptTemplateDraft, patch.templateId) : promptTemplateDraft),
+      ...patch, mode: promptTemplateDraft.mode, updatedAt: new Date().toISOString(),
     });
+    if (templateChanged && promptTemplateDraft.mode === "automatic") applyProfileToDrafts(next);
+    else setPromptTemplateDraft(next);
+  }
+
+  function applyProfileToDrafts(config: AgentPromptBuilderConfig) {
+    const setup = applyActivitySetup({ config, agentName: selectedAgentNameNormalized || state?.agent?.name || "Agente",
+      previousTemplateId: promptTemplateDraft.profileVersion ? promptTemplateDraft.templateId : undefined,
+      cloneProfile: cloneProfileDraft, qualification: qualificationDraft, behavior: behaviorDraft });
+    setPromptTemplateDraft(config);
+    setCloneProfileDraft(setup.cloneProfile);
+    setQualificationDraft(setup.qualification);
+    setBehaviorDraft(setup.behavior);
   }
 
   function generatePromptFromTemplate() {
@@ -946,16 +957,10 @@ export function WhatsAppConsole({
       return;
     }
 
-    const nextPrompt = buildAgentPromptFromTemplate({
-      config: promptTemplateDraft,
-      companyName: selectedCompany?.name ?? state.agent.companyId ?? "Empresa",
-      agentName: state.agent.name,
-      productCount: state.salesCatalog.length,
-      knowledgeFileCount: state.knowledge.files.length,
-    }).slice(0, agentPromptMaxLength);
-
-    setPromptDraft(nextPrompt);
-    setNotice({ tone: "success", message: "Prompt gerado pelo modelo. Revise e clique em Salvar alteracoes." });
+    applyProfileToDrafts(promptTemplateDraft.profileVersion
+      ? { ...promptTemplateDraft, mode: "automatic", profileVersion: 1 }
+      : createActivityPromptConfig(promptTemplateDraft.templateId, promptTemplateDraft.companyComplement));
+    setNotice({ tone: "success", message: "Perfil aplicado: instruções, personalidade e qualificação prontas. Personalizações da personalidade e do CRM foram preservadas. Salve para usar no atendimento." });
   }
 
   async function improveCompanyComplementWithAi() {
@@ -1023,13 +1028,14 @@ export function WhatsAppConsole({
   }
 
   function updateQualificationDraft(value: Partial<LeadQualificationConfig>) {
-    setQualificationDraft((current) => normalizeLeadQualificationConfig({ ...current, ...value }));
+    setQualificationDraft((current) => normalizeLeadQualificationConfig({ ...current, ...value, customized: true }));
   }
 
   function updateQualificationQuestion(id: string, value: Partial<LeadQualificationQuestion>) {
     setQualificationDraft((current) =>
       normalizeLeadQualificationConfig({
         ...current,
+        customized: true,
         questions: current.questions.map((question) => question.id === id ? { ...question, ...value } : question),
       }),
     );
@@ -1041,6 +1047,7 @@ export function WhatsAppConsole({
     setQualificationDraft((current) =>
       normalizeLeadQualificationConfig({
         ...current,
+        customized: true,
         questions: [
           ...current.questions,
           {
@@ -1060,6 +1067,7 @@ export function WhatsAppConsole({
     setQualificationDraft((current) =>
       normalizeLeadQualificationConfig({
         ...current,
+        customized: true,
         questions: current.questions.filter((question) => question.id !== id),
       }),
     );
@@ -1181,10 +1189,10 @@ export function WhatsAppConsole({
         body: JSON.stringify({
           ...whatsappActionPayload,
           ...(agentNameChanged ? { agentName: selectedAgentNameNormalized } : {}),
-          agentPrompt: promptDraft,
+          agentPrompt: effectivePrompt,
           promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
-          cloneProfile: cloneProfileDraft,
+          cloneProfile: cloneProfileDraft.useAgentName ? { ...cloneProfileDraft, displayName: selectedAgentNameNormalized } : cloneProfileDraft,
           ...(qualificationChanged ? { qualificationConfig: qualificationDraft } : {}),
           channelConfig: channelConfigDraft,
         }),
@@ -1251,15 +1259,7 @@ export function WhatsAppConsole({
       const template = agentPromptTemplates.find((item) => item.id === agentTemplateId) ?? agentPromptTemplates[0];
       const responsiblePayload = responsibleHumansToPayload(agentResponsibles);
       const firstResponsible = firstResponsibleHumanPayload(agentResponsibles);
-      const promptTemplateConfig = normalizeAgentPromptBuilderConfig({
-        templateId: template.id,
-        tone: template.defaultTone,
-        objective: template.defaultObjective,
-        audience: template.defaultAudience,
-        salesRules: template.salesPlaybook.join("\n"),
-        neverRules: template.careRules.join("\n"),
-        updatedAt: new Date().toISOString(),
-      });
+      const promptTemplateConfig = createActivityPromptConfig(template.id);
 
       const response = await fetch(variant.endpoints.createAgent, {
         method: "POST",
@@ -1284,12 +1284,13 @@ export function WhatsAppConsole({
 
       const nextState = await fetchWhatsappState(variant, data?.agent?.id ?? selectedWhatsappEntityId);
       applyWhatsappState(nextState);
-      setAgentName("");
+      setAgentName("Assistente");
       setAgentSectorName(agentPromptTemplates[0].sectorName);
-      setAgentResponsibles([createResponsibleHumanDraft()]);
+      setAgentResponsibles([createResponsibleHumanDraft(nextState.defaultResponsible)]);
       setAgentTemplateId(defaultAgentPromptTemplateId);
       setShowAgentForm(false);
-      setNotice({ tone: "success", message: "Agente criado. Agora configure o prompt, comportamento e conexao." });
+      setActiveTab("connection");
+      setNotice({ tone: "success", message: "Agente criado com o perfil da atividade pronto. Conecte o WhatsApp para começar a receber mensagens." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar agente." });
     } finally {
@@ -1663,6 +1664,16 @@ export function WhatsAppConsole({
       />
 
       {notice && <NoticeBar notice={notice} />}
+      {!loading && !canManageInternalAgents ? (
+        <div className="my-4 rounded-xl border bg-white p-4" aria-label="Configuração inicial em três passos">
+          <ol className="grid gap-3 sm:grid-cols-3">
+            <li className="text-sm"><span className="font-semibold">1. Seu negócio</span><p className="mt-1 text-xs text-slate-500">{selectedCompany?.name || "Cadastre seu nome profissional ou comercial."}</p></li>
+            <li><button className="text-left text-sm" onClick={() => state?.agent ? setActiveTab("prompt") : setShowAgentForm(true)}><span className="font-semibold">2. Sua atividade</span><span className="mt-1 block text-xs text-slate-500">{state?.agent ? agentPromptTemplates.find((item) => item.id === state.agent?.promptTemplateConfig?.templateId)?.label || "Revisar atividade" : "Escolha e receba o atendimento pronto."}</span></button></li>
+            <li><button className="text-left text-sm" disabled={!state?.agent} onClick={() => setActiveTab("connection")}><span className="font-semibold">3. Conectar WhatsApp</span><span className="mt-1 block text-xs text-slate-500">{isConnected ? "WhatsApp conectado" : "Leia o QR Code para conectar."}</span></button></li>
+          </ol>
+          {state?.agent && isConnected ? <p className="mt-3 border-t pt-3 text-xs text-slate-600">{settingsChanged ? "Há alterações para salvar antes de usar no atendimento." : state.behavior.agentEnabled ? "Configuração salva e WhatsApp conectado. Envie uma mensagem de teste para conferir o atendimento. Você pode adicionar produtos e informações aos poucos." : "O agente está pausado. Ative o atendimento na aba Comportamento quando quiser retomar."}</p> : null}
+        </div>
+      ) : null}
       {metaComingSoonChannel ? (
         <MetaChannelsComingSoonModal
           channelLabel={metaComingSoonChannel}
@@ -1958,13 +1969,13 @@ export function WhatsAppConsole({
                 />
 
                 <BehaviorSection
-                  title="Prompt tecnico avancado"
+                  title="Editar instruções avançadas"
                   description="Opcional. O agente usa o modelo do nicho e o complemento da empresa; abra apenas se precisar ajustar o texto final manualmente."
                 >
                   <PromptBox
                     label="Prompt final usado pelo agente"
                     description="Texto tecnico final que sera enviado ao agente. Produtos e links cadastrados entram automaticamente no contexto do atendimento."
-                    value={promptDraft}
+                    value={effectivePrompt}
                     maxLength={agentPromptMaxLength}
                     onChange={updatePromptDraft}
                     helper={promptHelper}
@@ -1972,7 +1983,7 @@ export function WhatsAppConsole({
                 </BehaviorSection>
 
                 <CloneProfileEditor
-                  profile={cloneProfileDraft}
+                  profile={cloneProfileDraft.useAgentName ? { ...cloneProfileDraft, displayName: selectedAgentNameNormalized } : cloneProfileDraft}
                   importStatus={state.agent.cloneProfileImport}
                   importing={running === "generate_clone_profile_from_history"}
                   canImport={Boolean(state.instance?.tokenReady)}
@@ -1981,9 +1992,12 @@ export function WhatsAppConsole({
                   onChange={updateCloneProfileDraft}
                 />
 
-                <CloneMemoryPanel memory={state.agent.cloneMemory} enabled={behaviorDraft.cloneMemory} />
-
-                <CloneRealTestPanel summary={state.cloneTest} enabled={behaviorDraft.cloneRealTestMode} />
+                <BehaviorSection title="Evolução do agente" description="Aprendizados e indicadores baseados nas conversas reais.">
+                  <ToggleTile icon={Brain} label="Aprender com as conversas" description="Registra padrões de atendimento. A análise usa IA e consome créditos conforme o uso." checked={behaviorDraft.cloneMemory} onChange={() => updateBehavior("cloneMemory", !behaviorDraft.cloneMemory)} />
+                  <CloneMemoryPanel memory={state.agent.cloneMemory} enabled={behaviorDraft.cloneMemory} />
+                  <ToggleTile icon={CheckCircle2} label="Avaliar qualidade" description="Registra indicadores automáticos após as respostas, sem precisar ativar um modo de teste." checked={behaviorDraft.qualityMetrics} onChange={() => updateBehavior("qualityMetrics", !behaviorDraft.qualityMetrics)} />
+                  <CloneRealTestPanel summary={state.cloneTest} enabled={behaviorDraft.qualityMetrics} />
+                </BehaviorSection>
 
                 <div className="flex flex-wrap gap-2">
                   <SecondaryAction
@@ -2135,12 +2149,22 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
+              <BehaviorSection title="Estilo de conversa" description="Emojis no texto, reações e figurinhas são recursos diferentes. Suas escolhas são respeitadas no atendimento." defaultOpen>
+                <ModeSelector<WhatsappBehaviorConfig["conversationStyle"]>
+                  value={behaviorDraft.conversationStyle}
+                  options={[
+                    { value: "discreet", label: "Discreto", description: "Formal e cuidadoso", help: "Reações discretas; não envia figurinhas." },
+                    { value: "balanced", label: "Equilibrado", description: "Consultivo e próximo", help: "Conversa profissional, sem intimidade excessiva." },
+                    { value: "warm", label: "Descontraído", description: "Leve e acolhedor", help: "Acompanha a abertura do cliente sem perder o foco do atendimento." },
+                  ]}
+                  onChange={(value) => updateBehavior("conversationStyle", value)}
+                />
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   <ToggleTile icon={Smile} label="Reacoes emoji" description="Reage a mensagens do lead com emoji contextual antes de responder." checked={behaviorDraft.emojiReactions} onChange={() => updateBehavior("emojiReactions", !behaviorDraft.emojiReactions)} />
+                  <ToggleTile icon={Smile} label="Emojis nas respostas" description="Permite emojis no texto. Não altera as reações presas às mensagens." checked={behaviorDraft.textEmojis} onChange={() => updateBehavior("textEmojis", !behaviorDraft.textEmojis)} />
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
-                  <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
+                  <ToggleTile icon={Coffee} label="Conversa leve" description="Permite um breve papo informal quando o cliente der abertura." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
                 </div>
               </BehaviorSection>
 
@@ -2755,7 +2779,7 @@ function WhatsappConsoleCommandBar({
     agentNameChanged ? "Nome" : null,
     promptChanged ? "Prompt" : null,
     promptTemplateChanged ? "Modelo" : null,
-    cloneProfileChanged ? "DNA manual" : null,
+    cloneProfileChanged ? "Personalidade" : null,
     qualificationChanged ? "CRM" : null,
     channelConfigChanged ? "Canais" : null,
     behaviorChanged ? "Comportamento" : null,
@@ -3188,18 +3212,8 @@ function ClientAgentsManager({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
-              <select
-                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                value={agentTemplateId}
-                onChange={(event) => onAgentTemplateChange(event.target.value)}
-              >
-                {agentPromptTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
+              <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Profissão ou atividade</span>
+              <ActivitySelect value={agentTemplateId} onChange={onAgentTemplateChange} />
             </label>
             <label className="block">
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
@@ -3839,18 +3853,8 @@ function AgentCreationGate({
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
-                <select
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  value={agentTemplateId}
-                  onChange={(event) => onAgentTemplateChange(event.target.value)}
-                >
-                  {agentPromptTemplates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.label}
-                    </option>
-                  ))}
-                </select>
+                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Profissão ou atividade</span>
+                <ActivitySelect value={agentTemplateId} onChange={onAgentTemplateChange} />
               </label>
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
@@ -4047,27 +4051,18 @@ function GuidedPromptBuilder({
 
   return (
     <BehaviorSection
-      title="Construtor guiado do prompt"
-      description="Escolha o nicho e preencha campos simples. O sistema gera o prompt comercial completo mantendo as regras de botoes, checkout e catalogo."
+      title="Atividade e atendimento"
+      description="Escolha sua atividade. As instruções, a personalidade e as perguntas já vêm preparadas para esse atendimento."
+      defaultOpen
     >
       <div className="grid gap-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
           <label className="block">
             <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
-              Nicho / profissao do agente
+              Profissão ou atividade do negócio
               <InfoHint text="Esse modelo cria a base do prompt. O usuario ainda pode ajustar campos e o comportamento do agente nas outras abas." />
             </span>
-            <select
-              className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-              value={config.templateId}
-              onChange={(event) => onChange({ templateId: event.target.value as AgentPromptTemplateId })}
-            >
-              {agentPromptTemplates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <ActivitySelect value={config.templateId} onChange={(templateId) => onChange({ templateId })} />
           </label>
 
           <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
@@ -4079,11 +4074,11 @@ function GuidedPromptBuilder({
         <div className="grid gap-2 md:grid-cols-3">
           <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
           <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
-          <InfoTile label="Checkout" value="Botao obrigatorio" />
+          <InfoTile label="Atuação" value={template.kind === "professional" ? "Profissional individual" : template.kind === "company" ? "Empresa" : "Atendimento geral"} />
         </div>
 
         <TextAreaField
-          label="Informacoes extras da empresa"
+          label="Informações extras do seu negócio (opcional)"
           description="Campo principal para personalizar o agente. Produtos, precos e links ja entram automaticamente pelo Catalogo/Produtos."
           minHeight="140px"
           placeholder="Cole aqui detalhes da empresa. Se quiser, use Melhorar com IA; essa acao consome os creditos da empresa."
@@ -4092,7 +4087,7 @@ function GuidedPromptBuilder({
         />
 
         <BehaviorSection
-          title="Ajustes avancados do modelo"
+          title="Regras do atendimento"
           description="Opcional. O modelo do nicho ja preenche estes campos; ajuste somente quando precisar de uma regra especifica."
         >
           <div className="grid gap-3 xl:grid-cols-2">
@@ -4151,6 +4146,10 @@ function GuidedPromptBuilder({
           </div>
         </BehaviorSection>
 
+        <p className="text-xs leading-5 text-slate-500">
+          {config.mode === "automatic" ? "Perfil ativo: as instruções acompanham suas alterações automaticamente. Salve para aplicar ao atendimento."
+            : "Suas instruções personalizadas estão preservadas. Aplicar o perfil substitui o texto avançado pelas regras desta atividade; personalidade e qualificação personalizadas são mantidas."}
+        </p>
         <div className="flex flex-wrap gap-2">
           <SecondaryAction
             icon={Wand2}
@@ -4162,8 +4161,8 @@ function GuidedPromptBuilder({
           />
           <ActionButton
             icon={PenLine}
-            label="Gerar prompt pelo modelo"
-            description="Atualiza o prompt tecnico avancado usando nicho, complemento e regras. Esta acao local nao usa IA."
+            label={config.mode === "automatic" ? "Reaplicar perfil da atividade" : "Aplicar perfil da atividade"}
+            description="Prepara instruções, personalidade e qualificação. Substitui o texto avançado por estas regras e preserva personalizações do DNA e CRM. Não usa créditos de IA."
             onClick={onGeneratePrompt}
           />
         </div>
@@ -4228,14 +4227,14 @@ function CloneProfileEditor({
 
   return (
     <BehaviorSection
-      title="DNA manual do agente"
-      description="Perfil opcional para ensinar estilo, tom, ritmo e jeito de vender manualmente ou a partir do historico do WhatsApp."
+      title="Personalidade do agente"
+      description="Identidade, vocabulário e abordagem da atividade escolhida. Você pode personalizar ou desativar."
     >
       <div className="grid gap-3">
         <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(240px,0.58fr)]">
           <ToggleTile
             icon={UserRound}
-            label="Usar DNA manual"
+            label="Usar personalidade"
             description="Quando ligado, estas regras entram no contexto de toda resposta deste agente."
             checked={profile.enabled}
             onChange={() => onChange({ enabled: !profile.enabled, source: "manual" })}
@@ -4245,7 +4244,7 @@ function CloneProfileEditor({
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <PromptCheck label={profile.enabled ? "DNA ativo" : "DNA pausado"} active={profile.enabled} />
               <PromptCheck label={`${activeFields}/12 campos`} active={activeFields >= 4} />
-              <PromptCheck label={profile.source === "history" ? "Historico" : "Manual"} active />
+              <PromptCheck label={profile.source === "history" ? "Histórico" : profile.source === "activity" ? "Da atividade" : "Personalizada"} active />
               <PromptCheck label={changed ? "Alterado" : "Salvo"} active={!changed} />
             </div>
           </div>
@@ -4281,11 +4280,14 @@ function CloneProfileEditor({
         </div>
 
         <div className="grid gap-3 xl:grid-cols-2">
+          <div className="xl:col-span-2">
+            <ToggleTile icon={UserRound} label="Usar o nome do agente na assinatura" description="A assinatura acompanha as mudanças no nome do agente. Desative para escolher outro nome." checked={profile.useAgentName === true} onChange={() => onChange({ useAgentName: !profile.useAgentName })} />
+          </div>
           <TextField
             label="Nome de assinatura"
             description="Nome que representa a pessoa ou estilo que este agente deve assumir."
             value={profile.displayName}
-            onChange={(displayName) => onChange({ displayName, source: "manual" })}
+            onChange={(displayName) => onChange({ displayName, useAgentName: false, source: "manual" })}
           />
           <TextAreaField
             label="Identidade"
@@ -4385,14 +4387,14 @@ function CloneRealTestPanel({
 
   return (
     <BehaviorSection
-      title="Metrica de humanizacao"
-      description="Mostra se o clone respondeu completo, natural, variado, contextual, com links corretos, sem prometer sem entregar e mantendo o estilo."
+      title="Qualidade do atendimento"
+      description="Indicadores automáticos de clareza, repetição, contexto e entrega. A nota é uma estimativa por regras, não uma probabilidade de parecer humano."
     >
       <div className="grid gap-3">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <InfoTile label="Modo" value={enabled ? "Ativo" : "Pausado"} />
-          <InfoTile label="Testes lidos" value={String(data.total)} />
-          <InfoTile label="Humanizacao" value={formatCloneScore(data.averageScore)} />
+          <InfoTile label="Avaliações recentes" value={String(data.total)} />
+          <InfoTile label="Qualidade estimada" value={formatCloneScore(data.averageScore)} />
           <InfoTile label="Alertas" value={String(data.reviewCount)} />
         </div>
 
@@ -4438,7 +4440,7 @@ function CloneRealTestPanel({
                         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-blue-100">
                           <span
                             className={cn("block h-full rounded-full", getHumanizationMetricBarColor(metric.status))}
-                            style={{ width: `${Math.max(4, Math.min(100, Math.round(metric.score * 100)))}%` }}
+                            style={{ width: `${Math.max(0, Math.min(100, Math.round(metric.score * 100)))}%` }}
                           />
                         </div>
                       </div>
@@ -4486,7 +4488,7 @@ function CloneMemoryPanel({
 
   return (
     <BehaviorSection
-      title="Memoria do clone"
+      title="Aprendizados do agente"
       description="Aprendizados vivos de estilo deste agente. Nao guarda lead, produto, preco, link ou dado de outra empresa."
     >
       <div className="grid gap-3">
@@ -4619,7 +4621,7 @@ function BehaviorSection({
 }) {
   return (
     <details
-      className="group rounded-xl border"
+      className="rounded-xl border [&[open]>summary>.section-closed]:hidden [&[open]>summary>.section-open]:inline"
       open={defaultOpen}
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
@@ -4628,8 +4630,8 @@ function BehaviorSection({
           {title}
           {description ? <InfoHint text={description} /> : null}
         </span>
-        <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500 group-open:hidden">abrir</span>
-        <span className="hidden font-mono text-[11px] uppercase tracking-widest text-blue-700 group-open:inline">fechar</span>
+        <span className="section-closed font-mono text-[11px] uppercase tracking-widest text-slate-500">abrir</span>
+        <span className="section-open hidden font-mono text-[11px] uppercase tracking-widest text-blue-700">fechar</span>
       </summary>
       <div className="border-t px-3 py-3 sm:px-4 sm:py-4" style={{ borderColor: "var(--ch-border)" }}>
         {children}
@@ -4731,6 +4733,7 @@ function ToggleTile({
       type="button"
       disabled={disabled}
       onClick={onChange}
+      aria-pressed={checked}
       className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent sm:min-h-11 sm:gap-3 sm:px-3"
       style={{
         background: checked ? `linear-gradient(135deg, rgba(${tone.rgb},0.17), rgba(${tone.rgb},0.07))` : "var(--ch-panel-2)",
@@ -5461,7 +5464,7 @@ function LeadQualificationEditor({
 
       <BehaviorSection
         title="Perguntas do CRM"
-        description="Cada pergunta vira um campo no arquivo do lead e soma pontos quando for respondida."
+        description="Todas as perguntas listadas estão incluídas, inclusive objeções. Obrigatória indica se a resposta é essencial; desligá-la não exclui a pergunta do atendimento."
       >
         <div className="grid gap-2">
           {normalized.questions.map((question, index) => (

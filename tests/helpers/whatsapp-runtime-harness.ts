@@ -8,6 +8,8 @@ import * as catalogShared from "@/lib/sales-catalog/shared";
 import * as shipping from "@/lib/sales-catalog/shipping-calculator";
 import * as language from "@/lib/whatsapp/outbound-language";
 import * as templates from "@/lib/whatsapp/agent-prompt-templates";
+import * as activitySetup from "@/lib/whatsapp/activity-setup";
+import * as conversationStyle from "@/lib/whatsapp/conversation-style";
 import * as commerceConversation from "@/lib/whatsapp/commerce-conversation";
 import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
@@ -30,6 +32,7 @@ const exposed = [
   "maybeSendExistingSalesCatalogCheckoutLink", "buildConfiguredNicheCareLines",
   "prepareSalesCatalogDeliveryText", "hasSalesCatalogOrderIntent", "hasSalesCatalogCheckoutConfirmationIntent",
   "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction",
+  "resolveRuntimeAgentPrompt", "sendEmojiReaction",
   "buildSalesCatalogOrderIntentText",
   "persistCloneRealTestTurn", "extractCloneMemory", "detectSalesCatalogPreferredPaymentMethod",
   "needsSalesCatalogCheckoutTotalConfirmation", "resolveInitialSalesCatalogOrderShipping", "buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt",
@@ -66,6 +69,8 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/sales-catalog/mercado-pago": money.exports,
     "./outbound-language": language,
     "./agent-prompt-templates": templates,
+    "./activity-setup": activitySetup,
+    "./conversation-style": conversationStyle,
     "./commerce-conversation": commerceConversation,
     "./agent-behavior": agentBehavior,
     "./human-handoff": humanHandoff,

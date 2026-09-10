@@ -5,9 +5,11 @@ export type WhatsappRapportMode = "off" | "soft" | "strong";
 export type WhatsappGroupReplyMode = "all" | "mentions" | "admins";
 export type WhatsappPresenceMode = "focused" | "natural" | "always";
 export type WhatsappQuoteReplyMode = "off" | "smart" | "always";
-export type WhatsappCloneProfileSource = "manual" | "history";
+export type WhatsappCloneProfileSource = "manual" | "history" | "activity";
 
 export type WhatsappCloneProfile = {
+  activityTemplateId?: string;
+  useAgentName?: boolean;
   enabled: boolean;
   source: WhatsappCloneProfileSource;
   displayName: string;
@@ -35,6 +37,10 @@ export type WhatsappCloneMemory = {
 };
 
 export type WhatsappBehaviorConfig = {
+  customizedStyleFields?: string[];
+  textEmojis: boolean;
+  conversationStyle: "discreet" | "balanced" | "warm";
+  qualityMetrics: boolean;
   agentEnabled: boolean;
   alwaysOnline: boolean;
   presenceMode: WhatsappPresenceMode;
@@ -265,6 +271,9 @@ export const defaultWhatsappCloneMemory: WhatsappCloneMemory = {
 };
 
 export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
+  textEmojis: true,
+  conversationStyle: "balanced",
+  qualityMetrics: true,
   agentEnabled: true,
   alwaysOnline: false,
   presenceMode: "natural",
@@ -392,6 +401,7 @@ const quoteReplyModes = new Set<WhatsappQuoteReplyMode>(["off", "smart", "always
 export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehaviorConfig {
   const input = isRecord(value) ? value : {};
   const merged = { ...defaultWhatsappBehaviorConfig };
+  if (Array.isArray(input.customizedStyleFields)) merged.customizedStyleFields = input.customizedStyleFields.filter((key): key is string => typeof key === "string").slice(0, 32);
 
   for (const key of Object.keys(merged) as Array<keyof WhatsappBehaviorConfig>) {
     const current = merged[key];
@@ -409,6 +419,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
       merged.groupReplyMode = groupReplyModes.has(next as WhatsappGroupReplyMode) ? (next as WhatsappGroupReplyMode) : merged.groupReplyMode;
     } else if (key === "presenceMode") {
       merged.presenceMode = presenceModes.has(next as WhatsappPresenceMode) ? (next as WhatsappPresenceMode) : merged.presenceMode;
+    } else if (key === "conversationStyle") {
+      merged.conversationStyle = next === "discreet" || next === "warm" ? next : "balanced";
     } else if (key === "quoteReplyMode") {
       merged.quoteReplyMode = quoteReplyModes.has(next as WhatsappQuoteReplyMode) ? (next as WhatsappQuoteReplyMode) : merged.quoteReplyMode;
     } else if (isOptionalStringKey(key)) {
@@ -464,6 +476,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.smartTiming = false;
     merged.aiScheduleEnabled = false;
     merged.emojiReactions = false;
+    merged.textEmojis = false;
+    merged.qualityMetrics = false;
     merged.timingJitter = false;
     merged.composingPause = false;
     merged.humanizedLanguage = false;
@@ -511,10 +525,6 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.readReceiptDelay = true;
   behavior.readReceiptMinSeconds = 3;
   behavior.readReceiptMaxSeconds = 12;
-  behavior.emojiReactions = true;
-  behavior.spontaneousAudio = true;
-  behavior.spontaneousAudioProbability = 15;
-  behavior.mirrorTextFallbackProbability = 30;
   behavior.circadianTiming = true;
   behavior.naturalAudioFillers = true;
   behavior.wpmTypingModel = true;
@@ -522,8 +532,6 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.intentionalTypos = false;
   behavior.midMessageCorrections = false;
   behavior.correctionFrequency = 0;
-  behavior.reactionProbability = 40;
-  behavior.stickerProbability = 20;
   behavior.botLoopProtection = true;
   behavior.allowInternalInstanceMessages = false;
   behavior.cloneRealTestMode = false;
@@ -545,7 +553,6 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.topicShiftDetection = true;
   behavior.promptInjectionGuard = true;
   behavior.sharedCompanyContext = true;
-  behavior.cloneMemory = true;
   behavior.cloneConsistencyGuard = true;
   behavior.identityGuard = true;
   behavior.leadMemory = true;
@@ -578,9 +585,11 @@ export function mergeWhatsappHandoffNotificationSettings(
 
 export function normalizeWhatsappCloneProfile(value: unknown): WhatsappCloneProfile {
   const input = isRecord(value) ? value : {};
-  const source = input.source === "history" ? "history" : "manual";
+  const source = input.source === "history" ? "history" : input.source === "activity" ? "activity" : "manual";
 
   return {
+    ...(typeof input.activityTemplateId === "string" ? { activityTemplateId: input.activityTemplateId.slice(0, 80) } : {}),
+    ...(typeof input.useAgentName === "boolean" ? { useAgentName: input.useAgentName } : {}),
     enabled: readBoolean(input.enabled, defaultWhatsappCloneProfile.enabled),
     source,
     displayName: readLimitedString(input.displayName, 80),

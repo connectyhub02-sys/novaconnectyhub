@@ -12,6 +12,9 @@ export type LeadQualificationQuestion = {
 };
 
 export type LeadQualificationConfig = {
+  activityTemplateId?: string;
+  activityVersion?: number;
+  customized?: boolean;
   enabled: boolean;
   productName: string;
   commercialObjective: string;
@@ -105,6 +108,7 @@ export function normalizeLeadQualificationConfig(value: unknown, options: Normal
     : cloneLeadQualificationQuestions(defaultLeadQualificationQuestions);
 
   const normalized = {
+    ...(typeof record.activityTemplateId === "string" ? { activityTemplateId: record.activityTemplateId.slice(0, 80), activityVersion: Number(record.activityVersion) || 1, customized: record.customized === true } : {}),
     enabled: readBoolean(record.enabled, defaultLeadQualificationConfig.enabled),
     productName: readText(record.productName, defaultLeadQualificationConfig.productName, 120),
     commercialObjective: readText(record.commercialObjective, defaultLeadQualificationConfig.commercialObjective, maxTextLength),
@@ -355,6 +359,7 @@ function calculateScoreFromAnswers(config: LeadQualificationConfig, answeredQues
 }
 
 function isPersistedUnconfiguredQualificationConfig(record: Record<string, unknown>, config: LeadQualificationConfig) {
+  if (record.activityTemplateId) return false;
   if (config.configuredAt) {
     return false;
   }
