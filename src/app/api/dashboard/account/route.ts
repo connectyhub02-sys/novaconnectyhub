@@ -1,4 +1,3 @@
-import { publicUsageCalculation } from "@/lib/billing/public-usage-calculation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -511,21 +510,16 @@ function mapCreditTransaction(row: CreditTransactionRow) {
     type: row.transaction_type,
     amountCredits: toNumber(row.amount_credits),
     balanceAfterCredits: toNumber(row.balance_after_credits),
-    provider: row.provider,
-    description: row.description,
+    description: /gemini|openai|anthropic|elevenlabs|tokens?/i.test(row.description ?? "") ? "Uso de créditos ConnectyHub" : row.description,
     createdAt: row.created_at,
   };
 }
 
 function mapUsageEvent(row: UsageEventRow) {
   return {
-    model:row.model_id??null,
-    calculation:publicUsageCalculation(row.metadata),
     id: row.id,
     featureCode: row.feature_code,
     publicCategory: usagePublicCategory(row.feature_code),
-    inputUnits: toNumber(row.input_units),
-    outputUnits: toNumber(row.output_units),
     chargeCredits: toNumber(row.connecty_charge_credits),
     createdAt: row.occurred_at ?? row.created_at,
   };

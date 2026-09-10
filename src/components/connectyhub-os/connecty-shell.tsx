@@ -1336,7 +1336,7 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
   const label = status ? formatShellCredits(status.balanceCredits) : "--";
 
   return (
-    <Link href="/docs/ia#creditos" aria-label={`Saldo ${label} créditos. Como meus créditos são usados?`}
+    <Link href="/docs/api#ia-creditos" aria-label={`Saldo ${label} créditos. Como meus créditos são usados?`}
       className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide sm:px-3"
       title="Como meus créditos são usados?"
       style={{

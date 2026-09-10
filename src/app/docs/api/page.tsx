@@ -8,11 +8,13 @@ import { connectyhubOpenApiSpec } from "@/lib/connectyhub-api/openapi";
 import { buildApiDocsStructuredData } from "@/lib/seo/structured-data";
 
 export const metadata: Metadata = {
-  title: "Documentacao da API WhatsApp | ConnectyHub",
+  title: "Documentação das APIs WhatsApp e IA / LLM | ConnectyHub",
   description:
-    "Referencia publica da API WhatsApp ConnectyHub para instancias, envio de mensagens, consultas, webhooks e recursos avancados.",
+    "Documentação pública das APIs WhatsApp e IA / LLM ConnectyHub. Endpoints, autenticação, exemplos, créditos e downloads OpenAPI JSON.",
   keywords: [
     "API WhatsApp ConnectyHub",
+    "API de IA ConnectyHub",
+    "API LLM",
     "documentacao API WhatsApp",
     "testar API WhatsApp",
     "webhook WhatsApp",
@@ -20,9 +22,9 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: "/docs/api" },
   openGraph: {
-    title: "Documentacao da API WhatsApp | ConnectyHub",
+    title: "Documentação das APIs WhatsApp e IA / LLM | ConnectyHub",
     description:
-      "Referencia publica e console de testes da API WhatsApp ConnectyHub para mensagens, instancias, contatos e webhooks.",
+      "Integre WhatsApp e geração de IA: referência pública, exemplos e OpenAPI JSON de cada API.",
     url: "/docs/api",
     siteName: "ConnectyHub",
     locale: "pt_BR",
@@ -31,9 +33,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Documentacao da API WhatsApp | ConnectyHub",
+    title: "Documentação das APIs WhatsApp e IA / LLM | ConnectyHub",
     description:
-      "Referencia publica e console de testes da API WhatsApp ConnectyHub para integradores.",
+      "Documentação pública das APIs WhatsApp e IA / LLM, com exemplos e downloads OpenAPI JSON.",
     images: ["/opengraph-image"],
   },
   robots: {

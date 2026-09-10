@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { AiApiDocs, AiDocsSidePanel, aiDocSections, isAiDocSection } from "./ai-api-docs";
 import {
   BookOpen,
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Sparkles,
   Terminal,
   Webhook,
   XCircle,
@@ -70,12 +72,19 @@ type ParsedBodyResult =
   | { error: string; ok: false };
 
 export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
+  const hash = useSyncExternalStore(subscribeDocsHash, () => window.location.hash.slice(1), () => "");
+  const aiSection = isAiDocSection(hash) ? hash : null;
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SelectedDoc>({ type: "overview" });
   const [sideTab, setSideTab] = useState<SideTab>("try");
   const [baseUrl, setBaseUrl] = useState(() => catalog.baseUrl);
   const [apiToken, setApiToken] = useState("");
   const [openGroups, setOpenGroups] = useState<string[]>(() => catalog.groups.slice(0, 5).map((group) => group.name));
+
+  function selectWhatsApp(doc: SelectedDoc) {
+    setSelected(doc);
+    if (aiSection) window.location.hash = "whatsapp";
+  }
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = useMemo(() => {
@@ -110,13 +119,25 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
 
   return (
     <section id="referencia" className="border-t border-white/10 bg-[#05070a] pt-20">
+      <header className="mx-auto max-w-[1760px] border-b border-white/10 px-4 pb-6 pt-8 sm:px-6 lg:px-8">
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">Documentação pública ConnectyHub</p>
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">WhatsApp e IA / LLM</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">Duas APIs, uma referência. Escolha a integração no menu para consultar endpoints, exemplos e baixar o OpenAPI JSON de cada serviço. A documentação é aberta; cada API usa sua própria chave de acesso.</p>
+      </header>
       <div className="mx-auto grid max-w-[1760px] gap-0 px-4 py-6 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:px-8 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
-        <aside className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:border-r lg:border-white/10 lg:pr-5">
+        <aside aria-label="Navegação da documentação" className="max-h-[26rem] min-w-0 overflow-y-auto lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:border-r lg:border-white/10 lg:pr-5">
+          <nav aria-label="Escolher API" className="mb-5 grid grid-cols-2 gap-2">
+            <a href="#whatsapp" onClick={() => setSelected({ type: "overview" })} aria-current={!aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${!aiSection ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-white/10 text-slate-400 hover:text-white"}`}><Webhook className="h-4 w-4 shrink-0" />WhatsApp</a>
+            <a href="#ia" aria-current={aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${aiSection ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-100" : "border-white/10 text-slate-300 hover:text-white"}`}><Sparkles className="h-4 w-4 shrink-0" />IA / LLM</a>
+          </nav>
+          {aiSection ? <nav aria-label="Seções da API de IA" className="space-y-1">{aiDocSections.map(section => <a key={section.id} href={`#${section.id}`} aria-current={aiSection === section.id ? "page" : undefined} className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm ${aiSection === section.id ? "bg-emerald-300/10 font-bold text-emerald-100" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>{"method" in section ? <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-emerald-200">{section.method}</span> : <BookOpen className="h-4 w-4 shrink-0" />}{section.label}</a>)}<a href="/docs/api/ia/openapi.json" download="connectyhub-ia-openapi.json" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-emerald-200 hover:bg-white/5"><FileJson className="h-4 w-4 shrink-0" />Baixar JSON de IA / LLM</a></nav> : null}
+          <div hidden={Boolean(aiSection)}>
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
             <Search className="h-4 w-4 text-slate-500" />
             <input
               className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
               placeholder="Buscar docs, endpoints, schemas"
+              aria-label="Buscar na documentação WhatsApp"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -125,10 +146,10 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
           <button
             className={`mb-3 flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold transition ${selected.type === "overview" ? "bg-cyan-400/15 text-cyan-100" : "text-slate-300 hover:bg-white/[0.04] hover:text-white"}`}
             type="button"
-            onClick={() => setSelected({ type: "overview" })}
+            onClick={() => selectWhatsApp({ type: "overview" })}
           >
             <BookOpen className="h-4 w-4" />
-            Overview
+            Visão geral · WhatsApp
           </button>
 
           <div className="mb-3 rounded-lg border border-emerald-400/15 bg-emerald-400/5 p-3">
@@ -144,7 +165,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
             <span className="font-mono text-[11px] text-slate-500">{catalog.stats.endpoints}</span>
           </div>
 
-          <nav className="space-y-1">
+          <nav aria-label="Endpoints WhatsApp" className="space-y-1">
             {filteredGroups.map((group) => {
               const isOpen = normalizedQuery ? true : openGroups.includes(group.name);
               return (
@@ -153,7 +174,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
                     className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${selected.type === "tag" && selected.name === group.name ? "bg-cyan-400/15 text-cyan-100" : "text-slate-300 hover:bg-white/[0.04] hover:text-white"}`}
                     type="button"
                     onClick={() => {
-                      setSelected({ type: "tag", name: group.name });
+                      selectWhatsApp({ type: "tag", name: group.name });
                       if (!normalizedQuery) toggleGroup(group.name);
                     }}
                   >
@@ -169,7 +190,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
                           className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${selected.type === "endpoint" && selected.id === endpoint.id ? "bg-cyan-400/15 text-cyan-100" : "text-slate-400 hover:bg-white/[0.04] hover:text-white"}`}
                           type="button"
                           onClick={() => {
-                            setSelected({ type: "endpoint", id: endpoint.id });
+                            selectWhatsApp({ type: "endpoint", id: endpoint.id });
                             setSideTab("try");
                           }}
                         >
@@ -195,7 +216,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
                   key={schema.name}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${selected.type === "schema" && selected.name === schema.name ? "bg-violet-400/15 text-violet-100" : "text-slate-400 hover:bg-white/[0.04] hover:text-white"}`}
                   type="button"
-                  onClick={() => setSelected({ type: "schema", name: schema.name })}
+                  onClick={() => selectWhatsApp({ type: "schema", name: schema.name })}
                 >
                   <Database className="h-3.5 w-3.5" />
                   <span className="min-w-0 flex-1 truncate">{schema.name}</span>
@@ -204,18 +225,21 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
               ))}
             </div>
           </div>
+          </div>
         </aside>
 
-        <div className="min-w-0 pt-8 lg:pt-0 lg:pl-8 xl:pr-8">
+        <div id="doc-content" className="min-w-0 scroll-mt-24 pt-8 lg:pt-0 lg:pl-8 xl:pr-8">
+          <div hidden={!aiSection}><AiApiDocs section={aiSection ?? "ia"} /></div>
+          {!aiSection ? <>
           {selected.type === "overview" ? <Overview catalog={catalog} /> : null}
-          {selectedGroup ? <TagView group={selectedGroup} onSelectEndpoint={(id) => setSelected({ type: "endpoint", id })} /> : null}
+          {selectedGroup ? <TagView group={selectedGroup} onSelectEndpoint={(id) => selectWhatsApp({ type: "endpoint", id })} /> : null}
           {selectedEndpoint ? <EndpointView endpoint={selectedEndpoint} /> : null}
           {selectedSchema ? <SchemaView schema={selectedSchema} /> : null}
-
+          </> : null}
         </div>
 
-        <aside className="mt-8 lg:col-start-2 xl:sticky xl:top-20 xl:col-start-auto xl:mt-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:border-l xl:border-white/10 xl:pl-5">
-          <SidePanel
+        <aside className="mt-8 min-w-0 lg:col-start-2 xl:sticky xl:top-20 xl:col-start-auto xl:mt-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:border-l xl:border-white/10 xl:pl-5">
+          {aiSection ? <AiDocsSidePanel /> : <SidePanel
             apiToken={apiToken}
             baseUrl={baseUrl}
             catalog={catalog}
@@ -224,23 +248,29 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
             setBaseUrl={setBaseUrl}
             setSideTab={setSideTab}
             sideTab={sideTab}
-          />
+          />}
         </aside>
       </div>
     </section>
   );
 }
 
+function subscribeDocsHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
 function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
   return (
     <div className="space-y-10">
       <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-emerald-300">Referencia completa</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan-300">API WhatsApp</p>
         <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Tudo organizado por recurso</h2>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400 sm:text-base">
-          A documentacao agora combina as rotas nativas da ConnectyHub com o catalogo avancado permitido. O cliente usa
+          A API WhatsApp combina as rotas nativas da ConnectyHub com o catalogo avancado permitido. O cliente usa
           a nossa chave, o nosso endpoint e o instanceId publico; a ConnectyHub faz a ponte e registra a auditoria.
         </p>
+        <a href="#ia" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-100 hover:bg-emerald-300/20"><Sparkles className="h-4 w-4" />Procurando geração de texto e imagens? Ver API de IA / LLM</a>
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">
@@ -446,7 +476,7 @@ function SidePanel({
           title="Baixar especificacao tecnica em JSON para Postman, Insomnia e SDKs"
         >
           <FileJson className="h-4 w-4" />
-          Baixar OpenAPI JSON
+          Baixar OpenAPI JSON · WhatsApp
         </a>
       </div>
     );

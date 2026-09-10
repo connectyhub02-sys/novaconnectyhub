@@ -16,7 +16,6 @@ const staticRoutes: Array<{
   { path: "/", changeFrequency: "weekly", priority: 1 },
   { path: "/solucoes", changeFrequency: "weekly", priority: 0.9 },
   { path: "/solucoes-personalizadas", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/docs/ia", changeFrequency: "monthly", priority: 0.8 },
   { path: "/docs/api", changeFrequency: "weekly", priority: 0.9 },
   { path: "/cadastro", changeFrequency: "monthly", priority: 0.8 },
   { path: "/privacidade", changeFrequency: "yearly", priority: 0.3 },
@@ -29,7 +28,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: SitemapEntry[] = [
     ...staticRoutes.map((route) => ({
       url: buildCanonicalUrl(route.path),
-      ...(route.path === "/solucoes-personalizadas" || route.path === "/docs/ia" ? {lastModified: new Date("2026-09-08T00:00:00-03:00")} : {}),
+      ...(route.path === "/solucoes-personalizadas" ? {lastModified: new Date("2026-09-08T00:00:00-03:00")} : {}),
+      ...(route.path === "/docs/api" ? { lastModified: new Date("2026-09-09T00:00:00-03:00") } : {}),
       changeFrequency: route.changeFrequency,
       priority: route.priority,
     })),

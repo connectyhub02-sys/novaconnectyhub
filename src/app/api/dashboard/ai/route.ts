@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getContractAccess } from "@/lib/billing/contract-access";
 import { createAiSecret, record } from "@/lib/ai-api/gateway";
 import { assertOrganizationOperationalAccess } from "@/lib/billing/access-control";
-import {publicUsageCalculation} from "@/lib/billing/public-usage-calculation";
+import { aiUsagePeriod, aiUsageStart } from "@/lib/ai-api/usage";
 async function context() {
   const workspace = await getCurrentWorkspace();
   if (!workspace?.organization) throw new Error("Sessão obrigatória.");
@@ -12,18 +12,23 @@ async function context() {
   const access = await getContractAccess(workspace.organization.id, client);
   return { workspace, client, org: access.billing_organization_id };
 }
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { client, org } = await context();
-    const [projects, wallet, activity] = await Promise.all([
-      client.from("ai_projects").select("*,ai_api_keys(id,name,key_prefix,status,last_used_at,created_at)").eq("organization_id",org).order("created_at",{ascending:false}).limit(100),
+    const url = new URL(request.url);
+    const days = aiUsagePeriod(url.searchParams.get("days"));
+    const projectId = url.searchParams.get("project") || null;
+    if (projectId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId)) throw new Error("Projeto inválido.");
+    let recent = client.from("ai_requests").select("id,project_id,status,charged_credits,reserved_credits,created_at").eq("organization_id",org).gte("created_at",aiUsageStart(days)).order("created_at",{ascending:false}).limit(50);
+    if (projectId) recent = recent.eq("project_id",projectId);
+    const [projects, wallet, activity, usage] = await Promise.all([
+      client.from("ai_projects").select("id,name,status,ai_api_keys(id,name,key_prefix,status,last_used_at,created_at)").eq("organization_id",org).order("created_at",{ascending:false}),
       client.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id",org).maybeSingle(),
-      client.from("ai_requests").select("id,project_id,status,model_id,charged_credits,reserved_credits,created_at,error_code,usage_events(input_tokens,output_tokens,metadata)").eq("organization_id",org).order("created_at",{ascending:false}).limit(100),
+      recent,
+      client.rpc("ai_usage_summary",{p_org:org,p_days:days,p_project:projectId}),
     ]);
-    if (projects.error || wallet.error || activity.error) throw new Error("Não foi possível carregar a API de IA.");
-    // Customer payload never includes provider costs/margins or secret hashes.
-    const usage = (activity.data ?? []).map((r) => { const u=record(r.usage_events); return { ...r, usage_events:undefined, calculation: { input:Number(u.input_tokens ?? 0), output:Number(u.output_tokens ?? 0), ...publicUsageCalculation(u.metadata) } }; });
-    return NextResponse.json({ projects:projects.data, wallet:wallet.data, activity:usage },{headers:{"Cache-Control":"no-store"}});
+    if (projects.error || wallet.error || activity.error || usage.error) throw new Error("Não foi possível carregar o uso da API. Tente atualizar novamente.");
+    return NextResponse.json({ projects:projects.data, wallet:wallet.data, activity:activity.data, usage:usage.data },{headers:{"Cache-Control":"no-store"}});
   } catch(error) { return NextResponse.json({error:error instanceof Error ? error.message : "Falha ao carregar."},{status:403}); }
 }
 export async function POST(request: Request) {
@@ -34,13 +39,16 @@ export async function POST(request: Request) {
     await assertOrganizationOperationalAccess({organizationId:org,client});
     const body=record(await request.json());
     if(body.action==="create_project"||body.action==="update_project") {
-      const name=String(body.name??"").trim(); const budget=body.monthly_credit_limit===null || body.monthly_credit_limit==="" ? null : Number(body.monthly_credit_limit);
-      const rpm=Number(body.requests_per_minute??30), output=Number(body.max_output_tokens??2048);
-      if(!name || name.length>100 || (budget!==null && (!Number.isFinite(budget)||budget<=0)) || !Number.isInteger(rpm)||rpm<1||rpm>300||!Number.isInteger(output)||output<1||output>8192) throw new Error("Confira nome, limite mensal, chamadas por minuto e tamanho da resposta.");
-      const values={name,monthly_credit_limit:budget,requests_per_minute:rpm,max_output_tokens:output};
-      const mutation=body.action==="create_project"?client.from("ai_projects").insert({organization_id:org,...values}):client.from("ai_projects").update(values).eq("id",body.projectId).eq("organization_id",org);
-      const {data,error}=await mutation.select("id").single();
-      if(error) throw new Error("Não foi possível criar o projeto.");
+      const name=String(body.name??"").trim();
+      if(!name || name.length>100) throw new Error("Informe um nome de até 100 caracteres.");
+      if(body.action==="create_project") {
+        const key=createAiSecret();
+        const {data,error}=await client.rpc("create_ai_project_with_key",{p_org:org,p_name:name,p_hash:key.key_hash,p_prefix:key.key_prefix});
+        if(error) throw new Error("Não foi possível criar o projeto e a chave.");
+        return NextResponse.json({project:{id:data},secret:key.secret},{headers:{"Cache-Control":"no-store"}});
+      }
+      const {data,error}=await client.from("ai_projects").update({name}).eq("id",body.projectId).eq("organization_id",org).select("id").single();
+      if(error) throw new Error("Não foi possível renomear o projeto.");
       return NextResponse.json({project:data});
     }
     const {data:project,error:projectError}=await client.from("ai_projects").select("id").eq("id",body.projectId).eq("organization_id",org).maybeSingle();

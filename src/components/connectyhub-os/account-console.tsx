@@ -151,13 +151,9 @@ type AccountData = {
     createdAt: string | null;
   }>;
   usageEvents: Array<{
-    model:string|null;
-    calculation:{rates:Array<{id:string;unit:string;units:number;price:number;minimum:number}>;minimum:number;adjusted:boolean;version:string|null};
     id: string;
     featureCode: string | null;
     publicCategory: string;
-    inputUnits: number;
-    outputUnits: number;
     chargeCredits: number;
     createdAt: string | null;
   }>;
@@ -1499,11 +1495,11 @@ function CreditsTab({
               <p className="mt-1 truncate text-xs text-slate-500">
                 {event.publicCategory}
               </p>
-              <details className="mt-2 text-xs leading-6 text-slate-600"><summary className="min-h-11 cursor-pointer py-2 font-semibold text-blue-800">Ver cálculo</summary><p>Modelo: {event.model??"Registro anterior"}</p>{event.calculation?.rates.length?event.calculation.rates.map((r,i)=><p key={i}>{r.unit==="input_token"?"Leitura":r.unit==="output_token"?"Resposta e raciocínio":r.unit}: {formatCredits(r.units)} × {formatCredits(r.price)} crédito por unidade. Tarifa: {r.id}</p>):<p>Este registro não contém o detalhamento da tarifa. O débito efetivo é o valor indicado na atividade.</p>}{event.calculation?.minimum>0&&<p>Mínimo da atividade: {formatCredits(event.calculation.minimum)} créditos.</p>}{event.calculation?.adjusted&&<p>O total foi limitado ao orçamento autorizado para esta chamada.</p>}<p className="break-all">Registro: {event.id}</p></details>
+              <details className="mt-2 text-xs leading-6 text-slate-600"><summary className="min-h-11 cursor-pointer py-2 font-semibold text-blue-800">Ver atividade</summary><p>Consumo: {formatCredits(event.chargeCredits)} créditos.</p><p className="break-all">Registro: {event.id}</p></details>
             </div>
             <div className="text-left sm:text-right">
               <p className="text-lg font-semibold text-rose-600">-{formatCredits(event.chargeCredits)}</p>
-              <p className="text-xs text-slate-500">{formatUsageUnits(event)}</p>
+              <p className="text-xs text-slate-500">créditos utilizados</p>
             </div>
           </article>
         )) : <EmptyState text="Nenhum consumo de agente encontrado ainda." />}
@@ -1545,14 +1541,10 @@ function usageFeatureLabel(featureCode: string | null) {
     embedding_memory: "Memoria semantica",
   };
 
-  return labels[featureCode ?? ""] ?? featureCode ?? "Consumo de agente";
+  return labels[featureCode ?? ""] ?? "Atividade ConnectyHub";
 }
 
-function formatUsageUnits(event: AccountData["usageEvents"][number]) {
-  const input = event.inputUnits > 0 ? `${formatCredits(event.inputUnits)} entrada` : null;
-  const output = event.outputUnits > 0 ? `${formatCredits(event.outputUnits)} saida` : null;
-  return [input, output].filter(Boolean).join(" / ") || "unidades registradas";
-}
+
 
 function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(cycles);

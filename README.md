@@ -67,6 +67,16 @@ A API publica e documentada por:
 
 Use `npm run api:audit` depois de mudar rotas `/api/v1/*` ou o proxy de provider. A auditoria deve continuar sem gaps inesperados.
 
+## API de IA / LLM
+
+- Documentação pública unificada: https://www.connectyhub.com.br/docs/api#ia
+- OpenAPI JSON de IA: https://www.connectyhub.com.br/docs/api/ia/openapi.json
+- Guia para sistemas externos: [docs/guia-integracao-api-llm.md](docs/guia-integracao-api-llm.md)
+- Verificação operacional: [docs/auditoria-api-llm-2026-09-09.md](docs/auditoria-api-llm-2026-09-09.md)
+- Base direta: `https://www.connectyhub.com.br/api/v1/ai`
+
+A API de IA usa chaves próprias e um subconjunto do formato Chat Completions. Sua especificação está em `src/lib/ai-api/openapi.ts`; os arquivos OpenAPI da seção anterior documentam WhatsApp. `/docs/ia` redireciona para a seção de IA na referência unificada.
+
 ## Seguranca
 
 - Segredos persistidos passam por AES-256-GCM em `src/lib/security/credentials-crypto.ts`.

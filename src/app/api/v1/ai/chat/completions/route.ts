@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { processWalletAlerts } from "@/lib/billing/wallet-alerts";
 import { AiApiError, completeAi } from "@/lib/ai-api/gateway";
 import { statusForAccessControlError } from "@/lib/billing/access-control";
+import { publicAiErrorCode } from "@/lib/ai-api/public-response";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export async function POST(request: Request) {
@@ -18,13 +19,13 @@ export async function POST(request: Request) {
     if (!result.stream) return NextResponse.json(result.response, { headers });
     // Buffered SSE: account for the complete provider result before delivering
     // chunks. Disconnects/replays cannot orphan a partially charged response.
-    const response = result.response as { id: string; created: number; model: string; choices: Array<{ message: { content: string }; finish_reason: string }>; usage: unknown; connectyhub: unknown };
+    const response = result.response as { id: string; created: number; model: string; choices: Array<{ message: { content: string }; finish_reason: string }>; connectyhub: unknown };
     const chunk = { id: response.id, object: "chat.completion.chunk", created: response.created, model: response.model };
-    const stream = `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: response.choices[0].message.content }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: response.choices[0].finish_reason }], usage: response.usage, connectyhub: response.connectyhub })}\n\ndata: [DONE]\n\n`;
+    const stream = `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: response.choices[0].message.content }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: response.choices[0].finish_reason }], connectyhub: response.connectyhub })}\n\ndata: [DONE]\n\n`;
     return new Response(stream, { headers: { ...headers, "Content-Type": "text/event-stream; charset=utf-8" } });
   } catch (error) {
     const status = error instanceof AiApiError ? error.status : statusForAccessControlError(error, 503);
     const requestId=error instanceof AiApiError?error.requestId:undefined;
-    return NextResponse.json({ error: { code: error instanceof AiApiError ? error.code : "access_or_service_unavailable", request_id:requestId, message: error instanceof AiApiError ? error.message : "Não foi possível concluir a solicitação. Verifique o acesso e o histórico no painel." } }, { status, headers: { "Cache-Control": "no-store",...(requestId?{"X-Request-Id":requestId}:{}) } });
+    return NextResponse.json({ error: { code: error instanceof AiApiError ? publicAiErrorCode(error.code) : "access_or_service_unavailable", request_id:requestId, message: error instanceof AiApiError ? error.message : "Não foi possível concluir a solicitação. Verifique o acesso e o histórico no painel." } }, { status, headers: { "Cache-Control": "no-store",...(requestId?{"X-Request-Id":requestId}:{}) } });
   }
 }

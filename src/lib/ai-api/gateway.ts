@@ -7,6 +7,7 @@ import { assertOrganizationOperationalAccess, assertOrganizationFeatureAccess } 
 import { assertContractAccess } from "@/lib/billing/contract-access";
 import { calculateMeteredUsageCharge, extractGeminiUsageMetadata, resolveActiveBillingRates } from "@/lib/billing/metered-usage";
 import { loadGeminiCredentials } from "@/lib/gemini/credentials";
+import { publicAiCompletion } from "./public-response";
 
 type Json = Record<string, unknown>;
 export class AiApiError extends Error {
@@ -40,7 +41,7 @@ export function parseAiInput(raw: unknown, outputLimit: number) {
   if (Object.keys(body).some((key) => !accepted.has(key))) throw new AiApiError("unsupported_parameter", 422, "Parâmetro não suportado. Consulte /docs/ia.");
   if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100) throw new AiApiError("invalid_messages", 422, "Envie entre 1 e 100 mensagens.");
   const maxTokens = body.max_tokens === undefined ? Math.min(1024, outputLimit) : Number(body.max_tokens);
-  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > outputLimit) throw new AiApiError("output_limit", 422, `A resposta deve ter limite entre 1 e ${outputLimit} unidades.`);
+  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > outputLimit) throw new AiApiError("output_limit", 422, "Não foi possível usar essa configuração de resposta. Envie apenas a mensagem para configuração automática.");
   const temperature = body.temperature === undefined ? 0.7 : Number(body.temperature);
   if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) throw new AiApiError("invalid_temperature", 422, "temperature deve estar entre 0 e 2.");
   if (body.stream !== undefined && typeof body.stream !== "boolean") throw new AiApiError("invalid_stream", 422, "stream deve ser booleano.");
@@ -91,13 +92,13 @@ export async function listAiModels(client = createServiceClient()) {
 
 export async function completeAi(request: Request, raw: unknown, client: SupabaseClient = createServiceClient()) {
   const auth = await authenticateAi(request, client);
-  const input = parseAiInput(raw, auth.project.max_output_tokens);
+  const input = parseAiInput(raw, 8192);
   const idempotency = request.headers.get("idempotency-key") ?? randomUUID();
   if (!/^[\x21-\x7e]{1,128}$/.test(idempotency)) throw new AiApiError("invalid_idempotency_key", 422, "Idempotency-Key deve ter entre 1 e 128 caracteres ASCII sem espaços.");
   const claimed = await rpc(client, "claim_ai_request", { p_key: auth.key.id, p_idempotency: idempotency, p_hash: hashAiSecret(JSON.stringify(input)) });
   const requestId = String(claimed.id);
   if (!claimed.claimed) {
-    if (claimed.status === "completed") return { response: record(claimed.response), stream: input.stream, requestId, replayed: true, organizationId: auth.billingOrganizationId };
+    if (claimed.status === "completed") return { response: publicAiCompletion(claimed.response), stream: input.stream, requestId, replayed: true, organizationId: auth.billingOrganizationId };
     const error=new AiApiError(claimed.status === "failed" ? "previous_request_failed" : "request_in_progress", 409, claimed.status === "failed" ? "A tentativa anterior falhou. Consulte o histórico e use uma nova Idempotency-Key para outra tentativa." : "Esta solicitação já está sendo processada ou conciliada. Reutilize a mesma Idempotency-Key para consultar o resultado.");
     error.requestId=requestId;throw error;
   }
@@ -114,7 +115,7 @@ export async function completeAi(request: Request, raw: unknown, client: Supabas
     const countResponse = await fetch(`${endpoint}:countTokens`, { method: "POST", headers, body: JSON.stringify({ generateContentRequest: { model: `models/${model}`, ...input.providerBody } }), signal: AbortSignal.timeout(20000) });
     if (!countResponse.ok) throw new AiApiError("token_count_failed", 503, "Não foi possível calcular o orçamento desta solicitação. Nenhum crédito foi debitado.");
     const count = Number(record(await countResponse.json()).totalTokens);
-    if (!Number.isFinite(count) || count < 1 || count > 32768) throw new AiApiError("input_limit", 422, "Entrada acima do limite de 32.768 unidades ou impossível de medir.");
+    if (!Number.isFinite(count) || count < 1 || count > 32768) throw new AiApiError("input_limit", 422, "Não foi possível processar este conteúdo. Envie uma mensagem menor.");
     const shadow = auth.billing.planCode === "internal";
     const budget = calculateMeteredUsageCharge({ rates, units: { inputTokens: Math.ceil(count * 1.05) + 32, outputTokens: input.maxTokens, requests: 1 } });
     await rpc(client, "reserve_ai_credits", { p_request: requestId, p_amount: shadow ? 0 : budget.chargeCredits, p_model: model, p_rates: rates });
@@ -146,7 +147,7 @@ export async function completeAi(request: Request, raw: unknown, client: Supabas
     const persisted = await client.from("ai_requests").update({ result_snapshot: settlement }).eq("id", requestId).eq("status", "processing");
     if (persisted.error) throw new AiApiError("settlement_pending", 503, "O consumo está em conferência. Consulte esta solicitação antes de tentar novamente.");
     const settled = await rpc(client, "finish_ai_request", settlement);
-    return { response: record(settled.response), stream: input.stream, requestId, replayed: false, organizationId: auth.billingOrganizationId };
+    return { response: publicAiCompletion(settled.response), stream: input.stream, requestId, replayed: false, organizationId: auth.billingOrganizationId };
   } catch (error) {
     await rpc(client, "finish_ai_request", { p_request: requestId, p_status: dispatched ? "uncertain" : "failed", p_error: error instanceof AiApiError ? error.code : "internal_error" }).catch(() => undefined);
     const outward=error instanceof AiApiError?error:new AiApiError("request_failed",503,"Não foi possível concluir. Consulte esta solicitação no histórico antes de iniciar outra.");
@@ -158,7 +159,7 @@ export async function rpc(client: SupabaseClient, name: string, args: Json): Pro
   if (error) {
     const code = error.message.match(/ai_[a-z_]+/)?.[0] ?? "service_unavailable";
     const status = /insufficient|budget|contract/.test(code) ? 402 : /rate_limit/.test(code) ? 429 : /conflict|state/.test(code) ? 409 : /key_inactive/.test(code) ? 401 : 503;
-    throw new AiApiError(code, status, status === 402 ? "Saldo, limite ou contrato insuficiente. Confira sua conta ConnectyHub." : "Não foi possível processar a solicitação. Consulte o código e o histórico no painel.");
+    throw new AiApiError(code, status, status === 402 ? "Confira o saldo disponível e o acesso da sua conta ConnectyHub." : "Não foi possível processar a solicitação. Consulte o histórico no painel.");
   }
   return record(data);
 }

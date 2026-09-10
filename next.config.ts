@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [{ source: "/docs/ia", destination: "/docs/api#ia", permanent: true }];
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.whatsapp.net" },
