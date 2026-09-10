@@ -257,9 +257,10 @@ async function contactContext(
   if (message.data?.direction !== "outbound") return null;
   const run = await client
     .from("agent_runs")
-    .select("id")
+    .select("id,agent_id")
     .eq("organization_id", org)
     .eq("metadata->>conversationId", c.id)
+    .eq("run_status", "completed")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -272,8 +273,8 @@ async function contactContext(
     .eq("id", c.whatsapp_instance_id)
     .single();
   if (instance.error) throw new Error(instance.error.message);
-  const agentId = instance.data.metadata?.agent_id;
-  if (typeof agentId !== "string" || instance.data.status !== "connected")
+  const agentId = run.data.agent_id;
+  if (typeof agentId !== "string" || instance.data.metadata?.agent_id !== agentId || instance.data.status !== "connected")
     return null;
   return {
     organizationId: org,

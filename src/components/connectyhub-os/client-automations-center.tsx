@@ -215,7 +215,8 @@ export function ClientAutomationsCenter({
             {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
           </select>
         ) : <strong>{selectedCompany?.name ?? "Workspace"}</strong>}
-        <span>{selectedAgent?.personaName || selectedAgent?.name || "WhatsApp da conversa"}</span>
+        <span>Mensagens ao lead: mesmo agente do atendimento</span>
+        <span className="text-xs text-slate-500">Campanhas e novos contatos: {selectedAgent?.personaName || selectedAgent?.name || "sem agente padrão"}</span>
         <span className="inline-flex items-center gap-1.5 text-xs"><Smartphone className="h-4 w-4" />{selectedWhatsapp?.status === "connected" ? "Conectado" : selectedWhatsapp ? "Verificar conexão" : "Sem WhatsApp padrão"}</span>
       </div>
 
@@ -242,7 +243,7 @@ export function ClientAutomationsCenter({
           </label>
 
           <label className="block">
-            <FieldLabel>Agente e WhatsApp das automacoes</FieldLabel>
+            <FieldLabel>Agente para campanhas e contatos sem atendimento anterior</FieldLabel>
             <select
               value={draft.automationSettings.defaultWhatsappInstanceId ?? ""}
               onChange={(event) => {
@@ -270,12 +271,10 @@ export function ClientAutomationsCenter({
             description="Quando o pagamento do pedido for aprovado, o agente envia a confirmacao para o cliente."
             onClick={() => updateAutomationSettings({ paymentStatusNotifications: !draft.automationSettings.paymentStatusNotifications })}
           />
-          <ToggleRow
-            checked={draft.automationSettings.useConversationWhatsappFirst}
-            title="Priorizar WhatsApp da conversa"
-            description="Pedidos feitos dentro de uma conversa respondem pelo mesmo agente que atendeu o lead."
-            onClick={() => updateAutomationSettings({ useConversationWhatsappFirst: !draft.automationSettings.useConversationWhatsappFirst })}
-          />
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-900">
+            <p className="font-semibold">Mesmo agente e WhatsApp do atendimento · sempre ativo</p>
+            <p className="mt-1 text-xs leading-5">Follow-ups, avisos de pagamento e lembretes continuam pela origem da conversa ou do pedido. O agente selecionado acima só inicia contatos sem histórico e organiza campanhas. Se a origem estiver indisponível, o sistema não troca de agente automaticamente.</p>
+          </div>
         </div>
       </Panel>
 

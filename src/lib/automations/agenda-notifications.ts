@@ -9,6 +9,7 @@ import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getContractAccess } from "@/lib/billing/contract-access";
 import { inngest } from "@/lib/inngest/client";
+import { resolveConversationSender } from "@/lib/whatsapp/conversation-sender";
 
 async function bookingContext(client: SupabaseClient, org: string, id: string) {
   const booking = await client
@@ -264,10 +265,18 @@ export async function dispatchAgendaNotifications(
         continue;
       }
       if (!c.b.agent_id) throw new Error("missing_responsible_agent");
+      const sender = await resolveConversationSender(client, {
+        organizationId: n.organization_id,
+        leadId: c.b.lead_id,
+        conversationId: c.b.conversation_id,
+        agentId: c.b.agent_id,
+      });
+      if (!sender) throw new Error("original_attendance_unavailable");
       const instance = await client
         .from("whatsapp_instances")
         .select("id,status,instance_token_encrypted,metadata")
         .eq("organization_id", n.organization_id)
+        .eq("id", sender.whatsappInstanceId)
         .eq("metadata->>agent_id", c.b.agent_id)
         .eq("status", "connected")
         .limit(1)

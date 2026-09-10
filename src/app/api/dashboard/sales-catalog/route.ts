@@ -4134,8 +4134,7 @@ function normalizeAutomationSettings(
   return {
     paymentStatusNotifications: readBoolean(record.paymentStatusNotifications ?? record.payment_status_notifications)
       ?? fallback.paymentStatusNotifications,
-    useConversationWhatsappFirst: readBoolean(record.useConversationWhatsappFirst ?? record.use_conversation_whatsapp_first)
-      ?? fallback.useConversationWhatsappFirst,
+    useConversationWhatsappFirst: true,
     defaultWhatsappInstanceId: normalizeUuid(readFormString(record.defaultWhatsappInstanceId ?? record.default_whatsapp_instance_id)),
     defaultAgentId: normalizeUuid(readFormString(record.defaultAgentId ?? record.default_agent_id)),
   };

@@ -139,6 +139,11 @@ async function executeWhatsappProactiveFollowUp(input: {
   if (instance.status !== "connected") return { status: "skipped", reason: "whatsapp_disconnected" };
   const assignedAgent = readRecord(instance.metadata)?.agent_id;
   if (assignedAgent && assignedAgent !== eventData.agentId) return { status: "skipped", reason: "agent_assignment_changed" };
+  const originRun = await client.from("agent_runs").select("agent_id")
+    .eq("organization_id", eventData.organizationId).eq("id", eventData.agentRunId)
+    .eq("metadata->>conversationId", eventData.conversationId).maybeSingle();
+  if (originRun.error) throw new Error("Não foi possível verificar o agente que atendeu esta conversa.");
+  if (originRun.data?.agent_id !== eventData.agentId) return { status: "skipped", reason: "attendance_agent_mismatch" };
 
   const behavior = normalizeWhatsappBehaviorConfig(
     readRecord(instance.metadata)?.behavior_config,

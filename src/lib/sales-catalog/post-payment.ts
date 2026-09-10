@@ -1,5 +1,6 @@
 import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campaigns";
 import "server-only";
+import { resolveConversationSender } from "@/lib/whatsapp/conversation-sender";
 import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
 import { paymentOutcomeCopy } from "./payment-diagnostics";
 
@@ -61,12 +62,6 @@ type SkuRow = {
   stock_quantity: number | null;
   low_stock_threshold: number | null;
   metadata: JsonRecord | null;
-};
-
-type ConversationRow = {
-  id: string;
-  whatsapp_instance_id: string | null;
-  provider_chat_id: string | null;
 };
 
 type WhatsappInstanceRow = {
@@ -400,10 +395,15 @@ async function maybeNotifyPaymentApproved(input: {
 
   if (!automation.paymentStatusNotifications) return false;
 
-  const conversation = input.order.conversation_id && automation.useConversationWhatsappFirst
-    ? await loadOrderConversation(input.client, input.order)
-    : null;
-  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+  const sender = await resolveConversationSender(input.client, {
+    organizationId: input.order.organization_id,
+    leadId: input.order.lead_id,
+    conversationId: input.order.conversation_id,
+    agentId: resolveOrderAgentId(orderMetadata),
+    defaultWhatsappInstanceId: automation.defaultWhatsappInstanceId,
+  });
+  if (!sender) return false;
+  const { conversation, whatsappInstanceId } = sender;
 
   if (!whatsappInstanceId) return false;
 
@@ -458,10 +458,10 @@ async function maybeNotifyPaymentApproved(input: {
     .maybeSingle<{ metadata: JsonRecord | null }>();
   const latestMetadata = readRecord(latestOrder?.metadata);
 
-  if (conversation && input.order.conversation_id) {
+  if (conversation) {
     await input.client.from("conversation_messages").insert({
       organization_id: input.order.organization_id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       lead_id: input.order.lead_id,
       whatsapp_instance_id: instance.id,
       provider: "uazapi",
@@ -495,7 +495,7 @@ async function maybeNotifyPaymentApproved(input: {
   }
 
   await Promise.all([
-    conversation && input.order.conversation_id
+    conversation
       ? input.client
           .from("conversations")
           .update({
@@ -503,7 +503,7 @@ async function maybeNotifyPaymentApproved(input: {
             last_message_preview: preview(text, 240),
             last_message_at: now,
           })
-          .eq("id", input.order.conversation_id)
+          .eq("id", conversation.id)
           .eq("organization_id", input.order.organization_id)
       : Promise.resolve(),
     input.order.lead_id
@@ -550,7 +550,7 @@ async function maybeNotifyPaymentApproved(input: {
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
       whatsapp_instance_id: instance.id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       items: summarizePaymentConfirmationItems(input.items),
       delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       source: input.source,
@@ -575,8 +575,15 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
   const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
-  const conversation = input.order.conversation_id ? await loadOrderConversation(input.client, input.order) : null;
-  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+  const sender = await resolveConversationSender(input.client, {
+    organizationId: input.order.organization_id,
+    leadId: input.order.lead_id,
+    conversationId: input.order.conversation_id,
+    agentId: resolveOrderAgentId(orderMetadata),
+    defaultWhatsappInstanceId: automation.defaultWhatsappInstanceId,
+  });
+  if (!sender) return false;
+  const { conversation, whatsappInstanceId } = sender;
 
   if (!whatsappInstanceId) return false;
 
@@ -662,7 +669,7 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
       whatsapp_instance_id: instance.id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       agent_id: agent?.id ?? null,
       responsible_phone: responsiblePhones[0],
       responsible_phones: responsiblePhones,
@@ -703,10 +710,15 @@ async function maybeNotifyPaymentStatus(input: {
 
   if (!automation.paymentStatusNotifications) return false;
 
-  const conversation = input.order.conversation_id && automation.useConversationWhatsappFirst
-    ? await loadOrderConversation(input.client, input.order)
-    : null;
-  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+  const sender = await resolveConversationSender(input.client, {
+    organizationId: input.order.organization_id,
+    leadId: input.order.lead_id,
+    conversationId: input.order.conversation_id,
+    agentId: resolveOrderAgentId(orderMetadata),
+    defaultWhatsappInstanceId: automation.defaultWhatsappInstanceId,
+  });
+  if (!sender) return false;
+  const { conversation, whatsappInstanceId } = sender;
 
   if (!whatsappInstanceId) return false;
 
@@ -762,10 +774,10 @@ async function maybeNotifyPaymentStatus(input: {
     .maybeSingle<{ metadata: JsonRecord | null }>();
   const latestMetadata = readRecord(latestOrder?.metadata);
 
-  if (conversation && input.order.conversation_id) {
+  if (conversation) {
     await input.client.from("conversation_messages").insert({
       organization_id: input.order.organization_id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       lead_id: input.order.lead_id,
       whatsapp_instance_id: instance.id,
       provider: "uazapi",
@@ -800,7 +812,7 @@ async function maybeNotifyPaymentStatus(input: {
   }
 
   await Promise.all([
-    conversation && input.order.conversation_id
+    conversation
       ? input.client
           .from("conversations")
           .update({
@@ -808,7 +820,7 @@ async function maybeNotifyPaymentStatus(input: {
             last_message_preview: preview(text, 240),
             last_message_at: now,
           })
-          .eq("id", input.order.conversation_id)
+          .eq("id", conversation.id)
           .eq("organization_id", input.order.organization_id)
       : Promise.resolve(),
     input.order.lead_id
@@ -856,7 +868,7 @@ async function maybeNotifyPaymentStatus(input: {
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
       whatsapp_instance_id: instance.id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       payment_status: input.status,
       payment_method: input.paymentMethodLabel,
       items: summarizePaymentConfirmationItems(input.items),
@@ -887,8 +899,15 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
 
   const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
   const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
-  const conversation = input.order.conversation_id ? await loadOrderConversation(input.client, input.order) : null;
-  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+  const sender = await resolveConversationSender(input.client, {
+    organizationId: input.order.organization_id,
+    leadId: input.order.lead_id,
+    conversationId: input.order.conversation_id,
+    agentId: resolveOrderAgentId(orderMetadata),
+    defaultWhatsappInstanceId: automation.defaultWhatsappInstanceId,
+  });
+  if (!sender) return false;
+  const { conversation, whatsappInstanceId } = sender;
 
   if (!whatsappInstanceId) return false;
 
@@ -976,7 +995,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
       whatsapp_instance_id: instance.id,
-      conversation_id: input.order.conversation_id,
+      conversation_id: conversation?.id ?? input.order.conversation_id,
       agent_id: agent?.id ?? null,
       responsible_phone: responsiblePhones[0],
       responsible_phones: responsiblePhones,
@@ -1006,19 +1025,6 @@ function summarizePaymentConfirmationItems(items: OrderItemRow[]) {
     title: item.title,
     quantity: item.quantity ?? 1,
   }));
-}
-
-async function loadOrderConversation(client: SupabaseClient, order: OrderRow) {
-  if (!order.conversation_id) return null;
-
-  const { data } = await client
-    .from("conversations")
-    .select("id, whatsapp_instance_id, provider_chat_id")
-    .eq("id", order.conversation_id)
-    .eq("organization_id", order.organization_id)
-    .maybeSingle<ConversationRow>();
-
-  return data ?? null;
 }
 
 async function loadResponsiblePaymentAgent(client: SupabaseClient, order: OrderRow, instance: WhatsappInstanceRow) {

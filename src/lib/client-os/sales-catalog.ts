@@ -2094,8 +2094,7 @@ function readAutomationSettings(value: unknown, fallback: SalesCatalogAutomation
   return {
     paymentStatusNotifications: readNullableBoolean(record.payment_status_notifications ?? record.paymentStatusNotifications)
       ?? fallback.paymentStatusNotifications,
-    useConversationWhatsappFirst: readNullableBoolean(record.use_conversation_whatsapp_first ?? record.useConversationWhatsappFirst)
-      ?? fallback.useConversationWhatsappFirst,
+    useConversationWhatsappFirst: true,
     defaultWhatsappInstanceId: readString(record.default_whatsapp_instance_id ?? record.defaultWhatsappInstanceId),
     defaultAgentId: readString(record.default_agent_id ?? record.defaultAgentId),
   };

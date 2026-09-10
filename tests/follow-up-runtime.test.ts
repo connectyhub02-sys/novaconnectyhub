@@ -4,6 +4,7 @@ import { commerceDatabase } from "./helpers/commerce-database";
 
 function fixture() {
   const db = commerceDatabase({
+    agent_runs: [{ id: "run", organization_id: "org", agent_id: "agent", metadata: { conversationId: "conversation" } }],
     whatsapp_instances: [
       {
         id: "instance",
@@ -171,6 +172,11 @@ function fixture() {
   };
 }
 describe("follow-up execution gates", () => {
+  it("rejects an old queued job assigned to someone other than the attending agent",async()=>{
+    const f=fixture();f.db.tables.agent_runs[0].agent_id="original-agent";
+    expect(await f.execute()).toMatchObject({reason:"attendance_agent_mismatch"});
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
   it("allows a recorded first return but still stops on an intervening reply", async () => {
     const f = fixture();
     f.db.tables.conversation_messages = [];

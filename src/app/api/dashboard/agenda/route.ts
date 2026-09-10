@@ -188,6 +188,7 @@ export async function POST(request: NextRequest) {
         .select("id,whatsapp_instance_id")
         .eq("organization_id", org)
         .eq("lead_id", body.leadId)
+        .eq("channel", "whatsapp")
         .order("last_message_at", { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle();
@@ -195,15 +196,18 @@ export async function POST(request: NextRequest) {
         throw new Error(
           "Não foi possível consultar o atendimento deste contato.",
         );
-      const instance = conversation.data?.whatsapp_instance_id
+      const attendance = conversation.data
         ? await client
-            .from("whatsapp_instances")
-            .select("metadata")
-            .eq("id", conversation.data.whatsapp_instance_id)
+            .from("agent_runs")
+            .select("agent_id")
             .eq("organization_id", org)
-            .single()
+            .eq("metadata->>conversationId", conversation.data.id)
+            .eq("run_status", "completed")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
         : null;
-      if (instance?.error)
+      if (attendance?.error)
         throw new Error("Não foi possível consultar o agente responsável.");
       const result = await client.rpc("reserve_customer_appointment", {
         p_org: org,
@@ -216,7 +220,7 @@ export async function POST(request: NextRequest) {
         p_version: body.version ?? null,
         p_conversation: conversation.data?.id ?? null,
         p_agent:
-          instance?.data?.metadata?.agent_id ??
+          conversation.data ? (attendance?.data?.agent_id ?? null) :
           (uuid.test(body.agentId ?? "") ? body.agentId : null),
       });
       if (result.error)

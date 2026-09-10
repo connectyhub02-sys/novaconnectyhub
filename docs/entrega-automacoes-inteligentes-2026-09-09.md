@@ -3,6 +3,7 @@
 ## Implementado
 
 - Controle central de follow-up por empresa, com compatibilidade temporária com a configuração anterior por agente. Desligar o controle central interrompe suas quatro jornadas.
+- Continuidade obrigatória do remetente: follow-ups, notificações de pagamento e avisos de agenda preservam agente e conexão do atendimento. Pedidos e reservas mantêm sua conversa de origem; indisponibilidade ou reassociação da conexão não autoriza substituição. O agente padrão atende apenas contatos sem histórico e campanhas. A antiga opção de desligar a prioridade da conversa é ignorada no servidor e foi removida da interface; não exige migration adicional.
 - Janela de contato e fuso editáveis em uma opção recolhida do controle central, para acomodar empresas com atendimento noturno sem exigir uma esteira manual.
 - Retomada de conversas, recuperação após envio confirmado do pagamento, convites de retorno e recomendações/recompra. A recuperação usa 15 minutos quando o controle central foi ativado e não existe prazo anterior.
 - Fila persistente com exclusão mútua por empresa/lead, identificação de tentativas, recuperação de execução interrompida e bloqueio de reenvio diante de entrega incerta.

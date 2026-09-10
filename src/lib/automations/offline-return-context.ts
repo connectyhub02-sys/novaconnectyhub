@@ -33,7 +33,7 @@ export async function offlineReturnContext(
     .eq("organization_id", org)
     .eq("lead_id", leadId)
     .eq("channel", "whatsapp")
-    .order("created_at", { ascending: false })
+    .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
   if (existing.error) throw new Error(existing.error.message);
@@ -41,7 +41,7 @@ export async function offlineReturnContext(
     return null;
   const settings = await getOrganizationSalesCatalogSettings(client, org),
     instanceId =
-      existing.data?.whatsapp_instance_id ??
+      existing.data ? existing.data.whatsapp_instance_id :
       settings?.automationSettings.defaultWhatsappInstanceId;
   if (!instanceId) return null;
   const instance = await client

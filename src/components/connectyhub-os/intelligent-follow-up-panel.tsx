@@ -27,6 +27,8 @@ const statusLabels: Record<string, string> = {
   uncertain: "Confirmar entrega",
 };
 const reasonLabels: Record<string, string> = {
+  attendance_agent_mismatch: "O envio não corresponde ao agente do atendimento",
+  agent_assignment_changed: "A conexão mudou de agente; o remetente original foi preservado",
   disabled_by_company: "Desativado pela empresa",
   next_contact_window: "Aguardando horário permitido",
   lead_replied_after_reference: "O lead respondeu",
@@ -135,6 +137,7 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl space-y-2 text-sm leading-6 text-slate-600">
+            <p className="font-medium text-slate-800">Quem atendeu continua o contato: o follow-up usa o mesmo agente e WhatsApp do atendimento, automaticamente.</p>
             <p>
               Seu agente retoma conversas, recupera compras pendentes e convida
               clientes a voltar. Compras e interesses repetidos ajudam a

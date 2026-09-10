@@ -778,6 +778,8 @@ export function CustomerAgendaPanel({
                   {when(notice.due_at)}
                   {notice.reason === "missing_responsible_agent"
                     ? " · Vincule o atendimento a um agente com responsável cadastrado."
+                    : notice.reason === "original_attendance_unavailable"
+                      ? " · O agente ou WhatsApp original do atendimento está indisponível. Nenhum outro remetente foi usado."
                     : notice.reason === "whatsapp_unavailable"
                       ? " · Confira a conexão do agente."
                       : notice.status === "uncertain"
