@@ -54,6 +54,25 @@ no endpoint Inngest e precisam aparecer na sincronização do ambiente publicado
 
 ## Limites operacionais ainda existentes
 
+Após o push `586ce3c`, a Vercel concluiu o deploy de produção. O OpenAPI público
+retornou 1.5.0, 37 caminhos e 62 operações. GET sem chave em /webhooks e /triggers
+retornou HTTP 401, sem executar IA ou alterar créditos.
+
+Na conferência operacional, o Inngest exibiu **Execution Limit Reached**:
+106.334 execuções mensais usadas para um limite Hobby de 50.000. Não considerar
+agendamentos e entregas automáticas plenamente operacionais enquanto esse
+impedimento não for resolvido e a sincronização das funções for confirmada.
+Foi solicitada a escolha entre regularizar o serviço atual e migrar os novos
+executores de IA. Nenhuma contratação de plano foi realizada.
+
+A sincronização automática do deploy `586ce3c` falhou com “We could not reach your
+URL” para o endereço individual da Vercel. O aplicativo existente ainda mostrava
+41 funções e última sincronização bem-sucedida em 09/09, 21:31. Foi preparada uma
+ressincronização para `https://www.connectyhub.com.br/api/inngest`, mas a revisão
+automática de aprovação bloqueou a confirmação pelo excesso do plano e pelas
+falhas de sincronização. A ação não foi executada por outro caminho. A ativação
+das duas novas funções depende de resolver essa condição e autorizar a continuação.
+
 O serviço WebSocket de tempo real existe em `services/ai-relay`, mas sua hospedagem
 persistente ainda precisa ser indicada e configurada. Não afirmar que está ativo
 apenas pela presença do endpoint ou dos exemplos. A pergunta sobre o ambiente foi
