@@ -26,6 +26,11 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
 ] as const;
 
 export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
+  { eventType: "paid_access_ending", label: "Acesso perto do fim", description: "Último dia do acesso sem renovação automática, sem criar uma nova cobrança." },
+  { eventType: "paid_access_ended", label: "Período de acesso encerrado", description: "O acesso contratado terminou, sem gerar dívida ou renovação automática." },
+  { eventType: "credit_topup_enabled", label: "Recarga automática autorizada", description: "O titular autorizou ou alterou a compra automática de créditos." },
+  { eventType: "credit_topup_disabled", label: "Recarga automática desativada", description: "O titular desativou as compras automáticas de créditos." },
+  { eventType: "credit_topup_action_required", label: "Recarga precisa de atenção", description: "Cartão indisponível, novas condições do pacote ou valor mensal autorizado atingido." },
   {
     eventType: "billing_operational_test",
     label: "Teste operacional",
@@ -181,6 +186,11 @@ export type PlatformBillingMessageTemplateKey =
 export type PlatformBillingMessageTemplates = Record<PlatformBillingMessageTemplateKey, string>;
 
 export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageTemplates = {
+  paid_access_ending: "{cliente}, seu acesso ao plano {plano} termina em {data_vencimento}. Não há renovação automática desse acesso. Confira suas opções no painel: {checkout_url}.",
+  paid_access_ended: "{cliente}, o período de acesso ao plano {plano} terminou em {data_vencimento}. Nenhuma nova cobrança foi criada por este aviso. Confira suas opções no painel: {checkout_url}.",
+  credit_topup_enabled: "{cliente}, sua recarga automática foi autorizada. Confira as condições em {checkout_url}.",
+  credit_topup_disabled: "{cliente}, sua recarga automática foi desativada. Os atendimentos continuam enquanto houver saldo. Confira em {checkout_url}.",
+  credit_topup_action_required: "{cliente}, sua recarga automática precisa de atenção. Confira a autorização e as opções de recarga em {checkout_url}.",
   billing_operational_test:
     "{cliente}, esta e uma mensagem de teste da ConnectyHub para validar os avisos automaticos de cobranca. Nenhuma cobranca foi feita.",
   subscription_pending:

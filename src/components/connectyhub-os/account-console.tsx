@@ -1,5 +1,6 @@
 "use client";
 import { CreditExplainer } from "./credit-explainer";
+import { NotificationSenderSettings } from "./notification-sender-settings";
 
 import {
   useCallback,
@@ -411,6 +412,8 @@ export function AccountConsole() {
         <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} />
         <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
       </div>
+
+      <NotificationSenderSettings />
 
       <BillingWorkspace
         account={account}

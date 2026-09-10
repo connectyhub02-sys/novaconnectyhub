@@ -1,4 +1,5 @@
 import "server-only";
+import { accessPeriodNotice } from "./account-notice-copy";
 import { processWalletAlerts } from "./wallet-alerts";
 import { preparePlatformCampaign } from "@/lib/commerce/platform-campaigns";
 import { attemptManagedAsaasRenewal } from "./managed-asaas-renewals";
@@ -154,10 +155,20 @@ export async function processPaidBillingLifecycleNotifications(
       const terms = readCommercialTerms(subscription.metadata?.commercial_terms);
       if (subscription.subscription_kind === "product" && (terms.billingCycle === "one_time" || subscription.status === "canceled")) continue;
       if (terms.billingCycle === "one_time" || subscription.status === "canceled") {
+        const accessNotice = accessPeriodNotice(context.periodEnd, now);
+        if (accessNotice) {
+          const result = await sendLifecycleNotification(client, {
+            context, eventType: accessNotice,
+            dedupeSuffix: context.periodEnd!.toISOString(), source: "paid_access_period_sweep",
+          });
+          if (result.status === "failed") summary.failed++;
+          else if (result.status === "skipped") summary.skipped++;
+          else summary.deadlineNotifications++;
+        }
         if (isBillingDeadlineReached(context.periodEnd, 0, now)) {
           if (await markSubscriptionPastDue(client, { subscription, now, periodEnd: context.periodEnd })) summary.expiredPlans++;
         }
-        continue; // End a paid access period without generating an uncontracted renewal/debt notice.
+        continue; // Inform about access expiry without issuing a renewal invoice or debt notice.
       }
       const cardAttempt = await (renewalPolicy.cardChargeAttemptEnabled ? attemptManagedAsaasRenewal(client, {organizationId:subscription.organization_id,subscriptionId:subscription.id,periodEnd:context.periodEnd,now,prepare:()=>ensureLifecycleRenewalCheckout(client,context,"paid_plan_renewal_reminder","card")}) : Promise.resolve({attempted:false,approved:false,failed:false})).catch((error) => {
         summary.warnings.push(error instanceof Error ? error.message : "Falha na tentativa automatica de cartao.");

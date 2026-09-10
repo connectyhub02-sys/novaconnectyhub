@@ -1,6 +1,13 @@
 import "server-only";
 import { expandPlatformBillingReference } from "./payment-reference";
 import { planDiscountNotice } from "./plan-discounts";
+import { loadPlatformNotificationSender, resolveNotificationSender, type NotificationSender } from "./notification-sender";
+import { deliverWithPlatformFallback } from "./notification-sender-policy";
+import { accountNoticeMetadata, buildAccountCreditNotice, canonicalPaymentNoticeKey, subscriptionNoticeType } from "./account-notice-copy";
+import { processAccountBillingNoticeOutbox } from "./account-notice-outbox";
+import { renderAccountNoticeVoice } from "./account-notice-voice";
+import { AccountNoticesOptedOut, ensureNoticeRecipient, prepareNoticeActions } from "./account-notice-preferences";
+import { noticeActionChoices, noticeActionsMessage, type AccountNoticeActions } from "./account-notice-actions";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -144,6 +151,8 @@ export type PlatformPlanInteractionNotificationInput = {
 };
 
 export type PlatformBillingLifecycleNotificationType =
+  | "paid_access_ending"
+  | "paid_access_ended"
   | "manual_plan_activated"
   | "manual_plan_renewed"
   | "paid_plan_three_days_remaining"
@@ -265,15 +274,6 @@ type ProfileRecipientRow = {
   full_name: string | null;
   phone: string | null;
   email: string | null;
-};
-
-type WhatsappInstanceRow = {
-  id: string;
-  status: string | null;
-  phone_number: string | null;
-  display_name: string | null;
-  instance_token_encrypted: string | null;
-  metadata: JsonRecord | null;
 };
 
 type PendingBillingNotificationRow = {
@@ -662,11 +662,7 @@ async function processSubscriptionWebhook(client: SupabaseClient, input: Billing
     planName: record.plan?.name ?? record.subscription.plan_code,
     amountBrl: toNumber(record.invoice?.total_brl ?? record.payment?.amount_brl ?? record.plan?.monthly_price_brl),
     includedCredits: toNumber(record.plan?.included_credits),
-    eventType: subscriptionStatus === "paused"
-      ? "subscription_paused"
-      : subscriptionStatus === "canceled"
-        ? "subscription_canceled"
-        : "subscription_pending",
+    eventType: subscriptionNoticeType(subscriptionStatus),
     dedupeKey: `billing:${record.subscription.id}:subscription:${subscriptionStatus}`,
     providerStatus,
     providerReference: providerSubscription.id,
@@ -1173,7 +1169,7 @@ async function processAsaasSubscriptionWebhook(client: SupabaseClient, input: Bi
     planName: record.plan?.name ?? record.subscription.plan_code,
     amountBrl: toNumber(record.invoice?.total_brl ?? record.payment?.amount_brl ?? record.plan?.monthly_price_brl),
     includedCredits: toNumber(record.plan?.included_credits),
-    eventType: subscriptionStatus === "canceled" ? "subscription_canceled" : "subscription_pending",
+    eventType: subscriptionNoticeType(subscriptionStatus),
     dedupeKey: `billing:${record.subscription.id}:asaas_subscription:${subscriptionStatus}:${providerSubscription.id}`,
     providerStatus: providerSubscription.status,
     providerReference: providerSubscription.id,
@@ -1685,7 +1681,22 @@ async function enqueuePlatformBillingNotification(
       metadata: input.metadata,
     }),
   ]);
-  const message = input.metadata.purchase_kind === "product"
+  if (input.paymentId) {
+    const payment = await client.from("billing_payments").select("payload").eq("id", input.paymentId).eq("organization_id", input.organizationId).maybeSingle();
+    if (payment.error) throw new Error("Não foi possível conferir o contexto do aviso de pagamento.");
+    input.metadata = accountNoticeMetadata(payment.data?.payload, input.metadata, getAppBaseUrl());
+  }
+  const canonicalKey = canonicalPaymentNoticeKey(input.paymentId, input.eventType, input.dedupeKey);
+  // Keep already emitted legacy notices from being sent again under the canonical key.
+  if (input.paymentId && canonicalKey === `billing:payment:${input.paymentId}:${input.eventType}`) {
+    const existing = await client.from("billing_notification_events").select("id,status").eq("organization_id", input.organizationId).eq("payment_id", input.paymentId).eq("event_type", input.eventType).is("metadata->>recipient_kind", null).order("created_at").limit(1).maybeSingle();
+    if (existing.error) throw new Error("Não foi possível conferir avisos anteriores deste pagamento.");
+    if (existing.data) return existing.data as { id: string; status: string };
+    input.dedupeKey = canonicalKey;
+  }
+  const message = input.metadata.credit_topup === true || input.eventType.startsWith("credit_topup_")
+    ? buildAccountCreditNotice(input, recipient.profile?.full_name ?? "Olá")
+    : input.metadata.purchase_kind === "product"
     ? buildProductBillingMessage(input, recipient.profile?.full_name ?? "Olá")
     : buildBillingMessage({
     eventType: input.eventType,
@@ -1713,9 +1724,7 @@ async function enqueuePlatformBillingNotification(
     : new Date().toISOString();
   const initialError = !enabled
     ? "Notificacoes WhatsApp de billing desativadas."
-    : !selectedAgentId
-      ? "Agente de cobrança nao configurado."
-      : !recipientPhone
+    : !recipientPhone
         ? "Cliente sem telefone no perfil."
         : null;
   const insertPayload: JsonRecord = {
@@ -1734,6 +1743,7 @@ async function enqueuePlatformBillingNotification(
     error_message: initialError,
     metadata: {
       ...input.metadata,
+      platform_sender_agent_id: selectedAgentId,
       automation_flow_id: automation?.id ?? null,
       automation_flow_key: automation?.flowKey ?? null,
       automation_flow_name: automation?.name ?? null,
@@ -1745,6 +1755,7 @@ async function enqueuePlatformBillingNotification(
       plan_name: input.planName,
       amount_brl: input.amountBrl,
       included_credits: input.includedCredits,
+      ...(input.balanceCredits != null ? { balance_credits: input.balanceCredits } : {}),
     },
   };
 
@@ -1797,7 +1808,7 @@ async function enqueuePlatformBillingNotification(
       .eq("id", event.id);
   });
 
-  if (!event || initialError || !selectedAgentId || !recipientPhone || delayMinutes > 0) {
+  if (!event || initialError || !recipientPhone || delayMinutes > 0) {
     return event ?? null;
   }
 
@@ -1873,7 +1884,7 @@ async function enqueueResponsibleBillingNotifications(
       throw new Error(`Nao foi possivel registrar aviso financeiro para responsavel: ${insert.error.message}`);
     }
 
-    if (!insert.data?.id || responsibleInitialError || !input.selectedAgentId || input.delayMinutes > 0) {
+    if (!insert.data?.id || responsibleInitialError || input.delayMinutes > 0) {
       continue;
     }
 
@@ -1943,6 +1954,7 @@ export async function processPendingPlatformBillingNotifications(
   if (recovered.error) throw new Error("Não foi possível conferir os avisos interrompidos.");
   if (Number(recovered.data)>0) await client.from("maintenance_audit_logs").insert({event_type:"billing.notice.delivery_uncertain",metadata:{count:recovered.data,action:"Verificar entrega no provedor antes de reenviar."}});
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+  const accountNotices = await processAccountBillingNoticeOutbox(client, notice => enqueuePlatformBillingNotification(client, notice), getAppBaseUrl());
   const enqueuedPendingCheckouts = await enqueueMissingPendingCheckoutNotifications(client, {
     limit: Math.min(limit, 25),
   });
@@ -1971,31 +1983,32 @@ export async function processPendingPlatformBillingNotifications(
     const agentId = row.selected_agent_id;
     const phone = row.recipient_phone;
 
-    if (!message || !agentId || !phone) {
+    if (!message || !phone) {
       skipped += 1;
       await client
         .from("billing_notification_events")
         .update({
           status: "skipped",
-          error_message: "Automacao pendente sem agente, telefone ou mensagem.",
+          error_message: "Automacao pendente sem telefone ou mensagem.",
         })
         .eq("id", row.id);
       continue;
     }
 
-    await sendBillingNotificationNow(client, {
+    const delivered = await sendBillingNotificationNow(client, {
       eventId: row.id,
       agentId,
       phone,
       message,
       attempts: toNumber(row.attempts),
     });
-    sent += 1;
+    if (delivered) sent += 1;
   }
 
   return {
     checked: rows.length,
     enqueuedPendingCheckouts,
+    accountNotices,
     sent,
     skipped,
   };
@@ -2088,7 +2101,7 @@ async function sendBillingNotificationNow(
   client: SupabaseClient,
   input: {
     eventId: string;
-    agentId: string;
+    agentId: string | null;
     phone: string;
     message: string;
     attempts?: number;
@@ -2097,53 +2110,94 @@ async function sendBillingNotificationNow(
   const nextAttempts = Math.max(0, input.attempts ?? 0) + 1;
   const { data: claimed, error: claimError } = await client.rpc("claim_billing_notice", { p_event: input.eventId });
   if (claimError) throw new Error("Não foi possível reservar o aviso financeiro.");
-  if (!claimed) return;
+  if (!claimed) return false;
   let dispatched = false;
 
 
   try {
-    const [credentials, instance, currentEvent] = await Promise.all([
+    const [credentials, settings, currentEvent] = await Promise.all([
       loadUazapiCredentials(client),
-      loadBillingAgentWhatsappInstance(client, input.agentId),
+      loadBillingSettings(client),
       loadBillingNotificationDeliveryContext(client, input.eventId),
     ]);
-
-    if (!instance?.instance_token_encrypted || instance.status !== "connected") {
-      throw new Error("WhatsApp do agente de cobranca nao esta conectado.");
-    }
-
-    const token = decryptCredentialValue(instance.instance_token_encrypted);
+    if (!currentEvent?.organization_id) throw new Error("Conta do aviso não encontrada.");
+    const recipient = await ensureNoticeRecipient(client, currentEvent.organization_id, input.phone);
+    if (!recipient.enabled) throw new AccountNoticesOptedOut();
+    if (settings?.notification_whatsapp_enabled === false) throw new Error("Avisos WhatsApp desativados na plataforma.");
+    const platformAgentId = readString(currentEvent.metadata?.platform_sender_agent_id) ?? input.agentId;
+    const sender = await resolveNotificationSender(client, currentEvent.organization_id, platformAgentId, input.phone);
+    if (!sender) throw new Error("Nenhum WhatsApp disponível para enviar o aviso. O envio será tentado novamente.");
     const button = buildCheckoutActionButton({
       eventType: currentEvent?.event_type ?? null,
       metadata: currentEvent?.metadata ?? null,
     });
-    dispatched = true;
-    const sendResult = await sendBillingWhatsappNotice({
-      credentials,
-      token,
-      phone: input.phone,
-      message: input.message,
-      button,
-      pixCode: readString(currentEvent?.metadata?.pix_copy_code),
-      paymentSummary: {
-        amount: Number(currentEvent?.metadata?.amount_brl),
-        itemName: readString(currentEvent?.metadata?.plan_name) ?? readString(currentEvent?.metadata?.plan_code) ?? "Compra ConnectyHub",
-        invoiceNumber: (currentEvent?.invoice_id ?? currentEvent?.subscription_id ?? input.eventId).slice(0, 8).toUpperCase(),
+    const delivery = await deliverWithPlatformFallback({
+      sender,
+      fallback: () => loadPlatformNotificationSender(client, platformAgentId, input.phone),
+      isDefinitiveFailure: error => error instanceof BillingNoticeProviderError && error.definitive,
+      send: async (selected: NotificationSender) => {
+        const actions = await prepareNoticeActions(client, recipient, { appUrl: getAppBaseUrl(), senderKind: selected.kind, senderPhone: selected.instance.phone_number, eventType: currentEvent.event_type });
+        const message = renderAccountNoticeVoice({
+          senderKind: selected.kind, agentName: selected.agentName,
+          eventType: currentEvent.event_type, platformMessage: input.message,
+          metadata: currentEvent.metadata ?? {},
+        });
+        let token: string;
+        try { token = decryptCredentialValue(selected.instance.instance_token_encrypted!); }
+        catch { throw new BillingNoticeProviderError("Conexão do remetente indisponível.", true); }
+        const recorded = await client.from("billing_notification_events").update({
+          selected_agent_id: selected.agentId,
+          metadata: { ...(currentEvent.metadata ?? {}), platform_sender_agent_id: platformAgentId,
+            sender_kind: selected.kind, sender_instance_id: selected.instance.id,
+            attempted_message_body: message,
+            sender_fallback: sender.kind === "customer" && selected.kind === "platform" },
+        }).eq("id", input.eventId);
+        if (recorded.error) throw new Error("Não foi possível registrar o remetente do aviso.");
+        dispatched = true;
+        try {
+          return await sendBillingWhatsappNotice({
+            credentials,
+            token,
+            phone: input.phone,
+            message,
+            actions,
+            button,
+            pixCode: readString(currentEvent.metadata?.pix_copy_code),
+            paymentSummary: {
+              amount: Number(currentEvent.metadata?.amount_brl),
+              itemName: readString(currentEvent.metadata?.plan_name) ?? readString(currentEvent.metadata?.plan_code) ?? "Compra ConnectyHub",
+              invoiceNumber: (currentEvent.invoice_id ?? currentEvent.subscription_id ?? input.eventId).slice(0, 8).toUpperCase(),
+            },
+            trackId: `billing_notice_${input.eventId}`,
+          });
+        } catch (error) {
+          if (error instanceof BillingNoticeProviderError && error.definitive) dispatched = false;
+          throw error;
+        }
       },
-      trackId: `billing_notice_${input.eventId}`,
     });
+    const sendResult = delivery.result;
+    const instance = delivery.sender.instance;
 
     const saved = await Promise.all([
       client
         .from("billing_notification_events")
         .update({
           status: "sent",
+          message_preview: preview(sendResult.message, 480),
+          selected_agent_id: delivery.sender.agentId,
+          error_message: null,
+          next_attempt_at: null,
           delivery_claimed_at: null,
           attempts: nextAttempts,
           sent_at: new Date().toISOString(),
           provider_message_id: readProviderMessageId(sendResult.providerResponse.data),
           metadata: {
             ...(currentEvent?.metadata ?? {}),
+            platform_sender_agent_id: platformAgentId,
+            sender_kind: delivery.sender.kind,
+            sender_instance_id: instance.id,
+            sender_fallback: delivery.fallbackUsed,
             delivery_mode: sendResult.deliveryMode,
             sent_message_body: sendResult.message,
             checkout_button: sendResult.button,
@@ -2161,7 +2215,12 @@ async function sendBillingNotificationNow(
         .eq("id", instance.id),
     ]);
     if (saved.some(result => result.error)) throw new Error("Aviso enviado; confirmação de registro em conferência.");
+    return true;
   } catch (error) {
+    if (error instanceof AccountNoticesOptedOut) {
+      await client.from("billing_notification_events").update({ status: "skipped", delivery_claimed_at: null, next_attempt_at: null, error_message: error.message }).eq("id", input.eventId);
+      return false;
+    }
     await client
       .from("billing_notification_events")
       .update({
@@ -2173,6 +2232,7 @@ async function sendBillingNotificationNow(
         error_message: error instanceof Error ? error.message : "Falha ao enviar WhatsApp de billing.",
       })
       .eq("id", input.eventId);
+    return false;
   }
 }
 
@@ -2192,9 +2252,10 @@ type BillingWhatsappNoticeResult = {
 async function loadBillingNotificationDeliveryContext(client: SupabaseClient, eventId: string) {
   const { data, error } = await client
     .from("billing_notification_events")
-    .select("event_type, subscription_id, invoice_id, metadata")
+    .select("organization_id, event_type, subscription_id, invoice_id, metadata")
     .eq("id", eventId)
     .maybeSingle<{
+      organization_id: string;
       event_type: string | null;
       subscription_id: string | null;
       invoice_id: string | null;
@@ -2217,7 +2278,29 @@ async function sendBillingWhatsappNotice(input: {
   pixCode?: string | null;
   paymentSummary?: { amount: number; itemName: string; invoiceNumber: string };
   trackId: string;
+  actions?: AccountNoticeActions;
 }): Promise<BillingWhatsappNoticeResult> {
+  if (input.actions) {
+    // Include unsubscribe in the same message as checkout/Pix; every fallback keeps the link.
+    const baseMessage = input.pixCode && input.button && !input.message.includes(input.button.url)
+      ? `${input.message}\n\nAbrir no painel: ${input.button.url}` : input.message;
+    const text = noticeActionsMessage(baseMessage, input.actions);
+    try {
+      const providerResponse = await callUazapi(input.credentials, "/send/menu", {
+        method: "POST", token: input.token, body: {
+          number: input.phone, type: "button", text,
+          choices: noticeActionChoices(input.actions, input.button, input.pixCode),
+          footerText: "ConnectyHub", track_source: "connectyhub", track_id: input.trackId,
+        },
+      });
+      return { providerResponse, deliveryMode: "button", message: text, button: input.button, fallbackError: null };
+    } catch (error) {
+      if (!(error instanceof BillingNoticeProviderError && error.definitive && [400, 404, 405, 422].includes(error.status ?? 0))) throw error;
+      const message = `${text}${input.button && !text.includes(input.button.url) ? `\n\nAbrir no painel: ${input.button.url}` : ""}${input.pixCode ? `\n\nPix copia e cola:\n${input.pixCode}` : ""}`;
+      const providerResponse = await callUazapi(input.credentials, "/send/text", { method: "POST", token: input.token, body: { number: input.phone, text: message, linkPreview: false, track_source: "connectyhub", track_id: `${input.trackId}_fallback` } });
+      return { providerResponse, deliveryMode: "text_fallback", message, button: input.button, fallbackError: error.message };
+    }
+  }
   let paymentRequestError: string | null = null;
   if (input.button && input.pixCode && input.paymentSummary && Number.isFinite(input.paymentSummary.amount) && input.paymentSummary.amount > 0) {
     // The total is the invoice amount after discounts/add-ons, never the plan's list price.
@@ -2340,7 +2423,7 @@ function buildCheckoutActionButton(input: {
   }
 
   return {
-    label: resolveCheckoutActionLabel(input.eventType),
+    label: input.metadata?.credit_topup === true ? "Ver recarga" : resolveCheckoutActionLabel(input.eventType),
     url,
   };
 }
@@ -2455,24 +2538,8 @@ async function loadBillingRecipient(client: SupabaseClient, organizationId: stri
   return { organization, profile: profile ?? null };
 }
 
-async function loadBillingAgentWhatsappInstance(client: SupabaseClient, agentId: string) {
-  const { data, error } = await client
-    .from("whatsapp_instances")
-    .select("id, status, phone_number, display_name, instance_token_encrypted, metadata")
-    .contains("metadata", { agent_id: agentId, admin_whatsapp: true, platform_whatsapp: true })
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<WhatsappInstanceRow>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar WhatsApp do agente de cobranca: ${error.message}`);
-  }
-
-  return data ?? null;
-}
-
 class BillingNoticeProviderError extends Error {
-  constructor(message: string, readonly definitive: boolean) { super(message); }
+  constructor(message: string, readonly definitive: boolean, readonly status?: number) { super(message); }
 }
 
 async function callUazapi(
@@ -2497,7 +2564,7 @@ async function callUazapi(
   const data = await readResponse(response);
 
   if (!response.ok) {
-    throw new BillingNoticeProviderError(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`, response.status >= 400 && response.status < 500 && response.status !== 408);
+    throw new BillingNoticeProviderError(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`, response.status >= 400 && response.status < 500 && response.status !== 408, response.status);
   }
 
   return { ok: response.ok, status: response.status, data };

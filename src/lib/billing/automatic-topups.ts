@@ -7,7 +7,7 @@ import {directPaymentState} from "@/lib/sales-catalog/transparent-checkout";
 import {billingLocalDate} from "./commercial-terms";
 import {finishNativeBilling,type Attempt} from "./native-card-checkout";
 export async function processAutomaticTopups(client:SupabaseClient,organizationId?:string){
- let q=client.from("credit_topup_policies").select("organization_id").eq("enabled",true).order("last_checked_at",{nullsFirst:true}).limit(5);
+ let q=client.from("credit_topup_policies").select("organization_id,authorized_at").eq("enabled",true).order("last_checked_at",{nullsFirst:true}).limit(5);
  if(organizationId)q=q.eq("organization_id",organizationId);
  const policies=await q;if(policies.error)throw new Error("Não foi possível consultar as recargas autorizadas.");
  let attempted=0;
@@ -30,13 +30,18 @@ export async function processAutomaticTopups(client:SupabaseClient,organizationI
    if(bound.error)throw new Error("Cobrança em conferência.");attempt=bound.data as Attempt;
    const saved=await client.from("billing_payments").update({provider_payment_id:invoice.id}).eq("id",attempt.payment_id);if(saved.error)throw new Error("Cobrança em conferência.");
    const payment=await payManagedAsaasInvoice({...config,paymentId:invoice.id,reference:attempt.external_reference,customerId:card.data.customer_id,token:decryptCredentialValue(card.data.token_encrypted),amount:Number(attempt.amount)});
-   await finishNativeBilling(client,attempt,directPaymentState(payment),payment);
+   const result=await finishNativeBilling(client,attempt,directPaymentState(payment),payment);
+   if(["rejected","error","cancelled"].includes(result.state)) await disablePolicy(client,policy.organization_id,policy.authorized_at);
   }catch(error){
    const definitive=!dispatched||(error instanceof AsaasDirectError&&error.definitive);
    await finishNativeBilling(client,attempt,definitive?(error instanceof AsaasDirectError&&error.declined?"rejected":"error"):"unknown").catch(()=>null);
    // A refusal needs customer action. Do not keep retrying their card each hour.
-   if(definitive)await client.from("credit_topup_policies").update({enabled:false,updated_at:new Date().toISOString()}).eq("organization_id",policy.organization_id);
+   if(definitive)await disablePolicy(client,policy.organization_id,policy.authorized_at);
   }
  }
  return {attempted};
+}
+async function disablePolicy(client:SupabaseClient,organizationId:string,authorizedAt:string){
+ const result=await client.from("credit_topup_policies").update({enabled:false,updated_at:new Date().toISOString()}).eq("organization_id",organizationId).eq("authorized_at",authorizedAt);
+ if(result.error)throw new Error("Não foi possível pausar a autorização de recarga recusada.");
 }

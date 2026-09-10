@@ -8,11 +8,64 @@ beforeAll(async()=>{
  db=await commercialDb();await db.exec(`alter table profiles add column is_platform_admin boolean default false;
  alter table platform_products add column price text,add column short_description text,add column commercial_description text,add column offer jsonb default '{}',add column metadata jsonb default '{}';
  alter table credit_wallets add column reserved_credits numeric default 0;
+ alter table billing_notification_events add column dedupe_key text unique;
  insert into auth.users(id) values('${admin}');insert into profiles(id,is_platform_admin) values('${admin}',true);`);
  const money=readFileSync("supabase/migrations/0076_transparent_checkout_attempts.sql","utf8");await db.exec(money.slice(money.indexOf("create or replace function public.checkout_money"),money.indexOf("create or replace function public.guard_checkout_order_revision")));
- for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
+ for(const name of ["0107_custom_contracts","0108_wallet_alert_episodes","0109_custom_software_meetings","0110_automatic_credit_topups","0112_custom_meeting_reminders","0121_account_billing_notice_outbox"])await db.exec(readFileSync(`supabase/migrations/${name}.sql`,"utf8"));
 },60000);
 afterAll(async()=>{await db?.close();});
+async function configuredTopup(){
+ const a=await account(),pack=randomUUID(),card=randomUUID(),activation=randomUUID();const initial=await invoice(a);
+ await db.query("select claim_native_billing_card($1,$2,$3,0,247,247,$4)",[a.org,initial.pay,activation,`notice_fixture:${activation}`]);
+ await db.query("insert into platform_products(id,name,billing_cycle,billing_interval,price,metadata) values($1,'Recarga','one_time','month',47,'{\"credit_amount\":5000}')",[pack]);
+ await db.query("insert into billing_asaas_card_vault(id,organization_id,subscription_id,activation_attempt_id,customer_id,token_encrypted,consent_version,status) values($1,$2,$3,$4,'fixture','encrypted','connectyhub-advance-3-2-1-v1','active')",[card,a.org,a.sub,activation]);
+ const policy={enabled:true,product_id:pack,card_method_id:card,threshold_credits:1000,amount_brl:47,credits:5000,monthly_cap_brl:47,consent_version:"credit_topup_v1"};
+ await db.query("select save_credit_topup_policy($1,$2,$3)",[a.org,a.user,JSON.stringify(policy)]);
+ return {...a,pack,card,policy,initial};
+}
+
+it("persists owner authorization and deactivation notices with no payment attempt",async()=>{
+ const a=await configuredTopup();await db.query("select save_credit_topup_policy($1,$2,'{\"enabled\":false}')",[a.org,a.user]);
+ const rows=(await db.query<{event_type:string}>("select event_type from account_billing_notice_outbox where organization_id=$1 order by created_at",[a.org])).rows;
+ expect(rows.map(r=>r.event_type)).toEqual(["credit_topup_enabled","credit_topup_disabled"]);
+ expect((await db.query("select * from credit_topup_runs where organization_id=$1",[a.org])).rows).toHaveLength(0);
+});
+it("queues a single missing-card warning and does not charge",async()=>{
+ const a=await configuredTopup();await db.query("update billing_asaas_card_vault set status='inactive' where id=$1",[a.card]);
+ for(let i=0;i<3;i++)await db.query("select claim_credit_topup($1)",[a.org]);
+ const rows=(await db.query<{metadata:{reason:string};dedupe_key:string}>("select metadata,dedupe_key from account_billing_notice_outbox where organization_id=$1 and event_type='credit_topup_action_required'",[a.org])).rows;
+ expect(rows).toHaveLength(1);expect(rows[0].metadata.reason).toBe("card_unavailable");
+ await db.query("insert into billing_notification_events(dedupe_key) values($1)",[rows[0].dedupe_key]);
+ await db.query("delete from account_billing_notice_outbox where dedupe_key=$1",[rows[0].dedupe_key]);
+ await db.query("select claim_credit_topup($1)",[a.org]);
+ expect((await db.query("select * from account_billing_notice_outbox where dedupe_key=$1",[rows[0].dedupe_key])).rows).toHaveLength(0);
+ expect((await db.query("select * from credit_topup_runs where organization_id=$1",[a.org])).rows).toHaveLength(0);
+});
+it("queues changed-offer and monthly-cap notices while preserving their charge guards",async()=>{
+ const changed=await configuredTopup();await db.query("update platform_products set price='48' where id=$1",[changed.pack]);await db.query("select claim_credit_topup($1)",[changed.org]);
+ expect((await db.query<{metadata:{reason:string}}>("select metadata from account_billing_notice_outbox where organization_id=$1 and event_type='credit_topup_action_required'",[changed.org])).rows[0].metadata.reason).toBe("offer_changed");
+ expect((await db.query<{enabled:boolean}>("select enabled from credit_topup_policies where organization_id=$1",[changed.org])).rows[0].enabled).toBe(false);
+ const capped=await configuredTopup();const first=(await db.query<{r:{attempt:{id:string}}}>("select claim_credit_topup($1) r",[capped.org])).rows[0].r;
+ await db.query("update billing_card_attempts set state='approved' where id=$1",[first.attempt.id]);await db.query("update credit_topup_runs set created_at=now()-interval '2 hours' where organization_id=$1",[capped.org]);
+ for(let i=0;i<2;i++)await db.query("select claim_credit_topup($1)",[capped.org]);
+ expect((await db.query<{metadata:{reason:string}}>("select metadata from account_billing_notice_outbox where organization_id=$1 and event_type='credit_topup_action_required'",[capped.org])).rows.map(r=>r.metadata.reason)).toEqual(["monthly_cap"]);
+ expect((await db.query("select * from credit_topup_runs where organization_id=$1",[capped.org])).rows).toHaveLength(1);
+});
+it("queues direct cancellation and refund confirmations once and protects the outbox",async()=>{
+ const a=await account(),p=await invoice(a);
+ await db.query("update billing_payments set status='canceled' where id=$1",[p.pay]);
+ await db.query("update billing_payments set status='refunded' where id=$1",[p.pay]);
+ await db.query("update billing_payments set status='refunded' where id=$1",[p.pay]);
+ expect((await db.query<{event_type:string}>("select event_type from account_billing_notice_outbox where payment_id=$1 order by created_at",[p.pay])).rows.map(r=>r.event_type)).toEqual(["payment_canceled","payment_refunded"]);
+ expect((await db.query("select has_table_privilege('authenticated','account_billing_notice_outbox','SELECT') as allowed")).rows[0]).toEqual({allowed:false});
+});
+it("allows an informational access-end notice for canceled renewal while blocking a renewal demand",async()=>{
+ const a=await account();await db.query("update organization_subscriptions set status='canceled' where id=$1",[a.sub]);
+ for(const [event,expected] of [["paid_access_ended",true],["paid_plan_due_today",false]] as const){
+  const id=randomUUID();await db.query("insert into billing_notification_events(id,organization_id,subscription_id,event_type,status,next_attempt_at,metadata) select $1,organization_id,id,$2,'pending',now(),jsonb_build_object('current_period_end',current_period_end) from organization_subscriptions where id=$3",[id,event,a.sub]);
+  expect((await db.query<{claimed:boolean}>("select claim_billing_notice($1) claimed",[id])).rows[0].claimed).toBe(expected);
+ }
+});
 async function account(){const user=randomUUID(),org=randomUUID(),sub=randomUUID();await db.query("insert into auth.users(id) values($1)",[user]);await db.query("insert into organizations(id,owner_id,name,plan_code,status) values($1,$2,'Cliente','pro','active')",[org,user]);
  const plan=(await db.query<{id:string}>("insert into billing_plans(plan_code,name,monthly_price_brl,included_credits,billing_cycle,billing_interval) values($1,'Plano',247,1000,'recurring','month') returning id",[randomUUID()])).rows[0].id;
  await db.query("insert into organization_subscriptions(id,organization_id,plan_id,plan_code,status,current_period_start,current_period_end,billing_provider,metadata) values($1,$2,$3,'pro','active',now()-interval '1 day',now()+interval '29 days','asaas',$4)",[sub,org,plan,JSON.stringify({commercial_terms:{billing_cycle:"recurring",billing_interval:"month",price_brl:247,included_credits:1000}})]);
