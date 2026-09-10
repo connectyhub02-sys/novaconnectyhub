@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1102,6 +1103,7 @@ export async function sendGatewayTextMessage(
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/text", {
+    outbound: { instanceId: instance.id, client: auth.client },
     method: "POST",
     token,
     body: {
@@ -1258,6 +1260,7 @@ export async function sendGatewayMediaMessage(
   });
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/media", {
+    outbound: { instanceId: instance.id, client: auth.client },
     method: "POST",
     token,
     body: providerBody,
@@ -1448,6 +1451,7 @@ export async function proxyGatewayProviderRequest(
   const providerStartedAt = Date.now();
   const providerBody = normalizeProviderProxyRequestBody(input.path, input.body);
   const result = await callUazapi(credentials, input.path, {
+    outbound: { instanceId: instance.id, client: auth.client },
     method: input.method,
     token,
     body: providerBody,
@@ -3322,6 +3326,7 @@ async function callInstanceUazapi(
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, input.providerPath, {
+    outbound: { instanceId: instance.id, client: auth.client },
     method: input.method,
     token,
     body: input.body,
@@ -4061,7 +4066,7 @@ async function configureGatewayProviderWebhook(credentials: UazapiCredentials, t
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: {
+  options: { outbound?: WhatsappOutboundScope;
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token?: string;
@@ -4078,7 +4083,7 @@ async function callUazapi(
   });
 
   const startedAt = Date.now();
-  const response = await fetch(url, {
+  const response = await fetchWhatsappOutbound(url, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -4088,7 +4093,7 @@ async function callUazapi(
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  }, options.outbound);
   const data = await readResponse(response);
 
   if (!response.ok && !options.tolerateError) {

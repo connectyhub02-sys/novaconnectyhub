@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { loadGeminiCredentials } from "./credentials";
+import { billableGeminiUnits, estimateTokensFromText, extractGeminiUsageMetadata } from "@/lib/billing/metered-usage";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -38,6 +39,7 @@ export type GeneratedGeminiAudio = {
   modelId: string;
   outputFormat: "wav_24000_16_mono";
   text: string;
+  meteredUsage: { inputTokens: number; outputTokens: number; totalTokens: number; estimated: boolean };
 };
 
 export const geminiTtsVoicePrefix = "gemini:";
@@ -77,13 +79,13 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
 
   const voice = resolveGeminiTtsVoice(input.voiceId, input.voiceName);
   const modelId = input.modelId?.trim() || credentials.ttsModel;
-  const pcmBytes = await requestGeminiPcmAudio({
+  const generation = await requestGeminiPcmAudio({
     apiKey: credentials.apiKey,
     modelId,
     voiceName: voice.voiceName,
     text,
   });
-  const audioBytes = wrapPcmAsWav(pcmBytes);
+  const audioBytes = wrapPcmAsWav(generation.bytes);
   const now = new Date();
   const objectKey = `generated-media/gemini/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.wav`;
   const bypassStorageQuota = isRealtimeWhatsappAudioSource(input.source);
@@ -142,6 +144,7 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
       outputFormat,
       generatedBy: input.userId ?? null,
       generatedAt: now.toISOString(),
+      meteredUsage: generation.usage,
     },
   });
 
@@ -154,6 +157,7 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
     modelId,
     outputFormat,
     text,
+    meteredUsage: generation.usage,
   };
 }
 
@@ -211,6 +215,7 @@ async function requestGeminiPcmAudio(input: {
         },
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(90000),
     });
     const data = await readProviderResponse(response);
 
@@ -218,7 +223,13 @@ async function requestGeminiPcmAudio(input: {
       const base64Audio = extractGeminiInlineAudio(data);
 
       if (base64Audio) {
-        return Uint8Array.from(Buffer.from(base64Audio, "base64"));
+        const bytes = Uint8Array.from(Buffer.from(base64Audio, "base64"));
+        const metadata = extractGeminiUsageMetadata(data);
+        // A fallback remains explicitly marked; audio duration is measured from PCM.
+        const inputTokens = estimateTokensFromText(buildGeminiTtsPrompt(input.text));
+        const outputTokens = Math.ceil(bytes.byteLength / (pcmSampleRate * pcmChannels * pcmSampleWidthBytes) * 25);
+        const usage = metadata ? billableGeminiUnits(metadata) : { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
+        return { bytes, usage: { ...usage, estimated: !metadata } };
       }
 
       lastError = "Gemini respondeu sem audio.";

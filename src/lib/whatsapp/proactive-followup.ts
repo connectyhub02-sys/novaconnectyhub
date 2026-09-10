@@ -1,3 +1,6 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
+import { prepareLeadContact } from "@/lib/automations/lead-contact-preferences";
+import { leadContactMessage, sendLeadContactMessage } from "@/lib/automations/lead-contact-message";
 import "server-only";
 import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { getContractAccess } from "@/lib/billing/contract-access";
@@ -334,18 +337,15 @@ async function executeWhatsappProactiveFollowUp(input: {
   if (latestConversation.data.status !== conversation.data.status || (typeof latestPause === "string" && Date.parse(latestPause) > Date.now())) return { status: "skipped", reason: "human_intervention" };
   const latestLead = await loadLead(client, eventData.leadId, eventData.organizationId);
   if (!latestLead || latestLead.status === "archived" || readRecord(latestLead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(latestLead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
+  const unsubscribeUrl = await prepareLeadContact(client, eventData.organizationId, eventData.leadId);
+  if (!unsubscribeUrl) return { status: "skipped", reason: "lead_opted_out" };
+  const delivery = leadContactMessage(outgoingText, unsubscribeUrl);
   await updateDispatch(client, eventData.dispatchId!, { status: "sending", send_started_at: new Date().toISOString(), lease_until: new Date(Date.now() + 120000).toISOString() }, eventData.claimToken);
-  const providerResponse = await callUazapi(credentials, "/send/text", {
-    method: "POST",
-    token,
-    body: {
-      number: phone,
-      text: outgoingText,
-      linkPreview: false,
-      track_source: "connectyhub",
-      track_id: `followup_${eventData.dispatchId}`,
-    },
-  });
+  const providerResponse = await sendLeadContactMessage(
+    (path, body) => callUazapi(credentials, path, { method: "POST", token, body, outbound: { instanceId: eventData.whatsappInstanceId, client } }),
+    { number: phone, ...delivery, track_source: "connectyhub", track_id: `followup_${eventData.dispatchId}` },
+    async () => Boolean(await prepareLeadContact(client, eventData.organizationId, eventData.leadId)),
+  );
 
   if (!providerResponse.ok) {
     const uncertain = providerResponse.status === 0 || providerResponse.status === 408 || providerResponse.status >= 500;
@@ -364,7 +364,7 @@ async function executeWhatsappProactiveFollowUp(input: {
     provider: "uazapi",
     direction: "outbound",
     message_type: "text",
-    text_content: outgoingText,
+    text_content: delivery.text,
     occurred_at: sentAt,
     payload: {
       delivery_source: "proactive_follow_up",
@@ -666,10 +666,10 @@ async function loadRecentMessages(client: SupabaseClient, conversationId: string
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: { method: "POST"; body: unknown; token: string },
+  options: { outbound?: WhatsappOutboundScope; method: "POST"; body: unknown; token: string },
 ) {
   try {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -679,7 +679,7 @@ async function callUazapi(
     body: JSON.stringify(options.body),
     cache: "no-store",
     signal: AbortSignal.timeout(30000),
-  });
+  }, options.outbound);
   const data = await readProviderResponse(response);
   const record = readRecord(data);
   return { ok: response.ok && record !== null && record.error == null && record.success !== false, status: response.status, data };

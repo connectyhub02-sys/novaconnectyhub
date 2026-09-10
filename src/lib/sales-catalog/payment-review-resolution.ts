@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -39,8 +40,8 @@ export async function sendResolvedPaymentReviewNotices(client: SupabaseClient) {
       if (message.error) throw new Error("RESOLUTION_MESSAGE_SAVE_FAILED");
       await assertContractAccess(review.organization_id, client);
       requested = true;
-      const response = await fetch(`${credentials.baseUrl.replace(/\/$/, "")}/send/text`, { method: "POST", headers: { "Content-Type": "application/json", token },
-        body: JSON.stringify({ number: lead.phone_number, text, track_source: "connectyhub", track_id: `review_resolution_${review.id}`, linkPreview: false }), signal: AbortSignal.timeout(20000) });
+      const response = await fetchWhatsappOutbound(`${credentials.baseUrl.replace(/\/$/, "")}/send/text`, { method: "POST", headers: { "Content-Type": "application/json", token },
+        body: JSON.stringify({ number: lead.phone_number, text, track_source: "connectyhub", track_id: `review_resolution_${review.id}`, linkPreview: false }), signal: AbortSignal.timeout(20000) }, { instanceId: conversation.whatsapp_instance_id, client });
       if (!response.ok) throw new Error("RESOLUTION_DELIVERY_UNCONFIRMED");
       const body = await response.json().catch(() => null);
       if (!body || body.error || body.status === "error") throw new Error("RESOLUTION_DELIVERY_UNCONFIRMED");

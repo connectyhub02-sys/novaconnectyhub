@@ -1,4 +1,6 @@
 import "server-only";
+import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
+import { isExplicitLeadOptOut, leadOptOutButtonReply } from "@/lib/automations/lead-contact-message";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 
 import { createHash } from "node:crypto";
@@ -106,6 +108,22 @@ export async function ingestUazapiWebhook(input: {
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
   const message = extractMessageSnapshot(payload);
   const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
+  if (instance && message.direction === "outbound" && isConversationMessageWebhookEvent(eventType)) {
+    const current = findMessageRecord(payload) ?? payload;
+    const track = findString(current, ["track_id", "trackId"]) ?? findString(readRecord(current.content) ?? {}, ["track_id", "trackId"]);
+    const deliveryId = track?.match(/:delivery:([a-f0-9-]{36})$/i)?.[1];
+    if (deliveryId) {
+      const recorded = await client.from("whatsapp_outbound_deliveries").update({ status:"sent",provider_message_id:message.providerMessageId,updated_at:new Date().toISOString() })
+        .eq("id",deliveryId).eq("organization_id",instance.organization_id).eq("whatsapp_instance_id",instance.id).in("status",["sending","queued","uncertain"]);
+      if (recorded.error) throw new Error("Não foi possível registrar a confirmação de envio.");
+    }
+  }
+  // Apply explicit consent even on a provider retry; duplicate event handling must not swallow it.
+  if (instance && isConversationMessageWebhookEvent(eventType) && message.direction === "inbound" && !message.isGroupChat && message.phoneNumber && isExplicitLeadOptOut(message.textContent)) {
+    const recipient = await client.from("leads").select("id").eq("organization_id", instance.organization_id).eq("phone_number", message.phoneNumber).limit(1).maybeSingle();
+    if (recipient.error) throw new Error("Não foi possível conferir a preferência do lead.");
+    if (recipient.data) await optOutLeadContact(client, instance.organization_id, recipient.data.id, "whatsapp_agent");
+  }
   const payloadHash = hashPayload(payload);
   const eventResult = await insertWebhookEvent(client, {
     eventType,
@@ -249,6 +267,9 @@ export async function ingestUazapiWebhook(input: {
       message,
       payload,
     });
+    // Consent does not depend on an enabled agent, a wallet balance or a human pause.
+    const leadOptOut = message.direction === "inbound" && !message.isGroupChat && lead && isExplicitLeadOptOut(message.textContent);
+    if (leadOptOut) await optOutLeadContact(client, instance.organization_id, lead.id, "whatsapp_agent");
     if (isHumanAuthoredWhatsappMessage(message, payload)) {
       const humanInterventionMinutes = await resolveHumanInterventionMinutesForInstance({
         client,
@@ -257,7 +278,7 @@ export async function ingestUazapiWebhook(input: {
       });
       await markConversationHandledByHuman(client, conversation.id, message, humanInterventionMinutes);
     }
-    const autoResume = message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply
+    const autoResume = !leadOptOut && message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply
       ? await scheduleHumanInterventionAutoResumeForLead({
           client,
           conversationId: conversation.id,
@@ -265,7 +286,7 @@ export async function ingestUazapiWebhook(input: {
           providerMessageId: message.providerMessageId,
         })
       : null;
-    const agentRun = !input.suppressAgentRun && message.direction === "inbound"
+    const agentRun = !leadOptOut && !input.suppressAgentRun && message.direction === "inbound"
       ? await enqueueWhatsappAgentRun(client, {
           organizationId: instance.organization_id,
           leadId: lead?.id ?? null,
@@ -1472,7 +1493,8 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
     || false;
   const textContent =
-    findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
+    leadOptOutButtonReply(messageRecord)
+    ?? findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
     ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
   const outbound = typeof fromMe === "boolean" ? fromMe : sentByApi === true ? true : null;
   const messageType = resolveMessageType(messageRecord);

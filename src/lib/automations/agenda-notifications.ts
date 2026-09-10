@@ -1,3 +1,6 @@
+import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
+import { prepareLeadContact } from "./lead-contact-preferences";
+import { leadContactMessage, sendLeadContactMessage } from "./lead-contact-message";
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -330,6 +333,12 @@ export async function dispatchAgendaNotifications(
       }
       const credentials = await loadUazapiCredentials(client),
         token = decryptCredentialValue(instance.data.instance_token_encrypted);
+      const unsubscribeUrl = n.audience === "lead" ? await prepareLeadContact(client, n.organization_id, c.b.lead_id) : null;
+      if (n.audience === "lead" && !unsubscribeUrl) {
+        await client.from("customer_agenda_notices").update({ status: "skipped", reason: "lead_opted_out" }).eq("id", n.id).eq("claim_token", claimToken);
+        continue;
+      }
+      const delivery = unsubscribeUrl ? leadContactMessage(n.message_text, unsubscribeUrl, choices) : { text: n.message_text, choices };
       const start = await client
         .from("customer_agenda_notices")
         .update({
@@ -345,28 +354,18 @@ export async function dispatchAgendaNotifications(
       if (start.error) throw new Error("delivery_claim_failed");
       if (!start.data) continue;
       sending = true;
-      const response = await fetch(
-        `${credentials.baseUrl}${choices.length ? "/send/menu" : "/send/text"}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", token },
-          body: JSON.stringify({
-            number: n.recipient_phone,
-            text: n.message_text,
-            ...(choices.length
-              ? {
-                  type: "button",
-                  choices,
-                  footerText:
-                    c.agent?.persona_name ?? c.agent?.name ?? "Agenda",
-                }
-              : { linkPreview: false }),
-            track_source: "connectyhub",
-            track_id: `agenda_${n.id}`,
-          }),
-          signal: AbortSignal.timeout(25000),
-        },
-      );
+      const body = {
+        number: n.recipient_phone, ...delivery,
+        footerText: c.agent?.persona_name ?? c.agent?.name ?? "Agenda",
+        track_source: "connectyhub", track_id: `agenda_${n.id}`,
+      };
+      const deliver = (path: string, payload: Record<string, unknown>) => fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
+        method: "POST", headers: { "Content-Type": "application/json", token },
+        body: JSON.stringify(payload), signal: AbortSignal.timeout(25000),
+      }, { instanceId: sender.whatsappInstanceId, client });
+      const response = unsubscribeUrl
+        ? await sendLeadContactMessage(deliver, body, async () => Boolean(await prepareLeadContact(client, n.organization_id, c.b.lead_id)))
+        : await deliver(choices.length ? "/send/menu" : "/send/text", { ...body, ...(choices.length ? { type: "button" } : { linkPreview: false }) });
       const result = await response.json().catch(() => null);
       if (!response.ok || !result || result.error || result.success === false)
         throw new Error("delivery_unconfirmed");
@@ -389,8 +388,8 @@ export async function dispatchAgendaNotifications(
           whatsapp_instance_id: instance.data.id,
           provider: "uazapi",
           direction: "outbound",
-          message_type: choices.length ? "interactive" : "text",
-          text_content: n.message_text,
+          message_type: delivery.choices.length ? "interactive" : "text",
+          text_content: delivery.text,
           occurred_at: new Date().toISOString(),
           payload: {
             delivery_source: "customer_agenda",

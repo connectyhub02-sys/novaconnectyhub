@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 
@@ -3299,9 +3300,7 @@ async function callUazapi(
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
   } satisfies RequestInit;
-  const response = options.timeoutMs
-    ? await fetchWithTimeout(url, fetchInit, options.timeoutMs, `Uazapi ${path}`)
-    : await fetch(url, fetchInit);
+  const response = await fetchWhatsappOutbound(url, { ...fetchInit, ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}) }, { instanceId: context.instance.id });
   const data = options.timeoutMs
     ? await withTimeout(readResponse(response), options.timeoutMs, `Uazapi ${path} leitura da resposta`)
     : await readResponse(response);
@@ -3311,26 +3310,6 @@ async function callUazapi(
   }
 
   return { status: response.status, data };
-}
-
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, label: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
@@ -5711,11 +5690,7 @@ function readProviderError(value: unknown) {
   return findString(value, ["error", "message", "detail"]);
 }
 
-function isAbortError(error: unknown) {
-  return error instanceof DOMException
-    ? error.name === "AbortError"
-    : readRecord(error)?.name === "AbortError";
-}
+
 
 function parseGeminiCampaignDraft(value: string) {
   const cleaned = stripCodeFence(value).trim();

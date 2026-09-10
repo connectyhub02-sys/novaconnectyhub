@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { getContractAccess } from "@/lib/billing/contract-access";
 
@@ -136,6 +137,7 @@ export async function processWhatsappHandoffNotification(input: {
     if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
     try {
       const response = await callUazapi(credentials, "/send/text", {
+      outbound: { instanceId: instance.id, client },
         method: "POST",
         token,
         body: {
@@ -470,13 +472,13 @@ async function loadLead(client: SupabaseClient, leadId: string) {
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: {
+  options: { outbound?: WhatsappOutboundScope;
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token: string;
   },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -485,7 +487,7 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  }, options.outbound);
   const data = await readProviderResponse(response);
 
   if (!response.ok) {

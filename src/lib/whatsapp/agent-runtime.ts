@@ -1,8 +1,10 @@
+import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
+import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { assertContractAccess } from "@/lib/billing/contract-access";
-const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient }>();
+const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
 import { customSoftwareContext } from "./custom-software";
 import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-catalog/checkout-customer";
@@ -19,6 +21,7 @@ import { buildCommerceConversationInstruction, requiresCommerceConversationReply
 import {
   estimateTokensFromText,
   extractGeminiUsageMetadata,
+  billableGeminiUnits,
   meterUsageEvent,
   type GeminiTokenUsage,
   type MeteredUsageResult,
@@ -542,6 +545,8 @@ async function processWhatsappAgentRunWithScope(input: {
   }
 
   const { run, instance, agent, globalAgent, behavior, lead, organization } = context;
+  const outboundScope = outboundBillingScope.getStore();
+  if (outboundScope) outboundScope.instanceId = instance.id;
 
   if (run.run_status !== "queued") {
     return { status: "skipped", reason: `run_${run.run_status}` };
@@ -828,6 +833,7 @@ async function processWhatsappAgentRunWithScope(input: {
     }
 
     if (behavior.detectOptOut && behaviorSignals.some((signal) => signal.type === "whatsapp.lead.opt_out")) {
+      await recordLeadOptOut(client, context);
       const optOutText = "Entendido. Vou respeitar seu pedido e nao seguir com novas mensagens por aqui.";
       const sent = await sendWhatsappText({
         credentials: context.credentials,
@@ -839,7 +845,6 @@ async function processWhatsappAgentRunWithScope(input: {
         mentions: resolveGroupMentions(context, latestInbound),
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_opt_out");
-      await archiveLeadForOptOut(client, context, userText);
       await saveOutboundMessage(client, context, {
         text: optOutText,
         mode: "text",
@@ -1066,6 +1071,14 @@ async function processWhatsappAgentRunWithScope(input: {
 
     await assertRunStillTargetsLatestInbound(client, context, latestInbound);
 
+    const textMetering = await meterWhatsappAgentTextUsage({
+      client, context, response: aiResponse, outboundMessages: 0, userText,
+    }).catch(async (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Falha ao registrar consumo.";
+      await appendRunMeteringError(client, run.id, "chat_completion", message);
+      throw error;
+    });
+
     const outbound = await sendAgentResponse({
       client,
       context,
@@ -1079,18 +1092,6 @@ async function processWhatsappAgentRunWithScope(input: {
         await saveOutboundMessage(client, context, message);
       }
     }
-
-    const textMetering = await meterWhatsappAgentTextUsage({
-      client,
-      context,
-      response: aiResponse,
-      outboundMessages: outbound.length,
-      userText,
-    }).catch(async (error: unknown) => {
-      const message = error instanceof Error ? error.message : "Falha desconhecida ao registrar metering.";
-      await appendRunMeteringError(client, run.id, "chat_completion", message);
-      return null;
-    });
 
     if (behavior.cloneRealTestMode) {
       await persistCloneRealTestTurn(client, context, {
@@ -14915,29 +14916,12 @@ async function persistHumanHandoffEvent(
   });
 }
 
-async function archiveLeadForOptOut(
+async function recordLeadOptOut(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
-  userText: string,
 ) {
-  if (!context.lead?.id) {
-    return;
-  }
-
-  await client
-    .from("leads")
-    .update({
-      status: "archived",
-      metadata: {
-        ...(context.lead.metadata ?? {}),
-        opt_out: {
-          requested_at: new Date().toISOString(),
-          source: "whatsapp_agent",
-          text: preview(userText, 500),
-        },
-      },
-    })
-    .eq("id", context.lead.id);
+  if (!context.lead?.id) return;
+  await optOutLeadContact(client, context.organization.id, context.lead.id, "whatsapp_agent");
 }
 
 async function claimRun(client: SupabaseClient, runId: string): Promise<boolean> {
@@ -15623,9 +15607,10 @@ async function meterWhatsappAgentTextUsage(input: {
   userText: string;
 }): Promise<MeteredUsageResult> {
   const usage = input.response.usage;
-  const outputTokens = usage?.outputTokens ?? estimateTokensFromText(input.response.text);
-  const inputTokens = usage?.inputTokens ?? estimateTokensFromText(buildMeteringPromptEstimate(input.context, input.userText));
-  const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens;
+  const billed = usage ? billableGeminiUnits(usage) : null;
+  const outputTokens = billed?.outputTokens ?? estimateTokensFromText(input.response.text);
+  const inputTokens = billed?.inputTokens ?? estimateTokensFromText(buildMeteringPromptEstimate(input.context, input.userText));
+  const totalTokens = inputTokens + outputTokens;
 
   return meterUsageEvent(input.client, {
     organizationId: input.context.organization.id,
@@ -15718,6 +15703,7 @@ function serializeGeminiUsage(usage: GeminiTokenUsage | null | undefined) {
     totalTokens: usage.totalTokens,
     cachedTokens: usage.cachedTokens,
     thoughtsTokens: usage.thoughtsTokens,
+    toolInputTokens: usage.toolInputTokens,
     raw: usage.raw,
   };
 }
@@ -15743,6 +15729,7 @@ function readCachedGeminiUsage(value: unknown): GeminiTokenUsage | null {
     totalTokens,
     cachedTokens: asNumber(record.cachedTokens) ?? 0,
     thoughtsTokens: asNumber(record.thoughtsTokens) ?? 0,
+    toolInputTokens: asNumber(record.toolInputTokens) ?? undefined,
     raw: readRecord(record.raw) ?? {},
   };
 }
@@ -16163,9 +16150,7 @@ async function callUazapi(
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
   } satisfies RequestInit;
-  const response = options.timeoutMs
-    ? await fetchWithTimeout(`${credentials.baseUrl}${path}`, fetchInit, options.timeoutMs, `Uazapi ${path}`)
-    : await fetch(`${credentials.baseUrl}${path}`, fetchInit);
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, { ...fetchInit, ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}) }, scope?.instanceId ? { instanceId: scope.instanceId, client: scope.client } : undefined);
   const data = options.timeoutMs
     ? await withTimeout(readProviderResponse(response), options.timeoutMs, `Uazapi ${path} leitura da resposta`)
     : await readProviderResponse(response);

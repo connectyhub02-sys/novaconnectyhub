@@ -23,7 +23,7 @@ export type GenerateConnectyVoiceAudioInput = {
   client?: SupabaseClient;
 };
 
-export type GeneratedConnectyVoiceAudio = (GeneratedElevenLabsAudio | GeneratedGeminiAudio) & {
+export type GeneratedConnectyVoiceAudio = (GeneratedElevenLabsAudio | Omit<GeneratedGeminiAudio, "meteredUsage">) & {
   usageEventId?: string | null;
   billingMode?: UsageBillingMode | null;
   chargeCredits?: number | null;
@@ -65,15 +65,6 @@ export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAud
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha desconhecida ao registrar metering de audio.";
     await appendGeneratedMediaMeteringError(client, generated.mediaId, message);
-    if (isRealtimeWhatsappAudioSource(input.source)) {
-      return {
-        ...generated,
-        usageEventId: null,
-        billingMode: null,
-        chargeCredits: null,
-        meteringError: message,
-      };
-    }
     throw error;
   }
 
@@ -87,7 +78,14 @@ export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAud
   }
 
   return {
-    ...generated,
+    mediaId: generated.mediaId,
+    audioUrl: generated.audioUrl,
+    objectKey: generated.objectKey,
+    bytesSize: generated.bytesSize,
+    voiceId: generated.voiceId,
+    modelId: generated.modelId,
+    outputFormat: generated.outputFormat,
+    text: generated.text,
     usageEventId: metering.usageEventId ?? null,
     billingMode: metering.billingMode ?? null,
     chargeCredits: metering.chargeCredits ?? null,
@@ -103,12 +101,13 @@ async function meterVoiceUsage(
 ) {
   const metadata = readRecord(input.metadata) ?? {};
   const characters = generated.text.length;
+  const audioUsage = "meteredUsage" in generated ? generated.meteredUsage : null;
 
   return meterUsageEvent(client, {
     organizationId: input.organizationId,
     userId: input.userId ?? null,
     provider,
-    featureCode: resolveVoiceFeatureCode(input.source),
+    featureCode: provider === "gemini" ? "voice_generation_audio" : resolveVoiceFeatureCode(input.source),
     modelId: generated.modelId,
     agentId: readString(metadata.agentId),
     agentRunId: readString(metadata.agentRunId),
@@ -117,7 +116,11 @@ async function meterVoiceUsage(
     agentScope: readAgentScope(metadata.agentScope),
     billingMode: readBillingMode(metadata.billingMode),
     characters,
-    outputUnits: characters,
+    inputUnits: audioUsage?.inputTokens,
+    outputUnits: audioUsage?.outputTokens ?? characters,
+    inputTokens: audioUsage?.inputTokens,
+    outputTokens: audioUsage?.outputTokens,
+    totalTokens: audioUsage?.totalTokens,
     requestId: `voice:${provider}:${generated.mediaId ?? generated.objectKey}`,
     debitDescription: "Audio de agente ConnectyHub",
     metadata: {
@@ -129,6 +132,7 @@ async function meterVoiceUsage(
       voiceId: generated.voiceId,
       outputFormat: generated.outputFormat,
       characters,
+      audioUsage,
     },
   });
 }
@@ -176,13 +180,6 @@ function resolveVoiceProvider(source: string | null | undefined, voiceId: string
 function resolveVoiceFeatureCode(source: string | null | undefined) {
   const normalizedSource = source?.trim().toLowerCase() ?? "";
   return normalizedSource.includes("whatsapp") ? "voice_reply_whatsapp" : "text_to_speech";
-}
-
-function isRealtimeWhatsappAudioSource(value: string | null | undefined) {
-  const source = value?.trim().toLowerCase();
-  return source === "whatsapp_agent"
-    || source === "whatsapp_test"
-    || source === "whatsapp_internal_test";
 }
 
 function readRecord(value: unknown): JsonRecord | null {

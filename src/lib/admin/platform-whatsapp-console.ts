@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1109,6 +1110,7 @@ export async function sendPlatformWhatsappConsoleTest(input: {
     });
 
     await callUazapi(credentials, "/send/media", {
+      outbound: { instanceId: instance.id, client },
       method: "POST",
       token,
       timeoutMs: outboundAudioDeliveryTimeoutMs,
@@ -1122,6 +1124,7 @@ export async function sendPlatformWhatsappConsoleTest(input: {
     });
   } else {
     await callUazapi(credentials, "/send/text", {
+      outbound: { instanceId: instance.id, client },
       method: "POST",
       token,
       body: {
@@ -2383,7 +2386,7 @@ async function getConnectedAvatarData(credentials: UazapiCredentials, token: str
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: {
+  options: { outbound?: WhatsappOutboundScope;
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token?: string;
@@ -2403,9 +2406,7 @@ async function callUazapi(
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
   } satisfies RequestInit;
-  const response = options.timeoutMs
-    ? await fetchWithTimeout(`${credentials.baseUrl}${path}`, fetchInit, options.timeoutMs, `Uazapi ${path}`)
-    : await fetch(`${credentials.baseUrl}${path}`, fetchInit);
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, { ...fetchInit, ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}) }, options.outbound);
   const data = options.timeoutMs
     ? await withTimeout(readResponse(response), options.timeoutMs, `Uazapi ${path} leitura da resposta`)
     : await readResponse(response);
@@ -2419,26 +2420,6 @@ async function callUazapi(
     status: response.status,
     data,
   };
-}
-
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, label: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
@@ -2837,11 +2818,7 @@ function readProviderError(value: unknown) {
   return findString(value, ["error", "message", "detail"]);
 }
 
-function isAbortError(error: unknown) {
-  return error instanceof DOMException
-    ? error.name === "AbortError"
-    : readRecord(error)?.name === "AbortError";
-}
+
 
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;

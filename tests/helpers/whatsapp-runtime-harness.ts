@@ -50,6 +50,10 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   const money = { exports: {} };
   runInNewContext(currency, { module: money, exports: money.exports, require: () => ({}), process, URL });
   const imports: Record<string, unknown> = {
+    "@/lib/whatsapp/outbound-delivery": { fetchWhatsappOutbound: (url: unknown, init: unknown) => {
+      if (typeof globals.fetch !== "function") throw new Error("HTTP mock required for outbound transport");
+      return globals.fetch(url, init);
+    } },
     "@/lib/sales-catalog/payment-evidence": paymentEvidence,
     "@/lib/sales-catalog/payment-reviews": serverModuleHarness("src/lib/sales-catalog/payment-reviews.ts"),
     "@/lib/sales-catalog/checkout-customer": customer,
@@ -70,7 +74,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   };
   runInNewContext(compiled, {
     module: runtimeModule, exports: runtimeModule.exports, require: (name: string) => imports[name] ?? {},
-    URL, Date, Buffer, process, setTimeout, clearTimeout, AbortController,
+    URL, Date, Buffer, process, setTimeout, clearTimeout, AbortController, AbortSignal,
     fetch: () => { throw new Error("Unexpected external request in runtime test"); },
     ...globals,
   });

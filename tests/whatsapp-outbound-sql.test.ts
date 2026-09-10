@@ -1,0 +1,41 @@
+import { PGlite } from "@electric-sql/pglite";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { expect,it } from "vitest";
+it("commits every outbound to the lead archive, isolates companies and records clicks atomically",async()=>{
+ const db=new PGlite();
+ try{
+  await db.exec(`create role anon;create role authenticated;create role service_role;
+   create table organizations(id uuid primary key);
+   create table whatsapp_instances(id uuid primary key,organization_id uuid);
+   create table leads(id uuid primary key default gen_random_uuid(),organization_id uuid,channel text,phone_number text,source text,metadata jsonb default '{}',unique(organization_id,channel,phone_number));
+   create table conversations(id uuid primary key,organization_id uuid,lead_id uuid,whatsapp_instance_id uuid,provider_chat_id text,updated_at timestamptz default now());
+   create table conversation_messages(id uuid primary key,organization_id uuid,lead_id uuid,created_at timestamptz default now());
+   create table lead_files(id uuid primary key);
+   create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint);
+   create table sales_catalog_orders(id uuid primary key,organization_id uuid,lead_id uuid);
+   create table intelligence_events(scope text,organization_id uuid,source_type text,source_id uuid,event_type text,title text,summary text,visibility text,tags text[],payload jsonb);`);
+  await db.exec(readFileSync("supabase/migrations/0081_lead_journey_archive.sql","utf8"));
+  await db.exec(readFileSync("supabase/migrations/0124_whatsapp_outbound_tracking_archive.sql","utf8"));
+  const org=randomUUID(),foreign=randomUUID(),instance=randomUUID(),other=randomUUID(),delivery=randomUUID(),foreignDelivery=randomUUID(),key=randomUUID();
+  await db.query("insert into organizations values($1),($2)",[org,foreign]);await db.query("insert into whatsapp_instances values($1,$2),($3,$4)",[instance,org,other,foreign]);
+  const reserve=async(id:string,from:string)=>db.query<{result:{lead_id:string;organization_id:string}}>("select prepare_whatsapp_outbound($1,$2,'5511999999999','/send/text','test','text','Olá',$3) result",[id,from,{text:"Olá",password:"never archive"}]);
+  const result=(await reserve(delivery,instance)).rows[0].result;
+  const second=(await reserve(foreignDelivery,other)).rows[0].result;
+  expect(result.organization_id).toBe(org);expect(second.lead_id).not.toBe(result.lead_id);
+  let archived=await db.query<{operation:string;snapshot:Record<string,unknown>}>("select operation,snapshot from lead_message_archive where lead_id=$1",[result.lead_id]);
+  expect(archived.rows).toHaveLength(1);expect(archived.rows[0].operation).toBe("outbound_prepared");expect(JSON.stringify(archived.rows)).not.toContain("never archive");
+  await db.query("update whatsapp_outbound_deliveries set status='sent',provider_message_id='receipt' where id=$1",[delivery]);
+  archived=await db.query("select operation,snapshot from lead_message_archive where lead_id=$1",[result.lead_id]);
+  expect(archived.rows).toHaveLength(2);expect(archived.rows[1].snapshot).toMatchObject({provider_message_id:"receipt",payload:{delivery_status:"sent"}});
+  await db.query("update leads set metadata=$2 where id=$1",[result.lead_id,{opt_out:true,customer_note:"preserve"}]);
+  expect((await reserve(randomUUID(),instance)).rows[0].result.lead_id).toBe(result.lead_id);
+  expect((await db.query("select metadata from leads where id=$1",[result.lead_id])).rows[0]).toEqual({metadata:{opt_out:true,customer_note:"preserve"}});
+  await db.query("insert into whatsapp_outbound_links(id,delivery_id,organization_id,lead_id,target_url,label) values($1,$2,$3,$4,'https://checkout.invalid/pay?sig=exact','Pagar')",[key,delivery,org,result.lead_id]);
+  for(let i=0;i<2;i++)expect((await db.query("select record_whatsapp_outbound_click($1) target",[key])).rows[0]).toEqual({target:"https://checkout.invalid/pay?sig=exact"});
+  expect((await db.query("select click_count from whatsapp_outbound_links where id=$1",[key])).rows[0]).toEqual({click_count:2});
+  expect((await db.query("select organization_id,payload from intelligence_events where event_type='tracked_link.clicked'")).rows).toEqual([1,2].map(()=>({organization_id:org,payload:{lead_id:result.lead_id,outbound_delivery_id:delivery,tracking_link_id:key,label:"Pagar"}})));
+  expect((await db.query("select has_table_privilege('anon','whatsapp_outbound_links','SELECT') readable,has_function_privilege('authenticated','record_whatsapp_outbound_click(uuid)','EXECUTE') callable")).rows[0]).toEqual({readable:false,callable:false});
+  await expect(reserve(randomUUID(),randomUUID())).rejects.toThrow("OUTBOUND_INSTANCE_REQUIRED");
+ }finally{await db.close();}
+},30000);

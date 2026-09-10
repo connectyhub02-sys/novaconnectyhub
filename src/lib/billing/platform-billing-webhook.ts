@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { expandPlatformBillingReference } from "./payment-reference";
 import { planDiscountNotice } from "./plan-discounts";
@@ -2156,6 +2157,7 @@ async function sendBillingNotificationNow(
         dispatched = true;
         try {
           return await sendBillingWhatsappNotice({
+            outbound: { instanceId: selected.instance.id, client },
             credentials,
             token,
             phone: input.phone,
@@ -2270,6 +2272,7 @@ async function loadBillingNotificationDeliveryContext(client: SupabaseClient, ev
 }
 
 async function sendBillingWhatsappNotice(input: {
+  outbound: WhatsappOutboundScope;
   credentials: UazapiCredentials;
   token: string;
   phone: string;
@@ -2286,7 +2289,7 @@ async function sendBillingWhatsappNotice(input: {
       ? `${input.message}\n\nAbrir no painel: ${input.button.url}` : input.message;
     const text = noticeActionsMessage(baseMessage, input.actions);
     try {
-      const providerResponse = await callUazapi(input.credentials, "/send/menu", {
+      const providerResponse = await callUazapi(input.credentials, "/send/menu", { outbound: input.outbound,
         method: "POST", token: input.token, body: {
           number: input.phone, type: "button", text,
           choices: noticeActionChoices(input.actions, input.button, input.pixCode),
@@ -2297,7 +2300,7 @@ async function sendBillingWhatsappNotice(input: {
     } catch (error) {
       if (!(error instanceof BillingNoticeProviderError && error.definitive && [400, 404, 405, 422].includes(error.status ?? 0))) throw error;
       const message = `${text}${input.button && !text.includes(input.button.url) ? `\n\nAbrir no painel: ${input.button.url}` : ""}${input.pixCode ? `\n\nPix copia e cola:\n${input.pixCode}` : ""}`;
-      const providerResponse = await callUazapi(input.credentials, "/send/text", { method: "POST", token: input.token, body: { number: input.phone, text: message, linkPreview: false, track_source: "connectyhub", track_id: `${input.trackId}_fallback` } });
+      const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound, method: "POST", token: input.token, body: { number: input.phone, text: message, linkPreview: false, track_source: "connectyhub", track_id: `${input.trackId}_fallback` } });
       return { providerResponse, deliveryMode: "text_fallback", message, button: input.button, fallbackError: error.message };
     }
   }
@@ -2306,7 +2309,7 @@ async function sendBillingWhatsappNotice(input: {
     // The total is the invoice amount after discounts/add-ons, never the plan's list price.
     const message = `${input.message}\n\nCopie o Pix pelo botão ou abra os dados da cobrança para acessar o checkout ConnectyHub.`;
     try {
-      const providerResponse = await callUazapi(input.credentials, "/send/request-payment", {
+      const providerResponse = await callUazapi(input.credentials, "/send/request-payment", { outbound: input.outbound,
         method: "POST",
         token: input.token,
         body: {
@@ -2338,7 +2341,7 @@ async function sendBillingWhatsappNotice(input: {
       : buildCheckoutButtonMessage(input.message, input.button.url);
 
     try {
-      const providerResponse = await callUazapi(input.credentials, "/send/menu", {
+      const providerResponse = await callUazapi(input.credentials, "/send/menu", { outbound: input.outbound,
         method: "POST",
         token: input.token,
         body: {
@@ -2365,7 +2368,7 @@ async function sendBillingWhatsappNotice(input: {
       if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
       const fallbackError = [paymentRequestError, error.message].filter(Boolean).join("; ");
       const fallbackMessage = input.pixCode ? `${input.message}${input.message.includes(input.button.url) ? "" : `\n\nFinalizar no checkout: ${input.button.url}`}\n\nPix copia e cola:\n${input.pixCode}` : input.message;
-      const providerResponse = await callUazapi(input.credentials, "/send/text", {
+      const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound,
         method: "POST",
         token: input.token,
         body: {
@@ -2387,7 +2390,7 @@ async function sendBillingWhatsappNotice(input: {
     }
   }
 
-  const providerResponse = await callUazapi(input.credentials, "/send/text", {
+  const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound,
     method: "POST",
     token: input.token,
     body: {
@@ -2545,13 +2548,13 @@ class BillingNoticeProviderError extends Error {
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: {
+  options: { outbound?: WhatsappOutboundScope;
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token?: string;
   },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -2560,7 +2563,7 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  }, options.outbound);
   const data = await readResponse(response);
 
   if (!response.ok) {

@@ -19,9 +19,9 @@ export async function POST(request: Request) {
     if (!result.stream) return NextResponse.json(result.response, { headers });
     // Buffered SSE: account for the complete provider result before delivering
     // chunks. Disconnects/replays cannot orphan a partially charged response.
-    const response = result.response as { id: string; created: number; model: string; choices: Array<{ message: { content: string }; finish_reason: string }>; connectyhub: unknown };
+    const response = result.response as { id: string; created: number; model: string; choices: Array<{ message: { content: string; tool_calls?: unknown[] }; finish_reason: string }>; connectyhub: unknown };
     const chunk = { id: response.id, object: "chat.completion.chunk", created: response.created, model: response.model };
-    const stream = `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: response.choices[0].message.content }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: response.choices[0].finish_reason }], connectyhub: response.connectyhub })}\n\ndata: [DONE]\n\n`;
+    const stream = `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: response.choices[0].message.content, ...(response.choices[0].message.tool_calls ? {tool_calls:response.choices[0].message.tool_calls} : {}) }, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: response.choices[0].finish_reason }], connectyhub: response.connectyhub })}\n\ndata: [DONE]\n\n`;
     return new Response(stream, { headers: { ...headers, "Content-Type": "text/event-stream; charset=utf-8" } });
   } catch (error) {
     const status = error instanceof AiApiError ? error.status : statusForAccessControlError(error, 503);

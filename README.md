@@ -71,11 +71,14 @@ Use `npm run api:audit` depois de mudar rotas `/api/v1/*` ou o proxy de provider
 
 - Documentação pública unificada: https://www.connectyhub.com.br/docs/api#ia
 - OpenAPI JSON de IA: https://www.connectyhub.com.br/docs/api/ia/openapi.json
+- Guia público completo para download: https://www.connectyhub.com.br/docs/api/ia/guide.md
 - Guia para sistemas externos: [docs/guia-integracao-api-llm.md](docs/guia-integracao-api-llm.md)
 - Verificação operacional: [docs/auditoria-api-llm-2026-09-09.md](docs/auditoria-api-llm-2026-09-09.md)
 - Base direta: `https://www.connectyhub.com.br/api/v1/ai`
 
 A API de IA usa chaves próprias e um subconjunto do formato Chat Completions. Sua especificação está em `src/lib/ai-api/openapi.ts`; os arquivos OpenAPI da seção anterior documentam WhatsApp. `/docs/ia` redireciona para a seção de IA na referência unificada.
+
+A referência de recursos, exemplos e disponibilidade usa `src/lib/ai-api/documentation.ts` como fonte comum da página e do download Markdown. Após alterar o conteúdo, execute `node scripts/generate-ai-guide.mjs` para atualizar o guia compartilhável em `docs/guia-integracao-api-llm.md`. A versão 1.4 acrescenta geração de mídia, Interações, pesquisa, mapas, lotes, cache, indexação, agentes especializados, ambientes e sessões em tempo real, com medição e débito na carteira por operação. O catálogo inclui 55 modelos; a liberação exige acesso e tarifas para as dimensões do recurso. Aplicar as migrações até 0128 e seguir [o relatório de integrações e cobrança](docs/integracoes-ia-creditos-2026-09-10.md).
 
 ## Seguranca
 
@@ -97,3 +100,5 @@ npm audit --omit=dev
 ```
 
 O audit pode listar vulnerabilidades transitivas do pacote `next` enquanto nao houver versao upstream corrigida. Documente o resultado no release quando isso acontecer.
+
+A revisão 1.3.1 documenta recursos e créditos. A auditoria identificou respostas sem tarifa e corrigiu medição, preservação de débitos e conciliação. Aplicar também a migração 0127 junto ao código: [auditoria de recursos e créditos](docs/auditoria-creditos-recursos-ia-2026-09-10.md).

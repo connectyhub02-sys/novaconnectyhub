@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import { NextResponse, type NextRequest } from "next/server";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -166,6 +167,7 @@ export async function POST(request: NextRequest) {
   const originSource = isPlatformAdmin ? "connectyhub_admin_human" : "connectyhub_dashboard_human";
   const trackId = `${isPlatformAdmin ? "admin" : "dashboard"}_human_reply_${conversation.id}_${Date.now()}`;
   const providerResponse = await sendUazapiText({
+    outbound: { instanceId: instance.id, client },
     credentials,
     token,
     number: recipient,
@@ -395,6 +397,7 @@ async function loadLead(client: ReturnType<typeof createServiceClient>, leadId: 
 }
 
 async function sendUazapiText(input: {
+  outbound: WhatsappOutboundScope;
   credentials: UazapiCredentials;
   token: string;
   number: string;
@@ -403,7 +406,7 @@ async function sendUazapiText(input: {
   trackId: string;
 }) {
   const startedAt = Date.now();
-  const response = await fetch(`${input.credentials.baseUrl}/send/text`, {
+  const response = await fetchWhatsappOutbound(`${input.credentials.baseUrl}/send/text`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -418,7 +421,7 @@ async function sendUazapiText(input: {
       track_id: input.trackId,
     }),
     cache: "no-store",
-  });
+  }, input.outbound);
 
   return {
     ok: response.ok,

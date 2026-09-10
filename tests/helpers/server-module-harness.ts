@@ -13,6 +13,10 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
       if (name in imports) return imports[name];
+      if (name.endsWith("/outbound-delivery")) return { fetchWhatsappOutbound: (url: unknown, init: unknown) => {
+        if (typeof globals.fetch !== "function") throw new Error("HTTP mock required for outbound transport");
+        return globals.fetch(url, init);
+      } };
       return {};
     }, URL, Date, Buffer, process, console, AbortSignal, ...globals,
   });

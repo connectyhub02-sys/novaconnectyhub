@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { AiApiDocs, AiDocsSidePanel, aiDocSections, isAiDocSection } from "./ai-api-docs";
+import { AiApiDocs, AiDocsSidePanel, AiDocsNavigation, isAiDocSection } from "./ai-api-docs";
 import {
   BookOpen,
   CheckCircle2,
@@ -130,7 +130,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
             <a href="#whatsapp" onClick={() => setSelected({ type: "overview" })} aria-current={!aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${!aiSection ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-white/10 text-slate-400 hover:text-white"}`}><Webhook className="h-4 w-4 shrink-0" />WhatsApp</a>
             <a href="#ia" aria-current={aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${aiSection ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-100" : "border-white/10 text-slate-300 hover:text-white"}`}><Sparkles className="h-4 w-4 shrink-0" />IA / LLM</a>
           </nav>
-          {aiSection ? <nav aria-label="Seções da API de IA" className="space-y-1">{aiDocSections.map(section => <a key={section.id} href={`#${section.id}`} aria-current={aiSection === section.id ? "page" : undefined} className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm ${aiSection === section.id ? "bg-emerald-300/10 font-bold text-emerald-100" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>{"method" in section ? <span className="rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-emerald-200">{section.method}</span> : <BookOpen className="h-4 w-4 shrink-0" />}{section.label}</a>)}<a href="/docs/api/ia/openapi.json" download="connectyhub-ia-openapi.json" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-emerald-200 hover:bg-white/5"><FileJson className="h-4 w-4 shrink-0" />Baixar JSON de IA / LLM</a></nav> : null}
+          {aiSection ? <AiDocsNavigation selected={aiSection} /> : null}
           <div hidden={Boolean(aiSection)}>
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
             <Search className="h-4 w-4 text-slate-500" />
@@ -270,7 +270,7 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
           A API WhatsApp combina as rotas nativas da ConnectyHub com o catalogo avancado permitido. O cliente usa
           a nossa chave, o nosso endpoint e o instanceId publico; a ConnectyHub faz a ponte e registra a auditoria.
         </p>
-        <a href="#ia" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-100 hover:bg-emerald-300/20"><Sparkles className="h-4 w-4" />Procurando geração de texto e imagens? Ver API de IA / LLM</a>
+        <a href="#ia" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-100 hover:bg-emerald-300/20"><Sparkles className="h-4 w-4" />Procurando geração de texto e análise de imagens? Ver API de IA / LLM</a>
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">

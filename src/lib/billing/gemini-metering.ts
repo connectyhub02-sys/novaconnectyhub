@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UsageAgentScope, UsageBillingMode } from "@/lib/billing/cost-center";
 import {
   estimateTokensFromText,
+  billableGeminiUnits,
   extractGeminiUsageMetadata,
   meterUsageEvent,
   type GeminiTokenUsage,
@@ -42,9 +43,10 @@ export async function meterGeminiGenerationUsage(input: MeterGeminiGenerationInp
   const usage = input.usage ?? extractGeminiUsageMetadata(input.responseData);
   const promptText = joinText(input.promptText);
   const outputText = joinText(input.outputText);
-  const inputTokens = usage?.inputTokens ?? estimateTokensFromText(promptText);
-  const outputTokens = usage?.outputTokens ?? estimateTokensFromText(outputText);
-  const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens;
+  const billed = usage ? billableGeminiUnits(usage) : null;
+  const inputTokens = billed?.inputTokens ?? estimateTokensFromText(promptText);
+  const outputTokens = billed?.outputTokens ?? estimateTokensFromText(outputText);
+  const totalTokens = inputTokens + outputTokens;
 
   return meterUsageEvent(input.client, {
     organizationId: input.organizationId ?? null,
@@ -100,6 +102,7 @@ function serializeGeminiUsage(usage: GeminiTokenUsage) {
     totalTokens: usage.totalTokens,
     cachedTokens: usage.cachedTokens,
     thoughtsTokens: usage.thoughtsTokens,
+    toolInputTokens: usage.toolInputTokens,
     raw: usage.raw,
   };
 }

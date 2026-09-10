@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { callUazapiOperation, getUazapiConfig, UazapiRequestError } from "@/lib/uazapi/client";
 import { getUazapiCategories, getUazapiOperation, uazapiOperations } from "@/lib/uazapi/operations";
+import { createServiceClient } from "@/lib/supabase/service";
+import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,7 @@ type ExecuteBody = {
   payload?: unknown;
   query?: unknown;
   instanceTokenOverride?: unknown;
+  whatsappInstanceId?: unknown;
 };
 
 export async function GET() {
@@ -40,7 +43,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: "Operacao Uazapi nao encontrada" }, { status: 404 });
   }
 
-  if (requiresInternalKey(operation.auth) && !isAuthorizedInternalRequest(request)) {
+  const sendsMessage = operation.path.startsWith("/send/") || ["/sender/simple", "/sender/advanced"].includes(operation.path);
+  if ((sendsMessage || requiresInternalKey(operation.auth)) && !isAuthorizedInternalRequest(request)) {
     return Response.json(
       {
         ok: false,
@@ -52,14 +56,32 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // A caller-supplied token cannot establish which organization's lead file to use.
+    let instanceTokenOverride = typeof body.instanceTokenOverride === "string" ? body.instanceTokenOverride : undefined;
+    let outbound;
+    if (sendsMessage) {
+      if (typeof body.whatsappInstanceId !== "string" || !/^[0-9a-f-]{36}$/i.test(body.whatsappInstanceId)) {
+        return Response.json({ ok: false, error: "whatsappInstanceId é obrigatório para registrar o envio no arquivo do lead." }, { status: 400 });
+      }
+      const client = createServiceClient();
+      const { data: instance, error } = await client.from("whatsapp_instances")
+        .select("id, instance_token_encrypted").eq("id", body.whatsappInstanceId).maybeSingle();
+      if (error || !instance?.instance_token_encrypted) {
+        return Response.json({ ok: false, error: "Instância cadastrada com credencial segura não encontrada." }, { status: 400 });
+      }
+      const savedToken = decryptCredentialValue(instance.instance_token_encrypted);
+      if (instanceTokenOverride && instanceTokenOverride !== savedToken) {
+        return Response.json({ ok: false, error: "A credencial não corresponde à instância informada." }, { status: 400 });
+      }
+      instanceTokenOverride = savedToken;
+      outbound = { instanceId: instance.id, client, source: "internal-operation" };
+    }
     const result = await callUazapiOperation({
       operationId: body.operationId,
       payload: body.payload,
       query: isPlainRecord(body.query) ? normalizeQuery(body.query) : undefined,
-      instanceTokenOverride:
-        typeof body.instanceTokenOverride === "string" && body.instanceTokenOverride.length > 0
-          ? body.instanceTokenOverride
-          : undefined,
+      instanceTokenOverride,
+      outbound,
     });
 
     return Response.json(result);

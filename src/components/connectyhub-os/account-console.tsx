@@ -1521,9 +1521,19 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 function usageFeatureLabel(featureCode: string | null) {
   const labels: Record<string, string> = {
-    external_ai: "Resposta no projeto de IA",
+      external_ai: "Resposta no projeto de IA",
+      external_ai_generation: "Conteúdo gerado pela API",
+      external_ai_video: "Vídeo gerado pela API",
+      external_ai_music: "Música gerada pela API",
+      external_ai_batch: "Lote processado pela API",
+      external_ai_cache: "Contexto armazenado pela API",
+      external_ai_indexing: "Arquivo indexado pela API",
+      external_ai_interaction: "Interação e ferramentas da API",
+      external_ai_live: "Sessão de IA em tempo real",
+      external_ai_agent: "Agente especializado da API",
     chat_completion: "Resposta do agente",
     voice_reply_whatsapp: "Resposta por audio",
+    voice_generation_audio: "Voz gerada",
     text_to_speech: "Audio gerado",
     audio_transcription: "Transcricao de audio",
     media_image_analysis: "Leitura de imagem",

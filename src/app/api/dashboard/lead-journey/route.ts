@@ -10,28 +10,29 @@ async function authorize(companyId: string, leadId: string) {
   if (!workspace || !uuid.test(companyId) || !uuid.test(leadId)) throw new Error("ACCESS_DENIED");
   const client = createServiceClient();
   const company = workspace.profile.isPlatformAdmin ? null : await requireClientCompanyAccess({ client, companyId, userId: workspace.user.id });
-  const lead = await client.from("leads").select("id").eq("id", leadId).eq("organization_id", companyId).maybeSingle();
+  const lead = await client.from("leads").select("id,metadata").eq("id", leadId).eq("organization_id", companyId).maybeSingle();
   if (!lead.data) throw new Error("ACCESS_DENIED");
-  return { client, workspace, canResolve: workspace.profile.isPlatformAdmin || ["owner", "admin"].includes(company?.role ?? "") };
+  return { client, workspace, contactPreference: { optedOut: lead.data.metadata?.whatsapp_opt_out === true || Boolean(lead.data.metadata?.opt_out?.requested_at), requestedAt: lead.data.metadata?.opt_out?.requested_at ?? null, source: lead.data.metadata?.opt_out?.source ?? null }, canResolve: workspace.profile.isPlatformAdmin || ["owner", "admin"].includes(company?.role ?? "") };
 }
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const companyId = params.get("companyId") ?? "", leadId = params.get("leadId") ?? "";
   try {
-    const { client, canResolve } = await authorize(companyId, leadId);
+    const { client, canResolve, contactPreference } = await authorize(companyId, leadId);
     let archiveQuery = client.from("lead_message_archive").select("id, message_id, operation, created_at, media_status, last_error, snapshot").eq("organization_id", companyId).eq("lead_id", leadId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(26);
     const cursor = params.get("cursor");
     if (cursor) {
       const [at, id] = cursor.split("|");
       if (!Number.isNaN(Date.parse(at)) && uuid.test(id ?? "")) archiveQuery = archiveQuery.or(`created_at.lt.${new Date(at).toISOString()},and(created_at.eq.${new Date(at).toISOString()},id.lt.${id})`);
     }
-    const [reviews, archive] = await Promise.all([
+    const [reviews, archive, links] = await Promise.all([
       client.from("sales_catalog_payment_reviews").select("id, order_id, status, notification_status, requested_at, resolved_at, resolution, verification_reference, resolution_notice_state").eq("organization_id", companyId).eq("lead_id", leadId).order("requested_at", { ascending: false }).limit(50), archiveQuery,
+      client.from("whatsapp_outbound_links").select("id,label,click_count,last_clicked_at,created_at").eq("organization_id",companyId).eq("lead_id",leadId).order("created_at",{ascending:false}).limit(50),
     ]);
-    if (reviews.error || archive.error) throw new Error("READ_FAILED");
+    if (reviews.error || archive.error || links.error) throw new Error("READ_FAILED");
     const rows = (archive.data ?? []).slice(0, 25);
     const last = rows[rows.length - 1];
-    return NextResponse.json({ canResolve, reviews: reviews.data, archive: rows.map(row => ({ ...row, snapshot: undefined, text: row.snapshot?.text_content ?? null, direction: row.snapshot?.direction, messageType: row.snapshot?.message_type })), cursor: (archive.data?.length ?? 0) > 25 && last ? `${last.created_at}|${last.id}` : null }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ canResolve, contactPreference, links: links.data, reviews: reviews.data, archive: rows.map(row => ({ ...row, snapshot: undefined, text: row.snapshot?.text_content ?? null, direction: row.snapshot?.direction, messageType: row.snapshot?.message_type, deliveryStatus: row.snapshot?.payload?.delivery_status })), cursor: (archive.data?.length ?? 0) > 25 && last ? `${last.created_at}|${last.id}` : null }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Não foi possível consultar o arquivo do lead neste acesso." }, { status: 403 }); }
 }
 export async function POST(request: Request) {

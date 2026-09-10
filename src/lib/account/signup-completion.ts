@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 
 import { randomInt } from "node:crypto";
@@ -921,6 +922,7 @@ async function sendSignupVerificationWhatsapp(
   const { credentials, instance, token } = input.transport;
 
   const response = await callUazapi(credentials, "/send/text", {
+      outbound: { instanceId: instance.id, client, sensitive: true },
     method: "POST",
     token,
     body: {
@@ -1123,13 +1125,13 @@ async function loadBillingAgentWhatsappInstance(client: SupabaseClient, agentId:
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: {
+  options: { outbound?: WhatsappOutboundScope;
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token?: string;
   },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -1138,7 +1140,7 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  }, options.outbound);
   const data = await readResponse(response);
 
   if (!response.ok) {

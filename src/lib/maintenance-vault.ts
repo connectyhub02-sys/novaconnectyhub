@@ -1,5 +1,5 @@
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
-import { getUazapiConfig } from "@/lib/uazapi/client";
+import { getUazapiConfig } from "@/lib/uazapi/config";
 import { uazapiOperations } from "@/lib/uazapi/operations";
 
 export type CredentialKind = "secret" | "public" | "endpoint" | "identifier";

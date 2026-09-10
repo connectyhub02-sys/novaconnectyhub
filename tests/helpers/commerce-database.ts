@@ -12,10 +12,12 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
       const filters: Array<(row: Row) => boolean> = [];
       let sorting: { key: string; ascending: boolean } | null = null;
       let maximum = Infinity;
+      let offset = 0;
       const query = {
         select: () => query,
         order: (key: string, options?: { ascending?: boolean }) => { sorting = { key, ascending: options?.ascending !== false }; return query; },
         limit: (value: number) => { maximum = value; return query; },
+        range: (from: number, to: number) => { offset = from; maximum = to - from + 1; return query; },
         eq(key: string, value: unknown) {
           filters.push(row => {
             const [field, child] = key.split("->>");
@@ -28,6 +30,9 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
         neq(key: string, value: unknown) { filters.push(row => row[key] !== value); return query; },
         is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
         gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },
+        gt(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) > value); return query; },
+        lt(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) < value); return query; },
+        lte(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) <= value); return query; },
         not(key: string, operator: string, value: unknown) {
           if (operator !== "is") throw new Error(`Unsupported operator: ${operator}`);
           filters.push(row => value === null ? row[key] != null : row[key] !== value);
@@ -56,7 +61,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           const { key, ascending } = sorting;
           selected.sort((a, b) => String(a[key] ?? "").localeCompare(String(b[key] ?? "")) * (ascending ? 1 : -1));
         }
-        selected = selected.slice(0, maximum);
+        selected = selected.slice(offset, offset + maximum);
         if (operation === "insert") {
           selected = (Array.isArray(payload) ? payload : [payload]).map(row => ({ id: `row-${++sequence}`, ...row }));
           if (selected.some(row => tables[table].some(existing => existing.id === row.id))) {

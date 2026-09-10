@@ -489,11 +489,10 @@ export async function recordUsageAndDebitCredits(
 ) {
   const event = await recordUsageEvent(client, usage);
   const charge = Number(event.connecty_charge_credits ?? 0);
-  const alreadyDebited = event.deduplicated
-    ? await hasDebitTransactionForUsageEvent(client, event.id)
-    : false;
-
-  if (charge > 0 && event.status === "completed" && !alreadyDebited) {
+  if (event.status === "pending" && charge <= 0) {
+    throw new Error("Este consumo aguarda conferência da tarifa antes de concluir a cobrança.");
+  }
+  if (charge > 0 && (event.status === "completed" || event.status === "pending")) {
     try {
       await debitCredits(client, {
         organizationId: usage.organizationId,
@@ -507,15 +506,17 @@ export async function recordUsageAndDebitCredits(
           requestId: usage.requestId ?? null,
         },
       });
+      event.status = "completed";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha desconhecida ao debitar creditos.";
 
       await client
         .from("usage_events")
         .update({
-          connecty_charge_credits: 0,
+          status: "pending",
+          debit_retry_at: new Date(Date.now() + 5 * 60000).toISOString(),
           connecty_revenue_estimate: 0,
-          gross_margin_estimate: 0,
+          gross_margin_estimate: -Number(event.provider_cost ?? 0),
           error_message: `Falha ao debitar creditos: ${message}`.slice(0, 1000),
           metadata: {
             ...(usage.metadata ?? {}),
@@ -553,22 +554,6 @@ async function findUsageEventByRequestId(client: SupabaseClient, input: UsageEve
   }
 
   return data as UsageEventRow | null;
-}
-
-async function hasDebitTransactionForUsageEvent(client: SupabaseClient, usageEventId: string) {
-  const { data, error } = await client
-    .from("credit_transactions")
-    .select("id")
-    .eq("usage_event_id", usageEventId)
-    .eq("transaction_type", "debit")
-    .limit(1)
-    .maybeSingle<{ id: string }>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel verificar debito de uso existente: ${error.message}`);
-  }
-
-  return Boolean(data?.id);
 }
 
 function shouldSendTrialUsageNotification(metadata: Record<string, unknown> | undefined) {

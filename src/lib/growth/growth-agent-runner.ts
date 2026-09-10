@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   estimateTokensFromText,
   extractGeminiUsageMetadata,
+  billableGeminiUnits,
   meterUsageEvent,
   type GeminiTokenUsage,
 } from "@/lib/billing/metered-usage";
@@ -443,9 +444,10 @@ async function meterGrowthAgentUsage(input: {
   input: RunGrowthAgentInput;
 }) {
   const prompt = buildGrowthPrompt(input.agent, input.mission);
-  const inputTokens = input.llm.usage?.inputTokens ?? estimateTokensFromText(prompt);
-  const outputTokens = input.llm.usage?.outputTokens ?? estimateTokensFromText(input.llm.text);
-  const totalTokens = input.llm.usage?.totalTokens ?? inputTokens + outputTokens;
+  const billed = input.llm.usage ? billableGeminiUnits(input.llm.usage) : null;
+  const inputTokens = billed?.inputTokens ?? estimateTokensFromText(prompt);
+  const outputTokens = billed?.outputTokens ?? estimateTokensFromText(input.llm.text);
+  const totalTokens = inputTokens + outputTokens;
 
   return meterUsageEvent(input.client, {
     provider: "gemini",

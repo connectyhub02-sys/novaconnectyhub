@@ -104,7 +104,7 @@ export async function processAgendaTurn(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.credentials.model)}:generateContent`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": input.credentials.apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {

@@ -1,3 +1,6 @@
+import { fetchWhatsappOutbound } from "./outbound-delivery";
+import { prepareLeadContact } from "@/lib/automations/lead-contact-preferences";
+import { leadContactMessage, sendLeadContactMessage } from "@/lib/automations/lead-contact-message";
 import "server-only";
 import type {SupabaseClient} from "@supabase/supabase-js";
 import {loadUazapiCredentials} from "./uazapi-credentials";
@@ -14,21 +17,27 @@ export async function processCustomMeetingReminders(client:SupabaseClient){
    const [slot,conversation,lead]=await Promise.all([
     client.from("custom_software_meeting_slots").select("starts_at,meeting_url,status").eq("id",n.slot_id).single(),
     client.from("conversations").select("whatsapp_instance_id,provider_chat_id").eq("id",r.conversation_id).eq("lead_id",r.lead_id).eq("organization_id",r.organization_id).single(),
-    client.from("leads").select("phone_number,metadata").eq("id",r.lead_id).eq("organization_id",r.organization_id).single()]);
+    client.from("leads").select("phone_number,status,metadata").eq("id",r.lead_id).eq("organization_id",r.organization_id).single()]);
    if(slot.error||conversation.error||lead.error)throw new Error("context_unavailable");
    const s=slot.data,c=conversation.data;
-   if(r.status!=="booked"||r.slot_id!==n.slot_id||s.status!=="booked"||Date.parse(s.starts_at)<=Date.now()||lead.data.metadata?.whatsapp_opt_out===true){await client.from("custom_software_meeting_notices").update({state:"cancelled",updated_at:new Date().toISOString()}).eq("id",n.id);continue;}
+   if(r.status!=="booked"||r.slot_id!==n.slot_id||s.status!=="booked"||Date.parse(s.starts_at)<=Date.now()||lead.data.status==="archived"||lead.data.metadata?.whatsapp_opt_out===true||lead.data.metadata?.opt_out?.requested_at){await client.from("custom_software_meeting_notices").update({state:"cancelled",updated_at:new Date().toISOString()}).eq("id",n.id);continue;}
    const instance=await client.from("whatsapp_instances").select("id,instance_token_encrypted,status,metadata").eq("id",c.whatsapp_instance_id).eq("organization_id",r.organization_id).single();
    if(instance.error||instance.data.status!=="connected"||instance.data.metadata?.platform_whatsapp!==true||!instance.data.instance_token_encrypted||!(await getContractAccess(r.organization_id,client)).allowed)throw new Error("channel_unavailable");
    const credentials=await loadUazapiCredentials(client),token=decryptCredentialValue(instance.data.instance_token_encrypted);
    const when=new Date(s.starts_at).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
    const text=`Lembrete ConnectyHub: sua reunião sobre software personalizado está marcada para ${when} (Brasília).${s.meeting_url?`\nAcesse: ${s.meeting_url}`:" A equipe compartilhará os detalhes por aqui."}\nSe precisar remarcar, avise por esta conversa.`;
-   const started=await client.from("custom_software_meeting_notices").update({state:"dispatching",message_text:text,updated_at:new Date().toISOString()}).eq("id",n.id).eq("state","claimed").select("id").maybeSingle();if(started.error||!started.data)continue;
+   const unsubscribeUrl=await prepareLeadContact(client,r.organization_id,r.lead_id);
+   if(!unsubscribeUrl){await client.from("custom_software_meeting_notices").update({state:"cancelled",error_code:"lead_opted_out",updated_at:new Date().toISOString()}).eq("id",n.id).eq("state","claimed");continue;}
+   const delivery=leadContactMessage(text,unsubscribeUrl);
+   const started=await client.from("custom_software_meeting_notices").update({state:"dispatching",message_text:delivery.text,updated_at:new Date().toISOString()}).eq("id",n.id).eq("state","claimed").select("id").maybeSingle();if(started.error||!started.data)continue;
    dispatched=true;
-   const response=await fetch(`${credentials.baseUrl}/send/text`,{method:"POST",headers:{"Content-Type":"application/json",token},body:JSON.stringify({number:lead.data.phone_number,text,linkPreview:false,track_source:"connectyhub",track_id:`custom_meeting_${n.id}`}),signal:AbortSignal.timeout(20000)});
+   const response=await sendLeadContactMessage(
+    (path,body)=>fetchWhatsappOutbound(`${credentials.baseUrl}${path}`,{method:"POST",headers:{"Content-Type":"application/json",token},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)},{instanceId:instance.data.id,client}),
+    {number:lead.data.phone_number,...delivery,track_source:"connectyhub",track_id:`custom_meeting_${n.id}`},
+    async()=>Boolean(await prepareLeadContact(client,r.organization_id,r.lead_id)));
    if(!response.ok)throw new Error("delivery_unconfirmed");
-   const result=await response.json(),providerId=[result.messageid,result.id,result.key?.id].find(v=>typeof v==="string"&&v.length)??`custom_meeting_${n.id}`;
-   const persisted=await client.from("conversation_messages").insert({organization_id:r.organization_id,conversation_id:r.conversation_id,lead_id:r.lead_id,whatsapp_instance_id:instance.data.id,provider:"uazapi",provider_message_id:providerId,provider_chat_id:c.provider_chat_id,direction:"outbound",message_type:"text",text_content:text,occurred_at:new Date().toISOString(),payload:{source:"custom_meeting_reminder",request_id:n.request_id,slot_id:n.slot_id,notice_id:n.id}});
+   const result=await response.json();if(!result||result.error||result.success===false)throw new Error("delivery_unconfirmed");const providerId=[result.messageid,result.id,result.key?.id].find(v=>typeof v==="string"&&v.length)??`custom_meeting_${n.id}`;
+   const persisted=await client.from("conversation_messages").insert({organization_id:r.organization_id,conversation_id:r.conversation_id,lead_id:r.lead_id,whatsapp_instance_id:instance.data.id,provider:"uazapi",provider_message_id:providerId,provider_chat_id:c.provider_chat_id,direction:"outbound",message_type:"text",text_content:delivery.text,occurred_at:new Date().toISOString(),payload:{source:"custom_meeting_reminder",request_id:n.request_id,slot_id:n.slot_id,notice_id:n.id}});
    if(persisted.error&&persisted.error.code!=="23505")throw new Error("delivery_archive_pending");
    const saved=await client.from("custom_software_meeting_notices").update({state:"sent",provider_message_id:providerId,updated_at:new Date().toISOString(),error_code:null}).eq("id",n.id);if(saved.error)throw new Error("delivery_state_pending");sent++;
   }catch(error){await client.from("custom_software_meeting_notices").update({state:dispatched?"uncertain":"pending",due_at:new Date(Date.now()+15*60000).toISOString(),updated_at:new Date().toISOString(),error_code:error instanceof Error?error.message.slice(0,100):"reminder_failed"}).eq("id",n.id).not("state","in","(sent,cancelled)");}

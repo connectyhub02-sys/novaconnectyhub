@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { BillingCatalogFeature, BillingCatalogRate, BillingCommercialCatalog } from "@/lib/billing/admin-catalog";
 import { Panel, StatusBadge } from "./panel-primitives";
+import {AiOperationRates} from './ai-operation-rates';
 
 type RateDraft = {
   providerCostPerUnit: string;
@@ -757,6 +758,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
         </Panel>
       </div>
 
+      <AiOperationRates />
       <Panel title="Como usar agora" eyebrow="fluxo financeiro" compact collapsible>
         <div className="grid gap-3 md:grid-cols-3">
           <StepCard title="1. Aplique o MVP" text="Preencha uma regua inicial de creditos sem depender do preco oficial de cada provedor." />

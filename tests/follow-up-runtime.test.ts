@@ -1,3 +1,4 @@
+import * as contactMessage from "../src/lib/automations/lead-contact-message";
 import { describe, it, expect, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
@@ -78,7 +79,10 @@ function fixture() {
     billingMode: "credits",
     chargeCredits: 1,
   }));
+  const prepareContact = vi.fn(async (): Promise<string | null> => "https://fixture.invalid/contato/preferencias/10000000-0000-4000-8000-000000000001");
   const imports = {
+    "@/lib/automations/lead-contact-preferences": { prepareLeadContact: prepareContact },
+    "@/lib/automations/lead-contact-message": contactMessage,
     "@/lib/billing/contract-access": {
       getContractAccess: async () => ({ allowed: true }),
     },
@@ -164,6 +168,7 @@ function fixture() {
     finance,
     policy,
     metering,
+    prepareContact,
     execute: (extra = {}) =>
       service.executeWhatsappProactiveFollowUp({
         client: db.client,
@@ -172,6 +177,21 @@ function fixture() {
   };
 }
 describe("follow-up execution gates", () => {
+  it("stops on the final consent check before claiming delivery", async () => {
+    const f=fixture(); f.prepareContact.mockResolvedValue(null);
+    expect(await f.execute()).toMatchObject({status:"skipped",reason:"lead_opted_out"});
+    expect(f.patches).toHaveLength(0); expect(f.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("archives the exact exit link sent with the follow-up button", async () => {
+    const f=fixture();
+    await f.execute();
+    const [url,request]=f.fetch.mock.calls[1] as unknown as [string,RequestInit];
+    expect(url).toContain("/send/menu");
+    const body=JSON.parse(String(request.body));
+    expect(body.choices[0]).toMatch(/^Sair da lista\|https:/);
+    expect(body.text).toContain("Sair da lista");
+    expect(f.db.tables.conversation_messages.at(-1)?.text_content).toBe(body.text);
+  });
   it("rejects an old queued job assigned to someone other than the attending agent",async()=>{
     const f=fixture();f.db.tables.agent_runs[0].agent_id="original-agent";
     expect(await f.execute()).toMatchObject({reason:"attendance_agent_mismatch"});

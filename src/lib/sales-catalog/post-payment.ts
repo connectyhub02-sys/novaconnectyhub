@@ -1,3 +1,4 @@
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campaigns";
 import "server-only";
 import { resolveConversationSender } from "@/lib/whatsapp/conversation-sender";
@@ -437,6 +438,7 @@ async function maybeNotifyPaymentApproved(input: {
   const credentials = await loadUazapiCredentials(input.client);
   await assertContractAccess(input.order.organization_id, input.client);
   const providerResponse = await callUazapi(credentials, "/send/text", {
+    outbound: { instanceId: instance.id, client: input.client },
     method: "POST",
     token,
     body: {
@@ -609,6 +611,7 @@ async function maybeNotifyResponsiblePaymentApproved(input: {
   });
   const credentials = await loadUazapiCredentials(input.client);
   const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    instanceId: instance.id,
     client: input.client,
     organizationId: input.order.organization_id,
     credentials,
@@ -753,6 +756,7 @@ async function maybeNotifyPaymentStatus(input: {
   const credentials = await loadUazapiCredentials(input.client);
   await assertContractAccess(input.order.organization_id, input.client);
   const providerResponse = await callUazapi(credentials, "/send/text", {
+    outbound: { instanceId: instance.id, client: input.client },
     method: "POST",
     token,
     body: {
@@ -934,6 +938,7 @@ async function maybeNotifyResponsiblePaymentStatus(input: {
   });
   const credentials = await loadUazapiCredentials(input.client);
   const deliveries = await sendResponsiblePaymentWhatsappMessages({
+    instanceId: instance.id,
     client: input.client,
     organizationId: input.order.organization_id,
     credentials,
@@ -1231,6 +1236,7 @@ function normalizePendingPaymentStatusText(text: string) {
 async function sendResponsiblePaymentWhatsappMessages(input: {
   client: SupabaseClient;
   organizationId: string;
+  instanceId: string;
   credentials: UazapiCredentials;
   token: string;
   phones: string[];
@@ -1242,6 +1248,7 @@ async function sendResponsiblePaymentWhatsappMessages(input: {
   for (const [index, phone] of input.phones.entries()) {
     await assertContractAccess(input.organizationId, input.client);
     const providerResponse = await callUazapi(input.credentials, "/send/text", {
+      outbound: { instanceId: input.instanceId, client: input.client },
       method: "POST",
       token: input.token,
       body: {
@@ -1399,9 +1406,9 @@ function resolveNextStockStatus(nextQuantity: number, currentStatus: string | nu
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
-  options: { method: "POST"; body: unknown; token: string },
+  options: { outbound?: WhatsappOutboundScope; method: "POST"; body: unknown; token: string },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const response = await fetchWhatsappOutbound(`${credentials.baseUrl}${path}`, {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -1410,7 +1417,7 @@ async function callUazapi(
     },
     body: JSON.stringify(options.body),
     cache: "no-store",
-  });
+  }, options.outbound);
 
   const text = await response.text().catch(() => "");
   if (!text) return null;

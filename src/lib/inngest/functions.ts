@@ -47,6 +47,9 @@ import { processPendingPlatformBillingNotifications } from "@/lib/billing/platfo
 import { processPaidBillingLifecycleNotifications } from "@/lib/billing/paid-lifecycle-notifications";
 import { processWalletAlerts } from "@/lib/billing/wallet-alerts";
 import { reconcileAiRequests } from "@/lib/ai-api/reconciliation";
+import { reconcileAiResources } from '@/lib/ai-api/resources';
+import { reconcileAiLive } from '@/lib/ai-api/live';
+import { reconcileUsageDebits } from "@/lib/billing/usage-reconciliation";
 import { processAutomaticTopups } from "@/lib/billing/automatic-topups";
 import {processCustomMeetingReminders} from "@/lib/whatsapp/custom-meeting-reminders";
 import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
@@ -564,6 +567,9 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
       });
       const walletAlerts = await step.run("process-wallet-alerts", () => processWalletAlerts(createServiceClient()));
       const ai = await step.run("reconcile-external-ai", () => reconcileAiRequests(createServiceClient()));
+      await step.run('reconcile-ai-resources',()=>reconcileAiResources(createServiceClient()));
+      await step.run('reconcile-ai-live',()=>reconcileAiLive(createServiceClient()));
+      await step.run("reconcile-platform-usage", () => reconcileUsageDebits(createServiceClient()));
       const topups = await step.run("process-authorized-topups", () => processAutomaticTopups(createServiceClient()));
       const meetings = await step.run("send-meeting-reminders", () => processCustomMeetingReminders(createServiceClient()));
 

@@ -17,6 +17,7 @@ type JsonRecord = Record<string, unknown>;
 
 type UsageOrganizationRow = {
   id: string;
+  billing_organization_id?: string | null;
   name: string | null;
   slug: string | null;
   plan_code: string | null;
@@ -153,8 +154,17 @@ export type GeminiTokenUsage = {
   totalTokens: number;
   cachedTokens: number;
   thoughtsTokens: number;
+  toolInputTokens?: number;
   raw: JsonRecord;
 };
+
+/** Provider counters are separate; cached input is already part of prompt usage. */
+export function billableGeminiUnits(usage: GeminiTokenUsage) {
+  const toolInput = usage.toolInputTokens ?? readNumeric(usage.raw, ["toolUsePromptTokenCount", "tool_use_prompt_token_count"]);
+  const inputTokens = positiveNumber(usage.inputTokens) + positiveNumber(toolInput);
+  const outputTokens = positiveNumber(usage.outputTokens) + positiveNumber(usage.thoughtsTokens);
+  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
+}
 
 export async function meterUsageEvent(
   client: SupabaseClient,
@@ -167,23 +177,53 @@ export async function meterUsageEvent(
   }
 
   const organization = await loadUsageOrganization(client, organizationId);
-  const agentScope = input.agentScope ?? resolveAgentScope(organization);
-  const billingMode = input.billingMode ?? resolveBillingMode(organization, agentScope);
+  const billingOrganization = organization?.billing_organization_id
+    ? await loadUsageOrganization(client, organization.billing_organization_id) : organization;
+  const agentScope = input.agentScope ?? resolveAgentScope(billingOrganization);
+  const billingMode = input.billingMode ?? resolveBillingMode(billingOrganization, agentScope);
   const status = input.status ?? "completed";
   const normalizedModelId = normalizeProviderModelId(input.modelId);
-  const rates = await resolveActiveBillingRates(client, {
+  let rates = await resolveActiveBillingRates(client, {
     provider: input.provider,
     featureCode: input.featureCode,
     modelId: normalizedModelId,
-    planCode: organization?.plan_code ?? null,
+    planCode: billingOrganization?.plan_code ?? null,
   });
   const units = buildUsageUnits(input);
+  if (input.provider === "gemini" && (units.inputTokens ?? 0) > 200000
+    && normalizedModelId?.startsWith("gemini-3.1-pro-preview")) {
+    const longRates = await resolveActiveBillingRates(client, {
+      provider: input.provider, featureCode: "external_ai_long_context",
+      modelId: normalizedModelId, planCode: billingOrganization?.plan_code ?? null,
+    });
+    rates = [...rates.filter(rate => !["input_token", "output_token"].includes(rate.unit)), ...longRates];
+  }
   const calculated = calculateMeteredUsageCharge({
     rates,
     units,
     chargeCreditsOverride: input.connectyChargeCreditsOverride,
     providerCostOverride: input.providerCostOverride,
   });
+  const incompleteDirectionalRates = ["input_token", "output_token"].some(unit =>
+    resolveUnitsForRate(unit, units) > 0
+    && (rates.some(rate => ["input_token", "output_token"].includes(rate.unit))
+      || (input.provider === "gemini" && !["text_to_speech", "voice_reply_whatsapp", "voice_reply_economy"].includes(input.featureCode)))
+    && !rates.some(rate => rate.unit === unit && rate.connectyPricePerUnit > 0));
+  if (billingMode !== "free" && status === "completed"
+    && (calculated.matchedRates.length === 0 || calculated.chargeCredits <= 0 || incompleteDirectionalRates)
+    && input.connectyChargeCreditsOverride === undefined) {
+    await recordUsageEvent(client, {
+      organizationId, userId: input.userId, provider: input.provider, featureCode: input.featureCode,
+      modelId: normalizedModelId, agentId: input.agentId, agentRunId: input.agentRunId,
+      conversationId: input.conversationId, leadId: input.leadId, billingMode, agentScope,
+      status: "pending", requestId: input.requestId,
+      inputUnits: units.inputUnits, outputUnits: units.outputUnits,
+      inputTokens: units.inputTokens, outputTokens: units.outputTokens, totalTokens: input.totalTokens,
+      errorMessage: "billing_rate_missing",
+      metadata: { ...input.metadata, billing_review: { reason: "billing_rate_missing", units } },
+    });
+    throw new Error("Não foi possível calcular o consumo: tarifa indisponível. O uso foi registrado para conferência.");
+  }
   const chargeCredits = billingMode === "free" ? 0 : calculated.chargeCredits;
   const debited = shouldDebitBillingMode(billingMode) && status === "completed" && chargeCredits > 0;
   const revenueEstimate = debited ? roundMoney(chargeCredits * CONNECTY_CREDIT_UNIT_BRL) : 0;
@@ -202,8 +242,9 @@ export async function meterUsageEvent(
       provider: input.provider,
       featureCode: input.featureCode,
       modelId: normalizedModelId,
-      planCode: organization?.plan_code ?? null,
-      organizationStatus: organization?.status ?? null,
+      planCode: billingOrganization?.plan_code ?? null,
+      organizationStatus: billingOrganization?.status ?? null,
+      billingOrganizationId: billingOrganization?.id ?? organizationId,
       debited,
       equivalentChargeCredits: chargeCredits,
       equivalentRevenueBrl: roundMoney(chargeCredits * CONNECTY_CREDIT_UNIT_BRL),
@@ -349,7 +390,8 @@ export function extractGeminiUsageMetadata(data: unknown): GeminiTokenUsage | nu
   ]);
   const cachedTokens = readNumeric(metadata, ["cachedContentTokenCount", "cached_content_token_count"]);
   const thoughtsTokens = readNumeric(metadata, ["thoughtsTokenCount", "thoughts_token_count"]);
-  const totalTokens = readNumeric(metadata, ["totalTokenCount", "total_token_count"]) || inputTokens + outputTokens + thoughtsTokens;
+  const toolInputTokens = readNumeric(metadata, ["toolUsePromptTokenCount", "tool_use_prompt_token_count"]);
+  const totalTokens = readNumeric(metadata, ["totalTokenCount", "total_token_count"]) || inputTokens + outputTokens + thoughtsTokens + toolInputTokens;
 
   if (inputTokens <= 0 && outputTokens <= 0 && totalTokens <= 0) {
     return null;
@@ -361,6 +403,7 @@ export function extractGeminiUsageMetadata(data: unknown): GeminiTokenUsage | nu
     totalTokens,
     cachedTokens,
     thoughtsTokens,
+    toolInputTokens,
     raw: metadata,
   };
 }
@@ -403,18 +446,19 @@ export async function resolveActiveBillingRates(
       .from("provider_features")
       .select("id, feature_code, enabled, billable")
       .eq("cost_center_id", costCenter.id)
-      .limit(500),
+      .limit(1000),
     client
       .from("provider_models")
       .select("id, provider_model_id, feature_code")
       .eq("cost_center_id", costCenter.id)
-      .limit(500),
+      .limit(1000),
     client
       .from("billing_rates")
       .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to")
       .eq("cost_center_id", costCenter.id)
       .eq("active", true)
-      .limit(500),
+      .order("id")
+      .limit(1000),
   ]);
 
   const firstError = featuresResult.error ?? modelsResult.error ?? ratesResult.error;
@@ -422,20 +466,33 @@ export async function resolveActiveBillingRates(
     throw new Error(`Nao foi possivel carregar tarifas de ${input.provider}: ${firstError.message}`);
   }
 
+  // Never silently omit tariffs when the catalogue grows past one REST page.
+  const rateRows = [...(ratesResult.data ?? [])];
+  while (rateRows.length > 0 && rateRows.length % 1000 === 0) {
+    const page = await client.from("billing_rates")
+      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to")
+      .eq("cost_center_id", costCenter.id).eq("active", true).order("id")
+      .range(rateRows.length, rateRows.length + 999);
+    if (page.error) throw new Error("Não foi possível carregar todas as tarifas de consumo.");
+    rateRows.push(...(page.data ?? []));
+    if ((page.data ?? []).length < 1000) break;
+  }
+
   const features = (featuresResult.data ?? []) as FeatureRow[];
   const models = (modelsResult.data ?? []) as ModelRow[];
   const feature = features.find((item) => item.feature_code === input.featureCode) ?? null;
 
-  if (feature && (feature.enabled === false || feature.billable === false)) {
+  if (!feature || feature.enabled === false || feature.billable === false) {
     return [];
   }
 
   const model = input.modelId
     ? models.find((item) => normalizeProviderModelId(item.provider_model_id) === input.modelId) ?? null
     : null;
+  if (input.modelId && !model) return [];
   const featureById = new Map(features.map((item) => [item.id, item]));
   const modelById = new Map(models.map((item) => [item.id, item]));
-  const rankedRates = ((ratesResult.data ?? []) as BillingRateRow[])
+  const rankedRates = (rateRows as BillingRateRow[])
     .filter((rate) => !rate.effective_from || new Date(rate.effective_from).getTime() <= Date.now())
     .filter((rate) => !rate.effective_to || new Date(rate.effective_to).getTime() > Date.now())
     .map((rate) => ({ rate, score: scoreBillingRate(rate, { feature, model, featureById, modelById, ...input }) }))
@@ -618,7 +675,7 @@ function resolveUnitsForRate(unit: BillingUnit | string, units: MeteredUsageUnit
 async function loadUsageOrganization(client: SupabaseClient, organizationId: string) {
   const { data, error } = await client
     .from("organizations")
-    .select("id, name, slug, plan_code, status")
+    .select("id, name, slug, plan_code, status, billing_organization_id")
     .eq("id", organizationId)
     .maybeSingle<UsageOrganizationRow>();
 

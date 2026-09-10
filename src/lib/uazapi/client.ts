@@ -1,20 +1,17 @@
+import "server-only";
+import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
+import { getUazapiConfig } from "./config";
+export { getUazapiConfig, type UazapiConfig } from "./config";
 import { getUazapiOperation, type UazapiAuthMode } from "./operations";
 
 export type JsonRecord = Record<string, unknown>;
-
-export type UazapiConfig = {
-  baseUrl: string;
-  hasAdminToken: boolean;
-  hasInstanceToken: boolean;
-  hasWebhookSecret: boolean;
-  webhookUrl: string | null;
-};
 
 export type UazapiCallInput = {
   operationId: string;
   payload?: unknown;
   query?: Record<string, string | number | boolean | null | undefined>;
   instanceTokenOverride?: string;
+  outbound?: WhatsappOutboundScope;
 };
 
 export class UazapiRequestError extends Error {
@@ -29,17 +26,6 @@ export class UazapiRequestError extends Error {
     this.data = data;
     this.operationId = operationId;
   }
-}
-
-export function getUazapiConfig(): UazapiConfig {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  return {
-    baseUrl: (process.env.UAZAPI_BASE_URL || "https://free.uazapi.com").replace(/\/$/, ""),
-    hasAdminToken: Boolean(process.env.UAZAPI_ADMIN_TOKEN),
-    hasInstanceToken: Boolean(process.env.UAZAPI_INSTANCE_TOKEN),
-    hasWebhookSecret: Boolean(process.env.UAZAPI_WEBHOOK_SECRET),
-    webhookUrl: appUrl ? `${appUrl}/api/webhooks/uazapi` : null,
-  };
 }
 
 export async function callUazapiOperation(input: UazapiCallInput) {
@@ -85,12 +71,12 @@ export async function callUazapiOperation(input: UazapiCallInput) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(url, {
+  const response = await fetchWhatsappOutbound(url, {
     method: operation.method,
     headers,
     body,
     cache: "no-store",
-  });
+  }, input.outbound);
 
   const data = await readUazapiResponse(response);
 
