@@ -1,7 +1,7 @@
 "use client";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { ActivitySelect } from "./activity-select";
-import { applyActivityCloneProfile, applyActivitySetup } from "@/lib/whatsapp/activity-setup";
+import { applyActivityCloneProfile, applyActivityQualification, applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
@@ -615,7 +615,7 @@ export function WhatsAppConsole({
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab === "files" ? "prompt" : initialTab);
   const visibleWhatsappTabs = useMemo(
     () => whatsappConsoleTabs.filter((tab) => !variant.hiddenTabs?.includes(tab.id)),
     [variant.hiddenTabs],
@@ -677,7 +677,9 @@ export function WhatsAppConsole({
         ? applyActivityCloneProfile(nextPromptTemplateConfig.templateId, nextState.agent.name, savedProfile)
         : savedProfile);
       setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
-      setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
+      setQualificationDraft(nextState.agent
+        ? applyActivityQualification(nextPromptTemplateConfig.templateId, nextState.agent.qualification)
+        : normalizeLeadQualificationConfig(null));
     }
   }, []);
 
@@ -1926,22 +1928,6 @@ export function WhatsAppConsole({
           </Panel>
         ) : null}
 
-        {activeWhatsappTab === "files" ? (
-        <Panel
-          title="Conhecimento"
-          eyebrow="base do agente"
-          action={<NeonBadge tone={state.knowledge.files.length > 0 ? "green" : "amber"}>{state.knowledge.files.length.toLocaleString("pt-BR")} arquivos</NeonBadge>}
-        >
-          <div className="max-w-xl">
-            <KnowledgeFilesPanel
-              files={state.knowledge.files}
-              knowledgeUploading={knowledgeUploading}
-              onUploadFile={uploadKnowledgeFile}
-            />
-          </div>
-        </Panel>
-        ) : null}
-
         {activeWhatsappTab === "prompt" ? (
         <Panel
           title="Prompt do agente"
@@ -1969,6 +1955,13 @@ export function WhatsAppConsole({
                   onChange={updatePromptTemplateDraft}
                   onGeneratePrompt={generatePromptFromTemplate}
                   onImproveComplement={improveCompanyComplementWithAi}
+                  knowledgeFiles={variant.hiddenTabs?.includes("files") ? null : (
+                    <KnowledgeFilesPanel
+                      files={state.knowledge.files}
+                      knowledgeUploading={knowledgeUploading}
+                      onUploadFile={uploadKnowledgeFile}
+                    />
+                  )}
                 />
 
                 <BehaviorSection
@@ -2191,9 +2184,7 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              {variant.entityIdKey === "companyId" ? (
-                <div className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-600">Retomadas de conversa e recuperação de compras ficam em <a href="/dashboard/automacoes" className="font-semibold text-blue-700 underline">Automações → Follow-up inteligente</a>.</div>
-              ) : <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
+              {variant.entityIdKey === "companyId" ? null : <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={Forward} label="Follow-up automatico" description="Envia mensagem de retomada quando o lead silencia apos engajamento." checked={behaviorDraft.proactiveFollowUp} onChange={() => updateBehavior("proactiveFollowUp", !behaviorDraft.proactiveFollowUp)} />
                   <NumberField label="Delay (min)" description="Minutos de silencio do lead antes de enviar o follow-up." value={behaviorDraft.followUpDelayMinutes} min={30} max={1440} onChange={(value) => updateBehavior("followUpDelayMinutes", value)} />
@@ -2731,7 +2722,6 @@ const whatsappConsoleTabs: Array<{
 }> = [
   { id: "connection", label: "Conexao", description: "Numero e status", icon: Smartphone },
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
-  { id: "files", label: "Conhecimento", description: "Arquivos e contexto", icon: FileText },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
@@ -4041,6 +4031,7 @@ function GuidedPromptBuilder({
   onChange,
   onGeneratePrompt,
   onImproveComplement,
+  knowledgeFiles,
 }: {
   config: AgentPromptBuilderConfig;
   improving: boolean;
@@ -4049,6 +4040,7 @@ function GuidedPromptBuilder({
   onChange: (patch: Partial<AgentPromptBuilderConfig>) => void;
   onGeneratePrompt: () => void;
   onImproveComplement: () => void;
+  knowledgeFiles: ReactNode;
 }) {
   const template = agentPromptTemplates.find((item) => item.id === config.templateId) ?? agentPromptTemplates[0];
 
@@ -4080,14 +4072,26 @@ function GuidedPromptBuilder({
           <InfoTile label="Atuação" value={template.kind === "professional" ? "Profissional individual" : template.kind === "company" ? "Empresa" : "Atendimento geral"} />
         </div>
 
-        <TextAreaField
-          label="Informações extras do seu negócio (opcional)"
-          description="Campo principal para personalizar o agente. Produtos, precos e links ja entram automaticamente pelo Catalogo/Produtos."
-          minHeight="140px"
-          placeholder="Cole aqui detalhes da empresa. Se quiser, use Melhorar com IA; essa acao consome os creditos da empresa."
-          value={config.companyComplement}
-          onChange={(companyComplement) => onChange({ companyComplement })}
-        />
+        <div className="grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div>
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
+              Informações extras do seu negócio (opcional)
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Escreva informações, anexe arquivos ou combine os dois. Não é preciso repetir no texto o conteúdo dos arquivos.
+            </p>
+          </div>
+          <TextAreaField
+            label="Complemento em texto"
+            description="Acrescente detalhes que ajudem no atendimento. Produtos, preços e links cadastrados já entram no contexto do agente."
+            minHeight="120px"
+            placeholder="Ex.: regiões atendidas, diferenciais, horários e orientações que não estão nos arquivos."
+            value={config.companyComplement}
+            onChange={(companyComplement) => onChange({ companyComplement })}
+          />
+          {knowledgeFiles}
+          <p className="text-xs leading-5 text-slate-500">Os arquivos são adicionados ao enviar. Para aplicar alterações no texto, salve as configurações do agente.</p>
+        </div>
 
         <BehaviorSection
           title="Regras do atendimento"
@@ -4544,16 +4548,17 @@ function KnowledgeFilesPanel({
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
-          Materiais de conhecimento
-          <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
+          Arquivos do seu negócio
+          <InfoHint text="Anexe materiais para complementar o atendimento. Você pode usar somente arquivos ou adicionar observações no texto acima." />
         </p>
         <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100">
           {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-          Anexar
+          {knowledgeUploading ? "Enviando arquivo" : "Anexar arquivo"}
           <input
             accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,application/pdf,text/plain,text/markdown,text/csv,application/json"
             className="hidden"
             type="file"
+            disabled={knowledgeUploading}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0] ?? null;
               event.currentTarget.value = "";
@@ -5420,13 +5425,13 @@ function LeadQualificationEditor({
     <div className="grid gap-3">
       <BehaviorSection
         title="Playbook comercial"
-        description={`Comeca com o template global da ConnectyHub e permite ajustar como o agente qualifica leads deste ${entityLabel.toLowerCase()}.`}
+        description={`As perguntas seguem a atividade escolhida e podem ser editadas para o atendimento deste ${entityLabel.toLowerCase()}.`}
       >
         <div className="grid gap-3">
           <ToggleTile
             icon={ShieldCheck}
             label="Qualificacao ativa"
-            description="Quando ligado, o agente usa o template global ou as perguntas salvas aqui para qualificar o lead e alimentar o CRM."
+            description="Quando ligado, o agente usa as perguntas da atividade escolhida, com os ajustes salvos aqui, para qualificar o lead e alimentar o CRM."
             checked={normalized.enabled}
             onChange={() => onChange({ enabled: !normalized.enabled })}
           />

@@ -81,19 +81,39 @@ export function shouldApplyActivitySetup(previous: AgentPromptBuilderConfig, nex
   return previous.templateId !== next.templateId || !previous.profileVersion;
 }
 
+/** A save timestamp is not evidence that the generic questions were authored by the user. */
+export function applyActivityQualification(templateId: unknown, value?: unknown): LeadQualificationConfig {
+  const previous = normalizeLeadQualificationConfig(value);
+  const matchesDefaults = (defaults: LeadQualificationConfig) => {
+    const defaultObjection = defaults.questions.find(question => question.id === "objection");
+    const comparable = {
+      ...previous, configuredAt: null,
+      questions: previous.questions.map(question => question.id === "objection" && defaultObjection
+        ? { ...question, required: defaultObjection.required } : question),
+    };
+    return JSON.stringify(comparable) === JSON.stringify(normalizeLeadQualificationConfig(defaults));
+  };
+  const isUnchangedGlobal = !previous.activityTemplateId
+    && matchesDefaults(defaultLeadQualificationConfig);
+  const isUnchangedActivity = previous.activityTemplateId && !previous.customized
+    && matchesDefaults(createActivityQualification(previous.activityTemplateId));
+  if (value && !isUnchangedGlobal && !isUnchangedActivity) return previous;
+  const next = createActivityQualification(templateId);
+  const previousObjection = previous.questions.find(question => question.id === "objection");
+  if (value && previousObjection) {
+    next.questions = next.questions.map(question => question.id === "objection"
+      ? { ...question, required: previousObjection.required } : question);
+  }
+  return next;
+}
+
 /** Shared by the editor and server. Existing explicit customizations survive a profile change. */
 export function applyActivitySetup(input: {
   config: AgentPromptBuilderConfig; agentName: string; previousTemplateId?: unknown;
   cloneProfile?: unknown; qualification?: unknown; behavior?: unknown;
 }) {
   const cloneProfile = applyActivityCloneProfile(input.config.templateId, input.agentName, input.cloneProfile);
-  const previousQualification = normalizeLeadQualificationConfig(input.qualification);
-  const isUnchangedGlobal = !previousQualification.configuredAt && !previousQualification.activityTemplateId
-    && JSON.stringify(previousQualification) === JSON.stringify(defaultLeadQualificationConfig);
-  const isUnchangedActivity = previousQualification.activityTemplateId && !previousQualification.customized
-    && JSON.stringify({ ...previousQualification, configuredAt: null }) === JSON.stringify(normalizeLeadQualificationConfig(createActivityQualification(previousQualification.activityTemplateId)));
-  const qualification = !input.qualification || isUnchangedGlobal || isUnchangedActivity
-    ? createActivityQualification(input.config.templateId) : previousQualification;
+  const qualification = applyActivityQualification(input.config.templateId, input.qualification);
   const behavior = input.behavior ? normalizeWhatsappBehaviorConfig(input.behavior) : createActivityBehavior(input.config.templateId);
   if (input.behavior) {
     const oldBehavior = input.previousTemplateId ? createActivityBehavior(input.previousTemplateId) : { ...behavior };

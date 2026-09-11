@@ -10,6 +10,7 @@ import * as language from "@/lib/whatsapp/outbound-language";
 import * as templates from "@/lib/whatsapp/agent-prompt-templates";
 import * as activitySetup from "@/lib/whatsapp/activity-setup";
 import * as conversationStyle from "@/lib/whatsapp/conversation-style";
+import * as conversationEnding from "@/lib/whatsapp/conversation-ending";
 import * as commerceConversation from "@/lib/whatsapp/commerce-conversation";
 import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
@@ -38,6 +39,8 @@ const exposed = [
   "needsSalesCatalogCheckoutTotalConfirmation", "resolveInitialSalesCatalogOrderShipping", "buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt",
   "sendSalesCatalogPixDirectWhatsapp",
   "maybeCreateSalesCatalogPaymentLink", "guardUnexecutedCheckoutClaim", "persistRuntimeSavedDeliveryConsent", "maybeAttachSavedSalesCatalogDeliveryToOrder",
+  "scheduleProactiveFollowUp",
+  "handleConversationEnding",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}};`, {
@@ -71,6 +74,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "./agent-prompt-templates": templates,
     "./activity-setup": activitySetup,
     "./conversation-style": conversationStyle,
+    "./conversation-ending": conversationEnding,
     "./commerce-conversation": commerceConversation,
     "./agent-behavior": agentBehavior,
     "./human-handoff": humanHandoff,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { activityPresets } from "../src/lib/whatsapp/activity-presets";
 import { agentPromptTemplates, buildAgentPromptFromTemplate, createActivityPromptConfig, normalizeAgentPromptBuilderConfig, switchActivityPromptConfig } from "../src/lib/whatsapp/agent-prompt-templates";
-import { applyActivityCloneProfile, applyActivitySetup, createActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "../src/lib/whatsapp/activity-setup";
+import { applyActivityCloneProfile, applyActivityQualification, applyActivitySetup, createActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "../src/lib/whatsapp/activity-setup";
 import { normalizeWhatsappBehaviorConfig, normalizeWhatsappCloneProfile } from "../src/lib/whatsapp/agent-behavior";
-import { normalizeLeadQualificationConfig } from "../src/lib/leads/qualification";
+import { buildLeadQualificationAnalysisPrompt, buildLeadQualificationInstruction, defaultLeadQualificationConfig, markLeadQualificationConfigConfigured, normalizeLeadQualificationConfig } from "../src/lib/leads/qualification";
 import { applyTextEmojiPreference, selectConversationReaction } from "../src/lib/whatsapp/conversation-style";
 import * as setupModule from "../src/lib/whatsapp/activity-setup";
 import * as templatesModule from "../src/lib/whatsapp/agent-prompt-templates";
@@ -16,6 +16,49 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { runtimeHarness } from "./helpers/whatsapp-runtime-harness";
 
 describe("activity-specific agent setup", () => {
+  it.each(agentPromptTemplates)("replaces saved generic CRM questions with $label questions", ({ id }) => {
+    const saved = markLeadQualificationConfigConfigured(defaultLeadQualificationConfig, "2026-09-11T12:00:00Z");
+    const updated = applyActivityQualification(id, saved);
+    expect(updated.activityTemplateId).toBe(id);
+    expect(updated.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets[id].questions.map(([, , question]) => question));
+    const instructions = buildLeadQualificationInstruction(updated).join("\n");
+    const analysisPrompt = buildLeadQualificationAnalysisPrompt({ config: updated, organizationName: "Negócio", leadName: null, conversationText: "Conversa de teste", leadMetadata: null });
+    for (const question of updated.questions) {
+      expect(instructions).toContain(question.question);
+      expect(analysisPrompt).toContain(`campo=${question.crmField}; peso=${question.weight}`);
+    }
+    expect(instructions).toContain(activityPresets[id].handoff);
+    expect(saved).toEqual(markLeadQualificationConfigConfigured(defaultLeadQualificationConfig, "2026-09-11T12:00:00Z"));
+  });
+  it("applies profession qualification even when the technical prompt is manual", () => {
+    const config = { ...createActivityPromptConfig("corretor_imoveis"), mode: "manual" as const };
+    const saved = markLeadQualificationConfigConfigured(defaultLeadQualificationConfig);
+    expect(applyActivitySetup({ config, agentName: "Corretor", qualification: saved }).qualification.activityTemplateId).toBe("corretor_imoveis");
+  });
+  it("migrates the screenshot's generic questions while keeping objection required across activity changes", () => {
+    const saved = markLeadQualificationConfigConfigured({
+      ...defaultLeadQualificationConfig,
+      questions: defaultLeadQualificationConfig.questions.map(question => ({ ...question, required: true })),
+    });
+    const broker = applyActivityQualification("corretor_imoveis", saved);
+    expect(broker.activityTemplateId).toBe("corretor_imoveis");
+    expect(broker.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets.corretor_imoveis.questions.map(([, , question]) => question));
+    expect(broker.questions.find(question => question.id === "objection")?.required).toBe(true);
+    const lawyer = applyActivityQualification("advogado", markLeadQualificationConfigConfigured(broker));
+    expect(lawyer.activityTemplateId).toBe("advogado");
+    expect(lawyer.questions.find(question => question.id === "objection")?.required).toBe(true);
+    const customized = { ...saved, questions: saved.questions.map(question => question.id === "objection" ? { ...question, question: "Existe alguma restrição para a visita?" } : question) };
+    expect(applyActivityQualification("corretor_imoveis", customized)).toEqual(customized);
+  });
+  it("preserves genuine edits and disabled qualification in saved legacy profiles", () => {
+    const saved = markLeadQualificationConfigConfigured(defaultLeadQualificationConfig);
+    for (const value of [
+      { ...saved, enabled: false },
+      { ...saved, commercialObjective: "Atender exclusivamente locações comerciais" },
+      { ...saved, questions: saved.questions.map((question, index) => index ? question : { ...question, question: "Qual imóvel você deseja anunciar?" }) },
+      { ...saved, questions: [] },
+    ]) expect(applyActivityQualification("corretor_imoveis", value)).toEqual(normalizeLeadQualificationConfig(value));
+  });
   it.each(agentPromptTemplates)("prepares $label without freeform input and survives storage normalization", ({ id }) => {
     const setup = createActivitySetup(id, "Lia");
     const preset = activityPresets[id];

@@ -1,4 +1,7 @@
 import * as contactMessage from "../src/lib/automations/lead-contact-message";
+import * as followUpGeneration from "../src/lib/whatsapp/follow-up-generation";
+import * as conversationEnding from "../src/lib/whatsapp/conversation-ending";
+import { defaultWhatsappBehaviorConfig } from "../src/lib/whatsapp/agent-behavior";
 import { describe, it, expect, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
@@ -61,7 +64,7 @@ function fixture() {
       new Response(
         JSON.stringify({
           candidates: [
-            { content: { parts: [{ text: "Ficou alguma dúvida?" }] } },
+            { finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "send", message: "Ficou alguma dúvida?" }) }] } },
           ],
         }),
         { status: 200 },
@@ -81,6 +84,8 @@ function fixture() {
   }));
   const prepareContact = vi.fn(async (): Promise<string | null> => "https://fixture.invalid/contato/preferencias/10000000-0000-4000-8000-000000000001");
   const imports = {
+    "./follow-up-generation": followUpGeneration,
+    "./conversation-ending": conversationEnding,
     "@/lib/automations/lead-contact-preferences": { prepareLeadContact: prepareContact },
     "@/lib/automations/lead-contact-message": contactMessage,
     "@/lib/billing/contract-access": {
@@ -125,6 +130,7 @@ function fixture() {
     "@/lib/billing/gemini-metering": { meterGeminiGenerationUsage: metering },
     "./agent-behavior": {
       normalizeWhatsappBehaviorConfig: () => ({
+        ...defaultWhatsappBehaviorConfig,
         agentEnabled: true,
         proactiveFollowUp: true,
         followUpMaxPerConversation: 2,
@@ -177,6 +183,36 @@ function fixture() {
   };
 }
 describe("follow-up execution gates", () => {
+  it.each(["Obrigado, até a próxima!", "De nada, se precisar estou aqui!"])("does not treat the agent's goodbye as abandonment: %s", async text => {
+    const f = fixture();
+    f.db.tables.conversation_messages[0].text_content = text;
+    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "conversation_ended" });
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.metering).not.toHaveBeenCalled();
+    expect(f.prepareContact).not.toHaveBeenCalled();
+  });
+  it.each([
+    { finishReason: "STOP", content: { parts: [{ text: '" without accents like "você",' }] } },
+    { finishReason: "MAX_TOKENS", content: { parts: [{ text: JSON.stringify({ action: "send", message: "Conseguiu conferir?" }) }] } },
+    { finishReason: "STOP", content: { parts: [] } },
+  ])("records a generation failure and never sends an opt-out-only message", async candidate => {
+    const f = fixture();
+    f.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [candidate], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 } }), { status: 200 }));
+    expect(await f.execute()).toMatchObject({ status: "failed" });
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+    expect(f.metering).toHaveBeenCalledTimes(1);
+    expect(f.prepareContact).not.toHaveBeenCalled();
+    expect(f.db.tables.conversation_messages).toHaveLength(1);
+    expect(f.patches.map(p => p.status)).toEqual(["failed"]);
+    expect(JSON.stringify(f.patches)).not.toContain("without accents");
+  });
+  it("allows the model to skip a semantically resolved conversation", async () => {
+    const f = fixture();
+    f.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "skip", message: "" }) }] } }] }), { status: 200 }));
+    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "no_relevant_approach" });
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+    expect(f.prepareContact).not.toHaveBeenCalled();
+  });
   it("stops on the final consent check before claiming delivery", async () => {
     const f=fixture(); f.prepareContact.mockResolvedValue(null);
     expect(await f.execute()).toMatchObject({status:"skipped",reason:"lead_opted_out"});
@@ -300,7 +336,7 @@ describe("follow-up execution gates", () => {
         new Response(
           JSON.stringify({
             candidates: [
-              { content: { parts: [{ text: "Ficou alguma dúvida?" }] } },
+              { finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "send", message: "Ficou alguma dúvida?" }) }] } },
             ],
           }),
           { status: 200 },

@@ -3,6 +3,7 @@ import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
 import { resolveWhatsappBehavior } from "./activity-setup";
+import { conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { assertContractAccess } from "@/lib/billing/contract-access";
@@ -686,6 +687,11 @@ async function processWhatsappAgentRunWithScope(input: {
       fallback: run.input_summary,
     });
 
+    const endingResult = !isGroupChat && latestInbound
+      ? await handleConversationEnding({ client, context, latestInbound, userText, token, phone })
+      : null;
+    if (endingResult) return endingResult;
+
     if (behavior.quotedReplyContext && latestInbound) {
       const quotedContext = extractQuotedMessageContext(latestInbound, context.messages);
       if (quotedContext) {
@@ -1117,7 +1123,7 @@ async function processWhatsappAgentRunWithScope(input: {
     await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
     extractConversationArcSummary(client, context).catch(() => {});
     extractNegotiationState(client, context).catch(() => {});
-    await scheduleProactiveFollowUp(context).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
+    await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
@@ -1141,6 +1147,35 @@ async function processWhatsappAgentRunWithScope(input: {
     await markRun(client, run.id, "failed", message);
     return { status: "failed", error: message };
   }
+}
+
+async function handleConversationEnding(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow;
+  userText: string;
+  token: string;
+  phone: string;
+}) {
+  const { client, context, latestInbound, userText, token, phone } = input;
+  const action = conversationEndingAction(context.messages, latestInbound.id, userText);
+  if (action === "continue") return null;
+  await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+  if (action === "silence") {
+    return completeRun(client, context.run.id, "Cortesia após encerramento; nenhuma nova resposta necessária.", {
+      skipped: true, reason: "conversation_already_ended",
+    });
+  }
+  const text = "Por nada! Até mais.";
+  const sent = await sendWhatsappText({
+    credentials: context.credentials, token, phone, text,
+    trackId: `conversation_ending_${context.run.id}`,
+  });
+  await saveOutboundMessage(client, context, {
+    text, mode: "text", providerResponse: sent,
+    runtimeEvent: { type: "conversation_ending", inbound_message_id: latestInbound.id },
+  });
+  return completeRun(client, context.run.id, text, { sent: true, messages: 1, reason: "conversation_ended", mode: "text" });
 }
 
 async function loadRunContext(client: SupabaseClient, runId: string) {
@@ -15536,8 +15571,10 @@ async function extractNegotiationState(
 
 async function scheduleProactiveFollowUp(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  responseText: string,
 ) {
   if (!context.lead?.id || !context.behavior.agentEnabled) return;
+  if (conversationEnding([...context.messages, { direction: "outbound", text_content: responseText }]).ended) return;
   const { loadAutomationPolicy } = await import("@/lib/automations/dispatch");
   const policy = await loadAutomationPolicy(createServiceClient(), context.organization.id);
   if (!(policy?.follow_up_enabled ?? context.behavior.proactiveFollowUp)) return;

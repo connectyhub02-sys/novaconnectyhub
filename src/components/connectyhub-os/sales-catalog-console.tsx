@@ -3861,24 +3861,6 @@ export function SalesCatalogConsole({
                 </div>
               </AccordionSection>
 
-              <AccordionSection icon={MessageSquareText} title="Automacoes do checkout" tone="cyan">
-                <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3">
-                  <p className="text-[13px] font-semibold text-slate-100">
-                    Mensagens automaticas ficam em Automacoes. Aumento de carrinho fica junto dos Produtos.
-                  </p>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-400">
-                    O catalogo fica responsavel por produtos, aumento de carrinho, pagamento, frete e pedido. As mensagens que o agente envia ao lead ficam em um ambiente unico.
-                  </p>
-                  <Link
-                    href="/dashboard/automacoes"
-                    className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/35 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/10"
-                  >
-                    <MessageSquareText className="h-4 w-4" />
-                    Gerenciar automacoes
-                  </Link>
-                </div>
-              </AccordionSection>
-
               <button
                 type="button"
                 disabled={!selectedCompanyId || savingSettings}

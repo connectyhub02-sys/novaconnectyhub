@@ -195,7 +195,7 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
     `- Objetivo comercial: ${normalized.commercialObjective}.`,
     `- Lead qualificado a partir de ${normalized.qualifyThreshold} pontos; VIP a partir de ${normalized.vipThreshold} pontos.`,
     `- Limite de perguntas de qualificacao por conversa: ${normalized.maxQuestionsPerConversation}.`,
-    "- Use somente perguntas do playbook ativo: template global da ConnectyHub ou perguntas salvas pelo cliente no painel. Nao invente checklist proprio de qualificacao.",
+    "- Use somente perguntas do playbook ativo: perfil da atividade escolhida, template global da ConnectyHub ou perguntas salvas pelo cliente no painel. Nao invente checklist proprio de qualificacao.",
     "- Quando o cliente alterar, desligar ou adicionar perguntas no painel, essa configuracao explicita vira a fonte da verdade.",
     normalized.askOneQuestionAtATime
       ? "- Faca apenas uma pergunta de qualificacao por mensagem. Nao transforme a conversa em formulario."
@@ -233,7 +233,7 @@ export function buildLeadQualificationAnalysisPrompt(input: {
   return [
     "Analise a conversa e atualize a qualificacao comercial do lead.",
     "Responda somente JSON valido, sem markdown e sem texto fora do JSON.",
-    "Use apenas o playbook ativo, seja o template global da ConnectyHub ou a configuracao salva pelo cliente no painel. Nao crie perguntas ou criterios que nao existam na configuracao.",
+    "Use apenas o playbook ativo, seja o perfil da atividade escolhida, o template global da ConnectyHub ou a configuracao salva pelo cliente no painel. Nao crie perguntas ou criterios que nao existam na configuracao.",
     "",
     `Empresa: ${input.organizationName}`,
     `Lead: ${input.leadName || "desconhecido"}`,

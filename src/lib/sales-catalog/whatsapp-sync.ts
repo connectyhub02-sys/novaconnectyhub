@@ -868,7 +868,7 @@ export async function setWhatsappCatalogVisibility(input: {
   };
 }
 
-async function fetchWhatsappCatalogPages(
+export async function fetchWhatsappCatalogPages(
   credentials: UazapiCredentials,
   token: string,
   catalogJid: string,
@@ -1056,7 +1056,7 @@ async function inspectWhatsappBusinessProfile(credentials: UazapiCredentials, to
   }
 }
 
-function buildWhatsappCatalogImportDrafts(input: {
+export function buildWhatsappCatalogImportDrafts(input: {
   products: JsonRecord[];
   catalogJid: string;
   whatsappInstanceId: string;
@@ -1224,11 +1224,11 @@ function normalizeWhatsappProduct(product: JsonRecord, catalogJid: string, now: 
   const description = normalizeText(readString(product.Description) ?? readString(product.description), 1800) ?? "";
   const price = readCatalogPrice(product);
   const currency = readCatalogCurrency(product) ?? "BRL";
-  const hidden = readBoolean(product.IsHidden) ?? readBoolean(product.isHidden) ?? false;
-  const statusInfo = readRecord(product.StatusInfo) ?? readRecord(product.statusInfo);
+  const hidden = readBoolean(product.IsHidden) ?? readBoolean(product.isHidden) ?? readBoolean(product.is_hidden) ?? false;
+  const statusInfo = readRecord(product.StatusInfo) ?? readRecord(product.statusInfo) ?? readRecord(product.status_info);
   const catalogStatus = readString(statusInfo?.Status) ?? readString(statusInfo?.status);
-  const availability = readString(product.Availability) ?? readString(product.availability);
-  const retailerId = readString(product.RetailerID) ?? readString(product.retailerId) ?? readString(product.SKU);
+  const availability = readString(product.Availability) ?? readString(product.availability) ?? readString(product.product_availability);
+  const retailerId = readString(product.RetailerID) ?? readString(product.retailerId) ?? readString(product.retailer_id) ?? readString(product.SKU);
   const url = readString(product.Url) ?? readString(product.URL) ?? readString(product.url);
   const media = readProductImages(product, title, now);
 
@@ -1247,8 +1247,8 @@ function normalizeWhatsappProduct(product: JsonRecord, catalogJid: string, now: 
     retailerId,
     importedPayload: compactRecord({
       image_fetch_status: readString(product.ImageFetchStatus) ?? readString(product.imageFetchStatus),
-      max_available: readNumber(product.MaxAvailable) ?? readNumber(product.maxAvailable),
-      sale_price: readString(product.SalePrice) ?? readString(product.salePrice),
+      max_available: readNumber(product.MaxAvailable) ?? readNumber(product.maxAvailable) ?? readNumber(product.max_available),
+      sale_price: readString(product.SalePrice) ?? readString(product.salePrice) ?? readString(product.sale_price),
       source: readString(product.Source) ?? readString(product.source),
     }),
   };
@@ -1318,7 +1318,8 @@ function mapWhatsappProductToImportDraft(
 }
 
 function readProductImages(product: JsonRecord, title: string, now: string): SalesCatalogMedia[] {
-  const images = readArray(product.Images) ?? readArray(product.images) ?? [];
+  const media = readRecord(product.media);
+  const images = readArray(product.Images) ?? readArray(product.images) ?? readArray(media?.images) ?? [];
 
   return images
     .map((value, index): SalesCatalogMedia | null => {
@@ -1328,8 +1329,10 @@ function readProductImages(product: JsonRecord, title: string, now: string): Sal
       const storageUrl =
         readString(image.OriginalImageUrl) ??
         readString(image.originalImageUrl) ??
+        readString(image.original_image_url) ??
         readString(image.RequestImageUrl) ??
-        readString(image.requestImageUrl);
+        readString(image.requestImageUrl) ??
+        readString(image.request_image_url);
 
       if (!storageUrl) return null;
 
@@ -1354,7 +1357,7 @@ function readCatalogPage(value: unknown) {
 
   return {
     products: products.map(readRecord).filter((item): item is JsonRecord => Boolean(item)),
-    after: readString(paging.After) ?? readString(paging.after),
+    after: readString(paging.After) ?? readString(paging.after) ?? readString(response.next),
   };
 }
 
@@ -1367,7 +1370,11 @@ function readCatalogPrice(product: JsonRecord) {
   const normalized = amount.trim();
 
   if (/^\d+$/.test(normalized)) {
-    const value = Number(normalized) / 100;
+    // The flat snake_case payload observed in production uses thousandths.
+    // Keep the existing cents contract for legacy Price/Amount payloads.
+    const flatPrice = product.Price === undefined && !price && readString(product.currency);
+    const value = Number(normalized) / (flatPrice ? 1000 : 100);
+    if (!Number.isFinite(value) || !Number.isSafeInteger(Number(normalized))) return null;
     return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
@@ -1376,7 +1383,7 @@ function readCatalogPrice(product: JsonRecord) {
 
 function readCatalogCurrency(product: JsonRecord) {
   const price = readRecord(product.Price) ?? readRecord(product.price);
-  return normalizeText(readString(price?.Currency) ?? readString(price?.currency) ?? readString(product.Currency), 12);
+  return normalizeText(readString(price?.Currency) ?? readString(price?.currency) ?? readString(product.Currency) ?? readString(product.currency), 12);
 }
 
 function readCatalogJidCandidates(value: unknown): WhatsappCatalogJidCandidate[] {
