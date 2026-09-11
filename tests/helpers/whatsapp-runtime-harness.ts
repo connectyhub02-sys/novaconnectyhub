@@ -1,3 +1,4 @@
+import * as activityProfile from "@/lib/whatsapp/activity-profile";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
@@ -41,7 +42,7 @@ const exposed = [
   "maybeCreateSalesCatalogPaymentLink", "guardUnexecutedCheckoutClaim", "persistRuntimeSavedDeliveryConsent", "maybeAttachSavedSalesCatalogDeliveryToOrder",
   "scheduleProactiveFollowUp",
   "handleConversationEnding",
-  "buildSalesCatalogLines",
+  "buildSalesCatalogLines", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}};`, {
@@ -74,6 +75,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "./outbound-language": language,
     "./agent-prompt-templates": templates,
     "./activity-setup": activitySetup,
+    "./activity-profile": activityProfile,
     "./conversation-style": conversationStyle,
     "./conversation-ending": conversationEnding,
     "./commerce-conversation": commerceConversation,

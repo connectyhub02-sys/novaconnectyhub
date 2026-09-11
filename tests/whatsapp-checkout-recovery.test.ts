@@ -150,6 +150,45 @@ describe("payment recovery and duplicate prevention", () => {
   const pendingSession = (patch = {}) => ({ id: "session", organization_id: "store", order_id: "order",
     method: "pix", provider: "asaas", amount: "90,00", status: "pending", expires_at: "2099-01-01T00:00:00Z",
     pix_qr_code: "000201-TEST-NOT-PAYABLE", checkout_url: "https://loja.example/checkout/session", metadata: {}, ...patch });
+  const cardSnapshot = (patch = {}) => ({ session: pendingSession(),
+    order: { id: "order", payment_status: "pending", status: "pending_payment" }, amount: 90,
+    enabled: true, review: false, attempt: null, settings: { asaas: { enabledMethods: ["pix", "credit_card"] } }, ...patch });
+  it("opens the existing checkout for card after an overdue Pix without creating another charge", async () => {
+    const createPayment = vi.fn(), load = vi.fn(async () => cardSnapshot());
+    const db = commerceDatabase({ sales_catalog_payment_sessions: [pendingSession({ provider_status: "OVERDUE", provider_payment_id: "existing-pix" })] });
+    const call = runtimeHarness({
+      "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
+      "@/lib/sales-catalog/transparent-checkout": { loadTransparentCheckout: load },
+    });
+    const result = await call<{ checkoutUrl: string }>("maybeCreateSalesCatalogPaymentLink", {
+      client: db.client, context: context("vou pagar no cartão"), orderId: "order", total: "90,00", preferredMethod: "card" });
+    expect(result).toMatchObject({ orderId: "order", preferredMethod: "card", pixQrCode: null, pixTicketUrl: null });
+    expect(new URL(result.checkoutUrl).pathname).toBe("/checkout/session");
+    expect(load).toHaveBeenCalledOnce();
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(db.tables.sales_catalog_payment_sessions).toHaveLength(1);
+  });
+  it.each([
+    { review: true }, { enabled: false }, { amount: 100 },
+    { session: { ...pendingSession(), organization_id: "other" } },
+    { order: { id: "another-order", payment_status: "pending", status: "pending_payment" } },
+    { order: { id: "order", payment_status: "confirmed", status: "paid" } },
+    { order: { id: "order", payment_status: "pending", status: "pending_payment", checkout_payment_lock: "locked" } },
+    { attempt: { state: "unknown" } }, { settings: { asaas: { enabledMethods: ["pix"] } } },
+  ])("does not bypass a checkout guard when switching to card: %j", async patch => {
+    const createPayment = vi.fn();
+    const db = commerceDatabase({ sales_catalog_payment_sessions: [pendingSession({ provider_payment_id: "existing-pix" })] });
+    const call = runtimeHarness({
+      "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
+      "@/lib/sales-catalog/transparent-checkout": { loadTransparentCheckout: async () => cardSnapshot(patch) },
+    });
+    expect(await call("maybeCreateSalesCatalogPaymentLink", { client: db.client, context: context(), orderId: "order", total: "90,00", preferredMethod: "card" }))
+      .toMatchObject({ gatewayUnavailable: true, confirmationPending: true, checkoutUrl: "" });
+    expect(createPayment).not.toHaveBeenCalled();
+  });
+  it.each(["Vou te enviar o checkout agora", "Já vou te mandar o link de pagamento", "Estou enviando o botão de compra"])("blocks an unexecuted checkout promise: %s", text => {
+    expect(runtimeHarness()("guardUnexecutedCheckoutClaim", text, context())).toBeTruthy();
+  });
   it("reuses the unexpired Pix and checkout without another gateway call", async () => {
     const createPayment = vi.fn(), db = commerceDatabase({ sales_catalog_payment_sessions: [pendingSession()] });
     const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment } });

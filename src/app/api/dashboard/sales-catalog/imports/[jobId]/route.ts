@@ -177,6 +177,7 @@ function readItemPatches(value: unknown): SalesCatalogImportItemPatch[] {
 
       if (status) patch.status = status;
       if (salesDestination) patch.salesDestination = salesDestination;
+      if (record && readRecord(record.fulfillment)) patch.fulfillment = record.fulfillment as SalesCatalogImportItemPatch["fulfillment"];
       if (title) patch.title = title;
       if (record && "description" in record) patch.description = readNullableString(record.description);
       if (record && "category" in record) patch.category = readNullableString(record.category);
@@ -203,7 +204,7 @@ function normalizeItemStatus(value: unknown): SalesCatalogImportItemStatus | nul
 }
 
 function normalizeSalesDestination(value: unknown): SalesCatalogImportDestination | null {
-  if (value === "external_site" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment") return value;
   return null;
 }
 

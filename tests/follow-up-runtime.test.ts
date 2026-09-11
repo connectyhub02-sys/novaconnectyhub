@@ -5,6 +5,9 @@ import { defaultWhatsappBehaviorConfig } from "../src/lib/whatsapp/agent-behavio
 import { describe, it, expect, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
+const followUpCheckout = serverModuleHarness("src/lib/whatsapp/follow-up-checkout.ts", {
+  "@/lib/sales-catalog/mercado-pago": { buildSalesCatalogCheckoutUrl: (id: string) => `https://fixture.invalid/checkout/${id}`, normalizeCurrencyAmount: (n: unknown) => Number(n) || null },
+});
 
 function fixture() {
   const db = commerceDatabase({
@@ -91,6 +94,7 @@ function fixture() {
     "@/lib/billing/contract-access": {
       getContractAccess: async () => ({ allowed: true }),
     },
+    "./follow-up-checkout": followUpCheckout,
     "@/lib/billing/trial": { assertBillableAccess: async () => ({}) },
     "@/lib/sales-catalog/payment-reviews": {
       getLeadPaymentReviews: async () => [],
@@ -183,6 +187,23 @@ function fixture() {
   };
 }
 describe("follow-up execution gates", () => {
+  it("recovers an existing payment with distinct purchase and unsubscribe buttons", async () => {
+    const f = fixture();
+    f.db.tables.leads[0].metadata = { checkout_runtime_state: {stage:"payment_sent",order_id:"order"} };
+    f.db.tables.sales_catalog_orders = [{id:"order",organization_id:"org",lead_id:"lead",status:"pending_payment",payment_status:"pending",total:90,latest_payment_session_id:"session"}];
+    f.db.tables.sales_catalog_payment_sessions = [{id:"session",organization_id:"org",order_id:"order",status:"pending",amount:90,metadata:{}}];
+    f.db.tables.sales_catalog_order_items = [{order_id:"order",organization_id:"org",catalog_item_id:"product",title:"Produto",quantity:1,total:90}];
+    f.db.tables.intelligence_memory = [{id:"product",organization_id:"org",scope:"organization",memory_type:"sales_catalog_item",metadata:{sales_destination:"connectyhub_checkout"}}];
+    expect(await f.execute({salesCatalogOrderId:"order",salesCatalogFollowUpKind:"abandoned_order"})).toMatchObject({status:"sent"});
+    const calls = f.fetch.mock.calls as unknown as Array<[string,{body:string}]>;
+    const delivery = calls.find(([url]) => String(url).endsWith("/send/menu"));
+    expect(delivery).toBeDefined();
+    expect(JSON.parse(delivery![1].body).choices).toEqual([
+      "Continuar pagamento|https://fixture.invalid/checkout/session",
+      "Sair da lista|https://fixture.invalid/contato/preferencias/10000000-0000-4000-8000-000000000001",
+    ]);
+    expect(f.db.tables.sales_catalog_payment_sessions).toHaveLength(1);
+  });
   it.each(["Obrigado, até a próxima!", "De nada, se precisar estou aqui!"])("does not treat the agent's goodbye as abandonment: %s", async text => {
     const f = fixture();
     f.db.tables.conversation_messages[0].text_content = text;
@@ -225,7 +246,8 @@ describe("follow-up execution gates", () => {
     expect(url).toContain("/send/menu");
     const body=JSON.parse(String(request.body));
     expect(body.choices[0]).toMatch(/^Sair da lista\|https:/);
-    expect(body.text).toContain("Sair da lista");
+    expect(body.text).not.toContain("Sair da lista");
+    expect(f.db.tables.conversation_messages.at(-1)?.payload).toMatchObject({ choices: body.choices });
     expect(f.db.tables.conversation_messages.at(-1)?.text_content).toBe(body.text);
   });
   it("rejects an old queued job assigned to someone other than the attending agent",async()=>{

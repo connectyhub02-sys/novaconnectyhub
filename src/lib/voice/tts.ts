@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeOutboundSpeechText } from "@/lib/whatsapp/outbound-language";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterUsageEvent } from "@/lib/billing/metered-usage";
@@ -31,6 +32,7 @@ export type GeneratedConnectyVoiceAudio = (GeneratedElevenLabsAudio | Omit<Gener
 };
 
 export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAudioInput): Promise<GeneratedConnectyVoiceAudio> {
+  input = { ...input, text: normalizeOutboundSpeechText(input.text) };
   const provider = resolveVoiceProvider(input.voiceSource, input.voiceId);
   const client = input.client ?? createServiceClient();
   const generated = provider === "gemini"

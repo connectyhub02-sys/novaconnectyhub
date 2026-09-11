@@ -1,3 +1,4 @@
+import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
@@ -282,6 +283,7 @@ export async function POST(request: NextRequest) {
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
+    await validateProductAgenda(client, company.id, fulfillment.agendaResourceId);
     const itemId = requestedItemId ?? randomUUID();
     const now = new Date().toISOString();
     let existingRow: SalesCatalogMemoryRow | null = null;
@@ -390,7 +392,7 @@ export async function POST(request: NextRequest) {
 
     const tag = readFormString(existingMetadata.tag) ?? createSalesCatalogTag(title, itemId);
     const existingLinkButtonId = readFormString(existingMetadata.link_button_id) ?? readFormString(existingMetadata.external_link_button_id);
-    const productPageUrl = salesDestination === "connectyhub_checkout"
+    const productPageUrl = salesDestination !== "external_site"
       ? buildSalesCatalogProductUrl(itemId)
       : null;
     const trackedLink = salesDestination === "external_site" && productUrl
@@ -473,6 +475,7 @@ export async function POST(request: NextRequest) {
       media: serializeSalesCatalogMedia(media),
       skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,
+      action_version: 1,
       sales_destination: salesDestination,
       source_product_url: productUrl,
       product_page_url: productPageUrl,
@@ -3633,7 +3636,7 @@ function normalizeStatus(value: string | null): SalesCatalogItemStatus {
 }
 
 function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
-  if (value === "external_site" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment") return value;
   return "connectyhub_checkout";
 }
 
@@ -4551,6 +4554,7 @@ function readProductFulfillmentPayload(formData: FormData): SalesCatalogProductF
 
   return {
     mode: normalizeFulfillmentMode(readFormString(formData.get("fulfillmentMode"))),
+    agendaResourceId: normalizeUuid(readFormString(formData.get("agendaResourceId"))),
     schedulingRequired: readFormBoolean(formData.get("schedulingRequired")) ?? fallback.schedulingRequired,
     serviceDuration: normalizeOptionalText(readFormString(formData.get("serviceDuration")), 80) ?? fallback.serviceDuration,
     deliveryInstructions: normalizeOptionalText(readFormString(formData.get("deliveryInstructions")), 240) ?? fallback.deliveryInstructions,
@@ -4643,6 +4647,7 @@ function serializeProductFulfillment(fulfillment: SalesCatalogProductFulfillment
   return {
     mode: fulfillment.mode,
     scheduling_required: fulfillment.schedulingRequired,
+    agenda_resource_id: fulfillment.agendaResourceId ?? null,
     service_duration: fulfillment.serviceDuration,
     delivery_instructions: fulfillment.deliveryInstructions,
     access_instructions: fulfillment.accessInstructions,

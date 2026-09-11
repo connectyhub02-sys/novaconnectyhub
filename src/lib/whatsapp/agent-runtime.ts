@@ -1,3 +1,5 @@
+import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
+import { activityDefaultDestination, buildActivityProfileInstruction } from "./activity-profile";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
@@ -20,7 +22,7 @@ import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import { readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
 import { updateLeadMetadata } from "@/lib/leads/metadata-update";
-import { buildCommerceConversationInstruction, requiresCommerceConversationReply } from "./commerce-conversation";
+import { buildActivityCommerceInstruction, buildCommerceConversationInstruction, buildConsultativeCommerceReply, hasCheckoutActionClaim, isCommerceBudgetStatement, requiresCommerceConversationReply, resolveActivityCommerceJourney, type ActivityCommerceJourney } from "./commerce-conversation";
 import {
   estimateTokensFromText,
   extractGeminiUsageMetadata,
@@ -70,7 +72,8 @@ import {
   type SalesCatalogOrderRow,
 } from "@/lib/client-os/sales-catalog";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
-import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
+import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
+import { loadTransparentCheckout } from "@/lib/sales-catalog/transparent-checkout";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import {
   formatSalesCatalogBillingCycleWithInterval,
@@ -970,10 +973,12 @@ async function processWhatsappAgentRunWithScope(input: {
         }).catch(() => null)
       : null;
 
+    const agendaItem = resolveCatalogAgendaFocus(context.salesCatalog, userText, context.messages);
     const agendaTurn = lead?.id && !isGroupChat
       ? await import("@/lib/automations/agenda-agent").then(({ processAgendaTurn }) => processAgendaTurn({
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
           agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
+          catalogAppointment: agendaItem?.salesDestination === "appointment", catalogResourceId: agendaItem?.salesDestination === "appointment" ? agendaItem.fulfillment.agendaResourceId : undefined,
           messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
         })).catch((error) => {
           console.error("agenda_turn_failed", { runId: run.id, message: error instanceof Error ? error.message : "unknown" });
@@ -1300,7 +1305,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge,
     linkButtons,
     companyLocations,
-    salesCatalog,
+    salesCatalog: salesCatalog.map(item => ({ ...item, salesDestination: effectiveRuntimeDestination(item, agent) })),
     salesCatalogSettings,
     salesCatalogShippingSettings,
     salesCatalogOrders,
@@ -4346,6 +4351,8 @@ function buildSystemInstruction(input: {
   conversationMetadata: Record<string, unknown> | null;
 }) {
   const agentPrompt = renderPromptVariables(resolveRuntimeAgentPrompt(input), input);
+  const commerceJourney = resolveRuntimeCommerceJourney(input.agent);
+  const checkoutAllowed = input.salesCatalog.some(item => effectiveRuntimeDestination(item, input.agent) === "connectyhub_checkout") || (!input.salesCatalog.length && commerceJourney === "checkout");
   const isElianeAgent = isElianeRuntimeAgent(input.agent);
   const activityConfigured = normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).mode === "automatic";
   const globalPrompt = isElianeAgent ? elianeWhatsappGlobalPrompt : activityConfigured ? activityWhatsappGlobalPrompt : defaultWhatsappGlobalPrompt;
@@ -4374,7 +4381,7 @@ function buildSystemInstruction(input: {
     ...outboundLanguageQualityPromptLines,
     "",
     "REGRA GLOBAL DE FECHAMENTO E PAGAMENTO:",
-    ...buildGlobalCheckoutConfirmationLines(),
+    ...(checkoutAllowed ? buildGlobalCheckoutConfirmationLines() : buildActivityCommerceInstruction(commerceJourney)),
     "",
     ...buildCloneProfileLines(input.agent),
     ...conversationStyleInstructions(input.behavior),
@@ -4399,13 +4406,16 @@ function buildSystemInstruction(input: {
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
     ...buildOrganizationLocationLines(input.companyLocations),
-    ...buildSalesCatalogLines(input.salesCatalog),
-    ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
-    ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
-    ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
-    ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
-    ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
-    ...buildSalesCatalogCheckoutStateLines(input.lead),
+    ...buildSalesCatalogLines(input.salesCatalog.map(item => ({ ...item, salesDestination: effectiveRuntimeDestination(item, input.agent) })), checkoutAllowed ? "checkout" : commerceJourney),
+    ...buildActivityProfileInstruction(normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).templateId, normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).professionalIdentity),
+    ...(checkoutAllowed ? [
+      ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
+      ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
+      ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
+      ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
+      ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
+      ...buildSalesCatalogCheckoutStateLines(input.lead),
+    ] : []),
     ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
     "",
     "COMPORTAMENTO CONFIGURADO:",
@@ -4457,8 +4467,9 @@ function buildSystemInstruction(input: {
     ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
     ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
     ...buildSmallTalkContext(input.behavior),
-    ...(input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
+    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
     ...buildConfiguredNicheCareLines(input.agent),
+    ...buildActivityCommerceInstruction(commerceJourney),
     "",
     "REGRAS TECNICAS DE SAIDA:",
     "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
@@ -5893,16 +5904,49 @@ function buildOrganizationLocationLines(locations: RuntimeOrganizationLocation[]
   ];
 }
 
-function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
-  const sellableItems = items.filter(isSalesCatalogItemSellable);
+function effectiveRuntimeDestination(item: RuntimeSalesCatalogItem, agent?: Pick<AgentRow, "metadata">) {
+  if (item.actionVersion || item.salesDestination !== "connectyhub_checkout") return item.salesDestination;
+  return activityDefaultDestination(normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]).templateId);
+}
+function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; salesCatalog: RuntimeSalesCatalogItem[]; messages: ConversationMessageRow[] }, text?: string) {
+  const inbound = findLatestInbound(context.messages);
+  const current = text ?? inbound?.text_content ?? "";
+  if (isCommerceBudgetStatement(current)) return false;
+  let selected = selectSalesCatalogItemsFromText(context.salesCatalog, current);
+  if (!selected.length) {
+    const recent = buildRecentOutboundMessageBlocks(context.messages, inbound).slice(0, 1);
+    selected = recent.flatMap(block => selectSalesCatalogItemsFromText(context.salesCatalog, block.text));
+    if (/\b(?:agend|hor.rio|visita|avalia|reuni.o|test.drive)/i.test(recent[0]?.text ?? "") && !/\b(?:pedido|pagamento|comprar)\b/i.test(current)) return false;
+  }
+  if (selected.length) return selected.every(item => effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
+  return resolveRuntimeCommerceJourney(context.agent) === "checkout" && (!context.salesCatalog.length || context.salesCatalog.some(item => effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout"));
+}
+
+function resolveRuntimeCommerceJourney(agent?: Pick<AgentRow, "metadata">) {
+  return resolveActivityCommerceJourney(normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]).templateId);
+}
+
+function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: ActivityCommerceJourney = "checkout") {
+  const sellableItems = items.filter(item => item.salesDestination === "appointment" ? item.status === "active" : isSalesCatalogItemSellable(item));
 
   if (sellableItems.length === 0) {
     return [];
   }
 
+  if (journey !== "checkout") {
+    return [
+      ...buildActivityCommerceInstruction(journey),
+      "CATALOGO PARA CONSULTA, SEM PEDIDO OU COBRANCA:",
+      "- Apresente no maximo duas opcoes adequadas, com dados reais e uma explicacao curta. Use a tag para identificar o item sem exibir a tag ao cliente.",
+      "- Fotos cadastradas podem ser enviadas; sem arquivo, nao prometa enviar foto. Links cadastrados servem para consultar detalhes e a galeria.",
+      ...sellableItems.slice(0, 40).map(item => `- ${item.tag} (${item.title}) | valor de referencia: ${item.price} ${item.currency} | categoria: ${item.category ?? ""} | midias: ${item.media.length ? `${item.media.length} arquivo(s)` : "sem arquivo"}${item.productUrl ? ` | detalhes: ${item.productUrl}` : ""} | resumo: ${preview(item.description, 180)}`),
+    ];
+  }
+
   return [
     "",
     "CATÁLOGO DE VENDAS DISPONÍVEL:",
+    "- As regras de pedido e pagamento abaixo valem SOMENTE para itens de venda. Itens de agendamento nunca entram no carrinho: ofereça a agenda real ou o link da página para agendar. Não some serviços agendados à compra de produtos.",
     "- Use o catálogo como memória interna para conversar como uma pessoa real. Nunca copie a ficha técnica completa para o lead.",
     "- Quando o lead perguntar se tem um produto, responda em até 2 mensagens curtas, confirme que tem e apresente no máximo 2 opções com nome, preço e uma frase simples de contexto.",
     "- Quando o lead pedir orientação para decidir o que comprar, aja como atendente consultivo: entenda o objetivo, recomende 1 opção principal ou 1 combinação enxuta, explique por que encaixa e termine com uma pergunta curta para o lead avançar.",
@@ -6040,6 +6084,7 @@ function buildSalesCatalogCartIncreaseLines(
 }
 
 function formatRuntimeSalesCatalogDestinationForPrompt(item: RuntimeSalesCatalogItem) {
+  if (item.salesDestination === "appointment") return "Agendamento, sem checkout ou pagamento; use a agenda vinculada ou a página do item";
   if (item.salesDestination === "external_site") return "site externo";
   if (item.salesDestination === "manual_handoff") return "revisar destino da venda";
   return "pagamento interno automatico";
@@ -7942,6 +7987,8 @@ async function sendAgentResponse(input: {
   text: string;
 }) {
   const { context } = input;
+  const commerceJourney = resolveRuntimeCommerceJourney(context.agent);
+  const checkoutAllowed = runtimeAllowsCheckout(context);
   const latestInbound = findLatestInbound(context.messages);
   const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, {
     lead: context.lead,
@@ -7950,16 +7997,22 @@ async function sendAgentResponse(input: {
   });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
-  const cleanText = applyTextEmojiPreference(normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context)), context.behavior);
+  const budgetOnly = isCommerceBudgetStatement(buildSalesCatalogOrderIntentText(latestInbound, "", context));
+  const safeCatalogText = hasCheckoutActionClaim(customerCatalogText) && (!checkoutAllowed || budgetOnly)
+    ? checkoutAllowed
+      ? "Entendi sua faixa de investimento. Que características você procura para eu indicar uma opção adequada?"
+      : buildConsultativeCommerceReply(commerceJourney, budgetOnly)
+    : customerCatalogText;
+  const cleanText = applyTextEmojiPreference(normalizeAssistantText(ensureLinkPromiseIsActionable(safeCatalogText, context)), context.behavior);
   const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText, context);
-  await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
-  const hasConfirmedCheckoutIntent = hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
-  const hasPendingDeliveryDetailsIntent = hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
-  const hasConfirmedCartOfferIntent = hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
-  const recoveryRequested = !hasConfirmedCheckoutIntent && hasRuntimeCheckoutRecoveryIntent(context, orderIntentText)
+  if (checkoutAllowed) await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
+  const hasConfirmedCheckoutIntent = checkoutAllowed && hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
+  const hasPendingDeliveryDetailsIntent = checkoutAllowed && hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
+  const hasConfirmedCartOfferIntent = checkoutAllowed && hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
+  const recoveryRequested = checkoutAllowed && !hasConfirmedCheckoutIntent && hasRuntimeCheckoutRecoveryIntent(context, orderIntentText)
     && selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText).length === 0;
   const recoverySelections = recoveryRequested ? resolveRuntimeRecoverableCheckoutDraft(context) : [];
-  const hasOrderIntent = !requiresCommerceConversationReply(orderIntentText) && (hasSalesCatalogOrderIntent(orderIntentText)
+  const hasOrderIntent = checkoutAllowed && !requiresCommerceConversationReply(orderIntentText) && (hasSalesCatalogOrderIntent(orderIntentText)
     || hasConfirmedCheckoutIntent
     || hasPendingDeliveryDetailsIntent
     || hasConfirmedCartOfferIntent);
@@ -7977,16 +8030,16 @@ async function sendAgentResponse(input: {
   });
   const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
     leadCatalogItems,
-    hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
+    leadCatalogItems.length > 0 && !hasOrderIntent ? [] : hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
   );
-  const checkoutOrderSelections = resolveSalesCatalogOrderSelections({
+  const checkoutOrderSelections = checkoutAllowed ? resolveSalesCatalogOrderSelections({
     context,
     currentItems: selectedCatalogItems,
     responseText: cleanText,
     intentText: orderIntentText,
   })
     .filter(isRuntimeCheckoutOrderSelection)
-    .slice(0, salesCatalogCheckoutItemLimit);
+    .slice(0, salesCatalogCheckoutItemLimit) : [];
   const deliveryDetailsPrompt = buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt({
     context,
     latestInbound,
@@ -8037,7 +8090,7 @@ async function sendAgentResponse(input: {
   const unresolvedCheckoutPrompt = hasConfirmedCheckoutIntent && checkoutOrderSelections.length === 0
     ? "Antes de gerar o pagamento, preciso confirmar os produtos desse resumo. Me confirma o nome e a versão de cada item que você escolheu?"
     : null;
-  const unexecutedClaimPrompt = guardUnexecutedCheckoutClaim(cleanText, context)
+  const unexecutedClaimPrompt = checkoutAllowed && guardUnexecutedCheckoutClaim(cleanText, context)
     ? buildUnexecutedCheckoutReply(cleanText, context, orderIntentText)
     : null;
   const recoveryPrompt = recoveryRequested
@@ -8932,7 +8985,8 @@ function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
     ? formatSalesCatalogWhatsappPaymentAmount(price) ?? normalizeOutboundLanguageText(`${price}${item.currency ? ` ${item.currency}` : ""}`)
     : "";
   const priceText = formattedPrice ? ` - ${formattedPrice}` : "";
-  const highlightText = item.highlightLabel ? ` (${item.highlightLabel})` : "";
+  const highlight = customerCatalogHighlight(item.highlightLabel);
+  const highlightText = highlight ? ` (${highlight})` : "";
 
   return `${cleanSalesCatalogCustomerTitle(item.title)}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
 }
@@ -8984,6 +9038,19 @@ function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCa
   });
 }
 
+function resolveCatalogAgendaFocus(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {
+  const current = selectSalesCatalogItemsFromText(items, text);
+  if (current.length) return current.length === 1 ? current[0] : undefined;
+  const normalized = normalizeSearch(text);
+  if (/\b(?:outro|outra|mudar de|trocar de)\b/.test(normalized)) return undefined;
+  if (!/^(?:sim|ok|pode|quero|confirmo|esse|essa|amanha|hoje)\b|\b(?:agendar|agenda|horario|visita|consulta|avaliacao|reservar)\b/.test(normalized)) return undefined;
+  for (const message of messages.slice(-6).reverse()) {
+    const matches = selectSalesCatalogItemsFromText(items, message.text_content ?? "");
+    if (matches.length) return matches.length === 1 ? matches[0] : undefined;
+  }
+  return undefined;
+}
+
 function selectSalesCatalogItemsFromText(items: RuntimeSalesCatalogItem[], text: string) {
   const normalizedText = normalizeSearch(text);
 
@@ -8991,7 +9058,9 @@ function selectSalesCatalogItemsFromText(items: RuntimeSalesCatalogItem[], text:
     return [];
   }
 
-  const sellableItems = items.filter(isSalesCatalogItemSellable);
+  const sellableItems = items.filter(item => item.salesDestination === "appointment"
+    ? item.status === "active"
+    : isSalesCatalogItemSellable(item));
   const tokenFrequency = buildSalesCatalogTokenFrequency(sellableItems);
 
   return sellableItems.filter((item) => {
@@ -9089,6 +9158,7 @@ function resolveSalesCatalogOrderSelections(input: {
 }) {
   const selected = new Map<string, RuntimeSalesCatalogOrderSelection>();
   const addSelection = (selection: RuntimeSalesCatalogOrderSelection) => {
+    if (effectiveRuntimeDestination(selection.item, input.context.agent) !== "connectyhub_checkout") return;
     const quantity = clampRuntimeOrderQuantity(selection.quantity);
     const current = selected.get(selection.item.id);
 
@@ -10684,6 +10754,7 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
   if (!context.salesCatalog.some(item => item.salesDestination === "connectyhub_checkout")) return null;
   const normalized = normalizeSearch(text);
   const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
+    || /\b(?:vou|ja vou|estou|to)\s+(?:te\s+)?(?:mandar|enviar|mandando|enviando|liberar)\b.{0,80}\b(?:checkout|pix|link de pagamento|link para pagar|botao de compra)\b/.test(normalized)
     || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado|disponivel|liberado)\b/.test(normalized)
     || (/\b(?:pix|pagamento|pagar|checkout)\b/.test(normalized)
       && /\b(?:botao|codigo|link|pix|qr code)\b.{0,45}\b(?:esta|ta|ficou|fica|segue)\b.{0,30}\b(?:acima|abaixo|em cima|aqui|ali)\b/.test(normalized))
@@ -10752,6 +10823,7 @@ async function recordSalesCatalogOrderIntent(input: {
   intentText?: string;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
   const intentText = input.intentText ?? input.text;
+  if (!runtimeAllowsCheckout(input.context) || isCommerceBudgetStatement(intentText)) return null;
   const latestInbound = findLatestInbound(input.context.messages);
   const hasOrderIntent = hasSalesCatalogOrderIntent(intentText)
     || hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText)
@@ -11153,6 +11225,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   total: string | null;
   preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
+  if (!runtimeAllowsCheckout(input.context)) return null;
   if (!input.total) {
     return null;
   }
@@ -11176,6 +11249,32 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       && (!session.expires_at || Date.parse(session.expires_at) > Date.now())
       && session.checkout_url && (session.method === "card" || session.pix_qr_code));
     if (active) return runtimePaymentFromSession(active, input.orderId, input.preferredMethod);
+    // Changing the selected method is navigation, not authorization for a new charge.
+    // The checkout reconciles/retires the Pix only when the customer submits the card.
+    const existingPix = input.preferredMethod === "card" ? previous.find(session =>
+      session.provider === "asaas" && session.method === "pix"
+      && ["created", "pending"].includes(session.status ?? "")
+      && normalizeCurrencyAmount(session.amount) === normalizeCurrencyAmount(input.total)) : null;
+    if (existingPix) {
+      const checkout = await loadTransparentCheckout(input.client, existingPix.id);
+      const platformOwned = checkout.session.payment_owner_type === "connectyhub"
+        || readRecord(checkout.session.metadata)?.payment_owner === "connectyhub";
+      const cardEnabled = platformOwned || !checkout.settings
+        || checkout.settings.asaas.enabledMethods.includes("credit_card");
+      if (checkout.session.organization_id !== input.context.organization.id
+        || checkout.order.id !== input.orderId || !checkout.enabled || !cardEnabled
+        || checkout.review || checkout.order.checkout_payment_lock
+        || ["confirmed", "refunded"].includes(checkout.order.payment_status)
+        || ["paid", "in_preparation", "shipped", "delivered", "cancelled"].includes(checkout.order.status)
+        || ["processing", "unknown", "pending", "approved"].includes(checkout.attempt?.state ?? "")
+        || checkout.amount !== normalizeCurrencyAmount(input.total)) {
+        return unavailableRuntimePayment(input.orderId, input.total, input.preferredMethod,
+          "O checkout precisa de conferência antes de trocar a forma de pagamento.", true);
+      }
+      return { ...runtimePaymentFromSession(existingPix, input.orderId, "card"),
+        checkoutUrl: buildSalesCatalogCheckoutUrl(existingPix.id), trackingUrl: null,
+        pixQrCode: null, pixTicketUrl: null };
+    }
     if (previous.some(session => session.provider_payment_id
       && !["cancelled", "expired", "rejected", "failed"].includes(session.status ?? ""))) {
       return unavailableRuntimePayment(input.orderId, input.total, input.preferredMethod,
@@ -11243,6 +11342,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   latestInbound: ConversationMessageRow | null;
   userText: string;
 }): Promise<OutboundMessage | null> {
+  if (!runtimeAllowsCheckout(input.context)) return null;
   if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
   input = { ...input, userText: buildSalesCatalogOrderIntentText(input.latestInbound, "", input.context) || input.userText };
   if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
@@ -11729,6 +11829,7 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (!runtimeAllowsCheckout(input.context)) throw new Error("A atividade exige negociacao com o responsavel, sem pagamento automatico.");
   try {
     const message = await deliverSalesCatalogPaymentLink(input);
     const delivery = asString(readRecord(message.providerResponse)?.delivery);
@@ -11777,6 +11878,7 @@ async function deliverSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (!runtimeAllowsCheckout(input.context)) throw new Error("A atividade exige negociacao com o responsavel, sem pagamento automatico.");
   if (input.payment.paymentDeferred) {
     return sendSalesCatalogPaymentDeferredWhatsapp(input);
   }
@@ -11896,6 +11998,7 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (!runtimeAllowsCheckout(input.context)) throw new Error("A atividade exige negociacao com o responsavel, sem pagamento automatico.");
   const order = input.context.salesCatalogOrders.find((item) => item.id === input.payment.orderId) ?? null;
   const shippingSettings = input.context.salesCatalogShippingSettings;
   const canShip = Boolean(shippingSettings?.configured && shippingSettings.shippingEnabled);
@@ -12202,6 +12305,7 @@ async function sendSalesCatalogPixDirectWhatsapp(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
+  if (!runtimeAllowsCheckout(input.context)) throw new Error("A atividade exige negociacao com o responsavel, sem pagamento automatico.");
   const pixCode = normalizeSalesCatalogPixCopyCode(input.payment.pixQrCode);
   const amount = normalizeCurrencyAmount(input.payment.amount);
   if (!pixCode) throw new Error("Pix sem código copia e cola para montar botão de copiar.");

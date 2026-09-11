@@ -1,3 +1,4 @@
+import { validateProductAgenda } from "./appointment-policy";
 import "server-only";
 
 import { Buffer } from "node:buffer";
@@ -50,7 +51,7 @@ export type SalesCatalogImportPlatform =
   | "generic_menu"
   | "generic_sheet";
 export type SalesCatalogImportTargetMode = "connectyhub_checkout" | "external_site" | "review";
-export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
+export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_site" | "appointment" | "manual_handoff";
 export type SalesCatalogImportJobStatus = "uploaded" | "extracting" | "review_required" | "ready_to_publish" | "publishing" | "published" | "failed";
 export type SalesCatalogImportItemStatus = "draft" | "ready" | "published" | "discarded" | "error";
 export type SalesCatalogImportImageImportStatus = "pending" | "imported" | "skipped" | "failed";
@@ -265,6 +266,7 @@ export type SalesCatalogImportItemPatch = {
   id: string;
   status?: SalesCatalogImportItemStatus;
   salesDestination?: SalesCatalogImportDestination;
+  fulfillment?: SalesCatalogProductFulfillment;
   title?: string;
   description?: string | null;
   category?: string | null;
@@ -1160,6 +1162,10 @@ export async function updateSalesCatalogImportItems(input: {
       updated_at: new Date().toISOString(),
     };
 
+    if (patch.fulfillment) {
+      await validateProductAgenda(input.client, input.companyId, patch.fulfillment.agendaResourceId);
+      payload.fulfillment = serializeProductFulfillment(patch.fulfillment);
+    }
     if (patch.status) payload.status = patch.status;
     if (patch.salesDestination) payload.sales_destination = patch.salesDestination;
     if (patch.title) payload.title = patch.title;
@@ -1452,7 +1458,7 @@ export async function publishSalesCatalogImportJob(input: {
 
   let catalogItems = 0;
   let linkButtons = 0;
-  let legacyReviewItems = 0;
+  const legacyReviewItems = 0;
   let duplicateSkips = 0;
   let duplicateUpdates = 0;
   let errors = 0;
@@ -1478,13 +1484,10 @@ export async function publishSalesCatalogImportJob(input: {
         continue;
       }
 
-      const publishItem = item.salesDestination === "manual_handoff"
-        ? {
-          ...item,
-          salesDestination: "connectyhub_checkout" as SalesCatalogImportDestination,
-          warnings: Array.from(new Set([...item.warnings, "Destino legado de atendimento convertido para checkout ConnectyHub."])),
-        }
-        : item;
+      if (item.salesDestination === "manual_handoff") {
+        throw new Error("Revise a ação deste item: escolha venda, agendamento ou site externo antes de publicar.");
+      }
+      const publishItem = item;
 
       if (publishItem.salesDestination === "connectyhub_checkout" && !hasSalesCatalogImportCheckoutPrice(publishItem)) {
         throw new Error(`Informe um preco antes de publicar "${publishItem.title}" no checkout ConnectyHub.`);
@@ -1522,9 +1525,6 @@ export async function publishSalesCatalogImportJob(input: {
           assignmentScope,
           targetCatalogItemId: duplicateTargetItemId,
         });
-        if (item.salesDestination === "manual_handoff") {
-          legacyReviewItems += 1;
-        }
         catalogItems += 1;
         if (duplicateAction === "update_existing") duplicateUpdates += 1;
       }
@@ -1592,7 +1592,6 @@ export async function publishSalesCatalogImportJob(input: {
     summary: [
       `${catalogItems} produto(s)`,
       `${linkButtons} botao(oes) externo(s)`,
-      legacyReviewItems > 0 ? `${legacyReviewItems} item(ns) legado(s) convertido(s) para checkout` : null,
       duplicateUpdates > 0 ? `${duplicateUpdates} duplicado(s) atualizado(s)` : null,
       duplicateSkips > 0 ? `${duplicateSkips} duplicado(s) ignorado(s)` : null,
     ].filter(Boolean).join(", ") + ".",
@@ -2648,6 +2647,7 @@ async function publishImportItemAsCatalogItem(input: {
   targetCatalogItemId?: string | null;
 }) {
   const now = new Date().toISOString();
+  await validateProductAgenda(input.client, input.companyId, input.item.fulfillment.agendaResourceId);
   const existingCatalogItem = input.targetCatalogItemId
     ? await loadImportTargetCatalogItem({
       client: input.client,
@@ -2702,7 +2702,7 @@ async function publishImportItemAsCatalogItem(input: {
     currency: input.item.currency,
     status: "active",
     tag,
-    highlight_label: importedFromWhatsapp ? "Importado do WhatsApp" : "Importado por IA",
+    highlight_label: null,
     attributes: serializeItemAttributes(input.item.attributes),
     inventory: serializeProductInventory(inventory),
     offer: serializeProductOffer(offer),
@@ -2712,6 +2712,7 @@ async function publishImportItemAsCatalogItem(input: {
     skus: serializeSalesCatalogSkus(input.item.skus),
     source: "ai_import",
     sales_destination: input.item.salesDestination,
+    action_version: 1,
     source_product_url: input.item.productUrl,
     source_image_url: input.item.imageUrl,
     source_image_urls: normalizeImportImageUrls(input.item.imageUrl, input.item.imageUrls),
@@ -2849,6 +2850,7 @@ async function publishImportItemAsCatalogItem(input: {
       link_button_id: input.linkButton?.id ?? null,
       link_button_tag: input.linkButton?.tag ?? null,
       sales_destination: input.item.salesDestination,
+    action_version: 1,
       assigned_agent_ids: input.assignmentScope.assignedAgentIds,
       assigned_whatsapp_instance_ids: input.assignmentScope.assignedWhatsappInstanceIds,
     },
@@ -3592,6 +3594,12 @@ function buildImportItemPatchMetadata(patch: NormalizedItemPatch): JsonRecord | 
   const metadata: JsonRecord = {};
   let changed = false;
 
+  if (patch.salesDestination && patch.salesDestination !== "manual_handoff") {
+    changed = true;
+    metadata.action_version = 1;
+    metadata.action_origin = "user_review";
+  }
+
   if ("imageUrl" in patch) {
     changed = true;
     metadata.image_import_error = null;
@@ -3960,6 +3968,7 @@ type NormalizedItemPatch = {
   id: string;
   status?: SalesCatalogImportItemStatus;
   salesDestination?: SalesCatalogImportDestination;
+  fulfillment?: SalesCatalogProductFulfillment;
   title?: string;
   description?: string | null;
   category?: string | null;
@@ -3981,6 +3990,7 @@ function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemP
   const destination = readOptionalSalesDestination(patch.salesDestination);
   const title = normalizeTitle(patch.title);
 
+  if (patch.fulfillment) normalized.fulfillment = readFulfillment(patch.fulfillment);
   if (status) normalized.status = status;
   if (destination) normalized.salesDestination = destination;
   if (title) normalized.title = title;
@@ -4101,6 +4111,7 @@ function readFulfillment(value: unknown): SalesCatalogProductFulfillment {
 
   return {
     mode: normalizeFulfillmentMode(readString(record.mode)),
+    agendaResourceId: normalizeUuid(readString(record.agendaResourceId ?? record.agenda_resource_id)),
     schedulingRequired: readBoolean(record.schedulingRequired ?? record.scheduling_required) ?? fallback.schedulingRequired,
     serviceDuration: normalizeOptionalText(readString(record.serviceDuration ?? record.service_duration), 80),
     deliveryInstructions: normalizeOptionalText(readString(record.deliveryInstructions ?? record.delivery_instructions), 240),
@@ -4208,6 +4219,7 @@ function serializeProductOffer(offer: SalesCatalogProductOffer) {
 function serializeProductFulfillment(fulfillment: SalesCatalogProductFulfillment) {
   return {
     mode: fulfillment.mode,
+    agenda_resource_id: fulfillment.agendaResourceId ?? null,
     scheduling_required: fulfillment.schedulingRequired,
     service_duration: fulfillment.serviceDuration,
     delivery_instructions: fulfillment.deliveryInstructions,
@@ -4408,13 +4420,13 @@ function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {
 }
 
 function normalizeSalesDestination(value: unknown, targetMode: SalesCatalogImportTargetMode): SalesCatalogImportDestination {
-  if (value === "external_site" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment") return value;
   if (targetMode === "external_site") return "external_site";
   return "connectyhub_checkout";
 }
 
 function readOptionalSalesDestination(value: unknown): SalesCatalogImportDestination | null {
-  if (value === "external_site" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment") return value;
   return null;
 }
 

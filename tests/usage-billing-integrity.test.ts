@@ -131,6 +131,7 @@ describe("usage billing integrity", () => {
     const generated={mediaId:null,audioUrl:"https://example.test/audio",objectKey:"a",text:"oi",modelId:"voice",bytesSize:48};
     const meter=vi.fn().mockRejectedValue(new Error("billing unavailable"));
     const voice=serverModuleHarness<typeof Voice>("src/lib/voice/tts.ts",{
+      "@/lib/whatsapp/outbound-language": { normalizeOutboundSpeechText: (text: string) => text },
       "@/lib/gemini/tts":{isGeminiTtsVoiceId:()=>true,generateGeminiAudio:vi.fn().mockResolvedValue(generated)},
       "@/lib/billing/metered-usage":{meterUsageEvent:meter},
     });

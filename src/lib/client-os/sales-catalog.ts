@@ -1,3 +1,5 @@
+import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
+import { normalizeAgentPromptBuilderConfig } from "@/lib/whatsapp/agent-prompt-templates";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -1013,7 +1015,7 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     currency,
     status,
     tag: readString(metadata.tag) ?? createSalesCatalogTag(row.title, row.id),
-    highlightLabel: readHighlightLabel(metadata),
+    highlightLabel: customerCatalogHighlight(readHighlightLabel(metadata)),
     storeFeatured: readBoolean(metadata.store_featured ?? metadata.storeFeatured),
     storeFeaturedRank: readNumber(metadata.store_featured_rank ?? metadata.storeFeaturedRank),
     storeFeaturedAt: readString(metadata.store_featured_at ?? metadata.storeFeaturedAt),
@@ -1037,6 +1039,8 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     platformProductCommissionPercentage: readNumber(metadata.platform_product_commission_percentage),
     platformProductCommissionReleaseDays: readNumber(metadata.platform_product_commission_release_days),
     platformProductAgentPrompt: readString(metadata.platform_product_agent_prompt),
+    actionVersion: readNumber(metadata.action_version) ?? undefined,
+    activityProfile: metadata.activity_profile ? normalizeAgentPromptBuilderConfig(metadata.activity_profile) : undefined,
     salesDestination: normalizeSalesDestination(readString(metadata.sales_destination)),
     productUrl: readString(metadata.source_product_url) ?? readString(metadata.product_url),
     externalLinkButtonId: readString(metadata.link_button_id) ?? readString(metadata.external_link_button_id),
@@ -1420,6 +1424,7 @@ function readProductFulfillment(value: unknown): SalesCatalogProductFulfillment 
 
   return {
     mode: normalizeFulfillmentMode(readString(record.mode)),
+    agendaResourceId: readString(record.agenda_resource_id) ?? readString(record.agendaResourceId),
     schedulingRequired: readNullableBoolean(record.scheduling_required) ?? readNullableBoolean(record.schedulingRequired) ?? fallback.schedulingRequired,
     serviceDuration: readString(record.service_duration) ?? readString(record.serviceDuration),
     deliveryInstructions: readString(record.delivery_instructions) ?? readString(record.deliveryInstructions),
@@ -1665,7 +1670,7 @@ function normalizeSource(value: string | null): SalesCatalogSource {
 }
 
 function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout" || value === "appointment") return value;
   return "connectyhub_checkout";
 }
 

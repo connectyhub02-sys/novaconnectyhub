@@ -8,6 +8,7 @@ import { getLeadPaymentReviews, refreshLeadOrderFinance } from "@/lib/sales-cata
 import { loadAutomationPolicy, persistFollowUpDispatch, updateDispatch } from "@/lib/automations/dispatch";
 import { isContactWindow, nextContactWindow } from "@/lib/automations/contact-window";
 import { relationshipContext } from "@/lib/automations/relationship-context";
+import { claimsMissingFollowUpCheckout, loadFollowUpCheckout } from "./follow-up-checkout";
 import { checkContactPreferences } from "@/lib/automations/contact-preferences";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -263,11 +264,14 @@ async function executeWhatsappProactiveFollowUp(input: {
 
   const geminiCredentials = await loadGeminiCredentials(client);
   if (!geminiCredentials) return { status: "skipped", reason: "missing_gemini" };
+  const checkoutLink = eventData.salesCatalogOrderId && eventData.salesCatalogFollowUpKind === "abandoned_order"
+    ? await loadFollowUpCheckout(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId) : "";
 
   const followUpGeneration = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
     relationshipContext: relationship.context,
+    checkoutAvailable: Boolean(checkoutLink),
     behavior,
   });
   if (!followUpGeneration) {
@@ -317,7 +321,12 @@ async function executeWhatsappProactiveFollowUp(input: {
     return { status: "failed", reason: validation.reason ?? "generation_invalid" };
   }
   if (validation.outcome === "skip") return {status:"skipped",reason:"no_relevant_approach"};
-  const outgoingText=relationship.link ? `${followUpText.replace(/https?:\/\/\S+/g, "").trim()}\n\n${relationship.link}` : followUpText;
+  if (claimsMissingFollowUpCheckout(followUpText, checkoutLink)) {
+    await updateDispatch(client, eventData.dispatchId!, { status: "failed", reason: "checkout_action_not_available", lease_until: null }, eventData.claimToken);
+    return { status: "failed", reason: "checkout_action_not_available" };
+  }
+  const actionLink = checkoutLink || relationship.link;
+  const outgoingText=actionLink ? `${followUpText.replace(/https?:\/\/\S+/g, "").trim()}\n\n${actionLink}` : followUpText;
 
   if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
   const latestMessages = await loadRecentMessages(client, eventData.conversationId, eventData.whatsappInstanceId);
@@ -342,6 +351,9 @@ async function executeWhatsappProactiveFollowUp(input: {
   }
   const currentReviews = await getLeadPaymentReviews(client, eventData.organizationId, eventData.leadId);
   if (currentReviews.length) return { status: "skipped", reason: "financial_review_before_send" };
+  if (checkoutLink && await loadFollowUpCheckout(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId!) !== checkoutLink) {
+    return { status: "skipped", reason: "checkout_changed_before_send" };
+  }
   const latestConversation = await client.from("conversations").select("status,metadata").eq("organization_id", eventData.organizationId).eq("id", eventData.conversationId).single();
   if (latestConversation.error) throw new Error(latestConversation.error.message);
   const latestPause = readRecord(readRecord(latestConversation.data.metadata)?.human_intervention)?.paused_until;
@@ -350,11 +362,17 @@ async function executeWhatsappProactiveFollowUp(input: {
   if (!latestLead || latestLead.status === "archived" || readRecord(latestLead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(latestLead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
   const unsubscribeUrl = await prepareLeadContact(client, eventData.organizationId, eventData.leadId);
   if (!unsubscribeUrl) return { status: "skipped", reason: "lead_opted_out" };
-  const delivery = leadContactMessage(outgoingText, unsubscribeUrl);
+  const delivery = leadContactMessage(outgoingText, unsubscribeUrl, actionLink ? [`${checkoutLink ? "Continuar pagamento" : "Abrir página"}|${actionLink}`] : []);
+  let deliveredText = delivery.text;
+  let deliveredChoices: string[] = [];
   await updateDispatch(client, eventData.dispatchId!, { status: "sending", send_started_at: new Date().toISOString(), lease_until: new Date(Date.now() + 120000).toISOString() }, eventData.claimToken);
   const providerResponse = await sendLeadContactMessage(
-    (path, body) => callUazapi(credentials, path, { method: "POST", token, body, outbound: { instanceId: eventData.whatsappInstanceId, client } }),
-    { number: phone, ...delivery, track_source: "connectyhub", track_id: `followup_${eventData.dispatchId}` },
+    async (path, body) => {
+      const result = await callUazapi(credentials, path, { method: "POST", token, body, outbound: { instanceId: eventData.whatsappInstanceId, client } });
+      if (result.ok) { deliveredText = String(body.text ?? ""); deliveredChoices = Array.isArray(body.choices) ? body.choices : []; }
+      return result;
+    },
+    { number: phone, ...delivery, hideButtonLinks: true, track_source: "connectyhub", track_id: `followup_${eventData.dispatchId}` },
     async () => Boolean(await prepareLeadContact(client, eventData.organizationId, eventData.leadId)),
   );
 
@@ -375,10 +393,13 @@ async function executeWhatsappProactiveFollowUp(input: {
     provider: "uazapi",
     direction: "outbound",
     message_type: "text",
-    text_content: delivery.text,
+    text_content: deliveredText,
     occurred_at: sentAt,
     payload: {
       delivery_source: "proactive_follow_up",
+      choices: deliveredChoices,
+      checkout_url: checkoutLink || null,
+      unsubscribe_url: unsubscribeUrl,
       agent_run_id: eventData.agentRunId,
       author_type: "ai",
       author_label: "Agente IA",
@@ -456,6 +477,7 @@ async function generateFollowUpMessage(
     salesCatalogOrder?: SalesCatalogFollowUpOrder | null;
     salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
     relationshipContext?: string;
+    checkoutAvailable?: boolean;
     behavior?: WhatsappBehaviorConfig;
   } = {},
 ): Promise<FollowUpGenerationResult | null> {
@@ -466,6 +488,8 @@ async function generateFollowUpMessage(
     "Gere UMA mensagem curta (1-2 frases) de follow-up natural e contextual.",
     "Nao seja generico ('oi, tudo bem?'). Retome algo especifico da conversa.",
     "Não invente novidades, descontos, clima, urgência, links ou códigos de pagamento. Não diga que enviou um botão ou reservou algo: esta mensagem não executa essas ações.",
+    options.checkoutAvailable ? "Esta mensagem terá um botão real Continuar pagamento para o checkout existente. Não diga que o cliente já recebeu ou visualizou esse botão antes. Nenhuma nova cobrança foi criada."
+      : "Não há botão de checkout disponível para esta mensagem. Não pergunte se o cliente viu ou clicou no botão de pagamento, nem prometa enviar esse acesso. A opção Sair da lista só gerencia os contatos automáticos.",
     "Se o lead recusou, pediu para parar ou não existe motivo comercial pertinente, escolha action skip e message vazio.",
     ...(!options.salesCatalogOrder && !options.relationshipContext ? [
       "Para abandono de conversa, só envie se existir uma pergunta ou necessidade concreta ainda pendente que dependa do cliente. Tempo sem resposta, sozinho, não é abandono.",

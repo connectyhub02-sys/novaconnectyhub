@@ -70,7 +70,7 @@ describe("WhatsApp catalog import review flow", () => {
   it("keeps WhatsApp source metadata when reviewed products become catalog items", () => {
     expect(importerSource).toContain("buildPublishedImportSourceMetadata");
     expect(importerSource).toContain('source: "whatsapp_catalog"');
-    expect(importerSource).toContain('highlight_label: importedFromWhatsapp ? "Importado do WhatsApp" : "Importado por IA"');
+    expect(importerSource).not.toContain('highlight_label: importedFromWhatsapp ? "Importado do WhatsApp" : "Importado por IA"');
     expect(importerSource).toContain("whatsapp_catalog_payload");
     expect(importerSource).toContain("whatsapp_catalog_imported_at");
   });

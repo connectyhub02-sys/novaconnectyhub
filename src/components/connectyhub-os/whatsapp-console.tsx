@@ -92,6 +92,7 @@ import {
   type AgentPromptBuilderConfig,
   type AgentPromptTemplateId,
 } from "@/lib/whatsapp/agent-prompt-templates";
+import { professionalRegisters } from "@/lib/whatsapp/activity-profile";
 import {
   defaultLeadQualificationConfig,
   isLeadQualificationConfigEqual,
@@ -4071,6 +4072,25 @@ function GuidedPromptBuilder({
           <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
           <InfoTile label="Atuação" value={template.kind === "professional" ? "Profissional individual" : template.kind === "company" ? "Empresa" : "Atendimento geral"} />
         </div>
+
+        {template.kind !== "general" ? <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-3" style={{ borderColor: "var(--ch-border)" }}>
+          <label className="text-xs">{template.kind === "professional" ? "Nome do profissional" : "Nome de apresentação da empresa"}
+            <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.name ?? ""} maxLength={120}
+              onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), name: event.target.value } })} />
+          </label>
+          {professionalRegisters[config.templateId] ? <>
+            <label className="text-xs">Registro {professionalRegisters[config.templateId]}
+              <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.registration ?? ""} maxLength={80}
+                onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), registration: event.target.value } })} />
+            </label>
+            <label className="text-xs">UF do registro
+              <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.state ?? ""} maxLength={2}
+                onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), state: event.target.value.toUpperCase() } })} />
+            </label>
+          </> : null}
+          <label className="flex items-center gap-2 text-xs sm:col-span-3"><input type="checkbox" checked={config.professionalIdentity?.showPublic ?? false}
+            onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), showPublic: event.target.checked } })} />Exibir identificação nas páginas públicas vinculadas</label>
+        </div> : null}
 
         <div className="grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           <div>

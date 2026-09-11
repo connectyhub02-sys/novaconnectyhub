@@ -20,6 +20,8 @@ type Input = {
   userText: string;
   messages: Array<{ direction: string; text_content: string | null }>;
   assertCurrent: () => Promise<void>;
+  catalogResourceId?: string | null;
+  catalogAppointment?: boolean;
 };
 type Decision = {
   intent: string;
@@ -66,6 +68,8 @@ export async function processAgendaTurn(
       fallback: "Seu agendamento está registrado.",
     };
   const agenda = await getAgenda(client, org, input.leadId);
+  if (input.catalogAppointment && !input.catalogResourceId) return { context: "O item não tem agenda vinculada. Solicite atendimento para combinar disponibilidade; não confirme reserva.", booked: false, fallback: "Precisamos combinar a disponibilidade deste atendimento." };
+  if (input.catalogResourceId) agenda.resources = agenda.resources.filter(resource => resource.id === input.catalogResourceId);
   const bookings = agenda.bookings.filter(
     (b) => b.lead_id === input.leadId && b.status === "booked",
   );
@@ -78,6 +82,7 @@ export async function processAgendaTurn(
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
   if (offered.error) throw new Error(offered.error.message);
+  if (input.catalogResourceId && offered.data?.resource_id !== input.catalogResourceId) offered.data = null;
   const baseContext = `Agenda da empresa habilitada. Serviços/recursos: ${JSON.stringify(agenda.resources.filter((r) => r.enabled).map((r) => ({ id: r.id, name: r.name, service: r.service_name, duration: r.duration_minutes, kind: r.kind })))}. Reservas atuais deste lead: ${JSON.stringify(bookings)}. Só afirme reserva ou alteração quando a ferramenta confirmar. Não exponha IDs internos.`;
   if (
     !offered.data &&

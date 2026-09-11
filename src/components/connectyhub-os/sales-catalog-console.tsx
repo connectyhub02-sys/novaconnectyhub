@@ -1,4 +1,5 @@
 "use client";
+import { AgendaResourceSelect } from "./agenda-resource-select";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
@@ -16,6 +17,7 @@ import {
   CloudDownload,
   Copy,
   CreditCard,
+  CalendarDays,
   ExternalLink,
   Eye,
   EyeOff,
@@ -811,6 +813,17 @@ export function SalesCatalogConsole({
   const [inventoryNotes, setInventoryNotes] = useState("");
   const [skuDrafts, setSkuDrafts] = useState<SkuDraft[]>([]);
   const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
+  const [suggestedDestination, setSuggestedDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
+  const actionEdited = useRef(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/dashboard/sales-catalog/activity?companyId=${encodeURIComponent(selectedCompanyId)}`, { signal: controller.signal })
+      .then(async response => { if (!response.ok) return null; return response.json(); })
+      .then(data => { if (data?.destination) { setSuggestedDestination(data.destination); if (!actionEdited.current) setSalesDestination(data.destination); } })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [selectedCompanyId]);
+  const [agendaResourceId, setAgendaResourceId] = useState("");
   const [schedulingRequired, setSchedulingRequired] = useState(false);
   const [serviceDuration, setServiceDuration] = useState("");
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
@@ -916,7 +929,7 @@ export function SalesCatalogConsole({
     () => catalogImportMonitor?.jobId
       ? catalogImportJobs.find((job) => job.id === catalogImportMonitor.jobId) ?? null
       : null,
-    [catalogImportJobs, catalogImportMonitor?.jobId],
+    [catalogImportJobs, catalogImportMonitor],
   );
   const filteredOrders = useMemo(
     () => orderFlowFilter === "all" ? visibleOrders : visibleOrders.filter((order) => order.commercialFlowType === orderFlowFilter),
@@ -2219,7 +2232,8 @@ export function SalesCatalogConsole({
       formData.set("allowBackorder", String(allowBackorder));
       formData.set("inventoryNotes", inventoryNotes);
       formData.set("fulfillmentMode", fulfillmentMode);
-      formData.set("schedulingRequired", String(schedulingRequired));
+      formData.set("agendaResourceId", agendaResourceId);
+    formData.set("schedulingRequired", String(schedulingRequired));
       formData.set("serviceDuration", serviceDuration);
       formData.set("deliveryInstructions", deliveryInstructions);
       formData.set("accessInstructions", accessInstructions);
@@ -3111,6 +3125,7 @@ export function SalesCatalogConsole({
     setStoreFeatured(item.storeFeatured);
     setStoreFeaturedRank(item.storeFeaturedRank !== null ? String(item.storeFeaturedRank) : "");
     setPrice(item.price ?? "");
+    actionEdited.current = true;
     setSalesDestination(item.salesDestination);
     setProductUrl(item.productUrl ?? "");
     setExternalButtonLabel(item.externalLinkButtonLabel ?? item.title);
@@ -3143,6 +3158,7 @@ export function SalesCatalogConsole({
     setInventoryNotes(item.inventory.notes ?? "");
     setSkuDrafts(item.skus.map(buildSkuDraftFromSku));
     setFulfillmentMode(item.fulfillment.mode);
+    setAgendaResourceId(item.fulfillment.agendaResourceId ?? "");
     setSchedulingRequired(item.fulfillment.schedulingRequired);
     setServiceDuration(item.fulfillment.serviceDuration ?? "");
     setDeliveryInstructions(item.fulfillment.deliveryInstructions ?? "");
@@ -3184,7 +3200,8 @@ export function SalesCatalogConsole({
     setStoreFeatured(false);
     setStoreFeaturedRank("");
     setPrice("");
-    setSalesDestination("connectyhub_checkout");
+    actionEdited.current = false;
+    setSalesDestination(suggestedDestination);
     setProductUrl("");
     setExternalButtonLabel("");
     setDescription("");
@@ -3212,6 +3229,7 @@ export function SalesCatalogConsole({
     setInventoryNotes("");
     setSkuDrafts([]);
     setFulfillmentMode("physical");
+    setAgendaResourceId("");
     setSchedulingRequired(false);
     setServiceDuration("");
     setDeliveryInstructions("");
@@ -5272,22 +5290,24 @@ export function SalesCatalogConsole({
             </div>
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-              <FieldLabel>Destino da venda</FieldLabel>
+              <FieldLabel>Ação do item</FieldLabel>
               <div className="grid gap-2 sm:grid-cols-2">
                 <DestinationButton
                   active={salesDestination === "connectyhub_checkout"}
                   icon={CreditCard}
-                  label="Checkout CH"
-                  onClick={() => setSalesDestination("connectyhub_checkout")}
+                  label="Venda na loja"
+                  onClick={() => { actionEdited.current = true; setSalesDestination("connectyhub_checkout"); }}
                 />
+                <DestinationButton active={salesDestination === "appointment"} icon={CalendarDays} label="Agendamento" onClick={() => { actionEdited.current = true; setSalesDestination("appointment"); }} />
                 <DestinationButton
                   active={salesDestination === "external_site"}
                   icon={ExternalLink}
                   label="Site externo"
-                  onClick={() => setSalesDestination("external_site")}
+                  onClick={() => { actionEdited.current = true; setSalesDestination("external_site"); }}
                 />
               </div>
 
+              {salesDestination === "appointment" ? <AgendaResourceSelect companyId={selectedCompanyId} value={agendaResourceId} onChange={setAgendaResourceId} /> : null}
               {salesDestination === "external_site" ? (
                 <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                   <label className="block">
@@ -7758,7 +7778,8 @@ function CatalogImportItemEditor({
           className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
           style={{ borderColor: "var(--ch-border)" }}
         >
-          <option value="connectyhub_checkout">Checkout</option>
+          <option value="connectyhub_checkout">Venda na loja</option>
+          <option value="appointment">Agendamento</option>
           <option value="external_site">Site externo</option>
         </select>
         <select
@@ -7796,6 +7817,7 @@ function CatalogImportItemEditor({
         )}
       </div>
 
+      {item.salesDestination === "appointment" ? <AgendaResourceSelect companyId={item.companyId} value={item.fulfillment.agendaResourceId} onChange={value => onChange({ fulfillment: { ...item.fulfillment, agendaResourceId: value || null, schedulingRequired: true } })} /> : null}
       {item.salesDestination === "external_site" ? (
         <label className="mt-2 block">
           <FieldLabel>Link do produto no site externo</FieldLabel>
@@ -10471,7 +10493,7 @@ function getImportDestinationNotice(targetMode: SalesCatalogImportTargetMode, de
 
   return {
     title: "Revisar antes de publicar",
-    description: "O sistema mostra todos os itens antes de liberar. Em cada produto você decide se vende pelo checkout ConnectyHub ou se mantém o link externo da loja antiga.",
+    description: "Revise os itens e escolha a ação de cada um: venda na loja, agendamento ou site externo.",
   };
 }
 
@@ -10482,6 +10504,7 @@ function formatImportTargetMode(value: SalesCatalogImportTargetMode) {
 }
 
 function formatImportDestination(value: SalesCatalogImportDestination) {
+  if (value === "appointment") return "agendamento";
   if (value === "external_site") return "site";
   if (value === "manual_handoff") return "revisar";
   return "checkout";

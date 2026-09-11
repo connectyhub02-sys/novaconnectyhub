@@ -118,6 +118,16 @@ describe("customer agenda", () => {
     await expect(f.book(30)).rejects.toThrow("SLOT_UNAVAILABLE");
     expect((await f.book(60)).status).toBe("booked");
   });
+  it("shares availability between a WhatsApp reservation and a product-page reservation", async () => {
+    const f = await fixture(), otherLead = randomUUID();
+    await db.query("insert into leads(id,organization_id) values($1,$2)", [otherLead, f.org]);
+    const whatsapp = await f.book(0, 1, { key: "whatsapp:run-one" });
+    await expect(f.book(0, 1, { key: "public:product-one", lead: otherLead })).rejects.toThrow("SLOT_UNAVAILABLE");
+    const publicBooking = await f.book(60, 1, { key: "public:product-one", lead: otherLead });
+    const panel = await db.query<{ id: string; resource_id: string; status: string }>("select id,resource_id,status from customer_agenda_bookings where organization_id=$1 and resource_id=$2", [f.org, f.resource]);
+    expect(panel.rows.map(row => row.id).sort()).toEqual([whatsapp.id, publicBooking.id].sort());
+    await expect(f.book(60, 1, { key: "whatsapp:run-two" })).rejects.toThrow("SLOT_UNAVAILABLE");
+  });
   it("uses peak simultaneous occupancy for resources with capacity", async () => {
     const f = await fixture("service", 2);
     await f.book();

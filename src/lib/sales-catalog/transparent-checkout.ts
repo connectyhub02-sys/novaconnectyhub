@@ -286,7 +286,7 @@ export async function validateTransparentInventory(client: SupabaseClient, organ
   const byId = new Map((products ?? []).map(row => [row.id, mapSalesCatalogItem(row)]));
   for (const item of items) {
     const product = byId.get(item.catalog_item_id);
-    if (!product || product.status !== "active" || product.billingCycle !== "one_time") throw new CheckoutError("Um produto deste pedido precisa ser revisado pelo WhatsApp.", 409);
+    if (!product || product.status !== "active" || product.billingCycle !== "one_time" || product.salesDestination !== "connectyhub_checkout") throw new CheckoutError("Um produto deste pedido precisa ser revisado pelo WhatsApp.", 409);
     let status = product.inventory.status;
     let quantity = product.inventory.quantity;
     if (item.sku_id) {

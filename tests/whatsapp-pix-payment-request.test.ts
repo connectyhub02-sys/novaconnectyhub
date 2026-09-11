@@ -38,6 +38,7 @@ function store(fetch: unknown) {
     update: () => ({ eq: () => Promise.resolve({ error: null }) }),
   }) };
   const context = {
+    messages: [], salesCatalog: [],
     credentials: { baseUrl: "https://uazapi.example.test" },
     run: { id: "run-1" }, organization: { id: "store-1", name: "Loja teste", plan_code: "scale" },
     agent: { id: "agent-1", name: "Gustavo" }, instance: { id: "instance-1" },

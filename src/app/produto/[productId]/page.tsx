@@ -1,3 +1,6 @@
+import { ProductAppointment } from "@/components/checkout/product-appointment";
+import { activityAppointmentLabel, professionalRegisters } from "@/lib/whatsapp/activity-profile";
+import { getAgentPromptTemplate } from "@/lib/whatsapp/agent-prompt-templates";
 import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
 import { isPublicCommerceAvailable } from "@/lib/sales-catalog/public-commerce-access";
 import type { Metadata } from "next";
@@ -258,6 +261,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     loadStoreProducts(client, storefrontProductContext),
   ]);
   const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
+  const appointment = item.salesDestination === "appointment";
+  const activityId = getAgentPromptTemplate(item.activityProfile?.templateId).id;
+  const identity = item.activityProfile?.professionalIdentity;
   const canCheckout = item.salesDestination === "connectyhub_checkout"
     && price !== null
     && !(item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder);
@@ -342,7 +348,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const shippingParagraphs = splitDescription(item.pageContent.shippingInfo ?? buildDefaultShippingInfo(item));
   const faqParagraphs = splitDescription(item.pageContent.faq ?? buildDefaultFaqInfo(item));
   const importantNotice = item.pageContent.importantNotice
-    ?? "Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.";
+    ?? (item.salesDestination === "appointment"
+      ? "Escolha um horário disponível. A reserva só estará confirmada após o registro na agenda."
+      : "Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.");
   const highlights = buildProductHighlights(item, descriptionPreview);
   const brand = findAttributeValue(item, "marca") ?? inferBrandFromTitle(item.title);
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
@@ -366,6 +374,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
       />
       <PublicTrackingContextBridge context={publicTrackingContext} />
       <ProductTopBar
+        showCart={item.salesDestination === "connectyhub_checkout"}
         branding={branding}
         cartUrl={storeCartUrl}
         productsUrl={storeProductsUrl}
@@ -405,13 +414,10 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               {descriptionPreview}
             </p>
 
-            <ProductPurchaseControls
-              cartUrl={storeCartUrl}
-              disabled={!canCheckout}
-              organizationId={organization.id}
-              productId={item.id}
-              className="mt-5 hidden sm:grid"
-            />
+            {identity?.showPublic && identity.name ? <p className="mt-3 text-sm">{identity.name}{identity.registration && professionalRegisters[activityId] ? ` · ${professionalRegisters[activityId]} ${identity.registration}${identity.state ? ` / ${identity.state}` : ""}` : ""}</p> : null}
+            {appointment ? <ProductAppointment productId={item.id} label={activityAppointmentLabel(activityId)} contactHref={whatsappReturn?.href} /> : item.salesDestination === "external_site" ? <a className="mt-5 block rounded-xl bg-blue-700 p-3 text-center font-semibold text-white" href={item.productUrl ?? "#"} rel="noopener noreferrer">Ver no site externo</a> : <ProductPurchaseControls
+              cartUrl={storeCartUrl} disabled={!canCheckout} organizationId={organization.id} productId={item.id} className="mt-5 hidden sm:grid"
+            />}
 
             <ul className="mt-5 grid gap-2.5">
               {highlights.map((highlight) => (
@@ -425,26 +431,26 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         </div>
 
         <section className="mt-8 grid grid-cols-2 gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
-          <Benefit icon={<LockKeyhole className="h-6 w-6" />} title="Checkout seguro" subtitle="Ambiente criptografado" />
-          <Benefit icon={<Truck className="h-6 w-6" />} title="Entrega ou retirada" subtitle="Confira as condições" />
-          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Compra na loja" subtitle="Atendimento pelo WhatsApp" />
-          <Benefit icon={<PackageCheck className="h-6 w-6" />} title="Pedido acompanhado" subtitle="Atualizações pelo WhatsApp" />
+          <Benefit icon={<LockKeyhole className="h-6 w-6" />} title={appointment ? "Agenda online" : "Checkout seguro"} subtitle={appointment ? "Horários disponíveis" : "Ambiente criptografado"} />
+          <Benefit icon={<Truck className="h-6 w-6" />} title={appointment ? "Atendimento" : "Entrega ou retirada"} subtitle="Confira as condições" />
+          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title={appointment ? "Agendamento" : "Compra na loja"} subtitle="Atendimento pelo WhatsApp" />
+          <Benefit icon={<PackageCheck className="h-6 w-6" />} title={appointment ? "Reserva confirmada" : "Pedido acompanhado"} subtitle={appointment ? "Após escolher e confirmar o horário" : "Atualizações pelo WhatsApp"} />
         </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
           <section className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
             <div className="grid grid-cols-2 border-b border-black/10 text-center text-xs font-semibold text-black/60 sm:grid-cols-4 sm:text-sm">
               <a href="#descricao-completa" className="border-b-2 px-3 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descrição completa</a>
-              <a href="#modo-de-uso" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Modo de uso</a>
-              <a href="#informacoes-de-envio" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Informações de envio</a>
+              <a href="#modo-de-uso" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">{appointment ? "Sobre o atendimento" : "Modo de uso"}</a>
+              <a href="#informacoes-de-envio" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">{appointment ? "Condições do atendimento" : "Informações de envio"}</a>
               <a href="#perguntas-frequentes" className="px-4 py-4 transition hover:text-[color:var(--store-text)]">Perguntas frequentes</a>
             </div>
 
             <div className="grid gap-5 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_280px]">
               <div className="space-y-7 text-sm leading-7 text-[color:var(--store-text-muted)]">
                 <ProductInfoBlock id="descricao-completa" paragraphs={descriptionParagraphs} title="Descrição completa" />
-                <ProductInfoBlock id="modo-de-uso" paragraphs={usageParagraphs} title="Modo de uso" />
-                <ProductInfoBlock id="informacoes-de-envio" paragraphs={shippingParagraphs} title="Informações de envio" />
+                <ProductInfoBlock id="modo-de-uso" paragraphs={usageParagraphs} title={item.salesDestination === "appointment" ? "Como agendar" : "Modo de uso"} />
+                <ProductInfoBlock id="informacoes-de-envio" paragraphs={shippingParagraphs} title={item.salesDestination === "appointment" ? "Sobre o atendimento" : "Informações de envio"} />
                 <ProductInfoBlock id="perguntas-frequentes" paragraphs={faqParagraphs} title="Perguntas frequentes" />
                 {documents.length > 0 ? (
                   <div className="grid gap-3 pt-2 sm:grid-cols-2">
@@ -549,13 +555,13 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           <MessageCircle className="h-7 w-7" />
         </a>
       ) : null}
-      <ProductMobileCheckoutBar
+      {item.salesDestination === "connectyhub_checkout" ? <ProductMobileCheckoutBar
         cartUrl={storeCartUrl}
         disabled={!canCheckout}
         organizationId={organization.id}
         productId={item.id}
-      />
-      <ProductPageCartController
+      /> : null}
+      {item.salesDestination === "connectyhub_checkout" ? <ProductPageCartController
         branding={branding}
         products={cartProducts}
         storeSlug={storeSlug}
@@ -569,9 +575,10 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           agentId,
           trackingLinkId,
         }}
-      />
-      <div className="mx-auto max-w-6xl px-4"><CommercialOffers organizationId={organization.id} surface="product" currentProductIds={[item.id]} title="Você também pode gostar" /></div>
+      /> : null}
+      {item.salesDestination === "connectyhub_checkout" ? <div className="mx-auto max-w-6xl px-4"><CommercialOffers organizationId={organization.id} surface="product" currentProductIds={[item.id]} title="Você também pode gostar" /></div> : null}
       <PublicStoreFooter
+        showCart={item.salesDestination === "connectyhub_checkout"}
         branding={branding}
         cartUrl={storeCartUrl}
         footerContactText={storefront.footerContactText}
@@ -754,11 +761,13 @@ function buildProductPublicTrackingContext(input: {
 }
 
 function ProductTopBar({
+  showCart = true,
   branding,
   cartUrl,
   productsUrl,
   storeUrl,
 }: {
+  showCart?: boolean;
   branding: OrganizationBranding;
   cartUrl: string;
   productsUrl: string;
@@ -767,7 +776,7 @@ function ProductTopBar({
   return (
     <>
       <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
-        <span>Compra segura na {branding.displayName}.</span>
+        <span>{showCart ? "Compra segura" : "Conheça os serviços e atendimentos"} na {branding.displayName}.</span>
         <Link className="ml-1 font-bold underline underline-offset-2" href={productsUrl}>
           Ver outros produtos
         </Link>
@@ -785,7 +794,7 @@ function ProductTopBar({
                 <ProductMenuLink href={`${productsUrl}#ofertas`} label="Ofertas" />
                 <ProductMenuLink href={storeUrl} label="Novidades" />
                 <ProductMenuLink href={`${storeUrl}#categorias`} label="Categorias" />
-                <ProductMenuLink href={cartUrl} label="Carrinho" />
+                {showCart ? <ProductMenuLink href={cartUrl} label="Carrinho" /> : null}
               </div>
             </details>
             <StoreIdentity branding={branding} storeUrl={storeUrl} />
@@ -806,9 +815,9 @@ function ProductTopBar({
           </form>
 
           <div className="flex shrink-0 items-center justify-end gap-3">
-            <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5" aria-label="Carrinho">
+            {showCart ? <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5" aria-label="Carrinho">
               <ShoppingCart className="h-4 w-4" />
-            </Link>
+            </Link> : null}
           </div>
         </div>
       </header>
@@ -996,6 +1005,7 @@ function RelatedProductCard({
 }
 
 function PublicStoreFooter({
+  showCart,
   branding,
   cartUrl,
   footerContactText,
@@ -1006,6 +1016,7 @@ function PublicStoreFooter({
   tracking,
   whatsappHref,
 }: {
+  showCart: boolean;
   branding: OrganizationBranding;
   cartUrl: string;
   footerContactText: string;
@@ -1043,7 +1054,7 @@ function PublicStoreFooter({
             items={[
               { label: "Sobre", href: storeUrl },
               { label: "Produtos", href: storeProductsUrl },
-              { label: "Carrinho", href: cartUrl },
+              ...(showCart ? [{ label: "Carrinho", href: cartUrl }] : []),
               { label: "Atendimento", href: supportHref, external: supportIsExternal },
             ]}
           />
@@ -1266,6 +1277,8 @@ function buildProductHighlights(item: ClientSalesCatalogItem, preview: string) {
 }
 
 function buildDefaultUsageInfo(item: ClientSalesCatalogItem) {
+  if (item.salesDestination === "appointment") return item.fulfillment.accessInstructions
+    ?? "Abra a agenda, escolha uma data e um horário disponível e informe seus dados. A confirmação aparece após o registro da reserva. Se não houver horários disponíveis, entre em contato para combinar o atendimento.";
   const instructions = [
     item.fulfillment.accessInstructions,
     item.fulfillment.deliveryInstructions,
@@ -1277,6 +1290,8 @@ function buildDefaultUsageInfo(item: ClientSalesCatalogItem) {
 }
 
 function buildDefaultShippingInfo(item: ClientSalesCatalogItem) {
+  if (item.salesDestination === "appointment") return item.fulfillment.deliveryInstructions
+    ?? "Consulte as orientações e o local do atendimento pelo WhatsApp. O valor exibido é informativo e não gera pedido ou cobrança ao solicitar um horário.";
   const parts = [
     item.shipping.notes,
     item.fulfillment.deliveryInstructions,
@@ -1288,6 +1303,12 @@ function buildDefaultShippingInfo(item: ClientSalesCatalogItem) {
 }
 
 function buildDefaultFaqInfo(item: ClientSalesCatalogItem) {
+  if (item.salesDestination === "appointment") return [
+    "Como agendar? Escolha um dos horários disponíveis na agenda deste item.",
+    "Quando está confirmado? Aguarde a confirmação da reserva na página. O mesmo horário fica registrado na agenda do atendimento.",
+    "Não encontrou um horário? Entre em contato pelo WhatsApp para consultar outras possibilidades.",
+  ].join("\n");
+  if (item.salesDestination === "external_site") return "Como continuar? Abra o site externo pelo botão desta página. As condições de compra e atendimento são apresentadas no site de destino.";
   return [
     `Este item esta ${formatStockLabel(item).toLowerCase()}? A disponibilidade e confirmada no momento do pedido.`,
     `Como finalizar? Toque em comprar agora e siga o checkout seguro da loja.`,
@@ -1302,8 +1323,8 @@ function buildProductQuickDetails(
 ) {
   const defaultDetails = [
     { id: "category", label: "Categoria", value: item.category ?? "Produto" },
-    { id: "fulfillment", label: "Entrega", value: formatFulfillment(item.fulfillment.mode) },
-    { id: "availability", label: "Disponibilidade", value: formatStockLabel(item) },
+    { id: "fulfillment", label: item.salesDestination === "appointment" ? "Atendimento" : "Entrega", value: formatFulfillment(item.fulfillment.mode) },
+    { id: "availability", label: "Disponibilidade", value: item.salesDestination === "appointment" ? "Consulte a agenda" : formatStockLabel(item) },
     brand ? { id: "brand", label: "Marca", value: brand } : null,
     application ? { id: "application", label: "Aplicacao", value: application } : null,
   ].filter((detail): detail is { id: string; label: string; value: string } => Boolean(detail));

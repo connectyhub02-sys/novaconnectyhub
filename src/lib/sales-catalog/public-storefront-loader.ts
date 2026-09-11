@@ -1,3 +1,5 @@
+import { activityAppointmentLabel } from "@/lib/whatsapp/activity-profile";
+import { getAgentPromptTemplate } from "@/lib/whatsapp/agent-prompt-templates";
 import { isPublicCommerceAvailable } from "./public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import type {
@@ -646,6 +648,7 @@ export function mapStorefrontProduct(
     highlightLabel: isStoreFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (compareAtLabel ? "Oferta" : null),
     isFeatured: isStoreFeatured,
     canCheckout,
+    actionLabel: item.salesDestination === "appointment" ? activityAppointmentLabel(getAgentPromptTemplate(item.activityProfile?.templateId).id) : undefined,
     productUrl: buildLeadAwareSalesCatalogStoreProductUrl({
       storeSlug: input.storeSlug,
       productId: item.id,

@@ -3,7 +3,7 @@ import type { SalesCatalogCategoryIconId } from "./category-icons";
 export type SalesCatalogItemStatus = "active" | "draft" | "archived";
 export type SalesCatalogMediaKind = "image" | "video" | "document";
 export type SalesCatalogSource = "manual" | "whatsapp_catalog";
-export type SalesCatalogSalesDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
+export type SalesCatalogSalesDestination = "connectyhub_checkout" | "external_site" | "appointment" | "manual_handoff";
 export type SalesCatalogWhatsappExportStatus = "linked" | "pending_provider_support" | "exported" | "failed";
 export type SalesCatalogBusinessType = "simple" | "fashion" | "physical" | "services" | "digital" | "food";
 export type SalesCatalogShippingProfile = "default" | "free" | "custom";
@@ -215,6 +215,7 @@ export type SalesCatalogProductOffer = {
 };
 
 export type SalesCatalogProductFulfillment = {
+  agendaResourceId?: string | null;
   mode: SalesCatalogFulfillmentMode;
   schedulingRequired: boolean;
   serviceDuration: string | null;
@@ -354,6 +355,8 @@ export type ClientSalesCatalogItem = {
   platformProductCommissionPercentage: number | null;
   platformProductCommissionReleaseDays: number | null;
   platformProductAgentPrompt: string | null;
+  actionVersion?: number;
+  activityProfile?: { templateId: string; professionalIdentity?: { name: string; registration: string; state: string; showPublic: boolean } };
   salesDestination: SalesCatalogSalesDestination;
   productUrl: string | null;
   externalLinkButtonId: string | null;
@@ -1332,6 +1335,7 @@ export function formatSalesCatalogShippingProfile(profile: SalesCatalogShippingP
 
 export function formatSalesCatalogSalesDestination(destination: SalesCatalogSalesDestination) {
   if (destination === "external_site") return "site externo";
+  if (destination === "appointment") return "agendamento";
   if (destination === "manual_handoff") return "revisar destino da venda";
   return "checkout ConnectyHub";
 }
@@ -1674,4 +1678,9 @@ function buildProductPageContentLines(pageContent: SalesCatalogProductPageConten
   }
 
   return lines;
+}
+
+/** Import provenance belongs to the dashboard, never to customer-facing copy. */
+export function customerCatalogHighlight(label: string | null | undefined) {
+  return label && !/^importad[oa]\s+(?:do whatsapp|por ia)$/i.test(label.trim()) ? label : null;
 }

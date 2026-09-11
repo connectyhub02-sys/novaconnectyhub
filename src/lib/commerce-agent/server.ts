@@ -174,6 +174,8 @@ type CommerceOrderItem = {
   skuCode: string | null;
 };
 
+import { buildActivityProfileInstruction } from "@/lib/whatsapp/activity-profile";
+
 type OfferProduct = {
   id: string;
   title: string;
@@ -183,6 +185,8 @@ type OfferProduct = {
   priceLabel: string | null;
   billingCycle: SalesCatalogBillingCycle;
   billingInterval: SalesCatalogBillingInterval;
+  salesDestination?: ClientSalesCatalogItem["salesDestination"];
+  actionLabel?: string;
 };
 
 type CommerceAgentPromptContext = {
@@ -1873,6 +1877,9 @@ function mapOfferProduct(item: ClientSalesCatalogItem) {
     priceLabel: price !== null ? formatCurrency(price) : null,
     billingCycle: item.billingCycle,
     billingInterval: item.billingInterval,
+    salesDestination: item.salesDestination,
+    actionLabel: item.salesDestination === "appointment" ? "Agendar atendimento na página deste item"
+      : item.salesDestination === "external_site" ? "Abrir site externo" : "Comprar na loja",
   } satisfies OfferProduct;
 }
 
@@ -1885,6 +1892,7 @@ function buildCommerceAgentSystemInstruction(
   promptContext: CommerceAgentPromptContext,
 ) {
   const customGlobalPrompt = context.globalAgentPrompt?.trim();
+  const activity = normalizeAgentPromptBuilderConfig(context.agentMetadata?.[promptBuilderMetadataKey]);
   const shouldAppendCustomGlobalPrompt = Boolean(
     customGlobalPrompt && customGlobalPrompt !== defaultWhatsappGlobalPrompt,
   );
@@ -1901,6 +1909,8 @@ function buildCommerceAgentSystemInstruction(
     "",
     "PROMPT DO AGENTE DA EMPRESA:",
     resolveCommerceRuntimeAgentPrompt(context, promptContext),
+    ...buildActivityProfileInstruction(activity.templateId, activity.professionalIdentity),
+    "A ação do item atual prevalece sobre orientações genéricas de varejo. Agendamento não permite carrinho, pedido nem Pix. Oriente abrir Agendar na página e escolher horário; só a confirmação gravada pela agenda comprova uma reserva. Site externo encaminha para o destino cadastrado. Somente itens de venda na loja participam de checkout e aumento de carrinho.",
     "",
     "CANAL ATUAL: LOJA CONNECTYHUB",
     `- Voce e ${context.agentName}, o mesmo agente que atendeu este lead no WhatsApp.`,
@@ -2398,6 +2408,8 @@ function formatAsaasPaymentMethods(methods: SalesCatalogAsaasPaymentMethod[]) {
 }
 
 function formatOfferProductBilling(product: OfferProduct) {
+  if (product.salesDestination === "appointment") return `${product.actionLabel}. Preço apenas informativo; sem checkout.`;
+  if (product.salesDestination === "external_site") return "Compra no site externo cadastrado; sem checkout local.";
   return formatSalesCatalogBillingCycleWithInterval(product.billingCycle, product.billingInterval);
 }
 

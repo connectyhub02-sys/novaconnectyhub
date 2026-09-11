@@ -46,8 +46,31 @@ describe("WhatsApp outbound language quality", () => {
 
   it("speaks Brazilian currency naturally in generated audio", () => {
     expect(normalizeOutboundSpeechText("Sai por R$ 237,99. Oxandrolona - 237,99 BRL")).toBe(
-      "Sai por 237 reais e 99 centavos. Oxandrolona - 237 reais e 99 centavos",
+      "Sai por duzentos e trinta e sete reais e noventa e nove centavos. Oxandrolona - duzentos e trinta e sete reais e noventa e nove centavos",
     );
+  });
+
+  it.each([
+    ["R$ 950.000,00", "novecentos e cinquenta mil reais"],
+    ["950 mil", "novecentos e cinquenta mil reais"],
+    ["O valor é 950 mil.", "O valor é novecentos e cinquenta mil reais."],
+    ["950000 reais", "novecentos e cinquenta mil reais"],
+    ["R$ 2.590,10", "dois mil quinhentos e noventa reais e dez centavos"],
+    ["R$ 1,01", "um real e um centavo"],
+    ["R$ 0,50", "cinquenta centavos"],
+    ["R$ 0,00", "zero reais"],
+    ["1,5 milhão de reais", "um milhão e quinhentos mil reais"],
+    ["R$ 1.000.000,00", "um milhão de reais"],
+    ["R$ 1.001,00", "mil e um reais"],
+    ["R$ 100,00", "cem reais"],
+  ])("reads a monetary value in full and remains idempotent: %s", (input, output) => {
+    expect(normalizeOutboundSpeechText(input)).toBe(output);
+    expect(normalizeOutboundSpeechText(output)).toBe(output);
+  });
+  it("does not turn counts, phone numbers, codes, links or template tags into money", () => {
+    for (const value of ["950 mil seguidores", "Código 950000", "+55 67 99262-5652", "https://fixture.invalid/950mil?preco=R$950", "{{preco_R$950}}", "Área de 950 m²"]) {
+      expect(normalizeOutboundSpeechText(value)).toBe(value);
+    }
   });
 
   it("documents Portuguese, English and Spanish spelling requirements in the prompt", () => {

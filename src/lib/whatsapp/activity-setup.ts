@@ -1,5 +1,6 @@
 import { defaultLeadQualificationConfig, normalizeLeadQualificationConfig, type LeadQualificationConfig } from "../leads/qualification";
 import { activityPresetVersion } from "./activity-presets";
+import { activityClosing, activityExample, activityRepresentation } from "./activity-profile";
 import { createActivityPromptConfig, getAgentActivityPreset, getAgentPromptTemplate, type AgentPromptBuilderConfig } from "./agent-prompt-templates";
 import { defaultWhatsappBehaviorConfig, normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, normalizeWhatsappCloneProfile, type WhatsappBehaviorConfig, type WhatsappCloneProfile } from "./agent-behavior";
 
@@ -8,16 +9,16 @@ export function createActivityCloneProfile(templateId: unknown, agentName: strin
   const preset = getAgentActivityPreset(template.id);
   return {
     enabled: true, source: "activity", activityTemplateId: template.id, useAgentName: true,
-    displayName: agentName.slice(0, 80), roleIdentity: preset.identity, tone: preset.tone,
+    displayName: agentName.slice(0, 80), roleIdentity: activityRepresentation(template.id), tone: preset.tone,
     vocabulary: preset.vocabulary,
     responseRhythm: `Mensagens curtas, uma pergunta por vez. ${preset.playbook[0]} Não refaça perguntas já respondidas.`,
-    salesStyle: preset.playbook.join("\n"), objectionStyle: preset.objection, closingStyle: preset.closing,
+    salesStyle: preset.playbook.join("\n"), objectionStyle: preset.objection, closingStyle: activityClosing(template.id),
     emojiStyle: preset.style === "discreet" ? "Evite emojis em assuntos sensíveis. Quando permitidos nas preferências, use somente um símbolo discreto e útil, sem celebrações ou intimidade."
       : preset.style === "warm" ? "Use no máximo um emoji pertinente à mensagem, quando o cliente der abertura. Não substitua informações do pedido por emojis."
         : "Use emojis com moderação, quando ajudarem a organizar a conversa. Evite fogo, coração ou brincadeiras em negociações e reclamações.",
     audioStyle: `Se o modo de resposta permitir áudio e houver voz disponível, fale de forma clara e breve. ${preset.tone} Valores, endereços e condições importantes também precisam ficar claros em texto.`,
     forbiddenPatterns: preset.care,
-    notes: `Referência de abordagem: ${preset.example} Adapte ao contexto; não repita como bordão.`,
+    notes: `Referência de abordagem: ${activityExample(template.id)} Adapte ao contexto; não repita como bordão.`,
   };
 }
 
@@ -61,7 +62,13 @@ export function applyActivityCloneProfile(templateId: unknown, agentName: string
   if (previous.activityTemplateId) {
     const oldDefaults = createActivityCloneProfile(previous.activityTemplateId, previous.displayName);
     cloneProfile = { ...defaults, enabled: previous.enabled, source: previous.source, useAgentName: previous.useAgentName };
-    for (const key of fields) if (previous[key] !== oldDefaults[key]) cloneProfile[key] = previous[key];
+    for (const key of fields) {
+      const legacyIdentity = key === "roleIdentity" && previous[key] === getAgentActivityPreset(previous.activityTemplateId).identity;
+      const oldPreset = getAgentActivityPreset(previous.activityTemplateId);
+      const legacyClosing = key === "closingStyle" && previous[key] === oldPreset.closing;
+      const legacyExample = key === "notes" && previous[key] === `Referência de abordagem: ${oldPreset.example} Adapte ao contexto; não repita como bordão.`;
+      if (previous[key] !== oldDefaults[key] && !legacyIdentity && !legacyClosing && !legacyExample) cloneProfile[key] = previous[key];
+    }
     if (previous.useAgentName === false) cloneProfile.displayName = previous.displayName;
   } else if (previous.source === "history") {
     return previous;

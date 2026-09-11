@@ -1,4 +1,14 @@
 const protectedTokenPrefix = "__CONNECTYHUB_PROTECTED_TEXT_";
+const scaledCurrencyPattern = /(?<![\p{L}\p{N}/])(?:R\$\s*)?(\d+(?:[,.]\d+)?)\s*(milh(?:ão|ões|ao|oes)|mil)\b(?:\s*(?:de\s+)?reais)?/giu;
+function expandScaledCurrency(match: string, value: string, scale: string, offset: number, text: string) {
+  const prefix = text.slice(Math.max(0, offset - 65), offset).split(/[.!?\n]/).at(-1) ?? "";
+  const moneyContext = /R\$|reais/i.test(match) || text.trim() === match.trim()
+    || /\b(?:custa|valor|preço|preco|investimento|orçamento|orcamento|pagar|pagamento|por|sai por)\s*(?:(?:é|de|até|ate|em|fica|vai|a partir de)\s*)?$/i.test(prefix.trim());
+  if (!moneyContext) return match;
+  const amount = Number(value.replace(",", ".")) * (scale.toLowerCase() === "mil" ? 1000 : 1000000);
+  if (!Number.isFinite(amount) || amount >= 1e12) return match;
+  return "R$ " + amount.toFixed(2).replace(".", ",");
+}
 
 const portugueseSignalPattern = /\b(?:voce|você|voces|vocês|vc|vcs|nao|não|tambem|também|tbm|tb|pq|qnd|oq|cmg|dps|td|mto|qto|vdd|pra|manda|mande|mandar|envia|enviar|quero|preciso|produto|agente|atendimento|cliente|pagamento|pix|cartao|cartão|credito|crédito|debito|débito|codigo|código|endereco|endereço|numero|número|confirmacao|confirmação|proximo|próximo|opcao|opção|opcoes|opções|preco|preço|orcamento|orçamento|duvida|dúvida)\b/i;
 const englishSignalPattern = /\b(?:u|ur|pls|plz|thx|idk|btw)\b/i;
@@ -134,10 +144,15 @@ export function normalizeOutboundLanguageText(value: string) {
 }
 
 export function normalizeOutboundSpeechText(value: string) {
-  return normalizeOutboundLanguageText(value)
+  const { text, protectedValues } = protectOutboundFragments(normalizeOutboundLanguageText(value));
+  const spoken = text
+    .replace(scaledCurrencyPattern, expandScaledCurrency)
+    .replace(/(?<![\p{L}\p{N}/])((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{1,2})?)\s+reais\b/giu,
+      (_match, amount: string) => formatBrazilianCurrencyForSpeech(amount) ?? _match)
     .replace(brazilianCurrencyDisplayPattern, (_match, amount: string) => (
       formatBrazilianCurrencyForSpeech(amount) ?? `R$ ${amount}`
     ));
+  return restoreOutboundFragments(spoken, protectedValues);
 }
 
 function normalizeBrazilianCurrencyDisplay(value: string) {
@@ -167,18 +182,18 @@ function formatBrazilianCurrencyForSpeech(value: string) {
     return null;
   }
 
-  const realLabel = amount.reais === 1 ? "real" : "reais";
+  const realLabel = amount.reais === 1 ? "real" : amount.reais >= 1000000 && amount.reais % 1000000 === 0 ? "de reais" : "reais";
   const centLabel = amount.centavos === 1 ? "centavo" : "centavos";
 
   if (amount.centavos <= 0) {
-    return `${amount.reais} ${realLabel}`;
+    return `${portugueseNumber(amount.reais)} ${realLabel}`;
   }
 
   if (amount.reais <= 0) {
-    return `${amount.centavos} ${centLabel}`;
+    return `${portugueseNumber(amount.centavos)} ${centLabel}`;
   }
 
-  return `${amount.reais} ${realLabel} e ${amount.centavos} ${centLabel}`;
+  return `${portugueseNumber(amount.reais)} ${realLabel} e ${portugueseNumber(amount.centavos)} ${centLabel}`;
 }
 
 function parseBrazilianCurrency(value: string) {
@@ -224,4 +239,23 @@ function matchCase(match: string, replacement: string) {
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+function portugueseNumber(n: number): string {
+  return numberInPortuguese(n); }
+function numberInPortuguese(n: number): string {
+const units = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+const tens = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+const teens = ["dez", "onze", "doze", "treze", "catorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+const hundreds = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+if (!Number.isSafeInteger(n) || n < 0 || n >= 1e12) return String(n);
+if (n < 10) return units[n];
+if (n < 20) return teens[n - 10];
+if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " e " + numberInPortuguese(n % 10) : "");
+if (n === 100) return "cem";
+if (n < 1000) return hundreds[Math.floor(n / 100)] + (n % 100 ? " e " + numberInPortuguese(n % 100) : "");
+const scale = n >= 1e9 ? 1e9 : n >= 1e6 ? 1e6 : 1000;
+const count = Math.floor(n / scale), rest = n % scale;
+const label = scale === 1000 ? "mil" : scale === 1e6 ? (count === 1 ? "milhão" : "milhões") : (count === 1 ? "bilhão" : "bilhões");
+const head = scale === 1000 && count === 1 ? label : numberInPortuguese(count) + " " + label;
+return head + (rest ? (rest < 100 || rest % 100 === 0 ? " e " : " ") + numberInPortuguese(rest) : "");
 }

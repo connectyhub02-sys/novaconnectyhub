@@ -1,3 +1,4 @@
+import { loadCatalogActivityDefaults } from "./activity-defaults";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -268,6 +269,15 @@ export async function createWhatsappCatalogImportReview(input: {
   if (drafts.length === 0) {
     throw new Error("Nenhum produto valido foi encontrado no catalogo WhatsApp.");
   }
+  const activity = await loadCatalogActivityDefaults(client, company.id, agentId);
+  for (const draft of drafts) {
+    draft.salesDestination = activity.destination;
+    if (activity.destination === "appointment") {
+      draft.fulfillment = { ...draft.fulfillment, mode: "service", schedulingRequired: true };
+      draft.warnings = draft.warnings.filter(warning => !warning.startsWith("Preco nao encontrado"));
+    }
+  }
+
 
   const titleParts = [
     "Catalogo WhatsApp",
@@ -608,6 +618,15 @@ async function processWhatsappCatalogImportReviewJob(input: {
   if (drafts.length === 0) {
     throw new Error("Nenhum produto valido foi encontrado no catalogo WhatsApp.");
   }
+  const activity = await loadCatalogActivityDefaults(input.client, input.companyId, agentId);
+  for (const draft of drafts) {
+    draft.salesDestination = activity.destination;
+    if (activity.destination === "appointment") {
+      draft.fulfillment = { ...draft.fulfillment, mode: "service", schedulingRequired: true };
+      draft.warnings = draft.warnings.filter(warning => !warning.startsWith("Preco nao encontrado"));
+    }
+  }
+
 
   const importJob = await completeSalesCatalogImportReviewJob({
     client: input.client,

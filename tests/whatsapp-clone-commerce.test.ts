@@ -40,7 +40,7 @@ describe("clone conversation and checkout boundaries", () => {
     // No database access, charge or WhatsApp request should happen on the payment shortcut.
     const from = vi.fn(() => { throw new Error("Unexpected checkout action"); });
     await expect(call<Promise<unknown>>("maybeSendExistingSalesCatalogCheckoutLink", {
-      client: { from }, context: {}, userText: text, latestInbound: latest,
+      client: { from }, context: { agent: { metadata: {} }, messages, salesCatalog: [] }, userText: text, latestInbound: latest,
     })).resolves.toBeNull();
     expect(from).not.toHaveBeenCalled();
   });
@@ -116,7 +116,7 @@ describe("clone conversation and checkout boundaries", () => {
         organization: { id: "store" }, agent: { id: "agent" }, run: { id: "run" }, instance: { id: "instance", metadata: {} },
         conversationId: "conversation", credentials: { baseUrl: "https://whatsapp.invalid" }, behavior: {}, messages: [],
         lead: { id: "lead", display_name: "Maria Oliveira", metadata: { person_name: "Maria Oliveira", customer_document: "12345678901" } },
-        salesCatalogOrders: [], salesCatalogShippingSettings: null,
+        salesCatalogOrders: [], salesCatalog: [], salesCatalogShippingSettings: null,
       },
       payment: { orderId: "order", provider: "asaas", paymentDeferred: true },
     });

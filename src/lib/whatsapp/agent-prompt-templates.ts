@@ -1,5 +1,6 @@
 import { outboundLanguageQualityPromptLines } from "./outbound-language";
 import { activityPresets, activityPresetVersion, type AgentActivityId } from "./activity-presets";
+import { activityClosing, activityExample, buildActivityProfileInstruction, normalizeProfessionalIdentity, professionalRegisters, type ProfessionalIdentity } from "./activity-profile";
 
 export const promptBuilderMetadataKey = "prompt_builder_config";
 export const activityWhatsappGlobalPrompt = [
@@ -19,6 +20,7 @@ export type AgentPromptTemplate = {
   salesPlaybook: string[]; requiredQuestions: string[]; careRules: string[];
 };
 export type AgentPromptBuilderConfig = {
+  professionalIdentity?: ProfessionalIdentity;
   templateId: AgentPromptTemplateId;
   tone: string; objective: string; audience: string; salesRules: string;
   fulfillmentRules: string; humanHandoffRules: string; neverRules: string; companyComplement: string;
@@ -45,6 +47,7 @@ export function normalizeAgentPromptBuilderConfig(value: unknown, fallback?: Par
   const template = getAgentPromptTemplate(record?.templateId ?? record?.template_id ?? fallback?.templateId);
   const preset = activityPresets[template.id];
   return {
+    ...(normalizeProfessionalIdentity(record?.professionalIdentity ?? fallback?.professionalIdentity) ? { professionalIdentity: normalizeProfessionalIdentity(record?.professionalIdentity ?? fallback?.professionalIdentity) } : {}),
     templateId: template.id,
     tone: limitText(readString(record?.tone) ?? fallback?.tone ?? preset.tone),
     objective: limitText(readString(record?.objective) ?? fallback?.objective ?? preset.objective),
@@ -70,6 +73,9 @@ export function isAgentPromptBuilderConfigEqual(left: AgentPromptBuilderConfig, 
 export function switchActivityPromptConfig(current: AgentPromptBuilderConfig, templateId: unknown) {
   const previousDefaults = createActivityPromptConfig(current.templateId);
   const next = createActivityPromptConfig(templateId, current.companyComplement);
+  if (current.professionalIdentity) next.professionalIdentity = professionalRegisters[current.templateId] === professionalRegisters[next.templateId]
+    ? { ...current.professionalIdentity }
+    : { ...current.professionalIdentity, registration: "", state: "" };
   const fields = ["tone", "objective", "audience", "salesRules", "fulfillmentRules", "humanHandoffRules", "neverRules"] as const;
   if (current.profileVersion) {
     for (const key of fields) if (current[key] !== previousDefaults[key]) next[key] = current[key];
@@ -87,7 +93,7 @@ export function buildAgentPromptFromTemplate(input: {
     `Nome do agente: ${input.agentName || "{{agente}}"}.`,
     `${preset.kind === "professional" ? "Profissional / nome comercial" : "Negócio"}: ${input.companyName || "{{empresa}}"}.`,
     `Atividade: ${preset.label}. Forma de atuação: ${preset.kind === "professional" ? "profissional individual" : preset.kind === "company" ? "empresa" : "atendimento geral"}.`,
-    preset.identity,
+    ...buildActivityProfileInstruction(config.templateId, config.professionalIdentity),
     "Não confunda o nome do assistente com o nome do profissional, do negócio ou do cliente. Não invente equipe, filiais ou credenciais.",
     "", "OBJETIVO", config.objective,
     "", "TOM E VOCABULÁRIO", config.tone, preset.vocabulary,
@@ -98,8 +104,8 @@ export function buildAgentPromptFromTemplate(input: {
     "Dados já informados não precisam ser perguntados novamente. A qualificação não deve impedir atendimento, agendamento ou compra.",
     "", "ROTINA DESTA ATIVIDADE", ...toPromptBullets(config.salesRules),
     "", "DÚVIDAS E OBJEÇÕES", preset.objection,
-    "", "PRÓXIMO PASSO", preset.closing,
-    "", "EXEMPLO DE ABORDAGEM (adapte ao contexto, não repita mecanicamente)", preset.example,
+    "", "PRÓXIMO PASSO", activityClosing(config.templateId),
+    "", "EXEMPLO DE ABORDAGEM (adapte ao contexto, não repita mecanicamente)", activityExample(config.templateId),
     "", "EXECUÇÃO E CONDIÇÕES", config.fulfillmentRules,
     "Consulte catálogo, conhecimento, agenda e resultados de ferramentas disponíveis no contexto. A disponibilidade pode mudar; não dependa de contagens antigas.",
     "Sem item ou informação cadastrada, já é possível acolher, entender a demanda e encaminhar ao responsável. Não invente preço, estoque, horário, prazo, garantia ou condição.",

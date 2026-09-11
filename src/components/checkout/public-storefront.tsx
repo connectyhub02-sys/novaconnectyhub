@@ -96,6 +96,7 @@ export type PublicStorefrontProduct = {
   highlightLabel: string | null;
   isFeatured: boolean;
   canCheckout: boolean;
+  actionLabel?: string;
   productUrl: string;
 };
 
@@ -601,6 +602,7 @@ export function PublicStorefront({
     <main className="storefront-public min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StoreAnnouncement branding={branding} />
       <StoreNavbar
+        showCart={products.some(product => product.canCheckout)}
         branding={branding}
         cartPath={cartPath}
         mode={mode}
@@ -676,6 +678,7 @@ export function PublicStorefront({
       />
 
       <MobileBottomNav
+        showCart={products.some(product => product.canCheckout)}
         totalItems={totalItems}
         onCart={() => openCart("mobile_nav")}
         onCategories={() => document.getElementById(mode === "home" ? "categorias" : "produtos")?.scrollIntoView({ behavior: "smooth" })}
@@ -743,6 +746,7 @@ function StoreAnnouncement({ branding }: { branding: PublicStorefrontBranding })
 }
 
 function StoreNavbar({
+  showCart = true,
   branding,
   cartPath,
   mobileMenuOpen,
@@ -756,6 +760,7 @@ function StoreNavbar({
   onSearchTermChange,
   onToggleMobileMenu,
 }: {
+  showCart?: boolean;
   branding: PublicStorefrontBranding;
   cartPath: string;
   mobileMenuOpen: boolean;
@@ -808,7 +813,7 @@ function StoreNavbar({
           />
         </label>
 
-        <div className="flex items-center gap-3">
+        {showCart ? <div className="flex items-center gap-3">
           <button
             aria-label={totalItems > 0 ? `Abrir carrinho com ${totalItems} itens` : "Abrir carrinho"}
             className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5"
@@ -822,7 +827,7 @@ function StoreNavbar({
               </span>
             ) : null}
           </button>
-        </div>
+        </div> : null}
       </div>
       {mobileMenuOpen ? (
         <div className="border-t border-black/10 bg-white px-4 pb-4 shadow-lg shadow-black/5 md:hidden">
@@ -832,7 +837,7 @@ function StoreNavbar({
             <MobileMenuLink href={`${shopPath}#ofertas`} label="Ofertas" onClick={onCloseMobileMenu} />
             <MobileMenuLink href={`${storePath}#produtos`} label="Novidades" onClick={onCloseMobileMenu} />
             <MobileMenuLink href={`${storePath}#categorias`} label="Categorias" onClick={onCloseMobileMenu} />
-            <MobileMenuLink href={cartPath} label="Carrinho" onClick={onCloseMobileMenu} />
+            {showCart ? <MobileMenuLink href={cartPath} label="Carrinho" onClick={onCloseMobileMenu} /> : null}
             <label className="relative mt-2 block min-h-11">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" aria-hidden="true" />
               <input
@@ -1298,6 +1303,7 @@ function ProductCard({ product }: { product: PublicStorefrontProduct }) {
       <strong className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--store-card-text)] xl:text-lg">
         {product.title}
       </strong>
+      {product.actionLabel ? <span className="mt-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">{product.actionLabel}</span> : null}
       <span className="mt-1 flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1">
         <span className="max-w-full break-words text-base font-semibold tracking-tight text-[color:var(--store-card-text)] sm:text-xl xl:text-2xl">{product.priceLabel}</span>
         {product.compareAtLabel ? (
@@ -1716,11 +1722,13 @@ function CartLeadContactSummary({
 }
 
 function MobileBottomNav({
+  showCart = true,
   totalItems,
   onCart,
   onCategories,
   onHome,
 }: {
+  showCart?: boolean;
   totalItems: number;
   onCart: () => void;
   onCategories: () => void;
@@ -1730,7 +1738,7 @@ function MobileBottomNav({
     <nav className="fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)] grid grid-cols-3 border-t border-[#e5e2d8] bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] lg:hidden">
       <MobileNavButton active icon={<Home className="h-5 w-5" />} label="Início" onClick={onHome} />
       <MobileNavButton icon={<Store className="h-5 w-5" />} label="Categorias" onClick={onCategories} />
-      <MobileNavButton badge={totalItems} icon={<ShoppingCart className="h-5 w-5" />} label="Carrinho" onClick={onCart} />
+      {showCart ? <MobileNavButton badge={totalItems} icon={<ShoppingCart className="h-5 w-5" />} label="Carrinho" onClick={onCart} /> : null}
     </nav>
   );
 }

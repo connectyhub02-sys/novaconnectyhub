@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activityPresets } from "../src/lib/whatsapp/activity-presets";
+import { activityClosing, activityExample, activityRepresentation, buildActivityProfileInstruction, normalizeProfessionalIdentity } from "../src/lib/whatsapp/activity-profile";
 import { agentPromptTemplates, buildAgentPromptFromTemplate, createActivityPromptConfig, normalizeAgentPromptBuilderConfig, switchActivityPromptConfig } from "../src/lib/whatsapp/agent-prompt-templates";
 import { applyActivityCloneProfile, applyActivityQualification, applyActivitySetup, createActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "../src/lib/whatsapp/activity-setup";
 import { normalizeWhatsappBehaviorConfig, normalizeWhatsappCloneProfile } from "../src/lib/whatsapp/agent-behavior";
@@ -16,6 +17,16 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { runtimeHarness } from "./helpers/whatsapp-runtime-harness";
 
 describe("activity-specific agent setup", () => {
+  it("preserves professional identity within a council and clears the registration when the council changes", () => {
+    const broker = normalizeAgentPromptBuilderConfig({templateId:"corretor_imoveis",professionalIdentity:{name:"Titular",registration:"123",state:"ms",showPublic:true}});
+    expect(switchActivityPromptConfig(broker,"imobiliaria").professionalIdentity).toEqual({name:"Titular",registration:"123",state:"MS",showPublic:true});
+    expect(switchActivityPromptConfig(broker,"dentista").professionalIdentity).toEqual({name:"Titular",registration:"",state:"",showPublic:true});
+    expect(normalizeProfessionalIdentity({name:"Nome"})?.showPublic).toBe(false);
+    const instruction = buildActivityProfileInstruction("corretor_imoveis",broker.professionalIdentity).join("\n");
+    expect(instruction).toContain("Registro informado pelo titular: CRECI 123 / MS");
+    expect(instruction).toContain("Não alegue verificação automática");
+    expect(buildActivityProfileInstruction("dentista").join("\n")).not.toContain("Registro informado pelo titular:");
+  });
   it.each(agentPromptTemplates)("replaces saved generic CRM questions with $label questions", ({ id }) => {
     const saved = markLeadQualificationConfigConfigured(defaultLeadQualificationConfig, "2026-09-11T12:00:00Z");
     const updated = applyActivityQualification(id, saved);
@@ -64,9 +75,9 @@ describe("activity-specific agent setup", () => {
     const preset = activityPresets[id];
     const prompt = buildAgentPromptFromTemplate({ config: setup.config, agentName: "Lia", companyName: "Nome cadastrado" });
     expect(prompt.length).toBeLessThanOrEqual(8000);
-    expect(prompt).toContain(preset.identity);
+    expect(prompt).toContain(activityRepresentation(id));
     expect(prompt).toContain(preset.objection);
-    expect(prompt).toContain(preset.example);
+    expect(prompt).toContain(activityExample(id));
     expect(setup.cloneProfile.enabled).toBe(true);
     expect(setup.cloneProfile.displayName).toBe("Lia");
     expect(setup.cloneProfile.vocabulary).toBe(preset.vocabulary);
@@ -113,8 +124,8 @@ describe("activity-specific agent setup", () => {
     expect(shouldApplyActivitySetup(previous.config, config)).toBe(true);
     const next = applyActivitySetup({ config, agentName: "Renata Clone", cloneProfile: previous.cloneProfile });
     expect(next.config.mode).toBe("manual");
-    expect(next.cloneProfile.roleIdentity).toBe(activityPresets.corretor_imoveis.identity);
-    expect(next.cloneProfile.closingStyle).toBe(activityPresets.corretor_imoveis.closing);
+    expect(next.cloneProfile.roleIdentity).toBe(activityRepresentation("corretor_imoveis"));
+    expect(next.cloneProfile.closingStyle).toBe(activityClosing("corretor_imoveis"));
     expect(next.cloneProfile.vocabulary).toBe(previous.cloneProfile.vocabulary);
   });
 
@@ -125,7 +136,7 @@ describe("activity-specific agent setup", () => {
     expect(next.displayName).toBe(previous.displayName);
     expect(next.useAgentName).toBe(false);
     expect(next.vocabulary).toBe(previous.vocabulary);
-    expect(next.roleIdentity).toBe(activityPresets.corretor_imoveis.identity);
+    expect(next.roleIdentity).toBe(activityRepresentation("corretor_imoveis"));
     expect(next.activityTemplateId).toBe("corretor_imoveis");
     const switched = applyActivityCloneProfile("imobiliaria", "Renata Clone", next);
     expect(switched.roleIdentity).toBe(activityPresets.imobiliaria.identity);
@@ -213,7 +224,7 @@ describe("activity-specific agent setup", () => {
     const call = runtimeHarness();
     const context = { organization: { name: "Nome cadastrado" }, agent: { name: "Lia", prompt: "TEXTO ANTIGO DE OUTRA ATIVIDADE", metadata: { prompt_builder_config: createActivityPromptConfig("advogado") } }, knowledge: [], salesCatalog: [] };
     const prompt = call<string>("resolveRuntimeAgentPrompt", context);
-    expect(prompt).toContain(activityPresets.advogado.identity);
+    expect(prompt).toContain(activityRepresentation("advogado"));
     expect(prompt).not.toContain("TEXTO ANTIGO");
     context.agent.metadata.prompt_builder_config.mode = "manual";
     expect(call("resolveRuntimeAgentPrompt", context)).toBe("TEXTO ANTIGO DE OUTRA ATIVIDADE");
@@ -236,7 +247,7 @@ describe("activity-specific agent setup", () => {
     const row = db.tables.agent_registry[0];
     const metadata = row.metadata as Record<string, unknown>;
     if (customPrompt) expect(row.prompt).toBe(customPrompt);
-    else expect(row.prompt).toContain(activityPresets.contador.identity);
+    else expect(row.prompt).toContain(activityRepresentation("contador"));
     expect(normalizeAgentPromptBuilderConfig(metadata.prompt_builder_config).mode).toBe(customPrompt ? "manual" : "automatic");
     expect(normalizeWhatsappCloneProfile(metadata.whatsapp_clone_profile).enabled).toBe(true);
     expect(normalizeWhatsappCloneProfile(metadata.whatsapp_clone_profile).objectionStyle).toBe(activityPresets.contador.objection);
