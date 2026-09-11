@@ -41,6 +41,7 @@ const exposed = [
   "maybeCreateSalesCatalogPaymentLink", "guardUnexecutedCheckoutClaim", "persistRuntimeSavedDeliveryConsent", "maybeAttachSavedSalesCatalogDeliveryToOrder",
   "scheduleProactiveFollowUp",
   "handleConversationEnding",
+  "buildSalesCatalogLines",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}};`, {

@@ -3609,7 +3609,7 @@ function buildImportItemPatchMetadata(patch: NormalizedItemPatch): JsonRecord | 
     metadata.image_import_error = null;
   }
 
-  if (patch.salesDestination === "external_site" || patch.salesDestination === "manual_handoff") {
+  if (patch.salesDestination === "manual_handoff") {
     changed = true;
     metadata.import_external_image = false;
     metadata.image_import_status = "skipped";
@@ -3653,7 +3653,7 @@ function shouldImportExternalImage(input: {
   imageUrl: string | null;
   enabled?: boolean | null;
 }) {
-  if (!input.imageUrl || input.destination !== "connectyhub_checkout") return false;
+  if (!input.imageUrl || input.destination === "manual_handoff") return false;
   if (typeof input.enabled === "boolean") return input.enabled;
   return true;
 }

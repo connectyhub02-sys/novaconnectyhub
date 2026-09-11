@@ -2607,6 +2607,17 @@ export function SalesCatalogConsole({
     setCatalogImportMonitor((current) => current ? { ...current, open: false } : current);
   }
 
+  function reviewCatalogImport(job: ClientSalesCatalogImportJob) {
+    closeCatalogImportMonitor();
+    setActiveTab("products");
+    window.requestAnimationFrame(() => {
+      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-import-review-job]"))
+        .find(element => element.dataset.importReviewJob === job.id && element.getClientRects().length > 0);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+  }
+
   async function saveCatalogImportReview(job: ClientSalesCatalogImportJob) {
     if (!selectedCompanyId || savingCatalogImportId) return;
 
@@ -5106,6 +5117,7 @@ export function SalesCatalogConsole({
               monitor={catalogImportMonitor}
               onCancel={cancelCatalogImport}
               onClose={closeCatalogImportMonitor}
+              onReview={reviewCatalogImport}
               onRefresh={refreshCatalogImports}
             />
           ) : null}
@@ -7154,6 +7166,7 @@ function CatalogImportProgressModal({
   monitor,
   onCancel,
   onClose,
+  onReview,
   onRefresh,
 }: {
   job: ClientSalesCatalogImportJob | null;
@@ -7162,6 +7175,7 @@ function CatalogImportProgressModal({
   monitor: CatalogImportMonitorState;
   onCancel: (job: ClientSalesCatalogImportJob) => void;
   onClose: () => void;
+  onReview: (job: ClientSalesCatalogImportJob) => void;
   onRefresh: () => void;
 }) {
   const canceled = job ? isCatalogImportJobCanceled(job) : false;
@@ -7169,12 +7183,14 @@ function CatalogImportProgressModal({
   const visiblePreviewItems = monitor.previewItems.slice(0, Math.max(0, monitor.visiblePreviewCount));
   const visibleItems = canceled ? [] : officialItems.length > 0 ? officialItems : visiblePreviewItems;
   const active = job ? isCatalogImportJobActive(job) : monitor.status === "preparing" || monitor.status === "uploading";
+  const canReview = Boolean(job && !active && !canceled && job.items.some(isCatalogImportItemPendingReview));
   const progress = job ? getCatalogImportJobProgress(job) : getCatalogImportMonitorProgress(monitor);
   const statusLabel = job ? formatCatalogImportJobStatus(job) : formatCatalogImportMonitorStatus(monitor.status);
   const message = job ? getCatalogImportMonitorMessage(job) : monitor.message;
   const errorMessage = job?.errorMessage ?? monitor.errorMessage;
   const itemCount = job?.items.length ?? monitor.previewItems.length;
-  const imageCount = job?.items.filter((item) => item.imageUrl).length ?? monitor.previewItems.filter((item) => item.imageUrl).length;
+  const imageCount = job?.items.reduce((count, item) => count + (item.imageUrls?.length ?? (item.imageUrl ? 1 : 0)), 0)
+    ?? monitor.previewItems.filter((item) => item.imageUrl).length;
   const whatsappImport = (job?.sourcePlatform ?? monitor.sourcePlatform) === "whatsapp_catalog";
   const activityItems = job?.events.length
     ? job.events.slice(0, 6)
@@ -7192,18 +7208,30 @@ function CatalogImportProgressModal({
   return (
     <DialogFrame onClose={loading ? () => undefined : onClose} aria-label="Importação do catálogo" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+        <div className="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
           <div className="min-w-0">
             <p className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-blue-500">
               {whatsappImport ? "sincronizacao whatsapp" : "importacao com ia"}
             </p>
             <h3 className="mt-1 truncate text-xl font-bold text-slate-950">{monitor.title}</h3>
-            <p className="mt-1 text-sm text-slate-500">{message}</p>
+            <p className="mt-1 text-sm text-slate-500">{canReview ? "Proximo passo: revise as categorias, os precos e as fotos antes de publicar." : message}</p>
           </div>
           <div className="flex items-center gap-2">
-            <NeonBadge tone={job ? catalogImportJobStatusTone(job) : monitor.status === "failed" ? "rose" : active ? "cyan" : "green"}>
-              {statusLabel}
-            </NeonBadge>
+            {canReview && job ? (
+              <button
+                type="button"
+                disabled={loading || canceling}
+                onClick={() => onReview(job)}
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                <PencilLine className="h-4 w-4" />
+                Revisar produtos
+              </button>
+            ) : (
+              <NeonBadge tone={job ? catalogImportJobStatusTone(job) : monitor.status === "failed" ? "rose" : active ? "cyan" : "green"}>
+                {statusLabel}
+              </NeonBadge>
+            )}
             {job && canCancelCatalogImportJob(job) ? (
               <button
                 type="button"
@@ -7310,7 +7338,7 @@ function CatalogImportProgressModal({
               {active ? <span className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_18px_rgba(24,119,242,0.8)]" /> : null}
             </div>
 
-            <div className="max-h-[460px] overflow-y-auto p-3">
+            <div className="p-3">
               {canceled ? (
                 <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center">
                   <p className="text-sm font-semibold text-slate-900">Importacao cancelada</p>
@@ -7325,8 +7353,8 @@ function CatalogImportProgressModal({
                       key={item.id}
                       className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
                     >
-                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                        {item.imageUrl ? <ImageIcon className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
+                      <div className="relative inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded bg-blue-50 text-blue-600">
+                        {item.imageUrl ? <Image src={item.imageUrl} alt={`Capa de ${item.title}`} fill sizes="32px" className="object-cover" unoptimized /> : <PackagePlus className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-950">{index + 1}. {item.title}</p>
@@ -7445,7 +7473,7 @@ function CatalogImportJobCard({
   const requiresCategoryReview = isWhatsappCatalogImportJob(job);
 
   return (
-    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+    <div data-import-review-job={job.id} tabIndex={-1} aria-label={`Revisao de ${job.title ?? "produtos importados"}`} className="scroll-mt-6 rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-slate-100">{job.title ?? formatImportPlatform(job.sourcePlatform)}</p>
@@ -7616,7 +7644,7 @@ function CatalogImportItemEditor({
   const imageUrls = item.imageUrl
     ? Array.from(new Set([item.imageUrl, ...(item.imageUrls ?? []).filter((url) => url !== item.imageUrl)]))
     : [];
-  const canImportImage = imageUrls.length > 0 && item.salesDestination === "connectyhub_checkout";
+  const canImportImage = imageUrls.length > 0 && item.salesDestination !== "manual_handoff";
   const selectedDuplicateTargetId = item.duplicateTargetItemId ?? item.duplicateCandidates[0]?.itemId ?? "";
   const categoryValue = item.category ?? "";
 
@@ -7725,10 +7753,7 @@ function CatalogImportItemEditor({
           value={item.salesDestination}
           onChange={(event) => {
             const salesDestination = event.target.value as SalesCatalogImportDestination;
-            onChange({
-              salesDestination,
-              ...(item.imageUrl ? { importExternalImage: salesDestination === "connectyhub_checkout" } : {}),
-            });
+            onChange({ salesDestination });
           }}
           className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
           style={{ borderColor: "var(--ch-border)" }}
@@ -7771,13 +7796,19 @@ function CatalogImportItemEditor({
         )}
       </div>
 
-      <input
-        value={item.productUrl ?? ""}
-        onChange={(event) => onChange({ productUrl: event.target.value.slice(0, 1000) })}
-        className="mt-2 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-        placeholder="URL do produto"
-        style={{ borderColor: "var(--ch-border)" }}
-      />
+      {item.salesDestination === "external_site" ? (
+        <label className="mt-2 block">
+          <FieldLabel>Link do produto no site externo</FieldLabel>
+          <input
+            type="url"
+            value={item.productUrl ?? ""}
+            onChange={(event) => onChange({ productUrl: event.target.value.slice(0, 1000) })}
+            className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+            placeholder="URL do produto"
+            style={{ borderColor: "var(--ch-border)" }}
+          />
+        </label>
+      ) : null}
 
       {item.imageUrl ? (
         <div className="mt-2 rounded-lg border p-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>

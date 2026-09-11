@@ -5934,6 +5934,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para item digital, conduza pagamento e envie/prepare o acesso dentro do WhatsApp.",
     "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
     "- Se o item tiver arquivos, fale sobre foto/video somente quando o lead pedir ver ou quando a midia for realmente necessaria para decidir.",
+    "- Fotos cadastradas podem ser enviadas mesmo quando a compra acontece em site externo; o destino da compra nao limita o uso das midias disponiveis.",
+    "- Se o produto estiver sem arquivo, nao prometa enviar foto nem afirme que enviou. Ofereca o link cadastrado para consultar o produto, sem inventar imagens ou afirmar que o site tem uma galeria.",
     "- Quando houver varias fotos/videos, nao prometa enviar tudo no WhatsApp. Use uma midia principal e direcione o restante para a pagina do produto.",
     "- Se o lead pedir mais fotos, video ou detalhes visuais, responda curto e use a pagina do produto para a galeria completa.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",

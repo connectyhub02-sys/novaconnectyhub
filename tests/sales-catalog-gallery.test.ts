@@ -55,7 +55,7 @@ function database() {
 async function review(db: ReturnType<typeof database>) {
   const { drafts } = buildWhatsappCatalogImportDrafts({
     catalogJid: "5511999999999@s.whatsapp.net", whatsappInstanceId: userId, agentId: null, now,
-    products: [{ id: "house", name: "Casa", description: "Casa com jardim", price: "850000000", currency: "BRL",
+    products: [{ id: "house", name: "Casa", url: "https://imoveis.example/casa", description: "Casa com jardim", price: "850000000", currency: "BRL",
       media: { images: [...urls, urls[0]].map(original_image_url => ({ original_image_url })) } }],
   });
   return createSalesCatalogImportReviewJob({ client: db.client, companyId, userId, sourceKind: "mixed", sourcePlatform: "whatsapp_catalog", targetMode: "review", defaultSalesDestination: "connectyhub_checkout", drafts });
@@ -76,6 +76,7 @@ describe("WhatsApp gallery import", () => {
     const db = database();
     const job = await review(db);
     expect(job.items[0].imageUrls).toEqual(urls);
+    expect(job.items[0].productUrl).toBe("https://imoveis.example/casa");
     expect(putR2Object).not.toHaveBeenCalled();
     const chosen = [urls[2], urls[0], urls[1]];
     await updateSalesCatalogImportItems({ client: db.client, companyId, jobId: job.id, patches: [{ id: job.items[0].id, category: "Casas", imageUrl: chosen[0], imageUrls: chosen }] });
@@ -131,6 +132,42 @@ describe("WhatsApp gallery import", () => {
     expect(result.items[0].imageUrls).toEqual(urls);
   });
 
+  it("copies all photos to the importing company's R2 for external-site products too", async () => {
+    const db = database(); const job = await review(db);
+    const result = await publishSalesCatalogImportJob({ client: db.client, companyId, userId, jobId: job.id,
+      patches: [{ id: job.items[0].id, category: "Casas", salesDestination: "external_site" }] });
+    expect(result.items[0]).toMatchObject({ status: "published", salesDestination: "external_site", importExternalImage: true, imageImportStatus: "imported" });
+    const product = db.tables.intelligence_memory.find(row => row.memory_type === "sales_catalog_item");
+    const metadata = product?.metadata as Row;
+    expect(metadata.sales_destination).toBe("external_site");
+    expect(metadata.source_product_url).toBe("https://imoveis.example/casa");
+    expect(metadata.media).toHaveLength(3);
+    expect(result.items[0].publishedLinkButtonId).toBeTruthy();
+    expect(recordOrganizationStorageUsage).toHaveBeenCalledTimes(3);
+    for (const [call] of vi.mocked(recordOrganizationStorageUsage).mock.calls) expect(call.organizationId).toBe(companyId);
+  });
+
+  it("keeps an external product with only a link without fetching the external page or inventing photos", async () => {
+    const db = database(); const job = await review(db);
+    const result = await publishSalesCatalogImportJob({ client: db.client, companyId, userId, jobId: job.id,
+      patches: [{ id: job.items[0].id, category: "Casas", salesDestination: "external_site", imageUrl: null, imageUrls: [] }] });
+    expect(result.items[0]).toMatchObject({ status: "published", productUrl: "https://imoveis.example/casa", imageUrls: [], imageImportStatus: null });
+    const product = db.tables.intelligence_memory.find(row => row.memory_type === "sales_catalog_item");
+    expect((product?.metadata as Row).media).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled(); expect(recordOrganizationStorageUsage).not.toHaveBeenCalled();
+  });
+
+  it("preserves the user's disabled image choice when changing the purchase destination", async () => {
+    const db = database(); const job = await review(db);
+    await updateSalesCatalogImportItems({ client: db.client, companyId, jobId: job.id, patches: [{ id: job.items[0].id, importExternalImage: false }] });
+    for (const salesDestination of ["external_site", "connectyhub_checkout"] as const) {
+      await updateSalesCatalogImportItems({ client: db.client, companyId, jobId: job.id, patches: [{ id: job.items[0].id, salesDestination }] });
+      const saved = await getSalesCatalogImportJob({ client: db.client, companyId, jobId: job.id });
+      expect(saved.items[0].importExternalImage).toBe(false);
+      expect(saved.items[0].imageUrls).toEqual(urls);
+    }
+  });
+
   it("reports a failed photo and keeps the successfully stored images in order", async () => {
     const db = database(); const job = await review(db);
     vi.mocked(fetch).mockResolvedValueOnce(new Response("", { status: 503 }));
@@ -153,9 +190,9 @@ describe("WhatsApp gallery import", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("respects disabled imports and external destinations", async () => {
+  it("respects disabled imports and legacy manual destinations", async () => {
     const db = database(); const job = await review(db);
-    for (const item of [{ ...job.items[0], importExternalImage: false }, { ...job.items[0], salesDestination: "external_site" as const }]) {
+    for (const item of [{ ...job.items[0], importExternalImage: false }, { ...job.items[0], salesDestination: "manual_handoff" as const }]) {
       expect((await buildImportedMedia({ client: db.client, companyId, itemId: "product", item, now })).imageImportStatus).toBe("skipped");
     }
     expect(fetch).not.toHaveBeenCalled(); expect(putR2Object).not.toHaveBeenCalled();

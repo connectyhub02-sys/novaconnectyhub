@@ -45,6 +45,12 @@ describe("WhatsApp catalog provider payload", () => {
     expect(drafts[0].skus[0]).toMatchObject({ price: "850.000,00" });
   });
 
+  it.each(["Url", "URL", "url"])("imports the product's external link from %s without changing the selected destination", (field) => {
+    const productUrl = "https://imoveis.example/casa-ipiranga?ref=whatsapp";
+    const { drafts } = buildWhatsappCatalogImportDrafts({ ...context, products: [{ ...flatProduct, [field]: productUrl }] });
+    expect(drafts[0]).toMatchObject({ productUrl, salesDestination: "connectyhub_checkout", sourceEvidence: { whatsapp_catalog_url: productUrl } });
+  });
+
   it.each([
     ["220000000", "220.000,00"], ["2590100", "2.590,10"], ["19990", "19,99"], ["0", "0,00"],
   ])("converts flat provider price %s from thousandths", (price, expected) => {
