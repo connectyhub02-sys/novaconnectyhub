@@ -71,7 +71,7 @@ import {
   defaultWhatsappCloneProfile,
   normalizeWhatsappCloneMemory,
   normalizeWhatsappCloneProfile,
-  normalizeWhatsappBehaviorConfig,
+  normalizeWhatsappBehaviorSettings,
   type WhatsappBehaviorConfig,
   type WhatsappCloneMemory,
   type WhatsappCloneProfile,
@@ -670,7 +670,7 @@ export function WhatsAppConsole({
       setSelectedAgentNameDraft(nextState.agent?.name ?? "");
       setPromptTemplateDraft(nextPromptTemplateConfig);
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
-      const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
+      const nextBehavior = normalizeWhatsappBehaviorSettings(nextState.behavior);
       setBehaviorDraft(nextBehavior);
       const savedProfile = normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile);
       setCloneProfileDraft(nextState.agent && !savedProfile.activityTemplateId
@@ -880,7 +880,7 @@ export function WhatsAppConsole({
   const promptHelper = `${effectivePrompt.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres · ${promptTemplateDraft.mode === "automatic" ? "Atualizado automaticamente pela atividade" : "Instruções personalizadas preservadas"}`;
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
-    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value, customizedStyleFields: [...new Set([...(current.customizedStyleFields ?? []), key])] }));
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorSettings({ ...current, [key]: value, customizedStyleFields: [...new Set([...(current.customizedStyleFields ?? []), key])] }));
   }
 
   function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
@@ -917,11 +917,11 @@ export function WhatsAppConsole({
   }
 
   function updatePresenceMode(value: WhatsappPresenceMode) {
-    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, presenceMode: value, alwaysOnline: value === "always" }));
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorSettings({ ...current, presenceMode: value, alwaysOnline: value === "always" }));
   }
 
   function updateQuoteReplyMode(value: WhatsappQuoteReplyMode) {
-    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, quoteReplyMode: value, quotedReplyContext: value !== "off" }));
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorSettings({ ...current, quoteReplyMode: value, quotedReplyContext: value !== "off" }));
   }
 
   function updatePromptDraft(value: string) {
@@ -1080,7 +1080,7 @@ export function WhatsAppConsole({
 
   function selectAudioVoice(voice: AudioVoiceOption) {
     setBehaviorDraft((current) =>
-      normalizeWhatsappBehaviorConfig({
+      normalizeWhatsappBehaviorSettings({
         ...current,
         responseMode: "audio",
         splitMessages: true,
@@ -2073,7 +2073,7 @@ export function WhatsAppConsole({
               <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente.">
                 <div className="grid gap-3">
                   <div className="grid gap-2 md:grid-cols-2">
-                    <ToggleTile icon={Power} label="Agente ativo" description="Quando ligado, o agente pode responder leads automaticamente neste WhatsApp." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
+                    <ToggleTile icon={Power} label="Agente ativo" description="Liga ou pausa o atendimento automático. Ao pausar, suas configurações ficam guardadas para a próxima ativação." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
                     <ToggleTile icon={Eye} label="Marcar como lido" description="Marca mensagens como lidas depois que o sistema processa a conversa." checked={behaviorDraft.markAsRead} onChange={() => updateBehavior("markAsRead", !behaviorDraft.markAsRead)} />
                   </div>
                   <div className="grid gap-2">
@@ -2357,7 +2357,7 @@ function normalizeAgentAutomationRoles(value: AgentAutomationRoles | null | unde
 }
 
 function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorConfig) {
-  return JSON.stringify(normalizeWhatsappBehaviorConfig(left)) === JSON.stringify(normalizeWhatsappBehaviorConfig(right));
+  return JSON.stringify(normalizeWhatsappBehaviorSettings(left)) === JSON.stringify(normalizeWhatsappBehaviorSettings(right));
 }
 
 function isAgentChannelConfigEqual(left: AgentChannelConfig, right: AgentChannelConfig) {

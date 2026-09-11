@@ -77,7 +77,7 @@ describe("activity-specific agent setup", () => {
     expect(setup.qualification.questions.find((question) => question.id === "objection")?.required).toBe(false);
     expect(setup.config.fulfillmentRules).toBe(preset.fulfillment);
     expect(setup.behavior.agentEnabled).toBe(true);
-    expect(setup.behavior.responseMode).toBe("text");
+    expect(setup.behavior.responseMode).toBe("mirror");
   });
 
   it.each([
@@ -241,6 +241,6 @@ describe("activity-specific agent setup", () => {
     expect(normalizeWhatsappCloneProfile(metadata.whatsapp_clone_profile).enabled).toBe(true);
     expect(normalizeWhatsappCloneProfile(metadata.whatsapp_clone_profile).objectionStyle).toBe(activityPresets.contador.objection);
     expect(normalizeLeadQualificationConfig(metadata.lead_qualification_config, { persisted: true }).activityTemplateId).toBe("contador");
-    expect(normalizeWhatsappBehaviorConfig(metadata.whatsapp_behavior_config).emojiReactions).toBe(false);
+    expect(normalizeWhatsappBehaviorConfig(metadata.whatsapp_behavior_config).emojiReactions).toBe(true);
   });
 });

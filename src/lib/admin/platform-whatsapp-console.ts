@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
+import { applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -22,7 +22,7 @@ import {
   mergeWhatsappHandoffNotificationSettings,
   normalizeWhatsappCloneMemory,
   normalizeWhatsappCloneProfile,
-  normalizeWhatsappBehaviorConfig,
+  normalizeWhatsappBehaviorSettings,
   type WhatsappBehaviorConfig,
   type WhatsappCloneProfile,
 } from "@/lib/whatsapp/agent-behavior";
@@ -351,7 +351,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   }
 
   const currentBehavior = getBehaviorConfig(agent, instance);
-  let nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? currentBehavior);
+  let nextBehavior = normalizeWhatsappBehaviorSettings(input.behavior ?? currentBehavior);
   const hasCloneProfile = input.cloneProfile !== undefined;
   let nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
@@ -1189,7 +1189,7 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     requireSectorWhatsappAgent(client, sector.id),
     requireSectorWhatsappInstance(client, sector.id),
   ]);
-  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(agent, instance));
+  const behaviorDraft = normalizeWhatsappBehaviorSettings(input.behavior ?? getBehaviorConfig(agent, instance));
   const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(agent, instance), behaviorDraft);
   const token = decryptInstanceToken(instance);
 
@@ -1387,7 +1387,7 @@ export function mapTrackedLinkButton(row: KnowledgeMemoryRow): ClientTrackedLink
 function buildState(
   instance: WhatsappInstanceRow | null,
   agent: AgentRow | null,
-  behavior: ReturnType<typeof normalizeWhatsappBehaviorConfig>,
+  behavior: ReturnType<typeof normalizeWhatsappBehaviorSettings>,
   audio: WhatsappAudioVoiceState,
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
@@ -2207,7 +2207,7 @@ function mapSectorEntity(row: SectorRow): PlatformWhatsappConsoleEntity {
 function getBehaviorConfig(agent: AgentRow | null, instance: WhatsappInstanceRow | null) {
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
-  return resolveWhatsappBehavior({ instance: instanceConfig, agent: agentConfig, global: defaultWhatsappBehaviorConfig });
+  return resolveWhatsappBehaviorSettings({ instance: instanceConfig, agent: agentConfig, global: defaultWhatsappBehaviorConfig });
 }
 
 function getAgentChannelConfig(agent: AgentRow | null) {

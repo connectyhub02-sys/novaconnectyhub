@@ -48,6 +48,7 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 
 ## Regras de negócio a preservar
 
+- Agentes WhatsApp: o padrão inicial de comportamento segue o painel definido pelo titular (espelho, sempre online, rapport suave, citação inteligente, emojis/figurinhas, mídia proativa, conversa leve, memória do clone e qualidade). Voz própria é escolhida pelo cliente. As preferências editáveis devem ser preservadas ao pausar/salvar/reativar; configurações armazenadas e bloqueios efetivos de execução são separados. Estado de publicação e limites da recuperação de configurações antigas ficam no estado operacional.
 - A carteira pode ser compartilhada entre organizações vinculadas. Selecione a tarifa pelo plano da organização responsável e atribua consumo ao executor correto. Custos internos da plataforma usam classificação própria; não criar débito fictício por tarefa administrativa determinística.
 - Tarifas ausentes não autorizam geração gratuita. Recursos experimentais exigem acesso e tarifa confirmados. Preserve consumo pendente, reserva e recuperação após falha. Os preços de referência e multiplicadores dos relatórios são históricos, não garantia de margem atual.
 - A documentação pública usa ConnectyHub, sem expor credenciais ou nomes privados do fornecedor. A documentação interna pode nomear o provedor para permitir manutenção correta. Não prometa paridade integral apenas por haver catálogo ou endpoints.

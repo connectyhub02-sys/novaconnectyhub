@@ -13,7 +13,7 @@ import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind }
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { createServiceClient } from "@/lib/supabase/service";
 import { generateConnectyVoiceAudio } from "@/lib/voice/tts";
-import { normalizeWhatsappBehaviorConfig, type WhatsappBehaviorConfig } from "./agent-behavior";
+import { normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, type WhatsappBehaviorConfig } from "./agent-behavior";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -1758,7 +1758,9 @@ export async function enableWhatsappAutomationCapability(
 
   const now = new Date().toISOString();
   const enabled = input.enabled !== false;
-  const nextBehavior = buildAutomationCapabilityBehavior(context.behavior, capability, enabled);
+  const nextBehavior = buildAutomationCapabilityBehavior(
+    normalizeWhatsappBehaviorSettings(readRecord(context.instance.metadata)?.behavior_config ?? context.behavior), capability, enabled,
+  );
   const instanceMetadata = readRecord(context.instance.metadata) ?? {};
   const nextInstanceMetadata = {
     ...instanceMetadata,
@@ -1793,7 +1795,7 @@ export async function enableWhatsappAutomationCapability(
 
     const agentMetadata = readRecord(agent?.metadata) ?? {};
     const currentAgentBehavior = buildAutomationCapabilityBehavior(
-      normalizeWhatsappBehaviorConfig(agentMetadata.whatsapp_behavior_config ?? nextBehavior),
+      normalizeWhatsappBehaviorSettings(agentMetadata.whatsapp_behavior_config ?? nextBehavior),
       capability,
       enabled,
     );
@@ -1842,7 +1844,7 @@ function buildAutomationCapabilityBehavior(
   capability: WhatsappAutomationCapability,
   enabled: boolean,
 ) {
-  const nextBehavior = normalizeWhatsappBehaviorConfig(behavior);
+  const nextBehavior = normalizeWhatsappBehaviorSettings(behavior);
 
   if (capability === "groups") {
     nextBehavior.allowGroupChats = enabled;

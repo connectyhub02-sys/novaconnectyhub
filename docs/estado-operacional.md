@@ -67,6 +67,18 @@ Validação consolidada desse complemento local em 11/09: **1.310 testes aprovad
 
 Publicação desse complemento autorizada pelo titular em seguida, em 11/09. Preparação de um único commit com os ajustes de revisão, URL e fotos externas e seus testes; envio à master e verificação da implantação em andamento. Nenhuma migration necessária.
 
+Publicação concluída: commit `3c99e40` enviado à master, com os oito arquivos do conjunto. Vercel confirmou **Ready / Latest / Production**, vinculado ao domínio principal, em 11/09 às 18:08 de Brasília (build de 1 minuto). Implantação `6zxqFmK8E8gwrDY1ShrEcNiYpnKY`. Nenhum produto do cliente foi publicado ou mensagem real enviada nessa implantação. O registro posterior ao push fica local para não gerar outro deploy apenas documental.
+
+## Padrão de ativação e pausa do agente — alteração local posterior
+
+Em 11/09, o titular definiu pelos prints um comportamento inicial pronto: presença sempre online, marcar como lido, resposta espelho, rapport suave, citação inteligente, emojis, figurinhas, mídia proativa, conversa leve, aprendizado e avaliação ligados. Temporização inteligente e janela da IA ficam desligadas como nos prints, com tempos/horários editáveis. A personalidade e o conteúdo continuam específicos da atividade; a voz particular do exemplo não é copiada para outros clientes.
+
+Implementado localmente um normalizador de preferências separado do comportamento efetivo em execução. Editor compartilhado, salvamento de cliente/admin, criação/edição/clonagem de agentes e mudanças de capacidades preservam as preferências, a voz e os números de responsáveis ao pausar. O normalizador usado no atendimento/webhook/follow-up continua desabilitando ações quando o agente está pausado. O padrão não habilita grupos ou campanhas. Usuários ativos com opções explicitamente salvas mantêm suas escolhas.
+
+Registros antigos pausados com quatro proteções forçadas zeradas são reconhecidos como o antigo reset. O painel recupera os valores que coincidem com aquele reset, preservando campos marcados como personalizados e a voz. Não é possível reconstruir preferências anteriores que o código antigo já apagou sem deixar proveniência. A versão das preferências impede reaplicar a recuperação; a leitura não escreve no banco até salvar. Sem migration, mudanças ainda não publicadas. Testes direcionados: 142 aprovados. Suíte completa: 1.314 aprovados e um timeout de 5 segundos no teste SQL de opt-out, que passou isoladamente em seguida, sem alteração do teste ou do SQL. TypeScript e ESLint dos arquivos alterados aprovados. Nenhuma configuração do agente Renata foi salva por esta tarefa, nenhum envio ou aprendizado pago foi executado.
+
+Publicação do padrão de ativação autorizada pelo titular em seguida, em 11/09. O conjunto está sendo enviado à master e terá sua implantação verificada na Vercel, sem migration ou alteração direta das preferências dos clientes.
+
 ## Auditoria geral em curso
 
 Solicitada conferência dos painéis dos clientes, agentes, agenda/follow-up, API IA/LLM, cobrança por crédito e dependências Supabase/Inngest. Revisão inicial leu os commits `917410c` e `586ce3c` e confirmou reserva/liquidação no código. Suíte completa executada em 11/09 com `npm test -- --maxWorkers=2`: **1.172 testes aprovados em 143 arquivos**, duração aproximada de 98 segundos. São testes locais, com fronteiras externas simuladas; não comprovam geração paga, todos os fluxos publicados ou entrega externa. Uma revisão não está encerrada pela existência deste arquivo.

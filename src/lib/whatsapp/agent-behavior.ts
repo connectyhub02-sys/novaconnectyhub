@@ -37,6 +37,7 @@ export type WhatsappCloneMemory = {
 };
 
 export type WhatsappBehaviorConfig = {
+  settingsVersion?: number;
   customizedStyleFields?: string[];
   textEmojis: boolean;
   conversationStyle: "discreet" | "balanced" | "warm";
@@ -275,11 +276,11 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   conversationStyle: "balanced",
   qualityMetrics: true,
   agentEnabled: true,
-  alwaysOnline: false,
-  presenceMode: "natural",
+  alwaysOnline: true,
+  presenceMode: "always",
   markAsRead: true,
   splitMessages: true,
-  responseMode: "text",
+  responseMode: "mirror",
   audioVoiceId: "",
   audioVoiceName: "",
   audioVoiceSource: "",
@@ -335,9 +336,9 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   intentionalTypos: false,
   circadianTiming: true,
   naturalAudioFillers: true,
-  sendStickers: false,
+  sendStickers: true,
   stickerProbability: 20,
-  proactiveMedia: false,
+  proactiveMedia: true,
   agentLearning: true,
   sharedCompanyContext: true,
   cloneMemory: true,
@@ -355,7 +356,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   mediaBatchImageLimit: 8,
   mediaBatchVideoLimit: 2,
   mediaBatchDocumentLimit: 3,
-  smartTiming: true,
+  smartTiming: false,
   timingTextSeconds: 6,
   timingTextBurstSeconds: 9,
   timingMediaCaptionSeconds: 10,
@@ -388,7 +389,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   followUpTimeWindowEnd: "20:00",
   conversationArcMemory: true,
   negotiationTracking: true,
-  smallTalk: false,
+  smallTalk: true,
   turingBenchmark: false,
 };
 
@@ -398,9 +399,10 @@ const groupReplyModes = new Set<WhatsappGroupReplyMode>(["all", "mentions", "adm
 const presenceModes = new Set<WhatsappPresenceMode>(["focused", "natural", "always"]);
 const quoteReplyModes = new Set<WhatsappQuoteReplyMode>(["off", "smart", "always"]);
 
-export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehaviorConfig {
+export function normalizeWhatsappBehaviorConfig(value: unknown, options?: { preserveSettings?: boolean }): WhatsappBehaviorConfig {
   const input = isRecord(value) ? value : {};
   const merged = { ...defaultWhatsappBehaviorConfig };
+  if (input.settingsVersion === 1) merged.settingsVersion = 1;
   if (Array.isArray(input.customizedStyleFields)) merged.customizedStyleFields = input.customizedStyleFields.filter((key): key is string => typeof key === "string").slice(0, 32);
 
   for (const key of Object.keys(merged) as Array<keyof WhatsappBehaviorConfig>) {
@@ -430,8 +432,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     }
   }
 
-  if (!("presenceMode" in input)) {
-    merged.presenceMode = readBoolean(input.alwaysOnline, false) ? "always" : merged.presenceMode;
+  if (!("presenceMode" in input) && typeof input.alwaysOnline === "boolean") {
+    merged.presenceMode = input.alwaysOnline ? "always" : "natural";
   }
   merged.alwaysOnline = merged.presenceMode === "always";
 
@@ -440,7 +442,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
   }
   merged.quotedReplyContext = merged.quoteReplyMode !== "off";
 
-  if (!merged.agentEnabled) {
+  if (!merged.agentEnabled && !options?.preserveSettings) {
     merged.alwaysOnline = false;
     merged.presenceMode = "focused";
     merged.markAsRead = false;
@@ -517,6 +519,26 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
   return merged;
 }
 
+/** Persist preferences separately from the disabled runtime's effective switches. */
+export function normalizeWhatsappBehaviorSettings(value: unknown): WhatsappBehaviorConfig {
+  const input = isRecord(value) ? value : {};
+  const settings = { ...input };
+  // Old releases saved the effective disabled configuration. These forced guards
+  // could not be disabled individually, so together they identify that old reset.
+  const legacyReset = input.settingsVersion !== 1 && input.agentEnabled === false
+    && input.botLoopProtection === false && input.audioTranscription === false
+    && input.identityGuard === false && input.promptInjectionGuard === false;
+  if (legacyReset) {
+    const pausedDefaults = normalizeWhatsappBehaviorConfig({ ...defaultWhatsappBehaviorConfig, agentEnabled: false });
+    const customized = new Set(Array.isArray(input.customizedStyleFields) ? input.customizedStyleFields : []);
+    for (const key of Object.keys(defaultWhatsappBehaviorConfig) as (keyof WhatsappBehaviorConfig)[]) {
+      if (key !== "agentEnabled" && !customized.has(key) && input[key] === pausedDefaults[key]
+        && defaultWhatsappBehaviorConfig[key] !== pausedDefaults[key]) settings[key] = defaultWhatsappBehaviorConfig[key];
+    }
+  }
+  return { ...normalizeWhatsappBehaviorConfig(settings, { preserveSettings: true }), settingsVersion: 1 };
+}
+
 function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) {
   behavior.splitMessages = true;
   behavior.humanizedLanguage = true;
@@ -572,7 +594,7 @@ export function mergeWhatsappHandoffNotificationSettings(
   base: WhatsappBehaviorConfig,
   draft: WhatsappBehaviorConfig,
 ): WhatsappBehaviorConfig {
-  return normalizeWhatsappBehaviorConfig({
+  return normalizeWhatsappBehaviorSettings({
     ...base,
     humanIntervention: draft.humanIntervention,
     detectHumanRequest: draft.detectHumanRequest,

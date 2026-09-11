@@ -17,7 +17,7 @@ import {
 } from "@/lib/agents/responsible-human";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
-import { defaultWhatsappAgentPrompt, defaultWhatsappCloneMemory, normalizeWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
+import { defaultWhatsappAgentPrompt, defaultWhatsappCloneMemory, normalizeWhatsappBehaviorSettings } from "@/lib/whatsapp/agent-behavior";
 import {
   buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
@@ -327,7 +327,7 @@ export async function updateClientAgent(input: {
   const promptTemplateConfig = input.promptTemplateConfig !== undefined
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]);
-  const currentBehavior = normalizeWhatsappBehaviorConfig(agent.metadata?.whatsapp_behavior_config);
+  const currentBehavior = normalizeWhatsappBehaviorSettings(agent.metadata?.whatsapp_behavior_config);
   if (input.prompt !== undefined && input.prompt !== agent.prompt) promptTemplateConfig.mode = "manual";
   const setup = applyActivitySetup({ config: promptTemplateConfig, agentName: name,
     previousTemplateId: normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]).templateId,
@@ -428,7 +428,7 @@ export async function cloneClientAgent(input: {
   const promptTemplateConfig = input.promptTemplateConfig !== undefined
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]);
-  const currentBehavior = normalizeWhatsappBehaviorConfig(sourceAgent.metadata?.whatsapp_behavior_config);
+  const currentBehavior = normalizeWhatsappBehaviorSettings(sourceAgent.metadata?.whatsapp_behavior_config);
   if (input.prompt !== undefined && input.prompt !== sourceAgent.prompt) promptTemplateConfig.mode = "manual";
   const setup = applyActivitySetup({ config: promptTemplateConfig, agentName: name,
     previousTemplateId: normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]).templateId,
@@ -728,7 +728,7 @@ function mergeAgentMetadata(
     client_created: true,
     agent_kind: "whatsapp",
     multichannel_config: normalizeAgentChannelConfig((metadata ?? {}).multichannel_config),
-    whatsapp_behavior_config: normalizeWhatsappBehaviorConfig((metadata ?? {}).whatsapp_behavior_config),
+    whatsapp_behavior_config: normalizeWhatsappBehaviorSettings((metadata ?? {}).whatsapp_behavior_config),
     company_id: company.id,
     company_name: company.name,
     sector_code: sectorCode,

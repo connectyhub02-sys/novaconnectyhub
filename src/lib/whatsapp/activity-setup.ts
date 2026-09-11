@@ -1,7 +1,7 @@
 import { defaultLeadQualificationConfig, normalizeLeadQualificationConfig, type LeadQualificationConfig } from "../leads/qualification";
 import { activityPresetVersion } from "./activity-presets";
 import { createActivityPromptConfig, getAgentActivityPreset, getAgentPromptTemplate, type AgentPromptBuilderConfig } from "./agent-prompt-templates";
-import { defaultWhatsappBehaviorConfig, normalizeWhatsappBehaviorConfig, normalizeWhatsappCloneProfile, type WhatsappBehaviorConfig, type WhatsappCloneProfile } from "./agent-behavior";
+import { defaultWhatsappBehaviorConfig, normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, normalizeWhatsappCloneProfile, type WhatsappBehaviorConfig, type WhatsappCloneProfile } from "./agent-behavior";
 
 export function createActivityCloneProfile(templateId: unknown, agentName: string): WhatsappCloneProfile {
   const template = getAgentPromptTemplate(templateId);
@@ -43,11 +43,11 @@ export function createActivityQualification(templateId: unknown): LeadQualificat
 
 export function createActivityBehavior(templateId: unknown): WhatsappBehaviorConfig {
   const preset = getAgentActivityPreset(templateId);
-  return normalizeWhatsappBehaviorConfig({
+  return normalizeWhatsappBehaviorSettings({
     ...defaultWhatsappBehaviorConfig,
-    conversationStyle: preset.style, textEmojis: preset.style !== "discreet",
-    emojiReactions: preset.style !== "discreet", reactionProbability: preset.style === "warm" ? 25 : 10,
-    sendStickers: false, smallTalk: false, spontaneousAudio: false, responseMode: "text",
+    conversationStyle: preset.style, textEmojis: true,
+    emojiReactions: true, reactionProbability: preset.style === "warm" ? 25 : 10,
+    spontaneousAudio: false,
     interactiveMessages: true, qualityMetrics: true,
   });
 }
@@ -114,7 +114,7 @@ export function applyActivitySetup(input: {
 }) {
   const cloneProfile = applyActivityCloneProfile(input.config.templateId, input.agentName, input.cloneProfile);
   const qualification = applyActivityQualification(input.config.templateId, input.qualification);
-  const behavior = input.behavior ? normalizeWhatsappBehaviorConfig(input.behavior) : createActivityBehavior(input.config.templateId);
+  const behavior = input.behavior ? normalizeWhatsappBehaviorSettings(input.behavior) : createActivityBehavior(input.config.templateId);
   if (input.behavior) {
     const oldBehavior = input.previousTemplateId ? createActivityBehavior(input.previousTemplateId) : { ...behavior };
     const newBehavior = createActivityBehavior(input.config.templateId);
@@ -133,4 +133,8 @@ export function createActivitySetup(templateId: unknown, agentName: string) {
 /** One precedence for dashboard and runtime; explicit agent settings beat global defaults. */
 export function resolveWhatsappBehavior(input: { instance?: unknown; agent?: unknown; global?: unknown }) {
   return normalizeWhatsappBehaviorConfig(input.instance ?? input.agent ?? input.global);
+}
+
+export function resolveWhatsappBehaviorSettings(input: { instance?: unknown; agent?: unknown; global?: unknown }) {
+  return normalizeWhatsappBehaviorSettings(input.instance ?? input.agent ?? input.global);
 }

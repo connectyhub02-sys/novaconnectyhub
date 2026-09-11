@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "./activity-setup";
+import { applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "./activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -50,7 +50,7 @@ import {
   mergeWhatsappHandoffNotificationSettings,
   normalizeWhatsappCloneMemory,
   normalizeWhatsappCloneProfile,
-  normalizeWhatsappBehaviorConfig,
+  normalizeWhatsappBehaviorSettings,
   type WhatsappBehaviorConfig,
   type WhatsappCloneMemory,
   type WhatsappCloneProfile,
@@ -1001,7 +1001,7 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
   const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
   const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const globalAgent = await getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId);
-  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance, agent));
+  const behaviorDraft = normalizeWhatsappBehaviorSettings(input.behavior ?? getBehaviorConfig(globalAgent, instance, agent));
   const responsibleHumans = normalizeAgentResponsibleHumans(input.responsibleHumans, {
     requireAtLeastOne: true,
     requireName: true,
@@ -1196,7 +1196,7 @@ export async function updateClientWhatsappPrompt(input: {
     getWorkspaceInstance(client, input.organization.id, agentForMetadata),
   ]);
   const resolvedInstance = instance && agentForMetadata ? await ensureInstanceAgentMetadata(client, instance, input.organization, agentForMetadata) : instance;
-  let nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
+  let nextBehavior = normalizeWhatsappBehaviorSettings(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
   if (input.behavior !== undefined) {
     await assertWhatsappBehaviorVoiceAccess(client, {
       organizationId: input.organization.id,
@@ -2650,7 +2650,7 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
 
-  return resolveWhatsappBehavior({ instance: instanceConfig, agent: agentConfig, global: globalConfig });
+  return resolveWhatsappBehaviorSettings({ instance: instanceConfig, agent: agentConfig, global: globalConfig });
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
