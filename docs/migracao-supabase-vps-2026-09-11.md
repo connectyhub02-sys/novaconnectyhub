@@ -1,63 +1,73 @@
-# Migração do Supabase para a VPS — preparação
+# Migração do Supabase para a VPS — 11/09/2026
 
-## Escopo confirmado
+## Estado de produção
 
-A aplicação permanece hospedada na Vercel. Migrar o Supabase gerenciado para `supabase.connectyhub.com.br`, na VPS Contabo existente, preservando banco, usuários, regras de acesso, funções e arquivos. O Inngest de produção já está na VPS; seus handlers continuam na Vercel. Cloudflare R2 permanece em uso.
+O Supabase passou para `https://supabase.connectyhub.com.br`, na VPS Contabo. A Vercel continua hospedando a aplicação e os handlers; o Inngest opera na VPS e o Cloudflare R2 permanece em uso.
 
-**Estado: ensaio e importação inicial no banco principal da VPS concluídos; troca final em andamento.** O ensaio permanece separado em `migration_trial_20260911`. A produção da Vercel foi pausada em 11/09/2026 às 09:32 UTC para drenagem e sincronização final. As três variáveis Supabase foram atualizadas, mas ainda é necessário publicar e validar a implantação antes de retomar o serviço. Não cancelar o Cloud antes da validação completa e da janela de retorno.
+A produção foi reaberta às **09:49:57 UTC (06:49:57 BRT)**. Banco, usuários, regras de acesso, funções SQL, histórico de migrations e arquivos foram transferidos. O Supabase Cloud foi preservado em modo somente leitura; o app do Inngest Cloud permanece arquivado. Nenhuma assinatura foi cancelada.
 
-## Inventário da origem
+As verificações técnicas abaixo passaram. Ainda dependem de confirmação do titular o login completo no navegador e a conferência visual do painel. O SMTP autenticou, mas a entrega real de e-mail não foi testada. A migração não equivale a um teste integral de todos os fluxos de negócio.
 
-Fonte: painel autenticado e consultas SQL somente leitura em 11/09/2026. Contagens registradas em `evidencias/migracao-supabase-2026-09-11/inventory.json`.
+## Dados transferidos e conferidos
 
-- PostgreSQL 17.6; aproximadamente 1,22 GB de tamanho físico do banco.
-- 152 tabelas públicas, 174 funções públicas e 253 políticas públicas de acesso.
-- 25 usuários; identidades: 18 por e-mail e 7 por Google.
-- Dois buckets privados: `lead-archive` com 26 objetos (3.294.932 bytes) e `platform-deliverables` vazio.
-- Nenhuma Edge Function publicada e nenhuma tabela na publicação consultada do Realtime.
-- Schemas adicionais: auth, storage, realtime, vault e supabase_migrations. Vault sem segredos, pg_cron não instalado e 83 registros no histórico de migrations. Os scripts de roles exportados contêm configurações de timeout dos papéis padrão; o papel temporário de login do CLI não é uma dependência da aplicação.
-- Login por e-mail e Google habilitado; cadastro permitido, confirmação de e-mail desativada, login anônimo e associação manual de identidades desativados.
-- Site: `https://www.connectyhub.com.br`. Retornos permitidos: `/auth/callback` nos domínios com e sem `www`.
-- SMTP personalizado não configurado: a origem usa o serviço de e-mail embutido do Cloud. Não presumir que esse serviço acompanha o banco exportado.
+- PostgreSQL 17.6 na origem e no destino.
+- **181 tabelas exportadas, 421.808 registros e zero diferenças de contagem** no snapshot final, antes de retomar os serviços.
+- 152 tabelas públicas, 174 funções públicas, 253 políticas públicas e 83 registros de migrations.
+- 25 usuários; 18 identidades por e-mail e sete por Google. Hashes de senha iguais aos da origem.
+- Conteúdo das carteiras de créditos, flags RLS, políticas públicas e gatilhos públicos iguais aos da origem congelada. Comparação de definições com `search_path=pg_catalog` nos dois lados.
+- Dois buckets privados: `lead-archive` com 26 objetos, somando 3.294.932 bytes, e `platform-deliverables` vazio. Objetos enviados pela API Storage e baixados novamente; os 26 arquivos conferiram byte a byte.
+- Nenhuma Edge Function publicada na origem, nenhuma tabela na publicação Realtime consultada, Vault sem segredos e `pg_cron` não instalado. Não havia trabalhos desses recursos para transferir.
+- Roles, schema, ownership e privilégios restaurados pelo procedimento oficial. `pg_graphql` 1.5.11 instalado. Histórico de migrations exportado e restaurado separadamente.
 
-## Destino conferido
+Inventário e evidências resumidas, sem credenciais: `evidencias/migracao-supabase-2026-09-11/inventory.json`.
 
-O PostgreSQL da instalação Supabase da VPS também está em 17.6. O destino, inicialmente vazio, recebeu a restauração transacional do primeiro snapshot e o histórico de migrations. A extensão `pg_graphql` 1.5.11 foi instalada. Auth, REST e Storage voltaram saudáveis após a importação.
+## Execução da troca
 
-A preparação local em `next.config.ts` permite imagens de `https://supabase.connectyhub.com.br/storage/v1/**`, preservando a compatibilidade com os endereços anteriores durante a transição. Essa alteração ainda não foi publicada.
+1. Ensaio isolado em `migration_trial_20260911`: 181 tabelas, 421.789 registros, sem diferenças de contagem. Backup do destino vazio e restauração transacional concluídos.
+2. Vercel pausada às 09:32:49 UTC. Inngest parado durante a sincronização final, preservando seus volumes PostgreSQL e Redis.
+3. Origem colocada em modo somente leitura e conexões de aplicação drenadas. Snapshot final: `final-20260911T093810Z`, dump de dados com 1.377.691.905 bytes.
+4. Schema final comparado ao inicial antes da atualização transacional do destino. A atualização preservou as versões físicas dos arquivos de Storage; depois os objetos foram sincronizados e verificados novamente.
+5. Três variáveis existentes da Vercel atualizadas: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` e `SUPABASE_SECRET_KEY`. Alvos compartilhados Production/Preview preservados. As outras credenciais, incluindo a chave de criptografia da aplicação, não foram substituídas. As mesmas três configurações foram atualizadas no `.env.local`, fora do Git.
+6. Como a Vercel não compilava um projeto pausado, uma regra temporária de manutenção foi criada com autorização específica do titular. O projeto foi despausado para compilar; a regra foi removida após a implantação ficar Ready e o destino passar nas verificações. Conferência final: zero regras temporárias restantes.
+7. Implantação da troca: `dpl_8GmV5AXnpTGKUmgQjHLpWBWTT9DZ`, commit `b7556554f893a368a9e459c9b08c90fc12caaa4b`, com aliases públicos ativos. Inngest retomado após a reabertura.
 
-## Exportação e ensaio concluídos
-
-- A senha redefinida pelo titular permitiu conectar diretamente ao PostgreSQL da origem a partir da VPS. Credenciais armazenadas somente em arquivos privados; não incluídas no repositório.
-- Exportação em `trial-20260911T083509Z`: roles, schema e dados pelo CLI Supabase; histórico `supabase_migrations` exportado separadamente. Dump de dados: 1.377.668.222 bytes. Checksums SHA-256 registrados na VPS.
-- Backup do destino vazio realizado antes do ensaio. Restauração transacional no banco isolado, incluindo `pg_graphql`, com sucesso.
-- Comparação do dump com o banco restaurado: **181 tabelas, 421.789 linhas e zero diferenças de contagem**. Conferidos 25 usuários, 152 tabelas públicas, 174 funções públicas, 253 políticas públicas e 83 migrations.
-- Comparação adicional com a origem confirmou igualdade dos hashes de senha, conteúdo das carteiras de créditos, flags RLS, políticas públicas e gatilhos públicos. A comparação de políticas foi executada com `search_path=pg_catalog` em ambos os lados para evitar diferenças apenas de qualificação de nomes na representação SQL.
-- Exportação dos dois buckets e download de 26 objetos, totalizando 3.294.932 bytes, com manifesto e SHA-256. Os objetos foram enviados pela API Storage do destino e baixados novamente: todos conferidos byte a byte. Repetir a sincronização após congelar a origem para capturar eventuais arquivos recentes.
-- A chamada `backfill_lead_message_archive(10)` retornou 10 em aproximadamente 137 ms no ensaio, dentro de transação revertida. Não houve mensagens ou pagamentos artificiais.
+Não foi criada nova migration SQL de aplicação. Os 83 registros existentes foram preservados.
 
 ## Autenticação e e-mail
 
-- Credencial Google preservada em arquivo privado na VPS. Novo callback `https://supabase.connectyhub.com.br/auth/v1/callback` adicionado ao cliente OAuth existente; callback Cloud mantido para transição. Console confirmou salvamento.
-- Google e URLs de retorno configurados no serviço Auth do destino, que voltou saudável. Cadastro do destino permanece desabilitado até a troca final; telefone desativado para acompanhar a origem.
-- Origem sem Auth Hooks personalizados. Sessões sem duração máxima ou timeout de inatividade; múltiplas sessões permitidas; validade de acesso de 3.600 segundos e rotação de refresh com intervalo de reutilização de 10 segundos.
-- TOTP habilitado, SMS MFA desativado, máximo de 10 fatores; janela AAL1 de 15 minutos aplicada ao Auth no reinício.
-- Resend escolhido e conta criada pelo titular. Domínio `connectyhub.com.br` verificado em São Paulo. Registros DKIM, SPF/MX do subdomínio `send` e DMARC adicionados no DNS autoritativo da Vercel, preservando a hospedagem.
-- Chave `ConnectyHub Supabase Auth VPS` criada com **Sending access restrito a connectyhub.com.br**. A tentativa anterior de escopo All domains foi bloqueada e nenhuma chave ampla foi criada.
-- Após o titular fornecer a credencial, SMTP configurado no Auth da VPS: `smtp.resend.com:587`, STARTTLS, remetente `no-reply@connectyhub.com.br`, nome ConnectyHub. A autenticação retornou código 235. Nenhuma mensagem de teste foi enviada; entrega real de e-mail ainda não foi validada.
-- As APIs públicas do destino responderam: configurações Auth 200 com e-mail/Google ativos e telefone desativado; consulta interna das carteiras 200; consulta anônima sem nenhuma carteira visível.
-- Ainda conferir todos os templates e demais opções do Auth antes da mudança de produção. Notificações adicionais de segurança por e-mail estão desabilitadas na origem; modelo de recuperação de senha usa conteúdo padrão.
+- Cadastro permitido, login anônimo desativado, confirmação de e-mail desativada e telefone desativado, acompanhando a origem.
+- Site `https://www.connectyhub.com.br`; callbacks `/auth/callback` nos domínios com e sem `www`.
+- Google habilitado com a credencial existente. Callback `https://supabase.connectyhub.com.br/auth/v1/callback` acrescentado ao cliente Google; callback Cloud preservado durante a transição.
+- Sessões múltiplas, sem duração máxima ou timeout de inatividade; acesso de 3.600 segundos, refresh com rotação e reutilização de 10 segundos.
+- Códigos de acesso por e-mail com oito dígitos e validade de 3.600 segundos, acompanhando a origem. Alteração de e-mail exige confirmação nos dois endereços.
+- TOTP habilitado, SMS MFA desativado, máximo de 10 fatores e janela AAL1 de 15 minutos. Origem sem Auth Hooks personalizados.
+- Resend em São Paulo, domínio `connectyhub.com.br` verificado. DKIM, SPF/MX de `send` e DMARC adicionados no DNS autoritativo da Vercel.
+- Credencial com permissão de envio restrita ao domínio. SMTP `smtp.resend.com:587`, STARTTLS, remetente `no-reply@connectyhub.com.br`, nome ConnectyHub. Autenticação retornou **235**; nenhuma mensagem de teste foi enviada.
+- Notificações adicionais de segurança por e-mail desativadas na origem. Os seis templates de autenticação foram conferidos e usam o conteúdo padrão: confirmação, convite, recuperação, acesso por link, alteração de e-mail e reautenticação. Passkeys, servidor OAuth próprio, CAPTCHA e bloqueio de senhas vazadas estavam desativados na origem.
 
-## Sequência de execução pendente
+No teste de login Google pelo Chrome, o subdomínio ainda alcançou a página antiga da Vercel. O resolvedor do Windows e uma chamada HTTPS no mesmo computador já alcançavam corretamente a VPS; solicitado reinício completo do navegador para validar o acesso. A ferramenta não permite abrir a página interna de limpeza de DNS do Chrome.
 
-1. Concluir SMTP e conferir as opções restantes de autenticação.
-2. Concluir verificações de ownership, privilégios e isolamento de acesso no ensaio. Preparar a importação final sem descartar a origem.
-3. Copiar objetos pela API de Storage ou S3 compatível; verificar contagens, tamanhos e hashes. Copiar metadados SQL não transfere os arquivos.
-4. Configurar Auth, OAuth, SMTP, URLs, API e recursos adicionais existentes na origem. Manter o destino de teste isolado dos envios e cobranças reais.
-5. Preparar uma janela controlada de troca: interromper ou reter produtores de escrita, drenar execuções relevantes, capturar os dados finais e conferir a restauração. Não trocar a aplicação para uma cópia defasada.
-6. Alterar somente as variáveis Supabase necessárias da Vercel e republicar, pois variáveis públicas são incorporadas ao build. Preservar as demais credenciais da aplicação e sua chave de criptografia.
-7. Retomar o Inngest na VPS e verificar login, isolamento entre contas, créditos, arquivos e automações. Validar a correção pendente do arquivamento primeiro no ambiente restaurado, sem mensagens ou pagamentos artificiais.
-8. Registrar resultados e manter a origem preservada durante a observação. Um retorno após novas escritas no destino exige reconciliação dos dados; não basta reverter variáveis.
+O navegador pode exigir novo login porque o endereço do Supabase mudou. Usuários e senhas foram preservados; sessões e links antigos não devem ser presumidos compatíveis com o novo emissor de autenticação.
+
+## Verificações após a troca
+
+- Todos os containers Supabase e Inngest saudáveis.
+- Site, login e documentação pública: HTTP 200.
+- Configurações Auth: HTTP 200, e-mail e Google ativos, telefone desativado.
+- Consulta de carteiras com chave de serviço: HTTP 200. Consulta anônima: nenhuma carteira visível. O objeto privado consultado não foi servido pela rota pública sem autenticação.
+- Conferidos 16 arquivos JavaScript da página de login: endereço da VPS presente, endereço do projeto Cloud ausente.
+- GET assinado do handler Inngest: HTTP 200, assinatura válida, 43 funções, API e eventos apontando para `inngest.connectyhub.com.br`. GET sem assinatura retorna 401, como esperado.
+- Entre 09:50 e 09:54:35 UTC: **202 execuções finalizadas como Completed e nenhuma como Failed**, incluindo arquivamento de mensagens. Agendas diárias e semanais conferidas por registro, sem disparo artificial.
+- Backup pós-migração concluído às **09:51:44 UTC**, `Result=success`, `ExecMainStatus=0`.
+- Nenhuma cobrança ou mensagem de WhatsApp artificial disparada como teste. A amostra de execuções não comprova todos os cenários futuros.
+
+## Operação, retenção e retorno
+
+Configuração privada: `/opt/connectyhub/supabase`. Snapshots, manifestos e relatórios detalhados: `/opt/connectyhub/migration-supabase`, acesso restrito ao root. Backups diários e suas limitações: `preparacao-vps-contabo-2026-09-11.md`.
+
+O banco Cloud permanece congelado e não recebe novas operações. Não basta reverter variáveis: **após a reabertura, novas escritas existem somente na VPS**. Um retorno exige nova manutenção, interrupção dos produtores e reconciliação dessas escritas antes de reativar a origem. O helper privado `unfreeze-source.py` somente remove o modo de leitura; não reconcilia dados e não deve ser executado isoladamente.
+
+Antes de cancelar o Cloud: concluir login e teste de entrega de e-mail, conferir o primeiro Auto Backup da Contabo, manter cópia externa recuperável e observar a operação. O backup local não substitui uma cópia fora da máquina. Preservar o histórico antigo do Inngest pelo período necessário; ele não foi reexecutado nem convertido para o banco do novo serviço.
 
 ## Referências oficiais
 

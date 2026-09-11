@@ -2,7 +2,7 @@
 
 ## Escopo e estado
 
-O agendamento, a fila e o histórico das novas execuções de produção passaram do Inngest Cloud para `https://inngest.connectyhub.com.br`, na VPS Contabo `13.140.34.227`. Os handlers continuam executando na Vercel. Supabase gerenciado e Cloudflare R2 permanecem em uso; esta mudança não migrou o banco de clientes.
+O agendamento, a fila e o histórico das novas execuções de produção passaram do Inngest Cloud para `https://inngest.connectyhub.com.br`, na VPS Contabo `13.140.34.227`. Os handlers continuam executando na Vercel. O Supabase foi transferido para a mesma VPS na etapa seguinte, descrita em `migracao-supabase-vps-2026-09-11.md`. Cloudflare R2 permanece em uso.
 
 Foram registrados **43 funções, 31 funções com cron e 26 com evento**. Uma função pode ter ambos os tipos de gatilho. O Cloud tinha 41 funções sincronizadas; o novo ambiente inclui os agendamentos e webhooks da API de IA já existentes no código de produção.
 
@@ -41,7 +41,13 @@ Diagnóstico somente leitura no Supabase gerenciado:
 - O papel `authenticator` tem `statement_timeout=8s` e `lock_timeout=8s`; `service_role` não possui override.
 - Sanitizar os primeiros dez registros: aproximadamente 54 ms. Medição de uma amostra, sem garantia para todo conteúdo futuro.
 
-Foi preparada **somente localmente** a redução de `p_limit: 100` para `p_limit: 10` em `src/lib/leads/message-archive.ts`. Não exige migration SQL. Não foi publicada nem aplicada a registros de clientes. A aprovação automática bloqueou uma chamada de diagnóstico que executaria backfill real; a investigação seguiu por consultas sem escrita. A publicação e a validação da correção precisam ser retomadas com autorização específica, observando o consumo progressivo da fila e eventuais mensagens individuais muito grandes.
+A redução de `p_limit: 100` para `p_limit: 10` em `src/lib/leads/message-archive.ts` foi publicada no commit `b7556554f893a368a9e459c9b08c90fc12caaa4b`, durante a migração autorizada do Supabase. Não exige migration SQL. Antes da publicação, `backfill_lead_message_archive(10)` retornou dez linhas em aproximadamente 137 ms no banco de ensaio, em transação revertida. Após a retomada, execuções naturais da rotina concluíram na VPS. Continuar observando o consumo da fila e mensagens individuais muito grandes.
+
+## Validação após migrar o Supabase
+
+O serviço Inngest foi interrompido durante a sincronização final do banco e retomado após reabrir a produção às 09:49:57 UTC. PostgreSQL e Redis persistentes foram preservados. A implantação `dpl_8GmV5AXnpTGKUmgQjHLpWBWTT9DZ` respondeu ao GET assinado com HTTP 200, autenticação válida, 43 funções e ambos os endereços de API apontando para a VPS.
+
+Entre 09:50 e 09:54:35 UTC, a consulta de finalizações registrou 202 execuções Completed e nenhuma Failed, incluindo o arquivamento. Backup posterior concluído às 09:51:44 UTC. Essa amostra não substitui testes completos dos fluxos diários e semanais; não foram disparadas cobranças ou mensagens artificiais.
 
 ## Operação e retorno
 

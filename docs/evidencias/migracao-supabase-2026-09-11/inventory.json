@@ -3,7 +3,7 @@
   "sourceProject": "nkcnaizbsetmtcrocaon",
   "destination": "supabase.connectyhub.com.br",
   "applicationHosting": "Vercel (retained)",
-  "phase": "initial destination import validated; Vercel paused for final synchronization",
+  "phase": "production switched to VPS; login and email delivery acceptance pending",
   "trial": {
     "database": "migration_trial_20260911",
     "snapshot": "trial-20260911T083509Z",
@@ -11,9 +11,26 @@
     "rowsInDump": 421789,
     "rowCountMismatches": 0,
     "migrationHistoryRecords": 83,
-    "criticalComparison": {"authPasswordHashesEqual": true, "creditWalletsEqual": true, "publicRlsFlagsEqual": true, "publicPoliciesEqual": true, "publicTriggersEqual": true},
-    "archiveBatch10": {"rows": 10, "durationMs": 136.962, "rolledBack": true},
-    "storageExport": {"buckets": 2, "objects": 26, "bytes": 3294932, "hashManifest": true, "uploadedToDestination": true, "downloadComparisonPassed": true}
+    "criticalComparison": {
+      "authPasswordHashesEqual": true,
+      "creditWalletsEqual": true,
+      "publicRlsFlagsEqual": true,
+      "publicPoliciesEqual": true,
+      "publicTriggersEqual": true
+    },
+    "archiveBatch10": {
+      "rows": 10,
+      "durationMs": 136.962,
+      "rolledBack": true
+    },
+    "storageExport": {
+      "buckets": 2,
+      "objects": 26,
+      "bytes": 3294932,
+      "hashManifest": true,
+      "uploadedToDestination": true,
+      "downloadComparisonPassed": true
+    }
   },
   "emailMigration": {
     "provider": "Resend",
@@ -28,15 +45,28 @@
   },
   "databaseVersion": "PostgreSQL 17.6",
   "databaseBytes": 1219349651,
-  "tablesBySchema": {"public": 152, "auth": 23, "storage": 8, "realtime": 3, "vault": 1, "supabase_migrations": 1},
+  "tablesBySchema": {
+    "public": 152,
+    "auth": 23,
+    "storage": 8,
+    "realtime": 3,
+    "vault": 1,
+    "supabase_migrations": 1
+  },
   "publicPolicies": 253,
   "publicFunctions": 174,
   "users": 25,
-  "identitiesByProvider": {"email": 18, "google": 7},
+  "identitiesByProvider": {
+    "email": 18,
+    "google": 7
+  },
   "realtimePublishedTables": 0,
   "edgeFunctions": 0,
   "authentication": {
-    "enabledProviders": ["email", "google"],
+    "enabledProviders": [
+      "email",
+      "google"
+    ],
     "allowSignups": true,
     "allowAnonymousSignIns": false,
     "allowManualLinking": false,
@@ -44,14 +74,91 @@
     "customSmtpConfigured": false,
     "customHooks": 0,
     "googleDestinationCallbackRegistered": true,
-    "sessions": {"singlePerUser": false, "timeboxHours": 0, "inactivityHours": 0, "accessExpirySeconds": 3600, "refreshRotation": true, "refreshReuseSeconds": 10},
-    "mfa": {"totp": true, "phone": false, "maxFactors": 10, "allowLowAalMinutes": 15},
+    "sessions": {
+      "singlePerUser": false,
+      "timeboxHours": 0,
+      "inactivityHours": 0,
+      "accessExpirySeconds": 3600,
+      "refreshRotation": true,
+      "refreshReuseSeconds": 10
+    },
+    "mfa": {
+      "totp": true,
+      "phone": false,
+      "maxFactors": 10,
+      "allowLowAalMinutes": 15
+    },
     "siteUrl": "https://www.connectyhub.com.br",
-    "redirectUrls": ["https://www.connectyhub.com.br/auth/callback", "https://connectyhub.com.br/auth/callback"]
+    "redirectUrls": [
+      "https://www.connectyhub.com.br/auth/callback",
+      "https://connectyhub.com.br/auth/callback"
+    ],
+    "standardEmailTemplatesVerified": 6,
+    "passkeysEnabled": false,
+    "oauthServerEnabled": false,
+    "emailOtpLength": 8,
+    "emailOtpExpirySeconds": 3600
   },
-  "extensions": ["plpgsql", "pg_stat_statements", "uuid-ossp", "pgcrypto", "supabase_vault", "pg_graphql"],
+  "extensions": [
+    "plpgsql",
+    "pg_stat_statements",
+    "uuid-ossp",
+    "pgcrypto",
+    "supabase_vault",
+    "pg_graphql"
+  ],
   "storageBuckets": [
-    {"id": "lead-archive", "public": false, "objects": 26, "bytes": 3294932},
-    {"id": "platform-deliverables", "public": false, "objects": 0, "bytes": 0}
-  ]
+    {
+      "id": "lead-archive",
+      "public": false,
+      "objects": 26,
+      "bytes": 3294932
+    },
+    {
+      "id": "platform-deliverables",
+      "public": false,
+      "objects": 0,
+      "bytes": 0
+    }
+  ],
+  "finalCutover": {
+    "snapshot": "final-20260911T093810Z",
+    "tablesCompared": 181,
+    "rowsInDump": 421808,
+    "rowCountMismatches": 0,
+    "dataDumpBytes": 1377691905,
+    "criticalComparisonEqual": true,
+    "storageObjectsVerified": 26,
+    "storageBytesVerified": 3294932,
+    "pausedAt": "2026-09-11T09:32:49Z",
+    "reopenedAt": "2026-09-11T09:49:57Z",
+    "deploymentId": "dpl_8GmV5AXnpTGKUmgQjHLpWBWTT9DZ",
+    "commit": "b7556554f893a368a9e459c9b08c90fc12caaa4b",
+    "maintenanceRuleRemoved": true,
+    "sourceReadOnly": true,
+    "cloudSubscriptionCanceled": false,
+    "newSqlMigration": false
+  },
+  "postCutoverValidation": {
+    "containersHealthy": true,
+    "homeStatus": 200,
+    "loginStatus": 200,
+    "docsStatus": 200,
+    "anonymousWalletRows": 0,
+    "privateObjectNotPublic": true,
+    "loginJavascriptAssetsChecked": 16,
+    "vpsUrlFoundInClient": true,
+    "oldCloudUrlFoundInClient": false,
+    "inngestSignedHealthStatus": 200,
+    "inngestFunctions": 43,
+    "inngestOrigin": "https://inngest.connectyhub.com.br",
+    "runsCapturedAt": "2026-09-11T09:54:35Z",
+    "runsCompleted": 202,
+    "runsFailed": 0,
+    "backupCompletedAt": "2026-09-11T09:51:44Z",
+    "backupResult": "success",
+    "browserLoginAccepted": false,
+    "realEmailDeliveryTested": false,
+    "browserIssue": "Chrome reached old Vercel destination; Windows DNS and HTTPS already reached VPS; requested full browser restart"
+  }
 }

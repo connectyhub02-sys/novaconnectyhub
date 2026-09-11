@@ -1,6 +1,6 @@
 # Preparação da VPS Contabo — 11/09/2026
 
-> Registro da instalação inicial. Atualização posterior: o Inngest de produção foi transferido para a VPS em 11/09/2026. Consulte [a migração e a pendência de arquivamento](migracao-inngest-vps-2026-09-11.md). O Supabase de produção ainda é o gerenciado.
+> Registro histórico da instalação inicial. Atualização de 11/09/2026: Inngest e Supabase de produção foram transferidos para a VPS; Vercel e Cloudflare R2 foram mantidos. O estado atual está nos relatórios de [migração do Inngest](migracao-inngest-vps-2026-09-11.md) e [migração do Supabase](migracao-supabase-vps-2026-09-11.md). As descrições de ambiente vazio abaixo se referem ao momento da preparação, anterior à migração.
 
 ## Escopo e estado
 
