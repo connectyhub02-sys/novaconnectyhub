@@ -51,6 +51,23 @@ Entre 09:50 e 09:54:35 UTC, a consulta de finalizações registrou 202 execuçõ
 
 ## Operação e retorno
 
+### Correção do acesso administrativo e dos checkpoints em 11/09
+
+O painel aceitava Basic Auth, mas a consulta seguinte a `GET /dev` era recusada pela autenticação nativa do Inngest. Reprodução: a página e o GraphQL retornavam 200 com a credencial administrativa; `/dev` retornava 401. No Inngest v1.44.0 em modo self-hosted, `/dev` retorna 404 **depois** de autenticar, conforme o código oficial; esse 404 é esperado e não significa indisponibilidade do servidor.
+
+Aplicado no Caddy, sem reiniciar Inngest, PostgreSQL ou Redis:
+
+- Depois de validar o Basic Auth administrativo, o proxy substitui o cabeçalho de autorização enviado ao upstream pelo Bearer derivado da chave de assinatura. Essa credencial permanece exclusivamente na configuração privada da VPS, nunca no navegador ou no Git.
+- `POST /v1/checkpoint/<runID>/(async|steps)`, com identificador de 26 caracteres, passa à autenticação nativa do Inngest, preservando o cabeçalho do SDK. Antes, essas chamadas eram indevidamente barradas pelo Basic Auth. As demais exceções existentes continuam como descritas acima.
+- Verificação externa: página com Basic Auth 200; página e GraphQL sem credencial 401; GraphQL autenticado 200; `/dev` autenticado 404 esperado. Checkpoint sem credencial 401; com credencial válida e identificador de teste inexistente 400, sem criar uma execução.
+- Após a correção, uma janela de 90 segundos registrou 17 checkpoints naturais com HTTP 200 e nenhum recusado. Não houve envio artificial de WhatsApp nem cobrança de teste.
+
+O registro temporário de acesso foi retirado após o diagnóstico. Evidências sem credenciais estão no diretório privado `/opt/connectyhub/inngest-ui-diagnostics` da VPS. O titular confirmou que o painel abre e autentica normalmente na aba anônima, solicitando a senha uma única vez, sem repetição. O perfil normal do Chrome ainda mostrava `ERR_BLOCKED_BY_CLIENT`. Esse bloqueio do navegador deve ser distinguido da autenticação do servidor; a causa específica no perfil normal não foi identificada.
+
+Referências de implementação: [autenticação por chave](https://github.com/inngest/inngest/blob/v1.44.0/pkg/authn/signing_key_strategy.go), [consulta de informações em self-hosted](https://github.com/inngest/inngest/blob/v1.44.0/pkg/devserver/api.go), [checkpoints](https://github.com/inngest/inngest/blob/v1.44.0/pkg/api/apiv1/checkpoint.go).
+
+### Procedimentos operacionais
+
 - Configuração: `/opt/connectyhub/inngest/compose.yaml` e `.env`; credenciais não devem entrar no Git.
 - Configuração anterior: `compose.before-production-migration.yaml` e `.env.before-production-migration`, no mesmo diretório.
 - Em atualização normal da aplicação, aguardar a sincronização de até cinco minutos e conferir contagem de funções/erros do app. Não reativar a integração Cloud por engano.

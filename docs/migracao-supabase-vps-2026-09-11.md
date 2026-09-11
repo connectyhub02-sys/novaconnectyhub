@@ -67,7 +67,9 @@ Configuração privada: `/opt/connectyhub/supabase`. Snapshots, manifestos e rel
 
 O banco Cloud permanece congelado e não recebe novas operações. Não basta reverter variáveis: **após a reabertura, novas escritas existem somente na VPS**. Um retorno exige nova manutenção, interrupção dos produtores e reconciliação dessas escritas antes de reativar a origem. O helper privado `unfreeze-source.py` somente remove o modo de leitura; não reconcilia dados e não deve ser executado isoladamente.
 
-Antes de cancelar o Cloud: concluir login e teste de entrega de e-mail, conferir o primeiro Auto Backup da Contabo, manter cópia externa recuperável e observar a operação. O backup local não substitui uma cópia fora da máquina. Preservar o histórico antigo do Inngest pelo período necessário; ele não foi reexecutado nem convertido para o banco do novo serviço.
+Antes de cancelar o Cloud: concluir a validação do login e da recuperação de acesso atualmente usada, conferir o primeiro Auto Backup da Contabo, manter cópia externa recuperável e observar a operação. O backup local não substitui uma cópia fora da máquina. Preservar o histórico antigo do Inngest pelo período necessário; ele não foi reexecutado nem convertido para o banco do novo serviço.
+
+O titular esclareceu em 11/09 que a recuperação de acesso já ocorria pelo WhatsApp antes da migração; recuperação por e-mail estava prevista para uma etapa posterior. O SMTP Resend foi configurado, mas a entrega de e-mail continua sem teste e não é requisito para reproduzir o fluxo anterior. Isso não substitui a validação funcional do fluxo pelo WhatsApp.
 
 ## Referências oficiais
 
