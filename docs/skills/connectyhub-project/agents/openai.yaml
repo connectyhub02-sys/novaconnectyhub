@@ -1,0 +1,6 @@
+interface:
+  display_name: "ConnectyHub — contexto do projeto"
+  short_description: "Arquitetura, créditos, agentes e operação ConnectyHub"
+  default_prompt: "Use $connectyhub-project para retomar o trabalho na ConnectyHub consultando o contexto e o estado operacional do repositório."
+policy:
+  allow_implicit_invocation: true
