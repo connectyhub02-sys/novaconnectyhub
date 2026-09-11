@@ -1,0 +1,1494 @@
+{
+  "capturedAt": "2026-09-11T16:19:37.499988+00:00",
+  "cutoverSince": "2026-09-11T09:50:00Z",
+  "functions": [
+    {
+      "name": "Agendamentos da API de IA",
+      "slug": "connectyhub-connectyhub-ai-triggers",
+      "total": 495,
+      "post_cutover": {
+        "300": 402
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143300040,
+      "last_completed": 1789143300732,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Agendador executa; nenhuma chamada de IA submetida na janela. Falta cenário com agendamento ativo.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub AEO Agent",
+      "slug": "connectyhub-connectyhub-growth-aeo-agent",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.aeo.scheduled"
+        },
+        {
+          "cron": "15 12 * * 2,4"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem execução na VPS ainda; cron semanal ocorre às terças e quintas. Próxima: 15/09/2026, 09:15:00.",
+      "nextCronBrt": [
+        "15/09/2026, 09:15:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub API Access Guard Sync",
+      "slug": "connectyhub-connectyhub-api-access-guard-sync",
+      "total": 33,
+      "post_cutover": {
+        "300": 26
+      },
+      "recent": {
+        "300": 2
+      },
+      "last_queued": 1789143300004,
+      "last_completed": 1789143305430,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/api.access_guard.sync.requested"
+        },
+        {
+          "cron": "*/15 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Consulta 23 clientes; 5 permitidos e 18 bloqueados por política. Última execução sem erros.",
+      "nextCronBrt": [
+        "11/09/2026, 13:30:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub API Health Monitor",
+      "slug": "connectyhub-connectyhub-api-health-monitor",
+      "total": 49,
+      "post_cutover": {
+        "300": 38
+      },
+      "recent": {
+        "300": 3
+      },
+      "last_queued": 1789142999984,
+      "last_completed": 1789143003385,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/api.health.requested"
+        },
+        {
+          "cron": "*/10 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Monitor executou; última avaliação com status ok e pontuação 100.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Admin Ping",
+      "slug": "connectyhub-connectyhub-admin-ping",
+      "total": 1,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": 1789113695226,
+      "last_completed": 1789113697452,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/admin.ping"
+        }
+      ],
+      "auditStatus": "Execução anterior à troca do banco",
+      "auditNote": "Evento diagnóstico concluído na VPS antes da troca do Supabase.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub Agenda Notice",
+      "slug": "connectyhub-connectyhub-agenda-notice",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/agenda.notice"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado. Testar aviso de reserva com destinatário de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub Agenda Notifications",
+      "slug": "connectyhub-connectyhub-customer-agenda",
+      "total": 247,
+      "post_cutover": {
+        "300": 200
+      },
+      "recent": {
+        "300": 15
+      },
+      "last_queued": 1789143239993,
+      "last_completed": 1789143243160,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/2 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Preparação/fila executam; nenhum aviso enfileirado na janela.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Blog Agent",
+      "slug": "connectyhub-connectyhub-growth-blog-agent",
+      "total": 1,
+      "post_cutover": {
+        "300": 1
+      },
+      "recent": null,
+      "last_queued": 1789120799994,
+      "last_completed": 1789120811662,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.blog.scheduled"
+        },
+        {
+          "cron": "0 10 * * 1,3,5"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "14/09/2026, 07:00:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Checkout Payment Reconciliation",
+      "slug": "connectyhub-connectyhub-transparent-checkout-reconciliation",
+      "total": 99,
+      "post_cutover": {
+        "300": 81
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143299985,
+      "last_completed": 1789143302624,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Conciliação executa; nenhum pagamento elegível verificado nos fluxos de lojas e plataforma. Falta validar uma conciliação com pagamento real em cenário controlado.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Competitive Intelligence Agent",
+      "slug": "connectyhub-connectyhub-growth-competitive-intel-agent",
+      "total": 1,
+      "post_cutover": {
+        "300": 1
+      },
+      "recent": null,
+      "last_queued": 1789126200030,
+      "last_completed": 1789126212136,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.competitive-intel.scheduled"
+        },
+        {
+          "cron": "30 11 * * 1,3,5"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "14/09/2026, 08:30:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Daily Admin Report",
+      "slug": "connectyhub-connectyhub-daily-admin-report",
+      "total": 1,
+      "post_cutover": {
+        "300": 1
+      },
+      "recent": null,
+      "last_queued": 1789126199981,
+      "last_completed": 1789126203602,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "30 11 * * *"
+        }
+      ],
+      "auditStatus": "Implementação parcial",
+      "auditNote": "Implementação incompleta: registra horário e retorna ready; não compila nem envia relatório.",
+      "nextCronBrt": [
+        "12/09/2026, 08:30:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Eliane Ecosystem Sync",
+      "slug": "connectyhub-connectyhub-eliane-ecosystem-sync",
+      "total": 1,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": 1789117199987,
+      "last_completed": 1789117207956,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/eliane.ecosystem.sync.requested"
+        },
+        {
+          "cron": "0 9 * * *"
+        }
+      ],
+      "auditStatus": "Execução anterior à troca do banco",
+      "auditNote": "Sincronização anterior à troca do Supabase concluída, seis áreas alteradas e zero alertas; aguarda próxima janela diária.",
+      "nextCronBrt": [
+        "12/09/2026, 06:00:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub GEO AGO Agent",
+      "slug": "connectyhub-connectyhub-growth-geo-ago-agent",
+      "total": 1,
+      "post_cutover": {
+        "300": 1
+      },
+      "recent": null,
+      "last_queued": 1789135199990,
+      "last_completed": 1789135213454,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.geo-ago.scheduled"
+        },
+        {
+          "cron": "0 14 * * 5"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "18/09/2026, 11:00:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Gateway Webhook Delivery",
+      "slug": "connectyhub-connectyhub-gateway-webhook-delivery",
+      "total": 260,
+      "post_cutover": {
+        "300": 258
+      },
+      "recent": {
+        "300": 21
+      },
+      "last_queued": 1789143088442,
+      "last_completed": 1789143088678,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/gateway.webhook.delivery.requested"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Eventos consumidos, zero entregas. Amostra ignora instância não pertencente ao cliente de API; validar entrega elegível.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub Growth Research Agent",
+      "slug": "connectyhub-connectyhub-growth-research-agent",
+      "total": 1,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": 1789115400055,
+      "last_completed": 1789115417989,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.research.scheduled"
+        },
+        {
+          "cron": "30 8 * * *"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "12/09/2026, 05:30:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Intelligent Automation Dispatch",
+      "slug": "connectyhub-connectyhub-intelligent-automation-sweep",
+      "total": 247,
+      "post_cutover": {
+        "300": 201
+      },
+      "recent": {
+        "300": 15
+      },
+      "last_queued": 1789143239990,
+      "last_completed": 1789143242874,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/2 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa sem itens vencidos a enfileirar na janela.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Lead Message Archive",
+      "slug": "connectyhub-connectyhub-lead-media-archive",
+      "total": 495,
+      "post_cutover": {
+        "300": 401
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143299984,
+      "last_completed": 1789143301184,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Trabalho real: 4.030 operações de backfill, 2.780 salvamentos e 1.250 adiamentos na amostra de saídas. Não são necessariamente objetos únicos.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Lead Relationships",
+      "slug": "connectyhub-connectyhub-lead-relationships",
+      "total": 49,
+      "post_cutover": {
+        "300": 39
+      },
+      "recent": {
+        "300": 3
+      },
+      "last_queued": 1789142999994,
+      "last_completed": 1789143000648,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/10 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Planejador executa; última saída sem recomendações ou retornos novos.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Market Radar Agent",
+      "slug": "connectyhub-connectyhub-growth-market-radar-agent",
+      "total": 1,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": 1789118100056,
+      "last_completed": 1789118114440,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.market-radar.scheduled"
+        },
+        {
+          "cron": "15 9 * * *"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "12/09/2026, 06:15:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Meta Organic Publish Sweep",
+      "slug": "connectyhub-connectyhub-meta-organic-publish-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 79
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143300040,
+      "last_completed": 1789143300645,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhuma publicação elegível processada.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Meta Social Agent Queue Sweep",
+      "slug": "connectyhub-connectyhub-meta-social-agent-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 81
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143299993,
+      "last_completed": 1789143300664,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhuma mensagem/comentário elegível processado.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Meta Social Approved Dispatch",
+      "slug": "connectyhub-connectyhub-meta-social-approved-dispatch",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.social.dispatch.requested"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar resposta aprovada em conta de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub Meta Social Comment Queue",
+      "slug": "connectyhub-connectyhub-meta-social-comment-queue",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.comment.received"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar comentário recebido em conta de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub Meta Social Dispatch Sweep",
+      "slug": "connectyhub-connectyhub-meta-social-dispatch-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 80
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143299985,
+      "last_completed": 1789143300584,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhuma resposta aprovada elegível processada.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Meta Social Message Queue",
+      "slug": "connectyhub-connectyhub-meta-social-message-queue",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.message.received"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar mensagem recebida em conta de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub News Agent",
+      "slug": "connectyhub-connectyhub-growth-news-agent",
+      "total": 1,
+      "post_cutover": {
+        "300": 1
+      },
+      "recent": null,
+      "last_queued": 1789131600054,
+      "last_completed": 1789131613366,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.news.scheduled"
+        },
+        {
+          "cron": "0 7,13,18 * * *"
+        }
+      ],
+      "auditStatus": "Conteúdo gerado; aguarda aprovação",
+      "auditNote": "Gerou conteúdo; aprovação humana obrigatória confirmada no banco, sem erro da IA e com consumo registrado no centro de custo interno.",
+      "nextCronBrt": [
+        "11/09/2026, 15:00:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Platform Automation Sweep",
+      "slug": "connectyhub-connectyhub-platform-automation-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 80
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143299984,
+      "last_completed": 1789143303537,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Ciclo financeiro e conciliações executam; nenhum débito/recarga/aviso de teste foi disparado. Existem verificações de clientes, mas filas de recargas e avisos estavam vazias.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub SEO Agent",
+      "slug": "connectyhub-connectyhub-growth-seo-agent",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.seo.scheduled"
+        },
+        {
+          "cron": "45 9 * * 2,4"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem execução na VPS ainda; cron semanal ocorre às terças e quintas. Próxima: 15/09/2026, 06:45:00.",
+      "nextCronBrt": [
+        "15/09/2026, 06:45:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Sales Catalog Import Sweep",
+      "slug": "connectyhub-connectyhub-sales-catalog-import-sweep",
+      "total": 495,
+      "post_cutover": {
+        "300": 402
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143299984,
+      "last_completed": 1789143300570,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/sales-catalog.import.process_requested"
+        },
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhum job de importação processado na janela.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub Uazapi Cost Guard",
+      "slug": "connectyhub-connectyhub-uazapi-cost-guard",
+      "total": 49,
+      "post_cutover": {
+        "300": 39
+      },
+      "recent": {
+        "300": 3
+      },
+      "last_queued": 1789143000047,
+      "last_completed": 1789143000544,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/10 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Execuções ignoradas por horário (not_due); mensagem de horário em errors não é falha de execução. Modo configurado delete: não disparado artificialmente.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Agent Queue Sweep",
+      "slug": "connectyhub-connectyhub-whatsapp-agent-sweep",
+      "total": 495,
+      "post_cutover": {
+        "300": 401
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143299989,
+      "last_completed": 1789143302281,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Fila executa; três processamentos e 15 adiamentos na amostra, com retomada de trabalho real.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Agent Response",
+      "slug": "connectyhub-connectyhub-whatsapp-agent-response",
+      "total": 19,
+      "post_cutover": {
+        "300": 19
+      },
+      "recent": {
+        "300": 2
+      },
+      "last_queued": 1789143016096,
+      "last_completed": 1789143026066,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.message.received"
+        }
+      ],
+      "auditStatus": "Falha funcional identificada",
+      "auditNote": "13 saídas completed e uma failed entre 19 execuções técnicas concluídas; houve também controles de cancelamento/duplicidade. Titular confirmou Gustavo e Kalum respondendo.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub WhatsApp Catalog Import Sweep",
+      "slug": "connectyhub-connectyhub-whatsapp-catalog-import-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 80
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143300002,
+      "last_completed": 1789143300554,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/sales-catalog.whatsapp_catalog.process_requested"
+        },
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhum job elegível processado.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Clone Profile Import",
+      "slug": "connectyhub-connectyhub-whatsapp-clone-profile-import",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.clone_profile.import_requested"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar importação de perfil em agente de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub WhatsApp Contract Guard",
+      "slug": "connectyhub-connectyhub-whatsapp-contract-guard",
+      "total": 495,
+      "post_cutover": {
+        "300": 401
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143299987,
+      "last_completed": 1789143300731,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Verifica quatro instâncias por passagem; nenhuma pausa necessária na amostra.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Human Handoff Notifier",
+      "slug": "connectyhub-connectyhub-whatsapp-handoff-notifier",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.handoff.notify"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar transferência humana com destinatário de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub WhatsApp Instance Sync",
+      "slug": "connectyhub-connectyhub-whatsapp-sync",
+      "total": 16,
+      "post_cutover": {
+        "300": 13
+      },
+      "recent": {
+        "300": 1
+      },
+      "last_queued": 1789142399989,
+      "last_completed": 1789142415065,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.sync.requested"
+        },
+        {
+          "cron": "*/30 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Quatro instâncias sincronizadas; última execução sem erro de webhook ou imagem de perfil.",
+      "nextCronBrt": [
+        "11/09/2026, 13:30:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Outbound Dispatcher",
+      "slug": "connectyhub-connectyhub-whatsapp-outbound-dispatcher",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.outbound.requested"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar envio agendado em destinatário de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub WhatsApp Outbound Sweep",
+      "slug": "connectyhub-connectyhub-whatsapp-outbound-sweep",
+      "total": 99,
+      "post_cutover": {
+        "300": 80
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143300008,
+      "last_completed": 1789143302434,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhum envio agendado elegível processado.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "ConnectyHub WhatsApp Proactive Follow-Up",
+      "slug": "connectyhub-connectyhub-whatsapp-follow-up",
+      "total": 9,
+      "post_cutover": {
+        "100": 7,
+        "300": 2
+      },
+      "recent": null,
+      "last_queued": 1789138634358,
+      "last_completed": 1789133187168,
+      "old_pending": 7,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.followup.scheduled"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Uma saída sent e uma ignorada porque a conversa já foi atendida. Sete execuções futuras conferidas, sem atraso; seis dispatches já bloqueados por opt-out aguardam apenas a checagem final do handler.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "ConnectyHub WhatsApp Reconnect Catch-up",
+      "slug": "connectyhub-connectyhub-whatsapp-reconnect-catchup",
+      "total": 0,
+      "post_cutover": null,
+      "recent": null,
+      "last_queued": null,
+      "last_completed": null,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.instance.reconnected"
+        }
+      ],
+      "auditStatus": "Sem execução observada",
+      "auditNote": "Sem evento observado; validar retomada após reconexão de uma instância de teste.",
+      "nextCronBrt": []
+    },
+    {
+      "name": "Notificações da API de IA",
+      "slug": "connectyhub-connectyhub-ai-webhooks",
+      "total": 495,
+      "post_cutover": {
+        "300": 400
+      },
+      "recent": {
+        "300": 30
+      },
+      "last_queued": 1789143300002,
+      "last_completed": 1789143302459,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Fila executa; nenhuma entrega na janela. Falta webhook de IA real ou destinatário de teste.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    },
+    {
+      "name": "Renovações das assinaturas das lojas",
+      "slug": "connectyhub-connectyhub-store-subscription-renewals",
+      "total": 99,
+      "post_cutover": {
+        "300": 81
+      },
+      "recent": {
+        "300": 6
+      },
+      "last_queued": 1789143299985,
+      "last_completed": 1789143300553,
+      "old_pending": 0,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ],
+      "auditStatus": "Execução observada após a troca",
+      "auditNote": "Varredura executa; nenhuma renovação elegível preparada ou cobrada.",
+      "nextCronBrt": [
+        "11/09/2026, 13:20:00"
+      ]
+    }
+  ],
+  "business": {
+    "connectyhub-connectyhub-customer-agenda": {
+      "name": "ConnectyHub Agenda Notifications",
+      "runs": 201,
+      "business_status": {
+        "no_status": 201
+      },
+      "reasons": {},
+      "numeric": {
+        "queued": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-ai-triggers": {
+      "name": "Agendamentos da API de IA",
+      "runs": 404,
+      "business_status": {
+        "no_status": 404
+      },
+      "reasons": {},
+      "numeric": {
+        "submitted": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-agent-sweep": {
+      "name": "ConnectyHub WhatsApp Agent Queue Sweep",
+      "runs": 403,
+      "business_status": {
+        "swept": 403
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.deferred": 15,
+        "summary.processed": 3
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-contract-guard": {
+      "name": "ConnectyHub WhatsApp Contract Guard",
+      "runs": 403,
+      "business_status": {
+        "no_status": 403
+      },
+      "reasons": {},
+      "numeric": {
+        "checked": 1612
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-ai-webhooks": {
+      "name": "Notificações da API de IA",
+      "runs": 402,
+      "business_status": {
+        "no_status": 402
+      },
+      "reasons": {},
+      "numeric": {
+        "delivered": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-gateway-webhook-delivery": {
+      "name": "ConnectyHub Gateway Webhook Delivery",
+      "runs": 258,
+      "business_status": {
+        "no_status": 258
+      },
+      "reasons": {},
+      "numeric": {
+        "delivered": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-lead-media-archive": {
+      "name": "ConnectyHub Lead Message Archive",
+      "runs": 403,
+      "business_status": {
+        "no_status": 403
+      },
+      "reasons": {},
+      "numeric": {
+        "backfilled": 4030,
+        "deferred": 1250,
+        "saved": 2780
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-meta-organic-publish-sweep": {
+      "name": "ConnectyHub Meta Organic Publish Sweep",
+      "runs": 79,
+      "business_status": {
+        "swept": 79
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.processed": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-intelligent-automation-sweep": {
+      "name": "ConnectyHub Intelligent Automation Dispatch",
+      "runs": 202,
+      "business_status": {
+        "no_status": 202
+      },
+      "reasons": {},
+      "numeric": {
+        "queued": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-meta-social-dispatch-sweep": {
+      "name": "ConnectyHub Meta Social Dispatch Sweep",
+      "runs": 80,
+      "business_status": {
+        "swept": 80
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.checked": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-outbound-sweep": {
+      "name": "ConnectyHub WhatsApp Outbound Sweep",
+      "runs": 80,
+      "business_status": {
+        "swept": 80
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.processed": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-sales-catalog-import-sweep": {
+      "name": "ConnectyHub Sales Catalog Import Sweep",
+      "runs": 404,
+      "business_status": {
+        "swept": 404
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.salesCatalog.processed": 0,
+        "summary.whatsappCatalog.processed": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-lead-relationships": {
+      "name": "ConnectyHub Lead Relationships",
+      "runs": 39,
+      "business_status": {
+        "no_status": 39
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-uazapi-cost-guard": {
+      "name": "ConnectyHub Uazapi Cost Guard",
+      "runs": 39,
+      "business_status": {
+        "skipped": 39
+      },
+      "reasons": {
+        "not_due": 39
+      },
+      "numeric": {
+        "summary.failed": 0
+      },
+      "errors": 39
+    },
+    "connectyhub-connectyhub-store-subscription-renewals": {
+      "name": "Renovações das assinaturas das lojas",
+      "runs": 81,
+      "business_status": {
+        "no_status": 81
+      },
+      "reasons": {},
+      "numeric": {
+        "attempted": 0,
+        "prepared": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-platform-automation-sweep": {
+      "name": "ConnectyHub Platform Automation Sweep",
+      "runs": 80,
+      "business_status": {
+        "swept": 80
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.billing.accountNotices.checked": 0,
+        "summary.billing.accountNotices.queued": 0,
+        "summary.billing.checked": 0,
+        "summary.billing.sent": 0,
+        "summary.paidLifecycle.checked": 960,
+        "summary.paidLifecycle.failed": 0,
+        "summary.trial.checked": 0,
+        "summary.trial.failed": 0,
+        "summary.trial.sent": 0,
+        "walletAlerts.checked": 0,
+        "ai.completed": 0,
+        "ai.released": 0,
+        "ai.uncertain": 0,
+        "topups.attempted": 0,
+        "meetings.sent": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-catalog-import-sweep": {
+      "name": "ConnectyHub WhatsApp Catalog Import Sweep",
+      "runs": 80,
+      "business_status": {
+        "swept": 80
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.processed": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-transparent-checkout-reconciliation": {
+      "name": "ConnectyHub Checkout Payment Reconciliation",
+      "runs": 81,
+      "business_status": {
+        "no_status": 81
+      },
+      "reasons": {},
+      "numeric": {
+        "stores.checked": 0,
+        "stores.deferred": 0,
+        "reviews.checked": 0,
+        "reviewResults.sent": 0,
+        "platform.checked": 0,
+        "platform.deferred": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-meta-social-agent-sweep": {
+      "name": "ConnectyHub Meta Social Agent Queue Sweep",
+      "runs": 81,
+      "business_status": {
+        "swept": 81
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.checked": 0
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-api-health-monitor": {
+      "name": "ConnectyHub API Health Monitor",
+      "runs": 38,
+      "business_status": {
+        "checked": 38
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-api-access-guard-sync": {
+      "name": "ConnectyHub API Access Guard Sync",
+      "runs": 26,
+      "business_status": {
+        "synced": 26
+      },
+      "reasons": {},
+      "numeric": {
+        "summary.checked": 598
+      },
+      "errors": 0
+    },
+    "connectyhub-connectyhub-growth-blog-agent": {
+      "name": "ConnectyHub Blog Agent",
+      "runs": 1,
+      "business_status": {
+        "needs_approval": 1
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-sync": {
+      "name": "ConnectyHub WhatsApp Instance Sync",
+      "runs": 13,
+      "business_status": {
+        "synced": 13
+      },
+      "reasons": {},
+      "numeric": {
+        "costGuard.failed": 0
+      },
+      "errors": 13
+    },
+    "connectyhub-connectyhub-whatsapp-agent-response": {
+      "name": "ConnectyHub WhatsApp Agent Response",
+      "runs": 19,
+      "business_status": {
+        "completed": 13,
+        "skipped": 5,
+        "failed": 1
+      },
+      "reasons": {
+        "run_cancelled": 2,
+        "newer_inbound_message": 1,
+        "run_already_claimed": 3
+      },
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-growth-competitive-intel-agent": {
+      "name": "ConnectyHub Competitive Intelligence Agent",
+      "runs": 1,
+      "business_status": {
+        "needs_approval": 1
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-daily-admin-report": {
+      "name": "ConnectyHub Daily Admin Report",
+      "runs": 1,
+      "business_status": {
+        "ready": 1
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-whatsapp-follow-up": {
+      "name": "ConnectyHub WhatsApp Proactive Follow-Up",
+      "runs": 2,
+      "business_status": {
+        "sent": 1,
+        "skipped": 1
+      },
+      "reasons": {
+        "conversation_handled_after_reference": 1
+      },
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-growth-news-agent": {
+      "name": "ConnectyHub News Agent",
+      "runs": 1,
+      "business_status": {
+        "needs_approval": 1
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    },
+    "connectyhub-connectyhub-growth-geo-ago-agent": {
+      "name": "ConnectyHub GEO AGO Agent",
+      "runs": 1,
+      "business_status": {
+        "needs_approval": 1
+      },
+      "reasons": {},
+      "numeric": {},
+      "errors": 0
+    }
+  },
+  "followups": {
+    "queued_at_capture": 7,
+    "future_at_inspection": 7,
+    "overdue_at_inspection": 0,
+    "future_event_range_utc": [
+      "2026-09-11T16:21:03.480Z",
+      "2026-09-11T16:57:14.221Z"
+    ],
+    "dispatch_status_counts": [
+      {
+        "status": "pending",
+        "reason": null,
+        "count": 1,
+        "min": "2026-09-11T16:57:14.221+00:00",
+        "max": "2026-09-11T16:57:14.221+00:00"
+      },
+      {
+        "status": "sent",
+        "reason": null,
+        "count": 2,
+        "min": "2026-09-10T14:01:18.373+00:00",
+        "max": "2026-09-11T13:26:19.154+00:00"
+      },
+      {
+        "status": "skipped",
+        "reason": "lead_opted_out",
+        "count": 6,
+        "min": "2026-09-11T16:21:03.48+00:00",
+        "max": "2026-09-11T16:53:13.821+00:00"
+      },
+      {
+        "status": "skipped",
+        "reason": "conversation_handled_after_reference",
+        "count": 2,
+        "min": "2026-09-10T13:58:16.251+00:00",
+        "max": "2026-09-11T13:25:23.328+00:00"
+      }
+    ]
+  },
+  "growth": [
+    {
+      "agent_code": "agente-noticias",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1454,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-pesquisa-web",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.23,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-radar-mercado",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1382,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-blog",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1652,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-inteligencia-competitiva",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1922,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-noticias",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1454,
+      "has_error": false
+    },
+    {
+      "agent_code": "agente-geo-ago",
+      "requires_human_approval": true,
+      "run_status": "needs_approval",
+      "llm_status": "generated",
+      "billing_mode": "internal_shadow",
+      "has_usage_event": true,
+      "cost_credits": 13.1328,
+      "has_error": false
+    }
+  ],
+  "tests": {
+    "files": 20,
+    "passed": 200,
+    "failed": 0
+  },
+  "findings": [
+    {
+      "code": "agent_history_ends_model",
+      "count": 1,
+      "error": "Requests ending with a model turn are not supported.",
+      "source": "src/lib/whatsapp/agent-runtime.ts:6546"
+    },
+    {
+      "code": "daily_report_placeholder",
+      "source": "src/lib/inngest/functions.ts:85"
+    }
+  ],
+  "registrationComparison": {
+    "expected": 43,
+    "actual": 43,
+    "mismatches": []
+  },
+  "manualValidation": {
+    "agent": "Gustavo",
+    "result": "O titular confirmou resposta normal pelo WhatsApp durante a auditoria.",
+    "productionMessagesSentByAuditor": 0
+  }
+}
