@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehavior } from "@/lib/whatsapp/activity-setup";
+import { applyActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -366,8 +366,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   const previousConfig = normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]);
   const nextConfig = normalizeAgentPromptBuilderConfig(input.promptTemplateConfig ?? previousConfig);
   if (hasAgentPrompt && input.promptTemplateConfig === undefined && agentPrompt !== agent.prompt?.trim()) nextConfig.mode = "manual";
-  if (input.promptTemplateConfig !== undefined && nextConfig.mode === "automatic"
-    && (previousConfig.templateId !== nextConfig.templateId || !previousConfig.profileVersion)) {
+  if (input.promptTemplateConfig !== undefined && shouldApplyActivitySetup(previousConfig, nextConfig)) {
     const setup = applyActivitySetup({ config: nextConfig, agentName: agent.persona_name || agent.name,
       previousTemplateId: previousConfig.profileVersion ? previousConfig.templateId : undefined,
       cloneProfile: nextCloneProfile, qualification: nextQualificationConfig, behavior: nextBehavior });

@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehavior } from "./activity-setup";
+import { applyActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "./activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -1223,8 +1223,7 @@ export async function updateClientWhatsappPrompt(input: {
     : getPromptTemplateConfig(agent);
   const previousTemplateConfig = getPromptTemplateConfig(agent);
   if (hasAgentPrompt && !hasPromptTemplateConfig && agentPrompt !== agent.prompt?.trim()) nextPromptTemplateConfig.mode = "manual";
-  const appliesActivityProfile = hasPromptTemplateConfig && nextPromptTemplateConfig.mode === "automatic"
-    && (previousTemplateConfig.templateId !== nextPromptTemplateConfig.templateId || !previousTemplateConfig.profileVersion);
+  const appliesActivityProfile = hasPromptTemplateConfig && shouldApplyActivitySetup(previousTemplateConfig, nextPromptTemplateConfig);
   if (appliesActivityProfile) {
     const setup = applyActivitySetup({
       config: nextPromptTemplateConfig, agentName: nextAgentName || agent.name,

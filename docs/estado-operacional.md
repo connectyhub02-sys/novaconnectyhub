@@ -15,6 +15,8 @@ Atualização: 11/09/2026. Este é um ponto de continuidade, não monitoramento 
 
 ## Pendências concretas
 
+Correção em 11/09 da personalidade por atividade: o painel e os salvamentos de cliente/admin passaram a aplicar o perfil mesmo com prompt técnico manual. Na abertura de agente legado, campos vazios recebem padrões da atividade no rascunho editável; textos personalizados, perfis importados do histórico e desativações identificáveis são preservados. O preenchimento não escreve no banco até salvar. Passaram 206 testes direcionados, TypeScript e ESLint; não requer migration SQL. A implantação desta correção e a verificação no agente Renata em produção permanecem pendentes. A configuração local do Supabase foi conferida e aponta para o domínio próprio da VPS; não houve alteração de destinos ou credenciais.
+
 | Item | Estado e próximo critério |
 |---|---|
 | Backup fora da VPS | Arquivo cifrado transferido ao computador do titular; transferência da chave/manifesto não concluída e decifragem local ainda não validada. Não declarar cópia externa recuperável antes dessa verificação. |

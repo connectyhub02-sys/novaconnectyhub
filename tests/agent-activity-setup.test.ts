@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activityPresets } from "../src/lib/whatsapp/activity-presets";
 import { agentPromptTemplates, buildAgentPromptFromTemplate, createActivityPromptConfig, normalizeAgentPromptBuilderConfig, switchActivityPromptConfig } from "../src/lib/whatsapp/agent-prompt-templates";
-import { applyActivitySetup, createActivitySetup, resolveWhatsappBehavior } from "../src/lib/whatsapp/activity-setup";
+import { applyActivityCloneProfile, applyActivitySetup, createActivitySetup, resolveWhatsappBehavior, shouldApplyActivitySetup } from "../src/lib/whatsapp/activity-setup";
 import { normalizeWhatsappBehaviorConfig, normalizeWhatsappCloneProfile } from "../src/lib/whatsapp/agent-behavior";
 import { normalizeLeadQualificationConfig } from "../src/lib/leads/qualification";
 import { applyTextEmojiPreference, selectConversationReaction } from "../src/lib/whatsapp/conversation-style";
@@ -50,6 +50,52 @@ describe("activity-specific agent setup", () => {
   it("keeps legacy text in manual mode until the customer applies a profile", () => {
     expect(normalizeAgentPromptBuilderConfig({ templateId: "imobiliaria" }).mode).toBe("manual");
     expect(createActivityPromptConfig("corretor_imoveis").mode).toBe("automatic");
+  });
+
+  it.each(agentPromptTemplates)("fills a legacy empty personality for $label independently of manual prompt mode", ({ id }) => {
+    const previous = normalizeAgentPromptBuilderConfig({ templateId: "imobiliaria" });
+    const config = { ...switchActivityPromptConfig(previous, id), mode: "manual" as const };
+    expect(shouldApplyActivitySetup(previous, config)).toBe(true);
+    const next = applyActivitySetup({ config, agentName: "Renata Clone", cloneProfile: normalizeWhatsappCloneProfile({}) });
+    expect(next.config.mode).toBe("manual");
+    expect(next.cloneProfile).toEqual(createActivitySetup(id, "Renata Clone").cloneProfile);
+    expect(next.cloneProfile.enabled).toBe(true);
+  });
+
+  it("changes personality from company to professional after a manual prompt was already saved", () => {
+    const previous = createActivitySetup("imobiliaria", "Renata Clone");
+    previous.config.mode = "manual";
+    previous.cloneProfile.vocabulary = "Vocabulário escolhido pelo usuário";
+    const config = { ...switchActivityPromptConfig(previous.config, "corretor_imoveis"), mode: "manual" as const };
+    expect(shouldApplyActivitySetup(previous.config, config)).toBe(true);
+    const next = applyActivitySetup({ config, agentName: "Renata Clone", cloneProfile: previous.cloneProfile });
+    expect(next.config.mode).toBe("manual");
+    expect(next.cloneProfile.roleIdentity).toBe(activityPresets.corretor_imoveis.identity);
+    expect(next.cloneProfile.closingStyle).toBe(activityPresets.corretor_imoveis.closing);
+    expect(next.cloneProfile.vocabulary).toBe(previous.cloneProfile.vocabulary);
+  });
+
+  it("fills only missing legacy fields while retaining custom content, signature and paused state", () => {
+    const previous = normalizeWhatsappCloneProfile({ enabled: false, displayName: "Assinatura própria", vocabulary: "Expressões escolhidas" });
+    const next = applyActivityCloneProfile("corretor_imoveis", "Renata Clone", previous);
+    expect(next.enabled).toBe(false);
+    expect(next.displayName).toBe(previous.displayName);
+    expect(next.useAgentName).toBe(false);
+    expect(next.vocabulary).toBe(previous.vocabulary);
+    expect(next.roleIdentity).toBe(activityPresets.corretor_imoveis.identity);
+    expect(next.activityTemplateId).toBe("corretor_imoveis");
+    const switched = applyActivityCloneProfile("imobiliaria", "Renata Clone", next);
+    expect(switched.roleIdentity).toBe(activityPresets.imobiliaria.identity);
+    expect(switched.vocabulary).toBe(previous.vocabulary);
+  });
+
+  it("does not refill a field deliberately cleared after applying a profile", () => {
+    const previous = createActivitySetup("corretor_imoveis", "Renata Clone").cloneProfile;
+    previous.vocabulary = "";
+    previous.enabled = false;
+    const next = applyActivityCloneProfile("imobiliaria", "Renata Clone", previous);
+    expect(next.vocabulary).toBe("");
+    expect(next.enabled).toBe(false);
   });
 
   it("moves preset fields together while preserving user overrides, pauses and linked identity", () => {

@@ -1,7 +1,7 @@
 "use client";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { ActivitySelect } from "./activity-select";
-import { applyActivitySetup } from "@/lib/whatsapp/activity-setup";
+import { applyActivityCloneProfile, applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
@@ -672,7 +672,10 @@ export function WhatsAppConsole({
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
-      setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
+      const savedProfile = normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile);
+      setCloneProfileDraft(nextState.agent && !savedProfile.activityTemplateId
+        ? applyActivityCloneProfile(nextPromptTemplateConfig.templateId, nextState.agent.name, savedProfile)
+        : savedProfile);
       setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
@@ -937,7 +940,7 @@ export function WhatsAppConsole({
       ...(templateChanged ? switchActivityPromptConfig(promptTemplateDraft, patch.templateId) : promptTemplateDraft),
       ...patch, mode: promptTemplateDraft.mode, updatedAt: new Date().toISOString(),
     });
-    if (templateChanged && promptTemplateDraft.mode === "automatic") applyProfileToDrafts(next);
+    if (templateChanged) applyProfileToDrafts(next);
     else setPromptTemplateDraft(next);
   }
 
@@ -4148,7 +4151,7 @@ function GuidedPromptBuilder({
 
         <p className="text-xs leading-5 text-slate-500">
           {config.mode === "automatic" ? "Perfil ativo: as instruções acompanham suas alterações automaticamente. Salve para aplicar ao atendimento."
-            : "Suas instruções personalizadas estão preservadas. Aplicar o perfil substitui o texto avançado pelas regras desta atividade; personalidade e qualificação personalizadas são mantidas."}
+            : "Suas instruções personalizadas estão preservadas. A personalidade acompanha a atividade escolhida, mantendo seus ajustes. Salve para aplicar. O botão abaixo também substitui o texto avançado pelas regras da atividade."}
         </p>
         <div className="flex flex-wrap gap-2">
           <SecondaryAction

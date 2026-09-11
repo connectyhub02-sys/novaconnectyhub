@@ -52,23 +52,41 @@ export function createActivityBehavior(templateId: unknown): WhatsappBehaviorCon
   });
 }
 
+/** Personality follows the activity independently of how the technical prompt is edited. */
+export function applyActivityCloneProfile(templateId: unknown, agentName: string, value?: unknown) {
+  const defaults = createActivityCloneProfile(templateId, agentName);
+  const previous = normalizeWhatsappCloneProfile(value);
+  const fields = ["roleIdentity", "tone", "vocabulary", "responseRhythm", "salesStyle", "objectionStyle", "closingStyle", "emojiStyle", "audioStyle", "forbiddenPatterns", "notes"] as const;
+  let cloneProfile = defaults;
+  if (previous.activityTemplateId) {
+    const oldDefaults = createActivityCloneProfile(previous.activityTemplateId, previous.displayName);
+    cloneProfile = { ...defaults, enabled: previous.enabled, source: previous.source, useAgentName: previous.useAgentName };
+    for (const key of fields) if (previous[key] !== oldDefaults[key]) cloneProfile[key] = previous[key];
+    if (previous.useAgentName === false) cloneProfile.displayName = previous.displayName;
+  } else if (previous.source === "history") {
+    return previous;
+  } else if (previous.displayName.trim() || fields.some((key) => previous[key].trim())) {
+    // Old records have no field provenance: keep authored content and fill only gaps.
+    cloneProfile = { ...defaults, enabled: previous.enabled, source: previous.source };
+    for (const key of fields) if (previous[key].trim()) cloneProfile[key] = previous[key];
+    if (previous.useAgentName === false || (previous.displayName.trim() && previous.useAgentName !== true)) {
+      cloneProfile.displayName = previous.displayName;
+      cloneProfile.useAgentName = false;
+    }
+  }
+  return cloneProfile;
+}
+
+export function shouldApplyActivitySetup(previous: AgentPromptBuilderConfig, next: AgentPromptBuilderConfig) {
+  return previous.templateId !== next.templateId || !previous.profileVersion;
+}
+
 /** Shared by the editor and server. Existing explicit customizations survive a profile change. */
 export function applyActivitySetup(input: {
   config: AgentPromptBuilderConfig; agentName: string; previousTemplateId?: unknown;
   cloneProfile?: unknown; qualification?: unknown; behavior?: unknown;
 }) {
-  const defaults = createActivityCloneProfile(input.config.templateId, input.agentName);
-  const previous = normalizeWhatsappCloneProfile(input.cloneProfile);
-  let cloneProfile = defaults;
-  if (previous.activityTemplateId) {
-    const oldDefaults = createActivityCloneProfile(previous.activityTemplateId, previous.displayName);
-    cloneProfile = { ...defaults, enabled: previous.enabled, source: previous.source, useAgentName: previous.useAgentName };
-    const fields = ["roleIdentity", "tone", "vocabulary", "responseRhythm", "salesStyle", "objectionStyle", "closingStyle", "emojiStyle", "audioStyle", "forbiddenPatterns", "notes"] as const;
-    for (const key of fields) if (previous[key] !== oldDefaults[key]) cloneProfile[key] = previous[key];
-    if (previous.useAgentName === false) cloneProfile.displayName = previous.displayName;
-  } else if (Object.entries(previous).some(([key, value]) => key !== "source" && typeof value === "string" && value.trim())) {
-    cloneProfile = previous;
-  }
+  const cloneProfile = applyActivityCloneProfile(input.config.templateId, input.agentName, input.cloneProfile);
   const previousQualification = normalizeLeadQualificationConfig(input.qualification);
   const isUnchangedGlobal = !previousQualification.configuredAt && !previousQualification.activityTemplateId
     && JSON.stringify(previousQualification) === JSON.stringify(defaultLeadQualificationConfig);
