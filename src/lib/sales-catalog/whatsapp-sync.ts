@@ -1262,7 +1262,10 @@ function mapWhatsappProductToImportDraft(
     now: string;
   },
 ): SalesCatalogImportDraft {
-  const imageUrl = product.media.find((media) => media.kind === "image")?.storageUrl ?? null;
+  const imageUrls = Array.from(new Set(product.media
+    .filter((media) => media.kind === "image")
+    .map((media) => media.storageUrl)));
+  const imageUrl = imageUrls[0] ?? null;
   const warnings = product.price
     ? []
     : ["Preco nao encontrado no catalogo WhatsApp. Informe o preco antes de publicar."];
@@ -1279,6 +1282,7 @@ function mapWhatsappProductToImportDraft(
     currency: product.currency,
     productUrl: product.url,
     imageUrl,
+    imageUrls,
     importExternalImage: Boolean(imageUrl),
     attributes: [],
     skus: [

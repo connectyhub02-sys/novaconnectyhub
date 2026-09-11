@@ -183,6 +183,7 @@ function readItemPatches(value: unknown): SalesCatalogImportItemPatch[] {
       if (record && "price" in record) patch.price = readNullableString(record.price);
       if (record && "productUrl" in record) patch.productUrl = readNullableString(record.productUrl);
       if (record && "imageUrl" in record) patch.imageUrl = readNullableString(record.imageUrl);
+      if (record && Array.isArray(record.imageUrls)) patch.imageUrls = record.imageUrls.filter((url): url is string => typeof url === "string");
       if (record && "importExternalImage" in record) patch.importExternalImage = readBoolean(record.importExternalImage) ?? false;
       if (record && "duplicateAction" in record) {
         const duplicateAction = normalizeDuplicateAction(readString(record.duplicateAction));

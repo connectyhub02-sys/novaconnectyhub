@@ -140,6 +140,7 @@ import type {
   SalesCatalogImportTargetMode,
 } from "@/lib/sales-catalog/importer";
 import { HighlightLabelInput } from "./highlight-label-input";
+import { CatalogImportGallery } from "./catalog-import-gallery";
 import { cn } from "@/lib/utils";
 
 type Notice = {
@@ -2659,23 +2660,34 @@ export function SalesCatalogConsole({
 
     try {
       const patches = getCatalogImportPatchesForJob(job);
-      const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: selectedCompanyId,
-          patches,
-        }),
-      });
-      const data = await response.json().catch(() => null) as {
-        importJob?: ClientSalesCatalogImportJob;
-        items?: ClientSalesCatalogItem[];
-        error?: string;
-      } | null;
-
-      if (!response.ok || !data?.importJob) {
-        throw new Error(data?.error ?? "Nao foi possivel publicar a importacao.");
+      // A gallery can require several downloads; publish one product per request
+      // so a large catalog does not hold a single HTTP request for every photo.
+      const pendingIds = job.items.filter(item => item.status !== "published" && item.status !== "discarded").map(item => item.id);
+      const batches = job.items.some(item => (item.imageUrls?.length ?? 0) > 1)
+        ? pendingIds.map(id => [id]) : [pendingIds];
+      let data: { importJob: ClientSalesCatalogImportJob; items?: ClientSalesCatalogItem[] } | null = null;
+      for (const [index, itemIds] of batches.entries()) {
+        const batchPatches = patches.filter(patch => itemIds.includes(patch.id));
+        const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}/publish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: selectedCompanyId, patches: batchPatches, itemIds }),
+        });
+        const result = await response.json().catch(() => null) as {
+          importJob?: ClientSalesCatalogImportJob; items?: ClientSalesCatalogItem[]; error?: string;
+        } | null;
+        if (!response.ok || !result?.importJob) {
+          throw new Error(result?.error ?? "Nao foi possivel publicar a importacao.");
+        }
+        data = { importJob: result.importJob, items: result.items };
+        const updatedJob = result.importJob;
+        setCatalogImportJobs(current => current.map(entry => entry.id === updatedJob.id ? updatedJob : entry));
+        clearCatalogImportPatches(batchPatches);
+        if (batches.length > 1) {
+          updateCatalogImportJobNotice(job.id, { tone: "warning", message: `Processando produtos e fotos: ${index + 1} de ${batches.length}.` });
+        }
       }
+      if (!data) throw new Error("Nenhum item disponivel para publicar.");
 
       setCatalogImportJobs((current) => current.map((entry) => (entry.id === data.importJob!.id ? data.importJob! : entry)));
       if (data.items?.length) {
@@ -7457,7 +7469,7 @@ function CatalogImportJobCard({
         <MiniStat label="pendentes" value={String(pendingItems.length)} />
         <MiniStat label="externos" value={String(job.items.filter((item) => item.salesDestination === "external_site").length)} />
         <MiniStat label="duplicados" value={String(job.items.filter((item) => item.duplicateCandidates.length > 0).length)} />
-        <MiniStat label="imagens" value={String(job.items.filter((item) => item.imageUrl).length)} />
+        <MiniStat label="imagens" value={String(job.items.reduce((count, item) => count + (item.imageUrls?.length ?? (item.imageUrl ? 1 : 0)), 0))} />
       </div>
 
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -7475,6 +7487,12 @@ function CatalogImportJobCard({
           {job.errorMessage}
         </div>
       ) : null}
+
+      {job.items.filter(item => item.status === "published" && item.imageImportError).map(item => (
+        <p key={item.id} className="mt-2 rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-900">
+          {item.title}: {item.imageImportError}
+        </p>
+      ))}
 
       {requiresCategoryReview && missingCategoryCount > 0 ? (
         <div className="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-900">
@@ -7595,7 +7613,10 @@ function CatalogImportItemEditor({
   item: ClientSalesCatalogImportItem;
   onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
 }) {
-  const canImportImage = Boolean(item.imageUrl) && item.salesDestination === "connectyhub_checkout";
+  const imageUrls = item.imageUrl
+    ? Array.from(new Set([item.imageUrl, ...(item.imageUrls ?? []).filter((url) => url !== item.imageUrl)]))
+    : [];
+  const canImportImage = imageUrls.length > 0 && item.salesDestination === "connectyhub_checkout";
   const selectedDuplicateTargetId = item.duplicateTargetItemId ?? item.duplicateCandidates[0]?.itemId ?? "";
   const categoryValue = item.category ?? "";
 
@@ -7763,26 +7784,21 @@ function CatalogImportItemEditor({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold text-cyan-100">
               <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Imagem detectada</span>
+              <span className="truncate">{imageUrls.length === 1 ? "1 foto detectada" : `${imageUrls.length} fotos na galeria`}</span>
             </span>
             {item.imageImportStatus ? (
               <NeonBadge tone={imageImportStatusTone(item.imageImportStatus)}>{formatImageImportStatus(item.imageImportStatus)}</NeonBadge>
             ) : null}
           </div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-            <input
-              value={item.imageUrl}
-              onChange={(event) => {
-                const imageUrl = event.target.value.slice(0, 1000);
-                onChange({
-                  imageUrl,
-                  importExternalImage: item.salesDestination === "connectyhub_checkout" && Boolean(imageUrl.trim()),
-                });
-              }}
-              className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              placeholder="URL da imagem"
-              style={{ borderColor: "var(--ch-border)" }}
-            />
+          <CatalogImportGallery
+            imageUrls={imageUrls}
+            title={item.title}
+            onChooseCover={(url) => onChange({ imageUrl: url, imageUrls: [url, ...imageUrls.filter((image) => image !== url)] })}
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px]" style={{ color: "var(--ch-text-muted)" }}>
+              Escolha a capa. Ao confirmar, as fotos serao salvas na galeria do produto.
+            </span>
             <label
               className={cn(
                 "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-[11px] font-semibold text-slate-300",
@@ -10460,7 +10476,7 @@ function formatImportItemStatus(value: ClientSalesCatalogImportItem["status"]) {
 
 function formatImageImportStatus(value: NonNullable<ClientSalesCatalogImportItem["imageImportStatus"]>) {
   if (value === "pending") return "pendente";
-  if (value === "imported") return "imagem salva";
+  if (value === "imported") return "fotos salvas";
   if (value === "skipped") return "sem importacao";
   return "falhou";
 }

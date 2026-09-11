@@ -1,5 +1,9 @@
 # Reteste do catálogo WhatsApp — 11/09/2026
 
+## Resultado final após implantação
+
+Correção enviada à master em `aece285`. Vercel confirmou Ready no domínio principal às 17:01 de Brasília. Após recarregar a loja e executar uma nova sincronização às 17:02, o painel confirmou duas páginas (dez + três), 13 imóveis únicos, 13 imagens principais detectadas e preços corrigidos. Ipiranga: R$ 850.000,00; Rita Vieira: R$ 220.000,00. Novo lote ficou em REVISAR com 13 rascunhos sem categoria; nenhum produto publicado. As imagens estão detectadas com ingestão definitiva pendente, não comprovada nesta etapa. O lote antigo já não aparece no painel. Registro posterior ao push mantido local para evitar deploy adicional apenas documental. As seções seguintes descrevem a sequência histórica do diagnóstico.
+
 Teste autorizado pelo titular, realizado no navegador pela documentação UAZAPI e depois pelo Catálogo de Vendas da Renata. Horários de Brasília. Nenhum produto publicado e nenhum deploy realizado.
 
 ## Documentação, 16:46

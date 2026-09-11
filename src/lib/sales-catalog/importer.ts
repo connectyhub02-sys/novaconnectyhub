@@ -33,7 +33,7 @@ import {
   normalizeHttpUrl,
 } from "@/lib/tracking/tracked-links";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
-import { assertStorageUploadAllowed, recordOrganizationStorageUsage, releaseOrganizationStorageUsage } from "@/lib/storage/quotas";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage, releaseOrganizationStorageUsage, StorageQuotaError } from "@/lib/storage/quotas";
 
 export type SalesCatalogImportSourceKind = "text" | "csv" | "excel" | "site" | "pdf" | "image" | "mixed";
 export type SalesCatalogImportPlatform =
@@ -182,6 +182,7 @@ export type ClientSalesCatalogImportItem = {
   currency: string;
   productUrl: string | null;
   imageUrl: string | null;
+  imageUrls?: string[];
   importExternalImage: boolean;
   imageImportStatus: SalesCatalogImportImageImportStatus | null;
   imageImportError: string | null;
@@ -246,6 +247,7 @@ export type SalesCatalogImportDraft = {
   currency: string;
   productUrl: string | null;
   imageUrl: string | null;
+  imageUrls?: string[];
   importExternalImage: boolean;
   attributes: SalesCatalogItemAttribute[];
   skus: SalesCatalogSku[];
@@ -269,6 +271,7 @@ export type SalesCatalogImportItemPatch = {
   price?: string | null;
   productUrl?: string | null;
   imageUrl?: string | null;
+  imageUrls?: string[];
   importExternalImage?: boolean;
   duplicateAction?: SalesCatalogImportDuplicateAction;
   duplicateTargetItemId?: string | null;
@@ -665,6 +668,7 @@ export async function createSalesCatalogImportReviewJob(input: {
       metadata: {
         created_from: sourcePlatform === "whatsapp_catalog" ? "whatsapp_catalog_sync" : "sales_catalog_review_import",
         import_version: 1,
+        image_urls: normalizeImportImageUrls(review.draft.imageUrl, review.draft.imageUrls),
         import_external_image: review.draft.importExternalImage,
         image_import_status: review.draft.imageUrl
           ? review.draft.importExternalImage ? "pending" : "skipped"
@@ -815,6 +819,7 @@ export async function completeSalesCatalogImportReviewJob(input: {
       metadata: {
         created_from: sourcePlatform === "whatsapp_catalog" ? "whatsapp_catalog_sync" : "sales_catalog_review_import",
         import_version: 1,
+        image_urls: normalizeImportImageUrls(review.draft.imageUrl, review.draft.imageUrls),
         import_external_image: review.draft.importExternalImage,
         image_import_status: review.draft.imageUrl
           ? review.draft.importExternalImage ? "pending" : "skipped"
@@ -1178,9 +1183,15 @@ export async function updateSalesCatalogImportItems(input: {
         throw new Error(`Nao foi possivel preparar imagem importada: ${metadataError.message}`);
       }
 
+      const currentMetadata = readRecord(currentItem?.metadata) ?? {};
       payload.metadata = {
-        ...(readRecord(currentItem?.metadata) ?? {}),
+        ...currentMetadata,
         ...metadataPatch,
+        // The edited URL replaces the cover, retaining the remaining gallery.
+        ...("imageUrl" in patch ? {
+          image_urls: normalizeImportImageUrls(patch.imageUrl ?? null,
+            patch.imageUrls ?? (Array.isArray(currentMetadata.image_urls) ? currentMetadata.image_urls.slice(1) : [])),
+        } : {}),
       };
     }
 
@@ -1541,21 +1552,32 @@ export async function publishSalesCatalogImportJob(input: {
     }
   }
 
-  const status: SalesCatalogImportJobStatus = errors === candidates.length ? "failed" : "published";
+  const currentJob = await getSalesCatalogImportJob({ client: input.client, companyId: input.companyId, jobId: input.jobId });
+  const publishedItems = currentJob.items.filter(item => item.status === "published");
+  const failedItems = currentJob.items.filter(item => item.status === "error");
+  const pendingItems = currentJob.items.filter(item => item.status !== "published" && item.status !== "discarded");
+  const imageFailures = publishedItems.filter(item => item.imageImportStatus === "failed").length;
+  const status: SalesCatalogImportJobStatus = pendingItems.length === 0 ? "published"
+    : publishedItems.length === 0 && failedItems.length === pendingItems.length ? "failed" : "review_required";
+  const errorMessage = [
+    failedItems.length > 0 ? `${failedItems.length} item(ns) falharam ao publicar.` : null,
+    imageFailures > 0 ? `${imageFailures} produto(s) com fotos nao importadas. Confira os avisos das imagens.` : null,
+  ].filter(Boolean).join(" ") || null;
   await input.client
     .from("sales_catalog_import_jobs")
     .update({
       status,
       published_at: status === "published" ? new Date().toISOString() : null,
-      error_message: errors === 0 ? null : `${errors} item(ns) falharam ao publicar.`,
+      error_message: errorMessage,
       stats: {
         ...job.stats,
-        published_catalog_items: catalogItems,
-        published_link_buttons: linkButtons,
-        published_legacy_review_items: legacyReviewItems,
-        duplicate_skips: duplicateSkips,
-        duplicate_updates: duplicateUpdates,
-        publish_errors: errors,
+        published_catalog_items: publishedItems.filter(item => item.publishedCatalogItemId).length,
+        published_link_buttons: publishedItems.filter(item => item.publishedLinkButtonId).length,
+        published_legacy_review_items: (readNumber(job.stats.published_legacy_review_items) ?? 0) + legacyReviewItems,
+        duplicate_skips: (readNumber(job.stats.duplicate_skips) ?? 0) + duplicateSkips,
+        duplicate_updates: (readNumber(job.stats.duplicate_updates) ?? 0) + duplicateUpdates,
+        publish_errors: failedItems.length,
+        image_import_failures: imageFailures,
       },
     })
     .eq("id", input.jobId)
@@ -1732,6 +1754,7 @@ async function processSalesCatalogImportJob(input: {
       metadata: {
         created_from: "sales_catalog_ai_import",
         import_version: 1,
+        image_urls: normalizeImportImageUrls(review.draft.imageUrl, review.draft.imageUrls),
         import_external_image: review.draft.importExternalImage,
         image_import_status: review.draft.imageUrl
           ? review.draft.importExternalImage ? "pending" : "skipped"
@@ -2691,6 +2714,7 @@ async function publishImportItemAsCatalogItem(input: {
     sales_destination: input.item.salesDestination,
     source_product_url: input.item.productUrl,
     source_image_url: input.item.imageUrl,
+    source_image_urls: normalizeImportImageUrls(input.item.imageUrl, input.item.imageUrls),
     import_external_image: input.item.importExternalImage,
     image_import_status: mediaResult.imageImportStatus,
     image_import_error: mediaResult.imageImportError,
@@ -2792,7 +2816,7 @@ async function publishImportItemAsCatalogItem(input: {
       status: "published",
       published_catalog_item_id: data.id,
       warnings: mediaResult.imageImportStatus === "failed"
-        ? Array.from(new Set([...input.item.warnings, `Imagem nao importada: ${mediaResult.imageImportError ?? "falha no download."}`]))
+        ? Array.from(new Set([...input.item.warnings, `Falha na importacao de imagens: ${mediaResult.imageImportError ?? "falha no download."}`]))
         : input.item.warnings,
       metadata: buildPublishedImportItemMetadata(input.item, mediaResult),
       published_at: now,
@@ -3386,43 +3410,62 @@ type ImportedMediaBuildResult = {
   imageImportError: string | null;
 };
 
-async function buildImportedMedia(input: {
+// The main URL stays first for legacy imports and determines the cover.
+export function normalizeImportImageUrls(imageUrl: string | null, imageUrls?: unknown): string[] {
+  const cover = normalizeDraftUrl(imageUrl);
+  if (!cover) return [];
+  const urls = Array.isArray(imageUrls) ? imageUrls : [];
+  return Array.from(new Set([cover, ...urls.map(normalizeDraftUrl)]
+    .filter((url): url is string => Boolean(url))));
+}
+
+export async function buildImportedMedia(input: {
   client: SupabaseClient;
   companyId: string;
   itemId: string;
   item: ClientSalesCatalogImportItem;
   now: string;
 }): Promise<ImportedMediaBuildResult> {
-  if (!input.item.imageUrl) {
+  const imageUrls = normalizeImportImageUrls(input.item.imageUrl, input.item.imageUrls);
+  if (imageUrls.length === 0) {
     return { media: [], imageImportStatus: null, imageImportError: null };
   }
 
   if (!shouldImportExternalImage({
     destination: input.item.salesDestination,
-    imageUrl: input.item.imageUrl,
+    imageUrl: imageUrls[0],
     enabled: input.item.importExternalImage,
   })) {
     return { media: [], imageImportStatus: "skipped", imageImportError: null };
   }
 
-  try {
-    const media = await importExternalImageToR2({
-      client: input.client,
-      companyId: input.companyId,
-      itemId: input.itemId,
-      itemTitle: input.item.title,
-      imageUrl: input.item.imageUrl,
-      now: input.now,
-    });
-
-    return { media: [media], imageImportStatus: "imported", imageImportError: null };
-  } catch (error) {
-    return {
-      media: [],
-      imageImportStatus: "failed",
-      imageImportError: formatExternalImageImportError(error),
-    };
+  const media: SalesCatalogMedia[] = [];
+  const errors: string[] = [];
+  // Sequential uploads keep gallery order and account for each file before
+  // checking the organization's quota for the next one.
+  for (const [index, imageUrl] of imageUrls.entries()) {
+    try {
+      media.push(await importExternalImageToR2({
+        client: input.client,
+        companyId: input.companyId,
+        itemId: input.itemId,
+        itemTitle: input.item.title,
+        imageUrl,
+        now: input.now,
+      }));
+    } catch (error) {
+      errors.push(`Foto ${index + 1}: ${formatExternalImageImportError(error)}`);
+      if (error instanceof StorageQuotaError) break;
+    }
   }
+
+  return {
+    media,
+    imageImportStatus: errors.length > 0 ? "failed" : "imported",
+    imageImportError: errors.length > 0
+      ? `${media.length} de ${imageUrls.length} foto(s) importada(s). ${errors.join(" ")}`
+      : null,
+  };
 }
 
 async function importExternalImageToR2(input: {
@@ -3597,6 +3640,7 @@ function buildPublishedImportItemMetadata(
     image_import_status: mediaResult.imageImportStatus,
     image_import_error: mediaResult.imageImportError,
     source_image_url: item.imageUrl,
+    image_urls: normalizeImportImageUrls(item.imageUrl, item.imageUrls),
     imported_media_count: mediaResult.media.length,
     duplicate_candidates: serializeDuplicateCandidates(item.duplicateCandidates),
     duplicate_action: item.duplicateAction,
@@ -3876,6 +3920,7 @@ function mapImportItem(row: ImportItemRow): ClientSalesCatalogImportItem {
     currency: normalizeCurrency(row.currency),
     productUrl: row.product_url,
     imageUrl: row.image_url,
+    imageUrls: normalizeImportImageUrls(row.image_url, metadata.image_urls),
     importExternalImage,
     imageImportStatus: normalizeImageImportStatus(readString(metadata.image_import_status)),
     imageImportError: readString(metadata.image_import_error),
@@ -3921,6 +3966,7 @@ type NormalizedItemPatch = {
   price?: string | null;
   productUrl?: string | null;
   imageUrl?: string | null;
+  imageUrls?: string[];
   importExternalImage?: boolean;
   duplicateAction?: SalesCatalogImportDuplicateAction;
   duplicateTargetItemId?: string | null;
@@ -3943,6 +3989,9 @@ function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemP
   if ("price" in patch) normalized.price = normalizePrice(patch.price);
   if ("productUrl" in patch) normalized.productUrl = normalizeDraftUrl(patch.productUrl);
   if ("imageUrl" in patch) normalized.imageUrl = normalizeDraftUrl(patch.imageUrl);
+  if ("imageUrls" in patch && "imageUrl" in patch) {
+    normalized.imageUrls = normalizeImportImageUrls(normalized.imageUrl ?? null, patch.imageUrls);
+  }
   if ("importExternalImage" in patch) normalized.importExternalImage = readBoolean(patch.importExternalImage) ?? false;
   if ("duplicateAction" in patch) {
     const duplicateAction = normalizeDuplicateAction(patch.duplicateAction);
