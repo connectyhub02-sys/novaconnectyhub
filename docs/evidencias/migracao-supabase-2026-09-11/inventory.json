@@ -1,0 +1,57 @@
+{
+  "capturedOn": "2026-09-11",
+  "sourceProject": "nkcnaizbsetmtcrocaon",
+  "destination": "supabase.connectyhub.com.br",
+  "applicationHosting": "Vercel (retained)",
+  "phase": "initial destination import validated; Vercel paused for final synchronization",
+  "trial": {
+    "database": "migration_trial_20260911",
+    "snapshot": "trial-20260911T083509Z",
+    "tablesCompared": 181,
+    "rowsInDump": 421789,
+    "rowCountMismatches": 0,
+    "migrationHistoryRecords": 83,
+    "criticalComparison": {"authPasswordHashesEqual": true, "creditWalletsEqual": true, "publicRlsFlagsEqual": true, "publicPoliciesEqual": true, "publicTriggersEqual": true},
+    "archiveBatch10": {"rows": 10, "durationMs": 136.962, "rolledBack": true},
+    "storageExport": {"buckets": 2, "objects": 26, "bytes": 3294932, "hashManifest": true, "uploadedToDestination": true, "downloadComparisonPassed": true}
+  },
+  "emailMigration": {
+    "provider": "Resend",
+    "domain": "connectyhub.com.br",
+    "domainVerified": true,
+    "region": "sa-east-1",
+    "credentialPermission": "sending_access",
+    "credentialDomainScope": "connectyhub.com.br",
+    "smtpConfiguredOnDestination": true,
+    "smtpTlsAuthenticationStatus": 235,
+    "testMessageSent": false
+  },
+  "databaseVersion": "PostgreSQL 17.6",
+  "databaseBytes": 1219349651,
+  "tablesBySchema": {"public": 152, "auth": 23, "storage": 8, "realtime": 3, "vault": 1, "supabase_migrations": 1},
+  "publicPolicies": 253,
+  "publicFunctions": 174,
+  "users": 25,
+  "identitiesByProvider": {"email": 18, "google": 7},
+  "realtimePublishedTables": 0,
+  "edgeFunctions": 0,
+  "authentication": {
+    "enabledProviders": ["email", "google"],
+    "allowSignups": true,
+    "allowAnonymousSignIns": false,
+    "allowManualLinking": false,
+    "requireEmailConfirmation": false,
+    "customSmtpConfigured": false,
+    "customHooks": 0,
+    "googleDestinationCallbackRegistered": true,
+    "sessions": {"singlePerUser": false, "timeboxHours": 0, "inactivityHours": 0, "accessExpirySeconds": 3600, "refreshRotation": true, "refreshReuseSeconds": 10},
+    "mfa": {"totp": true, "phone": false, "maxFactors": 10, "allowLowAalMinutes": 15},
+    "siteUrl": "https://www.connectyhub.com.br",
+    "redirectUrls": ["https://www.connectyhub.com.br/auth/callback", "https://connectyhub.com.br/auth/callback"]
+  },
+  "extensions": ["plpgsql", "pg_stat_statements", "uuid-ossp", "pgcrypto", "supabase_vault", "pg_graphql"],
+  "storageBuckets": [
+    {"id": "lead-archive", "public": false, "objects": 26, "bytes": 3294932},
+    {"id": "platform-deliverables", "public": false, "objects": 0, "bytes": 0}
+  ]
+}

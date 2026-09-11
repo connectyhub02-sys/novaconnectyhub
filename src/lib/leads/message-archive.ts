@@ -9,7 +9,8 @@ type Archive = { id: string; organization_id: string; lead_id: string; message_i
 const MAX_BYTES = 100 * 1024 * 1024;
 
 export async function archiveLeadMediaBatch(client: SupabaseClient) {
-  const backfill = await client.rpc("backfill_lead_message_archive", { p_limit: 100 });
+  // Keep each backfill below the database API timeout; the next sweep resumes it.
+  const backfill = await client.rpc("backfill_lead_message_archive", { p_limit: 10 });
   if (backfill.error) throw new Error("MESSAGE_ARCHIVE_BACKFILL_FAILED");
   const { data, error } = await client.rpc("claim_lead_media_archives", { p_limit: 10 });
   if (error) throw new Error("MESSAGE_ARCHIVE_QUEUE_FAILED");

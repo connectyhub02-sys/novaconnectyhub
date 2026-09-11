@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.fbcdn.net" },
       { protocol: "https", hostname: "**.uazapi.com" },
       { protocol: "https", hostname: "**.supabase.co" },
+      { protocol: "https", hostname: "supabase.connectyhub.com.br", pathname: "/storage/v1/**" },
       { protocol: "https", hostname: "**.r2.dev" },
       { protocol: "https", hostname: "**.cloudflarestorage.com" },
     ],

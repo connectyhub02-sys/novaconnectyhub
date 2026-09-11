@@ -1,0 +1,505 @@
+{
+  "capturedAt": "2026-09-11T07:41:50.077Z",
+  "source": "src/lib/inngest/functions.ts",
+  "functions": [
+    {
+      "id": "connectyhub-ai-triggers",
+      "name": "Agendamentos da API de IA",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-ai-webhooks",
+      "name": "Notificações da API de IA",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-agenda-notice",
+      "name": "ConnectyHub Agenda Notice",
+      "retries": 1,
+      "concurrency": {
+        "limit": 1,
+        "key": "event.data.organizationId"
+      },
+      "triggers": [
+        {
+          "event": "connectyhub/agenda.notice"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-lead-relationships",
+      "name": "ConnectyHub Lead Relationships",
+      "retries": 1,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "*/10 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-intelligent-automation-sweep",
+      "name": "ConnectyHub Intelligent Automation Dispatch",
+      "retries": 1,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "*/2 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-customer-agenda",
+      "name": "ConnectyHub Agenda Notifications",
+      "retries": 1,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "*/2 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-store-subscription-renewals",
+      "name": "Renovações das assinaturas das lojas",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-contract-guard",
+      "name": "ConnectyHub WhatsApp Contract Guard",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-lead-media-archive",
+      "name": "ConnectyHub Lead Message Archive",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-transparent-checkout-reconciliation",
+      "name": "ConnectyHub Checkout Payment Reconciliation",
+      "retries": 2,
+      "concurrency": {
+        "limit": 1
+      },
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-daily-admin-report",
+      "name": "ConnectyHub Daily Admin Report",
+      "triggers": [
+        {
+          "cron": "30 11 * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-admin-ping",
+      "name": "ConnectyHub Admin Ping",
+      "triggers": [
+        {
+          "event": "connectyhub/admin.ping"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-sync",
+      "name": "ConnectyHub WhatsApp Instance Sync",
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.sync.requested"
+        },
+        {
+          "cron": "*/30 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-uazapi-cost-guard",
+      "name": "ConnectyHub Uazapi Cost Guard",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/10 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-agent-response",
+      "name": "ConnectyHub WhatsApp Agent Response",
+      "retries": 4,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.message.received"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-agent-sweep",
+      "name": "ConnectyHub WhatsApp Agent Queue Sweep",
+      "triggers": [
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-reconnect-catchup",
+      "name": "ConnectyHub WhatsApp Reconnect Catch-up",
+      "retries": 2,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.instance.reconnected"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-social-message-queue",
+      "name": "ConnectyHub Meta Social Message Queue",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.message.received"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-social-comment-queue",
+      "name": "ConnectyHub Meta Social Comment Queue",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.comment.received"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-social-agent-sweep",
+      "name": "ConnectyHub Meta Social Agent Queue Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-social-approved-dispatch",
+      "name": "ConnectyHub Meta Social Approved Dispatch",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/meta.social.dispatch.requested"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-social-dispatch-sweep",
+      "name": "ConnectyHub Meta Social Dispatch Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-meta-organic-publish-sweep",
+      "name": "ConnectyHub Meta Organic Publish Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-outbound-dispatcher",
+      "name": "ConnectyHub WhatsApp Outbound Dispatcher",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.outbound.requested"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-outbound-sweep",
+      "name": "ConnectyHub WhatsApp Outbound Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-api-access-guard-sync",
+      "name": "ConnectyHub API Access Guard Sync",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/api.access_guard.sync.requested"
+        },
+        {
+          "cron": "*/15 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-api-health-monitor",
+      "name": "ConnectyHub API Health Monitor",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/api.health.requested"
+        },
+        {
+          "cron": "*/10 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-gateway-webhook-delivery",
+      "name": "ConnectyHub Gateway Webhook Delivery",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/gateway.webhook.delivery.requested"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-handoff-notifier",
+      "name": "ConnectyHub WhatsApp Human Handoff Notifier",
+      "retries": 3,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.handoff.notify"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-clone-profile-import",
+      "name": "ConnectyHub WhatsApp Clone Profile Import",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.clone_profile.import_requested"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-follow-up",
+      "name": "ConnectyHub WhatsApp Proactive Follow-Up",
+      "retries": 2,
+      "triggers": [
+        {
+          "event": "connectyhub/whatsapp.followup.scheduled"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-platform-automation-sweep",
+      "name": "ConnectyHub Platform Automation Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-sales-catalog-import-sweep",
+      "name": "ConnectyHub Sales Catalog Import Sweep",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/sales-catalog.import.process_requested"
+        },
+        {
+          "cron": "* * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-whatsapp-catalog-import-sweep",
+      "name": "ConnectyHub WhatsApp Catalog Import Sweep",
+      "retries": 2,
+      "triggers": [
+        {
+          "event": "connectyhub/sales-catalog.whatsapp_catalog.process_requested"
+        },
+        {
+          "cron": "*/5 * * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-eliane-ecosystem-sync",
+      "name": "ConnectyHub Eliane Ecosystem Sync",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/eliane.ecosystem.sync.requested"
+        },
+        {
+          "cron": "0 9 * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-research-agent",
+      "name": "ConnectyHub Growth Research Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.research.scheduled"
+        },
+        {
+          "cron": "30 8 * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-market-radar-agent",
+      "name": "ConnectyHub Market Radar Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.market-radar.scheduled"
+        },
+        {
+          "cron": "15 9 * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-news-agent",
+      "name": "ConnectyHub News Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.news.scheduled"
+        },
+        {
+          "cron": "0 7,13,18 * * *"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-blog-agent",
+      "name": "ConnectyHub Blog Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.blog.scheduled"
+        },
+        {
+          "cron": "0 10 * * 1,3,5"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-competitive-intel-agent",
+      "name": "ConnectyHub Competitive Intelligence Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.competitive-intel.scheduled"
+        },
+        {
+          "cron": "30 11 * * 1,3,5"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-seo-agent",
+      "name": "ConnectyHub SEO Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.seo.scheduled"
+        },
+        {
+          "cron": "45 9 * * 2,4"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-aeo-agent",
+      "name": "ConnectyHub AEO Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.aeo.scheduled"
+        },
+        {
+          "cron": "15 12 * * 2,4"
+        }
+      ]
+    },
+    {
+      "id": "connectyhub-growth-geo-ago-agent",
+      "name": "ConnectyHub GEO AGO Agent",
+      "retries": 1,
+      "triggers": [
+        {
+          "event": "connectyhub/growth.geo-ago.scheduled"
+        },
+        {
+          "cron": "0 14 * * 5"
+        }
+      ]
+    }
+  ]
+}
