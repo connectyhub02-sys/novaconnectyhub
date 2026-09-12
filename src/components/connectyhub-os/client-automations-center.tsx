@@ -21,7 +21,6 @@ import {
 } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 import { IntelligentFollowUpPanel } from "./intelligent-follow-up-panel";
-import { CustomerAgendaPanel } from "./customer-agenda-panel";
 
 type Notice = {
   tone: "success" | "error";
@@ -279,7 +278,6 @@ export function ClientAutomationsCenter({
       </Panel>
 
       <IntelligentFollowUpPanel key={selectedCompanyId} companyId={selectedCompanyId} />
-      <CustomerAgendaPanel key={`agenda:${selectedCompanyId}`} companyId={selectedCompanyId} agentId={selectedAgent?.id} />
 
       <ClientWhatsappAutomationStudio
         key={`${selectedCompanyId}:${draft.automationSettings.defaultAgentId ?? "conversation"}`}

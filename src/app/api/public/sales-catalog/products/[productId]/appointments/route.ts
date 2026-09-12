@@ -7,6 +7,7 @@ import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { availableAppointments, agendaErrorMessage } from "@/lib/automations/agenda";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { localContactTime } from "@/lib/automations/contact-window";
+import { readAgendaActivation, agendaDisabledMessage } from "@/lib/automations/agenda-activation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,12 +32,12 @@ export async function GET(request: NextRequest, context: Context) {
   try {
     const { client, item } = await loadProduct((await context.params).productId);
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
+    const activation = await readAgendaActivation(client, item.companyId);
+    if (!activation.enabled) return NextResponse.json({ enabled: false, slots: [], error: agendaDisabledMessage }, { status: 409, headers: { "Cache-Control": "no-store" } });
     if (!item.fulfillment.agendaResourceId) return NextResponse.json({ slots: [], contactRequired: true });
-    const settings = await client.from("customer_agenda_settings").select("timezone").eq("organization_id", item.companyId).single();
-    if (settings.error) throw new Error("Agenda indisponível.");
-    const timezone = settings.data?.timezone ?? "America/Sao_Paulo";
-    const day = request.nextUrl.searchParams.get("day");
+    const timezone = activation.timezone;
     const requested = request.nextUrl.searchParams.get("from");
+    const day = request.nextUrl.searchParams.get("day") ?? (requested ? null : localContactTime(new Date(), timezone).day);
     let from = requested ? new Date(requested) : new Date();
     if (day) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Escolha uma data válida.");
@@ -49,8 +50,8 @@ export async function GET(request: NextRequest, context: Context) {
       }
     }
     if (!Number.isFinite(from.getTime()) || from.getTime() > Date.now() + 90 * 86400000) throw new Error("Escolha uma data nos próximos 90 dias.");
-    const slots = await availableAppointments(client, item.companyId, item.fulfillment.agendaResourceId, from);
-    return NextResponse.json({ slots, timezone }, { headers: { "Cache-Control": "no-store" } });
+    const slots = await availableAppointments(client, item.companyId, item.fulfillment.agendaResourceId, from, 1, undefined, day ?? undefined);
+    return NextResponse.json({ enabled: true, slots, timezone, day }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Agenda indisponível." }, { status: 422 }); }
 }
 export async function POST(request: NextRequest, context: Context) {
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest, context: Context) {
     if (!name || !/^\d{10,15}$/.test(phone) || !Number.isFinite(startsAt.getTime()) || startsAt.getTime() > Date.now() + 90 * 86400000) throw new Error("Informe nome, telefone com código do país e um horário disponível.");
     const { client, item } = await loadProduct((await context.params).productId);
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
+    if (!(await readAgendaActivation(client, item.companyId)).enabled) return NextResponse.json({ enabled: false, error: agendaDisabledMessage }, { status: 409 });
     const resourceId = item.fulfillment.agendaResourceId;
     if (!resourceId) throw new Error("Solicite o atendimento para combinar um horário.");
     const key = `public:${createHash("sha256").update([item.companyId, item.id, resourceId, phone, startsAt.toISOString()].join("|")).digest("hex")}`;
@@ -89,6 +91,7 @@ export async function POST(request: NextRequest, context: Context) {
     }
     if (!leadId) throw new Error("Não foi possível cadastrar o contato.");
     const result = await client.rpc("reserve_customer_appointment", { p_org: item.companyId, p_resource: resourceId, p_lead: leadId, p_start: startsAt.toISOString(), p_party: 1, p_key: key });
+    if (result.error?.message?.includes("AGENDA_UNAVAILABLE")) return NextResponse.json({ enabled: false, error: agendaDisabledMessage }, { status: 409 });
     if (result.error) throw new Error(agendaErrorMessage(result.error.message));
     return NextResponse.json({ booked: true, startsAt: result.data.starts_at, endsAt: result.data.ends_at });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível agendar." }, { status: 422 }); }

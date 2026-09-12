@@ -45,6 +45,15 @@ describe("customer agenda", () => {
         "utf8",
       ),
     );
+    await db.exec(`alter table agent_registry add column metadata jsonb;
+      create table intelligence_memory(id uuid primary key,organization_id uuid,scope text,memory_type text,metadata jsonb);
+      create table sales_catalog_import_jobs(default_sales_destination text);
+      create table sales_catalog_import_items(id uuid primary key,organization_id uuid,sales_destination text,status text,metadata jsonb,source_evidence jsonb,fulfillment jsonb,warnings text[]);
+      create table sales_catalog_order_items(order_id uuid,organization_id uuid,catalog_item_id uuid);
+      create table sales_catalog_payment_sessions(order_id uuid,organization_id uuid,status text);
+      create table sales_catalog_card_attempts(order_id uuid,organization_id uuid,state text);`);
+    await db.exec(readFileSync("supabase/migrations/0130_catalog_item_appointments.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/0131_explicit_agenda_activation.sql", "utf8"));
   }, 45000);
   afterAll(async () => {
     await db?.close();
@@ -117,6 +126,46 @@ describe("customer agenda", () => {
     await f.book();
     await expect(f.book(30)).rejects.toThrow("SLOT_UNAVAILABLE");
     expect((await f.book(60)).status).toBe("booked");
+  });
+  it("does not promote catalog items or import previews through legacy activity defaults while disabled", async () => {
+    const f = await fixture(), agent = randomUUID(), item = randomUUID(), preview = randomUUID();
+    await db.query("update customer_agenda_settings set enabled=false where organization_id=$1", [f.org]);
+    await db.query("insert into agent_registry(id,organization_id,metadata) values($1,$2,$3)", [agent, f.org, { prompt_builder_config: { templateId: "dentista" } }]);
+    await db.query("insert into intelligence_memory values($1,$2,'organization','sales_catalog_item',$3)", [item, f.org, { source_agent_id: agent }]);
+    await db.query("insert into sales_catalog_import_items(id,organization_id,sales_destination,status,source_evidence) values($1,$2,'connectyhub_checkout','draft',$3)", [preview, f.org, { source_agent_id: agent }]);
+    await db.query("update agent_registry set metadata=jsonb_set(metadata,'{prompt_builder_config,templateId}','\"advogado\"') where id=$1", [agent]);
+    await db.query("update sales_catalog_import_items set status='ready' where id=$1", [preview]);
+    const catalog = await db.query<{ destination: string | null }>("select metadata->>'sales_destination' destination from intelligence_memory where id=$1", [item]);
+    expect(catalog.rows[0].destination).not.toBe("appointment");
+    expect((await db.query<{ sales_destination: string }>("select sales_destination from sales_catalog_import_items where id=$1", [preview])).rows[0].sales_destination).toBe("connectyhub_checkout");
+    await expect(db.query("update intelligence_memory set metadata=metadata || '{\"sales_destination\":\"appointment\",\"action_version\":1}' where id=$1", [item])).rejects.toThrow("AGENDA_NOT_ENABLED");
+    await expect(db.query("update sales_catalog_import_items set sales_destination='appointment' where id=$1", [preview])).rejects.toThrow("AGENDA_NOT_ENABLED");
+  });
+  it("preserves catalog links and unrelated edits when paused, while refusing new links even through direct SQL", async () => {
+    const f = await fixture(), item = randomUUID();
+    await db.query("insert into intelligence_memory values($1,$2,'organization','sales_catalog_item',$3)", [item, f.org, { sales_destination: "appointment", action_version: 1, fulfillment: { agenda_resource_id: f.resource } }]);
+    await db.query("update customer_agenda_settings set enabled=false where organization_id=$1", [f.org]);
+    await db.query("update customer_agenda_resources set enabled=false where id=$1", [f.resource]);
+    await db.query("update intelligence_memory set metadata=metadata || '{\"description\":\"Descrição atualizada\"}' where id=$1", [item]);
+    expect((await db.query<{ metadata: unknown }>("select metadata from intelligence_memory where id=$1", [item])).rows[0].metadata).toMatchObject({ sales_destination: "appointment", description: "Descrição atualizada", fulfillment: { agenda_resource_id: f.resource } });
+    await expect(db.query("insert into intelligence_memory values($1,$2,'organization','sales_catalog_item',$3)", [randomUUID(), f.org, { sales_destination: "appointment", action_version: 1 }])).rejects.toThrow("AGENDA_NOT_ENABLED");
+    await db.query("update intelligence_memory set metadata=metadata || '{\"sales_destination\":\"manual_handoff\"}' where id=$1", [item]);
+    await db.query("update customer_agenda_settings set enabled=true where organization_id=$1", [f.org]);
+    await expect(db.query("update intelligence_memory set metadata=metadata || '{\"sales_destination\":\"appointment\"}' where id=$1", [item])).rejects.toThrow("AGENDA_RESOURCE_UNAVAILABLE");
+    await db.query("update customer_agenda_resources set enabled=true where id=$1", [f.resource]);
+    await db.query("update intelligence_memory set metadata=metadata || '{\"sales_destination\":\"appointment\"}' where id=$1", [item]);
+  });
+  it("rejects direct creation, replay and rescheduling after deactivation, preserving existing appointments", async () => {
+    const f = await fixture();
+    const original = await f.book(0, 1, { key: "original" });
+    await db.query("update customer_agenda_settings set enabled=false where organization_id=$1", [f.org]);
+    await expect(f.book(120)).rejects.toThrow("AGENDA_UNAVAILABLE");
+    await expect(f.book(0, 1, { key: "original" })).rejects.toThrow("AGENDA_UNAVAILABLE");
+    await expect(f.book(120, 1, { replace: original.id, version: original.version })).rejects.toThrow("AGENDA_UNAVAILABLE");
+    const saved = await db.query<{ id: string; version: number }>("select id,version from customer_agenda_bookings where organization_id=$1", [f.org]);
+    expect(saved.rows).toEqual([{ id: original.id, version: original.version }]);
+    await db.query("update customer_agenda_settings set enabled=true where organization_id=$1", [f.org]);
+    expect((await f.book(120, 1, { replace: original.id, version: original.version })).version).toBe(original.version + 1);
   });
   it("shares availability between a WhatsApp reservation and a product-page reservation", async () => {
     const f = await fixture(), otherLead = randomUUID();

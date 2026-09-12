@@ -1,0 +1,25 @@
+# Ativação explícita da agenda — 12/09/2026
+
+O titular definiu a ativação da agenda da empresa como condição central para agendamento no painel, no catálogo, na página pública e no WhatsApp. A versão anterior já recusava novas reservas no banco quando desligada, mas permitia selecionar Agendamento no produto, exibia o calendário público e deixava o agente sem instrução explícita de indisponibilidade.
+
+## Comportamento implementado
+
+- Agenda desligada mostra a tela simples com **Ativar agenda**, sem calendário ou formulários completos. A ativação é uma ação explícita do responsável, validada pela API. Pode ativar vazia para depois cadastrar atendimentos; nenhum recurso, horário ou reserva é criado automaticamente.
+- Agenda ativa mantém o calendário como conteúdo principal, com navegação de datas, mês/semana/dia e filtro de atendimento. **Criar compromisso** e **Atendimentos e horários** abrem áreas separadas. O cadastro explica atendimento/profissional, duração e disponibilidade. O fuso continua manual, com nomes de Brasília, Manaus, Acre e Fernando de Noronha, preservando o identificador salvo; sem inferência por IP ou navegador.
+- Cadastro/edição e revisão de importações desabilitam a opção Agendamento enquanto a agenda da mesma empresa estiver desligada, com caminho para ativá-la. O servidor verifica mudanças de destino e vínculo antes de salvar. Criação de rascunhos, publicação e edição de importações usam a mesma política. Sugestões baseadas na atividade não habilitam agendamento quando desligada.
+- Produtos já vinculados preservam os dados. Edições não relacionadas e a saída do destino Agendamento continuam possíveis; novos vínculos exigem ativação e as validações de recurso existentes. Desativar não remove produtos, serviços ou compromissos. A disponibilidade continua subordinada ao recurso, horários, capacidade e bloqueios configurados.
+- A loja oferece **Ver detalhes** em lugar do convite a agendar quando a agenda está desligada. A página do produto informa indisponibilidade e mantém o contato. A consulta pública verifica a ativação antes de mostrar calendário/horários; a reserva revalida antes de consultar confirmação anterior ou gravar contato, e o RPC existente valida novamente a ativação antes da reserva/remarcação. Um fluxo aberto perde os horários e o formulário ao receber o estado desativado.
+- O WhatsApp recebe instrução explícita de agenda desativada antes de usar ofertas antigas, cache ou interpretar intenção. Não executa agenda nessa situação. A resposta é revalidada após a geração e alegações/promessas de agendamento recebem uma resposta de indisponibilidade. Os demais assuntos do produto continuam normalmente. Uma resposta da IA não comprova uma reserva.
+- O assistente web da loja também consulta a ativação, retira sugestões de agendamento quando desligada e revalida a resposta após a geração. Não confirma reservas que não executou.
+- Benefícios, instruções, FAQ e detalhes de disponibilidade na página pública acompanham o estado desativado, sem orientações contraditórias para escolher horários inexistentes.
+- A migration `0131_explicit_agenda_activation` condiciona sugestões automáticas no banco à ativação, protege novos destinos/vínculos no catálogo e nas importações e serializa a reserva com uma desativação concorrente. Preserva configurações existentes e não reescreve dados de clientes.
+
+## Verificação e limites
+
+Testes usam empresas, contatos, serviços e reservas fictícios. Cobrem formulário adulterado, importação, escopo, preservação de configuração anterior, ativação vazia, ausência de ativação implícita, fluxo público aberto, repetição de confirmação, reserva e remarcação no SQL real em PGlite e comunicação do agente. A revisão visual usa componentes reais em 1440 e 390 pixels, incluindo calendário ativo, tela de ativação, configurações, produto com Agendamento bloqueado/liberado e calendário público interrompido pela desativação.
+
+Regressão completa: 1.581 testes em 163 arquivos aprovados; após acrescentar a proteção de resposta do assistente web, a rodada direcionada passou 48 testes em três arquivos. TypeScript, ESLint sem erros e build de produção com 100 páginas estáticas aprovados. A migration 0131 foi aplicada transacionalmente em produção, com cópia privada das três funções anteriores e comparação de fingerprints comprovando que configurações, recursos, reservas, produtos e importações não foram alterados.
+
+Nenhum envio de WhatsApp, reserva, alteração de fuso/configuração de empresa real ou transação financeira foi usado na validação. Sem mudança de áudio ou integração com Google Agenda. A correção Pix/cartão publicada anteriormente foi preservada. Um aviso de hidratação foi reproduzido no cabeçalho compartilhado sem componentes de agenda; não constitui regressão desta alteração e ficou fora deste escopo.
+
+Publicação e validação final são registradas no [estado operacional](estado-operacional.md). Capturas locais fictícias estão em `tmp/agenda-qa` na cópia de trabalho e não integram o deploy.

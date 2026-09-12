@@ -113,9 +113,13 @@ describe("agent-owned storefront", () => {
   it("chooses appointment or sale actions per item, even in a mixed dentist catalog", () => {
     const { api } = harness();
     const context = { surface: "product", agentMetadata: attendant("dentista").metadata, settings: { commerceAgent: legacy }, leadName: null };
-    const prompt = { ...api.emptyPromptContext(), currentProduct: { id: "item", title: "Avaliação", salesDestination: "appointment" } };
+    const prompt = { ...api.emptyPromptContext(), agendaEnabled: true, currentProduct: { id: "item", title: "Avaliação", salesDestination: "appointment" } };
     expect(api.buildQuickActions(context, prompt).map(x => x.label)).toEqual(["Tirar dúvidas", "Como agendar"]);
     expect(api.buildProductWhisperMessage(context, prompt, "")).toContain("agendar");
+    const paused = { ...prompt, agendaEnabled: false };
+    expect(api.buildQuickActions(context, paused).map(x => x.label)).toEqual(["Tirar dúvidas"]);
+    expect(api.buildProductWhisperMessage(context, paused, "")).not.toMatch(/agendar|agendamento/);
+    expect(api.buildContextualAssistantOpener(context, paused)).not.toMatch(/agendar|agendamento|compra|carrinho/);
     expect(api.buildContextualAssistantOpener(context, prompt)).not.toMatch(/pedido|carrinho|compra/);
     expect(api.buildQuickActions(context, { ...prompt, currentProduct: { salesDestination: "connectyhub_checkout" } }).map(x => x.label)).toContain("Revisar pedido");
     expect(api.buildQuickActions(context, { ...prompt, currentProduct: { salesDestination: "external_site" } }).map(x => x.label)).toEqual(["Tirar dúvidas"]);

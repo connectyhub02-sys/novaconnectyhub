@@ -14,6 +14,13 @@ import { applySalesCatalogOrderRevision } from "@/lib/sales-catalog/order-revisi
 import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalog/order-shipping";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
+
+function enforceAgendaResponse(text: string, userText: string, result: { disabled?: boolean; booked: boolean; fallback: string }) {
+  const scheduling = /\b(agend\w*|reserv\w*|remarc\w*|marcar|marco|hor[aá]rios?)\b/i;
+  if (result.disabled && (scheduling.test(text) || scheduling.test(userText))) return result.fallback;
+  if (!result.booked && /\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return result.fallback;
+  return text;
+}
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
 import { customSoftwareContext } from "./custom-software";
 import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-catalog/checkout-customer";
@@ -985,7 +992,7 @@ async function processWhatsappAgentRunWithScope(input: {
       : null;
 
     const agendaItem = resolveCatalogAgendaFocus(context.salesCatalog, userText, context.messages);
-    const agendaTurn = lead?.id && !isGroupChat
+    let agendaTurn = lead?.id && !isGroupChat
       ? await import("@/lib/automations/agenda-agent").then(({ processAgendaTurn }) => processAgendaTurn({
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
           agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
@@ -1066,8 +1073,13 @@ async function processWhatsappAgentRunWithScope(input: {
       response: aiResponse,
     });
 
-    if (agendaTurn && !agendaTurn.booked && /\b(agendei|reservei|marquei|hor[aá]rio (?:est[aá]|ficou) (?:reservado|agendado|confirmado))\b/i.test(aiResponse.text)) {
-      aiResponse = { ...aiResponse, text: agendaTurn.fallback };
+    if (agendaTurn) {
+      // A company may pause scheduling while the model is composing its reply.
+      const activation = await client.from("customer_agenda_settings").select("enabled").eq("organization_id", organization.id).maybeSingle();
+      if (activation.error || !activation.data?.enabled) {
+        agendaTurn = (await import("@/lib/automations/agenda-agent")).disabledAgendaTurn();
+      }
+      aiResponse = { ...aiResponse, text: enforceAgendaResponse(aiResponse.text, userText, agendaTurn) };
     }
     const aiText = aiResponse.text;
 

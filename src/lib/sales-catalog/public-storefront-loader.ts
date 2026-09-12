@@ -1,4 +1,5 @@
 import { activityAppointmentLabel } from "@/lib/whatsapp/activity-profile";
+import { readAgendaActivation } from "@/lib/automations/agenda-activation";
 import { getAgentPromptTemplate } from "@/lib/whatsapp/agent-prompt-templates";
 import { isPublicCommerceAvailable } from "./public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
@@ -606,7 +607,9 @@ export async function loadStoreProducts(
     .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
     .sort(compareStoreCatalogItems);
 
-  return items.map((item) => mapStorefrontProduct(item, input, item.storeFeatured));
+  const agendaEnabled = items.some(item => item.salesDestination === "appointment")
+    ? (await readAgendaActivation(client, input.organizationId).catch(() => ({ enabled: false }))).enabled : false;
+  return items.map((item) => mapStorefrontProduct(item, { ...input, agendaEnabled }, item.storeFeatured));
 }
 
 export function mapStorefrontProduct(
@@ -619,6 +622,7 @@ export function mapStorefrontProduct(
     conversationId: string | null;
     agentId: string | null;
     trackingLinkId: string | null;
+    agendaEnabled?: boolean;
   },
   isStoreFeatured: boolean,
 ): PublicStorefrontProduct {
@@ -648,7 +652,7 @@ export function mapStorefrontProduct(
     highlightLabel: isStoreFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (compareAtLabel ? "Oferta" : null),
     isFeatured: isStoreFeatured,
     canCheckout,
-    actionLabel: item.salesDestination === "appointment" ? activityAppointmentLabel(getAgentPromptTemplate(item.activityProfile?.templateId).id) : undefined,
+    actionLabel: item.salesDestination === "appointment" ? (input.agendaEnabled ? activityAppointmentLabel(getAgentPromptTemplate(item.activityProfile?.templateId).id) : "Ver detalhes") : undefined,
     productUrl: buildLeadAwareSalesCatalogStoreProductUrl({
       storeSlug: input.storeSlug,
       productId: item.id,

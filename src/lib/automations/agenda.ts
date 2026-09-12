@@ -110,6 +110,7 @@ export async function getAgenda(
   client: SupabaseClient,
   organizationId: string,
   leadId?: string,
+  period?: { from: string; to: string },
 ) {
   const [settings, resources, bookings] = await Promise.all([
     client
@@ -130,6 +131,7 @@ export async function getAgenda(
         )
         .eq("organization_id", organizationId);
       if (leadId) query = query.eq("lead_id", leadId);
+      if (period) return query.lt("starts_at", period.to).gt("ends_at", period.from).order("starts_at").order("id").limit(1000);
       return query
         .gte("starts_at", new Date(Date.now() - 86400000).toISOString())
         .order("starts_at")
@@ -155,6 +157,7 @@ export async function availableAppointments(
   from: Date,
   partySize = 1,
   excludeBookingId?: string,
+  calendarDay?: string,
 ) {
   const [settings, result] = await Promise.all([
     client
@@ -180,7 +183,7 @@ export async function availableAppointments(
   )
     return [];
   const lower = Math.max(from.getTime(), Date.now() + 60000),
-    upper = lower + 7 * 86400000;
+    upper = lower + (calendarDay ? 2 : 7) * 86400000;
   let busyQuery = client
     .from("customer_agenda_bookings")
     .select("starts_at,ends_at")
@@ -196,12 +199,13 @@ export async function availableAppointments(
   const slots: Array<{ starts_at: string; ends_at: string }> = [];
   for (
     let start = Math.ceil(lower / 60000) * 60000;
-    start < upper && slots.length < 12;
+    start < upper && slots.length < (calendarDay ? 100 : 12);
     start += 15 * 60000
   ) {
     const end = start + resource.duration_minutes * 60000,
       local = localContactTime(new Date(start), settings.data.timezone),
       finish = localContactTime(new Date(end), settings.data.timezone);
+    if (calendarDay && local.day !== calendarDay) continue;
     const weekday =
       ((new Date(`${local.day}T12:00:00Z`).getUTCDay() + 6) % 7) + 1;
     if (

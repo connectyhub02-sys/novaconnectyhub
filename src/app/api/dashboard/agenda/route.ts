@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { parseCalendarRange } from "@/lib/automations/calendar-view";
+import { readAgendaActivation, requireAgendaActivation } from "@/lib/automations/agenda-activation";
 import {
   resolveDashboardCompanyId,
   statusForDashboardCompanyScopeError,
@@ -19,11 +21,15 @@ export async function GET(request: NextRequest) {
   if (!workspace)
     return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
   try {
+    const period = parseCalendarRange(request.nextUrl.searchParams.get("from"), request.nextUrl.searchParams.get("to"));
     const org = resolveDashboardCompanyId({
         workspace,
         requestedCompanyId: request.nextUrl.searchParams.get("companyId"),
       }),
       client = createServiceClient();
+    if (request.nextUrl.searchParams.get("statusOnly") === "true") {
+      return NextResponse.json({ settings: await readAgendaActivation(client, org) }, { headers: { "Cache-Control": "no-store" } });
+    }
     let leadQuery = client
       .from("leads")
       .select("id,display_name")
@@ -49,8 +55,10 @@ export async function GET(request: NextRequest) {
       .limit(20);
     if (notices.error)
       throw new Error("Não foi possível consultar os avisos da agenda.");
+    const agenda = await getAgenda(client, org, undefined, period);
     return NextResponse.json({
-      ...(await getAgenda(client, org)),
+      ...agenda,
+      truncated: Boolean(period && agenda.bookings.length >= 1000),
       notices: notices.data,
       leads: leads.data,
     });
@@ -88,18 +96,6 @@ export async function POST(request: NextRequest) {
     if (body.action === "set_enabled") {
       if (typeof body.enabled !== "boolean")
         throw new Error("Informe o estado da agenda.");
-      if (body.enabled) {
-        const resources = await client
-          .from("customer_agenda_resources")
-          .select("id")
-          .eq("organization_id", org)
-          .eq("enabled", true)
-          .limit(1);
-        if (resources.error || !resources.data?.length)
-          throw new Error(
-            "Cadastre ao menos um serviço ou mesa antes de ativar.",
-          );
-      }
       const result = await client.from("customer_agenda_settings").upsert(
         {
           organization_id: org,
@@ -147,6 +143,7 @@ export async function POST(request: NextRequest) {
               .single();
       if (result.error) throw new Error("Falha ao salvar o serviço ou mesa.");
     } else if (body.action === "availability") {
+      await requireAgendaActivation(client, org);
       if (
         !uuid.test(body.resourceId ?? "") ||
         !Number.isFinite(Date.parse(body.from))
@@ -175,6 +172,7 @@ export async function POST(request: NextRequest) {
         ),
       });
     } else if (body.action === "book" || body.action === "reschedule") {
+      await requireAgendaActivation(client, org);
       if (
         !uuid.test(body.resourceId ?? "") ||
         !uuid.test(body.leadId ?? "") ||

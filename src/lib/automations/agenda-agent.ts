@@ -5,6 +5,7 @@ import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { getAgenda, availableAppointments, agendaErrorMessage } from "./agenda";
 
 export type AgendaTurnResult = {
+  disabled?: boolean;
   context: string;
   booked: boolean;
   fallback: string;
@@ -31,6 +32,14 @@ type Decision = {
   bookingId?: string;
   partySize?: number;
 };
+export function disabledAgendaTurn(): AgendaTurnResult {
+  return {
+    disabled: true,
+    booked: false,
+    context: "AGENDA DESATIVADA pela empresa. Nenhuma operação de agenda foi executada nesta tentativa. Esta regra prevalece sobre o catálogo, o histórico e as instruções de venda: não ofereça agendamento, horários disponíveis, seleção de datas ou link para agendar; não prometa reservar, remarcar ou confirmar. Se houver interesse em visita ou atendimento, informe que o agendamento online está desativado e oriente a combinar os próximos passos com o responsável, sem afirmar encaminhamento ou reserva realizados. Outros assuntos do produto continuam normalmente.",
+    fallback: "O agendamento online está desativado no momento. Você pode combinar os próximos passos com o responsável pelo atendimento.",
+  };
+}
 export async function processAgendaTurn(
   input: Input,
 ): Promise<AgendaTurnResult | null> {
@@ -42,7 +51,7 @@ export async function processAgendaTurn(
     .maybeSingle();
   if (settings.error)
     throw new Error("Não foi possível verificar a agenda da empresa.");
-  if (!settings.data?.enabled) return null;
+  if (!settings.data?.enabled) return disabledAgendaTurn();
   const cached = await client
     .from("customer_agenda_turns")
     .select("result")
@@ -69,6 +78,7 @@ export async function processAgendaTurn(
       fallback: "Seu agendamento está registrado.",
     };
   const agenda = await getAgenda(client, org, input.leadId);
+  if (!agenda.settings.enabled) return disabledAgendaTurn();
   if (input.catalogAppointment && !input.catalogResourceId) return { context: "O item não tem agenda vinculada. Solicite atendimento para combinar disponibilidade; não confirme reserva.", booked: false, fallback: "Precisamos combinar a disponibilidade deste atendimento." };
   if (input.catalogResourceId) agenda.resources = agenda.resources.filter(resource => resource.id === input.catalogResourceId);
   const bookings = agenda.bookings.filter(
@@ -316,5 +326,7 @@ export async function processAgendaTurn(
       throw new Error("Não foi possível registrar o resultado da agenda.");
     console.error("agenda_turn_cache_failed", input.runId);
   }
-  return result;
+  const activation = await client.from("customer_agenda_settings").select("enabled").eq("organization_id", org).maybeSingle();
+  if (activation.error) throw new Error("Não foi possível verificar a agenda da empresa.");
+  return activation.data?.enabled ? result : disabledAgendaTurn();
 }

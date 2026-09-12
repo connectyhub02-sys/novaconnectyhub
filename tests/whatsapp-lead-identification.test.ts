@@ -14,7 +14,7 @@ describe("shared lead identification", () => {
     const db = commerceDatabase({ customer_agenda_settings: [{ organization_id: "org", enabled: true }], customer_agenda_offers: [{ organization_id: "org", conversation_id: "conversation", lead_id: "lead", resource_id: "resource", expires_at: "2099-01-01T00:00:00Z", slots: [{ starts_at: start, ends_at: "2099-01-02T13:00:00Z" }], party_size: 1 }] });
     const rpc = vi.fn(async () => ({ error: { message: "Slot no longer available" } }));
     const api = serverModuleHarness<typeof Agenda>("src/lib/automations/agenda-agent.ts", {
-      "./agenda": { getAgenda: async () => ({ bookings: [], resources: [{ id: "resource", enabled: true, name: "Visita" }], settings: { timezone: "America/Sao_Paulo" } }), agendaErrorMessage: (message: string) => message },
+      "./agenda": { getAgenda: async () => ({ bookings: [], resources: [{ id: "resource", enabled: true, name: "Visita" }], settings: { enabled: true, timezone: "America/Sao_Paulo" } }), agendaErrorMessage: (message: string) => message },
       "@/lib/billing/gemini-metering": { meterGeminiGenerationUsage: async () => null },
     }, [], { fetch: async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ intent: "book", resourceId: "resource", startsAt: start }) }] } }] }) }) });
     const result = await api.processAgendaTurn({ client: { ...db.client, rpc } as never, organizationId: "org", conversationId: "conversation", leadId: "lead", leadName, agentId: "agent", runId: "run", credentials: { apiKey: "test", model: "test" } as never, userText: "Sim, confirmo", messages: [], assertCurrent: async () => {} });
