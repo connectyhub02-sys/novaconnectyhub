@@ -5,7 +5,7 @@ import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sal
 // Read an existing checkout only. A follow-up never creates a payment session.
 export async function loadFollowUpCheckout(client: SupabaseClient, organizationId: string, leadId: string, orderId: string) {
   const { data: order, error } = await client.from("sales_catalog_orders")
-    .select("id,status,payment_status,total,latest_payment_session_id,checkout_payment_lock")
+    .select("id,status,payment_status,total,latest_payment_session_id,checkout_payment_lock,conversation_id,metadata")
     .eq("organization_id", organizationId).eq("lead_id", leadId).eq("id", orderId).maybeSingle();
   if (error) throw new Error("Não foi possível conferir o pedido da retomada.");
   if (!order || !["draft", "pending_payment"].includes(order.status) || order.checkout_payment_lock
@@ -32,7 +32,20 @@ export async function loadFollowUpCheckout(client: SupabaseClient, organizationI
     || (session.expires_at && Date.parse(session.expires_at) <= Date.now())
     || !normalizeCurrencyAmount(order.total)
     || normalizeCurrencyAmount(session.amount) !== normalizeCurrencyAmount(order.total)) return "";
-  return buildSalesCatalogCheckoutUrl(session.id);
+  const { data: lead, error: leadError } = await client.from("leads").select("metadata")
+    .eq("organization_id", organizationId).eq("id", leadId).maybeSingle();
+  if (leadError) throw new Error("Não foi possível conferir a forma de pagamento escolhida.");
+  const state = lead?.metadata?.checkout_runtime_state;
+  const url = new URL(buildSalesCatalogCheckoutUrl(session.id));
+  // The Pix session may still exist while the customer chooses card in the
+  // checkout. Preserve navigation preference without changing the real charge.
+  if (state?.organization_id === organizationId && state.order_id === order.id
+    && order.conversation_id && state.conversation_id === order.conversation_id
+    && order.metadata?.whatsapp_instance_id && state.instance_id === order.metadata.whatsapp_instance_id
+    && ["card", "pix"].includes(state.preferred_payment_method)) {
+    url.searchParams.set("payment_method", state.preferred_payment_method);
+  }
+  return url.toString();
 }
 
 export function claimsMissingFollowUpCheckout(text: string, checkoutLink: string) {

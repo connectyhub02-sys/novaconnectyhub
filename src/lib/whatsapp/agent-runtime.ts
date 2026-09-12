@@ -9805,7 +9805,8 @@ function detectRecentSalesCatalogPaymentPreference(
         && latestInboundMs - occurredAt <= salesCatalogCheckoutConfirmationWindowMs;
     })
     .sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
-    .filter((message) => !requiresCommerceConversationReply(message.text_content ?? ""))
+    .filter((message) => resolveSalesCatalogPaymentMethodRequest(message.text_content ?? "")
+      || !requiresCommerceConversationReply(message.text_content ?? ""))
     .map((message) => detectSalesCatalogPreferredPaymentMethod(message.text_content ?? ""))
     .filter((preference): preference is SalesCatalogRuntimePaymentPreference => Boolean(preference));
 
@@ -10819,6 +10820,8 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
   if (!context.salesCatalog.some(item => item.salesDestination === "connectyhub_checkout")) return null;
   const normalized = normalizeSearch(text);
   const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
+    || /\b(?:clicar|clique|clica|acesse|abrir)\b.{0,60}\bcheckout\b/.test(normalized)
+    || /\b(?:aqui esta|segue|ta aqui)\b.{0,80}\b(?:finalizar|pagar|pagamento)\b.{0,60}\b(?:cartao|credito|debito)\b/.test(normalized)
     || /\b(?:vou|ja vou|estou|to)\s+(?:te\s+)?(?:mandar|enviar|mandando|enviando|liberar)\b.{0,80}\b(?:checkout|pix|link de pagamento|link para pagar|botao de compra)\b/.test(normalized)
     || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado|disponivel|liberado)\b/.test(normalized)
     || (/\b(?:pix|pagamento|pagar|checkout)\b/.test(normalized)
@@ -11408,9 +11411,10 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   userText: string;
 }): Promise<OutboundMessage | null> {
   if (!runtimeAllowsCheckout(input.context)) return null;
-  if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
   input = { ...input, userText: buildSalesCatalogOrderIntentText(input.latestInbound, "", input.context) || input.userText };
-  if (requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText)) return null;
+  const methodRequest = resolveSalesCatalogPaymentMethodRequest(input.userText);
+  const needsConversationReply = requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText);
+  if (needsConversationReply && !methodRequest) return null;
   const cartText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, input.latestInbound)
     || buildRecentSalesCatalogCartSelectionText(input.context, input.latestInbound);
   const recoveredSelections = !cartText ? resolveRuntimeRecoverableCheckoutDraft(input.context, true) : [];
@@ -11434,12 +11438,17 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   if (
     !order
     || !(
-      isSalesCatalogPaymentLinkFollowUp(input.userText, input.context.messages, input.latestInbound)
+      methodRequest
+      || isSalesCatalogPaymentLinkFollowUp(input.userText, input.context.messages, input.latestInbound)
       || isSalesCatalogContextualCheckoutConfirmation(input.userText, input.context.messages, input.latestInbound)
     )
   ) {
     return null;
   }
+
+  // A question about using a method may reopen an existing checkout. It must
+  // never authorize creating a payment session for an unconfirmed purchase.
+  if (needsConversationReply && !order.latestPaymentSessionId) return null;
 
   if (
     resolvesSalesCatalogPaymentPrerequisiteText(input.userText, input.latestInbound)
@@ -11488,6 +11497,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     .select("id, order_id, provider, method, amount, status, expires_at, provider_payment_id, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, failure_reason, metadata")
     .eq("id", paymentSessionId)
     .eq("organization_id", input.context.organization.id)
+    .eq("order_id", order.id)
     .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
 
   if (error || !data) {
@@ -11512,16 +11522,26 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   const gatewayUnavailable = providerStatus === "gateway_unavailable"
     || providerStatus === "gateway_error"
     || metadata.gateway_available === false;
-  const preferredMethod = detectSalesCatalogPreferredPaymentMethod(input.userText)
-    ?? resolveSalesCatalogAffirmedPaymentPreference(input.context.messages, input.latestInbound, input.userText)
+  const preferredMethod = methodRequest ?? detectSalesCatalogPreferredPaymentMethod(input.userText)
     ?? detectRecentSalesCatalogPaymentPreference(input.context.messages, input.latestInbound,
       resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders))
+    ?? readRuntimeOrderPaymentPreference(input.context, order.id)
+    ?? resolveSalesCatalogAffirmedPaymentPreference(input.context.messages, input.latestInbound, input.userText)
     ?? readStoredSalesCatalogPaymentPreference(metadata)
     ?? (asString(data.pix_qr_code) ? "pix" : null);
+  const enabledChoices = getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings);
+  if (preferredMethod && !isSalesCatalogRuntimePaymentPreferenceEnabled(enabledChoices, preferredMethod)) {
+    const text = `Essa forma de pagamento não está disponível nesta loja. As opções disponíveis são: ${formatSalesCatalogRuntimePaymentChoiceList(enabledChoices.map(choice => choice.label))}. Qual você prefere?`;
+    await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+    const providerResponse = await sendWhatsappText({ credentials: input.context.credentials, token: input.token,
+      phone: input.phone, text, trackId: `payment_method_unavailable_${input.context.run.id}`, mentions: resolveGroupMentions(input.context) });
+    const message: OutboundMessage = { text, mode: "text", providerResponse, persisted: true };
+    await saveOutboundMessage(input.client, input.context, message);
+    return message;
+  }
   const currentMethod = resolveSalesCatalogPaymentSessionPreference(data, metadata);
   if (metadata.gateway_request_inflight === true
-    || ["paid", "approved", "confirmed", "refunded", "cancelled", "expired", "rejected", "failed"].includes(data.status ?? "")
-    || (data.expires_at && Date.parse(data.expires_at) <= Date.now())) {
+    || ["paid", "approved", "confirmed", "refunded", "cancelled", "expired", "rejected", "failed"].includes(data.status ?? "")) {
     return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
       "Confira o estado atual da tentativa no provedor antes de reenviar ou substituir a cobrança.", true) });
   }
@@ -11533,6 +11553,11 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       orderId: order.id, total: order.total ?? (data.amount == null ? null : String(data.amount)), preferredMethod });
     if (!payment) return null;
     return sendSalesCatalogPaymentLink({ ...input, payment });
+  }
+
+  if (data.expires_at && Date.parse(data.expires_at) <= Date.now()) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
+      "Confira o estado atual da tentativa no provedor antes de reenviar ou substituir a cobrança.", true) });
   }
 
   if (
@@ -11921,6 +11946,8 @@ async function persistRuntimeCheckoutProgress(input: {
   payment: SalesCatalogPaymentLinkResult;
 }, stage: string) {
   const state = { stage, order_id: input.payment.orderId, conversation_id: input.context.conversationId,
+    organization_id: input.context.organization.id, instance_id: input.context.instance.id,
+    preferred_payment_method: input.payment.preferredMethod ?? readRuntimeOrderPaymentPreference(input.context, input.payment.orderId),
     agent_run_id: input.context.run.id, updated_at: new Date().toISOString() };
   await input.client.from("intelligence_events").insert({ scope: "organization", organization_id: input.context.organization.id,
     source_type: "sales_catalog_order", source_id: input.payment.orderId, producer_agent_id: input.context.agent.id,
@@ -11934,6 +11961,15 @@ async function persistRuntimeCheckoutProgress(input: {
     }).catch(() => null);
     if (saved) input.context.lead.metadata = saved.metadata;
   }
+}
+
+function readRuntimeOrderPaymentPreference(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, orderId: string,
+): SalesCatalogRuntimePaymentPreference | null {
+  const state = readRecord(readRecord(context.lead?.metadata)?.checkout_runtime_state);
+  if (!state || state.organization_id !== context.organization.id || state.instance_id !== context.instance.id
+    || state.conversation_id !== context.conversationId || state.order_id !== orderId) return null;
+  return readStoredSalesCatalogPaymentPreference(state);
 }
 
 async function deliverSalesCatalogPaymentLink(input: {
@@ -12992,15 +13028,38 @@ function isSalesCatalogRecommendationBeforePurchaseIntent(normalizedText: string
 }
 
 function detectSalesCatalogPreferredPaymentMethod(text: string): SalesCatalogRuntimePaymentPreference | null {
-  const normalized = normalizeSearch(text);
+  const normalized = normalizeSearch(normalizeSalesCatalogMethodCorrection(text));
   if (!normalized || /\b(?:pix\s+ou\s+cartao|cartao\s+ou\s+pix)\b/.test(normalized)) return null;
   const mentions = Array.from(normalized.matchAll(/\b(?:cartao|credito|debito|card|pix|copia e cola|qrcode|qr code)\b/g));
   const positive = mentions.filter((mention) => {
     const before = normalized.slice(0, mention.index).trim();
-    return !/\b(?:nao|sem|em vez de|ao inves de)(?:\s+(?:quero|o|no|em|pelo|pagar|usar|de))*$/.test(before);
+    return !/\b(?:nao|sem|em vez de|ao inves de)(?:\s+(?:quero|tenho|como|consigo|posso|da|para|pra|vou|o|no|em|pelo|pagar|usar|de|cartao))*$/.test(before);
   });
   const chosen = positive[positive.length - 1]?.[0];
   return chosen ? /^(?:cartao|credito|debito|card)$/.test(chosen) ? "card" : "pix" : null;
+}
+
+function normalizeSalesCatalogMethodCorrection(text: string) {
+  return text.replace(/^\s*n[ãa]o[,!.]\s*(?=(?:no|pelo|com|quero|prefiro)\s+(?:o\s+)?(?:cart[ãa]o|cr[ée]dito|pix)\b)/i, "");
+}
+
+/** Method selection is separate from consent to create an order or a charge. */
+function resolveSalesCatalogPaymentMethodRequest(text: string): SalesCatalogRuntimePaymentPreference | null {
+  const preference = detectSalesCatalogPreferredPaymentMethod(text);
+  if (!preference) return null;
+  const method = "(?:cartao(?: de (?:credito|debito))?|credito|debito|card|pix|copia e cola|qrcode|qr code)";
+  const normalized = normalizeSearch(normalizeSalesCatalogMethodCorrection(text));
+  // Remove only objections to a METHOD, keeping refusals to buy, changes to the
+  // cart, requests for a person, doubts about fees and deferred decisions intact.
+  const remainder = normalized
+    .replace(new RegExp(`\\b(?:nao (?:quero|tenho como|consigo|posso|vou)|sem|em vez de|ao inves de)\\s+(?:(?:pagar|usar|o|no|em|pelo|de)\\s+)*${method}\\b`, "g"), "")
+    .replace(new RegExp(`\\b(?:como (?:eu )?(?:faco |faz |posso )?(?:para |pra )?|tem como |da para |posso )pagar\\s+(?:(?:no|com|pelo|em|o)\\s+)*${method}\\b`, "g"), "")
+    .replace(/\s+/g, " ").trim();
+  if (requiresCommerceConversationReply(remainder)) return null;
+  const isFragment = new RegExp(`^(?:(?:no|pelo|com|por|o|a)\\s+)*${method}(?: por favor)?$`).test(remainder);
+  return isFragment || remainder !== normalized
+    || /\b(?:pagar|pagamento|quero|prefiro|troca|trocar|muda|mudar|manda|mande|envia|envie|link|checkout)\b/.test(normalized)
+    ? preference : null;
 }
 
 function isSalesCatalogCartAdditionOnlyIntent(text: string) {
