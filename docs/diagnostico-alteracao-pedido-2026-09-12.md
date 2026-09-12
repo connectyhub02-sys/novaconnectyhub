@@ -54,4 +54,10 @@ Validação consolidada em 12/09: a suíte anterior à integração aprovou 1.81
 
 Entre os testes específicos: 83 casos do parser, 68 do ciclo de pedido, 35 de seleção/retomada no runtime, 28 do percurso de revisão e 42 de persistência/SQL. O teste do percurso também cobre mensagens consecutivas sem resposta: um “sim” ao final de um pedido de inclusão não autoriza o resumo antigo.
 
-A versão principal foi conferida por leitura e integrada localmente, preservando a agenda e as correções de ativação já publicadas. Nenhuma migration aplicada na VPS e nenhuma publicação deste conjunto. Nenhuma mensagem, alteração de pedido ou cobrança real foi usada nos testes. Para liberar o reteste, falta aplicar a migration, publicar a aplicação e verificar a implantação. O teste real do titular vem depois disso. As reproduções do defeito original permanecem fora da suíte de regressão permanente.
+A versão principal foi conferida por leitura e integrada localmente, preservando a agenda e as correções de ativação já publicadas. Nenhuma mensagem, alteração de pedido ou cobrança real foi usada nos testes. As reproduções do defeito original permanecem fora da suíte de regressão permanente.
+
+## Publicação autorizada
+
+O titular autorizou publicar a aplicação e aplicar o SQL no Supabase da VPS. Em 12/09, a migration `0132_sales_catalog_order_revisions` foi aplicada transacionalmente no PostgreSQL 17.6 e registrada uma única vez no histórico nativo. A transação comparou os registros de pedidos, itens e sessões de pagamento antes/depois e confirmou preservação integral; nenhuma cobrança ou revisão foi executada. As funções financeiras anteriores permaneceram com as mesmas definições.
+
+A leitura posterior confirmou as cinco funções novas com hashes iguais à migration, os três gatilhos habilitados, o índice de exclusão de concorrência válido e RLS ativada. A tabela e as RPCs não têm acesso para `anon` ou `authenticated`; o servidor mantém os privilégios necessários. Recarga de schema solicitada. A publicação da aplicação e a conferência da Vercel estão em andamento; o reteste real do titular deve ocorrer depois da confirmação dessa implantação.
