@@ -115,7 +115,7 @@ describe("Commerce Agent checkout continuity", () => {
     expect(resolver).toContain("hasValidHydratedSessionContext");
     expect(resolver).toContain("readString(hydratedSession?.lead_id)");
     expect(resolver).toContain("readUuid(hydratedSessionMetadata?.agent_id)");
-    expect(resolver).toContain("requestedCommerceSessionId ?? hydratedSession?.id ?? null");
+    expect(resolver).toContain("hydratedSession?.id ?? (storedSession ? null : requestedCommerceSessionId)");
   });
 
   it("rehydrates a returning browser from persistent lead web identity", () => {

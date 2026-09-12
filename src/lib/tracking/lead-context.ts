@@ -37,63 +37,74 @@ export async function resolveLeadTrackingContext(
   const requestedLeadId = readUuid(input.leadId);
   const requestedConversationId = readUuid(input.conversationId);
   const requestedPhone = normalizePhone(input.leadPhone);
-  let leadId: string | null = null;
-  let conversationId: string | null = null;
-  let leadPhone: string | null = requestedPhone;
+  const unresolved: ResolvedLeadTrackingContext = { leadId: null, conversationId: null, leadPhone: null };
 
   if (!organizationId) {
-    return { leadId: null, conversationId: null, leadPhone };
+    return { ...unresolved, leadPhone: requestedPhone };
   }
 
   if (requestedConversationId) {
-    const { data } = await client
+    const { data, error } = await client
       .from("conversations")
       .select("id, organization_id, lead_id")
       .eq("id", requestedConversationId)
       .eq("organization_id", organizationId)
       .maybeSingle<ConversationRow>();
 
+    if (error) return unresolved;
+
     if (data) {
-      conversationId = data.id;
-      leadId = data.lead_id;
+      // The stored conversation owns its lead relation. URL fields must not
+      // combine this conversation with another person's lead or phone.
+      const linkedLeadId = readUuid(data.lead_id);
+      const linkedLead = linkedLeadId ? await loadScopedLead(client, organizationId, linkedLeadId) : null;
+      return {
+        leadId: linkedLead?.id ?? null,
+        conversationId: data.id,
+        leadPhone: normalizePhone(linkedLead?.phone_number),
+      };
     }
   }
 
   if (requestedLeadId) {
-    const { data } = await client
-      .from("leads")
-      .select("id, organization_id, phone_number")
-      .eq("id", requestedLeadId)
-      .eq("organization_id", organizationId)
-      .neq("status", "archived")
-      .maybeSingle<LeadRow>();
-
-    if (data) {
-      leadId = data.id;
-      leadPhone = normalizePhone(data.phone_number) ?? leadPhone;
+    const lead = await loadScopedLead(client, organizationId, requestedLeadId);
+    if (lead) {
+      return { leadId: lead.id, conversationId: null, leadPhone: normalizePhone(lead.phone_number) };
     }
   }
 
-  if (!leadId && leadPhone) {
-    const { data } = await client
+  // Keep the existing phone-only attribution lookup. A rejected explicit ID
+  // must not silently switch identities through a separate phone parameter.
+  if (readString(input.leadId) || readString(input.conversationId)) return unresolved;
+
+  if (requestedPhone) {
+    const { data, error } = await client
       .from("leads")
       .select("id, organization_id, phone_number")
       .eq("organization_id", organizationId)
-      .eq("phone_number", leadPhone)
+      .eq("phone_number", requestedPhone)
       .neq("status", "archived")
       .maybeSingle<LeadRow>();
 
+    if (error) return unresolved;
     if (data) {
-      leadId = data.id;
-      leadPhone = normalizePhone(data.phone_number) ?? leadPhone;
+      return { leadId: data.id, conversationId: null, leadPhone: normalizePhone(data.phone_number) };
     }
   }
 
-  return {
-    leadId,
-    conversationId,
-    leadPhone,
-  };
+  return { ...unresolved, leadPhone: requestedPhone };
+}
+
+async function loadScopedLead(client: SupabaseClient, organizationId: string, leadId: string) {
+  const { data, error } = await client
+    .from("leads")
+    .select("id, organization_id, phone_number")
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .neq("status", "archived")
+    .maybeSingle<LeadRow>();
+
+  return error ? null : data;
 }
 
 export function normalizePhone(value: unknown) {

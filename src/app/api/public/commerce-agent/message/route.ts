@@ -45,11 +45,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: context.status === 200 ? 403 : context.status });
   }
 
-  await persistCommerceAgentMessage({
+  const savedLeadMessage = await persistCommerceAgentMessage({
     context,
     role: "lead",
     content: message,
   }).catch(() => null);
+
+  if (!savedLeadMessage?.id) {
+    return NextResponse.json(
+      { error: "Nao foi possivel salvar sua mensagem. Tente novamente em instantes." },
+      { status: 503 },
+    );
+  }
 
   let reply: string;
 
@@ -72,6 +79,13 @@ export async function POST(request: NextRequest) {
     content: reply,
   }).catch(() => null);
 
+  if (!savedReply?.id) {
+    return NextResponse.json(
+      { error: "Sua mensagem foi salva, mas nao foi possivel registrar a resposta. Tente novamente em instantes." },
+      { status: 503 },
+    );
+  }
+
   await recordCommerceAgentAction({
     context,
     actionType: "message",
@@ -83,7 +97,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     commerceSessionId: context.commerceSessionId,
     message: {
-      id: savedReply?.id ?? `assistant_${Date.now().toString(36)}`,
+      id: savedReply.id,
       role: "assistant",
       content: reply,
     },

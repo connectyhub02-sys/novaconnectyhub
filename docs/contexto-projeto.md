@@ -10,6 +10,8 @@ Decisão inicial de atendimento em 11/09: corretor de imóveis, imobiliária e r
 
 Agenda por item: página pública, WhatsApp e painel compartilham os mesmos recursos, reservas, capacidade e fuso da organização. Agendamento consome disponibilidade nos três canais; não é uma agenda separada da loja. Profissão representa atendimento individual do titular; empresa representa recepção do negócio, sem atribuir ao software identidade humana ou credencial própria. Dados profissionais são informados pelo usuário e sua exposição pública é opcional.
 
+Agente onipresente: o atendimento deve continuar nos dois sentidos entre WhatsApp, loja e página do item, mantendo o agente da conversa e o arquivo do mesmo lead. A navegação fornece contexto para comparar itens, inclusive os de agendamento, sem converter visualização em intenção de compra. Ativação e modo ficam em Comportamento do agente; profissão e identidade são herdadas, sem escolher outro playbook na loja. Preservar desativações e distinguir agente, empresa e visitante. Falas persistidas da loja devem alimentar tanto o contexto recente quanto a consolidação de memória na retomada do WhatsApp, quando habilitada; estado e limites verificados ficam no documento operacional.
+
 O titular quer vender os recursos de IA em créditos, contabilizando o custo do fornecedor. Não é uma equivalência fixa de um crédito para um token. A aplicação usa regras por modelo, modalidade, operação e plano; ferramentas, mídia e armazenamento faturável podem ter unidades próprias. O objetivo é cobrar consumo faturável uma vez, sem débito duplicado ao consultar/repetir uma solicitação e sem apresentar custo incerto como uso gratuito.
 
 ## Arquitetura de referência

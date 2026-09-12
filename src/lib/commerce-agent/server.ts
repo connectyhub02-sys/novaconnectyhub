@@ -144,6 +144,8 @@ type LeadWebIdentityContextRow = {
 
 type CommerceAgentMessageRow = {
   id: string;
+  lead_id?: string | null;
+  conversation_id?: string | null;
   role: "lead" | "assistant" | "system" | "tool";
   content: string;
   metadata: JsonRecord | null;
@@ -316,12 +318,16 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     return { ok: false, status: 403, error: "Contexto da loja nao autorizado." };
   }
 
-  const hydratedSession = await findCommerceSessionContext(client, organizationId, {
+  const storedSession = await findCommerceSessionContext(client, organizationId, {
     commerceSessionId: requestedCommerceSessionId,
     visitorId,
     sessionId,
     trackingLinkId: requestedTrackingLinkId,
   }).catch(() => null);
+  const explicitLeadId = readUuid(body.lead_id);
+  const hydratedSession = explicitLeadId && storedSession?.lead_id && explicitLeadId !== storedSession.lead_id
+    ? null
+    : storedSession;
   const hasValidTrackingToken = verifyOrganizationTrackingToken(organizationId, trackingToken);
   const hasValidCheckoutContext = hasValidTrackingToken
     ? false
@@ -363,6 +369,9 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   }
 
   const hydratedSessionMetadata = readRecord(hydratedSession?.metadata);
+  const explicitAgentId = readUuid(body.agent_id) ?? readUuid(body.agentId);
+  const inheritsSessionConversation = (!explicitAgentId || explicitAgentId === readUuid(hydratedSessionMetadata?.agent_id))
+    && (!explicitLeadId || explicitLeadId === hydratedSession?.lead_id);
   const hasExplicitLeadContext = Boolean(
     readString(body.lead_id)
       || readString(body.conversation_id)
@@ -377,16 +386,23 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   const leadContext = await resolveLeadTrackingContext(client, {
     organizationId: organization.id,
     leadId: readString(body.lead_id) ?? readString(hydratedSession?.lead_id),
-    conversationId: readString(body.conversation_id) ?? readString(hydratedSession?.conversation_id),
+    conversationId: readString(body.conversation_id) ?? (inheritsSessionConversation ? readString(hydratedSession?.conversation_id) : null),
     leadPhone: readString(body.lead_phone) ?? readString(hydratedSession?.lead_phone),
   });
   const lead = leadContext.leadId
     ? await loadLead(client, organization.id, leadContext.leadId)
     : null;
+  const sameSessionLead = !hydratedSession?.lead_id || hydratedSession.lead_id === leadContext.leadId;
 
-  const requestedAgentId = readUuid(body.agent_id)
-    ?? readUuid(body.agentId)
-    ?? readUuid(hydratedSessionMetadata?.agent_id);
+  const preferredAgentId = explicitAgentId
+    ?? (sameSessionLead ? readUuid(hydratedSessionMetadata?.agent_id) : null);
+  const storeConversation = await loadStoreConversation(client, {
+    organizationId: organization.id,
+    leadId: leadContext.leadId,
+    conversationId: leadContext.conversationId,
+    preferredAgentId,
+  });
+  const requestedAgentId = storeConversation?.agentId ?? preferredAgentId;
   const productId = inferProductIdFromPagePath(pagePath) ?? readUuid(body.product_id) ?? readUuid(body.catalog_item_id);
   let agent = requestedAgentId ? await loadCommerceAgent(client, organization.id, requestedAgentId) : null;
   if (!agent && productId) {
@@ -431,17 +447,15 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     lead,
     leadId: leadContext.leadId,
     leadName,
-    leadPhone: leadContext.leadPhone
-      ?? normalizePhone(readString(lead?.phone_number))
-      ?? normalizePhone(readString(hydratedSession?.lead_phone)),
-    conversationId: leadContext.conversationId,
+    leadPhone: leadContext.leadPhone,
+    conversationId: storeConversation?.id ?? leadContext.conversationId,
     surface,
-    commerceSessionId: requestedCommerceSessionId ?? hydratedSession?.id ?? null,
+    commerceSessionId: sameSessionLead ? hydratedSession?.id ?? (storedSession ? null : requestedCommerceSessionId) : null,
     visitorId,
     sessionId,
-    trackingLinkId,
-    orderId,
-    paymentSessionId,
+    trackingLinkId: sameSessionLead ? trackingLinkId : requestedTrackingLinkId,
+    orderId: sameSessionLead ? orderId : requestedOrderId,
+    paymentSessionId: sameSessionLead ? paymentSessionId : requestedPaymentSessionId,
     productId,
     pagePath,
     pageUrl,
@@ -458,7 +472,8 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     welcomeBackEligible: returningVisitor && isCommerceAgentWelcomeBackEligible(hydratedSession),
   } satisfies Extract<CommerceAgentResolvedContext, { ok: true }>;
 
-  const commerceSessionId = await ensureCommerceSession(context).catch(() => context.commerceSessionId);
+  const commerceSessionId = await ensureCommerceSession(context).catch(() => null);
+  if (!commerceSessionId) return { ok: false, status: 503, error: "Não foi possível preparar o histórico do atendimento. Tente novamente." };
 
   return {
     ...context,
@@ -510,12 +525,12 @@ export async function persistCommerceAgentMessage(input: {
   content: string;
 }) {
   if (!input.context.commerceSessionId) {
-    return null;
+    throw new Error("Não foi possível registrar a mensagem no histórico do atendimento.");
   }
 
   const origin = buildCommerceAgentMessageOrigin(input.role, input.context);
 
-  const { data } = await input.context.client
+  const { data, error } = await input.context.client
     .from("commerce_agent_messages")
     .insert({
       organization_id: input.context.organization.id,
@@ -554,7 +569,8 @@ export async function persistCommerceAgentMessage(input: {
     .select("id, role, content, created_at")
     .single<CommerceAgentMessageRow>();
 
-  return data ?? null;
+  if (error || !data?.id) throw new Error("Não foi possível registrar a mensagem no histórico do atendimento.");
+  return data;
 }
 
 function buildCommerceAgentMessageOrigin(
@@ -814,13 +830,20 @@ async function buildFallbackCommerceAgentReply(input: {
 
 async function ensureCommerceSession(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
   const now = new Date().toISOString();
-  const currentSession = context.commerceSessionId
+  const candidateSession = context.commerceSessionId
     ? await loadCommerceSessionById(context.client, context.organization.id, context.commerceSessionId)
     : await findCommerceSession(context);
-  const sessionLeadId = context.leadId ?? currentSession?.lead_id ?? null;
-  const sessionConversationId = context.conversationId ?? currentSession?.conversation_id ?? null;
+  const mismatchedLead = candidateSession?.lead_id && context.leadId !== candidateSession.lead_id;
+  const mismatchedUnidentifiedConversation = candidateSession?.conversation_id
+    && candidateSession.conversation_id !== context.conversationId
+    && (!candidateSession.lead_id || !context.leadId);
+  const currentSession = mismatchedLead || mismatchedUnidentifiedConversation
+    ? null
+    : candidateSession;
+  const sessionLeadId = context.leadId;
+  const sessionConversationId = context.conversationId;
   const sessionLeadName = context.leadName;
-  const sessionLeadPhone = context.leadPhone ?? currentSession?.lead_phone ?? null;
+  const sessionLeadPhone = context.leadPhone;
   const payload = {
     organization_id: context.organization.id,
     lead_id: sessionLeadId,
@@ -840,10 +863,22 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
     last_seen_at: now,
   };
 
-  await upsertLeadWebIdentities(context, now);
-
   if (currentSession) {
-    await context.client.from("commerce_sessions").update(payload).eq("id", currentSession.id);
+    let update = context.client.from("commerce_sessions").update(payload).eq("id", currentSession.id).eq("organization_id", context.organization.id);
+    update = currentSession.lead_id ? update.eq("lead_id", currentSession.lead_id) : update.is("lead_id", null);
+    update = currentSession.conversation_id ? update.eq("conversation_id", currentSession.conversation_id) : update.is("conversation_id", null);
+    const { data, error } = await update.select("id").maybeSingle<{ id: string }>();
+    if (error || !data) throw new Error("Não foi possível atualizar o histórico do atendimento.");
+    if (context.leadId) {
+      const { error: linkError } = await context.client.from("commerce_agent_messages")
+        .update({ lead_id: context.leadId, conversation_id: context.conversationId })
+        .eq("organization_id", context.organization.id)
+        .eq("commerce_session_id", currentSession.id)
+        .is("lead_id", null)
+        .is("conversation_id", null);
+      if (linkError) throw new Error("Não foi possível vincular o histórico do atendimento.");
+    }
+    await upsertLeadWebIdentities(context, now);
     return currentSession.id;
   }
 
@@ -857,6 +892,7 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
     .select("id")
     .single<CommerceSessionRow>();
 
+  if (data?.id) await upsertLeadWebIdentities(context, now);
   return data?.id ?? null;
 }
 
@@ -882,7 +918,7 @@ function buildCommerceSessionMetadata(
     agent_id: context.agentId ?? readString(existing.agent_id),
     agent_name: context.agentName || readString(existing.agent_name),
     lead_name: context.leadName,
-    lead_phone: context.leadPhone ?? readString(existing.lead_phone),
+    lead_phone: context.leadPhone,
     product_id: context.productId ?? readString(existing.product_id),
     latest_product_id: context.productId ?? readString(existing.latest_product_id),
     latest_surface: context.surface,
@@ -985,7 +1021,7 @@ async function upsertLeadWebIdentity(
     agent_id: context.agentId ?? readString(existingMetadata.agent_id),
     agent_name: context.agentName || readString(existingMetadata.agent_name),
     lead_name: context.leadName,
-    lead_phone: context.leadPhone ?? readString(existingMetadata.lead_phone),
+    lead_phone: context.leadPhone,
     latest_surface: context.surface,
     latest_page_path: context.pagePath,
     latest_page_url: context.pageUrl,
@@ -995,8 +1031,8 @@ async function upsertLeadWebIdentity(
   };
   const payload = {
     organization_id: context.organization.id,
-    lead_id: context.leadId ?? existing?.lead_id ?? null,
-    conversation_id: context.conversationId ?? existing?.conversation_id ?? null,
+    lead_id: context.leadId,
+    conversation_id: context.conversationId,
     identity_type: row.identity_type,
     identity_value: row.identity_value,
     confidence: context.leadId ? 0.95 : readNumber(existing?.confidence) ?? 0.65,
@@ -1008,7 +1044,8 @@ async function upsertLeadWebIdentity(
     await context.client
       .from("lead_web_identities")
       .update(payload)
-      .eq("id", existing.id);
+      .eq("id", existing.id)
+      .eq("organization_id", context.organization.id);
     return;
   }
 
@@ -1378,7 +1415,7 @@ async function loadRecentMessages(context: Extract<CommerceAgentResolvedContext,
     context.commerceSessionId
       ? context.client
           .from("commerce_agent_messages")
-          .select("id, role, content, metadata, created_at")
+          .select("id, lead_id, conversation_id, role, content, metadata, created_at")
           .eq("organization_id", context.organization.id)
           .eq("commerce_session_id", context.commerceSessionId)
           .order("created_at", { ascending: false })
@@ -1392,6 +1429,8 @@ async function loadRecentMessages(context: Extract<CommerceAgentResolvedContext,
     ...(sessionResult.data ?? []),
     ...(leadResult ?? []),
   ]).filter((message) => {
+    if (message.lead_id && message.lead_id !== context.leadId) return false;
+    if (!message.lead_id && message.conversation_id && message.conversation_id !== context.conversationId) return false;
     const authorAgentId = readUuid(message.metadata?.agent_id);
     return message.role !== "assistant" || !authorAgentId || authorAgentId === context.agentId;
   });
@@ -1404,13 +1443,13 @@ async function loadRecentLeadCommerceMessages(context: Extract<CommerceAgentReso
 
   let query = context.client
     .from("commerce_agent_messages")
-    .select("id, role, content, metadata, created_at")
+    .select("id, lead_id, conversation_id, role, content, metadata, created_at")
     .eq("organization_id", context.organization.id)
     .order("created_at", { ascending: false })
     .limit(18);
 
   if (context.leadId && context.conversationId) {
-    query = query.or(`lead_id.eq.${context.leadId},conversation_id.eq.${context.conversationId}`);
+    query = query.or(`lead_id.eq.${context.leadId},and(lead_id.is.null,conversation_id.eq.${context.conversationId})`);
   } else if (context.leadId) {
     query = query.eq("lead_id", context.leadId);
   } else if (context.conversationId) {
@@ -1463,6 +1502,36 @@ async function loadWhatsappConversationMessages(context: Extract<CommerceAgentRe
     .returns<WhatsappConversationMessageRow[]>();
 
   return (data ?? []).reverse();
+}
+
+async function loadStoreConversation(
+  client: SupabaseClient,
+  input: { organizationId: string; leadId: string | null; conversationId: string | null; preferredAgentId: string | null },
+) {
+  if (!input.leadId && !input.conversationId) return null;
+  let query = client.from("conversations")
+    .select("id, whatsapp_instance_id")
+    .eq("organization_id", input.organizationId)
+    .eq("channel", "whatsapp");
+  if (input.leadId) query = query.eq("lead_id", input.leadId);
+  if (input.conversationId) query = query.eq("id", input.conversationId);
+  const { data, error } = await query.order("last_message_at", { ascending: false, nullsFirst: false }).limit(20);
+  if (error) throw new Error("Não foi possível verificar a continuidade do atendimento.");
+  const conversations = (data ?? []) as Array<{ id: string; whatsapp_instance_id: string | null }>;
+  const instanceIds = conversations.map(row => row.whatsapp_instance_id).filter((id): id is string => Boolean(id));
+  if (instanceIds.length === 0) return null;
+  const instancesResult = await client.from("whatsapp_instances").select("id, metadata")
+    .eq("organization_id", input.organizationId).in("id", instanceIds);
+  if (instancesResult.error) throw new Error("Não foi possível verificar o agente do atendimento.");
+  const instances = (instancesResult.data ?? []) as Array<{ id: string; metadata: JsonRecord | null }>;
+  for (const conversation of conversations) {
+    const agentId = readUuid(instances.find(row => row.id === conversation.whatsapp_instance_id)?.metadata?.agent_id);
+    // A linked conversation owns its attendant. Without a conversation link,
+    // an explicitly selected attendant must not inherit another one's WhatsApp.
+    if (!agentId || (!input.conversationId && input.preferredAgentId && agentId !== input.preferredAgentId)) continue;
+    return { id: conversation.id, agentId };
+  }
+  return null;
 }
 
 async function loadRecentCommerceEvents(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
@@ -2134,10 +2203,13 @@ function buildProductWhisperMessage(
   }
 
   const product = promptContext.currentProduct;
+  const previousProducts = promptContext.recentProductViews.filter((item) => item.id !== product.id);
   if (product.salesDestination === "appointment") {
+    if (previousProducts[0]) {
+      return `${name}${product.title} está na tela agora. Posso comparar os detalhes com ${previousProducts[0].title}, que você viu antes, e orientar o agendamento.`;
+    }
     return `${name}quer conhecer os detalhes de ${product.title}? Clica na minha foto para tirar dúvidas e ver como agendar.`;
   }
-  const previousProducts = promptContext.recentProductViews.filter((item) => item.id !== product.id);
   const viewedManyProducts = promptContext.recentProductViews.length >= 4;
   const comparison = previousProducts[0]?.title;
   const offer = promptContext.contextualOffer && promptContext.contextualOffer.id !== product.id
@@ -2197,6 +2269,10 @@ function buildContextualAssistantOpener(
 ) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
   if (isAppointmentJourney(context, promptContext)) {
+    const previous = promptContext.recentProductViews.find(item => item.id !== promptContext.currentProduct?.id);
+    if (context.surface === "product" && promptContext.currentProduct && previous) {
+      return `${name}agora você está vendo ${promptContext.currentProduct.title}. Posso comparar os detalhes com ${previous.title}, que você já visitou, e ajudar com o agendamento. O que gostaria de comparar?`;
+    }
     return promptContext.currentProduct
       ? `${name}posso ajudar com os detalhes de ${promptContext.currentProduct.title} e orientar o agendamento pela página. O que você gostaria de saber?`
       : `${name}qual atendimento você gostaria de conhecer?`;

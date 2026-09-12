@@ -29,6 +29,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
         },
         in(key: string, values: unknown[]) { filters.push(row => values.includes(row[key])); return query; },
         neq(key: string, value: unknown) { filters.push(row => row[key] !== value); return query; },
+        or(expression: string) { filters.push(row => splitFilters(expression).some(part => matchesFilter(row, part))); return query; },
         is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
         gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },
         gt(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) > value); return query; },
@@ -87,4 +88,27 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
     },
   };
   return { client, tables };
+}
+
+function splitFilters(value: string) {
+  let depth = 0;
+  let start = 0;
+  const parts: string[] = [];
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "(") depth++;
+    else if (value[i] === ")") depth--;
+    else if (value[i] === "," && depth === 0) { parts.push(value.slice(start, i)); start = i + 1; }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function matchesFilter(row: Row, expression: string): boolean {
+  if (expression.startsWith("and(")) return splitFilters(expression.slice(4, -1)).every(part => matchesFilter(row, part));
+  if (expression.startsWith("or(")) return splitFilters(expression.slice(3, -1)).some(part => matchesFilter(row, part));
+  const [field, operator, ...rest] = expression.split(".");
+  const value = rest.join(".");
+  if (operator === "eq") return String(row[field]) === value;
+  if (operator === "is" && value === "null") return row[field] == null;
+  throw new Error(`Unsupported filter: ${expression}`);
 }

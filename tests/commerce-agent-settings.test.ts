@@ -121,4 +121,15 @@ describe("agent-owned storefront", () => {
     expect(api.buildQuickActions(context, { ...prompt, currentProduct: { salesDestination: "external_site" } }).map(x => x.label)).toEqual(["Tirar dúvidas"]);
     expect(api.buildQuickActions({ ...context, settings: { commerceAgent: { ...legacy, mode: "observer" } } }, prompt)).toEqual([]);
   });
+  it.each(["corretor_imoveis", "dentista", "advogado"])("uses visited items in the appointment approach for %s", templateId => {
+    const { api } = harness();
+    const context = { surface: "product", agentMetadata: attendant(templateId).metadata, settings: { commerceAgent: legacy }, leadName: null };
+    const prompt = { ...api.emptyPromptContext(), currentProduct: { id: "current", title: "Opção atual", salesDestination: "appointment" }, recentProductViews: [{ id: "previous", title: "Opção anterior" }] };
+    for (const text of [api.buildProductWhisperMessage(context, prompt, ""), api.buildContextualAssistantOpener(context, prompt)]) {
+      expect(text).toContain("Opção atual");
+      expect(text).toContain("Opção anterior");
+      expect(text).toContain("comparar");
+      expect(text).not.toMatch(/pedido|carrinho|compra|pagamento/);
+    }
+  });
 });
