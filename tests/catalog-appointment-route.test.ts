@@ -4,11 +4,12 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
 import type * as Route from "../src/app/api/public/sales-catalog/products/[productId]/appointments/route";
 import * as contactTime from "../src/lib/automations/contact-window";
+import * as activation from "../src/lib/automations/agenda-activation";
 const productId = "11111111-1111-4111-8111-111111111111";
 function fixture(destination = "appointment") {
   const startsAt = new Date(Date.now() + 86400000).toISOString(), endsAt = new Date(Date.now() + 90000000).toISOString();
   const db = commerceDatabase({ intelligence_memory: [{ id: productId, organization_id: "org", scope: "organization", memory_type: "sales_catalog_item" }],
-    leads: [{ id: "lead", organization_id: "org", channel: "whatsapp", phone_number: "5567999999999" }], customer_agenda_settings: [{organization_id:"org",timezone:"America/Manaus"}] });
+    leads: [{ id: "lead", organization_id: "org", channel: "whatsapp", phone_number: "5567999999999" }], customer_agenda_settings: [{organization_id:"org",enabled:true,timezone:"America/Manaus"}] });
   const reserve = vi.fn(async (_name: string, _args: Record<string, unknown>) => ({data:{starts_at:startsAt,ends_at:endsAt},error:null}));
   const available = vi.fn(async (_client: unknown, _org: string, _resource: string, _from: Date) => [{starts_at:startsAt,ends_at:endsAt}]);
   const client = {...db.client,rpc:reserve};
@@ -20,6 +21,7 @@ function fixture(destination = "appointment") {
     "@/lib/sales-catalog/public-commerce-access":{publicCommerceBlockResponse:async()=>null},
     "@/lib/automations/agenda":{availableAppointments:available,agendaErrorMessage:(s:string)=>s},
     "@/lib/automations/contact-window":contactTime,
+    "@/lib/automations/agenda-activation":activation,
     "@/lib/security/public-request-guard":{validatePublicWriteRequest:()=>({ok:true})},
   });
   const context={params:Promise.resolve({productId})};
@@ -57,4 +59,27 @@ it("rejects a retail item and malformed data before reserving",async()=>{
   expect((await f.route.GET(f.request(null),f.context)).status).toBe(422);
   expect((await f.route.POST(f.request(null),f.context)).status).toBe(422);
   expect(f.reserve).not.toHaveBeenCalled();
+});
+it("pauses an already open public flow before availability, lead writes or cached confirmation", async () => {
+  const f = fixture();
+  expect((await f.route.GET(f.request(null), f.context)).status).toBe(200);
+  f.available.mockClear();
+  f.db.tables.customer_agenda_settings[0].enabled = false;
+  const key = `public:${createHash("sha256").update(["org", productId, "resource", "5567999999999", f.startsAt].join("|")).digest("hex")}`;
+  f.db.tables.customer_agenda_bookings = [{ organization_id: "org", request_key: key, status: "booked", starts_at: f.startsAt }];
+  const snapshot = structuredClone(f.db.tables);
+  const response = await f.route.GET(f.request(null), f.context);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ enabled: false, slots: [] });
+  const booking = await f.route.POST(f.request({ name: "Cliente", phone: "5567999999999", startsAt: f.startsAt }), f.context);
+  expect(booking.status).toBe(409);
+  expect(await booking.json()).not.toHaveProperty("booked");
+  expect(f.reserve).not.toHaveBeenCalled();
+  expect(f.available).not.toHaveBeenCalled();
+  expect(f.db.tables).toEqual(snapshot);
+});
+it("treats missing settings as disabled instead of exposing a date picker", async () => {
+  const f = fixture(); f.db.tables.customer_agenda_settings = [];
+  expect((await f.route.GET(f.request(null), f.context)).status).toBe(409);
+  expect(f.available).not.toHaveBeenCalled();
 });

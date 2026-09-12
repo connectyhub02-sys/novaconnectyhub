@@ -1,4 +1,5 @@
 import { isPublicCommerceAvailable, storeUnavailableMessage } from "@/lib/sales-catalog/public-commerce-access";
+import { readAgendaActivation, agendaDisabledMessage } from "@/lib/automations/agenda-activation";
 import { loadCommerceOffers } from "@/lib/sales-catalog/commerce-offers";
 import "server-only";
 
@@ -193,6 +194,7 @@ type OfferProduct = {
 };
 
 type CommerceAgentPromptContext = {
+  agendaEnabled: boolean;
   currentProduct: OfferProduct | null;
   contextualOffer: OfferProduct | null;
   recentProductViews: OfferProduct[];
@@ -217,6 +219,12 @@ const commerceAgentResponseTimeoutMs = 45000;
 const commerceAgentMaxOutputTokens = 520;
 const commerceAgentAssistantMaxLength = 1600;
 const commerceAgentWelcomeBackAfterMs = 24 * 60 * 60 * 1000;
+
+function guardCommerceAgendaReply(text: string, userText: string, enabled: boolean) {
+  if (!enabled && /\b(agend\w*|reserv\w*|remarc\w*|marcar|hor[aá]rios?)\b/i.test(`${text} ${userText}`)) return agendaDisabledMessage;
+  if (/\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return enabled ? "Para consultar os horários e confirmar uma reserva, use a agenda na página do item." : agendaDisabledMessage;
+  return text;
+}
 
 export type CommerceAgentResolvedContext =
   | {
@@ -736,7 +744,8 @@ async function generateCommerceAgentReply(input: {
     );
   }
 
-  return text;
+  const enabled = (await readAgendaActivation(input.context.client, input.context.organization.id).catch(() => ({ enabled: false }))).enabled;
+  return guardCommerceAgendaReply(text, input.message, enabled);
 }
 
 async function callGeminiCommerceAgent(input: {
@@ -786,6 +795,7 @@ async function buildFallbackCommerceAgentReply(input: {
   const offer = promptContext.contextualOffer ?? await resolveContextualOffer(input.context).catch(() => null);
 
   if (isAppointmentJourney(input.context, promptContext)) {
+    if (!promptContext.agendaEnabled) return agendaDisabledMessage;
     return promptContext.currentProduct
       ? `Posso ajudar com os detalhes de ${promptContext.currentProduct.title}. Para consultar horários, abra a opção Agendar na página. Se não houver horários disponíveis, podemos continuar pelo WhatsApp.`
       : "Posso ajudar a escolher o atendimento e orientar o agendamento. Qual opção você quer conhecer melhor?";
@@ -1080,16 +1090,20 @@ async function loadCommerceAgentPromptContext(
     loadPersistentLeadCommerceMemory(context).catch(() => null),
   ]);
   const recentProductViews = await loadRecentProductViews(context, recentEvents, currentProduct).catch(() => []);
+  const agendaEnabled = (await readAgendaActivation(context.client, context.organization.id).catch(() => ({ enabled: false }))).enabled;
+  const applyAgendaState = (product: OfferProduct | null) => product && product.salesDestination === "appointment" && !agendaEnabled
+    ? { ...product, actionLabel: "Agendamento online indisponível; solicitar atendimento" } : product;
 
   return {
-    currentProduct,
-    contextualOffer,
-    recentProductViews,
+    agendaEnabled,
+    currentProduct: applyAgendaState(currentProduct),
+    contextualOffer: applyAgendaState(contextualOffer),
+    recentProductViews: recentProductViews.map(product => applyAgendaState(product)!),
     orderItems,
     commerceMessages,
     whatsappMessages,
     recentEvents,
-    catalogProducts,
+    catalogProducts: catalogProducts.map(product => applyAgendaState(product)!),
     persistentMemory,
     returningVisitor: context.returningVisitor,
   };
@@ -1097,6 +1111,7 @@ async function loadCommerceAgentPromptContext(
 
 function emptyPromptContext(): CommerceAgentPromptContext {
   return {
+    agendaEnabled: false,
     currentProduct: null,
     contextualOffer: null,
     recentProductViews: [],
@@ -2015,7 +2030,8 @@ function buildCommerceAgentSystemInstruction(
     "PROMPT DO AGENTE DA EMPRESA:",
     resolveCommerceRuntimeAgentPrompt(context, promptContext),
     ...buildActivityProfileInstruction(activity.templateId, activity.professionalIdentity),
-    "A ação do item atual prevalece sobre orientações genéricas de varejo. Agendamento não permite carrinho, pedido nem Pix. Oriente abrir Agendar na página e escolher horário; só a confirmação gravada pela agenda comprova uma reserva. Site externo encaminha para o destino cadastrado. Somente itens de venda na loja participam de checkout e aumento de carrinho.",
+    "A ação do item atual prevalece sobre orientações genéricas de varejo. Agendamento não permite carrinho, pedido nem Pix. O chat não executa reservas: nunca afirme ter agendado ou confirmado. Site externo encaminha para o destino cadastrado. Somente itens de venda na loja participam de checkout e aumento de carrinho.",
+    promptContext.agendaEnabled ? "Agenda da empresa ativa. Oriente abrir Agendar na página e consultar horários; só a confirmação gravada pela agenda comprova uma reserva." : "AGENDA DESATIVADA pela empresa. Esta regra prevalece sobre o histórico, o catálogo e a atividade: não ofereça agendamento, horários, seleção de datas ou link para agendar, nem prometa reserva. Informe indisponibilidade do agendamento online quando solicitado e ofereça atendimento para combinar os próximos passos. Continue esclarecendo os demais detalhes do produto.",
     "",
     "CANAL ATUAL: LOJA CONNECTYHUB",
     `- Voce e ${context.agentName}, o mesmo agente que atendeu este lead no WhatsApp.`,
@@ -2205,6 +2221,9 @@ function buildProductWhisperMessage(
   const product = promptContext.currentProduct;
   const previousProducts = promptContext.recentProductViews.filter((item) => item.id !== product.id);
   if (product.salesDestination === "appointment") {
+    if (!promptContext.agendaEnabled) return previousProducts[0]
+      ? `${name}${product.title} está na tela agora. Posso comparar os detalhes com ${previousProducts[0].title}, que você viu antes.`
+      : `${name}quer conhecer os detalhes de ${product.title}? Clica na minha foto para tirar dúvidas.`;
     if (previousProducts[0]) {
       return `${name}${product.title} está na tela agora. Posso comparar os detalhes com ${previousProducts[0].title}, que você viu antes, e orientar o agendamento.`;
     }
@@ -2270,6 +2289,9 @@ function buildContextualAssistantOpener(
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
   if (isAppointmentJourney(context, promptContext)) {
     const previous = promptContext.recentProductViews.find(item => item.id !== promptContext.currentProduct?.id);
+    if (!promptContext.agendaEnabled) return promptContext.currentProduct
+      ? `${name}posso ajudar com os detalhes de ${promptContext.currentProduct.title}${previous ? ` e comparar com ${previous.title}` : ""}. O que você gostaria de saber?`
+      : `${name}qual atendimento você gostaria de conhecer?`;
     if (context.surface === "product" && promptContext.currentProduct && previous) {
       return `${name}agora você está vendo ${promptContext.currentProduct.title}. Posso comparar os detalhes com ${previous.title}, que você já visitou, e ajudar com o agendamento. O que gostaria de comparar?`;
     }
@@ -2730,7 +2752,7 @@ function buildQuickActions(context: Extract<CommerceAgentResolvedContext, { ok: 
   if (isAppointmentJourney(context, promptContext)) {
     return [
       { id: "item_details", label: "Tirar dúvidas", message: "Quero saber mais sobre esta opção." },
-      { id: "appointment_help", label: "Como agendar", message: "Como posso agendar este atendimento ou visita?" },
+      ...(promptContext.agendaEnabled ? [{ id: "appointment_help", label: "Como agendar", message: "Como posso agendar este atendimento ou visita?" }] : []),
     ];
   }
   if (promptContext.currentProduct?.salesDestination === "external_site") {

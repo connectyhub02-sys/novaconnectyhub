@@ -283,7 +283,6 @@ export async function POST(request: NextRequest) {
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
-    await validateProductAgenda(client, company.id, fulfillment.agendaResourceId);
     const itemId = requestedItemId ?? randomUUID();
     const now = new Date().toISOString();
     let existingRow: SalesCatalogMemoryRow | null = null;
@@ -309,6 +308,11 @@ export async function POST(request: NextRequest) {
       existingRow = existingData;
     }
 
+    try {
+      await validateProductAgenda(client, company.id, fulfillment.agendaResourceId, salesDestination, existingRow ? mapSalesCatalogItem(existingRow) : null);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Confira a ativação da agenda desta empresa." }, { status: 422 });
+    }
     const existingMetadata = readRecord(existingRow?.metadata) ?? {};
     const previousMedia = readSalesCatalogMediaMetadata(existingMetadata.media);
     let media: SalesCatalogMedia[] = previousMedia;
@@ -3636,7 +3640,7 @@ function normalizeStatus(value: string | null): SalesCatalogItemStatus {
 }
 
 function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
-  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment") return value;
+  if (value === "external_site" || value === "connectyhub_checkout" || value === "appointment" || value === "manual_handoff") return value;
   return "connectyhub_checkout";
 }
 

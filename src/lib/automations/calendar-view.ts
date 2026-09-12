@@ -1,5 +1,13 @@
 export type CalendarView = "month" | "week" | "day";
 
+export const agendaTimezones: Record<string, string> = {
+  "America/Sao_Paulo": "Horário de Brasília",
+  "America/Manaus": "Horário de Manaus",
+  "America/Rio_Branco": "Horário do Acre",
+  "America/Noronha": "Horário de Fernando de Noronha",
+};
+export function agendaTimezoneLabel(timezone: string) { return agendaTimezones[timezone] ?? timezone.replaceAll("_", " "); }
+
 // Calendar dates are wall-clock dates in the company's timezone, never the device's.
 export function calendarDate(value: string | Date, timezone: string) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));

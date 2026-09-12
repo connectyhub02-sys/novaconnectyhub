@@ -4,22 +4,25 @@ import { DialogFrame } from "@/components/ui/dialog-frame";
 import { DateCalendar } from "@/components/ui/date-calendar";
 import { calendarDate, shiftDate } from "@/lib/automations/calendar-view";
 
-export function ProductAppointment({ productId, label = "Agendar atendimento", contactHref }: { productId: string; label?: string; contactHref?: string | null }) {
+export function ProductAppointment({ productId, enabled = false, label = "Agendar atendimento", contactHref }: { productId: string; enabled?: boolean; label?: string; contactHref?: string | null }) {
+  const [available, setAvailable] = useState(enabled), [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
   const [slots, setSlots] = useState<Array<{ starts_at: string; ends_at: string }>>([]);
   const [timezone, setTimezone] = useState("America/Sao_Paulo"), [selected, setSelected] = useState("");
   const [date, setDate] = useState(""), [name, setName] = useState(""), [phone, setPhone] = useState("");
   const [message, setMessage] = useState(""), [booked, setBooked] = useState(false);
   async function load(from = date) {
-    setBusy(true); setMessage(""); setSelected(""); setSlots([]);
+    setBusy(true); setReady(false); setMessage(""); setSelected(""); setSlots([]);
     try {
       const response = await fetch(`/api/public/sales-catalog/products/${productId}/appointments${from ? `?day=${encodeURIComponent(from)}` : ""}`, { cache: "no-store" });
       const data = await response.json();
+      if (data.enabled === false) setAvailable(false);
       if (!response.ok) throw new Error(data.error);
+      if (data.contactRequired) { setMessage("Solicite atendimento para combinar um horário."); return; }
       const zone = data.timezone ?? "America/Sao_Paulo";
       const chosenDay = data.day || from || calendarDate(new Date(), zone);
       const daySlots = data.slots.filter((slot: { starts_at: string }) => calendarDate(slot.starts_at, zone) === chosenDay);
-      setDate(chosenDay); setSlots(daySlots); setTimezone(zone);
+      setDate(chosenDay); setSlots(daySlots); setTimezone(zone); setReady(true);
       if (!daySlots.length) setMessage(data.contactRequired ? "Solicite atendimento para combinar um horário." : "Nenhum horário disponível neste dia. Escolha outra data ou solicite atendimento.");
     } catch (error) { setSlots([]); setMessage(error instanceof Error ? error.message : "Agenda indisponível."); }
     finally { setBusy(false); }
@@ -28,16 +31,18 @@ export function ProductAppointment({ productId, label = "Agendar atendimento", c
     setBusy(true); setMessage("");
     try {
       const response = await fetch(`/api/public/sales-catalog/products/${productId}/appointments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, phone, startsAt: selected }) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error);
+      const data = await response.json();
+      if (data.enabled === false) { setAvailable(false); setReady(false); setSelected(""); setSlots([]); }
+      if (!response.ok) throw new Error(data.error);
       setBooked(true); setMessage(`Agendamento confirmado para ${new Date(data.startsAt).toLocaleString("pt-BR", { timeZone: timezone, dateStyle: "short", timeStyle: "short" })}.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível agendar."); }
     finally { setBusy(false); }
   }
   return <div className="mt-5">
-    <button className="min-h-12 w-full rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" onClick={() => { setOpen(true); if (!booked) void load(); }}>{label}</button>
+    {available ? <button className="min-h-12 w-full rounded-xl bg-blue-700 px-4 py-3 font-semibold text-white" onClick={() => { setOpen(true); if (!booked) void load(); }}>{label}</button> : <div className="rounded-xl bg-slate-100 p-4 text-sm text-slate-700"><p>Agendamento online indisponível no momento.</p>{contactHref ? <a href={contactHref} className="mt-2 inline-block font-semibold text-blue-700">Solicitar atendimento pelo WhatsApp</a> : null}</div>}
     {open ? <DialogFrame onClose={() => setOpen(false)} aria-label={label} className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 text-slate-900"><div className="flex justify-between gap-4"><h2 className="text-lg font-semibold">{label}</h2><button onClick={() => setOpen(false)} aria-label="Fechar agenda">✕</button></div>
-      {!booked ? <>
+      {!booked && available && ready ? <>
         <p className="mt-2 text-sm">Escolha um horário disponível. Horários de {timezone.split("/").at(-1)?.replaceAll("_", " ")}.</p>
         <div className="my-3"><DateCalendar key={timezone} value={date} min={calendarDate(new Date(), timezone)} max={shiftDate(calendarDate(new Date(), timezone), 89)} disabled={busy} onChange={day => { setDate(day); void load(day); }} /></div>
         <p className="mb-2 text-sm font-medium">{date ? `Horários em ${new Date(`${date}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC", day: "numeric", month: "long" })}` : "Escolha uma data"}</p>

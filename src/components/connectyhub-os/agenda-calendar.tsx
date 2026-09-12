@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { AgendaBooking, AgendaResource } from "@/lib/automations/agenda";
-import { calendarDate, calendarDays, calendarRange, minutesInDay, navigateCalendar, type CalendarView } from "@/lib/automations/calendar-view";
+import { agendaTimezoneLabel, calendarDate, calendarDays, calendarRange, minutesInDay, navigateCalendar, type CalendarView } from "@/lib/automations/calendar-view";
 
 const control = "inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50";
 const colors: Record<string, string> = { booked: "border-blue-200 bg-blue-50 text-blue-800", completed: "border-emerald-200 bg-emerald-50 text-emerald-800", cancelled: "border-slate-200 bg-slate-100 text-slate-500 line-through", no_show: "border-amber-200 bg-amber-50 text-amber-800" };
@@ -50,9 +50,9 @@ export function AgendaCalendar({ companyId, timezone, resources, revision, onSel
       </div>
       <h2 aria-live="polite" className="order-first w-full min-w-0 text-base font-semibold capitalize text-slate-800 sm:order-none sm:w-auto sm:flex-1">{view === "month" ? dateLabel(date, { month: "long", year: "numeric" }) : view === "day" ? dateLabel(date, { day: "numeric", month: "long", year: "numeric" }) : `${dateLabel(days[0], { day: "numeric", month: "short" })} – ${dateLabel(days[6], { day: "numeric", month: "short", year: "numeric" })}`}</h2>
       <select aria-label="Visualização do calendário" className={control} value={view} onChange={(event) => setView(event.target.value as CalendarView)}><option value="month">Mês</option><option value="week">Semana</option><option value="day">Dia</option></select>
-      <select aria-label="Filtrar recurso" className={`${control} max-w-full`} value={resource} onChange={(event) => setResource(event.target.value)}><option value="">Todos os recursos</option>{resources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      <select aria-label="Filtrar atendimento" className={`${control} max-w-full`} value={resource} onChange={(event) => setResource(event.target.value)}><option value="">Todos os atendimentos</option>{resources.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
     </div>
-    <div className="flex flex-wrap gap-3 px-4 py-2 text-xs text-slate-500"><span>{timezone}</span>{Object.entries(statuses).map(([status, label]) => <span key={status} className="flex items-center gap-1"><span className={`size-2 rounded-full border ${colors[status]}`} />{label}</span>)}</div>
+    <div className="flex flex-wrap gap-3 px-4 py-2 text-xs text-slate-500"><span>{agendaTimezoneLabel(timezone)}</span>{Object.entries(statuses).map(([status, label]) => <span key={status} className="flex items-center gap-1"><span className={`size-2 rounded-full border ${colors[status]}`} />{label}</span>)}</div>
     {loading && <p role="status" className="px-4 py-2 text-sm text-slate-500">Carregando compromissos…</p>}
     {error?.key === key && <p role="alert" className="px-4 py-2 text-sm text-rose-700">{error.message} Use Atualizar para tentar novamente.</p>}
     {result?.key === key && result.truncated && <p role="status" className="px-4 py-2 text-sm text-amber-800">Este período atingiu o limite de 1.000 compromissos. Selecione Semana ou Dia para consultar um período menor.</p>}

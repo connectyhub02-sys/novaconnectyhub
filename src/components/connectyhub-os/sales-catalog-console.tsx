@@ -1,5 +1,6 @@
 "use client";
 import { AgendaResourceSelect } from "./agenda-resource-select";
+import { AgendaActivationNotice, useAgendaActivation } from "./use-agenda-activation";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
@@ -25,6 +26,7 @@ import {
   ImageIcon,
   Loader2,
   MapPin,
+  MessageCircle,
   MessageSquareText,
   Navigation,
   PackagePlus,
@@ -809,12 +811,13 @@ export function SalesCatalogConsole({
   const [skuDrafts, setSkuDrafts] = useState<SkuDraft[]>([]);
   const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
   const [suggestedDestination, setSuggestedDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
+  const agendaActivation = useAgendaActivation(selectedCompanyId);
   const actionEdited = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/dashboard/sales-catalog/activity?companyId=${encodeURIComponent(selectedCompanyId)}`, { signal: controller.signal })
       .then(async response => { if (!response.ok) return null; return response.json(); })
-      .then(data => { if (data?.destination) { setSuggestedDestination(data.destination); if (!actionEdited.current) setSalesDestination(data.destination); } })
+      .then(data => { if (!controller.signal.aborted && data?.destination) { setSuggestedDestination(data.destination); if (!actionEdited.current) setSalesDestination(data.destination); } })
       .catch(() => {});
     return () => controller.abort();
   }, [selectedCompanyId]);
@@ -5164,7 +5167,8 @@ export function SalesCatalogConsole({
                   label="Venda na loja"
                   onClick={() => { actionEdited.current = true; setSalesDestination("connectyhub_checkout"); }}
                 />
-                <DestinationButton active={salesDestination === "appointment"} icon={CalendarDays} label="Agendamento" onClick={() => { actionEdited.current = true; setSalesDestination("appointment"); }} />
+                <DestinationButton disabled={!agendaActivation.enabled} active={salesDestination === "appointment"} icon={CalendarDays} label="Agendamento" onClick={() => { actionEdited.current = true; setSalesDestination("appointment"); }} />
+                <DestinationButton active={salesDestination === "manual_handoff"} icon={MessageCircle} label="Solicitar atendimento" onClick={() => { actionEdited.current = true; setSalesDestination("manual_handoff"); }} />
                 <DestinationButton
                   active={salesDestination === "external_site"}
                   icon={ExternalLink}
@@ -5173,6 +5177,7 @@ export function SalesCatalogConsole({
                 />
               </div>
 
+              {!agendaActivation.enabled ? <AgendaActivationNotice companyId={selectedCompanyId} loading={agendaActivation.loading} /> : null}
               {salesDestination === "appointment" ? <AgendaResourceSelect companyId={selectedCompanyId} value={agendaResourceId} onChange={setAgendaResourceId} /> : null}
               {salesDestination === "external_site" ? (
                 <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
@@ -6043,6 +6048,7 @@ export function SalesCatalogConsole({
             <div className="grid gap-3 xl:grid-cols-2">
               {visibleItems.map((item) => (
                 <CatalogItemCard
+                  agendaEnabled={agendaActivation.enabled}
                   key={item.id}
                   confirmDelete={confirmDeleteId === item.id}
                   deleting={deletingId === item.id}
@@ -7527,6 +7533,7 @@ function CatalogImportItemEditor({
   item: ClientSalesCatalogImportItem;
   onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
 }) {
+  const agendaActivation = useAgendaActivation(item.companyId);
   const imageUrls = item.imageUrl
     ? Array.from(new Set([item.imageUrl, ...(item.imageUrls ?? []).filter((url) => url !== item.imageUrl)]))
     : [];
@@ -7645,7 +7652,8 @@ function CatalogImportItemEditor({
           style={{ borderColor: "var(--ch-border)" }}
         >
           <option value="connectyhub_checkout">Venda na loja</option>
-          <option value="appointment">Agendamento</option>
+          <option value="appointment" disabled={!agendaActivation.enabled}>Agendamento</option>
+          <option value="manual_handoff">Solicitar atendimento</option>
           <option value="external_site">Site externo</option>
         </select>
         <select
@@ -7683,6 +7691,7 @@ function CatalogImportItemEditor({
         )}
       </div>
 
+      {!agendaActivation.enabled ? <AgendaActivationNotice companyId={item.companyId} loading={agendaActivation.loading} /> : null}
       {item.salesDestination === "appointment" ? <AgendaResourceSelect companyId={item.companyId} value={item.fulfillment.agendaResourceId} onChange={value => onChange({ fulfillment: { ...item.fulfillment, agendaResourceId: value || null, schedulingRequired: true } })} /> : null}
       {item.salesDestination === "external_site" ? (
         <label className="mt-2 block">
@@ -8252,6 +8261,7 @@ function PaymentSessionCard({ session }: { session: ClientSalesCatalogPaymentSes
 
 function CatalogItemCard({
   item,
+  agendaEnabled,
   confirmDelete,
   deleting,
   visibilityLoading,
@@ -8261,6 +8271,7 @@ function CatalogItemCard({
   onWhatsappVisibility,
 }: {
   item: ClientSalesCatalogItem;
+  agendaEnabled: boolean;
   confirmDelete: boolean;
   deleting: boolean;
   visibilityLoading: boolean;
@@ -8298,7 +8309,7 @@ function CatalogItemCard({
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             {item.storeFeatured ? <NeonBadge tone="green">Destaque loja{item.storeFeaturedRank ? ` #${item.storeFeaturedRank}` : ""}</NeonBadge> : null}
             {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
-            <NeonBadge tone={salesDestinationTone(item.salesDestination)}>{formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
+            <NeonBadge tone={item.salesDestination === "appointment" && !agendaEnabled ? "amber" : salesDestinationTone(item.salesDestination)}>{item.salesDestination === "appointment" && !agendaEnabled ? "Agendamento indisponível" : formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
             <NeonBadge tone={item.billingCycle === "recurring" ? "violet" : "zinc"}>{formatBillingCycleWithInterval(item.billingCycle, item.billingInterval)}</NeonBadge>
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
             {item.assignedAgentIds.length > 0 || item.assignedWhatsappInstanceIds.length > 0 ? (
@@ -9668,11 +9679,13 @@ function TabButton({
 
 function DestinationButton({
   active,
+  disabled = false,
   icon: Icon,
   label,
   onClick,
 }: {
   active: boolean;
+  disabled?: boolean;
   icon: LucideIcon;
   label: string;
   onClick: () => void;
@@ -9680,9 +9693,10 @@ function DestinationButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-semibold transition",
+        "inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
         active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
       )}
       style={{ borderColor: active ? undefined : "var(--ch-border)" }}

@@ -22,6 +22,7 @@ import { serverModuleHarness } from "./server-module-harness";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
+  "enforceAgendaResponse",
   "loadOrganizationSalesCatalogOrders", "handleLeadFinancialEvidence",
   "extractRuntimeCustomerNameFromStructuredReply",
   "resolveSalesCatalogOrderSelections", "resolveSalesCatalogMentionQuantity",

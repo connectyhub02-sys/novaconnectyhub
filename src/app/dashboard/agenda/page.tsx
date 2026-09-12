@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description: "Calendário, serviços e reservas da sua empresa.",
 };
 
-export default async function DashboardAgendaPage() {
+export default async function DashboardAgendaPage({ searchParams }: { searchParams: Promise<{ companyId?: string }> }) {
   const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
@@ -33,6 +33,8 @@ export default async function DashboardAgendaPage() {
     listClientSalesCatalogWhatsappInstances({ userId: workspace.user.id, client }),
   ]);
   const organization = workspace.organization;
+  const requestedCompanyId = (await searchParams).companyId;
+  const selectedCompanyId = companies.some(company => company.id === requestedCompanyId) ? requestedCompanyId : null;
   const organizationCompanyId = organization && companies.some((company) => company.id === organization.id)
     ? organization.id
     : null;
@@ -56,7 +58,7 @@ export default async function DashboardAgendaPage() {
       <ClientAgendaCenter
         agents={agentWorkspace?.agents ?? []}
         companies={companies}
-        initialCompanyId={organizationCompanyId ?? companies[0]?.id ?? null}
+        initialCompanyId={selectedCompanyId ?? organizationCompanyId ?? companies[0]?.id ?? null}
         initialSettings={settings}
         whatsappInstances={whatsappInstances}
       />

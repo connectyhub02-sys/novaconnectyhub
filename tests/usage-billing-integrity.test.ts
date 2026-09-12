@@ -50,7 +50,7 @@ describe("usage billing integrity", () => {
     const meter=vi.fn().mockResolvedValue({usageEventId:"usage"});
     const fetchMock=vi.fn().mockResolvedValue({ok:true,json:async()=>({candidates:[{content:{parts:[{text:'{"intent":"none"}'}]}}],usageMetadata:{promptTokenCount:20,candidatesTokenCount:5}})});
     const agenda=serverModuleHarness<typeof Agenda>("src/lib/automations/agenda-agent.ts",{
-      "./agenda":{getAgenda:async()=>({bookings:[],resources:[],settings:{timezone:"America/Sao_Paulo"}})},
+      "./agenda":{getAgenda:async()=>({bookings:[],resources:[],settings:{enabled:true,timezone:"America/Sao_Paulo"}})},
       "@/lib/billing/gemini-metering":{meterGeminiGenerationUsage:meter},
     },[],{fetch:fetchMock});
     await agenda.processAgendaTurn({client:db.client as never,organizationId:"org",leadId:"lead",leadName:null,agentId:"agent",runId:"run",conversationId:"conversation",

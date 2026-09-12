@@ -4,6 +4,8 @@ import { Panel, NeonBadge } from "./panel-primitives";
 import type { AgendaResource, AgendaBooking } from "@/lib/automations/agenda";
 import { AgendaCalendar } from "./agenda-calendar";
 import { DialogFrame } from "@/components/ui/dialog-frame";
+import { agendaTimezones, agendaTimezoneLabel } from "@/lib/automations/calendar-view";
+import { Plus, Settings2, RefreshCw, X } from "lucide-react";
 type Agenda = {
   settings: { enabled: boolean; timezone: string };
   resources: AgendaResource[];
@@ -38,6 +40,7 @@ export function CustomerAgendaPanel({
     [revision, setRevision] = useState(0);
   const [editing, setEditing] = useState(false),
     [bookingOpen, setBookingOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [name, setName] = useState(""),
     [service, setService] = useState(""),
     [kind, setKind] = useState("service"),
@@ -136,6 +139,7 @@ export function CustomerAgendaPanel({
       if (!response.ok) throw new Error(data.error);
       if (data.settings) {
         setAgenda(data);
+        if (!data.settings.enabled) { setSettingsOpen(false); setBookingOpen(false); setSlots([]); }
         setSelectedBooking(null);
         setRevision((value) => value + 1);
       }
@@ -161,6 +165,18 @@ export function CustomerAgendaPanel({
       hour: "2-digit",
       minute: "2-digit",
     });
+  if (!agenda && loading) return <Panel title="Agenda" tone="green"><p role="status" className="py-10 text-center text-sm text-slate-600">Carregando agenda…</p></Panel>;
+  if (!agenda?.settings.enabled) return (
+    <Panel title="Agenda" tone="green">
+      <div className="mx-auto max-w-xl py-10 text-center">
+        <h2 className="text-xl font-semibold text-slate-800">Ative a agenda da sua empresa</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-600">Após ativar, configure os atendimentos e horários disponíveis. O agendamento no catálogo, nos produtos e no WhatsApp depende desta ativação.</p>
+        <button type="button" className="mt-6 rounded-xl bg-emerald-700 px-6 py-3 font-semibold text-white disabled:opacity-50" disabled={loading || saving || !agenda} onClick={() => action({ action: "set_enabled", enabled: true })}>{loading ? "Carregando…" : saving ? "Ativando…" : "Ativar agenda"}</button>
+        {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
+        {error && !agenda ? <button className={`${button} mt-3`} onClick={refresh}>Tentar novamente</button> : null}
+      </div>
+    </Panel>
+  );
   return (
     <Panel
       title="Seu calendário"
@@ -178,14 +194,18 @@ export function CustomerAgendaPanel({
       }
     >
       <div className="space-y-4">
-        <details className="rounded-xl border border-slate-200 p-3">
-          <summary className="cursor-pointer text-sm font-medium text-slate-700">Configurações da agenda · serviços e horários</summary>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!agenda.resources.some(resource => resource.enabled) || loading || saving} onClick={() => { setBookingOpen(true); setRescheduling(null); setSlots([]); setRequestKey(crypto.randomUUID()); }}><Plus className="size-4" />Criar compromisso</button>
+          <button type="button" className={`${button} inline-flex items-center gap-2`} onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" />Atendimentos e horários</button>
+          <button type="button" aria-label="Atualizar agenda" className={`${button} ml-auto`} disabled={loading || saving} onClick={refresh}><RefreshCw className="size-4" /></button>
+        </div>
+        {settingsOpen && <DialogFrame aria-label="Atendimentos e horários" onClose={() => setSettingsOpen(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
+        <div className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5">
+          <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold text-slate-800">Atendimentos e horários</h2><button aria-label="Fechar configurações" className={button} onClick={() => setSettingsOpen(false)}><X className="size-4" /></button></div>
           <div className="mt-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-2xl text-sm leading-6 text-slate-600">
-            Organize serviços, profissionais e mesas. A agenda verifica a
-            disponibilidade e registra reservas e alterações. O comparecimento
-            alimenta os convites de retorno quando o follow-up estiver ativo.
+            Defina o que sua empresa atende, quem realiza o atendimento e em quais dias e horários. Por exemplo: visita ao imóvel, consulta ou reserva de mesa.
           </p>
           <button
             type="button"
@@ -211,17 +231,16 @@ export function CustomerAgendaPanel({
               setResourceEnabled(true);
             }}
           >
-            {editing ? "Recolher cadastro" : "Cadastrar serviço ou mesa"}
+            {editing ? "Recolher cadastro" : "Cadastrar atendimento"}
           </button>
           <span className="self-center text-xs text-slate-500">
-            Horários em {timezone}
+            {agendaTimezoneLabel(timezone)}
           </span>
         </div>
-        <details className="rounded-lg border border-slate-200 p-3 text-sm">
-          <summary className="cursor-pointer">
-            Serviços e horários de funcionamento
-          </summary>
+        <div className="rounded-lg border border-slate-200 p-3 text-sm">
+          <h3 className="font-semibold">Atendimentos cadastrados</h3>
           <div className="mt-3 space-y-3">
+            {!agenda.resources.length && <p className="text-slate-600">Nenhum atendimento cadastrado. Use Cadastrar atendimento para definir a duração, os dias e os horários disponíveis.</p>}
             {agenda?.resources.map((resource) => (
               <div
                 key={resource.id}
@@ -241,20 +260,20 @@ export function CustomerAgendaPanel({
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+        <details className="rounded-lg border border-slate-200 p-3 text-sm">
+          <summary className="cursor-pointer">Fuso horário da empresa</summary>
+          <div className="mt-3 space-y-3">
             <label>
-              Fuso da empresa
+              Horário utilizado na agenda
               <select
                 className={field}
                 value={timezoneDraft}
                 onChange={(event) => setTimezoneDraft(event.target.value)}
               >
-                {[
-                  "America/Sao_Paulo",
-                  "America/Manaus",
-                  "America/Rio_Branco",
-                  "America/Noronha",
-                ].map((value) => (
-                  <option key={value}>{value}</option>
+                {Array.from(new Set([...Object.keys(agendaTimezones), timezoneDraft])).map((value) => (
+                  <option key={value} value={value}>{agendaTimezoneLabel(value)}</option>
                 ))}
               </select>
             </label>
@@ -280,7 +299,7 @@ export function CustomerAgendaPanel({
         >
           <p className="text-sm text-slate-600">
             Confira os horários sugeridos antes de salvar. Para cada
-            profissional ou mesa, crie um recurso.
+            profissional ou mesa, cadastre um atendimento com sua disponibilidade.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
@@ -289,7 +308,7 @@ export function CustomerAgendaPanel({
                 className={field}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex.: João / Mesa 1"
+                placeholder="Ex.: Corretora Ana / Mesa 1"
               />
             </label>
             <label className="text-sm">
@@ -298,7 +317,7 @@ export function CustomerAgendaPanel({
                 className={field}
                 value={service}
                 onChange={(e) => setService(e.target.value)}
-                placeholder="Ex.: Corte de cabelo / Reserva de mesa"
+                placeholder="Ex.: Visita ao imóvel / Consulta / Reserva de mesa"
               />
             </label>
             <label className="text-sm">
@@ -423,7 +442,7 @@ export function CustomerAgendaPanel({
               checked={resourceEnabled}
               onChange={(e) => setResourceEnabled(e.target.checked)}
             />
-            Aceitar novas reservas neste recurso
+            Aceitar novas reservas neste atendimento
           </label>
           <button
             type="button"
@@ -474,21 +493,17 @@ export function CustomerAgendaPanel({
               }
             }}
           >
-            Salvar recurso
+            Salvar atendimento
           </button>
         </div>
           </div>
-        </details>
-        {!loading && agenda && !agenda.settings.enabled && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">Agenda desativada. Os compromissos registrados continuam disponíveis. Abra Configurações da agenda para cadastrar serviços e ativar novas reservas.</p>}
-        {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={!agenda?.settings.enabled || loading || saving} onClick={() => { setBookingOpen((value) => !value); setRescheduling(null); setSlots([]); setRequestKey(crypto.randomUUID()); }}>Nova reserva</button>
-          <button type="button" className={button} disabled={loading || saving} onClick={refresh}>Atualizar</button>
         </div>
-        <div
-          hidden={!bookingOpen}
-          className="space-y-3 rounded-xl border border-slate-200 p-4"
-        >
+        </DialogFrame>}
+        {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
+        {bookingOpen && <DialogFrame aria-label={rescheduling ? "Remarcar compromisso" : "Criar compromisso"} onClose={() => setBookingOpen(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
+        <div className="max-h-[90dvh] w-full max-w-2xl space-y-3 overflow-auto rounded-2xl bg-white p-5">
+          <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">{rescheduling ? "Remarcar compromisso" : "Criar compromisso"}</h2><button className={button} aria-label="Fechar compromisso" onClick={() => setBookingOpen(false)}><X className="size-4" /></button></div>
+          {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               Buscar contato
@@ -607,10 +622,9 @@ export function CustomerAgendaPanel({
             ))}
           </div>
         </div>
+        </DialogFrame>}
         {!agenda?.resources.length && !loading && (
-          <p className="text-sm text-slate-500">
-            Cadastre o primeiro serviço ou mesa para começar.
-          </p>
+          <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">Sua agenda está ativa. <button className="font-semibold underline" onClick={() => { setSettingsOpen(true); setEditing(true); }}>Cadastre o primeiro atendimento e seus horários</button> para disponibilizar reservas.</div>
         )}
         {agenda && <AgendaCalendar companyId={companyId} timezone={timezone} resources={agenda.resources} revision={revision} onSelect={setSelectedBooking} />}
         {selectedBooking && <DialogFrame aria-label="Detalhes do compromisso" onClose={() => setSelectedBooking(null)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">

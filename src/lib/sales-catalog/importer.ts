@@ -1162,8 +1162,14 @@ export async function updateSalesCatalogImportItems(input: {
       updated_at: new Date().toISOString(),
     };
 
+    if (patch.fulfillment || patch.salesDestination) {
+      const current = await input.client.from("sales_catalog_import_items").select("sales_destination,fulfillment")
+        .eq("id", patch.id).eq("import_job_id", input.jobId).eq("organization_id", input.companyId).maybeSingle();
+      if (current.error || !current.data) throw new Error("Item importado não encontrado nesta empresa.");
+      const previous = { salesDestination: current.data.sales_destination, fulfillment: readFulfillment(current.data.fulfillment) };
+      await validateProductAgenda(input.client, input.companyId, (patch.fulfillment ?? previous.fulfillment).agendaResourceId, patch.salesDestination ?? previous.salesDestination, previous);
+    }
     if (patch.fulfillment) {
-      await validateProductAgenda(input.client, input.companyId, patch.fulfillment.agendaResourceId);
       payload.fulfillment = serializeProductFulfillment(patch.fulfillment);
     }
     if (patch.status) payload.status = patch.status;
@@ -1849,6 +1855,9 @@ async function buildImportDraftReviews(input: {
   companyId: string;
   drafts: SalesCatalogImportDraft[];
 }) {
+  for (const draft of input.drafts) {
+    await validateProductAgenda(input.client, input.companyId, draft.fulfillment.agendaResourceId, draft.salesDestination);
+  }
   const existingItems = await loadDuplicateCatalogItems(input);
 
   return input.drafts.map((draft) => {
@@ -2647,7 +2656,6 @@ async function publishImportItemAsCatalogItem(input: {
   targetCatalogItemId?: string | null;
 }) {
   const now = new Date().toISOString();
-  await validateProductAgenda(input.client, input.companyId, input.item.fulfillment.agendaResourceId);
   const existingCatalogItem = input.targetCatalogItemId
     ? await loadImportTargetCatalogItem({
       client: input.client,
@@ -2656,6 +2664,7 @@ async function publishImportItemAsCatalogItem(input: {
     })
     : null;
   const existingMetadata = readRecord(existingCatalogItem?.metadata) ?? {};
+  await validateProductAgenda(input.client, input.companyId, input.item.fulfillment.agendaResourceId, input.item.salesDestination, existingCatalogItem ? { salesDestination: readString(existingMetadata.sales_destination) ?? "connectyhub_checkout", fulfillment: readFulfillment(existingMetadata.fulfillment) } : null);
   const itemId = existingCatalogItem?.id ?? randomUUID();
   const tag = readString(existingMetadata.tag) ?? createSalesCatalogTag(input.item.title, itemId);
   const mediaResult = await buildImportedMedia({

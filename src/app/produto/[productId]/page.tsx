@@ -1,4 +1,5 @@
 import { ProductAppointment } from "@/components/checkout/product-appointment";
+import { readAgendaActivation } from "@/lib/automations/agenda-activation";
 import { activityAppointmentLabel, professionalRegisters } from "@/lib/whatsapp/activity-profile";
 import { getAgentPromptTemplate } from "@/lib/whatsapp/agent-prompt-templates";
 import { StoreUnavailable, storeUnavailableMetadata } from "@/components/checkout/store-unavailable";
@@ -262,6 +263,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   ]);
   const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
   const appointment = item.salesDestination === "appointment";
+  const agendaEnabled = appointment && (await readAgendaActivation(client, item.companyId).catch(() => ({ enabled: false }))).enabled;
   const activityId = getAgentPromptTemplate(item.activityProfile?.templateId).id;
   const identity = item.activityProfile?.professionalIdentity;
   const canCheckout = item.salesDestination === "connectyhub_checkout"
@@ -331,7 +333,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     agentId,
     trackingLinkId,
   });
-  const currentCartProduct = mapStorefrontProduct(item, storefrontProductContext, item.storeFeatured);
+  const currentCartProduct = mapStorefrontProduct(item, { ...storefrontProductContext, agendaEnabled }, item.storeFeatured);
   const cartProducts = storeProducts.some((product) => product.id === currentCartProduct.id)
     ? storeProducts
     : [currentCartProduct, ...storeProducts];
@@ -415,7 +417,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             </p>
 
             {identity?.showPublic && identity.name ? <p className="mt-3 text-sm">{identity.name}{identity.registration && professionalRegisters[activityId] ? ` · ${professionalRegisters[activityId]} ${identity.registration}${identity.state ? ` / ${identity.state}` : ""}` : ""}</p> : null}
-            {appointment ? <ProductAppointment productId={item.id} label={activityAppointmentLabel(activityId)} contactHref={whatsappReturn?.href} /> : item.salesDestination === "external_site" ? <a className="mt-5 block rounded-xl bg-blue-700 p-3 text-center font-semibold text-white" href={item.productUrl ?? "#"} rel="noopener noreferrer">Ver no site externo</a> : <ProductPurchaseControls
+            {appointment ? <ProductAppointment enabled={agendaEnabled} productId={item.id} label={activityAppointmentLabel(activityId)} contactHref={whatsappReturn?.href} /> : item.salesDestination === "external_site" ? <a className="mt-5 block rounded-xl bg-blue-700 p-3 text-center font-semibold text-white" href={item.productUrl ?? "#"} rel="noopener noreferrer">Ver no site externo</a> : <ProductPurchaseControls
               cartUrl={storeCartUrl} disabled={!canCheckout} organizationId={organization.id} productId={item.id} className="mt-5 hidden sm:grid"
             />}
 

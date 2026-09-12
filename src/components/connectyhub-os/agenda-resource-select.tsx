@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useAgendaActivation } from "./use-agenda-activation";
 
 export function AgendaResourceSelect({ companyId, value, onChange }: { companyId: string; value: string | null | undefined; onChange: (value: string) => void }) {
+  const activation = useAgendaActivation(companyId);
   const [resources, setResources] = useState<Array<{ id: string; name: string }>>([]);
   const [message, setMessage] = useState("Carregando agendas…");
   const [loadedCompanyId, setLoadedCompanyId] = useState<string | null>(null);
@@ -19,8 +21,9 @@ export function AgendaResourceSelect({ companyId, value, onChange }: { companyId
   }, [companyId]);
   return <label className="mt-3 block text-sm">
     <span className="mb-2 block font-medium">Agenda deste item</span>
-    <select value={value ?? ""} onChange={event => onChange(event.target.value)} className="h-11 w-full rounded-lg border bg-transparent px-3">
+    <select disabled={!activation.enabled || loadedCompanyId !== companyId} value={value ?? ""} onChange={event => onChange(event.target.value)} className="h-11 w-full rounded-lg border bg-transparent px-3 disabled:opacity-50">
       <option value="">Solicitar atendimento, sem reserva automática</option>
+      {value && !resources.some(resource => resource.id === value) ? <option value={value}>Vínculo salvo · indisponível</option> : null}
       {(loadedCompanyId === companyId ? resources : []).map(resource => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
     </select>
     <span className="mt-2 block text-xs opacity-75">{loadedCompanyId !== companyId ? "Carregando agendas…" : message || "O cliente escolhe um horário disponível nesta agenda. Sem agenda vinculada, poderá solicitar atendimento."}</span>
