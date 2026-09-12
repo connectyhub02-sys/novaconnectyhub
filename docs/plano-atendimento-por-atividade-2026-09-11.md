@@ -1,6 +1,6 @@
 # Plano: atividade, atendimento e catálogo de ponta a ponta
 
-Data: 11/09/2026. Implementação validada e publicação autorizada pelo titular. A migration foi aplicada na VPS; envio e implantação do aplicativo em andamento. Os testes locais abaixo não representam testes de atendimento real.
+Data: 11/09/2026. Implementação validada e publicada na master (`1267cd4`) e na Vercel, com a migration aplicada na VPS. Os testes locais abaixo não representam testes de atendimento real.
 
 ## Resultado esperado
 
@@ -119,6 +119,8 @@ Validação final: 1.387 testes em 153 arquivos na suíte completa, TypeScript, 
 Publicação pendente: aplicar `supabase/migrations/0130_catalog_item_appointments.sql` na VPS antes do deploy do aplicativo. A migration acrescenta o modo agenda nas importações, perfis derivados de agentes da própria organização, revisão de defaults antigos e bloqueios de novas cobranças. Foi exercitada em PostgreSQL local via PGlite; não foi aplicada em produção. Nenhuma mensagem real, cobrança, reserva de cliente ou upload pago foi disparado nos testes desta etapa. Depois do deploy, validar os fluxos reais com o titular; os testes simulados não comprovam entrega de botões ou pronúncia final do provedor de voz.
 
 Atualização de publicação em 11/09: a etapa de banco acima foi concluída após autorização. A migration `0130` foi registrada na VPS, com backup privado dos 82 itens anteriores. Treze imóveis herdados passaram para agendamento; 67 itens de venda e dois externos foram preservados. Zero prévias de importação pendentes naquele instante. O envio do aplicativo está em andamento; mensagens, áudio e reservas reais ainda não foram testados nesta publicação.
+
+Conclusão da publicação: Vercel Ready no domínio principal em 11/09 às 20:43 BRT, commit `1267cd4`. Página do Ipiranga e API de disponibilidade responderam 200; conferência pública desktop/celular mostrou agendamento sem controles de compra. A agenda da organização ainda não foi configurada/vinculada, portanto a resposta correta atual é solicitar atendimento, sem horários fictícios. O titular fará essa configuração no painel. O agente está salvo como `advogado`, e o botão observado é “Agendar reunião”; voltar a atividade para o perfil imobiliário desejado antes do teste de corretor. Não houve reserva, mensagem ou cobrança real nesta verificação.
 
 ## Critérios de aceite
 

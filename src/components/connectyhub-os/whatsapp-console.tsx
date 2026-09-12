@@ -840,6 +840,13 @@ export function WhatsAppConsole({
   }, [applyWhatsappState, isConnected, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
 
   const selectedAgentNameNormalized = normalizeEditableAgentName(selectedAgentNameDraft);
+  const selectedActivity = agentPromptTemplates.find((item) => item.id === promptTemplateDraft.templateId) ?? agentPromptTemplates[0];
+  const promptTemplateForSave: AgentPromptBuilderConfig = selectedActivity.kind === "professional"
+    ? { ...promptTemplateDraft, professionalIdentity: {
+      ...(promptTemplateDraft.professionalIdentity ?? { registration: "", state: "", showPublic: false }),
+      name: selectedAgentNameNormalized || state?.agent?.name || "",
+    } }
+    : promptTemplateDraft;
   const canEditSelectedAgentName = !canManageInternalAgents && Boolean(state?.agent);
   const agentNameChanged = canEditSelectedAgentName && state?.agent
     ? selectedAgentNameNormalized !== normalizeEditableAgentName(state.agent.name)
@@ -848,13 +855,13 @@ export function WhatsAppConsole({
     ? selectedAgentNameNormalized.length < 2 || selectedAgentNameNormalized.length > agentNameMaxLength
     : false;
   const effectivePrompt = promptTemplateDraft.mode === "automatic"
-    ? buildAgentPromptFromTemplate({ config: promptTemplateDraft, agentName: selectedAgentNameNormalized || state?.agent?.name || "Agente",
+    ? buildAgentPromptFromTemplate({ config: promptTemplateForSave, agentName: selectedAgentNameNormalized || state?.agent?.name || "Agente",
         companyName: state?.companies.find((company) => company.id === selectedCompanyId)?.name || "{{empresa}}" })
     : promptDraft;
   const promptChanged = state?.agent ? effectivePrompt.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = effectivePrompt.length > agentPromptMaxLength;
   const promptTemplateChanged = state?.agent
-    ? !isAgentPromptBuilderConfigEqual(promptTemplateDraft, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
+    ? !isAgentPromptBuilderConfigEqual(promptTemplateForSave, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
     : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
   const cloneProfileChanged = state?.agent
@@ -1196,7 +1203,7 @@ export function WhatsAppConsole({
           ...whatsappActionPayload,
           ...(agentNameChanged ? { agentName: selectedAgentNameNormalized } : {}),
           agentPrompt: effectivePrompt,
-          promptTemplateConfig: promptTemplateDraft,
+          promptTemplateConfig: promptTemplateForSave,
           behavior: behaviorDraft,
           cloneProfile: cloneProfileDraft.useAgentName ? { ...cloneProfileDraft, displayName: selectedAgentNameNormalized } : cloneProfileDraft,
           ...(qualificationChanged ? { qualificationConfig: qualificationDraft } : {}),
@@ -1887,6 +1894,9 @@ export function WhatsAppConsole({
               <div className="grid content-start gap-4">
                 <AgentIdentityCard
                   agent={state.agent}
+                  productCount={state.salesCatalog.length}
+                  knowledgeFileCount={state.knowledge.files.length}
+                  activityKind={selectedActivity.kind}
                   agentNameChanged={agentNameChanged}
                   agentNameDraft={selectedAgentNameDraft}
                   agentNameInvalid={agentNameInvalid}
@@ -1939,6 +1949,9 @@ export function WhatsAppConsole({
             <div className="grid gap-4">
               <div className="grid gap-4">
                 <AgentIdentityCard
+                  productCount={state.salesCatalog.length}
+                  knowledgeFileCount={state.knowledge.files.length}
+                  activityKind={selectedActivity.kind}
                   agent={state.agent}
                   agentNameChanged={agentNameChanged}
                   agentNameDraft={selectedAgentNameDraft}
@@ -1951,8 +1964,6 @@ export function WhatsAppConsole({
                 <GuidedPromptBuilder
                   config={promptTemplateDraft}
                   improving={promptAssistantRunning}
-                  knowledgeFileCount={state.knowledge.files.length}
-                  productCount={state.salesCatalog.length}
                   onChange={updatePromptTemplateDraft}
                   onGeneratePrompt={generatePromptFromTemplate}
                   onImproveComplement={improveCompanyComplementWithAi}
@@ -3904,6 +3915,9 @@ function AgentIdentityCard({
   agentNameDraft,
   agentNameInvalid = false,
   company,
+  productCount,
+  knowledgeFileCount,
+  activityKind,
   entityLabel = "Empresa",
   onAgentNameChange,
 }: {
@@ -3912,6 +3926,9 @@ function AgentIdentityCard({
   agentNameDraft?: string;
   agentNameInvalid?: boolean;
   company: ClientCompany | null;
+  productCount: number;
+  knowledgeFileCount: number;
+  activityKind: "professional" | "company" | "general";
   entityLabel?: string;
   onAgentNameChange?: (value: string) => void;
 }) {
@@ -3920,7 +3937,7 @@ function AgentIdentityCard({
 
   return (
     <div
-      className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-3 xl:grid-cols-[1.2fr_1.4fr_1fr_1fr_1fr_1.2fr]"
       style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border-strong)" }}
     >
       {canEditName ? (
@@ -3956,8 +3973,10 @@ function AgentIdentityCard({
         <InfoTile label="Agente" value={agent.name} />
       )}
       <InfoTile label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
-      <InfoTile label="Plano" value={companyStatus} />
-      <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />
+      <div title={`Última edição: ${formatDate(agent.updatedAt)}`}><InfoTile label="Plano" value={companyStatus} /></div>
+      <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
+      <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
+      <InfoTile label="Atuação" value={activityKind === "professional" ? "Profissional individual" : activityKind === "company" ? "Empresa" : "Atendimento geral"} />
     </div>
   );
 }
@@ -4027,8 +4046,6 @@ function InfoHint({ text }: { text: string }) {
 function GuidedPromptBuilder({
   config,
   improving,
-  knowledgeFileCount,
-  productCount,
   onChange,
   onGeneratePrompt,
   onImproveComplement,
@@ -4036,8 +4053,6 @@ function GuidedPromptBuilder({
 }: {
   config: AgentPromptBuilderConfig;
   improving: boolean;
-  knowledgeFileCount: number;
-  productCount: number;
   onChange: (patch: Partial<AgentPromptBuilderConfig>) => void;
   onGeneratePrompt: () => void;
   onImproveComplement: () => void;
@@ -4052,45 +4067,32 @@ function GuidedPromptBuilder({
       defaultOpen
     >
       <div className="grid gap-3">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
-          <label className="block">
+        <div className={cn("grid items-end gap-3", professionalRegisters[config.templateId] ? "md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_100px]" : "") }>
+          <div className="min-w-0">
             <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
               Profissão ou atividade do negócio
-              <InfoHint text="Esse modelo cria a base do prompt. O usuario ainda pode ajustar campos e o comportamento do agente nas outras abas." />
+              <InfoHint text={`${template.summary} Você pode ajustar as instruções e o comportamento nas outras abas.`} />
             </span>
             <ActivitySelect value={config.templateId} onChange={(templateId) => onChange({ templateId })} />
-          </label>
-
-          <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">{template.niche}</p>
-            <p className="mt-1 text-[12px] leading-5 text-slate-300">{template.summary}</p>
           </div>
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-3">
-          <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
-          <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
-          <InfoTile label="Atuação" value={template.kind === "professional" ? "Profissional individual" : template.kind === "company" ? "Empresa" : "Atendimento geral"} />
-        </div>
-
-        {template.kind !== "general" ? <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-3" style={{ borderColor: "var(--ch-border)" }}>
-          <label className="text-xs">{template.kind === "professional" ? "Nome do profissional" : "Nome de apresentação da empresa"}
-            <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.name ?? ""} maxLength={120}
-              onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), name: event.target.value } })} />
-          </label>
           {professionalRegisters[config.templateId] ? <>
             <label className="text-xs">Registro {professionalRegisters[config.templateId]}
-              <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.registration ?? ""} maxLength={80}
+              <input className="mt-1 h-11 w-full rounded-lg border bg-transparent px-3" value={config.professionalIdentity?.registration ?? ""} maxLength={80}
                 onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), registration: event.target.value } })} />
             </label>
             <label className="text-xs">UF do registro
-              <input className="mt-1 w-full rounded-md border bg-transparent p-2" value={config.professionalIdentity?.state ?? ""} maxLength={2}
+              <input className="mt-1 h-11 w-full rounded-lg border bg-transparent px-3" value={config.professionalIdentity?.state ?? ""} maxLength={2}
                 onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), state: event.target.value.toUpperCase() } })} />
             </label>
           </> : null}
-          <label className="flex items-center gap-2 text-xs sm:col-span-3"><input type="checkbox" checked={config.professionalIdentity?.showPublic ?? false}
+        </div>
+        {template.kind === "company" ? <label className="text-xs">Nome de apresentação da empresa
+          <input className="mt-1 h-11 w-full rounded-lg border bg-transparent px-3" value={config.professionalIdentity?.name ?? ""} maxLength={120}
+            onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), name: event.target.value } })} />
+        </label> : null}
+        {template.kind !== "general" ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.professionalIdentity?.showPublic ?? false}
             onChange={event => onChange({ professionalIdentity: { ...(config.professionalIdentity ?? { name: "", registration: "", state: "", showPublic: false }), showPublic: event.target.checked } })} />Exibir identificação nas páginas públicas vinculadas</label>
-        </div> : null}
+        : null}
 
         <div className="grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           <div>
