@@ -37,6 +37,9 @@ export type WhatsappCloneMemory = {
 };
 
 export type WhatsappBehaviorConfig = {
+  /** Missing on legacy agents: inherit the existing store setting until saved. */
+  storefrontEnabled?: boolean;
+  storefrontMode?: "observer" | "assistant" | "active_seller";
   settingsVersion?: number;
   customizedStyleFields?: string[];
   textEmojis: boolean;
@@ -402,6 +405,8 @@ const quoteReplyModes = new Set<WhatsappQuoteReplyMode>(["off", "smart", "always
 export function normalizeWhatsappBehaviorConfig(value: unknown, options?: { preserveSettings?: boolean }): WhatsappBehaviorConfig {
   const input = isRecord(value) ? value : {};
   const merged = { ...defaultWhatsappBehaviorConfig };
+  if (typeof input.storefrontEnabled === "boolean") merged.storefrontEnabled = input.storefrontEnabled;
+  if (input.storefrontMode === "observer" || input.storefrontMode === "assistant" || input.storefrontMode === "active_seller") merged.storefrontMode = input.storefrontMode;
   if (input.settingsVersion === 1) merged.settingsVersion = 1;
   if (Array.isArray(input.customizedStyleFields)) merged.customizedStyleFields = input.customizedStyleFields.filter((key): key is string => typeof key === "string").slice(0, 32);
 
@@ -443,6 +448,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown, options?: { pres
   merged.quotedReplyContext = merged.quoteReplyMode !== "off";
 
   if (!merged.agentEnabled && !options?.preserveSettings) {
+    merged.storefrontEnabled = false;
     merged.alwaysOnline = false;
     merged.presenceMode = "focused";
     merged.markAsRead = false;

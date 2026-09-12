@@ -155,6 +155,12 @@ export function CommerceAgentDock() {
     const controller = new AbortController();
     const snapshot = getTrackingSnapshot();
     let sessionRequestSettled = false;
+    let retryTimer: number | undefined;
+    const retrySession = () => {
+      if (controller.signal.aborted || probeAttempts >= 3) return;
+      lastSessionKey.current = null;
+      retryTimer = window.setTimeout(() => setTrackingContextProbe({ pageKey, attempts: probeAttempts + 1 }), 1000 * (probeAttempts + 1));
+    };
 
     fetch("/api/public/commerce-agent/session", {
       method: "POST",
@@ -176,6 +182,7 @@ export function CommerceAgentDock() {
         if (!response.ok || !payload?.enabled) {
           setSession(null);
           setMessages([]);
+          if (response.status >= 500 || (response.ok && !payload)) retrySession();
           return;
         }
 
@@ -186,6 +193,7 @@ export function CommerceAgentDock() {
         if (!controller.signal.aborted) {
           setSession(null);
           setMessages([]);
+          retrySession();
         }
       })
       .finally(() => {
@@ -196,6 +204,7 @@ export function CommerceAgentDock() {
       });
 
     return () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       if (!sessionRequestSettled && lastSessionKey.current === sessionKey) {
         lastSessionKey.current = null;
       }

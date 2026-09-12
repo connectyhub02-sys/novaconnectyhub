@@ -2106,6 +2106,8 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
+              <StorefrontBehaviorControls behaviorDraft={behaviorDraft} updateBehavior={updateBehavior} />
+
               <BehaviorSection title="Voz do agente" description="Escolhe a voz usada quando o agente responder em audio.">
                 <VoiceSelector
                   behavior={behaviorDraft}
@@ -6816,4 +6818,22 @@ function getHumanizationMetricBarColor(status: CloneHumanizationMetric["status"]
   if (status === "good") return "bg-emerald-400";
   if (status === "warning") return "bg-amber-400";
   return "bg-rose-400";
+}
+
+function StorefrontBehaviorControls({ behaviorDraft, updateBehavior }: { behaviorDraft: WhatsappBehaviorConfig; updateBehavior: <K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) => void }) {
+  return (
+    <BehaviorSection title="Atendimento na loja" description="Usa a identidade, a profissão e as regras deste agente na loja e nas páginas dos produtos.">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <ToggleTile icon={Globe2} label="Atender na loja e nos produtos" description="Leva este agente às páginas públicas vinculadas. Ao pausar o agente, o atendimento na loja também pausa." checked={behaviorDraft.storefrontEnabled ?? false} onChange={() => updateBehavior("storefrontEnabled", !behaviorDraft.storefrontEnabled)} />
+        <label className="grid gap-2 text-xs">
+          <span>Modo de atendimento</span>
+          <select aria-label="Modo de atendimento na loja" className="min-h-11 w-full rounded-lg border bg-transparent px-3" style={{ borderColor: "var(--ch-border)" }} value={behaviorDraft.storefrontMode ?? "assistant"} onChange={(event) => updateBehavior("storefrontMode", event.target.value as NonNullable<WhatsappBehaviorConfig["storefrontMode"]>)}>
+            <option value="observer">Observador</option>
+            <option value="assistant">Assistente</option>
+            <option value="active_seller">Vendedor ativo</option>
+          </select>
+        </label>
+      </div>
+    </BehaviorSection>
+  );
 }

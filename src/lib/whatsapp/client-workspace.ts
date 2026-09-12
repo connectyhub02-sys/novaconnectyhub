@@ -41,7 +41,7 @@ import type { OrganizationLocation } from "@/lib/company-locations/shared";
 import { listOrganizationLocations, replaceOrganizationLocations } from "@/lib/company-locations/server";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
-import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
+import { getOrganizationSalesCatalogSettings, listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import {
   defaultWhatsappAgentPrompt,
@@ -353,6 +353,11 @@ export async function getClientWhatsappState(input: {
     : rawInstance;
 
   const behavior = getBehaviorConfig(globalAgent, instance, agent);
+  // Show existing store preferences on first access, then persist them on this agent.
+  const storeSettings = await getOrganizationSalesCatalogSettings(client, input.organization.id);
+  const ownBehavior = normalizeWhatsappBehaviorSettings(readRecord(agent?.metadata)?.whatsapp_behavior_config);
+  behavior.storefrontEnabled = ownBehavior.storefrontEnabled ?? storeSettings?.commerceAgent.enabled ?? false;
+  behavior.storefrontMode = ownBehavior.storefrontMode ?? storeSettings?.commerceAgent.mode ?? "assistant";
   const [audio, runtimeAlerts, accountProfile] = await Promise.all([
     listWhatsappAudioVoices({ organizationId: input.organization.id, ownerUserId: input.userId, client }),
     listWhatsappRuntimeAlerts(client, {

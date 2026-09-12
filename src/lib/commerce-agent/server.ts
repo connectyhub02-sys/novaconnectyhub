@@ -32,7 +32,7 @@ import {
   promptBuilderMetadataKey,
 } from "@/lib/whatsapp/agent-prompt-templates";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
-import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
+import { isPublicStoreAgent, resolveAgentStoreSettings, resolveStoreLeadName } from "./agent-settings";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -82,6 +82,7 @@ type LeadRow = {
 };
 
 type AgentRow = {
+  agent_code?: string | null;
   id: string;
   name: string | null;
   persona_name: string | null;
@@ -174,7 +175,7 @@ type CommerceOrderItem = {
   skuCode: string | null;
 };
 
-import { buildActivityProfileInstruction } from "@/lib/whatsapp/activity-profile";
+import { activityDefaultDestination, buildActivityProfileInstruction } from "@/lib/whatsapp/activity-profile";
 
 type OfferProduct = {
   id: string;
@@ -357,9 +358,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
 
   if (!(await isPublicCommerceAvailable(organization.id, client))) return { ok: false, status: 503, error: storeUnavailableMessage };
   const settings = await getOrganizationSalesCatalogSettings(client, organization.id);
-  const commerceAgent = settings?.commerceAgent;
-
-  if (!settings || !commerceAgent?.enabled || !commerceAgent.surfaces.includes(surface as SalesCatalogCommerceAgentSurface)) {
+  if (!settings) {
     return { ok: false, status: 200, error: "Agente da loja inativo." };
   }
 
@@ -384,24 +383,29 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
   const lead = leadContext.leadId
     ? await loadLead(client, organization.id, leadContext.leadId)
     : null;
-  const leadName = (lead
-    ? resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata })
-    : null) ?? readString(hydratedSession?.lead_name) ?? readString(hydratedSessionMetadata?.lead_name);
+
   const requestedAgentId = readUuid(body.agent_id)
     ?? readUuid(body.agentId)
     ?? readUuid(hydratedSessionMetadata?.agent_id);
-  let agent = await loadCommerceAgent(
-    client,
-    organization.id,
-    requestedAgentId ?? settings.automationSettings.defaultAgentId,
-  );
+  const productId = inferProductIdFromPagePath(pagePath) ?? readUuid(body.product_id) ?? readUuid(body.catalog_item_id);
+  let agent = requestedAgentId ? await loadCommerceAgent(client, organization.id, requestedAgentId) : null;
+  if (!agent && productId) {
+    const productAgentId = await loadProductStoreAgentId(client, organization.id, productId);
+    if (productAgentId) agent = await loadCommerceAgent(client, organization.id, productAgentId);
+  }
 
-  if (!agent && requestedAgentId) {
+  if (!agent && settings.automationSettings.defaultAgentId) {
     agent = await loadCommerceAgent(client, organization.id, settings.automationSettings.defaultAgentId);
   }
 
+  if (!agent) agent = await loadCommerceAgent(client, organization.id, null);
+  if (!agent) return { ok: false, status: 200, error: "Agente da loja inativo." };
+  settings.commerceAgent = resolveAgentStoreSettings(agent, settings.commerceAgent);
+  if (!settings.commerceAgent.enabled || !settings.commerceAgent.surfaces.includes(surface as SalesCatalogCommerceAgentSurface)) return { ok: false, status: 200, error: "Agente da loja inativo." };
+
   const globalAgent = await loadGlobalCommerceAgent(client, organization.id).catch(() => null);
   const agentName = readString(agent?.persona_name) ?? readString(agent?.name) ?? "Agente ConnectyHub";
+  const leadName = resolveStoreLeadName(lead, agentName);
   const agentWhatsappInstance = await loadAgentWhatsappInstance(client, organization.id, agent?.id ?? null);
   const fallbackWhatsappInstance = agentWhatsappInstance
     ? null
@@ -438,7 +442,7 @@ export async function resolveCommerceAgentContext(body: CommerceAgentBody): Prom
     trackingLinkId,
     orderId,
     paymentSessionId,
-    productId: inferProductIdFromPagePath(pagePath) ?? readUuid(body.product_id) ?? readUuid(body.catalog_item_id),
+    productId,
     pagePath,
     pageUrl,
     agentId: agent?.id ?? null,
@@ -491,7 +495,7 @@ export async function buildCommerceAgentSessionPayload(
     contextualIntentMessage: buildContextualIntentMessage(context, promptContext),
     contextualAssistantOpener: buildContextualAssistantOpener(context, promptContext),
     whatsappHref: context.whatsappHref,
-    quickActions: buildQuickActions(context),
+    quickActions: buildQuickActions(context, promptContext),
     messages: visibleMessages.map((message) => ({
       id: message.id,
       role: message.role === "lead" || message.role === "assistant" ? message.role : "system",
@@ -765,6 +769,12 @@ async function buildFallbackCommerceAgentReply(input: {
   const promptContext = await loadCommerceAgentPromptContext(input.context, { includeMessages: false }).catch(() => emptyPromptContext());
   const offer = promptContext.contextualOffer ?? await resolveContextualOffer(input.context).catch(() => null);
 
+  if (isAppointmentJourney(input.context, promptContext)) {
+    return promptContext.currentProduct
+      ? `Posso ajudar com os detalhes de ${promptContext.currentProduct.title}. Para consultar horários, abra a opção Agendar na página. Se não houver horários disponíveis, podemos continuar pelo WhatsApp.`
+      : "Posso ajudar a escolher o atendimento e orientar o agendamento. Qual opção você quer conhecer melhor?";
+  }
+
   if (text.includes("whatsapp")) {
     return input.context.whatsappHref
       ? "Claro. Se quiser, voce pode voltar para o WhatsApp pelo atalho daqui, e eu continuo com o contexto desta compra."
@@ -809,7 +819,7 @@ async function ensureCommerceSession(context: Extract<CommerceAgentResolvedConte
     : await findCommerceSession(context);
   const sessionLeadId = context.leadId ?? currentSession?.lead_id ?? null;
   const sessionConversationId = context.conversationId ?? currentSession?.conversation_id ?? null;
-  const sessionLeadName = context.leadName ?? currentSession?.lead_name ?? null;
+  const sessionLeadName = context.leadName;
   const sessionLeadPhone = context.leadPhone ?? currentSession?.lead_phone ?? null;
   const payload = {
     organization_id: context.organization.id,
@@ -871,7 +881,7 @@ function buildCommerceSessionMetadata(
     source: "commerce_agent_session",
     agent_id: context.agentId ?? readString(existing.agent_id),
     agent_name: context.agentName || readString(existing.agent_name),
-    lead_name: context.leadName ?? readString(existing.lead_name),
+    lead_name: context.leadName,
     lead_phone: context.leadPhone ?? readString(existing.lead_phone),
     product_id: context.productId ?? readString(existing.product_id),
     latest_product_id: context.productId ?? readString(existing.latest_product_id),
@@ -974,7 +984,7 @@ async function upsertLeadWebIdentity(
     source: "commerce_agent",
     agent_id: context.agentId ?? readString(existingMetadata.agent_id),
     agent_name: context.agentName || readString(existingMetadata.agent_name),
-    lead_name: context.leadName ?? readString(existingMetadata.lead_name),
+    lead_name: context.leadName,
     lead_phone: context.leadPhone ?? readString(existingMetadata.lead_phone),
     latest_surface: context.surface,
     latest_page_path: context.pagePath,
@@ -1381,7 +1391,10 @@ async function loadRecentMessages(context: Extract<CommerceAgentResolvedContext,
   return mergeRecentCommerceMessages([
     ...(sessionResult.data ?? []),
     ...(leadResult ?? []),
-  ]);
+  ]).filter((message) => {
+    const authorAgentId = readUuid(message.metadata?.agent_id);
+    return message.role !== "assistant" || !authorAgentId || authorAgentId === context.agentId;
+  });
 }
 
 async function loadRecentLeadCommerceMessages(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
@@ -1721,17 +1734,40 @@ async function validateTrackedLinkCommerceAgentContext(
   return Boolean(data?.id);
 }
 
+async function loadProductStoreAgentId(client: SupabaseClient, organizationId: string, productId: string) {
+  const { data } = await client.from("intelligence_memory").select("metadata")
+    .eq("organization_id", organizationId).eq("scope", "organization")
+    .eq("memory_type", "sales_catalog_item").eq("id", productId).maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(data?.metadata);
+  const assigned = metadata?.assigned_agent_ids ?? metadata?.agent_ids;
+  const ids = Array.isArray(assigned) ? assigned.map(readUuid).filter((id): id is string => Boolean(id)) : [];
+  if (ids.length === 1) return ids[0];
+  const source = readUuid(metadata?.source_agent_id) ?? readUuid(metadata?.agent_id);
+  return source && (ids.length === 0 || ids.includes(source)) ? source : null;
+}
+
 async function loadCommerceAgent(client: SupabaseClient, organizationId: string, agentId: string | null) {
   let query = client
     .from("agent_registry")
-    .select("id, name, persona_name, prompt, model_id, avatar_url, avatar_alt, metadata")
+    .select("id, agent_code, name, persona_name, prompt, model_id, avatar_url, avatar_alt, metadata")
     .eq("organization_id", organizationId)
     .neq("status", "archived");
 
-  query = agentId ? query.eq("id", agentId) : query.order("created_at", { ascending: true }).limit(1);
-
-  const { data } = await query.maybeSingle<AgentRow>();
-  return data ?? null;
+  if (agentId) {
+    const { data } = await query.eq("id", agentId).maybeSingle<AgentRow>();
+    return data && isPublicStoreAgent(data) ? data : null;
+  }
+  query = query.order("created_at", { ascending: true });
+  const { data } = await query;
+  const candidates = (data ?? []).filter((candidate: AgentRow) => isPublicStoreAgent(candidate));
+  // Prefer an explicitly enabled attendant; never pick the internal controller.
+  return candidates.find((candidate: AgentRow) => {
+    const behavior = readRecord(candidate.metadata?.whatsapp_behavior_config) ?? {};
+    return behavior.storefrontEnabled === true && behavior.agentEnabled !== false;
+  }) ?? candidates.find((candidate: AgentRow) => {
+    const behavior = readRecord(candidate.metadata?.whatsapp_behavior_config) ?? {};
+    return behavior.storefrontEnabled !== false && behavior.agentEnabled !== false;
+  }) ?? null;
 }
 
 async function loadGlobalCommerceAgent(client: SupabaseClient, organizationId: string) {
@@ -1921,6 +1957,7 @@ function buildCommerceAgentSystemInstruction(
     "- Nao diga que esta monitorando, rastreando, analisando eventos, usando cookie, banco, sistema ou memoria.",
     "- Se o lead mudou de produto, conecte com a conversa anterior: compare, complemente ou pergunte uma coisa simples.",
     "- O produto atual da pagina sempre tem prioridade sobre produtos antigos do historico.",
+    "- A identidade deste agente e o nome confirmado do visitante prevalecem sobre nomes antigos do histórico. Não use o nome de um controlador interno como atendente nem presuma que o visitante tem o nome do agente.",
     "- Se o lead abriu varios produtos sem comprar, trate como duvida/comparacao e ajude a escolher com uma pergunta curta.",
     "- Se estiver no checkout, ajude sem atrapalhar o pagamento. Seja curto e resolutivo.",
     "- Faca aumento de carrinho somente quando combinar com o pedido, produto atual ou configuracao da loja.",
@@ -2097,6 +2134,9 @@ function buildProductWhisperMessage(
   }
 
   const product = promptContext.currentProduct;
+  if (product.salesDestination === "appointment") {
+    return `${name}quer conhecer os detalhes de ${product.title}? Clica na minha foto para tirar dúvidas e ver como agendar.`;
+  }
   const previousProducts = promptContext.recentProductViews.filter((item) => item.id !== product.id);
   const viewedManyProducts = promptContext.recentProductViews.length >= 4;
   const comparison = previousProducts[0]?.title;
@@ -2156,6 +2196,11 @@ function buildContextualAssistantOpener(
   promptContext: CommerceAgentPromptContext,
 ) {
   const name = context.leadName ? `${firstName(context.leadName)}, ` : "";
+  if (isAppointmentJourney(context, promptContext)) {
+    return promptContext.currentProduct
+      ? `${name}posso ajudar com os detalhes de ${promptContext.currentProduct.title} e orientar o agendamento pela página. O que você gostaria de saber?`
+      : `${name}qual atendimento você gostaria de conhecer?`;
+  }
 
   if (context.surface === "product" && promptContext.currentProduct) {
     const product = promptContext.currentProduct;
@@ -2595,9 +2640,25 @@ function buildCommerceAgentRequestId(
   return `commerce-agent:${base}`.slice(0, 180);
 }
 
-function buildQuickActions(context: Extract<CommerceAgentResolvedContext, { ok: true }>) {
+function isAppointmentJourney(context: Extract<CommerceAgentResolvedContext, { ok: true }>, promptContext: CommerceAgentPromptContext) {
+  if (promptContext.currentProduct?.salesDestination) return promptContext.currentProduct.salesDestination === "appointment";
+  if (context.surface === "checkout" || context.surface === "cart") return false;
+  return activityDefaultDestination(normalizeAgentPromptBuilderConfig(context.agentMetadata?.[promptBuilderMetadataKey]).templateId) === "appointment";
+}
+
+function buildQuickActions(context: Extract<CommerceAgentResolvedContext, { ok: true }>, promptContext: CommerceAgentPromptContext) {
   if (context.settings.commerceAgent.mode === "observer") {
     return [];
+  }
+
+  if (isAppointmentJourney(context, promptContext)) {
+    return [
+      { id: "item_details", label: "Tirar dúvidas", message: "Quero saber mais sobre esta opção." },
+      { id: "appointment_help", label: "Como agendar", message: "Como posso agendar este atendimento ou visita?" },
+    ];
+  }
+  if (promptContext.currentProduct?.salesDestination === "external_site") {
+    return [{ id: "item_details", label: "Tirar dúvidas", message: "Quero saber mais sobre este item e seu site." }];
   }
 
   if (context.surface === "checkout") {

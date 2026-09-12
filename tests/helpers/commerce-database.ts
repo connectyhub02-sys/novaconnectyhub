@@ -15,6 +15,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
       let offset = 0;
       const query = {
         select: () => query,
+        returns: () => query,
         order: (key: string, options?: { ascending?: boolean }) => { sorting = { key, ascending: options?.ascending !== false }; return query; },
         limit: (value: number) => { maximum = value; return query; },
         range: (from: number, to: number) => { offset = from; maximum = to - from + 1; return query; },
