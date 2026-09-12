@@ -2,6 +2,14 @@
 
 Atualização: 12/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
+## Publicação conjunta da agenda e recuperação de cartão — 12/09/2026
+
+O titular autorizou aguardar a agenda e publicar os dois conjuntos uma única vez. Agenda preservada em `ac655f0`; correção genérica Pix → cartão `9d44414` integrada como `21f6ee2`, sem conflitos de código. As evidências dos dois trabalhos e a nota local de publicação anterior do checkout original foram preservadas. O checkout original não foi alterado.
+
+Validação combinada concluída: **1.568 testes em 162 arquivos**, ESLint sem erros, diff-check e build de produção local aprovados. O build compilou, passou TypeScript e gerou 100 páginas estáticas, incluindo o registro da rota dinâmica `/dashboard/agenda`. Para o sitemap, foram usadas temporariamente apenas as três variáveis Supabase do ambiente local existente, com destino confirmado `supabase.connectyhub.com.br`; o arquivo temporário ignorado foi removido após a validação. A primeira tentativa sem ambiente completou compilação/TypeScript e parou por ausência da configuração do sitemap; isso foi resolvido sem alterar o código. Os testes de reservas, banco, gateway e transporte permanecem sintéticos, sem compra, cobrança, mensagem, reserva ou mudança nas configurações dos clientes.
+
+Envio único à master e observação da implantação em preparação. O estado observado de produção, antes deste envio, é `1d33255`, implantação `dpl_BkpfV5GDXozVaV3V2533pu7RDmfn` Ready, confirmada pela inspeção do domínio principal e aliases. Após a implantação, registrar a versão observada localmente, evitando outro deploy apenas documental. A entrega efetiva do botão Pix/cartão e a nova reserva continuam para o reteste do titular.
+
 ## Agenda em calendário — implementação local de 12/09/2026
 
 Por solicitação do titular, **Agenda** passa a ser um item do menu do cliente em `/dashboard/agenda`, com título Agenda inteligente. O bloco completo foi retirado de Automações. A página preserva a seleção inicial/empresas acessíveis e a associação do agente pelo WhatsApp padrão salvo; mantém o controle de sessão/contrato e o escopo de organização já exigido pela API. Trocar a empresa reinicia o componente, sem reaproveitar formulários, horários ou detalhes anteriores. O administrador global não recebeu esse item.
@@ -202,6 +210,8 @@ Correção compartilhada: seleção de método separada do consentimento para cr
 Validação: **1.528 testes em 161 arquivos** aprovados na suíte completa; depois do complemento da retomada, **127 testes em cinco arquivos** passaram. TypeScript e ESLint aprovados. Casos cobrem frases do print, pedido genérico de link, histórico truncado, troca de volta para Pix, dúvida sobre juros, recusa de compra, alteração de endereço, atendimento humano, agendamento, expiração, conferência financeira e isolamento da preferência. Sem migration ou alteração manual em pedidos/configurações. Banco, gateway e envio WhatsApp simulados nas regressões; não houve envio real, cobrança ou cancelamento de Pix. Publicação já autorizada, em preparação; reteste real pelo titular permanece necessário para observar a entrega na conversa.
 
 ### Novo incidente e correção isolada — 12/09, após o teste das 12h30
+
+Registro pós-publicação preservado do checkout original: publicado em 12/09 às 00:48 BRT, commit `1d33255` na master, implantação `dpl_BkpfV5GDXozVaV3V2533pu7RDmfn` Ready. Build confirmou o commit e concluiu compilação/TypeScript; consulta do domínio principal confirmou essa implantação e ambos os aliases. Dezesseis testes de retomada passaram novamente após ajuste de lint do teste. Alteração disponível para todos os agentes no runtime compartilhado. Nenhum teste real enviado pelo agente de desenvolvimento; observação da entrega na conversa permanece para o titular. O registro permaneceu local até esta integração para evitar outro deploy apenas documental.
 
 A Vercel foi consultada e confirmou o conjunto anterior `1d33255` em **Ready / Latest / Production**, implantação `dpl_BkpfV5GDXozVaV3V2533pu7RDmfn`, desde 00:48 BRT. Mesmo assim, leituras do banco confirmaram pedido explícito de cartão seguido apenas de áudios/texto, sem botão ou fallback, e sessão ainda Pix pendente. As execuções `completed` representavam respostas da IA, não a recuperação do checkout. Configuração de cartão habilitada; sem tentativa de cartão, revisão pendente ou trava encontrada para o pedido.
 
