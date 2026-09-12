@@ -102,8 +102,28 @@ function scenario(options: { quantities?: [string, number][]; freightAvailable?:
   }
   function assistant(text: string) { ctx.messages.push(message("outbound", text)); }
   function customer(text: string) { ctx.messages.push(message("inbound", text)); }
-  function draft() { return ctx.lead.metadata.checkout_order_revision as { ready: boolean; items: { id: string; quantity: number }[]; request_id: string; total: string } | null; }
-  return { ctx, db, call, requests, transport, persistence, createPayment, turn, assistant, customer, draft };
+  function draft() { return ctx.lead.metadata.checkout_order_revision as { ready: boolean; items: { id: string; quantity: number }[]; request_id: string; total: string;
+    address: string | null; cep: string | null; method: string | null; delivery_update?: { address: string | null; cep: string | null } | null;
+    pending_intent?: { kind: string; productText?: string } | null } | null; }
+  function metadata(patch: Row) { Object.assign(ctx.lead.metadata, structuredClone(patch)); Object.assign(db.tables.leads[0].metadata as Row, structuredClone(patch)); }
+  function legacyCart(includePreview = true) {
+    customer("adicione uma limonada");
+    const updated_at = ctx.messages.at(-1)!.occurred_at;
+    metadata({ checkout_cart_draft: { organization_id: "store", conversation_id: "conversation", instance_id: "instance", updated_at,
+      items: [{ id: "pizza", quantity: 1 }, { id: "lemonade", quantity: 1 }] } });
+    if (includePreview) assistant("Antes de fechar, confirma se o pedido ficou assim:\n- 1x Pizza de queijo - R$ 60,00\n- 1x Limonada - R$ 10,00\nFrete: R$ 10,00.\nTotal: R$ 80,00.\nPosso fechar seu pedido e gerar o pagamento?");
+    else assistant("Você quer continuar por aqui?");
+  }
+  function corruptedRevision() {
+    customer("quero alterar nada não so estou agradecendo pelo frete gratis");
+    const source_message_id = ctx.messages.at(-1)!.id;
+    const draft = { organization_id: "store", conversation_id: "conversation", instance_id: "instance", order_id: "order", request_id: "corrupted-proposal",
+      expected_revision: 0, source_message_id, items: [{ id: "pizza", quantity: 1, mention_text: catalog[0].title }],
+      address: null, cep: null, method: null, ready: false, preview_text: null, total: null, preferred_method: "card" };
+    metadata({ checkout_order_revision: draft, checkout_order_revisions: { conversation: draft } });
+    assistant("Me informe o novo endereço completo com CEP para eu recalcular a entrega.");
+  }
+  return { ctx, db, call, requests, transport, persistence, createPayment, turn, assistant, customer, draft, metadata, legacyCart, corruptedRevision };
 }
 
 describe("revising a persisted WhatsApp order", () => {
@@ -270,12 +290,192 @@ describe("revising a persisted WhatsApp order", () => {
     const result = await s.turn("mude o endereço");
     expect(result?.text).toMatch(/novo endereço|endereço completo/);
     expect(s.draft()?.ready).toBe(false);
+    expect(s.draft()?.address).toBe(address);
+    expect(s.draft()?.cep).toBe("88330786");
+    expect(s.draft()?.delivery_update).toEqual({ address: null, cep: null });
     await s.turn("sim");
     expect(s.persistence).not.toHaveBeenCalled();
     await s.turn("Rua das Rosas, numero 70, Centro, Balneario Camboriu, SC, CEP 88330786");
     expect(s.draft()?.ready).toBe(true);
     await s.turn("sim");
     expect(s.persistence.mock.calls[0][0].shipping.destinationAddress).toContain("Rua das Rosas");
+  });
+
+  it("repairs an old false revision without erasing the second item previously proposed", async () => {
+    const s = scenario();
+    s.legacyCart();
+    s.corruptedRevision();
+    const reply = await s.turn("pode fechar o pedido");
+    expect(reply?.text).toContain("Limonada");
+    expect(reply?.text).toContain(address);
+    expect(reply?.text).toContain("80,00");
+    expect(reply?.text).toContain("ainda não foram gravados");
+    expect(s.draft()?.items.map(item => [item.id, item.quantity])).toEqual([["pizza", 1], ["lemonade", 1]]);
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.db.tables.sales_catalog_order_items).toHaveLength(1);
+    await s.turn("sim");
+    expect(s.persistence).toHaveBeenCalledOnce();
+    expect(s.persistence.mock.calls[0][0].rows).toHaveLength(2);
+    expect(s.persistence.mock.calls[0][0].shipping.destinationAddress).toBe(address);
+  });
+
+  it("cancels an unresolved address change when the customer explicitly asks to keep the order", async () => {
+    const s = scenario();
+    await s.turn("mude o endereço");
+    const reply = await s.turn("quero alterar nada não so estou agradecendo pelo frete gratis");
+    expect(reply?.text).toContain("Não fiz nenhuma alteração");
+    expect(s.draft()).toBeNull();
+    expect(s.db.tables.sales_catalog_orders[0].destination_address).toBe(address);
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.createPayment).not.toHaveBeenCalled();
+  });
+
+  it("does not accept a pending item proposal from a generic no-change declaration", async () => {
+    const s = scenario();
+    await s.turn("adicione uma limonada");
+    const reply = await s.turn("não quero alterar nada só pode fechar");
+    expect(reply?.text).toContain("Limonada");
+    expect(reply?.text).toContain("Confirma essa alteração?");
+    expect(s.persistence).not.toHaveBeenCalled();
+    await s.turn("sim");
+    expect(s.persistence).toHaveBeenCalledOnce();
+  });
+
+  it.each(["top pode fechar obrigado por tirar o frete pode fechar", "quero alterar nada não so estou agradecendo pelo frete gratis"])("does not create a product or address revision from courtesy: %s", async text => {
+    const s = scenario();
+    const reply = await s.turn(text);
+    expect(reply).toBeNull();
+    expect(s.draft()).toBeFalsy();
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it("accumulates a replacement destination without overwriting the old one with only a CEP", async () => {
+    const s = scenario();
+    await s.turn("mude o endereço");
+    await s.turn("88330800");
+    expect(s.draft()?.address).toBe(address);
+    expect(s.draft()?.cep).toBe("88330786");
+    expect(s.draft()?.delivery_update).toEqual({ address: null, cep: "88330800" });
+    expect(s.draft()?.ready).toBe(false);
+    await s.turn("Rua das Rosas, numero 70, Centro, Balneario Camboriu, SC");
+    expect(s.draft()?.address).toContain("Rua das Rosas");
+    expect(s.draft()?.cep).toBe("88330800");
+    expect(s.draft()?.delivery_update).toBeNull();
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it("reconciles a scoped legacy cart as a new proposal, never as old consent", async () => {
+    const s = scenario();
+    s.legacyCart();
+    const reply = await s.turn("sim");
+    expect(reply?.text).toContain("Limonada");
+    expect(reply?.text).toContain("Confirma essa alteração?");
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.createPayment).not.toHaveBeenCalled();
+    await s.turn("sim");
+    expect(s.persistence).toHaveBeenCalledOnce();
+  });
+
+  it.each(["no_preview", "conversation", "instance", "organization", "old", "unknown_product", "invalid_quantity"])("does not recover an unverified legacy cart: %s", invalid => {
+    const s = scenario();
+    s.legacyCart(invalid !== "no_preview");
+    const draft = structuredClone(s.ctx.lead.metadata.checkout_cart_draft) as Row;
+    if (["conversation", "instance", "organization"].includes(invalid)) draft[`${invalid}_id`] = "another";
+    if (invalid === "old") draft.updated_at = s.db.tables.sales_catalog_orders[0].created_at;
+    if (invalid === "unknown_product") draft.items = [{ id: "unknown", quantity: 1 }];
+    if (invalid === "invalid_quantity") draft.items = [{ id: "pizza", quantity: "1" }, { id: "lemonade", quantity: "1" }];
+    s.metadata({ checkout_cart_draft: draft });
+    return s.turn("sim").then(reply => {
+      expect(reply).toBeNull();
+      expect(s.draft()).toBeFalsy();
+      expect(s.persistence).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not reintroduce a legacy item after the customer explicitly removed it from the revision", async () => {
+    const s = scenario();
+    s.legacyCart();
+    await s.turn("sim");
+    await s.turn("retire a limonada");
+    expect(s.draft()?.items.map(item => item.id)).toEqual(["pizza"]);
+    await s.turn("sim");
+    expect(s.persistence.mock.calls[0][0].rows.map(item => item.catalog_item_id)).toEqual(["pizza"]);
+  });
+
+  it("does not revive a legacy proposal for an isolated sim answering a different conversation prompt", async () => {
+    const s = scenario();
+    s.legacyCart();
+    s.customer("oi");
+    s.assistant("Olá! Quer conversar por aqui?");
+    expect(await s.turn("sim")).toBeNull();
+    expect(s.draft()).toBeFalsy();
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it("does not attach an earlier legacy cart to a new purchase journey", async () => {
+    const s = scenario();
+    s.legacyCart();
+    s.customer("quero fazer um novo pedido");
+    s.metadata({ checkout_journey: { organization_id: "store", conversation_id: "conversation", instance_id: "instance", started_at: s.ctx.messages.at(-1)!.occurred_at } });
+    s.assistant("Qual pizza você quer para o novo pedido?");
+    expect(await s.turn("pode fechar o pedido")).toBeNull();
+    expect(s.draft()).toBeFalsy();
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it("preserves a pending product choice through unrelated gratitude", async () => {
+    const s = scenario();
+    await s.turn("adicione uma pizza");
+    expect(s.draft()?.pending_intent?.productText).toBe("pizza");
+    const reply = await s.turn("obrigado");
+    expect(reply).toBeNull();
+    expect(s.draft()?.pending_intent?.productText).toBe("pizza");
+    expect(s.draft()?.address).toBe(address);
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it.each(["obrigado por não tirar a pizza de queijo", "obrigado por não tirar a pizza de queijo do pedido", "obrigado pelo frete da pizza de queijo", "qual é a pizza de queijo?"])("does not complete a pending removal from gratitude or a question: %s", async text => {
+    const s = scenario();
+    await s.turn("remova o item da promoção");
+    expect(s.draft()?.pending_intent?.kind).toBe("remove");
+    const reply = await s.turn(text);
+    expect(reply).toBeNull();
+    expect(s.draft()?.items).toEqual([expect.objectContaining({ id: "pizza", quantity: 1 })]);
+    expect(s.draft()?.pending_intent?.kind).toBe("remove");
+    expect(s.persistence).not.toHaveBeenCalled();
+  });
+
+  it("replaces the preview instead of accepting its old destination when sim includes a new address", async () => {
+    const s = scenario();
+    await s.turn("adicione uma limonada");
+    const reply = await s.turn("sim, Rua dos Ipês, numero 30, Centro, Florianópolis, SC, CEP 88010000");
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.createPayment).not.toHaveBeenCalled();
+    expect(reply?.text).toContain("Rua dos Ipês");
+    expect(reply?.text).toContain("Confirma essa alteração?");
+    expect(s.draft()?.cep).toBe("88010000");
+    await s.turn("sim");
+    expect(s.persistence).toHaveBeenCalledOnce();
+    expect(s.persistence.mock.calls[0][0].shipping.destinationCep).toBe("88010000");
+  });
+
+  it("can confirm the displayed proposal when the customer repeats the same saved destination", async () => {
+    const s = scenario();
+    await s.turn("adicione uma limonada");
+    await s.turn(`sim, ${address}`);
+    expect(s.persistence).toHaveBeenCalledOnce();
+    expect(s.persistence.mock.calls[0][0].shipping.destinationAddress).toBe(address);
+  });
+
+  it("requires the rest of the new destination when sim supplies only a different CEP", async () => {
+    const s = scenario();
+    await s.turn("adicione uma limonada");
+    await s.turn("sim, CEP 88010000");
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.draft()?.ready).toBe(false);
+    expect(s.draft()?.address).toBe(address);
+    expect(s.draft()?.delivery_update?.cep).toBe("88010000");
+    expect(s.createPayment).not.toHaveBeenCalled();
   });
 
   it("updates payment preference within the revision without losing the newly added item", async () => {

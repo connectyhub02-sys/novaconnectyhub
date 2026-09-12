@@ -26,10 +26,93 @@ const verbs = {
 const verbPattern = Object.values(verbs).join("|");
 const actionPattern = new RegExp(`\\b(${verbPattern})\\b`, "g");
 const contextSuffix = /\s+(?:(?:no|do|ao|nesse|neste|desse|deste|pro|para o|pra o)\s+(?:meu\s+)?(?:pedido|carrinho)|(?:por|fazendo|faca)\s+favor|por gentileza|para mim|pra mim|tambem|a mais|junto)\s*$/;
+const imperativePattern = "adicion[ae]|inclu[ai]|acrescent[ae]|coloca|coloque|bot[ae]|remov[ae]|retir[ae]|tir[ae]|exclu[ai]|aument[ae]|diminua|diminui|reduz[ae]?|troca|troque|substitu[ai]|mud[ae]|alter[ae]|deix[ae]|mantenha|cancel[ae]";
+const clauseStart = `${verbPattern}|nao|nunca|nem|eu|voce|quero|prefiro|vou|pode|podemos|poderia|vamos|gostaria|obrigad[oa]|valeu|agradeco|agradecendo|so|apenas|agora|entao|ai`;
 
 function normalized(text: string) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
+
+function isExplicitNoChangeClause(text: string) {
+  if (/\bnada (?:menos|mais) que\b/.test(text)) return false;
+  const changes = "(?:mudar|mude|muda|alterar|altere|altera|trocar|troque|troca|mexer|mexa|revisar|editar)";
+  return new RegExp(`\\b${changes}\\s+(?:absolutamente\\s+)?(?:nada|nenhum(?:a)?\\s+(?:coisa|item|produto|detalhe))\\b`).test(text)
+    || /\bnao\s+(?:(?:quero|preciso|precisa|pedi|solicitei)\s+)?(?:de\s+)?nenhum(?:a)?\s+(?:alteracao|mudanca|ajuste|troca)\b/.test(text)
+    || new RegExp(`\\bnao\\s+(?:(?:quero|preciso|precisa)\\s+)?${changes}(?:\\s+(?:no|o|meu|esse|este|nesse)\\s+(?:pedido|carrinho))?[.!?]*$`).test(text);
+}
+
+function isNegatedRevisionClause(text: string) {
+  return /\b(?:nao|nunca|nem)\s+(?:(?:quero|precisa|preciso|pode|vai|deve|e para|era para)\s+)?(?:mais\s+)?(?:que\s+)?(?:voce\s+)?(?:me\s+)?(?:adicion|inclu|acrescent|coloq|coloc|bot|remov|retir|tir|exclu|aument|diminu|reduz|tro|substitu|mud|alter|cancel)/.test(text)
+    || /\b(?:nao|nunca|nem)\s+(?:(?:quero|vou|posso)\s+)?(?:pagar|pix|cartao|credito|debito)\b/.test(text)
+    || new RegExp(`\\b(?:${verbPattern})\\b.+\\s+nao(?:\\s+(?:viu|ta|por favor))?[,.!?]*$`).test(text);
+}
+
+function isCompletedRevisionReference(text: string) {
+  return new RegExp(`\\b(?:acabou de|terminou de|conseguiu)\\s+(?:${verbPattern})\\b`).test(text)
+    || /\b(?:fez|fizeram|efetuou|concluiu|realizou)\s+(?:a\s+|essa\s+|esta\s+)?(?:troca|alteracao|mudanca|retirada|inclusao)\b/.test(text);
+}
+
+/** Segment by speech acts, not every comma: commas inside an address stay intact. */
+function revisionSpeech(text: string) {
+  // Folding accents preserves offsets for normal Portuguese text. Whitespace is
+  // deliberately retained here so returned commands retain their original address.
+  text = text.normalize("NFC");
+  const folded = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const boundary = new RegExp(`(?:[,;.!?]\\s*|\\s+(?:mas|porem|agora|entao|ai)\\s+)(?=\\b(?:${clauseStart})\\b)`
+    + `|\\s+e\\s+(?=\\b(?:${imperativePattern}|nao|prefiro|quero|pode)\\b)`
+    + `|\\s+(?:so|apenas|somente)\\s+(?=\\b(?:${imperativePattern})\\b)`
+    + "|\\s+(?=(?:(?:so\\s+)?(?:estou\\s+)?(?:obrigad[oa]|valeu|agradeco|agradecendo|agradeci))\\b)"
+    + "|\\s+(?=(?:pode(?:mos)?|vamos)\\s+(?:fechar|finalizar|concluir)\\b)", "g");
+  const pieces: string[] = [];
+  let start = 0;
+  for (const match of folded.matchAll(boundary)) {
+    pieces.push(text.slice(start, match.index).trim());
+    start = match.index! + match[0].length;
+  }
+  pieces.push(text.slice(start).trim());
+  // A short correction belongs to the immediately preceding speech act, even
+  // when transcription inserts a comma ("adicione limonada, não").
+  for (let index = pieces.length - 1; index > 0; index--) {
+    if (/^nao(?:\s+(?:viu|ta|por favor))?[,.!?]*$/.test(normalized(pieces[index]))) {
+      pieces[index - 1] = `${pieces[index - 1].replace(/[,;.!?]+$/, "")} ${pieces[index]}`;
+      pieces.splice(index, 1);
+    }
+  }
+  const active: string[] = [], ordinary: string[] = [], denied: string[] = [];
+  let noChange = false;
+  for (let piece of pieces) {
+    piece = piece.replace(/^(?:agora|ent[aã]o|a[ií]|mas|por[eé]m)[,:]?\s+/i, "").replace(/\s+/g, " ").trim();
+    let segment = normalized(piece);
+    if (!segment) continue;
+    const thanks = segment.match(/\b(?:obrigad[oa]|valeu|agradeco|agradecemos|agradecendo|agradecer|agradeci|grato|grata)\b/);
+    if (thanks) {
+      const remainder = piece.slice(thanks.index! + thanks[0].length).replace(/^[,:;!?.\s]+/, "");
+      // "Obrigado por tirar" describes what was done; "obrigado, tire" and
+      // "obrigado tire" introduce an imperative and must retain that command.
+      if (!remainder || /^(?:por|pel[ao]s?|que|a|ao|aos)\b/.test(normalized(remainder))) continue;
+      piece = remainder;
+      segment = normalized(piece);
+    }
+    if (isExplicitNoChangeClause(segment)) { noChange = true; continue; }
+    if (isCompletedRevisionReference(segment)) continue;
+    if (isNegatedRevisionClause(segment)) { denied.push(piece); continue; }
+    const hasAction = [...segment.matchAll(actionPattern)].length > 0
+      || /^(?:(?:eu\s+)?quero\s+)?mais\s+/.test(segment)
+      || /\b(?:quero|prefiro|vou|pagar|pagamento)\b.*\b(?:pix|cartao|credito|debito)\b/.test(segment)
+      || /^(?:pix|cartao(?:\s+de)?(?:\s+(?:credito|debito))?|credito|debito)[.!?]*$/.test(segment);
+    (hasAction ? active : ordinary).push(piece);
+  }
+  // A refusal or completed action does not negate a separate, explicit command.
+  // Multiple positive commands remain joined, so the parser still refuses to
+  // execute just one part of a compound edit.
+  return { text: active.length ? active.join(" e ") : denied.length ? denied.join(" e ") : ordinary.join(" "), noChange: noChange && active.length === 0 };
+}
+
+/** Shared with confirmation routing: gratitude is not another imperative verb. */
+export function normalizeOrderRevisionSpeech(text: string) { return revisionSpeech(text).text; }
+
+/** Only an explicit global refusal of changes can dismiss an unresolved draft. */
+export function isOrderRevisionNoChangeIntent(text: string) { return revisionSpeech(text).noChange; }
 
 function clarify(reason: Extract<OrderRevisionIntent, { kind: "clarify" }>["reason"] = "ambiguous"): OrderRevisionIntent {
   return { kind: "clarify", reason };
@@ -88,9 +171,11 @@ function hasUnresolvedList(text: string) {
  * Catalog matching, authorization, persistence and payment safety belong to the caller.
  */
 export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | null {
-  const input = normalized(text);
+  const commandText = normalizeOrderRevisionSpeech(text);
+  const input = normalized(commandText);
   if (!input) return null;
   if (/^(?:(?:sim|top|ok|beleza)[,!]?\s+)?(?:(?:pode\s+)?deixa(?:r)?|fica|ficar|mantenha)\s+(?:assim|como esta|igual)[.!]*$/.test(input)) return null;
+  if (/\b(?:quanto|qual|calcula|calcule|calcular)\b.*\b(?:frete|taxa de entrega|custo de entrega)\b/.test(input)) return null;
 
   const actions = [...input.matchAll(actionPattern)];
   const shorthandAdd = input.match(/^(?:(?:sim|top|ok|beleza)[,!.]?\s+)?(?:(?:eu\s+)?quero\s+)?mais\s+(.+)$/);
@@ -101,8 +186,7 @@ export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | nu
   if (!actions.length && !shorthandAdd && !shorthandSet && !paymentSignal && !revisionMention) return null;
 
   // Hypotheticals and refusals describe changes, but do not authorize any of them.
-  if (/\b(?:nao|nunca|nem)\s+(?:(?:quero|precisa|preciso|pode|vai|deve|e para|era para)\s+)?(?:mais\s+)?(?:que\s+)?(?:voce\s+)?(?:me\s+)?(?:adicion|inclu|acrescent|coloq|coloc|bot|remov|retir|tir|exclu|aument|diminu|reduz|tro|substitu|mud|alter|cancel)/.test(input)) return clarify("negated");
-  if (paymentSignal && /\b(?:nao|nunca|nem)\s+(?:(?:quero|vou|posso)\s+)?(?:pagar|pix|cartao|credito|debito)\b/.test(input)) return clarify("negated");
+  if (isNegatedRevisionClause(input)) return clarify("negated");
   if (/\b(?:se eu|se voce|caso eu|caso voce|e se|suponha|hipoteticamente|talvez|quem sabe)\b/.test(input)
     || /\b(?:consigo|posso|e possivel|seria possivel|tem como|da para|da pra|como faco para|como faz para|quanto|qual|quais)\b/.test(input)
     || /\b(?:como|quando)\s+(?:eu|voce|adicion|remov|retir|reduz|aument|tro|mud|alter)/.test(input)
@@ -132,7 +216,7 @@ export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | nu
     return { kind: "payment", paymentMethod: destination ? (/\bpix\b/.test(destination) ? "pix" : "card") : hasPix ? "pix" : hasCard ? "card" : null };
   }
   if (deliverySignal && (isVerb("replace") || isVerb("set"))) {
-    return { kind: "delivery", deliveryText: text.trim() };
+    return { kind: "delivery", deliveryText: commandText.trim() };
   }
   if (isVerb("cancel") && /^(?:(?:o|meu|esse|este|todo|inteiro)\s+)*(?:pedido|carrinho)(?:\s+(?:inteiro|todo))?[.!?]*$/.test(afterVerb)) return { kind: "cancel" };
 
@@ -193,6 +277,9 @@ export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | nu
 
   if (hasUnresolvedList(cleanProduct(productSource))) return clarify("multiple_operations");
   const product = extractProduct(productSource);
+  // Freight is a quote/price, not a catalog line that can be added or removed.
+  if (/^(?:(?:valor|preco|custo|taxa)\s+(?:do|da|de)\s+)?(?:frete|entrega|envio)(?:\s+(?:gratis|gratuit[oa]))?$/.test(product.productText)) return null;
+  if (/^(?:pix|cartao(?: de credito| de debito)?|pagamento|(?:forma|metodo) de pagamento|endereco|cep|retirada)$/.test(product.productText)) return clarify();
   if (product.invalid || !isSpecificProduct(product.productText)) return clarify();
   const quantity = explicitQuantity ?? product.quantity;
   if (kind === "set_quantity") return quantity === null ? clarify() : { kind, productText: product.productText, quantity };
