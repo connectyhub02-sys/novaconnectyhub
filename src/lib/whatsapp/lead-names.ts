@@ -67,6 +67,13 @@ export function resolveLeadPersonalName(input: LeadNameInput) {
   const metadata = readRecord(input.metadata);
   const memory = readRecord(metadata?.lead_memory);
   const qualification = readRecord(metadata?.qualification);
+  const evidence = readRecord(metadata?.lead_name_evidence);
+  const inferredName = normalizeLeadNameCandidate(memory?.personName ?? memory?.person_name);
+  const unconfirmedMemory = memory?.source === "whatsapp_agent_memory"
+    && memory?.name_source !== "existing_record"
+    && !(evidence?.source === "lead_message" && typeof evidence.name === "string"
+      && normalizeSearchText(evidence.name) === normalizeSearchText(inferredName ?? ""));
+  const suspectName = normalizeLeadNameCandidate(metadata?.lead_name_needs_confirmation);
   const candidates = [
     metadata?.person_name,
     metadata?.personal_name,
@@ -84,11 +91,34 @@ export function resolveLeadPersonalName(input: LeadNameInput) {
   for (const candidate of candidates) {
     const name = normalizeLeadNameCandidate(candidate);
 
-    if (name && isLikelyPersonalLeadName(name)) {
+    if (name && isLikelyPersonalLeadName(name)
+      && !(suspectName && normalizeSearchText(name) === normalizeSearchText(suspectName))
+      && !(unconfirmedMemory && inferredName && normalizeSearchText(name) === normalizeSearchText(inferredName))) {
       return name;
     }
   }
 
+  return null;
+}
+
+type IdentityMessage = { id?: string; direction: string; text_content?: string | null };
+
+// Names mentioned by the assistant, quoted third parties and greetings are not self-identification.
+export function findLeadNameEvidence(messages: IdentityMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.direction !== "inbound") continue;
+    const text = (message.text_content ?? "").trim();
+    const declared = text.match(/^(?:(?:oi|ol[aá]|bom dia|boa tarde|boa noite)[,! .]+)?(?:meu nome(?: completo)?\s*(?:[ée]|eh|:)\s*|(?:eu )?me chamo\s+|pode me chamar de\s+)([\p{L}][\p{L} '\u2019-]{1,79})(?=[,.;!\n]|$)/iu)?.[1];
+    const previous = messages[index - 1];
+    const askedName = previous?.direction === "outbound"
+      && /(?:qual (?:[ée] )?(?:o )?seu nome|como (?:posso|podemos|voc[eê] prefere que eu) (?:te |lhe |o |a )?chamar|(?:me (?:diga|informe)|preciso d[eo]) (?:o )?seu nome)/i.test(previous.text_content ?? "");
+    const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '\u2019-]{1,79}[.!]?$/u.test(text) ? text.replace(/[.!]$/, "") : null));
+    if (candidate && isLikelyPersonalLeadName(candidate)
+      && !/\b(?:ele|ela|voce|você|aqui|quero|procuro|falando|corretor|dentista|sou|prefiro|informar|dizer|passar|nao|não|depois)\b/i.test(candidate)) {
+      return { name: candidate, messageId: message.id ?? null };
+    }
+  }
   return null;
 }
 

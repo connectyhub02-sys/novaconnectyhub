@@ -14,6 +14,7 @@ type Input = {
   organizationId: string;
   conversationId: string;
   leadId: string;
+  leadName: string | null;
   agentId: string;
   runId: string;
   credentials: GeminiCredentials;
@@ -218,7 +219,10 @@ export async function processAgendaTurn(
     )
       result.context +=
         " Nenhuma reserva realizada. Peça que o lead escolha e confirme um dos horários oferecidos.";
-    else {
+    else if (!input.leadName) {
+      result.context += " Nenhuma reserva realizada: falta o nome da pessoa. Peça o nome para concluir este agendamento, sem pedir novamente dados já informados. Preserve a escolha do horário; a reserva só existe depois de gravada.";
+      result.fallback = "Para concluir o agendamento, como posso te chamar?";
+    } else {
       const saved = await client.rpc("reserve_customer_appointment", {
         p_org: org,
         p_resource: resource.id,

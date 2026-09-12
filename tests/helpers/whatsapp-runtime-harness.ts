@@ -26,7 +26,7 @@ const exposed = [
   "extractRuntimeCustomerNameFromStructuredReply",
   "resolveSalesCatalogOrderSelections", "resolveSalesCatalogMentionQuantity",
   "hasRecentSalesCatalogCheckoutConfirmation", "buildSalesCatalogOrderConfirmationPrompt",
-  "persistLeadBillingDetailsSnapshot", "persistLeadCustomerNameSnapshot", "extractLeadMemory",
+  "persistLeadBillingDetailsSnapshot", "persistLeadCustomerNameSnapshot", "extractLeadMemory", "buildLeadNameContext", "buildLeadMemoryLines",
   "maybePersistSalesCatalogLeadContactDetailsFromMessage", "maybeAttachSalesCatalogCustomerNameToOrder",
   "maybeAttachSalesCatalogCustomerBillingDetailsToOrder", "sendSalesCatalogPaymentDeferredWhatsapp",
   "buildSalesCatalogCheckoutStateLines", "resolveSalesCatalogConfirmedPaymentPreference",

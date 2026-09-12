@@ -53,7 +53,7 @@ describe("usage billing integrity", () => {
       "./agenda":{getAgenda:async()=>({bookings:[],resources:[],settings:{timezone:"America/Sao_Paulo"}})},
       "@/lib/billing/gemini-metering":{meterGeminiGenerationUsage:meter},
     },[],{fetch:fetchMock});
-    await agenda.processAgendaTurn({client:db.client as never,organizationId:"org",leadId:"lead",agentId:"agent",runId:"run",conversationId:"conversation",
+    await agenda.processAgendaTurn({client:db.client as never,organizationId:"org",leadId:"lead",leadName:null,agentId:"agent",runId:"run",conversationId:"conversation",
       credentials:{apiKey:"test-key",model:"test-model"} as never,userText:"Quero agendar",messages:[],assertCurrent:async()=>{}});
     expect(fetchMock.mock.calls[0][1].headers["x-goog-api-key"]).toBe("test-key");
     expect(meter.mock.calls[0][0]).toMatchObject({organizationId:"org",requestId:"agenda:run:intent",featureCode:"chat_completion"});

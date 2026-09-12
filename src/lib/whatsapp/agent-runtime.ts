@@ -129,6 +129,7 @@ import {
 import {
   isLikelyPersonalLeadName,
   normalizeLeadNameCandidate,
+  findLeadNameEvidence,
   resolveLeadPersonalName,
   resolveNonPersonalWhatsappDisplayName,
 } from "./lead-names";
@@ -978,6 +979,7 @@ async function processWhatsappAgentRunWithScope(input: {
       ? await import("@/lib/automations/agenda-agent").then(({ processAgendaTurn }) => processAgendaTurn({
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
           agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
+          leadName: resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata }),
           catalogAppointment: agendaItem?.salesDestination === "appointment", catalogResourceId: agendaItem?.salesDestination === "appointment" ? agendaItem.fulfillment.agendaResourceId : undefined,
           messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
         })).catch((error) => {
@@ -1171,7 +1173,15 @@ async function handleConversationEnding(input: {
       skipped: true, reason: "conversation_already_ended",
     });
   }
-  const text = "Por nada! Até mais.";
+  const closingNameQuestion = "Antes de encerrar, como posso te chamar para identificar seu atendimento?";
+  const declinedName = context.messages.some((message, index) => message.direction === "inbound"
+    && (/\b(?:prefiro|quero|vou) n[aã]o (?:informar|dizer|passar)|\bn[aã]o (?:quero|vou) (?:informar|dizer|passar)\b/i.test(message.text_content ?? "")
+      || (/^n[aã]o[.! ]*$/i.test(message.text_content ?? "") && /nome|como posso te chamar/i.test(context.messages[index - 1]?.text_content ?? ""))));
+  const askClosingName = Boolean(context.lead?.id)
+    && !resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata })
+    && !declinedName
+    && !context.messages.some((message) => message.direction === "outbound" && (message.text_content ?? "").includes(closingNameQuestion));
+  const text = askClosingName ? `Por nada! ${closingNameQuestion}` : "Por nada! Até mais.";
   const sent = await sendWhatsappText({
     credentials: context.credentials, token, phone, text,
     trackId: `conversation_ending_${context.run.id}`,
@@ -2658,6 +2668,18 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
 
   const latestInbound = findLatestInbound(input.context.messages);
   const latestMs = Date.parse(latestInbound?.occurred_at ?? "");
+  const currentName = resolveLeadPersonalName({ displayName: input.context.lead.display_name, metadata: input.context.lead.metadata });
+  const currentEvidence = readRecord(input.context.lead.metadata?.lead_name_evidence);
+  if (currentName && currentEvidence?.source !== "lead_message"
+    && [input.context.agent.name, input.context.agent.persona_name].some((name) => name && normalizeSearch(name) === normalizeSearch(currentName))) {
+    const saved = await updateLeadMetadata({
+      client: input.client, organizationId: input.context.organization.id, leadId: input.context.lead.id,
+      buildUpdate: (metadata) => readRecord(metadata.lead_name_evidence)?.source === "lead_message"
+        ? { metadata }
+        : { metadata: { ...metadata, lead_name_needs_confirmation: currentName } },
+    });
+    input.context.lead.metadata = saved.metadata;
+  }
   // Recover only lead-authored facts from this conversation, including data sent before a preview.
   const recentTexts = input.context.messages
     .filter((message) => message.direction === "inbound"
@@ -2671,9 +2693,13 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
     ?? normalizeRuntimeCustomerDocument(findString(input.context.lead.metadata, ["cpf_cnpj", "customer_document"]))
     ?? recentTexts.map(extractRuntimeCustomerDocument).find(Boolean) ?? null;
   const existingCustomerName = resolveRuntimeSalesCatalogCustomerName(input.context, null);
-  const customerName = existingCustomerName
+  const identityMessages = input.context.messages.map((message) => message.id === latestInbound?.id
+    ? { ...message, text_content: input.userText } : message);
+  const nameEvidence = findLeadNameEvidence(identityMessages);
+  const customerName = nameEvidence && nameEvidence.messageId === latestInbound?.id ? nameEvidence.name : existingCustomerName
     ? null
-    : extractRuntimeCustomerNameFromStructuredReply(input.userText)
+    : nameEvidence?.name
+      ?? extractRuntimeCustomerNameFromStructuredReply(input.userText)
       ?? (email || document ? extractRuntimeCustomerName(input.userText) : null)
       ?? recentTexts.filter((text) => extractRuntimeEmail(text) || extractRuntimeCustomerDocument(text))
         .map(extractRuntimeCustomerNameFromStructuredReply).find(Boolean) ?? null;
@@ -2837,6 +2863,13 @@ async function persistLeadCustomerNameSnapshot(input: {
           personal_name: input.customerName,
           name: input.customerName,
           lead_name: input.customerName,
+          lead_name_needs_confirmation: null,
+          lead_name_evidence: {
+            source: "lead_message",
+            message_id: findLatestInbound(input.context.messages)?.id ?? null,
+            name: input.customerName,
+            confirmed_at: now,
+          },
           lead_memory: {
             ...currentLeadMemory,
             personName: input.customerName,
@@ -3245,6 +3278,8 @@ function extractRuntimeCustomerName(text: string) {
 }
 
 function extractRuntimeCustomerNameFromStructuredReply(text: string) {
+  if (!/^\s*nome(?: completo)?\s*[:\-]/im.test(text)
+    && !extractRuntimeEmail(text) && !extractRuntimeCustomerDocument(text)) return null;
   // A checkout reply often starts with "Pix", then gives the name and email
   // on separate lines. Preserve those boundaries before cleaning the address.
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -4668,10 +4703,11 @@ function buildLeadNameContext(lead: LeadRow | null) {
       `- Nome exibido no WhatsApp: ${whatsappDisplayName} (parece nome de empresa, marca, segmento ou contato generico).`,
       `- Nome pessoal do lead no CRM: ainda nao informado.`,
       `- Regra obrigatoria: nao chame o lead de "${whatsappDisplayName}". Pergunte de forma natural o nome da pessoa para atualizar o CRM.`,
+      "- Pergunte uma vez no inicio. Se nao responder, continue ajudando; retome somente para concluir compra/reserva ou uma ultima vez no encerramento. Se recusar informar, nao insista. Se ja informou, nao pergunte novamente.",
     ].join("\n");
   }
 
-  return "- Nome pessoal do lead no CRM: desconhecido. Se a conversa ainda estiver no inicio, pergunte o nome de forma leve.";
+  return "- Nome pessoal do lead: ainda nao confirmado. Pergunte naturalmente como pode chamar a pessoa, mesmo se a conversa ja avancou. Pergunte uma vez: se ja perguntou e a pessoa nao respondeu, continue ajudando sem insistir. Retome para concluir compra ou agendamento, explicando o motivo, ou uma ultima vez no encerramento mesmo sem compra. Se preferiu nao informar, respeite e nao repita. Nao use o nome do agente, da empresa nem um nome citado no historico como identidade do lead.";
 }
 
 function buildAnswerCompletenessInstruction(userText: string) {
@@ -4725,7 +4761,8 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(metadata);
   const lines: string[] = [];
 
-  if (memory.personName) lines.push(`- Nome pessoal informado pelo lead: ${memory.personName}`);
+  const personalName = resolveLeadPersonalName({ metadata });
+  if (personalName) lines.push(`- Nome pessoal do lead: ${personalName}`);
   if (savedDeliveryAddress) {
     lines.push(`- Endereço de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`);
   }
@@ -15267,7 +15304,7 @@ async function extractLeadMemory(
     "Objetivo: guardar apenas fatos uteis para proximas respostas parecerem continuas e humanas.",
     "Nao invente. Nao salve dados sensiveis desnecessarios. Nao salve telefone.",
     "Se o nome exibido no WhatsApp parecer nome de empresa, marca ou contato generico, NAO use isso como nome pessoal.",
-    "Preencha personName somente quando o lead informar o proprio nome ou quando houver nome pessoal claro na conversa.",
+    "Preencha personName somente quando o lead se identificar explicitamente ou responder a uma pergunta sobre seu proprio nome. Nomes do agente, da empresa e de terceiros nao identificam o lead. Uma saudacao dirigida ao agente nao e apresentacao do cliente.",
     "",
     "Contexto de nome atual:",
     buildLeadNameContext(context.lead),
@@ -15345,7 +15382,9 @@ async function extractLeadMemory(
 
   if (!hasLeadMemoryContent(nextMemory)) return;
 
-  const personName = normalizeLeadNameCandidate(nextMemory.personName);
+  const nameEvidence = findLeadNameEvidence(context.messages.map((message) => message.id === findLatestInbound(context.messages)?.id
+    ? { ...message, text_content: userText } : message));
+  const personName = nameEvidence?.name ?? null;
   const saved = await updateLeadMetadata({
     client,
     organizationId: context.organization.id,
@@ -15357,7 +15396,8 @@ async function extractLeadMemory(
         lead_memory: {
           ...(readRecord(latestMetadata.lead_memory) ?? {}),
           ...nextMemory,
-          personName: savedName ?? personName,
+          personName: savedName ?? personName ?? normalizeLeadMemory(readRecord(latestMetadata.lead_memory)).personName,
+          name_source: savedName ? "existing_record" : personName ? "lead_message" : "unverified",
           updated_at: new Date().toISOString(),
           source: "whatsapp_agent_memory",
         },
@@ -15365,6 +15405,8 @@ async function extractLeadMemory(
       // An inferred name must never replace identity explicitly captured by checkout.
       if (!savedName && personName && isLikelyPersonalLeadName(personName)) {
         Object.assign(metadata, { person_name: personName, personal_name: personName, name: personName, lead_name: personName });
+        metadata.lead_name_evidence = { source: "lead_message", name: personName, message_id: nameEvidence?.messageId, confirmed_at: new Date().toISOString() };
+        metadata.lead_name_needs_confirmation = null;
         return { metadata, display_name: personName };
       }
       return { metadata };
