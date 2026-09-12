@@ -35,8 +35,8 @@ export async function GET(request: NextRequest, context: Context) {
     const settings = await client.from("customer_agenda_settings").select("timezone").eq("organization_id", item.companyId).single();
     if (settings.error) throw new Error("Agenda indisponível.");
     const timezone = settings.data?.timezone ?? "America/Sao_Paulo";
-    const day = request.nextUrl.searchParams.get("day");
     const requested = request.nextUrl.searchParams.get("from");
+    const day = request.nextUrl.searchParams.get("day") ?? (requested ? null : localContactTime(new Date(), timezone).day);
     let from = requested ? new Date(requested) : new Date();
     if (day) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Escolha uma data válida.");
@@ -49,8 +49,8 @@ export async function GET(request: NextRequest, context: Context) {
       }
     }
     if (!Number.isFinite(from.getTime()) || from.getTime() > Date.now() + 90 * 86400000) throw new Error("Escolha uma data nos próximos 90 dias.");
-    const slots = await availableAppointments(client, item.companyId, item.fulfillment.agendaResourceId, from);
-    return NextResponse.json({ slots, timezone }, { headers: { "Cache-Control": "no-store" } });
+    const slots = await availableAppointments(client, item.companyId, item.fulfillment.agendaResourceId, from, 1, undefined, day ?? undefined);
+    return NextResponse.json({ slots, timezone, day }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Agenda indisponível." }, { status: 422 }); }
 }
 export async function POST(request: NextRequest, context: Context) {

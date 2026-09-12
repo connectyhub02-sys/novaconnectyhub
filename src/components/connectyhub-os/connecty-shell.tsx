@@ -239,6 +239,7 @@ const clientSections: NavSection[] = [
       { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2, tone: "sky" },
       { label: "Agentes",      href: "/dashboard/whatsapp",       icon: Bot, tone: "violet" },
       { label: "Atendimento",  href: "/dashboard/atendimento",    icon: MessageCircle, tone: "blue" },
+      { label: "Agenda",       href: "/dashboard/agenda",         icon: CalendarDays, tone: "emerald" },
     ],
   },
   {

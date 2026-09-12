@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { Panel, NeonBadge } from "./panel-primitives";
 import type { AgendaResource, AgendaBooking } from "@/lib/automations/agenda";
+import { AgendaCalendar } from "./agenda-calendar";
+import { DialogFrame } from "@/components/ui/dialog-frame";
 type Agenda = {
   settings: { enabled: boolean; timezone: string };
   resources: AgendaResource[];
@@ -54,6 +56,7 @@ export function CustomerAgendaPanel({
     ),
     [requestKey, setRequestKey] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedBooking, setSelectedBooking] = useState<AgendaBooking | null>(null);
   const [checkedAt, setCheckedAt] = useState(() => Date.now());
   const [editResourceId, setEditResourceId] = useState<string | null>(null),
     [resourceEnabled, setResourceEnabled] = useState(true),
@@ -133,6 +136,7 @@ export function CustomerAgendaPanel({
       if (!response.ok) throw new Error(data.error);
       if (data.settings) {
         setAgenda(data);
+        setSelectedBooking(null);
         setRevision((value) => value + 1);
       }
       if (data.slots) setSlots(data.slots);
@@ -159,8 +163,7 @@ export function CustomerAgendaPanel({
     });
   return (
     <Panel
-      title="Agenda inteligente"
-      collapsible
+      title="Seu calendário"
       tone="green"
       action={
         <NeonBadge tone={agenda?.settings.enabled ? "green" : "amber"}>
@@ -175,6 +178,9 @@ export function CustomerAgendaPanel({
       }
     >
       <div className="space-y-4">
+        <details className="rounded-xl border border-slate-200 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">Configurações da agenda · serviços e horários</summary>
+          <div className="mt-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-2xl text-sm leading-6 text-slate-600">
             Organize serviços, profissionais e mesas. A agenda verifica a
@@ -195,14 +201,6 @@ export function CustomerAgendaPanel({
             {agenda?.settings.enabled ? "Desativar agenda" : "Ativar agenda"}
           </button>
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-rose-700">
-            {error}{" "}
-            <button type="button" onClick={refresh} className="underline">
-              Atualizar
-            </button>
-          </p>
-        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -214,27 +212,6 @@ export function CustomerAgendaPanel({
             }}
           >
             {editing ? "Recolher cadastro" : "Cadastrar serviço ou mesa"}
-          </button>
-          <button
-            type="button"
-            className={button}
-            disabled={!agenda?.settings.enabled}
-            onClick={() => {
-              setBookingOpen((value) => !value);
-              setRescheduling(null);
-              setSlots([]);
-              setRequestKey(crypto.randomUUID());
-            }}
-          >
-            Nova reserva
-          </button>
-          <button
-            type="button"
-            className={button}
-            onClick={refresh}
-            disabled={loading}
-          >
-            Atualizar
           </button>
           <span className="self-center text-xs text-slate-500">
             Horários em {timezone}
@@ -500,6 +477,14 @@ export function CustomerAgendaPanel({
             Salvar recurso
           </button>
         </div>
+          </div>
+        </details>
+        {!loading && agenda && !agenda.settings.enabled && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">Agenda desativada. Os compromissos registrados continuam disponíveis. Abra Configurações da agenda para cadastrar serviços e ativar novas reservas.</p>}
+        {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={button} disabled={!agenda?.settings.enabled || loading || saving} onClick={() => { setBookingOpen((value) => !value); setRescheduling(null); setSlots([]); setRequestKey(crypto.randomUUID()); }}>Nova reserva</button>
+          <button type="button" className={button} disabled={loading || saving} onClick={refresh}>Atualizar</button>
+        </div>
         <div
           hidden={!bookingOpen}
           className="space-y-3 rounded-xl border border-slate-200 p-4"
@@ -627,13 +612,16 @@ export function CustomerAgendaPanel({
             Cadastre o primeiro serviço ou mesa para começar.
           </p>
         )}
-        <div className="grid gap-2">
-          {agenda?.bookings.map((booking) => (
+        {agenda && <AgendaCalendar companyId={companyId} timezone={timezone} resources={agenda.resources} revision={revision} onSelect={setSelectedBooking} />}
+        {selectedBooking && <DialogFrame aria-label="Detalhes do compromisso" onClose={() => setSelectedBooking(null)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
+        <div className="grid max-h-[85dvh] w-full max-w-xl gap-2 overflow-auto rounded-2xl bg-white p-4">
+          {agenda && selectedBooking && [selectedBooking].map((booking) => (
             <div
               key={booking.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
             >
               <div className="text-sm">
+                <button type="button" className="mb-2 text-xs text-blue-700 underline" onClick={() => setSelectedBooking(null)}>Fechar detalhes</button>
                 <p className="font-medium">
                   {when(booking.starts_at)} ·{" "}
                   {
@@ -674,6 +662,7 @@ export function CustomerAgendaPanel({
                       setSlots([]);
                       setRequestKey(crypto.randomUUID());
                       setBookingOpen(true);
+                      setSelectedBooking(null);
                     }}
                   >
                     Remarcar
@@ -745,6 +734,7 @@ export function CustomerAgendaPanel({
             </div>
           ))}
         </div>
+        </DialogFrame>}
         <details className="rounded-lg border border-slate-200 p-3">
           <summary className="cursor-pointer text-sm">Avisos da agenda</summary>
           <div className="mt-2 space-y-2">

@@ -210,6 +210,8 @@ Planejar migrations aditivas com escopo por empresa, recursos/serviços, regras 
 
 ### 8.3. Navegação: centralizar em Automações
 
+Atualização de direção em 12/09/2026: por solicitação do titular, a Agenda inteligente passa a ter entrada própria **Agenda** no menu do cliente (`/dashboard/agenda`), com calendário de compromissos e configurações recolhidas. O agendamento público oferece calendário mensal clicável para escolher o dia. A referência visual é Google Agenda, sem integração Google. O desenho abaixo é histórico; relacionamento e demais automações continuam na central. Estado de validação e publicação em [estado-operacional.md](estado-operacional.md).
+
 Manter **Automações** como entrada no menu lateral. Usar seções recolhíveis: clicar no cabeçalho abre, clicar novamente fecha. Na entrada normal, começar com os blocos fechados e mostrar seus estados no resumo. Não criar um item lateral chamado “Follow-up com agenda”. A agenda e o relacionamento são módulos independentes dentro da mesma central.
 
 O projeto já tem `/dashboard/automacoes`, `ClientAutomationsCenter` e `ClientWhatsappAutomationStudio`, com empresa, WhatsApp de envio, templates de mensagens do checkout e operações de grupos/canais. Essa central é o ponto de expansão. A área `/admin/automacoes` administra automações da própria plataforma e não deve ser confundida com as automações de venda dos clientes.

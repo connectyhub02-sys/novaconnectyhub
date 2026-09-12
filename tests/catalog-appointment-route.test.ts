@@ -49,6 +49,8 @@ it("uses the panel timezone when looking up a selected calendar date",async()=>{
   expect(response.status).toBe(200);
   const from=f.available.mock.calls[0][3] as Date;
   expect(contactTime.localContactTime(from,"America/Manaus")).toEqual({day,minute:0});
+  expect(f.available.mock.calls[0]).toMatchObject([expect.anything(), "org", "resource", expect.any(Date), 1, undefined, day]);
+  expect(await response.json()).toMatchObject({ day, timezone: "America/Manaus" });
 });
 it("rejects a retail item and malformed data before reserving",async()=>{
   const f=fixture("connectyhub_checkout");

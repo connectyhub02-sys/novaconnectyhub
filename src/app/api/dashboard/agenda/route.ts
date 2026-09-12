@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { parseCalendarRange } from "@/lib/automations/calendar-view";
 import {
   resolveDashboardCompanyId,
   statusForDashboardCompanyScopeError,
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
   if (!workspace)
     return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
   try {
+    const period = parseCalendarRange(request.nextUrl.searchParams.get("from"), request.nextUrl.searchParams.get("to"));
     const org = resolveDashboardCompanyId({
         workspace,
         requestedCompanyId: request.nextUrl.searchParams.get("companyId"),
@@ -49,8 +51,10 @@ export async function GET(request: NextRequest) {
       .limit(20);
     if (notices.error)
       throw new Error("Não foi possível consultar os avisos da agenda.");
+    const agenda = await getAgenda(client, org, undefined, period);
     return NextResponse.json({
-      ...(await getAgenda(client, org)),
+      ...agenda,
+      truncated: Boolean(period && agenda.bookings.length >= 1000),
       notices: notices.data,
       leads: leads.data,
     });

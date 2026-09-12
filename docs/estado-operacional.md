@@ -2,6 +2,18 @@
 
 Atualização: 12/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
+## Agenda em calendário — implementação local de 12/09/2026
+
+Por solicitação do titular, **Agenda** passa a ser um item do menu do cliente em `/dashboard/agenda`, com título Agenda inteligente. O bloco completo foi retirado de Automações. A página preserva a seleção inicial/empresas acessíveis e a associação do agente pelo WhatsApp padrão salvo; mantém o controle de sessão/contrato e o escopo de organização já exigido pela API. Trocar a empresa reinicia o componente, sem reaproveitar formulários, horários ou detalhes anteriores. O administrador global não recebeu esse item.
+
+O calendário oferece Hoje, anterior/próximo, mês/semana/dia, filtro por recurso, compromissos com estado e abertura dos detalhes/ações existentes. Configurações, serviços, fuso e ativação ficam recolhidos. A consulta de compromissos aceita períodos de até 45 dias com interseção do intervalo, incluindo histórico; limita a leitura a 1.000 registros e informa quando o período precisa ser reduzido. Sem período, a leitura anterior permanece disponível para os demais consumidores.
+
+No agendamento público do item, o lead escolhe a data em calendário mensal clicável e vê somente os horários disponíveis daquele dia, no fuso da empresa. Datas passadas e além da janela pública ficam desabilitadas; dia sem vagas e agenda indisponível mantêm aviso/contato. A consulta diária usa o mesmo cálculo de disponibilidade, capacidade e bloqueios, com até 100 horários, suficiente para a grade de 15 minutos de um dia; a consulta de sugestões dos demais fluxos mantém 12 opções. A referência visual é Google Agenda, sem sincronização Google, recorrência ou arrastar reservas. Nenhuma agenda ativada, reserva, mensagem ou cobrança real realizada; sem migration.
+
+Validação: 37 testes direcionados em seis arquivos passaram. Na suíte geral, 1.538 testes passaram e dois falharam por comparações sensíveis a CRLF em arquivos fora da alteração (guia da API de IA e fonte do atendimento). Confirmada equivalência após normalizar quebras de linha; normalização apenas local, sem diff desses arquivos, e nova rodada com esses dois arquivos e calendário passou os 19 testes. TypeScript aprovado; ESLint sem erros, com seis avisos preexistentes de parâmetros não usados no teste público de agendamento. Navegador local confirmou o redirecionamento sem sessão para o login da nova rota. Prévia com componentes reais e dados fictícios conferida em 1440 e 390 px: menu ativo desktop/móvel, mudança de período/modo, detalhes, troca de empresa sem vazamento visual, agenda desativada e seletor público sem horários/seleção antigos após trocar o dia. Sobreposição do título com o seletor no celular foi encontrada, corrigida e recapturada.
+
+Estado: preparado em cópia isolada; **sem integração na master, push ou deploy** nesta etapa. A prévia não comprova novas reservas nem acesso de cliente autenticado em produção. Coordenar integração/publicação pela tarefa de origem para preservar a correção de pagamento e notas operacionais do checkout original. Capturas locais de dados fictícios ficam em `tmp/agenda-qa` nesta cópia (não versionadas).
+
 ## Verificado ou confirmado
 
 - Aplicação/handlers permanecem na Vercel; Supabase e Inngest de produção foram migrados para VPS Contabo; R2 permanece. [Relatório Supabase](migracao-supabase-vps-2026-09-11.md), [relatório Inngest](migracao-inngest-vps-2026-09-11.md).
