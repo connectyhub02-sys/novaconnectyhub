@@ -8,11 +8,11 @@ import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
   buildPublicTrackingApiBody,
-  getPublicTrackingContextSignature,
   publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
 } from "@/lib/tracking/public-context";
 import { cn } from "@/lib/utils";
+import { getCommerceAgentTrackingSignature } from "@/lib/commerce-agent/tracking-context";
 
 type CommerceAgentMessage = {
   id: string;
@@ -80,7 +80,7 @@ export function CommerceAgentDock() {
 
   useEffect(() => {
     function syncPublicTrackingSignature() {
-      setTrackingContextSignature(getPublicTrackingContextSignature(readPublicTrackingContext()));
+      setTrackingContextSignature(getCommerceAgentTrackingSignature(readPublicTrackingContext()));
     }
 
     syncPublicTrackingSignature();
@@ -142,7 +142,7 @@ export function CommerceAgentDock() {
       return;
     }
 
-    const publicTrackingSignature = getPublicTrackingContextSignature(publicTracking);
+    const publicTrackingSignature = getCommerceAgentTrackingSignature(publicTracking);
     const sessionKey = `${surface}:${pathname ?? ""}?${search}:${publicTrackingSignature}`;
     if (lastSessionKey.current === sessionKey) {
       return;

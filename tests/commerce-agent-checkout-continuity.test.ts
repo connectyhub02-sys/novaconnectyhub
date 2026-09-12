@@ -203,7 +203,7 @@ describe("Commerce Agent checkout continuity", () => {
     expect(publicTrackingBridgeSource).toContain("writePublicTrackingContext(context)");
     expect(commerceAgentDockSource).toContain("publicTrackingContextUpdatedEventName");
     expect(commerceAgentDockSource).toContain("trackingContextSignature");
-    expect(commerceAgentDockSource).toContain("getPublicTrackingContextSignature(publicTracking)");
+    expect(commerceAgentDockSource).toContain("getCommerceAgentTrackingSignature(publicTracking)");
     expect(commerceAgentDockSource).toContain("sessionRequestSettled");
     expect(commerceAgentDockSource).toContain("lastSessionKey.current = null");
     expect(connectyTrackerSource).toContain("publicTrackingContextUpdatedEventName");
