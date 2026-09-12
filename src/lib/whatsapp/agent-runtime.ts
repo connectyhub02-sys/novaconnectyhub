@@ -10717,7 +10717,11 @@ function shouldSendSalesCatalogProductPageLinks(latestInbound: ConversationMessa
 const runtimeCheckoutDraftLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 
 function isRuntimeMissingPaymentRequest(text: string) {
-  return /^(?:(?:mas|e|entao|o|ainda)\s+)*(?:(?:cade|kd)(?:\s+(?:o|a|esse|este|meu))?(?:\s+(?:pix|botao|codigo|link|pagamento))?|nao\s+(?:recebi|chegou|apareceu)(?:\s+(?:o|a))?(?:\s+(?:pix|botao|codigo|link|pagamento))?)$/.test(normalizeSearch(text).replace(/[?!.]+/g, "").trim());
+  const normalized = normalizeSearch(text).replace(/[?!.]+/g, " ").replace(/\s+/g, " ").trim();
+  if (/^\?+$/.test(text.replace(/\s+/g, ""))) return true;
+  // Match the whole complaint so an additional cancellation, question or cart
+  // change still takes precedence. Context is checked by the recovery caller.
+  return /^(?:(?:mas|e|entao|o|ainda)\s+)*(?:(?:cade|kd)(?:\s+(?:o|a|esse|este|meu))?(?:\s+(?:pix|botao|codigo|link|pagamento))?|(?:que\s+(?:botao|link)(?:\s+nao\s+(?:recebi|chegou|apareceu)(?:\s+nada)?)?|nao\s+(?:recebi|chegou|apareceu)(?:\s+(?:o|a))?(?:\s+(?:pix|botao|codigo|link|pagamento|nada))?)(?:\s+(?:aqui|por aqui))?)$/.test(normalized);
 }
 
 function hasRuntimeCheckoutRecoveryIntent(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, text: string) {
@@ -10781,7 +10785,7 @@ function resolveRuntimeRecoverableCheckoutDraft(context: NonNullable<Awaited<Ret
 function isRuntimeCheckoutDraftChange(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
   const normalized = normalizeSearch(text);
   if (/\b(?:cancela|cancelar|desisti|desistir|nao quero|nao vou comprar|novo pedido|outro pedido|troca|trocar|muda|mudar|altera|alterar|corrige|corrigir|remove|remover|tira|tirar|adiciona|adicionar|inclui|incluir|acrescenta|acrescentar|mais um|mais uma)\b/.test(normalized)) {
-    return !detectSalesCatalogPreferredPaymentMethod(text) || requiresCommerceConversationReply(text);
+    return !resolveSalesCatalogPaymentMethodRequest(text);
   }
   return selectSalesCatalogItemsFromText(context.salesCatalog, text).length > 0 && /\b(?:quero|compra|comprar|leva|levar|pedido)\b/.test(normalized);
 }
@@ -10820,7 +10824,10 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
   if (!context.salesCatalog.some(item => item.salesDestination === "connectyhub_checkout")) return null;
   const normalized = normalizeSearch(text);
   const claimsPayment = /\b(?:gerei|gerado|gerada|enviei|enviado|enviada|gerando|estou enviando|to enviando|vou gerar|vou enviar)\b.{0,80}\b(?:pix|codigo|pagamento|checkout)\b/.test(normalized)
-    || /\b(?:clicar|clique|clica|acesse|abrir)\b.{0,60}\bcheckout\b/.test(normalized)
+    || /\b(?:clicar|clique|clica|acesse|acessar|abrir)\b.{0,60}\bcheckout\b/.test(normalized)
+    || /\b(?:alterei|troquei|mudei|liberei|liberado|liberada)\b.{0,80}\b(?:pagamento|cartao|credito|checkout)\b/.test(normalized)
+    || (/\b(?:pagamento|pagar|cartao|credito|checkout)\b/.test(normalized)
+      && /\b(?:conseguiu|consegue|pode)\b.{0,35}\b(?:ver|visualizar|abrir|acessar)\b.{0,35}\b(?:botao|link|checkout)\b/.test(normalized))
     || /\b(?:aqui esta|segue|ta aqui)\b.{0,80}\b(?:finalizar|pagar|pagamento)\b.{0,60}\b(?:cartao|credito|debito)\b/.test(normalized)
     || /\b(?:vou|ja vou|estou|to)\s+(?:te\s+)?(?:mandar|enviar|mandando|enviando|liberar)\b.{0,80}\b(?:checkout|pix|link de pagamento|link para pagar|botao de compra)\b/.test(normalized)
     || /\b(?:pix|codigo pix)\b.{0,30}\b(?:pronto|gerado|enviado|disponivel|liberado)\b/.test(normalized)
@@ -10880,7 +10887,11 @@ function buildUnexecutedCheckoutReply(
         && !/\bpedido\b.{0,30}\b(?:confirmado|fechado|registrado|criado)\b/.test(normalized);
     }).join(" ");
   }).filter(Boolean).join("\n").trim();
-  return retained || "Estou por aqui. Me diz como posso te ajudar.";
+  const paymentRequested = resolveSalesCatalogPaymentMethodRequest(intentText)
+    || isRuntimeMissingPaymentRequest(intentText);
+  return paymentRequested
+    ? "Não consegui disponibilizar o acesso ao pagamento nesta tentativa. Preciso conferir o pedido antes de confirmar o envio."
+    : retained || "Estou por aqui. Me diz como posso te ajudar.";
 }
 
 async function recordSalesCatalogOrderIntent(input: {
@@ -11420,15 +11431,18 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   const recoveredSelections = !cartText ? resolveRuntimeRecoverableCheckoutDraft(input.context, true) : [];
   const cartItems = cartText ? selectSalesCatalogItemsForOrderText(input.context.salesCatalog, cartText)
     : recoveredSelections.map(selection => selection.item);
-  const cartSelections = cartText ? resolveSalesCatalogOrderSelections({ context: input.context, currentItems: [],
-    responseText: "", intentText: input.userText }) : recoveredSelections;
+  // Match an already-created order to the preview itself. A method switch or
+  // missing-button complaint is not fresh purchase consent, so the new-order
+  // intent resolver correctly returns no selections for these messages.
+  const cartSelections = cartText ? selectSalesCatalogOrderSelectionsFromText(input.context.salesCatalog, cartText, "confirmation_preview")
+    : recoveredSelections;
   const draft = readRecord(readRecord(input.context.lead?.metadata)?.checkout_cart_draft);
   const recoveryBlock = buildRecentOutboundMessageBlocks(input.context.messages, input.latestInbound, runtimeCheckoutDraftLifetimeMs)
     .find(block => isSalesCatalogCheckoutConfirmationPreviewText(block.text) || isSalesCatalogCartDraftPreviewText(block.text));
   const hasRecoveryCart = Boolean(recoveryBlock || (draft?.conversation_id === input.context.conversationId
     && draft?.instance_id === input.context.instance.id && draft?.organization_id === input.context.organization.id));
   // An unresolved cart must not fall through to an unrelated historical charge.
-  if ((cartText || hasRecoveryCart) && cartSelections.length === 0) return null;
+  if ((cartText || hasRecoveryCart) && (cartSelections.length === 0 || !cartSelections.every(isRuntimeCheckoutOrderSelection))) return null;
   const orders = cartItems.length ? input.context.salesCatalogOrders.filter(order =>
     order.items.length === cartItems.length && cartItems.every(item => order.items.some(line => line.catalogItemId === item.id))
     && cartSelections.every(selection => order.items.some(line => line.catalogItemId === selection.item.id && line.quantity === selection.quantity)))
@@ -11445,6 +11459,12 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   ) {
     return null;
   }
+
+  const cartSnapshotMs = Math.max(Date.parse(order.createdAt ?? "") || 0,
+    Date.parse(recoveryBlock?.firstMessage.occurred_at ?? "") || 0);
+  if (input.context.messages.some(message => message.direction === "inbound"
+    && Date.parse(message.occurred_at) > cartSnapshotMs
+    && isRuntimeCheckoutDraftChange(message.text_content ?? "", input.context))) return null;
 
   // A question about using a method may reopen an existing checkout. It must
   // never authorize creating a payment session for an unconfirmed purchase.
@@ -11874,6 +11894,8 @@ function hasRecentSalesCatalogCheckoutPromise(
     }
 
     const normalized = normalizeSearch(message.text_content);
+    if (/\b(?:botao|link|checkout)\b/.test(normalized)
+      && /\b(?:cartao|credito|pagamento|pagar|finalizar)\b/.test(normalized)) return true;
     if (/\b(?:botao|qr code)\b.{0,100}\b(?:pix|pagamento|pagar)\b/.test(normalized)
       || /\b(?:pix|pagamento)\b.{0,100}\b(?:botao|qr code)\b/.test(normalized)) return true;
     const promisedCheckout = normalized.includes("checkout")
@@ -13033,7 +13055,7 @@ function detectSalesCatalogPreferredPaymentMethod(text: string): SalesCatalogRun
   const mentions = Array.from(normalized.matchAll(/\b(?:cartao|credito|debito|card|pix|copia e cola|qrcode|qr code)\b/g));
   const positive = mentions.filter((mention) => {
     const before = normalized.slice(0, mention.index).trim();
-    return !/\b(?:nao|sem|em vez de|ao inves de)(?:\s+(?:quero|tenho|como|consigo|posso|da|para|pra|vou|o|no|em|pelo|pagar|usar|de|cartao))*$/.test(before);
+    return !/\b(?:nao|sem|em vez de|ao inves de)(?:\s+(?:quero|tenho|saldo|dinheiro|limite|como|consigo|posso|da|para|pra|vou|o|no|em|pelo|pagar|usar|de|cartao))*$/.test(before);
   });
   const chosen = positive[positive.length - 1]?.[0];
   return chosen ? /^(?:cartao|credito|debito|card)$/.test(chosen) ? "card" : "pix" : null;
@@ -13052,7 +13074,11 @@ function resolveSalesCatalogPaymentMethodRequest(text: string): SalesCatalogRunt
   // Remove only objections to a METHOD, keeping refusals to buy, changes to the
   // cart, requests for a person, doubts about fees and deferred decisions intact.
   const remainder = normalized
-    .replace(new RegExp(`\\b(?:nao (?:quero|tenho como|consigo|posso|vou)|sem|em vez de|ao inves de)\\s+(?:(?:pagar|usar|o|no|em|pelo|de)\\s+)*${method}\\b`, "g"), "")
+    // Polite indirect switches ("muda pra mim ... muda para cartão") do not
+    // change the cart. Only strip them when followed by a payment clause;
+    // "muda pra mim o endereço" must remain a conversation action.
+    .replace(new RegExp(`\\b(?:troca|trocar|muda|mudar|altera|alterar)\\s+(?:(?:para|pra) mim\\s+)?(?:por favor\\s+)?(?=(?:(?:para|por|pra|pro|no|em)\\s+)?${method}\\b|(?:quero|prefiro|vou) (?:pagar |usar )?(?:(?:no|com|o) )?${method}\\b|(?:estou|to) sem saldo\\b)`, "g"), "")
+    .replace(new RegExp(`\\b(?:nao (?:quero|tenho como|tenho saldo|tenho dinheiro|tenho limite|consigo|posso|vou)|sem(?: (?:saldo|dinheiro|limite))?|em vez de|ao inves de)\\s+(?:(?:pagar|usar|o|no|em|pelo|de)\\s+)*${method}\\b`, "g"), "")
     .replace(new RegExp(`\\b(?:como (?:eu )?(?:faco |faz |posso )?(?:para |pra )?|tem como |da para |posso )pagar\\s+(?:(?:no|com|pelo|em|o)\\s+)*${method}\\b`, "g"), "")
     .replace(/\s+/g, " ").trim();
   if (requiresCommerceConversationReply(remainder)) return null;
@@ -14008,9 +14034,12 @@ function isInteractiveButtonUrlChoice(choice: string) {
 }
 
 function shouldRetryInteractiveButtonUrlFormat(error: unknown) {
+  // A timeout or server error may follow an accepted send. Only a definitive
+  // rejection permits another URL format; keywords in a 5xx body prove nothing.
+  if (!(error instanceof UazapiRuntimeRequestError) || !error.definitive) return false;
   const message = describeRuntimeError(error, "");
 
-  return /(?:server error 479|respondeu status 4\d\d|respondeu status 5\d\d|button|botao|menu)/i.test(message);
+  return /(?:server error 479|respondeu status 4\d\d|button|botao|menu)/i.test(message);
 }
 
 function resolveInteractiveButtonFooterText(organization: OrganizationRow | null | undefined) {
