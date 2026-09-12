@@ -1,5 +1,5 @@
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
-import { activityDefaultDestination, buildActivityProfileInstruction } from "./activity-profile";
+import { activityDefaultDestination, activityRepresentation, buildActivityProfileInstruction } from "./activity-profile";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
@@ -4519,6 +4519,7 @@ function buildConfiguredNicheCareLines(agent: AgentRow) {
     "LIMITES DO NICHO CONFIGURADO:",
     ...template.careRules.map((rule) => `- ${rule}`),
     asString(config.neverRules) ?? asString(config.never_rules) ?? "",
+    ...(template.kind === "professional" ? ["FORMA DE ATENDIMENTO INDIVIDUAL ATUAL:", activityRepresentation(template.id)] : []),
     "- Memorias de estilo e objetivos de venda nao autorizam ultrapassar estes limites. Para duvida clinica, prescricao, ciclo ou combinacao terapeutica, encaminhe para um profissional habilitado; nao prometa resultados.",
   ].filter(Boolean);
 }
@@ -6545,6 +6546,8 @@ function replaceLooseLinkButtonTags(
 
 function sanitizeCustomerVisibleInternalTags(text: string) {
   return text
+    .replace(/\s*[([]\s*importad[oa]s?\s+do\s+whats\s*app\s*[)\]]/gi, "")
+    .replace(/\bimportad[oa]s?\s+do\s+whats\s*app\b/gi, "")
     .replace(completeCustomerVisibleInternalTagRegex, "")
     .split(/\r?\n/)
     .map((line) => (
@@ -8937,7 +8940,7 @@ function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) 
   const normalizedOriginalText = normalizeSearch(text);
 
   for (const item of items) {
-    if (!isSalesCatalogItemSellable(item)) continue;
+    if (!isSalesCatalogItemAvailableForDetails(item)) continue;
 
     const hasTag = Boolean(item.tag && rendered.includes(item.tag));
     const hasNaturalReference = referencesSalesCatalogItem(normalizedOriginalText, item);
@@ -10600,7 +10603,7 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
   const attachments: Array<{ item: RuntimeSalesCatalogItem; media: SalesCatalogMedia }> = [];
 
   for (const item of items) {
-    if (!isSalesCatalogItemSellable(item)) continue;
+    if (!isSalesCatalogItemAvailableForDetails(item)) continue;
 
     const media = selectSalesCatalogPrimaryMedia(item);
     if (!media) continue;
@@ -12449,9 +12452,8 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
 
   const items = input.items
     .filter((item) => (
-      item.salesDestination === "connectyhub_checkout"
-      && item.status === "active"
-      && isSalesCatalogItemSellable(item)
+      (item.salesDestination === "connectyhub_checkout" || item.salesDestination === "appointment")
+      && isSalesCatalogItemAvailableForDetails(item)
     ))
     .slice(0, 3);
 
@@ -12461,7 +12463,7 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
 
   const choices = items.map((item) => {
     const label = items.length === 1
-      ? "Ver produto"
+      ? item.salesDestination === "appointment" ? "Ver detalhes e fotos" : "Ver produto"
       : `Ver ${preview(item.title, 18)}`;
     const url = buildLeadAwareSalesCatalogProductUrl({
       productId: item.id,
@@ -12475,7 +12477,9 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
     return `${label}|${url}`;
   });
   const text = items.length === 1
-    ? "Separei a página do produto com os detalhes completos para você ver com calma."
+    ? items[0].salesDestination === "appointment"
+      ? "Você pode consultar os detalhes e as fotos disponíveis nesta página."
+      : "Separei a página do produto com os detalhes completos para você ver com calma."
     : "Separei as páginas dos produtos com os detalhes completos para você comparar com calma.";
   let messageText = text;
   let providerResponse: unknown;
@@ -12839,6 +12843,10 @@ async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
   } catch (error) {
     console.error("order_follow_up_schedule_failed", {orderId: input.orderId, message: error instanceof Error ? error.message : "unknown"});
   }
+}
+
+function isSalesCatalogItemAvailableForDetails(item: RuntimeSalesCatalogItem) {
+  return item.status === "active" && (item.salesDestination === "appointment" || isSalesCatalogItemSellable(item));
 }
 
 function isSalesCatalogItemSellable(item: RuntimeSalesCatalogItem) {

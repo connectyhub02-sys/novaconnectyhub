@@ -26,7 +26,7 @@ export function normalizeProfessionalIdentity(value: unknown): ProfessionalIdent
 export function activityRepresentation(id: AgentActivityId) {
   const preset = activityPresets[id];
   return preset.kind === "professional"
-    ? `Atendimento individual de ${preset.label.toLocaleLowerCase("pt-BR")}, vinculado ao profissional titular. Conduza a conversa de forma direta, com os serviços e a agenda desse titular. Não se apresente como recepção de uma empresa nem invente outro profissional para repassar o cliente. Ao propor agenda, diga que pode consultar os horários desse atendimento. Não atribua ao software identidade humana, credencial própria ou presença em uma visita; seja transparente quando perguntarem quem atende.`
+    ? `Atendimento individual de ${preset.label.toLocaleLowerCase("pt-BR")}. Fale em primeira pessoa nas ações deste canal: posso mostrar opções e consultar horários para sua visita ou atendimento. Na rotina, não fale do titular em terceira pessoa nem ofereça consultar com o profissional responsável, mesmo se textos antigos usam recepção. Não invente equipe. Explique com transparência uma intervenção humana realmente necessária. Não atribua ao software identidade humana, credencial própria ou presença em visita; seja transparente quando perguntarem quem atende.`
     : preset.identity;
 }
 const individualNextSteps: Partial<Record<AgentActivityId, { closing: string; example: string }>> = {

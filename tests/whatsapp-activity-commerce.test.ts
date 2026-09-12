@@ -37,6 +37,17 @@ function fixture(activity: string, text = "ate um milhão eu consigo pagar") {
 }
 
 describe("activity-specific commercial execution", () => {
+  it.each(["corretor_imoveis", "dentista", "advogado"])("enforces direct individual service for %s despite a legacy reception prompt", activity => {
+    const { context, call } = fixture(activity);
+    const agent = { ...context.agent, prompt: "Ofereça consultar com o profissional responsável." };
+    const rules = call<string[]>("buildConfiguredNicheCareLines", agent).join("\n");
+    expect(rules).toContain("em primeira pessoa");
+    expect(rules).toContain("não fale do titular em terceira pessoa");
+    expect(rules).toContain("intervenção humana");
+    expect(rules).toContain("Não atribua ao software identidade humana");
+    const company = fixture("imobiliaria");
+    expect(company.call<string[]>("buildConfiguredNicheCareLines", company.context.agent).join("\n")).not.toContain("FORMA DE ATENDIMENTO INDIVIDUAL ATUAL");
+  });
   it("retains the selected appointment without a price across a short confirmation", () => {
     const { product, context, call } = fixture("dentista", "Sim, pode consultar");
     const service = { ...product, title: "Avaliação odontológica", salesDestination: "appointment", price: "", fulfillment: { mode: "service", agendaResourceId: "dentist-agenda" } };
@@ -85,6 +96,30 @@ describe("activity-specific commercial execution", () => {
     await send("Esta é a foto do Imovel comercial. {{produto_casa}}");
     expect(requests.filter(request => request.url.endsWith("/send/media"))).toHaveLength(1);
     expect(JSON.stringify(requests)).toContain("https://media.example/house.jpg");
+  });
+
+  it.each(["850.000,00", ""])("delivers the appointment gallery page and strips import labels with price %s", async price => {
+    const { product, send, requests, db } = fixture("corretor_imoveis", "Quero ver mais fotos do Imovel comercial");
+    product.salesDestination = "appointment";
+    product.price = price;
+    product.media.push({ kind: "image", storageUrl: "https://media.example/room.jpg", title: "Sala" });
+    await send("Vou mandar o link para ver todas as fotos: Imovel comercial (Importado do WhatsApp). {{produto_casa}}");
+    const output = JSON.stringify(requests);
+    expect(output).not.toMatch(/importado do whatsapp/i);
+    expect(output).toContain("https://media.example/house.jpg");
+    expect(output).toContain("https://store.example/produto/house");
+    expect(output).toContain("Ver detalhes e fotos");
+    expect(db.tables.sales_catalog_orders ?? []).toHaveLength(0);
+    expect(JSON.stringify(db.tables.conversation_messages)).not.toMatch(/importado do whatsapp/i);
+  });
+
+  it.each(["empty", "draft"])("does not create a public product link for an %s catalog", async scenario => {
+    const { context, product, send, requests } = fixture("corretor_imoveis", "Quero ver mais fotos do Imovel comercial");
+    if (scenario === "empty") context.salesCatalog = [];
+    else { product.salesDestination = "appointment"; product.status = "draft"; }
+    await send("Posso ajudar com suas preferências para a visita.");
+    expect(JSON.stringify(requests)).not.toContain("https://store.example/produto/");
+    expect(requests.filter(request => request.url.endsWith("/send/media"))).toHaveLength(0);
   });
 
   it("allows an explicit retail product in a dentist catalog but not the appointment", () => {
