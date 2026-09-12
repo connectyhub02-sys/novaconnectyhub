@@ -10,6 +10,10 @@ const product = {
 const msg = (direction: string, text_content: string, minute: number) => ({
   direction, text_content, occurred_at: new Date(Date.UTC(2026, 8, 5, 12, minute)).toISOString(),
 });
+const checkoutContext = (messages: ReturnType<typeof msg>[]) => ({
+  messages, organization: { id: "store" }, conversationId: "conversation", instance: { id: "instance", metadata: {} },
+  lead: { id: "lead", metadata: {} }, agent: { id: "agent", metadata: {} }, salesCatalogOrders: [], salesCatalog: [],
+});
 
 describe("clone conversation and checkout boundaries", () => {
   it.each([
@@ -35,12 +39,12 @@ describe("clone conversation and checkout boundaries", () => {
     expect(call("hasSalesCatalogCheckoutConfirmationIntent", text)).toBe(false);
     const latest = msg("inbound", text, 2);
     const messages = [msg("outbound", "Antes de fechar, confirma se o pedido ficou assim:\n- 1x Pizza Margherita\nTotal: R$ 39,90\nPosso fechar seu pedido e gerar o pagamento?", 1), latest];
-    expect(call("hasRecentSalesCatalogCheckoutConfirmation", { messages }, text)).toBe(false);
+    expect(call("hasRecentSalesCatalogCheckoutConfirmation", checkoutContext(messages), text)).toBe(false);
     expect(call("isSalesCatalogPaymentLinkFollowUp", text, messages, latest)).toBe(false);
     // No database access, charge or WhatsApp request should happen on the payment shortcut.
     const from = vi.fn(() => { throw new Error("Unexpected checkout action"); });
     await expect(call<Promise<unknown>>("maybeSendExistingSalesCatalogCheckoutLink", {
-      client: { from }, context: { agent: { metadata: {} }, messages, salesCatalog: [] }, userText: text, latestInbound: latest,
+      client: { from }, context: checkoutContext(messages), userText: text, latestInbound: latest,
     })).resolves.toBeNull();
     expect(from).not.toHaveBeenCalled();
   });
@@ -61,7 +65,7 @@ describe("clone conversation and checkout boundaries", () => {
       msg("outbound", "O valor é o mesmo no Pix e no cartão.", 2),
       msg("inbound", "Pode continuar, Pix", 3),
     ];
-    expect(call("hasRecentSalesCatalogCheckoutConfirmation", { messages }, "Pode continuar, Pix")).toBe(true);
+    expect(call("hasRecentSalesCatalogCheckoutConfirmation", checkoutContext(messages), "Pode continuar, Pix")).toBe(true);
   });
 
   it.each(["Obrigado", "Vou pensar", "Bom dia", "Entendi"])("does not reuse a previous Pix choice as new consent: %s", text => {
@@ -72,7 +76,7 @@ describe("clone conversation and checkout boundaries", () => {
       msg("outbound", "Pedido confirmado. Qual forma de pagamento você prefere: Pix ou cartão?", 2),
       msg("inbound", "Pix", 3), msg("outbound", "Seu Pix está pronto.", 4), msg("inbound", text, 5),
     ];
-    expect(call("hasRecentSalesCatalogCheckoutConfirmation", { messages }, text)).toBe(false);
+    expect(call("hasRecentSalesCatalogCheckoutConfirmation", checkoutContext(messages), text)).toBe(false);
   });
 
   it.each([

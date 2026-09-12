@@ -18,6 +18,8 @@ import * as humanHandoff from "@/lib/whatsapp/human-handoff";
 import * as humanization from "@/lib/whatsapp/clone-humanization";
 import * as customer from "@/lib/sales-catalog/checkout-customer";
 import * as paymentEvidence from "@/lib/sales-catalog/payment-evidence";
+import * as orderRevisionIntent from "@/lib/whatsapp/order-revision-intent";
+import * as orderLifecycle from "@/lib/whatsapp/order-lifecycle";
 import { serverModuleHarness } from "./server-module-harness";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
@@ -42,10 +44,14 @@ const exposed = [
   "maybeCreateSalesCatalogPaymentLink", "guardUnexecutedCheckoutClaim", "persistRuntimeSavedDeliveryConsent", "maybeAttachSavedSalesCatalogDeliveryToOrder",
   "scheduleProactiveFollowUp",
   "handleConversationEnding",
+  "findRecentPendingSalesCatalogCheckoutOrder", "findRecentSalesCatalogOrderForSelections",
+  "resolveSalesCatalogCartBoundaryMs", "buildSalesCatalogShippingIntentText",
+  "maybeAttachSalesCatalogShippingQuoteToOrder", "maybeAttachSalesCatalogDeliveryAddressToOrder",
+  "maybeAttachSalesCatalogLocalDeliveryToOrder", "maybeAttachSalesCatalogPickupToOrder",
   "buildSalesCatalogLines", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
-const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}};`, {
+const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}, maybeHandleSalesCatalogOrderRevision: typeof maybeHandleSalesCatalogOrderRevision === "function" ? maybeHandleSalesCatalogOrderRevision : undefined};`, {
   compilerOptions: { module: ModuleKind.CommonJS, target: 9 },
 }).outputText;
 const require = createRequire(import.meta.url);
@@ -72,6 +78,11 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/sales-catalog/shared": catalogShared,
     "@/lib/sales-catalog/shipping-calculator": shipping,
     "@/lib/sales-catalog/mercado-pago": money.exports,
+    "@/lib/sales-catalog/order-shipping": serverModuleHarness("src/lib/sales-catalog/order-shipping.ts", {
+      "./shipping-calculator": shipping, "./mercado-pago": money.exports,
+    }),
+    "./order-revision-intent": orderRevisionIntent,
+    "./order-lifecycle": orderLifecycle,
     "./outbound-language": language,
     "./agent-prompt-templates": templates,
     "./activity-setup": activitySetup,

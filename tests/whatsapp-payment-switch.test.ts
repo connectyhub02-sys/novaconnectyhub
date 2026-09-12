@@ -12,7 +12,7 @@ function scenario(options: { realCheckout?: boolean; deliveryStatus?: number } =
   const session = { id: options.realCheckout ? "00000000-0000-4000-8000-000000000001" : "session", organization_id: "store", order_id: "order", method: "pix", provider: "asaas",
     amount: "90,00", status: "pending", expires_at: "2099-01-01T00:00:00Z", provider_payment_id: "existing-pix",
     pix_qr_code: "TEST-PIX-NOT-PAYABLE", checkout_url: "https://shop.example/checkout/session", metadata: { preferred_payment_method: "pix" } };
-  const order = { id: "order", latestPaymentSessionId: session.id, status: "pending_payment", paymentStatus: "pending",
+  const order = { id: "order", companyId: "store", leadId: "lead", conversationId: "conversation", latestPaymentSessionId: session.id, status: "pending_payment", paymentStatus: "pending",
     createdAt: msg("outbound", "", 0).occurred_at, checkoutConfirmedAt: msg("outbound", "", 0).occurred_at,
     total: "90,00", items: [{ catalogItemId: "kit", title: "Pizza de queijo", quantity: 1 }] };
   const ctx = {

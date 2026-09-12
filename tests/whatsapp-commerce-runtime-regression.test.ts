@@ -16,7 +16,7 @@ const message = (direction: string, text_content: string, minute: number) => ({
 type Selection = { item: { id: string }; quantity: number };
 const context = (messages: ReturnType<typeof message>[]) => ({
   messages, salesCatalog: [pizza, bebida], salesCatalogOrders: [], salesCatalogShippingSettings: null,
-  organization: { id: "store" }, agent: { id: "agent" }, instance: { metadata: {} }, conversationId: "conversation", run: { id: "run" },
+  organization: { id: "store" }, agent: { id: "agent" }, instance: { id: "instance", metadata: {} }, conversationId: "conversation", run: { id: "run" },
   lead: { id: "lead", display_name: null as string | null, metadata: {} as Record<string, unknown> },
 });
 
@@ -56,7 +56,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
       return { ok: true, status: 200, text: async () => JSON.stringify({ id: "delivery" }) };
     } });
     const ctx = { ...context([message("outbound", "Gerei o checkout do cartão", 2), latest]), instance: { id: "instance", metadata: {} }, behavior: {}, credentials: { baseUrl: "https://whatsapp.invalid" },
-      salesCatalogOrders: [{ id: "order", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza", title: "Pizza Margherita" }], createdAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
+      salesCatalogOrders: [{ id: "order", companyId: "store", leadId: "lead", conversationId: "conversation", status: "pending_payment", paymentStatus: "pending", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza", title: "Pizza Margherita", quantity: 1 }], createdAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
     };
     await call("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: latest.text_content, token: "fake", phone: "5500000000000" });
     expect(createPayment).not.toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     } });
     const ctx = { ...context([message("inbound", question, 4), message("outbound", offer, 5), latest]),
       instance: { id: "instance", metadata: {} }, behavior: {}, credentials: { baseUrl: "https://whatsapp.invalid" },
-      salesCatalogOrders: [{ id: "order", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza", title: "Pizza Margherita" }], createdAt: "2026-09-04T12:00:00Z", updatedAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
+      salesCatalogOrders: [{ id: "order", companyId: "store", leadId: "lead", conversationId: "conversation", status: "pending_payment", paymentStatus: "pending", latestPaymentSessionId: "session", items: [{ catalogItemId: "pizza", title: "Pizza Margherita", quantity: 1 }], createdAt: "2026-09-04T12:00:00Z", updatedAt: "2026-09-04T12:00:00Z", total: "573,80", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }],
     };
     const result = await call<{ text: string }>("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: confirmation, token: "fake", phone: "5500000000000" });
     expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order", preferredMethod, amount: "573,80" }));
@@ -93,6 +93,18 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     expect(call("extractRuntimeCustomerNameFromStructuredReply", "Pix\nMaria Pereira Dias\ncliente@example.test\n12345678909\nRua Exemplo, 10, CEP 88000000")).toBe("Maria Pereira Dias");
     expect(call("extractRuntimeCustomerNameFromStructuredReply", "Nome completo: João de Sá\nCPF: 12345678909")).toBe("João de Sá");
     expect(call("extractRuntimeCustomerNameFromStructuredReply", "Qual o valor\ncliente@example.test")).toBeNull();
+  });
+  it.each(["Sim", "Pode mandar"])("does not borrow an old checkout offer after a separate greeting: %s", confirmation => {
+    const call = runtimeHarness();
+    const latest = message("inbound", confirmation, 6);
+    const ctx = { ...context([
+      message("outbound", "Posso gerar o link de pagamento no cartão para você?", 1),
+      message("inbound", "oi", 3), message("outbound", "Olá! Como posso ajudar?", 5), latest,
+    ]), salesCatalogOrders: [{ id: "order", companyId: "store", leadId: "lead", conversationId: "conversation",
+      status: "pending_payment", paymentStatus: "pending", latestPaymentSessionId: "session",
+      items: [{ catalogItemId: "pizza", title: "Pizza Margherita", quantity: 1 }],
+      createdAt: "2026-09-04T12:00:00Z", checkoutConfirmedAt: "2026-09-04T12:00:00Z" }] };
+    expect(call("findRecentPendingSalesCatalogCheckoutOrder", ctx.salesCatalogOrders, latest, ctx)).toBeNull();
   });
   it.each([["card", "Pix", "pix"], ["pix", "Cartão", "card"]])("switches an existing %s checkout to %s using the same order", async (oldMethod, reply, preferredMethod) => {
     const latest = message("inbound", reply, 2);
@@ -108,7 +120,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     } });
     const ctx = { ...context([message("outbound", "Gerei o checkout para finalizar pedido", 1), latest]),
       instance: { id: "instance", metadata: {} }, behavior: {}, credentials: { baseUrl: "https://whatsapp.invalid" },
-      salesCatalogOrders: [{ id: "order", latestPaymentSessionId: "session", status: "pending_payment", paymentStatus: "pending", items: [{ catalogItemId: "pizza", title: "Pizza Margherita" }], updatedAt: message("outbound", "", 1).occurred_at, total: "52,80", checkoutConfirmedAt: message("outbound", "", 1).occurred_at }],
+      salesCatalogOrders: [{ id: "order", companyId: "store", leadId: "lead", conversationId: "conversation", latestPaymentSessionId: "session", status: "pending_payment", paymentStatus: "pending", items: [{ catalogItemId: "pizza", title: "Pizza Margherita", quantity: 1 }], createdAt: message("outbound", "", 1).occurred_at, updatedAt: message("outbound", "", 1).occurred_at, total: "52,80", checkoutConfirmedAt: message("outbound", "", 1).occurred_at }],
     };
     await call("maybeSendExistingSalesCatalogCheckoutLink", { client: db.client, context: ctx, latestInbound: latest, userText: reply, token: "fake", phone: "5500000000000" });
     expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order", preferredMethod }));
@@ -141,7 +153,9 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     const call = runtimeHarness({
       "@/lib/client-os/sales-catalog": {
         mapSalesCatalogOrder: (row: Record<string, unknown>, items: Record<string, unknown>[]) => ({
-          id: row.id, conversationId: row.conversation_id, customerName: row.customer_name, customerEmail: row.customer_email,
+          id: row.id, companyId: row.organization_id, leadId: row.lead_id, conversationId: row.conversation_id,
+          status: row.status, paymentStatus: row.payment_status, createdAt: row.created_at, updatedAt: row.updated_at,
+          customerName: row.customer_name, customerEmail: row.customer_email,
           customerDocument: row.customer_document, items: items.map(item => ({ catalogItemId: item.catalog_item_id, title: item.title, quantity: item.quantity, fulfillment: item.fulfillment })),
         }),
       },

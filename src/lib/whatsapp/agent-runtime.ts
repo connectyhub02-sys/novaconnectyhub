@@ -8,6 +8,10 @@ import { resolveWhatsappBehavior } from "./activity-setup";
 import { conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { parseOrderRevisionIntent, type OrderRevisionIntent } from "./order-revision-intent";
+import { classifyCheckoutJourney, isNewPurchaseIntent, isEditableCheckoutOrder } from "./order-lifecycle";
+import { applySalesCatalogOrderRevision } from "@/lib/sales-catalog/order-revision";
+import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalog/order-shipping";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
@@ -16,7 +20,7 @@ import { hasCheckoutBillingAddress, parseCheckoutAddress } from "@/lib/sales-cat
 import { paymentEvidenceIntent, selectPaymentEvidenceOrder } from "@/lib/sales-catalog/payment-evidence";
 import { deliverPaymentReviewNotification, getLeadPaymentReviews, loadOrderFinancialSummary, refreshLeadOrderFinance } from "@/lib/sales-catalog/payment-reviews";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
@@ -253,7 +257,7 @@ type RuntimeLinkButton = {
 };
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
-type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder & { checkoutConfirmedAt?: string | null; financialSummary?: string };
+type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder & { checkoutConfirmedAt?: string | null; financialSummary?: string; checkoutRevision?: number; checkoutPaymentLock?: string | null; preferredPaymentMethod?: SalesCatalogRuntimePaymentPreference | null };
 type RuntimeOrganizationLocation = OrganizationLocation;
 type SalesCatalogRuntimePaymentPreference = "pix" | "card";
 type SalesCatalogRuntimePaymentChoice = {
@@ -764,6 +768,11 @@ async function processWhatsappAgentRunWithScope(input: {
 
     if (financialReply) {
       return await completeRun(client, run.id, preview(financialReply, 500), { sent: true, reason: "financial_review", messages: 1, mode: "text" });
+    }
+
+    const revisedOrder = await maybeHandleSalesCatalogOrderRevision({ client, context, token, phone, latestInbound, userText });
+    if (revisedOrder) {
+      return await completeRun(client, run.id, preview(revisedOrder.text, 500), { sent: true, reason: "sales_catalog_order_revision", messages: 1, mode: revisedOrder.mode });
     }
 
     const refreshedSalesCatalogOrdersWithShipping = await maybeAttachSalesCatalogShippingQuoteToOrder({
@@ -1765,6 +1774,8 @@ async function loadOrganizationSalesCatalogOrders(
       "agent_notes",
       "internal_notes",
       "latest_payment_session_id",
+      "checkout_revision",
+      "checkout_payment_lock",
       "metadata",
       "created_by",
       "created_at",
@@ -1816,6 +1827,9 @@ async function loadOrganizationSalesCatalogOrders(
   return orderRows.map((order) => ({
     ...mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []),
     checkoutConfirmedAt: asString(readRecord(order.metadata)?.checkout_confirmed_at),
+    checkoutRevision: Number((order as SalesCatalogOrderRow & { checkout_revision?: number }).checkout_revision ?? 0),
+    checkoutPaymentLock: (order as SalesCatalogOrderRow & { checkout_payment_lock?: string | null }).checkout_payment_lock ?? null,
+    preferredPaymentMethod: readStoredSalesCatalogPaymentPreference(readRecord(order.metadata) ?? {}),
     financialSummary: financialSummaries.get(order.id),
   }));
 
@@ -1893,11 +1907,8 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   if (!cep || !shippingSettings?.configured || !shippingSettings.shippingEnabled) return null;
   const destinationAddress = extractRuntimeAddress(input.latestInbound, input.userText);
 
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
     && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
   ));
 
@@ -2020,11 +2031,8 @@ async function maybeAttachSalesCatalogDeliveryAddressToOrder(input: {
   const destinationAddress = extractRuntimeAddress(input.latestInbound, input.userText);
   if (!destinationAddress || !hasRuntimeCompleteDeliveryAddress(destinationAddress)) return null;
 
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && runtimeSalesCatalogOrderNeedsDeliveryAddress(item)
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    runtimeSalesCatalogOrderNeedsDeliveryAddress(item)
     && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
   ));
 
@@ -2107,11 +2115,8 @@ async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
   const activeZones = shippingSettings.localDeliveryZones.filter((zone) => zone.active);
   if (activeZones.length === 0) return null;
 
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
   ));
 
   if (!order) return null;
@@ -2243,7 +2248,7 @@ async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
   const shippingSettings = input.context.salesCatalogShippingSettings;
   if (!shippingSettings?.configured) return null;
 
-  const order = input.context.salesCatalogOrders.find((item) => (
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
     item.paymentStatus === "pending"
     && !item.latestPaymentSessionId
     && Date.parse(item.createdAt ?? "") >= Date.parse(input.latestInbound?.occurred_at ?? "") - salesCatalogCheckoutConfirmationWindowMs
@@ -2416,11 +2421,8 @@ async function maybeAttachSalesCatalogPickupToOrder(input: {
 
   if (!hasSalesCatalogPickupSignal(input.userText)) return null;
 
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    runtimeSalesCatalogOrderRequiresShippingBeforePayment(item)
   ));
 
   if (!order) return null;
@@ -2495,15 +2497,8 @@ async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && item.paymentStatus !== "confirmed"
-    && item.paymentStatus !== "refunded"
-    && item.paymentStatus !== "failed"
-    && item.conversationId === input.context.conversationId
-    && !normalizeLeadNameCandidate(item.customerName)
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    !normalizeLeadNameCandidate(item.customerName)
   ));
 
   if (!order) return null;
@@ -2577,15 +2572,8 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
 
   if (!email && !document) return null;
 
-  const order = input.context.salesCatalogOrders.find((item) => (
-    item.status !== "cancelled"
-    && item.status !== "delivered"
-    && item.fulfillmentStatus !== "fulfilled"
-    && item.paymentStatus !== "confirmed"
-    && item.paymentStatus !== "refunded"
-    && item.paymentStatus !== "failed"
-    && item.conversationId === input.context.conversationId
-    && ((!item.customerEmail && email) || (!item.customerDocument && document))
+  const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
+    Boolean((!item.customerEmail && email) || (!item.customerDocument && document))
   ));
 
   if (!order) {
@@ -3042,7 +3030,7 @@ function buildSalesCatalogShippingIntentText(
 ) {
   const latestInbound = findLatestInbound(context.messages);
   const latestMs = Date.parse(latestInbound?.occurred_at ?? "");
-  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders);
+  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders, context);
   // Delivery facts outlive intermediate replies and regenerated checkout previews.
   // Only the customer's messages can establish an address or a pickup choice.
   const recent = context.messages.filter((message) => message.direction === "inbound"
@@ -3054,7 +3042,22 @@ function buildSalesCatalogShippingIntentText(
   const deliveryTexts = texts.filter(text => extractRuntimeAddress(null, text)
     || extractFirstBrazilianCep(text) || hasSalesCatalogPickupSignal(text));
   const latest = deliveryTexts[0];
-  if (!latest) return intentText;
+  if (!latest) {
+    // The address belongs to the existing order, not to the date of its latest update.
+    // New purchases ask permission to reuse lead-level delivery details separately.
+    if (!isNewPurchaseIntent(intentText)) {
+      const activeId = asString(readRuntimeCheckoutJourney(context)?.order_id);
+      const candidates = context.salesCatalogOrders.filter(order => isCurrentRuntimeCheckoutOrder(context, order)
+        && (!activeId || order.id === activeId));
+      if (candidates.length === 1) {
+        const order = candidates[0];
+        if (/retirada/i.test(order.shippingMethod ?? "")) return "Retirada na loja";
+        const address = sanitizeRuntimeDeliveryAddress(order.destinationAddress);
+        if (address) return [address, order.destinationCep ? `CEP ${order.destinationCep}` : ""].filter(Boolean).join(", ");
+      }
+    }
+    return intentText;
+  }
   if (hasSalesCatalogPickupSignal(latest) || extractRuntimeAddress(null, latest)) return latest;
   // A CEP sent separately may complete the preceding address. A new address,
   // however, must never inherit a CEP from an older, different destination.
@@ -3458,7 +3461,7 @@ function resolveRuntimeSavedDeliveryConsent(context: NonNullable<Awaited<ReturnT
   if (!address || !latest) return null;
   const latestMs = Date.parse(latest.occurred_at);
   const fingerprint = createHash("sha256").update(JSON.stringify(address)).digest("hex");
-  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders);
+  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders, context);
   const recent = context.messages.filter(message => message.direction === "inbound"
     && Date.parse(message.occurred_at) <= latestMs
     && (!boundary || Date.parse(message.occurred_at) > boundary)
@@ -9221,6 +9224,7 @@ function resolveSalesCatalogOrderSelections(input: {
   responseText: string;
   intentText: string;
 }) {
+  input = { ...input, context: { ...input.context, messages: runtimeCheckoutMessagesForNewPurchase(input.context) } };
   const selected = new Map<string, RuntimeSalesCatalogOrderSelection>();
   const addSelection = (selection: RuntimeSalesCatalogOrderSelection) => {
     if (effectiveRuntimeDestination(selection.item, input.context.agent) !== "connectyhub_checkout") return;
@@ -9351,7 +9355,7 @@ function resolveSalesCatalogOrderSelections(input: {
     });
   }
 
-  const cartBoundaryMs = resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders);
+  const cartBoundaryMs = resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders, input.context);
   const latestInboundMs = Date.parse(latestInbound?.occurred_at ?? "");
   const recentInboundMessages = input.context.messages
     .filter((message) => {
@@ -9450,7 +9454,7 @@ function shouldRequestSalesCatalogDeliveryDetailsBeforeCheckout(input: {
     return false;
   }
 
-  if (hasRecentResolvedSalesCatalogOrderForSelections(input.context.salesCatalogOrders, input.selections, input.latestInbound)) {
+  if (hasRecentResolvedSalesCatalogOrderForSelections(input.context.salesCatalogOrders, input.selections, input.latestInbound, input.context)) {
     return false;
   }
 
@@ -9475,8 +9479,9 @@ function hasRecentResolvedSalesCatalogOrderForSelections(
   orders: RuntimeSalesCatalogOrder[],
   selections: RuntimeSalesCatalogOrderSelection[],
   latestInbound: ConversationMessageRow | null,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  const order = findRecentSalesCatalogOrderForSelections(orders, selections, latestInbound);
+  const order = findRecentSalesCatalogOrderForSelections(orders, selections, latestInbound, context);
 
   return Boolean(order && runtimeSalesCatalogOrderHasResolvedDeliveryForPayment(order));
 }
@@ -9485,8 +9490,9 @@ function findRecentSalesCatalogOrderForSelections(
   orders: RuntimeSalesCatalogOrder[],
   selections: RuntimeSalesCatalogOrderSelection[],
   latestInbound: ConversationMessageRow | null,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!latestInbound || selections.length === 0) {
+  if (!latestInbound || selections.length === 0 || isNewPurchaseIntent(latestInbound.text_content ?? "")) {
     return null;
   }
 
@@ -9495,18 +9501,17 @@ function findRecentSalesCatalogOrderForSelections(
     return null;
   }
 
-  const selectedItemIds = new Set(selections.map((selection) => selection.item.id));
+  const matching = orders.filter((order) => {
+    if (!isCurrentRuntimeCheckoutOrder(context, order)) return false;
+    if (order.items.length !== selections.length || !selections.every(selection =>
+      order.items.some(item => item.catalogItemId === selection.item.id && item.quantity === selection.quantity))) return false;
 
-  return orders.find((order) => {
-    if (order.paymentStatus === "confirmed" || order.paymentStatus === "refunded" || order.paymentStatus === "failed") return false;
-    if (order.status === "cancelled" || order.status === "delivered") return false;
-    if (!order.items.some((item) => item.catalogItemId && selectedItemIds.has(item.catalogItemId))) return false;
-
-    const orderMs = Date.parse(order.updatedAt ?? order.createdAt ?? "");
+    const orderMs = Date.parse(order.createdAt ?? "");
     return Number.isFinite(orderMs)
       && orderMs <= latestInboundMs + 60_000
       && latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs;
-  }) ?? null;
+  });
+  return matching.length === 1 ? matching[0] : null;
 }
 
 function hasPhysicalSalesCatalogSelection(selections: Array<{ item: RuntimeSalesCatalogItem }>) {
@@ -9584,8 +9589,10 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     shouldHoldFinalTotal ? "Ainda preciso calcular a entrega antes do total final." : "",
     totalLine,
     input.recoverSavedAddress && shipping?.destinationAddress ? `Endereço salvo: ${shipping.destinationAddress}.` : "",
-    input.recoverSavedAddress && shouldHoldFinalTotal
-      ? "Me confirma o endereço de entrega e o CEP para calcular o frete e conferir o total?"
+    shouldHoldFinalTotal
+      ? extractFirstBrazilianCep(shippingIntentText) && extractRuntimeAddress(null, shippingIntentText)
+        ? "Não encontrei uma tarifa para essa entrega. Você prefere informar outro endereço ou combinar a entrega com a equipe?"
+        : "Me confirma o endereço completo de entrega e o CEP para calcular o frete e conferir o total?"
       : input.recoverSavedAddress && shipping?.destinationAddress
         ? "Posso usar esse mesmo endereço, fechar seu pedido e gerar o pagamento?"
         : "Posso fechar seu pedido e gerar o pagamento?",
@@ -9753,7 +9760,7 @@ function resolveSalesCatalogConfirmedPaymentPreference(
   }
 
   const rememberedPreference = detectRecentSalesCatalogPaymentPreference(context.messages, findLatestInbound(context.messages),
-    resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders));
+    resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders, context));
   if (rememberedPreference && isSalesCatalogRuntimePaymentPreferenceEnabled(choices, rememberedPreference)) {
     return rememberedPreference;
   }
@@ -9887,6 +9894,7 @@ function hasRecentSalesCatalogCheckoutConfirmation(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   intentText: string,
 ) {
+  context = { ...context, messages: runtimeCheckoutMessagesForNewPurchase(context) };
   if (requiresCommerceConversationReply(intentText)) return false;
   const latestInbound = findLatestInbound(context.messages);
   const previewText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(context.messages, latestInbound);
@@ -9970,6 +9978,7 @@ function buildRecentSalesCatalogCartSelectionText(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
 ) {
+  context = { ...context, messages: runtimeCheckoutMessagesForNewPurchase(context) };
   return buildRecentOutboundMessageBlocks(context.messages, latestInbound)
     .find((block) => {
       if (isSalesCatalogCartDraftPreviewText(block.text) || isSalesCatalogDeliveryDetailsPromptText(block.text)) return true;
@@ -9986,6 +9995,7 @@ function hasRecentSalesCatalogCartOfferConfirmation(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   intentText: string,
 ) {
+  context = { ...context, messages: runtimeCheckoutMessagesForNewPurchase(context) };
   if (!hasSalesCatalogCheckoutConfirmationIntent(intentText)) {
     return false;
   }
@@ -10179,6 +10189,9 @@ function buildRecentOutboundMessageBlocks(
 }
 
 function hasSalesCatalogCheckoutConfirmationIntent(text: string) {
+  if (isNewPurchaseIntent(text)) return false;
+  const revision = parseOrderRevisionIntent(text);
+  if (revision && revision.kind !== "payment") return false;
   if (requiresCommerceConversationReply(text)) return false;
   const normalized = normalizeSearch(text);
 
@@ -10475,11 +10488,81 @@ function clampRuntimeOrderQuantity(value: number) {
   return Math.max(1, Math.min(100000, Math.floor(value)));
 }
 
-function resolveSalesCatalogCartBoundaryMs(orders: RuntimeSalesCatalogOrder[]) {
-  const timestamps = orders
-    .flatMap((order) => [order.createdAt, order.updatedAt])
+function readRuntimeCheckoutJourney(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const journey = readRecord(readRecord(context.lead?.metadata)?.checkout_journey);
+  return journey?.organization_id === context.organization.id
+    && journey?.conversation_id === context.conversationId && journey?.instance_id === context.instance.id
+    ? journey : null;
+}
+
+function runtimeCheckoutMessagesForNewPurchase(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const boundaries = [Date.parse(asString(readRuntimeCheckoutJourney(context)?.started_at) ?? "")];
+  for (const message of context.messages) {
+    if (message.direction === "inbound" && isNewPurchaseIntent(message.text_content ?? "")) boundaries.push(Date.parse(message.occurred_at));
+  }
+  for (const order of context.salesCatalogOrders) {
+    if (order.companyId === context.organization.id && order.conversationId === context.conversationId
+      && (!context.lead?.id || order.leadId === context.lead.id) && !isEditableCheckoutOrder(order)) {
+      boundaries.push(Date.parse(order.createdAt ?? ""));
+    }
+  }
+  const valid = boundaries.filter(Number.isFinite);
+  if (!valid.length) return context.messages;
+  const boundary = Math.max(...valid);
+  return context.messages.filter(message => Date.parse(message.occurred_at) >= boundary);
+}
+
+function isCurrentRuntimeCheckoutOrder(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, order: RuntimeSalesCatalogOrder,
+) {
+  if (order.companyId !== context.organization.id || order.conversationId !== context.conversationId
+    || (context.lead?.id && order.leadId !== context.lead.id) || !isEditableCheckoutOrder(order)) return false;
+  const journey = readRuntimeCheckoutJourney(context);
+  const startedAt = Date.parse(asString(journey?.started_at) ?? "");
+  const createdAt = Date.parse(order.createdAt ?? "");
+  if (Number.isFinite(startedAt) && createdAt < startedAt && journey?.order_id !== order.id) return false;
+  return journey?.order_id === order.id || !context.messages.some(message => message.direction === "inbound"
+    && Date.parse(message.occurred_at) > createdAt && isNewPurchaseIntent(message.text_content ?? ""));
+}
+
+function findRuntimeCheckoutOrderForAttachment(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, text: string,
+  matches: (order: RuntimeSalesCatalogOrder) => boolean,
+) {
+  if (isNewPurchaseIntent(text)) return null;
+  const change = parseOrderRevisionIntent(text);
+  // Edits to a closed cart are handled by the revision operation, not by data collection.
+  if (change && change.kind !== "payment" && change.kind !== "clarify") return null;
+  const latest = findLatestInbound(context.messages);
+  const now = Date.parse(latest?.occurred_at ?? "");
+  const activeId = asString(readRuntimeCheckoutJourney(context)?.order_id);
+  const eligible = context.salesCatalogOrders.filter(order => isCurrentRuntimeCheckoutOrder(context, order)
+    && (activeId ? order.id === activeId : Number.isFinite(now)
+      && Date.parse(order.createdAt ?? "") <= now + 60_000
+      && now - Date.parse(order.createdAt ?? "") <= salesCatalogCheckoutConfirmationWindowMs));
+  return eligible.length === 1 && matches(eligible[0]) ? eligible[0] : null;
+}
+
+function resolveSalesCatalogCartBoundaryMs(
+  orders: RuntimeSalesCatalogOrder[],
+  context?: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  const scoped = context ? orders.filter(order => order.companyId === context.organization.id
+    && order.conversationId === context.conversationId && (!context.lead?.id || order.leadId === context.lead.id)) : [];
+  const timestamps = scoped
+    .flatMap((order) => [order.createdAt, order.checkoutConfirmedAt])
     .map((value) => Date.parse(value ?? ""))
     .filter((value) => Number.isFinite(value));
+  if (context) {
+    const journeyAt = Date.parse(asString(readRuntimeCheckoutJourney(context)?.started_at) ?? "");
+    if (Number.isFinite(journeyAt)) timestamps.push(journeyAt);
+    for (const message of context.messages) {
+      if (message.direction === "inbound" && isNewPurchaseIntent(message.text_content ?? "")) {
+        const at = Date.parse(message.occurred_at);
+        if (Number.isFinite(at)) timestamps.push(at);
+      }
+    }
+  }
 
   return timestamps.length > 0 ? Math.max(...timestamps) : null;
 }
@@ -10894,6 +10977,113 @@ function buildUnexecutedCheckoutReply(
     : retained || "Estou por aqui. Me diz como posso te ajudar.";
 }
 
+function priceRuntimeSalesCatalogSelections(selections: RuntimeSalesCatalogOrderSelection[], intentText: string, responseText: string) {
+  return selections.map((selection) => {
+    const { item } = selection;
+    const mentionText = [selection.mentionText, intentText, responseText].filter(Boolean).join(" ");
+    const sku = resolveRuntimeOrderSku(item, mentionText);
+    const selectedAttributes = resolveRuntimeOrderSelectedAttributes(item, sku, mentionText);
+    const unitPrice = sku?.price ?? item.price;
+    const salePrice = sku?.salePrice ?? item.offer.salePrice;
+    const unitTotal = salePrice ?? unitPrice;
+    const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
+
+    return {
+      item,
+      sku,
+      quantity: selection.quantity,
+      attributes: selectedAttributes.attributes.length > 0
+        ? selectedAttributes.attributes
+        : sku?.attributes.length
+          ? sku.attributes
+          : item.attributes,
+      attributeModifiers: selectedAttributes.modifiers,
+      attributeModifierTotal: selectedAttributes.modifierTotal,
+      unitPrice,
+      salePrice,
+      total,
+      source: selection.source,
+      mentionText,
+      quantitySignal: selection.quantitySignal,
+      fractionalQuantity: selection.fractionalQuantity,
+    };
+  });
+}
+
+function buildRuntimeSalesCatalogOrderRows(selections: ReturnType<typeof priceRuntimeSalesCatalogSelections>, organizationId: string, orderId: string) {
+  return selections.map(({
+    item,
+    sku,
+    quantity,
+    unitPrice,
+    salePrice,
+    total: itemTotal,
+    attributes,
+    attributeModifiers,
+    attributeModifierTotal,
+    source,
+    mentionText,
+    quantitySignal,
+    fractionalQuantity,
+  }) => {
+    return {
+      order_id: orderId,
+      organization_id: organizationId,
+      catalog_item_id: item.id,
+      sku_id: sku?.id ?? null,
+      sku_code: sku?.skuCode ?? null,
+      title: sku?.title || item.title,
+      tag: item.tag,
+      quantity,
+      unit_price: unitPrice,
+      sale_price: salePrice,
+      total: itemTotal,
+      product_origin_type: item.productOriginType,
+      commercial_flow_type: item.commercialFlowType,
+      revenue_owner_type: item.revenueOwnerType,
+      commission_eligible: item.commissionEligible,
+      platform_product_id: item.platformProductId,
+      attributes: attributes.map((attribute) => ({
+        id: attribute.id,
+        name: attribute.name,
+        values: attribute.values,
+      })),
+      fulfillment: {
+        mode: item.fulfillment.mode,
+        scheduling_required: item.fulfillment.schedulingRequired,
+        service_duration: item.fulfillment.serviceDuration,
+        delivery_instructions: item.fulfillment.deliveryInstructions,
+        access_instructions: item.fulfillment.accessInstructions,
+      },
+      metadata: {
+        category: item.category,
+        currency: sku?.currency ?? item.currency,
+        source: item.source,
+        stock_status: sku?.stockStatus ?? item.inventory.status,
+        billing_cycle: item.billingCycle,
+        billing_interval: item.billingInterval,
+        platform_product_id: item.platformProductId,
+        platform_product_code: item.platformProductCode,
+        commercial_flow_type: item.commercialFlowType,
+        revenue_owner_type: item.revenueOwnerType,
+        commission_policy_type: item.commissionPolicyType,
+        commission_eligible: item.commissionEligible,
+        platform_product_commission_percentage: item.platformProductCommissionPercentage,
+        platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
+        platform_product_agent_prompt: item.platformProductAgentPrompt,
+        conversation_cart_source: source,
+        conversation_cart_quantity_signal: quantitySignal,
+        conversation_cart_fractional_quantity: fractionalQuantity,
+        conversation_cart_selected_attributes: attributes,
+        conversation_cart_attribute_modifiers: attributeModifiers,
+        conversation_cart_attribute_modifier_total: attributeModifierTotal,
+        conversation_cart_mention_preview: mentionText,
+      },
+    };
+  });
+
+}
+
 async function recordSalesCatalogOrderIntent(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -11002,36 +11192,7 @@ async function recordSalesCatalogOrderIntent(input: {
     ?? extractRuntimeEmail(customerDataText);
   const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
     ?? extractRuntimeCustomerDocument(customerDataText);
-  const orderSelections = orderCatalogSelections.map((selection) => {
-    const { item } = selection;
-    const mentionText = [selection.mentionText, intentText, input.text].filter(Boolean).join(" ");
-    const sku = resolveRuntimeOrderSku(item, mentionText);
-    const selectedAttributes = resolveRuntimeOrderSelectedAttributes(item, sku, mentionText);
-    const unitPrice = sku?.price ?? item.price;
-    const salePrice = sku?.salePrice ?? item.offer.salePrice;
-    const unitTotal = salePrice ?? unitPrice;
-    const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
-
-    return {
-      item,
-      sku,
-      quantity: selection.quantity,
-      attributes: selectedAttributes.attributes.length > 0
-        ? selectedAttributes.attributes
-        : sku?.attributes.length
-          ? sku.attributes
-          : item.attributes,
-      attributeModifiers: selectedAttributes.modifiers,
-      attributeModifierTotal: selectedAttributes.modifierTotal,
-      unitPrice,
-      salePrice,
-      total,
-      source: selection.source,
-      mentionText,
-      quantitySignal: selection.quantitySignal,
-      fractionalQuantity: selection.fractionalQuantity,
-    };
-  });
+  const orderSelections = priceRuntimeSalesCatalogSelections(orderCatalogSelections, intentText, input.text);
   const primaryItem = orderSelections[0].item;
   const total = sumRuntimeOrderTotal(orderSelections);
   const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
@@ -11145,76 +11306,7 @@ async function recordSalesCatalogOrderIntent(input: {
     }).catch(() => {});
   }
 
-  const orderItems = orderSelections.map(({
-    item,
-    sku,
-    quantity,
-    unitPrice,
-    salePrice,
-    total: itemTotal,
-    attributes,
-    attributeModifiers,
-    attributeModifierTotal,
-    source,
-    mentionText,
-    quantitySignal,
-    fractionalQuantity,
-  }) => {
-    return {
-      order_id: order.id,
-      organization_id: input.context.organization.id,
-      catalog_item_id: item.id,
-      sku_id: sku?.id ?? null,
-      sku_code: sku?.skuCode ?? null,
-      title: sku?.title || item.title,
-      tag: item.tag,
-      quantity,
-      unit_price: unitPrice,
-      sale_price: salePrice,
-      total: itemTotal,
-      product_origin_type: item.productOriginType,
-      commercial_flow_type: item.commercialFlowType,
-      revenue_owner_type: item.revenueOwnerType,
-      commission_eligible: item.commissionEligible,
-      platform_product_id: item.platformProductId,
-      attributes: attributes.map((attribute) => ({
-        id: attribute.id,
-        name: attribute.name,
-        values: attribute.values,
-      })),
-      fulfillment: {
-        mode: item.fulfillment.mode,
-        scheduling_required: item.fulfillment.schedulingRequired,
-        service_duration: item.fulfillment.serviceDuration,
-        delivery_instructions: item.fulfillment.deliveryInstructions,
-        access_instructions: item.fulfillment.accessInstructions,
-      },
-      metadata: {
-        category: item.category,
-        currency: sku?.currency ?? item.currency,
-        source: item.source,
-        stock_status: sku?.stockStatus ?? item.inventory.status,
-        billing_cycle: item.billingCycle,
-        billing_interval: item.billingInterval,
-        platform_product_id: item.platformProductId,
-        platform_product_code: item.platformProductCode,
-        commercial_flow_type: item.commercialFlowType,
-        revenue_owner_type: item.revenueOwnerType,
-        commission_policy_type: item.commissionPolicyType,
-        commission_eligible: item.commissionEligible,
-        platform_product_commission_percentage: item.platformProductCommissionPercentage,
-        platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
-        platform_product_agent_prompt: item.platformProductAgentPrompt,
-        conversation_cart_source: source,
-        conversation_cart_quantity_signal: quantitySignal,
-        conversation_cart_fractional_quantity: fractionalQuantity,
-        conversation_cart_selected_attributes: attributes,
-        conversation_cart_attribute_modifiers: attributeModifiers,
-        conversation_cart_attribute_modifier_total: attributeModifierTotal,
-        conversation_cart_mention_preview: mentionText,
-      },
-    };
-  });
+  const orderItems = buildRuntimeSalesCatalogOrderRows(orderSelections, input.context.organization.id, order.id);
 
   const { error: orderItemsError } = await input.client.from("sales_catalog_order_items").insert(orderItems);
   if (orderItemsError) {
@@ -11413,6 +11505,294 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   }
 }
 
+type RuntimeOrderRevisionDraft = {
+  organization_id: string; conversation_id: string; instance_id: string; order_id: string;
+  request_id: string; expected_revision: number; source_message_id: string;
+  items: Array<{ id: string; quantity: number; mention_text: string | null }>;
+  address: string | null; cep: string | null; method: string | null;
+  preferred_method: SalesCatalogRuntimePaymentPreference | null;
+  ready: boolean; preview_text: string | null; total: string | null; pending_intent?: OrderRevisionIntent | null; applied?: boolean; fingerprint?: string;
+};
+
+function readRuntimeOrderRevision(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const metadata = readRecord(context.lead?.metadata);
+  const value = readRecord(readRecord(metadata?.checkout_order_revisions)?.[context.conversationId])
+    ?? readRecord(metadata?.checkout_order_revision);
+  if (!value || value.organization_id !== context.organization.id || value.conversation_id !== context.conversationId
+    || value.instance_id !== context.instance.id || typeof value.order_id !== "string" || typeof value.request_id !== "string"
+    || !Number.isSafeInteger(value.expected_revision) || !Array.isArray(value.items)) return null;
+  return JSON.parse(JSON.stringify(value)) as RuntimeOrderRevisionDraft;
+}
+
+async function persistRuntimeOrderRevision(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, draft: RuntimeOrderRevisionDraft | null) {
+  if (!context.lead) return;
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => {
+      const revisions = { ...readRecord(metadata.checkout_order_revisions) };
+      const previous = readRecord(metadata.checkout_order_revision);
+      if (previous && typeof previous.conversation_id === "string" && !revisions[previous.conversation_id]) {
+        revisions[previous.conversation_id] = previous;
+      }
+      if (draft) revisions[context.conversationId] = draft;
+      else delete revisions[context.conversationId];
+      return { metadata: { ...metadata, checkout_order_revisions: revisions,
+        checkout_order_revision: draft ?? (previous?.conversation_id === context.conversationId ? null : previous) } };
+    },
+  });
+  context.lead.metadata = saved.metadata;
+}
+
+function runtimeRevisionSelections(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, draft: RuntimeOrderRevisionDraft) {
+  const selections: RuntimeSalesCatalogOrderSelection[] = [];
+  if (draft.items.length > salesCatalogCheckoutItemLimit) return null;
+  for (const line of draft.items) {
+    const item = context.salesCatalog.find(candidate => candidate.id === line.id);
+    if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout"
+      || !Number.isSafeInteger(line.quantity) || line.quantity < 1 || line.quantity > 99) return null;
+    selections.push({ item, quantity: line.quantity, mentionText: line.mention_text, source: "cart_draft", quantitySignal: null, fractionalQuantity: null });
+  }
+  return selections;
+}
+
+async function maybeHandleSalesCatalogOrderRevision(input: {
+  client: SupabaseClient; context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string; phone: string; latestInbound: ConversationMessageRow | null; userText: string;
+}): Promise<OutboundMessage | null> {
+  const { client, context, latestInbound } = input;
+  if (!runtimeAllowsCheckout(context) || !context.lead || !latestInbound) return null;
+  const text = buildSalesCatalogOrderIntentText(latestInbound, "", context) || input.userText;
+  await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+  let draft = readRuntimeOrderRevision(context);
+  const initialJourney = classifyCheckoutJourney({ text, orders: context.salesCatalogOrders, conversationId: context.conversationId,
+    organizationId: context.organization.id, leadId: context.lead.id, now: latestInbound.occurred_at });
+  if (initialJourney.kind === "new_purchase") {
+    await persistRuntimeOrderRevision(client, context, null);
+    const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+      buildUpdate: metadata => ({ metadata: { ...metadata, checkout_cart_draft: null, checkout_runtime_state: null,
+        checkout_journey: { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id, started_at: latestInbound.occurred_at } } }),
+    });
+    context.lead.metadata = saved.metadata;
+    return null;
+  }
+  let intent = parseOrderRevisionIntent(text);
+  // A completed proposal is retained until payment delivery is confirmed. A new
+  // edit starts from the persisted revision, while a retry reuses its payment.
+  if (draft?.applied && intent && intent.kind !== "payment") {
+    await persistRuntimeOrderRevision(client, context, null);
+    draft = null;
+  }
+  if (!intent && draft?.pending_intent && "productText" in draft.pending_intent && !hasSalesCatalogCheckoutConfirmationIntent(text)) {
+    intent = { ...draft.pending_intent, productText: text };
+  }
+  if (!draft && (!intent || intent.kind === "payment")) return null;
+  const progress = readRecord(readRecord(context.lead.metadata)?.checkout_runtime_state);
+  const activeOrderId = draft?.order_id ?? (progress?.conversation_id === context.conversationId && progress?.instance_id === context.instance.id ? asString(progress.order_id) : null);
+  const scopedOrders = context.salesCatalogOrders.filter(order => order.conversationId === context.conversationId
+    && order.companyId === context.organization.id && order.leadId === context.lead!.id);
+  const journey = classifyCheckoutJourney({ text: intent && intent.kind !== "payment" ? "alterar pedido" : text, orders: scopedOrders, conversationId: context.conversationId,
+    organizationId: context.organization.id, leadId: context.lead.id, activeOrderId: activeOrderId ?? undefined, instanceId: context.instance.id, now: latestInbound.occurred_at });
+  const order = draft ? scopedOrders.find(candidate => candidate.id === draft!.order_id) : journey.order;
+  const reply = async (replyText: string) => {
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    const providerResponse = await sendWhatsappText({ credentials: context.credentials, token: input.token, phone: input.phone,
+      text: replyText, trackId: `order_revision_${context.run.id}`, replyId: latestInbound.provider_message_id ?? undefined });
+    const outbound: OutboundMessage = { text: replyText, mode: "text", providerResponse, persisted: true };
+    await saveOutboundMessage(client, context, outbound);
+    return outbound;
+  };
+  if (!order) {
+    if (!scopedOrders.length && !draft) return null;
+    return reply(journey.ambiguous ? "Qual pedido pendente você quer alterar? Preciso identificar o pedido antes de atualizar os itens."
+      : "Esse pedido já saiu da etapa de edição. Você quer iniciar um novo pedido ou falar com a equipe sobre o anterior?");
+  }
+  if (!isEditableCheckoutOrder(order) || order.checkoutPaymentLock) {
+    return reply("Preciso conferir o estado do pagamento e do pedido antes de alterar os itens. Vou manter o pedido como está até essa conferência.");
+  }
+  if (draft?.applied) {
+    if (!intent && !hasSalesCatalogCheckoutConfirmationIntent(text) && !isRuntimeMissingPaymentRequest(text)) return null;
+    const preferredMethod = intent?.kind === "payment" ? intent.paymentMethod ?? draft.preferred_method : draft.preferred_method;
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total: order.total, preferredMethod });
+    if (!payment) return reply("Os itens já foram atualizados. Preciso conferir o acesso ao pagamento antes de enviar o checkout.");
+    const outbound = await sendSalesCatalogPaymentLink({ ...input, payment });
+    if (!payment.gatewayUnavailable && !payment.paymentDeferred && !payment.confirmationPending
+      && readRecord(outbound.providerResponse)?.delivery !== "whatsapp_pix_code_missing") {
+      await persistRuntimeOrderRevision(client, context, null);
+    }
+    return outbound;
+  }
+  if (!draft) {
+    if (new Set(order.items.map(line => line.catalogItemId)).size !== order.items.length || order.items.some(line => !line.catalogItemId)) {
+      return reply("Esse pedido tem itens personalizados ou versões diferentes do mesmo produto. Preciso que a equipe confira a alteração para preservar as opções escolhidas.");
+    }
+    draft = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
+      order_id: order.id, request_id: randomUUID(), expected_revision: order.checkoutRevision ?? 0, source_message_id: "",
+      items: order.items.map(line => ({ id: line.catalogItemId!, quantity: line.quantity,
+        mention_text: [line.title, ...(line.attributes ?? []).flatMap(attribute => attribute.values)].join(" ") })),
+      address: order.destinationAddress, cep: order.destinationCep, method: order.shippingMethod,
+      preferred_method: readRuntimeOrderPaymentPreference(context, order.id) ?? order.preferredPaymentMethod ?? null,
+      ready: false, preview_text: null, total: null };
+  }
+  const selectionsBefore = runtimeRevisionSelections(context, draft);
+  if (!selectionsBefore) return reply("Um item do pedido não está mais disponível com as opções atuais. Preciso conferir esse item antes de concluir a alteração.");
+  const isAffirmation = !intent && hasSalesCatalogCheckoutConfirmationIntent(text);
+  const lastOutbound = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0]?.text.trim();
+  const confirmed = isAffirmation && draft.ready && draft.preview_text?.trim() === lastOutbound;
+  if (!confirmed && (order.checkoutRevision ?? 0) !== draft.expected_revision) {
+    await persistRuntimeOrderRevision(client, context, null);
+    return reply("O pedido mudou desde o último resumo. Me diga novamente a alteração para eu conferir os itens atuais e o novo total.");
+  }
+  if (!confirmed && draft.source_message_id !== latestInbound.id) {
+    draft.ready = false;
+    draft.preview_text = null;
+    draft.pending_intent = null;
+    if (intent?.kind === "clarify" || intent?.kind === "cancel") {
+      await persistRuntimeOrderRevision(client, context, draft);
+      return reply(intent.kind === "cancel" ? "Você quer cancelar o pedido inteiro ou apenas retirar um item? Me diga qual alteração deseja."
+        : "Me diga a alteração com o nome do produto e a quantidade desejada para eu atualizar o pedido com precisão.");
+    }
+    if (intent && "productText" in intent) {
+      const eligible = intent.kind === "add" ? context.salesCatalog : selectionsBefore.map(selection => selection.item);
+      const matches = selectSalesCatalogItemsFromText(eligible, intent.productText);
+      const item = matches.length === 1 ? matches[0] : null;
+      if (!item) {
+        draft.pending_intent = intent;
+        await persistRuntimeOrderRevision(client, context, draft);
+        return reply("Qual é o nome completo do produto que você quer alterar? Preciso identificar uma única opção antes de atualizar o pedido.");
+      }
+      const index = draft.items.findIndex(line => line.id === item.id);
+      const previous = index >= 0 ? draft.items[index].quantity : 0;
+      if (intent.kind === "replace") {
+        const replacements = selectSalesCatalogItemsFromText(context.salesCatalog, intent.replacementText);
+        if (replacements.length !== 1) {
+          draft.pending_intent = null;
+          await persistRuntimeOrderRevision(client, context, draft);
+          return reply("Me diga o nome completo do produto que sai e do produto que entra, para eu confirmar a substituição.");
+        }
+        const replacement = replacements[0];
+        const quantity = intent.quantity ?? previous;
+        draft.items.splice(index, 1);
+        const destination = draft.items.find(line => line.id === replacement.id);
+        if (destination) destination.quantity += quantity;
+        else draft.items.push({ id: replacement.id, quantity, mention_text: intent.replacementText });
+      } else {
+        const quantity = intent.kind === "add" ? previous + intent.quantity : intent.kind === "set_quantity" ? intent.quantity
+          : intent.quantity === null ? 0 : previous - intent.quantity;
+        if (quantity < 0 || quantity > 99) {
+          await persistRuntimeOrderRevision(client, context, draft);
+          return reply("Essa quantidade não corresponde aos itens do pedido. Quantas unidades desse produto você quer no total?");
+        }
+        if (quantity === 0) draft.items.splice(index, 1);
+        else if (index >= 0) draft.items[index].quantity = quantity;
+        else draft.items.push({ id: item.id, quantity, mention_text: intent.productText });
+      }
+    } else if (intent?.kind === "payment") {
+      if (!intent.paymentMethod || !isSalesCatalogRuntimePaymentPreferenceEnabled(getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings), intent.paymentMethod)) {
+        await persistRuntimeOrderRevision(client, context, draft);
+        return reply("Qual forma de pagamento disponível você prefere para o pedido atualizado?");
+      }
+      draft.preferred_method = intent.paymentMethod;
+    } else if (intent?.kind === "delivery" || (!draft.ready && (extractRuntimeAddress(null, text) || extractFirstBrazilianCep(text)))) {
+      const deliveryText = intent?.kind === "delivery" ? intent.deliveryText : text;
+      const address = extractRuntimeAddress(null, deliveryText);
+      const cep = extractFirstBrazilianCep(deliveryText);
+      if (hasSalesCatalogPickupSignal(deliveryText)) { draft.method = "Retirada na loja"; draft.address = null; draft.cep = null; }
+      else {
+        if (intent?.kind === "delivery" && !address && !cep) {
+          draft.address = null; draft.cep = null; draft.method = null;
+          await persistRuntimeOrderRevision(client, context, draft);
+          return reply("Me informe o novo endereço completo com CEP para eu recalcular a entrega.");
+        }
+        if (address) { draft.address = address; draft.cep = cep; }
+        else if (cep) {
+          if (draft.cep !== cep) draft.address = null;
+          draft.cep = cep;
+        }
+        if (draft.method && hasSalesCatalogPickupSignal(draft.method)) draft.method = null;
+      }
+    } else if (!isAffirmation && !/\b(?:frete|entrega|calcula|calcule|resumo|pedido)\b/.test(normalizeSearch(text))) {
+      await persistRuntimeOrderRevision(client, context, draft);
+      return null;
+    }
+    draft.source_message_id = latestInbound.id;
+    draft.request_id = randomUUID();
+  }
+  const selections = runtimeRevisionSelections(context, draft);
+  if (!selections?.length) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply("A revisão ficou sem itens. Você quer adicionar algum produto ou cancelar o pedido inteiro?");
+  }
+  const priced = priceRuntimeSalesCatalogSelections(selections, "", "");
+  // Unchanged options must survive quantity changes and additions. If the catalog
+  // can no longer reproduce an existing variant, do not silently choose another.
+  const optionsKey = (attributes: Array<{ id: string; values: string[] }> = []) => JSON.stringify(attributes
+    .map(attribute => [attribute.id, [...attribute.values].sort()]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  if (priced.some(line => {
+    const original = order.items.find(item => item.catalogItemId === line.item.id);
+    return original && ((original.skuId ?? null) !== (line.sku?.id ?? null)
+      || optionsKey(original.attributes) !== optionsKey(line.attributes));
+  })) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply("Preciso conferir as opções de um dos itens para preservar sua escolha na alteração. O pedido continua como estava.");
+  }
+  const subtotal = normalizeCurrencyAmount(sumRuntimeOrderTotal(priced));
+  if (subtotal === null) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply("Preciso conferir os preços dos itens antes de concluir a alteração.");
+  }
+  draft.cep = draft.cep?.replace(/\D/g, "") || null;
+  const delivery = quoteOrderDelivery({ entries: selections, settings: context.salesCatalogShippingSettings,
+    subtotal, cep: draft.cep ?? "", address: draft.address ?? "" });
+  const quote = chooseOrderDeliveryQuote(delivery.quotes, draft.method);
+  if (delivery.physical && (!quote || !quote.pickup && (!draft.address || !hasRuntimeCompleteDeliveryAddress(draft.address)))) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply(!draft.cep && !quote?.pickup ? "Mantive os itens da revisão. Me informe o CEP e o endereço completo para calcular a entrega."
+      : !draft.address ? "Já tenho o CEP. Me informe rua, número, bairro e cidade para completar a entrega."
+        : "Mantive os itens e o endereço, mas não encontrei uma tarifa de entrega para essa revisão. Você prefere outro endereço ou combinar a entrega com a equipe?");
+  }
+  const payable = subtotal - (normalizeCurrencyAmount(order.discountTotal) ?? 0) + (quote?.amount ?? 0);
+  if (payable <= 0) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply("Preciso conferir o desconto do pedido antes de concluir essa alteração.");
+  }
+  const total = formatRuntimeOrderMoney(payable);
+  const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, order.id);
+  const shipping = { total: quote?.amount ?? 0, method: quote?.name ?? null,
+    destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address };
+  const fingerprint = createHash("sha256").update(JSON.stringify({ rows, shipping, total, preferredMethod: draft.preferred_method })).digest("hex");
+  if (confirmed && draft.total === total && draft.fingerprint === fingerprint) {
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    try {
+      await applySalesCatalogOrderRevision({ client, organizationId: context.organization.id, leadId: context.lead.id,
+        conversationId: context.conversationId, orderId: order.id, expectedRevision: draft.expected_revision, requestId: draft.request_id,
+        rows, shipping,
+        expectedTotal: normalizeCurrencyAmount(total)!, preferredPaymentMethod: draft.preferred_method });
+    } catch {
+      await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+      return reply("Não consegui confirmar a alteração com segurança. O pedido ou o pagamento precisa ser conferido antes de enviar o checkout atualizado.");
+    }
+    context.salesCatalogOrders = await loadOrganizationSalesCatalogOrders(client, { organizationId: context.organization.id, leadId: context.lead.id, conversationId: context.conversationId });
+    await persistRuntimeOrderRevision(client, context, { ...draft, applied: true });
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total, preferredMethod: draft.preferred_method });
+    if (!payment) return reply("Os itens foram atualizados. Preciso conferir o acesso ao pagamento antes de enviar o checkout.");
+    const outbound = await sendSalesCatalogPaymentLink({ ...input, payment });
+    if (!payment.gatewayUnavailable && !payment.paymentDeferred && !payment.confirmationPending
+      && readRecord(outbound.providerResponse)?.delivery !== "whatsapp_pix_code_missing") {
+      await persistRuntimeOrderRevision(client, context, null);
+    }
+    return outbound;
+  }
+  draft.total = total;
+  draft.fingerprint = fingerprint;
+  draft.preview_text = ["Confira a alteração do seu pedido:", selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line).join("\n"),
+    quote ? `Frete: R$ ${formatRuntimeOrderMoney(quote.amount)} (${quote.name}).` : "",
+    `Total: R$ ${total}.`, draft.address && !quote?.pickup ? `Entrega: ${draft.address}.` : "", draft.preferred_method ? `Pagamento: ${draft.preferred_method === "card" ? "cartão" : "Pix"}.` : "", "Confirma essa alteração?"].filter(Boolean).join("\n\n");
+  await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+  const result = await reply(draft.preview_text);
+  await persistRuntimeOrderRevision(client, context, { ...draft, ready: true });
+  return result;
+}
+
+
 async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -11423,7 +11803,10 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 }): Promise<OutboundMessage | null> {
   if (!runtimeAllowsCheckout(input.context)) return null;
   input = { ...input, userText: buildSalesCatalogOrderIntentText(input.latestInbound, "", input.context) || input.userText };
+  if (isNewPurchaseIntent(input.userText)) return null;
   const methodRequest = resolveSalesCatalogPaymentMethodRequest(input.userText);
+  const revision = parseOrderRevisionIntent(input.userText);
+  if (revision && revision.kind !== "payment" && !methodRequest) return null;
   const needsConversationReply = requiresCommerceConversationReply(input.userText) && !isRuntimeMissingPaymentRequest(input.userText);
   if (needsConversationReply && !methodRequest) return null;
   const cartText = buildRecentSalesCatalogCheckoutConfirmationPreviewText(input.context.messages, input.latestInbound)
@@ -11447,7 +11830,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     order.items.length === cartItems.length && cartItems.every(item => order.items.some(line => line.catalogItemId === item.id))
     && cartSelections.every(selection => order.items.some(line => line.catalogItemId === selection.item.id && line.quantity === selection.quantity)))
     : input.context.salesCatalogOrders;
-  const order = findRecentPendingSalesCatalogCheckoutOrder(orders, input.latestInbound);
+  const order = findRecentPendingSalesCatalogCheckoutOrder(orders, input.latestInbound, input.context);
 
   if (
     !order
@@ -11544,7 +11927,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     || metadata.gateway_available === false;
   const preferredMethod = methodRequest ?? detectSalesCatalogPreferredPaymentMethod(input.userText)
     ?? detectRecentSalesCatalogPaymentPreference(input.context.messages, input.latestInbound,
-      resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders))
+      resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders, input.context))
     ?? readRuntimeOrderPaymentPreference(input.context, order.id)
     ?? resolveSalesCatalogAffirmedPaymentPreference(input.context.messages, input.latestInbound, input.userText)
     ?? readStoredSalesCatalogPaymentPreference(metadata)
@@ -11778,8 +12161,9 @@ function resolvesSalesCatalogPaymentPrerequisiteText(
 function findRecentPendingSalesCatalogCheckoutOrder(
   orders: RuntimeSalesCatalogOrder[],
   latestInbound: ConversationMessageRow | null,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!latestInbound) {
+  if (!latestInbound || isNewPurchaseIntent(latestInbound.text_content ?? "")) {
     return null;
   }
 
@@ -11789,17 +12173,28 @@ function findRecentPendingSalesCatalogCheckoutOrder(
     return null;
   }
 
-  return orders.find((order) => {
+  const text = buildSalesCatalogOrderIntentText(latestInbound, "", context);
+  const explicitResume = Boolean(resolveSalesCatalogPaymentMethodRequest(text))
+    || isSalesCatalogPaymentLinkFollowUp(text, context.messages, latestInbound);
+  const latestBlock = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0];
+  const latestPrompt = latestBlock ? [{ ...latestBlock.firstMessage, text_content: latestBlock.text }] : [];
+  const contextualConfirmation = isSalesCatalogContextualCheckoutConfirmation(text, latestPrompt, latestInbound);
+  const contextualPaymentResume = contextualConfirmation
+    && (hasRecentSalesCatalogCheckoutPromise(latestPrompt, latestInbound)
+      || hasRecentSalesCatalogPaymentMethodChoicePrompt(latestPrompt, latestInbound));
+  if (!explicitResume && !contextualConfirmation) return null;
+  const activeId = asString(readRuntimeCheckoutJourney(context)?.order_id);
+  const candidates = orders.filter((order) => {
+    if (!isCurrentRuntimeCheckoutOrder(context, order) || (activeId && order.id !== activeId)) return false;
     if (!order.items.some((item) => Boolean(item.catalogItemId))) return false;
-    if (order.paymentStatus === "confirmed" || order.paymentStatus === "refunded" || order.paymentStatus === "failed") return false;
-    if (order.status === "cancelled" || order.status === "delivered") return false;
 
-    const orderMs = Date.parse(order.updatedAt ?? order.createdAt ?? "");
+    const orderMs = Date.parse(order.createdAt ?? "");
     return Number.isFinite(orderMs)
       && orderMs <= latestInboundMs + 60_000
       && (latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs
-        || Boolean(order.checkoutConfirmedAt && order.latestPaymentSessionId));
-  }) ?? null;
+        || Boolean((explicitResume || contextualPaymentResume) && order.checkoutConfirmedAt && order.latestPaymentSessionId));
+  });
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function isSalesCatalogPaymentLinkFollowUp(
