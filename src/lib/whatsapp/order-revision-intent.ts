@@ -83,12 +83,14 @@ function revisionSpeech(text: string) {
   }
   const active: string[] = [], ordinary: string[] = [], denied: string[] = [];
   let noChange = false;
+  let hasGratitude = false;
   for (let piece of pieces) {
     piece = piece.replace(/^(?:agora|ent[aã]o|a[ií]|mas|por[eé]m)[,:]?\s+/i, "").replace(/\s+/g, " ").trim();
     let segment = normalized(piece);
     if (!segment) continue;
     const thanks = segment.match(/\b(?:obrigad[oa]|valeu|agradeco|agradecemos|agradecendo|agradecer|agradeci|grato|grata)\b/);
     if (thanks) {
+      hasGratitude = true;
       const remainder = piece.slice(thanks.index! + thanks[0].length).replace(/^[,:;!?.\s]+/, "");
       // "Obrigado por tirar" describes what was done; "obrigado, tire" and
       // "obrigado tire" introduce an imperative and must retain that command.
@@ -108,6 +110,13 @@ function revisionSpeech(text: string) {
   // A refusal or completed action does not negate a separate, explicit command.
   // Multiple positive commands remain joined, so the parser still refuses to
   // execute just one part of a compound edit.
+  // Do not turn "blz obrigado" into the apparent fresh acceptance "blz".
+  // Explicit commands such as "obrigado, pode enviar o link" remain intact.
+  const courtesyRemainder = normalized(ordinary.join(" ")).replace(/[^a-z0-9\s]/g, " ").trim();
+  if (hasGratitude && !active.length && !denied.length
+    && /^(?:(?:sim|ok|okay|certo|certinho|correto|isso|mesmo|fechado|top|perfeito|show|beleza|blz|combinado|legal|muito|ta|bom|tudo|joia|demais)\s*)*$/.test(courtesyRemainder)) {
+    ordinary.length = 0;
+  }
   return { text: active.length ? active.join(" e ") : denied.length ? denied.join(" e ") : ordinary.join(" "), noChange: noChange && active.length === 0 };
 }
 

@@ -10063,18 +10063,57 @@ function findRecentSalesCatalogCheckoutConfirmationPreview(
   messages: ConversationMessageRow[],
   latestInbound: ConversationMessageRow | null,
 ) {
-  const blocks = buildRecentOutboundMessageBlocks(messages, latestInbound);
-  const block = blocks.find((candidate) => isSalesCatalogCheckoutConfirmationPreviewText(candidate.text)
-    || isSalesCatalogCartDraftPreviewText(candidate.text)
-    || isSalesCatalogCartOfferPromptText(candidate.text)
-    || isSalesCatalogDeliveryDetailsPromptText(candidate.text));
+  if (!latestInbound) return null;
+  const latestMs = Date.parse(latestInbound.occurred_at);
+  if (!Number.isFinite(latestMs)) return null;
+  // A delivered checkout consumes the earlier confirmation. Payloads also cover
+  // Pix code-only/empty-text bubbles that the text block builder cannot see.
+  const deliveredAt = messages.reduce((boundary, message) => {
+    const occurredAt = Date.parse(message.occurred_at);
+    if (message.direction !== "outbound" || !Number.isFinite(occurredAt) || occurredAt >= latestMs) return boundary;
+    const payload = readRecord(message.payload);
+    const response = readRecord(payload?.provider_response);
+    const delivery = asString(response?.delivery);
+    const text = normalizeSearch(message.text_content ?? "");
+    const paymentPayload = delivery === "whatsapp_pix_copy_button" || delivery === "whatsapp_pix_code_separate_message"
+      || response?.reason === "payment_interactive_button_failed";
+    const checkoutText = /\bdeixei um checkout seguro separado para concluir seu pedido\b/.test(text)
+      || /\bgerei o checkout seguro\b/.test(text) && /https?:\/\//.test(message.text_content ?? "");
+    const checkoutButton = payload?.interactive_button === true
+      && /\b(?:checkout|finalizar pedido|copiar pix)\b/.test(text);
+    return paymentPayload || checkoutText || checkoutButton ? Math.max(boundary, occurredAt) : boundary;
+  }, -Infinity);
+  const relevantMessages = messages.filter(message => Date.parse(message.occurred_at) > deliveredAt
+    && !(message.direction === "outbound" && readMediaAcknowledgementEvent(message)));
+  const blocks = buildRecentOutboundMessageBlocks(relevantMessages, latestInbound);
+  const resume = normalizeSearch(latestInbound.text_content ?? "");
+  const explicitlyResumes = /\b(?:pode|vamos)\s+(?:continuar|prosseguir|seguir|fechar|finalizar|concluir|gerar|enviar|mandar)\b/.test(resume);
 
-  return block && isSalesCatalogCheckoutConfirmationPreviewText(block.text)
-    ? {
-        ...block.firstMessage,
-        text_content: block.text,
-      }
-    : null;
+  for (const block of blocks) {
+    // A later question owns a short answer, even when it shares a burst with the
+    // preview. Joining whitespace keeps a confirmation split across bubbles valid.
+    const lastQuestion = block.text.replace(/\s+/g, " ").match(/[^.!?]*\?/g)?.at(-1) ?? "";
+    const question = normalizeSearch(lastQuestion);
+    const checkoutQuestion = /\b(?:posso|pode|podemos|vamos)\b.{0,80}\b(?:fechar|finalizar|concluir|gerar|mandar|enviar)\b/.test(question)
+        && (/\b(?:pedido|carrinho|checkout|pagamento|pix|total|link)\b/.test(question)
+          || /^(?:posso|pode|podemos|vamos)\s+(?:fechar|finalizar|concluir)(?:\s+agora)?[?]*$/.test(question))
+      || /\bconfirma(?:r)?\b.{0,80}\b(?:pedido|produto|produtos|itens|total)\b/.test(question)
+      || hasSalesCatalogPaymentMethodChoiceText(lastQuestion);
+    if (lastQuestion && !checkoutQuestion) return null;
+    if (isSalesCatalogCheckoutConfirmationPreviewText(block.text)) {
+      return { ...block.firstMessage, text_content: block.text };
+    }
+    if (isSalesCatalogCartDraftPreviewText(block.text) || isSalesCatalogCartOfferPromptText(block.text)
+      || isSalesCatalogDeliveryDetailsPromptText(block.text)) return null;
+    if (hasSalesCatalogPaymentMethodChoiceText(block.text)) continue;
+    // A resolved payment/price question may be followed by an explicit return to
+    // checkout. Greetings, farewells and unrelated replies cannot revive its total.
+    if (explicitlyResumes && !lastQuestion
+      && /\b(?:valor|preco|total|frete|taxa|juros|desconto|prazo)\b/.test(normalizeSearch(block.text))
+      && /\b(?:pix|cartao|pagamento|pedido|entrega|frete)\b/.test(normalizeSearch(block.text))) continue;
+    return null;
+  }
+  return null;
 }
 
 function buildRecentSalesCatalogCartSelectionText(
@@ -11091,10 +11130,12 @@ function guardUnexecutedOrderRevisionClaim(text: string, context: NonNullable<Aw
   if (draft?.pending_intent) return "A alteração ainda está pendente. Me informe o nome completo do produto, a versão e a quantidade desejada.";
   if (!draft?.applied && draft?.ready && draft.preview_text) return draft.preview_text;
   const inbound = findLatestInbound(context.messages)?.text_content ?? "";
+  const requestedChange = parseOrderRevisionIntent(inbound);
   const activeOrder = orders.find(order => order.id === (draft?.order_id ?? readRuntimeActivePaymentOrderId(context))) ?? (orders.length === 1 ? orders[0] : null);
-  if (activeOrder && (draft?.applied || !draft && /\b(?:ja|conseguiu|adicionou|incluiu|retirou|removeu|atualizou|ajustou|ficou)\b/.test(normalizeSearch(inbound)))) {
-    // Report the actual saved state when asked about a completed operation. A
-    // revision counter alone does not establish which action really happened.
+  if (activeOrder && (draft?.applied || !draft && (!requestedChange || requestedChange.kind === "clarify"
+    || /\b(?:ja|conseguiu|adicionou|incluiu|retirou|removeu|atualizou|ajustou|ficou)\b/.test(normalizeSearch(inbound))))) {
+    // A cleared revision is not a missing product. Answer clarification from
+    // saved state without endorsing the model's claim or inventing a new edit.
     return ["No pedido salvo constam:", ...activeOrder.items.map(item => `- ${item.quantity}x ${item.title}`),
       `Total: R$ ${activeOrder.total}.`].join("\n");
   }

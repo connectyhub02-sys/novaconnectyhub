@@ -22,4 +22,8 @@ Foram acrescentados 41 cenários de recuperação de histórico, dez de retomada
 
 Os cenários usam produtos comuns fictícios, as funções reais do runtime e substitutos de banco, transporte e provedor. Verificam a persistência, a prévia calculada, o novo consentimento, a ausência de pagamento antecipado e repetição sem duplicação. Não provam entrega real do WhatsApp nem aprovação financeira.
 
-Reteste previsto na mesma conversa: retomar, conferir a prévia calculada pelo sistema e confirmar uma vez. Se o histórico necessário não estiver mais no contexto, a agente ainda precisa esclarecer a alteração; não deve apresentar uma confirmação pronta enquanto falta identificá-la. Publicação e checagem de produção ainda pendentes neste registro.
+Reteste previsto na mesma conversa: retomar, conferir a prévia calculada pelo sistema e confirmar uma vez. Se o histórico necessário não estiver mais no contexto, a agente ainda precisa esclarecer a alteração; não deve apresentar uma confirmação pronta enquanto falta identificá-la.
+
+## Publicação verificada
+
+Publicado em 13/09/2026 às **09:36:43 BRT**, commit `de5165771f3adef1dd57d6e89787819182a3dd64` na master, implantação Vercel `dpl_F5YMhvcFCXFkursEr7BxDkx9UoXk` **Ready / Latest / Production**, domínio principal associado. Após a publicação: inicial e login HTTP 200; Inngest HTTP 200, assinatura aceita e 43 funções; checkout inexistente HTTP 404 esperado. Nenhuma intervenção em conversas/pedidos, envio de teste ou cobrança. Reteste liberado na conversa existente; a nova entrega real do fluxo ainda depende da observação do titular. Registro posterior ao push mantido local para evitar outra implantação apenas documental.
