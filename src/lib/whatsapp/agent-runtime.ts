@@ -8,7 +8,7 @@ import { resolveWhatsappBehavior } from "./activity-setup";
 import { conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { parseOrderRevisionIntent, normalizeOrderRevisionSpeech, isOrderRevisionNoChangeIntent, type OrderRevisionIntent } from "./order-revision-intent";
+import { parseOrderRevisionIntent, parseOrderRevisionClarification, parseOrderRevisionTotalQuantity, normalizeOrderRevisionSpeech, isOrderRevisionNoChangeIntent, type OrderRevisionIntent } from "./order-revision-intent";
 import { classifyCheckoutJourney, isNewPurchaseIntent, isEditableCheckoutOrder, isPaymentRecoverableCheckoutOrder } from "./order-lifecycle";
 import { applySalesCatalogOrderRevision } from "@/lib/sales-catalog/order-revision";
 import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalog/order-shipping";
@@ -8149,6 +8149,17 @@ async function sendAgentResponse(input: {
   const commerceJourney = resolveRuntimeCommerceJourney(context.agent);
   const checkoutAllowed = runtimeAllowsCheckout(context);
   const latestInbound = findLatestInbound(context.messages);
+  const revisionClaimReply = checkoutAllowed ? guardUnexecutedOrderRevisionClaim(input.text, context) : null;
+  if (revisionClaimReply) {
+    // A model's prose must never become proof that an existing cart was changed.
+    // Exit before generic checkout selection/persistence can import that prose.
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+    const providerResponse = await sendWhatsappText({ credentials: context.credentials, token: input.token, phone: input.phone,
+      text: revisionClaimReply, trackId: `unexecuted_revision_${context.run.id}`, mentions: resolveGroupMentions(context) });
+    const outbound: OutboundMessage = { text: revisionClaimReply, mode: "text", providerResponse, persisted: true };
+    await saveOutboundMessage(input.client, context, outbound);
+    return [outbound];
+  }
   const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, {
     lead: context.lead,
     conversationId: context.conversationId,
@@ -11053,6 +11064,39 @@ function normalizeRuntimeCheckoutIntent(text: string) {
   return text.split(/\n+/).map(normalizeOrderRevisionSpeech).filter(Boolean).join("\n");
 }
 
+function guardUnexecutedOrderRevisionClaim(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const draft = readRuntimeOrderRevision(context);
+  const orders = context.salesCatalogOrders.filter(order => isCurrentRuntimeCheckoutOrder(context, order, true));
+  if (!orders.length) return null;
+  const claims = text.split(/(?<=[.!?])\s+|\n+/).some(sentence => {
+    const normalized = normalizeSearch(sentence);
+    const changeVerb = /\b(?:adicionei|acrescentei|inclui|retirei|removi|substitui|atualizei|ajustei)\b/.test(normalized);
+    if (/\b(?:nao|ainda nao)\s+(?:adicionei|acrescentei|inclui|retirei|removi|substitui|atualizei|ajustei)\b/.test(normalized)) return false;
+    const catalogWords = (value: string) => normalizeSearch(value).replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+      .filter(Boolean).map(token => token.length > 3 ? token.replace(/s$/, "") : token).join(" ");
+    const catalogTarget = context.salesCatalog.some(item => [item.title, ...item.skus.map(sku => sku.title ?? "")].some(title => {
+      const target = catalogWords(title);
+      return target && ` ${catalogWords(sentence)} `.includes(` ${target} `);
+    }));
+    const cartTarget = /\b(?:produtos?|item|itens|pedido|carrinho|quantidades?)\b/.test(normalized) || catalogTarget;
+    return changeVerb && cartTarget
+      || /\b(?:produto|item|pedido|carrinho)\b.{0,35}\b(?:adicionado|incluido|atualizado|ajustado|alterado)\b/.test(normalized);
+  });
+  if (!claims) return null;
+  if (draft?.pending_quantity_item_id) return "A alteração ainda está pendente. Quantas unidades desse produto você quer no total?";
+  if (draft?.pending_intent) return "A alteração ainda está pendente. Me informe o nome completo do produto, a versão e a quantidade desejada.";
+  if (!draft?.applied && draft?.ready && draft.preview_text) return draft.preview_text;
+  const inbound = findLatestInbound(context.messages)?.text_content ?? "";
+  const activeOrder = orders.find(order => order.id === (draft?.order_id ?? readRuntimeActivePaymentOrderId(context))) ?? (orders.length === 1 ? orders[0] : null);
+  if (activeOrder && (draft?.applied || !draft && /\b(?:ja|conseguiu|adicionou|incluiu|retirou|removeu|atualizou|ajustou|ficou)\b/.test(normalizeSearch(inbound)))) {
+    // Report the actual saved state when asked about a completed operation. A
+    // revision counter alone does not establish which action really happened.
+    return ["No pedido salvo constam:", ...activeOrder.items.map(item => `- ${item.quantity}x ${item.title}`),
+      `Total: R$ ${activeOrder.total}.`].join("\n");
+  }
+  return "Ainda não há uma alteração confirmada no pedido. Me informe o produto e a quantidade que deseja alterar para eu conferir o resumo atualizado.";
+}
+
 function readRuntimeActivePaymentOrderId(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
   const journeyOrder = asString(readRuntimeCheckoutJourney(context)?.order_id);
   if (journeyOrder) return journeyOrder;
@@ -11689,6 +11733,8 @@ type RuntimeOrderRevisionDraft = {
   address: string | null; cep: string | null; method: string | null;
   preferred_method: SalesCatalogRuntimePaymentPreference | null;
   ready: boolean; preview_text: string | null; total: string | null; pending_intent?: OrderRevisionIntent | null; applied?: boolean; fingerprint?: string;
+  pending_quantity_item_id?: string | null;
+  pending_product_role?: "replacement" | null;
   base_delivery?: { address: string | null; cep: string | null; method: string | null };
   delivery_update?: { address: string | null; cep: string | null } | null;
   legacy_cart_reconciled_at?: string;
@@ -11705,7 +11751,7 @@ function buildRuntimeOrderRevisionContextLines(draft: RuntimeOrderRevisionDraft 
         : draft.address ? `- Endereço preservado para a proposta: ${draft.address}. CEP: ${draft.cep ?? "a confirmar"}.`
           : "- A proposta ainda precisa de um endereço válido de entrega.",
     draft.applied ? "- Não peça novo aceite dos itens já aplicados; confirme o resultado do envio do pagamento."
-      : draft.pending_intent ? "- A alteração solicitada depende de identificar o produto ou a quantidade. Ainda não foi executada."
+      : draft.pending_intent || draft.pending_quantity_item_id ? "- A alteração solicitada depende de identificar o produto ou a quantidade. Ainda não foi executada."
         : draft.ready && draft.preview_text ? `- Última proposta enviada, aguardando confirmação: ${draft.preview_text}`
           : "- A proposta ainda não está pronta para aceite. Resolva a pendência indicada antes de afirmar que concluiu o pedido.",
     "- Mencionar itens ou reconhecer dados na conversa não confirma gravação, revisão, frete nem envio de checkout. Use somente o resultado verificado da operação."];
@@ -11731,7 +11777,7 @@ function recoverRuntimeRevisionDelivery(context: NonNullable<Awaited<ReturnType<
 
 function recoverRuntimeRevisionLegacyCart(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, order: RuntimeSalesCatalogOrder,
   draft: RuntimeOrderRevisionDraft | null, latestInbound: ConversationMessageRow) {
-  if (draft?.applied || draft?.ready || !isCurrentRuntimeCheckoutOrder(context, order)) return null;
+  if (draft?.applied || draft?.ready || draft?.pending_intent || draft?.pending_quantity_item_id || !isCurrentRuntimeCheckoutOrder(context, order)) return null;
   const stored = readRecord(readRecord(context.lead?.metadata)?.checkout_cart_draft);
   if (!stored || stored.organization_id !== context.organization.id || stored.conversation_id !== context.conversationId
     || stored.instance_id !== context.instance.id || !Array.isArray(stored.items) || typeof stored.updated_at !== "string"
@@ -11803,6 +11849,14 @@ function runtimeRevisionSelections(context: NonNullable<Awaited<ReturnType<typeo
   return selections;
 }
 
+function selectRuntimeRevisionProducts(items: RuntimeSalesCatalogItem[], text: string) {
+  const titleKey = (value: string) => normalizeSearch(value).split(/\s+/).map(token => token.length > 3 ? token.replace(/s$/, "") : token).join(" ");
+  const exact = items.filter(item => isSalesCatalogItemSellable(item) && titleKey(item.title) === titleKey(text));
+  // Short titles and inflected quantities still identify a whole catalog title.
+  // Duplicate titles remain ambiguous; never resolve them by array position.
+  return exact.length ? exact : selectSalesCatalogItemsFromText(items, text);
+}
+
 async function maybeHandleSalesCatalogOrderRevision(input: {
   client: SupabaseClient; context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   token: string; phone: string; latestInbound: ConversationMessageRow | null; userText: string;
@@ -11823,8 +11877,9 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     context.lead.metadata = saved.metadata;
     return null;
   }
-  let intent = parseOrderRevisionIntent(text);
-  const speech = normalizeOrderRevisionSpeech(text);
+  const speech = normalizeRuntimeCheckoutIntent(text);
+  let intent = parseOrderRevisionIntent(speech);
+  const requestedMethod = intent?.kind === "payment" ? intent.paymentMethod : intent?.preferredPaymentMethod;
   const noChange = isOrderRevisionNoChangeIntent(text);
   const wantsCheckout = hasSalesCatalogCheckoutConfirmationIntent(text) || Boolean(resolveSalesCatalogPaymentMethodRequest(text)) || isRuntimeMissingPaymentRequest(text);
   // Refusal or a question is never a new proposal. Existing proposals remain unaccepted.
@@ -11841,10 +11896,19 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     await persistRuntimeOrderRevision(client, context, null);
     draft = null;
   }
-  if (!intent && draft?.pending_intent && "productText" in draft.pending_intent && !wantsCheckout && !noChange
-    && speech.trim() && !/[?]/.test(speech) && !/\b(?:qual|quanto|como|quando|porque|por que|obrigad[oa]|valeu)\b/.test(normalizeSearch(speech))
-    && selectSalesCatalogItemsFromText(context.salesCatalog, speech).length > 0) {
-    intent = { ...draft.pending_intent, productText: speech };
+  if (!intent && draft?.pending_intent && !wantsCheckout && !noChange) {
+    const clarified = parseOrderRevisionClarification(draft.pending_intent, speech);
+    if (clarified && "productText" in clarified && selectRuntimeRevisionProducts(context.salesCatalog, clarified.productText).length > 0) {
+      intent = draft.pending_product_role === "replacement" && draft.pending_intent.kind === "replace"
+        ? { ...draft.pending_intent, replacementText: clarified.productText, quantity: clarified.quantity }
+        : clarified;
+    }
+  }
+  if (!intent && draft?.pending_quantity_item_id && !noChange) {
+    const quantity = parseOrderRevisionTotalQuantity(speech);
+    const pendingQuantityItemId = draft.pending_quantity_item_id;
+    const item = context.salesCatalog.find(candidate => candidate.id === pendingQuantityItemId);
+    if (quantity !== null && item) intent = { kind: "set_quantity", productText: item.title, quantity };
   }
   if (!draft && !intent && !wantsCheckout) return null;
   const progress = readRecord(readRecord(context.lead.metadata)?.checkout_runtime_state);
@@ -11858,6 +11922,11 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     ?? (wantsCheckout ? activeOrderId ? scopedOrders.find(candidate => candidate.id === activeOrderId)
       : editableOrders.length === 1 ? editableOrders[0] : null : null);
   const legacyCart = order && (!intent || intent.kind === "payment") ? recoverRuntimeRevisionLegacyCart(context, order, draft, latestInbound) : null;
+  if (order && requestedMethod && isCurrentRuntimeCheckoutOrder(context, order, true)
+    && isSalesCatalogRuntimePaymentPreferenceEnabled(getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings), requestedMethod)) {
+    await persistRuntimeOrderPaymentPreference(client, context, order.id, requestedMethod, latestInbound);
+    if (draft) draft.preferred_method = requestedMethod;
+  }
   if (!draft && (!intent || intent.kind === "payment") && !legacyCart) return null;
   const reply = async (replyText: string) => {
     await assertRunStillTargetsLatestInbound(client, context, latestInbound);
@@ -11905,6 +11974,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.items = legacyCart.items;
     draft.legacy_cart_reconciled_at = legacyCart.at;
     draft.pending_intent = null;
+    draft.preferred_method = readRuntimeOrderPaymentPreference(context, order.id) ?? draft.preferred_method;
     draft.source_message_id = "";
     draft.ready = false;
     draft.preview_text = null;
@@ -11913,6 +11983,8 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   if (noChange) {
     draft.delivery_update = null;
     draft.pending_intent = null;
+    draft.pending_quantity_item_id = null;
+    draft.pending_product_role = null;
     draft.ready = false;
     draft.preview_text = null;
     draft.fingerprint = undefined;
@@ -11926,9 +11998,20 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   const selectionsBefore = runtimeRevisionSelections(context, draft);
   if (!selectionsBefore) return reply("Um item do pedido não está mais disponível com as opções atuais. Preciso conferir esse item antes de concluir a alteração.");
-  const isAffirmation = !intent && !noChange && hasSalesCatalogCheckoutConfirmationIntent(text);
+  const isAffirmation = !intent && !noChange && !requiresCommerceConversationReply(text)
+    && !/\b(?:perguntando|duvida|depois|amanha|aguarde|esper[ae])\b/.test(normalizeSearch(text))
+    && hasSalesCatalogCheckoutConfirmationIntent(text);
   const lastOutbound = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0]?.text.trim();
-  const confirmed = isAffirmation && !draft.delivery_update && draft.ready && draft.preview_text?.trim() === lastOutbound;
+  const confirmed = isAffirmation && !draft.delivery_update && !draft.pending_intent && !draft.pending_quantity_item_id
+    && draft.ready && draft.preview_text?.trim() === lastOutbound;
+  if ((draft.pending_intent || draft.pending_quantity_item_id) && (!intent || intent.kind === "payment")) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false, preview_text: null });
+    if (isAffirmation || intent?.kind === "payment" || wantsCheckout) {
+      return reply(draft.pending_quantity_item_id ? "Antes de confirmar, quantas unidades desse produto você quer no total?"
+        : "Antes de confirmar, preciso identificar o produto da alteração. Me informe o nome completo, a versão e a quantidade desejada.");
+    }
+    return null;
+  }
   if (!intent && !isAffirmation && !noChange && !mentionedAddress && !mentionedCep
     && !/\b(?:frete|entrega|calcula|calcule|resumo|pedido)\b/.test(normalizeSearch(speech))) {
     if (recoveredDelivery || legacyCart) await persistRuntimeOrderRevision(client, context, draft);
@@ -11942,14 +12025,18 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.ready = false;
     draft.preview_text = null;
     draft.pending_intent = null;
+    draft.pending_quantity_item_id = null;
+    draft.pending_product_role = null;
     if (intent?.kind === "clarify" || intent?.kind === "cancel") {
+      draft.pending_intent = intent.kind === "clarify" && intent.pendingIntent
+        ? { ...intent.pendingIntent, ...(intent.preferredPaymentMethod ? { preferredPaymentMethod: intent.preferredPaymentMethod } : {}) } : intent;
       await persistRuntimeOrderRevision(client, context, draft);
       return reply(intent.kind === "cancel" ? "Você quer cancelar o pedido inteiro ou apenas retirar um item? Me diga qual alteração deseja."
         : "Me diga a alteração com o nome do produto e a quantidade desejada para eu atualizar o pedido com precisão.");
     }
     if (intent && "productText" in intent) {
       const eligible = intent.kind === "add" ? context.salesCatalog : selectionsBefore.map(selection => selection.item);
-      const matches = selectSalesCatalogItemsFromText(eligible, intent.productText);
+      const matches = selectRuntimeRevisionProducts(eligible, intent.productText);
       const item = matches.length === 1 ? matches[0] : null;
       if (!item) {
         draft.pending_intent = intent;
@@ -11959,9 +12046,10 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
       const index = draft.items.findIndex(line => line.id === item.id);
       const previous = index >= 0 ? draft.items[index].quantity : 0;
       if (intent.kind === "replace") {
-        const replacements = selectSalesCatalogItemsFromText(context.salesCatalog, intent.replacementText);
+        const replacements = selectRuntimeRevisionProducts(context.salesCatalog, intent.replacementText);
         if (replacements.length !== 1) {
-          draft.pending_intent = null;
+          draft.pending_intent = intent;
+          draft.pending_product_role = "replacement";
           await persistRuntimeOrderRevision(client, context, draft);
           return reply("Me diga o nome completo do produto que sai e do produto que entra, para eu confirmar a substituição.");
         }
@@ -11975,6 +12063,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
         const quantity = intent.kind === "add" ? previous + intent.quantity : intent.kind === "set_quantity" ? intent.quantity
           : intent.quantity === null ? 0 : previous - intent.quantity;
         if (quantity < 0 || quantity > 99) {
+          draft.pending_quantity_item_id = item.id;
           await persistRuntimeOrderRevision(client, context, draft);
           return reply("Essa quantidade não corresponde aos itens do pedido. Quantas unidades desse produto você quer no total?");
         }
@@ -12062,6 +12151,13 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     return reply("Preciso conferir o desconto do pedido antes de concluir essa alteração.");
   }
   const total = formatRuntimeOrderMoney(payable);
+  const unchangedItems = draft.items.length === order.items.length && draft.items.every(item => order.items.some(line => line.catalogItemId === item.id && line.quantity === item.quantity));
+  if (unchangedItems && draft.address === order.destinationAddress && draft.cep === order.destinationCep && draft.method === order.shippingMethod
+    && normalizeCurrencyAmount(total) === normalizeCurrencyAmount(order.total) && draft.preferred_method === order.preferredPaymentMethod) {
+    await invalidateRuntimeCheckoutDraft(client, context, text);
+    await persistRuntimeOrderRevision(client, context, null);
+    return reply("Os itens e as quantidades já correspondem ao pedido salvo. Mantive o pedido e o pagamento existentes, sem gerar uma nova cobrança.");
+  }
   const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, order.id);
   const shipping = { total: quote?.amount ?? 0, method: quote?.name ?? null,
     destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address };
@@ -12840,10 +12936,34 @@ async function persistRuntimeCheckoutProgress(input: {
 function readRuntimeOrderPaymentPreference(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, orderId: string,
 ): SalesCatalogRuntimePaymentPreference | null {
+  const choice = readRecord(readRecord(readRecord(context.lead?.metadata)?.checkout_payment_preferences)?.[context.conversationId]);
+  if (choice?.organization_id === context.organization.id && choice.instance_id === context.instance.id
+    && choice.conversation_id === context.conversationId && choice.order_id === orderId) {
+    const preferred = readStoredSalesCatalogPaymentPreference(choice);
+    if (preferred) return preferred;
+  }
   const state = readRecord(readRecord(context.lead?.metadata)?.checkout_runtime_state);
   if (!state || state.organization_id !== context.organization.id || state.instance_id !== context.instance.id
     || state.conversation_id !== context.conversationId || state.order_id !== orderId) return null;
   return readStoredSalesCatalogPaymentPreference(state);
+}
+
+async function persistRuntimeOrderPaymentPreference(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  orderId: string, preferredMethod: SalesCatalogRuntimePaymentPreference, inbound: ConversationMessageRow) {
+  if (!context.lead) return;
+  // This records the customer's choice, not a payment receipt or consent to a revised total.
+  const choice = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
+    order_id: orderId, preferred_payment_method: preferredMethod, updated_at: inbound.occurred_at, source_message_id: inbound.id };
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => {
+      const choices = { ...readRecord(metadata.checkout_payment_preferences) };
+      const previous = readRecord(choices[context.conversationId]);
+      if (typeof previous?.updated_at === "string" && Date.parse(previous.updated_at) > Date.parse(inbound.occurred_at)) return { metadata };
+      choices[context.conversationId] = choice;
+      return { metadata: { ...metadata, checkout_payment_preferences: choices } };
+    },
+  });
+  context.lead.metadata = saved.metadata;
 }
 
 async function deliverSalesCatalogPaymentLink(input: {

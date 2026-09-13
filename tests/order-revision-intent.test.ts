@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOrderRevisionIntent, isOrderRevisionNoChangeIntent, normalizeOrderRevisionSpeech } from "../src/lib/whatsapp/order-revision-intent";
+import { parseOrderRevisionIntent, parseOrderRevisionClarification, parseOrderRevisionTotalQuantity, isOrderRevisionNoChangeIntent, normalizeOrderRevisionSpeech } from "../src/lib/whatsapp/order-revision-intent";
 
 describe("explicit revisions after an order has been confirmed", () => {
   it.each([
@@ -169,9 +169,7 @@ describe("a revision parser never invents consent or partially applies an ambigu
   it.each([
     "adicione pizza de queijo e tire a limonada",
     "adicione uma pizza e duas limonadas",
-    "sim mas tira pizza e muda para pix",
     "mude o endereço e o método de pagamento para pix",
-    "troque pizza pela limonada e mude para cartão",
   ])("requires clarification before compound changes: %s", text => {
     expect(parseOrderRevisionIntent(text)).toMatchObject({ kind: "clarify" });
   });
@@ -200,5 +198,34 @@ describe("a revision parser never invents consent or partially applies an ambigu
 
   it.each(["sim", "top", "pode fechar", "obrigado", "quanto custa a pizza?", "oi", "", "sim deixa assim", "fica como está", "meu cartão chegou"])("leaves ordinary conversation and approval to the caller: %s", text => {
     expect(parseOrderRevisionIntent(text)).toBeNull();
+  });
+});
+
+describe("one cart edit with an independent payment preference", () => {
+  it.each([
+    ["adicione esse produto e gera novo pix", { kind: "add", productText: "esse produto", quantity: 1, preferredPaymentMethod: "pix" }],
+    ["adicione duas limonadas e gere um novo Pix", { kind: "add", productText: "limonadas", quantity: 2, preferredPaymentMethod: "pix" }],
+    ["adicione uma pizza de tomate e quero pagar no cartão", { kind: "add", productText: "pizza de tomate", quantity: 1, preferredPaymentMethod: "card" }],
+    ["sim mas tira pizza e muda para pix", { kind: "remove", productText: "pizza", quantity: null, preferredPaymentMethod: "pix" }],
+    ["troque pizza pela limonada e mude para cartão", { kind: "replace", productText: "pizza", replacementText: "limonada", quantity: null, preferredPaymentMethod: "card" }],
+    ["quero pagar no cartão e adicione uma limonada", { kind: "add", productText: "limonada", quantity: 1, preferredPaymentMethod: "card" }],
+  ])("keeps a single mutation and the requested method: %s", (text, expected) => {
+    expect(parseOrderRevisionIntent(text as string)).toEqual(expected);
+  });
+  it.each(["adicione pizza e tire limonada e gere Pix", "adicione pizza e quero pagar Pix e cartão", "se eu adicionar pizza e pagar no Pix?"])("keeps unresolved or hypothetical combinations out of execution: %s", text => {
+    expect(parseOrderRevisionIntent(text)).toMatchObject({ kind: "clarify" });
+  });
+  it.each([
+    ["Pizza de tomate", "pizza de tomate", 1], ["duas pizzas de tomate", "pizzas de tomate", 2],
+    ["Pizza de tomate, duas unidades", "pizza de tomate", 2], ["Limonada 500ml", "limonada 500ml", 1],
+  ])("fills the pending operation from product/variant/count only: %s", (text, productText, quantity) => {
+    expect(parseOrderRevisionClarification({ kind: "add", productText: "esse produto", quantity: 1 }, String(text)))
+      .toEqual({ kind: "add", productText, quantity });
+  });
+  it.each(["obrigado por adicionar pizza", "não quero pizza", "pizza amanhã", "quanto custa pizza?", "sim", "duas pizzas e uma limonada"])("does not resolve an edit from a refusal, courtesy or another operation: %s", text => {
+    expect(parseOrderRevisionClarification({ kind: "add", productText: "esse produto", quantity: 1 }, text)).toBeNull();
+  });
+  it.each([["duas unidades no total", 2], ["0", 0], ["quero só 3", 3], ["100", null], ["2 amanhã", null], ["sim", null], ["2x pizza", null]])("accepts only an isolated total count: %s", (text, expected) => {
+    expect(parseOrderRevisionTotalQuantity(String(text))).toBe(expected);
   });
 });

@@ -4,6 +4,7 @@ import {
   ensureAsaasAccessToken,
   extractAsaasPaymentData,
   getAsaasPayment,
+  getAsaasCheckoutPayments,
   mapAsaasPaymentStatus,
   verifyAsaasWebhookToken,
   type AsaasPaymentResponse,
@@ -13,6 +14,7 @@ import { handleSalesCatalogPaymentStatusChange } from "@/lib/sales-catalog/post-
 import { createServiceClient } from "@/lib/supabase/service";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import { CheckoutError, processTransparentWebhook } from "@/lib/sales-catalog/transparent-checkout";
+import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +27,11 @@ type PaymentSessionRow = {
   order_id: string;
   integration_id: string | null;
   method: string | null;
+  status: string;
+  provider_status: string | null;
+  provider_payment_id: string | null;
+  updated_at: string | null;
+  amount: string | number | null;
   payment_owner_type: string | null;
   commercial_flow_type: string | null;
   revenue_owner_type: string | null;
@@ -40,6 +47,7 @@ type OrderTrackingRow = {
   conversation_id: string | null;
   customer_phone: string | null;
   total: string | null;
+  checkout_revision: number | null;
   metadata: JsonRecord | null;
 };
 
@@ -160,18 +168,55 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const paymentResponse = paymentId
+    let paymentResponse = paymentId
       ? await getAsaasPayment({
           accessToken: integration.accessToken,
           mode: integration.mode,
           paymentId,
-        }).catch(() => payment as AsaasPaymentResponse)
+        })
       : null;
+    if (paymentResponse && paymentResponse.id !== paymentId) throw new Error("O provedor retornou outro pagamento. A conciliação será repetida.");
+    let hostedReview: string | null = null;
+    let hostedEvidence: { count: number; has_more: boolean; payments: { id?: string; status?: string; amount?: number }[] } | null = null;
+    if (!paymentId && checkoutId && eventType === "CHECKOUT_PAID") {
+      const result = await getAsaasCheckoutPayments({ accessToken: integration.accessToken, mode: integration.mode, checkoutId });
+      const payments = result.payments;
+      hostedEvidence = { count: payments.length, has_more: result.hasMore,
+        payments: payments.slice(0, 10).map(row => ({ id: row.id, status: row.status, amount: row.value })) };
+      // Do not infer a full payment from a partial list, multiple installments or
+      // a foreign checkout. Ambiguous money remains visible for review.
+      if (result.hasMore || payments.length !== 1 || !payments[0].id
+        || payments[0].checkoutSession && payments[0].checkoutSession !== checkoutId) {
+        hostedReview = "hosted_checkout_payments_ambiguous";
+      } else {
+        paymentResponse = payments[0] as AsaasPaymentResponse;
+        if (!["approved", "refunded"].includes(extractAsaasPaymentData(paymentResponse).status)) hostedReview = "hosted_checkout_payment_not_confirmed";
+      }
+    }
     const paymentData = paymentResponse
-      ? extractAsaasPaymentData(paymentResponse, null)
-      : buildCheckoutPaymentData(eventType, checkoutId);
-    const providerPaymentId = paymentData.providerPaymentId ?? paymentId ?? checkoutId ?? dataId;
+      ? extractAsaasPaymentData(paymentResponse, null, eventType)
+      : hostedReview ? { ...buildCheckoutPaymentData("CHECKOUT_CREATED", checkoutId), providerStatus: "VERIFICATION_PENDING", providerStatusDetail: "verification_pending" }
+        : buildCheckoutPaymentData(eventType, checkoutId);
+    const preserveHostedSession = Boolean(hostedReview) && (!paymentResponse || ["cancelled", "expired", "rejected", "approved", "refunded"].includes(session.status));
+    const providerPaymentId = (preserveHostedSession ? session.provider_payment_id : null)
+      ?? paymentData.providerPaymentId ?? paymentId ?? checkoutId ?? dataId;
     const sessionMetadata = readRecord(session.metadata);
+    // Retirement and financial completion are not reversible by a late pending
+    // event. Fresh approvals/refunds remain eligible for reconciliation below.
+    const nextFinancial = paymentData.status === "approved" || paymentData.status === "refunded";
+    const terminalRegression = ["approved", "refunded"].includes(session.status) && !nextFinancial
+      || ["cancelled", "expired", "rejected"].includes(session.status) && ["created", "pending", "error"].includes(paymentData.status);
+    if (terminalRegression && !hostedReview) {
+      await recordWebhookEvent(client, { providerEventId, dataId, eventType, action: eventType, signatureHeader, requestId,
+        payload, organizationId: session.organization_id, paymentSessionId: session.id, processingStatus: "ignored",
+        errorMessage: "Evento não financeiro não reabre uma sessão encerrada." });
+      return NextResponse.json({ ok: true, ignored: true });
+    }
+    // "refunded" also represents disputes/refund requests in the legacy mapping.
+    // A won dispute can legitimately return to CONFIRMED. A completed refund plus
+    // a fresh approval is conflicting evidence: retain the refund and open review.
+    const completedRefundConflict = session.status === "refunded" && session.provider_status === "REFUNDED"
+      && paymentData.status === "approved";
     const commissionContext = readRecord(session.commission_context);
     const paymentOwnerType = normalizeRevenueOwnerType(
       session.payment_owner_type
@@ -194,7 +239,7 @@ export async function POST(request: NextRequest) {
     const paymentMethodLabel = session.method === "card" ? "Cartao Asaas" : "Pix Asaas";
     const { data: orderContextRow } = await client
       .from("sales_catalog_orders")
-      .select("id, lead_id, conversation_id, customer_phone, total, latest_payment_session_id, payment_status, metadata")
+      .select("id, lead_id, conversation_id, customer_phone, total, checkout_revision, latest_payment_session_id, payment_status, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<OrderTrackingRow>();
@@ -220,49 +265,66 @@ export async function POST(request: NextRequest) {
     );
     const now = new Date().toISOString();
 
-    await client
+    let sessionUpdate = client
       .from("sales_catalog_payment_sessions")
       .update({
-        status: paymentData.status,
+        status: preserveHostedSession ? session.status : completedRefundConflict ? "refunded" : paymentData.status,
         provider_payment_id: providerPaymentId,
-        provider_status: paymentData.providerStatus,
-        provider_status_detail: paymentData.providerStatusDetail,
+        provider_status: preserveHostedSession || completedRefundConflict ? session.provider_status : paymentData.providerStatus,
+        provider_status_detail: hostedReview ? "verification_pending" : paymentData.providerStatusDetail,
         // Status webhooks do not include /pixQrCode data. Never erase the code
         // already returned when the payment was created (including concurrent writes).
         ...(paymentData.pixQrCode ? { pix_qr_code: paymentData.pixQrCode } : {}),
         ...(paymentData.pixQrCodeBase64 ? { pix_qr_code_base64: paymentData.pixQrCodeBase64 } : {}),
         ...(paymentData.pixTicketUrl ? { pix_ticket_url: paymentData.pixTicketUrl } : {}),
         ...(paymentData.paidAt ? { paid_at: paymentData.paidAt } : {}),
+        updated_at: now,
         metadata: {
           ...sessionMetadata,
           gateway_request_inflight: false,
-          asaas_payment_id: paymentId ?? sessionMetadata.asaas_payment_id ?? null,
+          asaas_payment_id: paymentId ?? paymentResponse?.id ?? sessionMetadata.asaas_payment_id ?? null,
           asaas_checkout_id: checkoutId ?? sessionMetadata.asaas_checkout_id ?? null,
           asaas_status: paymentData.providerStatus,
           last_webhook_at: now,
           last_webhook_action: eventType,
+          ...(completedRefundConflict ? { financial_conflict: { verified_provider_status: paymentData.providerStatus, observed_at: now } } : {}),
+          ...(hostedEvidence ? { hosted_payment_evidence: hostedEvidence } : {}),
         },
       })
       .eq("id", session.id)
-      .eq("organization_id", session.organization_id);
+      .eq("organization_id", session.organization_id)
+      .eq("order_id", session.order_id)
+      .eq("status", session.status);
+    sessionUpdate = session.updated_at ? sessionUpdate.eq("updated_at", session.updated_at) : sessionUpdate.is("updated_at", null);
+    const { data: savedSession, error: sessionSaveError } = await sessionUpdate.select("id").maybeSingle();
+    if (sessionSaveError || !savedSession) throw new Error("O pagamento mudou durante a conciliação. O evento será conferido novamente.");
 
     // An abandoned Pix may expire after the customer switches to card. Record
     // that session's status without replacing the current checkout or notifying
     // the customer that their new payment failed. Financial events still apply.
     const financialEvent = paymentData.status === "approved" || paymentData.status === "refunded";
     const currentSessionId = orderContextRow?.latest_payment_session_id;
+    let financialReview = hostedReview ?? (completedRefundConflict ? "completed_refund_confirmation_conflict"
+      : financialEvent ? financialReviewReason(session, orderContextRow, paymentResponse?.value, paymentData.status) : null);
     let orderUpdated = false;
-    if (financialEvent || ((!currentSessionId || currentSessionId === session.id)
+    if (financialReview) {
+      await requireFinancialReview(client, session, orderContextRow);
+    } else if (financialEvent || ((!currentSessionId || currentSessionId === session.id)
       && !["confirmed", "refunded"].includes(orderContextRow?.payment_status ?? ""))) {
       let update = client.from("sales_catalog_orders").update(orderPatch)
         .eq("id", session.order_id).eq("organization_id", session.organization_id);
-      if (!financialEvent) {
-        update = currentSessionId ? update.eq("latest_payment_session_id", currentSessionId) : update.is("latest_payment_session_id", null);
-        if (orderContextRow?.payment_status) update = update.eq("payment_status", orderContextRow.payment_status);
+      update = currentSessionId ? update.eq("latest_payment_session_id", currentSessionId) : update.is("latest_payment_session_id", null);
+      if (orderContextRow?.payment_status) update = update.eq("payment_status", orderContextRow.payment_status);
+      if (financialEvent && orderContextRow) {
+        update = update.eq("total", orderContextRow.total).eq("checkout_revision", orderContextRow.checkout_revision ?? 0);
       }
       const { data: updatedOrder, error: orderUpdateError } = await update.select("id").maybeSingle();
       if (orderUpdateError) throw new Error(orderUpdateError.message);
       orderUpdated = Boolean(updatedOrder);
+      if (financialEvent && !orderUpdated) {
+        financialReview = "order_changed_during_reconciliation";
+        await requireFinancialReview(client, session, orderContextRow);
+      }
     }
 
     const postPayment = orderUpdated ? await handleSalesCatalogPaymentStatusChange({
@@ -319,6 +381,7 @@ export async function POST(request: NextRequest) {
         payment_method: session.method ?? null,
         payment_method_label: paymentMethodLabel,
         order_updated: orderUpdated,
+        financial_review_reason: financialReview,
         lead_id: orderContextRow?.lead_id ?? null,
         conversation_id: orderContextRow?.conversation_id ?? null,
         lead_phone: orderContextRow?.customer_phone ?? null,
@@ -355,7 +418,7 @@ export async function POST(request: NextRequest) {
       errorMessage: error instanceof Error ? error.message : "Falha ao processar webhook Asaas.",
     });
 
-    return NextResponse.json({ ok: true, deferred: true });
+    return NextResponse.json({ ok: false, deferred: true }, { status: 503 });
   }
 }
 
@@ -368,7 +431,7 @@ async function findAsaasPaymentSession(
   if (ids.length > 0) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .in("provider_payment_id", ids)
       .order("created_at", { ascending: false })
@@ -383,7 +446,7 @@ async function findAsaasPaymentSession(
   if (input.checkoutId) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .contains("metadata", { asaas_checkout_id: input.checkoutId })
       .order("created_at", { ascending: false })
@@ -398,7 +461,7 @@ async function findAsaasPaymentSession(
   if (input.externalReference) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .eq("external_reference", input.externalReference)
       .order("created_at", { ascending: false })
@@ -411,6 +474,34 @@ async function findAsaasPaymentSession(
   }
 
   return null;
+}
+
+function financialReviewReason(session: PaymentSessionRow, order: OrderTrackingRow | null, providerAmount: number | undefined, status: string) {
+  if (!order) return "order_unavailable";
+  const sessionAmount = normalizeCurrencyAmount(session.amount);
+  const orderAmount = normalizeCurrencyAmount(order.total);
+  const actualAmount = normalizeCurrencyAmount(providerAmount);
+  if (actualAmount === null || sessionAmount === null || orderAmount === null || actualAmount !== sessionAmount || sessionAmount !== orderAmount) {
+    return "payment_amount_differs_from_current_order";
+  }
+  const revision = readRecord(session.metadata).checkout_revision;
+  if (revision != null && (!Number.isSafeInteger(Number(revision)) || Number(revision) !== Number(order.checkout_revision ?? 0))) return "payment_belongs_to_another_order_revision";
+  if (status === "refunded" && order.latest_payment_session_id !== session.id) return "refund_belongs_to_another_session";
+  if (status === "approved" && order.payment_status === "refunded") return "confirmation_after_refund_or_dispute";
+  return null;
+}
+
+async function requireFinancialReview(client: ReturnType<typeof createServiceClient>, session: PaymentSessionRow, order: OrderTrackingRow | null) {
+  if (!order?.lead_id) throw new Error("Pagamento registrado, mas o pedido precisa de conferência financeira.");
+  const { data: existing, error } = await client.from("sales_catalog_payment_reviews").select("id")
+    .eq("organization_id", session.organization_id).eq("lead_id", order.lead_id).eq("order_id", session.order_id)
+    .neq("status", "resolved").maybeSingle();
+  if (error) throw new Error("Não foi possível registrar a conferência financeira.");
+  if (existing) return;
+  const { error: saveError } = await client.from("sales_catalog_payment_reviews").insert({ organization_id: session.organization_id,
+    lead_id: order.lead_id, order_id: session.order_id, conversation_id: order.conversation_id, status: "open" });
+  // The existing partial unique index coalesces concurrent observations.
+  if (saveError && saveError.code !== "23505") throw new Error("Não foi possível registrar a conferência financeira.");
 }
 
 async function recordWebhookEvent(

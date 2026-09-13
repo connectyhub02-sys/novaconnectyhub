@@ -158,10 +158,22 @@ async function retirePreviousPayments(client: SupabaseClient, organizationId: st
     if (old.id === attemptId || !old.provider_payment_id) continue;
     if (record(old.metadata).transparent_checkout === true && old.status === "pending") throw new CheckoutError("Aguarde a confirmação do cartão antes de alterar o pedido.", 409);
     if (old.provider !== "asaas") throw new CheckoutError("Existe outro pagamento em aberto. Continue pelo WhatsApp.", 409);
-    await retireAsaasPayment(connection, old.provider_payment_id, Boolean(record(old.metadata).asaas_checkout_id));
-    const { error: saveError } = await client.from("sales_catalog_payment_sessions").update({ status: "cancelled", provider_status_detail: "replaced_by_transparent_checkout" })
-      .eq("id", old.id).in("status", ["created", "pending", "error"]);
+    const checkoutId = record(old.metadata).asaas_checkout_id;
+    await retireAsaasPayment(connection, typeof checkoutId === "string" && checkoutId ? checkoutId : old.provider_payment_id, Boolean(checkoutId));
+    const { data: retired, error: saveError } = await client.from("sales_catalog_payment_sessions")
+      .update({ status: "cancelled", provider_status: "DELETED", provider_status_detail: "replaced_by_transparent_checkout", updated_at: new Date().toISOString() })
+      .eq("id", old.id).eq("organization_id", organizationId).eq("order_id", orderId).eq("provider_payment_id", old.provider_payment_id)
+      .in("status", ["created", "pending", "error"]).select("id").maybeSingle();
     if (saveError) throw new CheckoutError("Estamos conferindo o pagamento anterior.", 409);
+    if (!retired) {
+      // The deletion webhook can win this race; an approval or another payment
+      // cannot be treated as a successful local retirement.
+      const { data: current, error: currentError } = await client.from("sales_catalog_payment_sessions").select("status, provider_payment_id")
+        .eq("id", old.id).eq("organization_id", organizationId).eq("order_id", orderId).maybeSingle();
+      if (currentError || current?.status !== "cancelled" || current.provider_payment_id !== old.provider_payment_id) {
+        throw new CheckoutError("Estamos conferindo o pagamento anterior.", 409);
+      }
+    }
   }
 }
 

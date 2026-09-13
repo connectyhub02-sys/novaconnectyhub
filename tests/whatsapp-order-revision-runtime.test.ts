@@ -192,13 +192,12 @@ describe("revising a persisted WhatsApp order", () => {
   it("treats 'sim mas tira' as a further edit, never acceptance of the obsolete preview", async () => {
     const s = scenario();
     await s.turn("adicione uma limonada");
-    const before = s.draft()?.request_id;
     await s.turn("sim mas tira a limonada");
     expect(s.persistence).not.toHaveBeenCalled();
-    expect(s.draft()?.items).toEqual([expect.objectContaining({ id: "pizza", quantity: 1 })]);
-    expect(s.draft()?.request_id).not.toBe(before);
+    expect(s.draft()).toBeNull();
     await s.turn("sim");
-    expect(s.persistence.mock.calls[0][0].rows).toHaveLength(1);
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.db.tables.sales_catalog_order_items).toHaveLength(1);
   });
 
   it("requires a fresh preview after an unrelated assistant question", async () => {
@@ -397,9 +396,10 @@ describe("revising a persisted WhatsApp order", () => {
     s.legacyCart();
     await s.turn("sim");
     await s.turn("retire a limonada");
-    expect(s.draft()?.items.map(item => item.id)).toEqual(["pizza"]);
+    expect(s.draft()).toBeNull();
     await s.turn("sim");
-    expect(s.persistence.mock.calls[0][0].rows.map(item => item.catalog_item_id)).toEqual(["pizza"]);
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.db.tables.sales_catalog_order_items.map(item => item.catalog_item_id)).toEqual(["pizza"]);
   });
 
   it("does not revive a legacy proposal for an isolated sim answering a different conversation prompt", async () => {
@@ -561,5 +561,87 @@ describe("revising a persisted WhatsApp order", () => {
     await s.turn("sim");
     expect((s.ctx.lead.metadata.checkout_order_revisions as Row)["other-conversation"]).toEqual(other);
     expect((s.ctx.lead.metadata.checkout_order_revisions as Row).conversation).toBeUndefined();
+  });
+});
+
+describe("continuing a revision without losing its operation or payment choice", () => {
+  it("uses a clarified quantity instead of the original default addition", async () => {
+    const s = scenario();
+    await s.turn("adicione esse produto e gera novo pix");
+    const preview = await s.turn("Pizza de tomate, duas unidades");
+    expect(preview?.text).toContain("2x Pizza de tomate");
+    expect(preview?.text).toContain("Total: R$ 200,00");
+    expect(preview?.text).toContain("Frete: R$ 0,00");
+    expect(preview?.text).toContain("Pagamento: Pix");
+    expect(s.persistence).not.toHaveBeenCalled();
+    await s.turn("sim");
+    expect(s.persistence.mock.calls[0][0]).toMatchObject({ orderId: "order", expectedTotal: 200, preferredPaymentMethod: "pix" });
+    expect(s.createPayment.mock.calls[0][0]).toMatchObject({ orderId: "order", amount: "200,00", preferredMethod: "pix" });
+  });
+  it("preserves a generic addition even when the first target is only isso", async () => {
+    const s = scenario();
+    await s.turn("adicione isso e gere Pix");
+    await s.turn("sim");
+    expect(s.draft()?.ready).toBe(false);
+    expect(s.persistence).not.toHaveBeenCalled();
+    const preview = await s.turn("limonada");
+    expect(preview?.text).toContain("Limonada");
+    expect(preview?.text).toContain("Pagamento: Pix");
+  });
+  it("accepts a final quantity after an excessive decrement without repeating the subtraction", async () => {
+    const s = scenario();
+    expect((await s.turn("retire três pizzas de queijo"))?.text).toContain("no total");
+    expect(s.draft()?.ready).toBe(false);
+    const preview = await s.turn("duas unidades no total");
+    expect(preview?.text).toContain("2x Pizza de queijo");
+    await s.turn("sim");
+    expect(s.persistence.mock.calls[0][0].rows[0].quantity).toBe(2);
+  });
+  it("resolves only the replacement product while keeping the original source", async () => {
+    const s = scenario({ quantities: [["lemonade", 2]] });
+    await s.turn("troque a limonada pela pizza");
+    const preview = await s.turn("Pizza de tomate, duas unidades");
+    expect(preview?.text).toContain("2x Pizza de tomate");
+    expect(preview?.text).not.toContain("Limonada");
+    await s.turn("sim");
+    expect(s.persistence.mock.calls[0][0].rows.map(row => [row.catalog_item_id, row.quantity])).toEqual([["tomato", 2]]);
+  });
+  it("does not revise or regenerate payment when the requested count is already saved", async () => {
+    const s = scenario();
+    const response = await s.turn("deixe a pizza de queijo para 1");
+    expect(response?.text).toContain("já correspondem");
+    expect(s.draft()).toBeNull();
+    await s.turn("sim");
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.createPayment).not.toHaveBeenCalled();
+  });
+  it("remembers an explicit method before a legacy cart is later reconciled", async () => {
+    const s = scenario();
+    s.ctx.salesCatalogOrders[0].preferredPaymentMethod = "pix";
+    s.metadata({ checkout_runtime_state: { organization_id: "store", conversation_id: "conversation", instance_id: "instance", order_id: "order", preferred_payment_method: "pix" } });
+    expect(await s.turn("muda pra pagamento em cartão")).toBeNull();
+    expect(s.createPayment).not.toHaveBeenCalled();
+    s.legacyCart();
+    const preview = await s.turn("sim");
+    expect(preview?.text).toContain("Limonada");
+    expect(preview?.text).toContain("Pagamento: cartão");
+    await s.turn("sim confirmado");
+    expect(s.persistence.mock.calls[0][0].preferredPaymentMethod).toBe("card");
+    expect(s.createPayment.mock.calls[0][0].preferredMethod).toBe("card");
+  });
+  it("blocks a model's false addition claim before generic checkout persistence", async () => {
+    const s = scenario();
+    await s.turn("adicione esse produto e gere Pix");
+    s.customer("obrigado");
+    s.db.tables.conversation_messages = [...s.ctx.messages];
+    const sent = await s.call<Promise<Outbound[]>>("sendAgentResponse", { client: s.db.client, context: s.ctx, token: "fake", phone: "5500000000000",
+      text: "Adicionei 2 pizzas de tomate. Total R$ 200,00. Posso fechar seu pedido e gerar o pagamento?" });
+    expect(sent[0].text).toContain("alteração ainda está pendente");
+    expect(sent[0].text).not.toContain("Adicionei");
+    expect(sent[0].text).not.toContain("200,00");
+    expect(s.ctx.lead.metadata.checkout_cart_draft).toBeUndefined();
+    expect(s.draft()?.ready).toBe(false);
+    expect(s.persistence).not.toHaveBeenCalled();
+    expect(s.createPayment).not.toHaveBeenCalled();
   });
 });

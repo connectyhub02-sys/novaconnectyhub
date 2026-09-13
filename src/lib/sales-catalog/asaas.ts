@@ -76,6 +76,7 @@ export type AsaasPaymentResponse = {
   customer?: string;
   subscription?: string | null;
   installment?: string | null;
+  checkoutSession?: string | null;
   paymentLink?: string | null;
   value?: number;
   netValue?: number;
@@ -765,6 +766,18 @@ export async function getAsaasPayment(input: {
   });
 }
 
+/** Checkout webhooks omit a payment ID; use the provider's documented filter. */
+export async function getAsaasCheckoutPayments(input: {
+  accessToken: string; mode?: AsaasMode | null; apiBaseUrl?: string | null; checkoutId: string;
+}) {
+  const result = await requestAsaas<{ data?: AsaasPaymentResponse[]; hasMore?: boolean }>({
+    ...input, endpoint: `/payments?checkoutSession=${encodeURIComponent(input.checkoutId)}&limit=100`, method: "GET",
+    fallbackMessage: "Não foi possível conferir as cobranças do checkout Asaas.",
+  });
+  if (!Array.isArray(result.data)) throw new Error("A consulta do checkout retornou um resultado incompleto.");
+  return { payments: result.data, hasMore: result.hasMore === true };
+}
+
 export async function getAsaasPixQrCode(input: {
   accessToken: string;
   mode?: AsaasMode | null;
@@ -930,8 +943,12 @@ function normalizeAsaasWebhookUrl(url?: string | null) {
   return url?.trim().replace(/\/+$/, "").toLowerCase() ?? "";
 }
 
-export function extractAsaasPaymentData(payment: AsaasPaymentResponse, qrCode?: AsaasPixQrCodeResponse | null): AsaasPaymentData {
-  const providerStatus = payment.status ?? null;
+export function extractAsaasPaymentData(payment: AsaasPaymentResponse, qrCode?: AsaasPixQrCodeResponse | null, event?: string | null): AsaasPaymentData {
+  const financialStatus = mapAsaasPaymentStatus(payment.status);
+  // Asaas can keep status=PENDING on an excluded payment. Preserve verified
+  // financial outcomes, and prefer an explicit fresh deleted=false to an old event.
+  const deleted = payment.deleted === true || (payment.deleted !== false && event?.trim().toUpperCase() === "PAYMENT_DELETED");
+  const providerStatus = deleted && !["approved", "refunded"].includes(financialStatus) ? "DELETED" : payment.status ?? null;
 
   return {
     status: mapAsaasPaymentStatus(providerStatus),

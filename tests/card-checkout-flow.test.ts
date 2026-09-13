@@ -16,7 +16,7 @@ const order = {
   id: "order", organization_id: "store", lead_id: "lead", conversation_id: "conversation", customer_name: "Maria Exemplo",
   customer_email: "cliente@example.test", customer_document: "12345678909", customer_phone: "5500000000000",
   destination_cep: "88000000", destination_address: "Rua Exemplo, 10, Centro, Florianopolis SC",
-  shipping_total: "70,00", shipping_method: "Entrega", subtotal: "503,80", total: "573,80", status: "pending_payment", payment_status: "pending", metadata: {},
+  shipping_total: "70,00", shipping_method: "Entrega", subtotal: "503,80", total: "573,80", status: "pending_payment", payment_status: "pending", checkout_revision: 0, metadata: {},
 };
 const items = [{ id: "item", organization_id: "store", order_id: "order", title: "Produto de teste", quantity: 2, unit_price: "251,90", total: "503,80", fulfillment: { mode: "physical" } }];
 const initialSession = { id: "internal", organization_id: "store", order_id: "order", provider: "asaas", method: "card", status: "created", amount: "573,80", provider_payment_id: null, checkout_url: "https://loja.example/checkout/internal", created_at: new Date().toISOString(), metadata: {} };
@@ -87,7 +87,8 @@ describe("Asaas checkout and lead attribution", () => {
       "@/lib/sales-catalog/transparent-checkout": { processTransparentWebhook: async () => null },
       "@/lib/security/payment-audit": { sanitizePaymentAuditPayload: (value: unknown) => value },
       "next/server": next, "next/cache": { revalidatePath: vi.fn() }, "@/lib/supabase/service": { createServiceClient: () => db.client },
-      "@/lib/sales-catalog/asaas": { ensureAsaasAccessToken: async () => ({ accessToken: "fake", webhookSecret: "fake" }), verifyAsaasWebhookToken: () => ({ ok: true }), getAsaasPayment: async () => ({ id: "payment" }), extractAsaasPaymentData: () => ({ providerPaymentId: "payment", providerStatus: status, status, pixQrCode: null, pixQrCodeBase64: null, pixTicketUrl: null, paidAt: null }) },
+      "@/lib/sales-catalog/asaas": { ensureAsaasAccessToken: async () => ({ accessToken: "fake", webhookSecret: "fake" }), verifyAsaasWebhookToken: () => ({ ok: true }), getAsaasPayment: async () => ({ id: "payment", value: 573.8 }), extractAsaasPaymentData: () => ({ providerPaymentId: "payment", providerStatus: status, status, pixQrCode: null, pixQrCodeBase64: null, pixTicketUrl: null, paidAt: null }) },
+      "@/lib/sales-catalog/mercado-pago": mercadoPago,
       "@/lib/sales-catalog/post-payment": { handleSalesCatalogPaymentStatusChange: postPayment },
       "@/lib/platform-product-sales": { markPlatformProductCommissionsForPaymentStatus: async () => null },
     });

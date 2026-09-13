@@ -1,13 +1,16 @@
 /** An edit request is distinct from accepting a previously displayed order. */
-export type OrderRevisionIntent =
+export type CartRevisionIntent =
   | { kind: "add"; productText: string; quantity: number }
   | { kind: "remove"; productText: string; quantity: number | null }
   | { kind: "set_quantity"; productText: string; quantity: number }
-  | { kind: "replace"; productText: string; replacementText: string; quantity: number | null }
+  | { kind: "replace"; productText: string; replacementText: string; quantity: number | null };
+
+export type OrderRevisionIntent = (CartRevisionIntent
   | { kind: "payment"; paymentMethod: "pix" | "card" | null }
   | { kind: "delivery"; deliveryText: string }
   | { kind: "cancel" }
-  | { kind: "clarify"; reason: "ambiguous" | "multiple_operations" | "negated" | "inquiry" };
+  | { kind: "clarify"; reason: "ambiguous" | "multiple_operations" | "negated" | "inquiry"; pendingIntent?: CartRevisionIntent })
+  & { preferredPaymentMethod?: "pix" | "card" };
 
 const quantityWords: Record<string, number> = {
   zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4,
@@ -170,7 +173,7 @@ function hasUnresolvedList(text: string) {
  * A clarify result must block confirmation/recovery of the previous checkout.
  * Catalog matching, authorization, persistence and payment safety belong to the caller.
  */
-export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | null {
+function parseSingleOrderRevisionIntent(text: string): OrderRevisionIntent | null {
   const commandText = normalizeOrderRevisionSpeech(text);
   const input = normalized(commandText);
   if (!input) return null;
@@ -280,11 +283,54 @@ export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | nu
   // Freight is a quote/price, not a catalog line that can be added or removed.
   if (/^(?:(?:valor|preco|custo|taxa)\s+(?:do|da|de)\s+)?(?:frete|entrega|envio)(?:\s+(?:gratis|gratuit[oa]))?$/.test(product.productText)) return null;
   if (/^(?:pix|cartao(?: de credito| de debito)?|pagamento|(?:forma|metodo) de pagamento|endereco|cep|retirada)$/.test(product.productText)) return clarify();
-  if (product.invalid || !isSpecificProduct(product.productText)) return clarify();
+  if (product.invalid) return clarify();
+  if (!isSpecificProduct(product.productText)) {
+    const pending = kind === "set_quantity" && explicitQuantity === null && product.quantity === null ? null
+      : { kind, productText: product.productText, quantity: explicitQuantity ?? product.quantity ?? (kind === "remove" ? null : 1) } as CartRevisionIntent;
+    return pending ? { kind: "clarify", reason: "ambiguous", pendingIntent: pending } : clarify();
+  }
   const quantity = explicitQuantity ?? product.quantity;
   if (kind === "set_quantity") return quantity === null ? clarify() : { kind, productText: product.productText, quantity };
   if (quantity === 0) return clarify();
   return kind === "remove"
     ? { kind, productText: product.productText, quantity }
     : { kind, productText: product.productText, quantity: quantity ?? 1 };
+}
+
+/** A payment choice may accompany one edit; it never accepts the edited total. */
+export function parseOrderRevisionIntent(text: string): OrderRevisionIntent | null {
+  const speech = normalizeOrderRevisionSpeech(text);
+  const separators = /\s+(?:e|depois)\s+|[;,]\s*/g;
+  for (const separator of speech.matchAll(separators)) {
+    const left = speech.slice(0, separator.index).trim();
+    const right = speech.slice(separator.index! + separator[0].length).trim();
+    for (const [editText, paymentText] of [[left, right], [right, left]]) {
+      const edit = parseSingleOrderRevisionIntent(editText);
+      if (!edit || !("productText" in edit) && !(edit.kind === "clarify" && edit.pendingIntent)) continue;
+      // Only an explicit payment command can be stripped from a catalog title.
+      const paymentInput = normalized(paymentText).replace(/^(?:(?:me|ja)\s+)*(?:ger[ae]|gerar|gere|mand[ae]|envi[ae]|enviar)\s+(?:(?:um|o|novo|outro|link|codigo|de|do)\s+)*/, "quero pagar ");
+      const payment = parseSingleOrderRevisionIntent(paymentInput);
+      if (payment?.kind !== "payment" || !payment.paymentMethod) continue;
+      return { ...edit, preferredPaymentMethod: payment.paymentMethod };
+    }
+  }
+  return parseSingleOrderRevisionIntent(text);
+}
+
+/** Parse an answer to a specific pending edit without inventing a new operation. */
+export function parseOrderRevisionClarification(pending: OrderRevisionIntent, text: string): OrderRevisionIntent | null {
+  if (!("productText" in pending)) return null;
+  const input = normalized(text);
+  if (!input || /[?]/.test(input) || /\b(?:nao|nunca|nem|depois|amanha|aguarde|esper[ae]|quanto|qual|como|quando|porque|obrigad[oa]|valeu|sim|confirmo|confirmado)\b/.test(input)
+    || parseOrderRevisionIntent(text)) return null;
+  const product = extractProduct(input);
+  if (product.invalid || !isSpecificProduct(product.productText) || hasUnresolvedList(product.productText)
+    || product.quantity !== null && product.quantity < 1) return null;
+  return { ...pending, productText: product.productText, quantity: product.quantity ?? pending.quantity } as OrderRevisionIntent;
+}
+
+export function parseOrderRevisionTotalQuantity(text: string): number | null {
+  const match = normalized(text).match(new RegExp(`^(?:quero\\s+)?(?:ficar\\s+com\\s+)?(?:so\\s+|apenas\\s+)?(${quantityPattern})(?:\\s+(?:unidades?|unid|un|itens?))?(?:\\s+(?:no total|ao todo))?[.!]*$`));
+  const quantity = match ? parseQuantity(match[1]) : null;
+  return quantity !== null && quantity <= 99 ? quantity : null;
 }
