@@ -2,17 +2,20 @@
 import { useEffect, useState } from "react";
 import { Panel, NeonBadge } from "./panel-primitives";
 import type { AgendaResource, AgendaBooking } from "@/lib/automations/agenda";
+import { AgendaHoursEditor } from "./agenda-hours-editor";
+import { agendaLocalInstant } from "@/lib/automations/calendar-view";
 import { AgendaCalendar } from "./agenda-calendar";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { agendaTimezones, agendaTimezoneLabel } from "@/lib/automations/calendar-view";
 import { Plus, Settings2, RefreshCw, X } from "lucide-react";
 type Agenda = {
-  settings: { enabled: boolean; timezone: string };
+  settings: { enabled: boolean; timezone: string; default_resource_id?: string | null };
   resources: AgendaResource[];
   bookings: AgendaBooking[];
   notices?: Array<{
     id: string;
     audience: string;
+    source?: string;
     kind: string;
     status: string;
     due_at: string;
@@ -47,9 +50,9 @@ export function CustomerAgendaPanel({
     [duration, setDuration] = useState(30),
     [capacity, setCapacity] = useState(1),
     [returnDays, setReturnDays] = useState("");
-  const [days, setDays] = useState([1, 2, 3, 4, 5]),
-    [opens, setOpens] = useState("09:00"),
-    [closes, setCloses] = useState("18:00");
+  const [hours, setHours] = useState<AgendaResource["weekly_hours"]>([{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }]);
+  const [locationAddress, setLocationAddress] = useState(""), [locationUrl, setLocationUrl] = useState("");
+  const [blockOpen, setBlockOpen] = useState(false), [blockTitle, setBlockTitle] = useState(""), [blockEnd, setBlockEnd] = useState("");
   const [leadId, setLeadId] = useState(""),
     [resourceId, setResourceId] = useState(""),
     [party, setParty] = useState(1),
@@ -63,9 +66,7 @@ export function CustomerAgendaPanel({
   const [checkedAt, setCheckedAt] = useState(() => Date.now());
   const [editResourceId, setEditResourceId] = useState<string | null>(null),
     [resourceEnabled, setResourceEnabled] = useState(true),
-    [blockedDates, setBlockedDates] = useState(""),
-    [breakStart, setBreakStart] = useState(""),
-    [breakEnd, setBreakEnd] = useState("");
+    [blockedDates, setBlockedDates] = useState("");
   const [rescheduling, setRescheduling] = useState<AgendaBooking | null>(null),
     [timezoneDraft, setTimezoneDraft] = useState("America/Sao_Paulo");
   function editResource(resource: AgendaResource) {
@@ -78,15 +79,9 @@ export function CustomerAgendaPanel({
     setReturnDays(resource.return_days ? String(resource.return_days) : "");
     setResourceEnabled(resource.enabled);
     setBlockedDates(resource.blocked_dates.join(", "));
-    setDays(resource.weekly_hours[0]?.days ?? []);
-    setOpens(resource.weekly_hours[0]?.start ?? "09:00");
-    setCloses(resource.weekly_hours.at(-1)?.end ?? "18:00");
-    setBreakStart(
-      resource.weekly_hours.length === 2 ? resource.weekly_hours[0].end : "",
-    );
-    setBreakEnd(
-      resource.weekly_hours.length === 2 ? resource.weekly_hours[1].start : "",
-    );
+    setHours(resource.weekly_hours.map(row => ({ ...row, days: [...row.days] })));
+    setLocationAddress(resource.location_address ?? "");
+    setLocationUrl(resource.location_url ?? "");
     setEditing(true);
   }
   useEffect(() => {
@@ -130,6 +125,9 @@ export function CustomerAgendaPanel({
     setSaving(true);
     setError("");
     try {
+      if (payload.localFrom) { payload.from = agendaLocalInstant(String(payload.localFrom), timezone); delete payload.localFrom; }
+      if (payload.localStart) { payload.startsAt = agendaLocalInstant(String(payload.localStart), timezone); delete payload.localStart; }
+      if (payload.localEnd) { payload.endsAt = agendaLocalInstant(String(payload.localEnd), timezone); delete payload.localEnd; }
       const response = await fetch("/api/dashboard/agenda", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,10 +195,11 @@ export function CustomerAgendaPanel({
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!agenda.resources.some(resource => resource.enabled) || loading || saving} onClick={() => { setBookingOpen(true); setRescheduling(null); setSlots([]); setRequestKey(crypto.randomUUID()); }}><Plus className="size-4" />Criar compromisso</button>
           <button type="button" className={`${button} inline-flex items-center gap-2`} onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" />Atendimentos e horários</button>
+          <button type="button" className={button} disabled={!agenda.resources.length || saving} onClick={() => { setBlockOpen(true); setRequestKey(crypto.randomUUID()); }}>Bloquear período</button>
           <button type="button" aria-label="Atualizar agenda" className={`${button} ml-auto`} disabled={loading || saving} onClick={refresh}><RefreshCw className="size-4" /></button>
         </div>
         {settingsOpen && <DialogFrame aria-label="Atendimentos e horários" onClose={() => setSettingsOpen(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
-        <div className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5">
+        <div className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-2xl bg-white text-slate-900 p-5">
           <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold text-slate-800">Atendimentos e horários</h2><button aria-label="Fechar configurações" className={button} onClick={() => setSettingsOpen(false)}><X className="size-4" /></button></div>
           <div className="mt-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -229,6 +228,8 @@ export function CustomerAgendaPanel({
               setEditing((value) => !value);
               setEditResourceId(null);
               setResourceEnabled(true);
+              setHours([{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }]);
+              setLocationAddress(""); setLocationUrl(""); setBlockedDates(""); setName(""); setService("");
             }}
           >
             {editing ? "Recolher cadastro" : "Cadastrar atendimento"}
@@ -262,6 +263,14 @@ export function CustomerAgendaPanel({
             ))}
           </div>
         </div>
+        <label className="block text-sm">Calendário padrão da empresa
+          <select className={field} value={agenda.settings.default_resource_id ?? ""} disabled={saving} onChange={e => action({ action: "set_default_resource", resourceId: e.target.value || null })}>
+            <option value="">Usar somente os vínculos específicos dos itens</option>
+            {agenda.resources.filter(r => r.enabled && r.kind === "service").map(r => <option key={r.id} value={r.id}>{r.name} · {r.service_name}</option>)}
+          </select>
+          <span className="mt-1 block text-xs text-slate-500">Itens sem agenda própria usam este calendário. Reservas feitas pelo painel, WhatsApp e página do item ocupam as mesmas vagas.</span>
+        </label>
+        {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
         <details className="rounded-lg border border-slate-200 p-3 text-sm">
           <summary className="cursor-pointer">Fuso horário da empresa</summary>
           <div className="mt-3 space-y-3">
@@ -367,66 +376,9 @@ export function CustomerAgendaPanel({
               />
             </label>
           </div>
-          <div className="flex flex-wrap gap-3">
-            {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(
-              (label, index) => (
-                <label key={label} className="flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={days.includes(index + 1)}
-                    onChange={() =>
-                      setDays((current) =>
-                        current.includes(index + 1)
-                          ? current.filter((day) => day !== index + 1)
-                          : [...current, index + 1],
-                      )
-                    }
-                  />
-                  {label}
-                </label>
-              ),
-            )}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              Abre às
-              <input
-                type="time"
-                className={field}
-                value={opens}
-                onChange={(e) => setOpens(e.target.value)}
-              />
-            </label>
-            <label className="text-sm">
-              Fecha às
-              <input
-                type="time"
-                className={field}
-                value={closes}
-                onChange={(e) => setCloses(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              Início do intervalo (opcional)
-              <input
-                type="time"
-                className={field}
-                value={breakStart}
-                onChange={(e) => setBreakStart(e.target.value)}
-              />
-            </label>
-            <label className="text-sm">
-              Fim do intervalo
-              <input
-                type="time"
-                className={field}
-                value={breakEnd}
-                onChange={(e) => setBreakEnd(e.target.value)}
-              />
-            </label>
-          </div>
+          <AgendaHoursEditor value={hours} onChange={setHours} />
+          <label className="block text-sm">Endereço do atendimento<input className={field} value={locationAddress} onChange={e => setLocationAddress(e.target.value)} placeholder="Endereço ou ponto de encontro informado ao cliente" /></label>
+          <label className="block text-sm">Link da localização<input type="url" className={field} value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." /></label>
           <label className="block text-sm">
             Datas sem atendimento (AAAA-MM-DD, separadas por vírgula)
             <input
@@ -449,18 +401,6 @@ export function CustomerAgendaPanel({
             disabled={saving}
             className={button}
             onClick={async () => {
-              if (
-                Boolean(breakStart) !== Boolean(breakEnd) ||
-                (breakStart &&
-                  (breakStart <= opens ||
-                    breakEnd >= closes ||
-                    breakStart >= breakEnd))
-              ) {
-                setError(
-                  "Confira o intervalo dentro do horário de funcionamento.",
-                );
-                return;
-              }
               const result = await action({
                 action: editResourceId ? "update_resource" : "create_resource",
                 resourceId: editResourceId,
@@ -476,13 +416,9 @@ export function CustomerAgendaPanel({
                     .split(",")
                     .map((value) => value.trim())
                     .filter(Boolean),
-                  weekly_hours:
-                    breakStart && breakEnd
-                      ? [
-                          { days, start: opens, end: breakStart },
-                          { days, start: breakEnd, end: closes },
-                        ]
-                      : [{ days, start: opens, end: closes }],
+                  location_address: locationAddress,
+                  location_url: locationUrl,
+                  weekly_hours: hours,
                 },
               });
               if (result) {
@@ -500,8 +436,20 @@ export function CustomerAgendaPanel({
         </div>
         </DialogFrame>}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
+        {blockOpen && <DialogFrame aria-label="Bloquear período" onClose={() => setBlockOpen(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
+          <div className="max-h-[90dvh] w-full max-w-lg space-y-3 overflow-auto rounded-2xl bg-white text-slate-900 p-5">
+            <h2 className="text-lg font-semibold">Bloquear período</h2><p className="text-sm text-slate-600">Compromisso interno ou indisponibilidade, no fuso da empresa. Não envia avisos a contatos.</p>
+            <label className="block text-sm">Atendimento<select className={field} value={resourceId} onChange={e => setResourceId(e.target.value)}><option value="">Selecione</option>{agenda.resources.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+            <label className="block text-sm">Motivo<input className={field} value={blockTitle} onChange={e => setBlockTitle(e.target.value)} /></label>
+            <label className="block text-sm">Início<input type="datetime-local" className={field} value={from} onChange={e => setFrom(e.target.value)} /></label>
+            <label className="block text-sm">Fim<input type="datetime-local" className={field} value={blockEnd} onChange={e => setBlockEnd(e.target.value)} /></label>
+            {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
+            <button className={button} disabled={saving || !resourceId || !from || !blockEnd || !blockTitle} onClick={async () => { if (await action({ action: "block", resourceId, title: blockTitle, localStart: from, localEnd: blockEnd, requestKey })) setBlockOpen(false); }}>Salvar bloqueio</button>
+            <button className={button} onClick={() => setBlockOpen(false)}>Cancelar</button>
+          </div>
+        </DialogFrame>}
         {bookingOpen && <DialogFrame aria-label={rescheduling ? "Remarcar compromisso" : "Criar compromisso"} onClose={() => setBookingOpen(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
-        <div className="max-h-[90dvh] w-full max-w-2xl space-y-3 overflow-auto rounded-2xl bg-white p-5">
+        <div className="max-h-[90dvh] w-full max-w-2xl space-y-3 overflow-auto rounded-2xl bg-white text-slate-900 p-5">
           <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">{rescheduling ? "Remarcar compromisso" : "Criar compromisso"}</h2><button className={button} aria-label="Fechar compromisso" onClick={() => setBookingOpen(false)}><X className="size-4" /></button></div>
           {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -551,7 +499,7 @@ export function CustomerAgendaPanel({
               </select>
             </label>
             <label className="text-sm">
-              Buscar a partir de (horário deste dispositivo)
+              Buscar a partir de (fuso da empresa)
               <input
                 className={field}
                 type="datetime-local"
@@ -585,7 +533,7 @@ export function CustomerAgendaPanel({
                 action: "availability",
                 bookingId: rescheduling?.id,
                 resourceId,
-                from: new Date(from).toISOString(),
+                localFrom: from,
                 partySize: party,
               })
             }
@@ -628,7 +576,7 @@ export function CustomerAgendaPanel({
         )}
         {agenda && <AgendaCalendar companyId={companyId} timezone={timezone} resources={agenda.resources} revision={revision} onSelect={setSelectedBooking} />}
         {selectedBooking && <DialogFrame aria-label="Detalhes do compromisso" onClose={() => setSelectedBooking(null)} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 p-4">
-        <div className="grid max-h-[85dvh] w-full max-w-xl gap-2 overflow-auto rounded-2xl bg-white p-4">
+        <div className="grid max-h-[85dvh] w-full max-w-xl gap-2 overflow-auto rounded-2xl bg-white text-slate-900 p-4">
           {agenda && selectedBooking && [selectedBooking].map((booking) => (
             <div
               key={booking.id}
@@ -652,6 +600,7 @@ export function CustomerAgendaPanel({
                   {
                     (
                       {
+                        blocked: "Bloqueado",
                         booked: "Reservado",
                         cancelled: "Cancelado",
                         completed: "Realizado",
@@ -662,6 +611,7 @@ export function CustomerAgendaPanel({
                   {booking.confirmed_at ? " · Confirmado" : ""}
                 </p>
               </div>
+              {booking.status === "blocked" && <button className={button} disabled={saving} onClick={() => action({ action: "unblock", blockId: booking.id })}>Liberar período</button>}
               {booking.status === "booked" && (
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -778,6 +728,7 @@ export function CustomerAgendaPanel({
                     )[notice.status]
                   }
                 </span>
+                {notice.status === "failed" && <button className={`${button} ml-2`} disabled={saving} onClick={() => action({ action: "retry_notice", source: notice.source, noticeId: notice.id })}>Tentar aviso novamente</button>}
                 <p className="text-slate-500">
                   {when(notice.due_at)}
                   {notice.reason === "missing_responsible_agent"

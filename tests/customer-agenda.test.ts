@@ -54,9 +54,14 @@ describe("customer agenda", () => {
       create table sales_catalog_card_attempts(order_id uuid,organization_id uuid,state text);`);
     await db.exec(readFileSync("supabase/migrations/0130_catalog_item_appointments.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/0131_explicit_agenda_activation.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/0136_direct_customer_agenda.sql", "utf8"));
   }, 45000);
   afterAll(async () => {
     await db?.close();
+  });
+  it("keeps reservation execution limited to the internal service", async () => {
+    const {rows} = await db.query<{anon:boolean;authenticated:boolean;service:boolean}>(`select has_function_privilege('anon','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') anon, has_function_privilege('authenticated','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') authenticated, has_function_privilege('service_role','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') service`);
+    expect(rows[0]).toEqual({anon:false,authenticated:false,service:true});
   });
   async function fixture(kind = "service", capacity = 1) {
     const org = randomUUID(),
@@ -189,6 +194,24 @@ describe("customer agenda", () => {
     await f.book(0, 3);
     await expect(f.book(0, 2)).rejects.toThrow("SLOT_UNAVAILABLE");
     await expect(f.book(60, 7)).rejects.toThrow("INVALID_APPOINTMENT");
+  });
+  it("blocks periods atomically and shares them with every booking channel", async () => {
+    const f = await fixture();
+    await db.query("select block_customer_agenda($1,$2,$3,$4,'Indisponível',$5)", [f.org, f.resource, f.start.toISOString(), new Date(f.start.getTime()+3600000).toISOString(), randomUUID()]);
+    await expect(f.book()).rejects.toThrow("SLOT_UNAVAILABLE");
+    const b = await f.book(60);
+    await expect(db.query("select block_customer_agenda($1,$2,$3,$4,'Reunião',$5)", [f.org,f.resource,new Date(f.start.getTime()+3600000).toISOString(),new Date(f.start.getTime()+7200000).toISOString(),randomUUID()])).rejects.toThrow("SLOT_UNAVAILABLE");
+    expect(b.status).toBe("booked");
+  });
+  it("allows only one winner for simultaneous reservations of the same place", async () => {
+    const f = await fixture();
+    const results = await Promise.allSettled([f.book(), f.book()]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect((await db.query("select * from customer_agenda_events where organization_id=$1", [f.org])).rows).toHaveLength(1);
+  });
+  it("keeps default calendars scoped to their company", async () => {
+    const f = await fixture(), other = await fixture();
+    await expect(db.query("update customer_agenda_settings set default_resource_id=$1 where organization_id=$2", [other.resource,f.org])).rejects.toThrow();
   });
   it("reuses idempotent requests and rejects a changed payload", async () => {
     const f = await fixture(),

@@ -55,11 +55,13 @@ export async function GET(request: NextRequest) {
       .limit(20);
     if (notices.error)
       throw new Error("Não foi possível consultar os avisos da agenda.");
+    const requests = await client.from("customer_agenda_requests").select("id,status,reason,due_at").eq("organization_id", org).order("created_at", { ascending: false }).limit(20);
+    if (requests.error) throw new Error("Não foi possível consultar encaminhamentos.");
     const agenda = await getAgenda(client, org, undefined, period);
     return NextResponse.json({
       ...agenda,
       truncated: Boolean(period && agenda.bookings.length >= 1000),
-      notices: notices.data,
+      notices: [...(notices.data ?? []).map(n => ({ ...n, source: "notice" })), ...(requests.data ?? []).map(n => ({ ...n, audience: "responsible", kind: "handoff", source: "request" }))],
       leads: leads.data,
     });
   } catch (error) {
@@ -105,6 +107,28 @@ export async function POST(request: NextRequest) {
         { onConflict: "organization_id" },
       );
       if (result.error) throw new Error("Falha ao salvar a agenda.");
+    } else if (body.action === "set_default_resource") {
+      if (body.resourceId !== null) {
+        if (!uuid.test(body.resourceId ?? "")) throw new Error("Atendimento inválido.");
+        const resource = await client.from("customer_agenda_resources").select("id").eq("organization_id", org).eq("id", body.resourceId).eq("enabled", true).eq("kind", "service").maybeSingle();
+        if (resource.error || !resource.data) throw new Error("Escolha um atendimento ativo desta empresa.");
+      }
+      const saved = await client.from("customer_agenda_settings").update({ default_resource_id: body.resourceId, updated_at: new Date().toISOString() }).eq("organization_id", org);
+      if (saved.error) throw new Error("Falha ao salvar o calendário padrão.");
+    } else if (body.action === "block") {
+      await requireAgendaActivation(client, org);
+      if (!uuid.test(body.resourceId ?? "") || !Number.isFinite(Date.parse(body.startsAt)) || !Number.isFinite(Date.parse(body.endsAt))) throw new Error("Confira o período do bloqueio.");
+      const saved = await client.rpc("block_customer_agenda", { p_org: org, p_resource: body.resourceId, p_start: body.startsAt, p_end: body.endsAt, p_title: body.title, p_key: body.requestKey });
+      if (saved.error) throw new Error(agendaErrorMessage(saved.error.message));
+    } else if (body.action === "retry_notice") {
+      if (!uuid.test(body.noticeId ?? "")) throw new Error("Aviso inválido.");
+      const table = body.source === "request" ? "customer_agenda_requests" : "customer_agenda_notices";
+      const saved = await client.from(table).update({ status: "pending", attempts: 0, due_at: new Date().toISOString() }).eq("organization_id", org).eq("id", body.noticeId).eq("status", "failed").select("id").maybeSingle();
+      if (saved.error || !saved.data) throw new Error("Somente avisos com falha conhecida podem ser tentados novamente. Confira a situação atual.");
+    } else if (body.action === "unblock") {
+      if (!uuid.test(body.blockId ?? "")) throw new Error("Bloqueio inválido.");
+      const saved = await client.from("customer_agenda_blocks").delete().eq("organization_id", org).eq("id", body.blockId);
+      if (saved.error) throw new Error("Falha ao liberar período.");
     } else if (body.action === "set_timezone") {
       if (typeof body.timezone !== "string")
         throw new Error("Informe o fuso horário.");

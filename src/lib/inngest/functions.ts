@@ -797,6 +797,7 @@ export const connectyhubIntelligentAutomationSweep = inngest.createFunction(
 export const connectyhubCustomerAgendaSweep = inngest.createFunction(
   { id: "connectyhub-customer-agenda", name: "ConnectyHub Agenda Notifications", retries: 1, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
   async ({ step }) => {
+    await step.run("deliver-agenda-handoffs", async () => { const { dispatchAgendaHandoffs } = await import("@/lib/automations/agenda-handoff"); return dispatchAgendaHandoffs(createServiceClient()); });
     await step.run("prepare-agenda-notices", async () => { const { prepareAgendaNotifications } = await import("@/lib/automations/agenda-notifications"); return prepareAgendaNotifications(createServiceClient()); });
     return step.run("queue-agenda-notices", async () => { const { queueAgendaNotifications } = await import("@/lib/automations/agenda-notifications"); return queueAgendaNotifications(createServiceClient()); });
   },

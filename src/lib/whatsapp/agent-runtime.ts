@@ -15,10 +15,12 @@ import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalo
 import { assertContractAccess } from "@/lib/billing/contract-access";
 const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
 
-function enforceAgendaResponse(text: string, userText: string, result: { disabled?: boolean; booked: boolean; fallback: string }) {
+function enforceAgendaResponse(text: string, userText: string, result: { disabled?: boolean; booked: boolean; fallback: string; reply?: string }) {
+  if (result.reply) return result.reply;
   const scheduling = /\b(agend\w*|reserv\w*|remarc\w*|marcar|marco|hor[aá]rios?)\b/i;
   if (result.disabled && (scheduling.test(text) || scheduling.test(userText))) return result.fallback;
   if (!result.booked && /\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return result.fallback;
+  if (!result.booked && /\b(?:vou|vamos|assim que|deixei|já)\b.{0,100}\b(?:consultar|confirmar|reservar|anotad[oa]|retorno|retornar)\b/i.test(text) && (scheduling.test(text) || scheduling.test(userText))) return result.fallback;
   return text;
 }
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
@@ -1002,13 +1004,25 @@ async function processWhatsappAgentRunWithScope(input: {
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
           agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
           leadName: resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata }),
+          catalogAmbiguous: hasAmbiguousAgendaFocus(context.salesCatalog, userText, context.messages),
           catalogAppointment: agendaItem?.salesDestination === "appointment", catalogResourceId: agendaItem?.salesDestination === "appointment" ? agendaItem.fulfillment.agendaResourceId : undefined,
           messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
-        })).catch((error) => {
+        })).catch(async (error) => {
           console.error("agenda_turn_failed", { runId: run.id, message: error instanceof Error ? error.message : "unknown" });
-          return { context: "Não foi possível consultar a agenda nesta tentativa. Não afirme que reservou, confirmou ou cancelou horário. Se a pessoa pedir agendamento, explique que precisa verificar a disponibilidade.", booked: false, fallback: "Preciso verificar a disponibilidade para confirmar esse horário com você." };
+          const { unavailableAgendaTurn, agendaRequest } = await import("@/lib/automations/agenda-agent");
+          return agendaRequest(userText, context.messages) ? unavailableAgendaTurn("Falha ao consultar ou gravar a agenda") : null;
         })
       : null;
+    if (agendaTurn?.handoffReason && lead?.id) {
+      await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+      try {
+        const { queueAgendaHandoff } = await import("@/lib/automations/agenda-handoff");
+        await queueAgendaHandoff(client, { organizationId: organization.id, leadId: lead.id, conversationId: context.conversationId, agentId: agent.id, runId: run.id, instanceId: context.instance.id, reason: agendaTurn.handoffReason, requestText: userText });
+        agendaTurn.reply = "Não consegui concluir a reserva. Registrei o pedido para o responsável verificar a agenda e seguir com você. Seu horário ainda não está confirmado.";
+      } catch {
+        agendaTurn.reply = "Não consegui concluir a reserva nem registrar o encaminhamento. Seu horário ainda não está confirmado. Fale diretamente com o responsável para combinar o atendimento.";
+      }
+    }
     const cachedAiResponse = readCachedRunResponse(context.run.metadata);
     const salesCatalogShippingQuotes = buildRuntimeSalesCatalogShippingQuoteContext({
       context,
@@ -1086,7 +1100,7 @@ async function processWhatsappAgentRunWithScope(input: {
     if (agendaTurn) {
       // A company may pause scheduling while the model is composing its reply.
       const activation = await client.from("customer_agenda_settings").select("enabled").eq("organization_id", organization.id).maybeSingle();
-      if (activation.error || !activation.data?.enabled) {
+      if (!agendaTurn.booked && (activation.error || !activation.data?.enabled)) {
         agendaTurn = (await import("@/lib/automations/agenda-agent")).disabledAgendaTurn();
       }
       aiResponse = { ...aiResponse, text: enforceAgendaResponse(aiResponse.text, userText, agendaTurn) };
@@ -1162,12 +1176,14 @@ async function processWhatsappAgentRunWithScope(input: {
     await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
     extractConversationArcSummary(client, context).catch(() => {});
     extractNegotiationState(client, context).catch(() => {});
-    await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
+    if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
       messages: outbound.length,
       mode: outbound[0]?.mode ?? "text",
+      agenda_booking_id: agendaTurn?.bookingId ?? null,
+      agenda_handoff: Boolean(agendaTurn?.handoffReason),
       text_usage_event_id: textMetering?.usageEventId ?? null,
       text_usage_billing_mode: textMetering?.billingMode ?? null,
       text_usage_charge_credits: textMetering?.chargeCredits ?? null,
@@ -9213,6 +9229,17 @@ function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCa
     if (normalizedText.includes(candidate)) return true;
     return salesCatalogCandidateTokensMatch(normalizedText, candidate);
   });
+}
+
+function hasAmbiguousAgendaFocus(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {
+  const current = selectSalesCatalogItemsFromText(items, text);
+  if (current.length) return current.length > 1;
+  if (!/^(sim|ok|pode|quero|confirmo|combinado|sou |amanh[aã]|hoje)|\b(agenda|hor[aá]rio|visita)\b/i.test(text)) return false;
+  for (const message of messages.slice(-6).reverse()) {
+    const matches = selectSalesCatalogItemsFromText(items, message.text_content ?? "");
+    if (matches.length) return matches.length > 1;
+  }
+  return false;
 }
 
 function resolveCatalogAgendaFocus(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {

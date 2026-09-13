@@ -51,3 +51,17 @@ export function parseCalendarRange(from: string | null, to: string | null) {
   }
   return { from: new Date(start).toISOString(), to: new Date(end).toISOString() };
 }
+
+// Resolve a wall-clock input in the company timezone; reject nonexistent DST times.
+export function agendaLocalInstant(value: string, timezone: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error("Informe data e horário válidos.");
+  const target = Date.parse(`${value}:00Z`);
+  let instant = target;
+  for (let i = 0; i < 4; i++) {
+    const date = new Date(instant);
+    const local = `${calendarDate(date, timezone)}T${String(Math.floor(minutesInDay(date.toISOString(), timezone) / 60)).padStart(2, "0")}:${String(minutesInDay(date.toISOString(), timezone) % 60).padStart(2, "0")}`;
+    if (local === value) return date.toISOString();
+    instant += target - Date.parse(`${local}:00Z`);
+  }
+  throw new Error("Esse horário não existe no fuso da empresa. Escolha outro horário.");
+}

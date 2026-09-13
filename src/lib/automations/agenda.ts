@@ -13,11 +13,14 @@ export type AgendaResource = {
   blocked_dates: string[];
   return_days: number | null;
   enabled: boolean;
+  location_address?: string | null;
+  location_url?: string | null;
 };
 export type AgendaBooking = {
   id: string;
   resource_id: string;
   lead_id: string;
+  title?: string;
   starts_at: string;
   ends_at: string;
   party_size: number;
@@ -89,11 +92,16 @@ export function validateResource(value: Record<string, unknown>) {
       (day) =>
         typeof day !== "string" ||
         !/^\d{4}-\d{2}-\d{2}$/.test(day) ||
-        !Number.isFinite(Date.parse(day)),
+        !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day,
     )
   )
     throw new Error("Confira as datas bloqueadas.");
+  const locationUrl = text("location_url");
+  if (locationUrl && !/^https?:\/\//i.test(locationUrl)) throw new Error("Informe um link de localização HTTP ou HTTPS.");
+  if (text("location_address").length > 500 || locationUrl.length > 1000) throw new Error("Localização muito longa.");
   return {
+    location_address: text("location_address") || null,
+    location_url: locationUrl || null,
     name,
     service_name: service,
     kind: value.kind === "table" ? "table" : "service",
@@ -112,10 +120,10 @@ export async function getAgenda(
   leadId?: string,
   period?: { from: string; to: string },
 ) {
-  const [settings, resources, bookings] = await Promise.all([
+  const [settings, resources, bookings, blocks] = await Promise.all([
     client
       .from("customer_agenda_settings")
-      .select("enabled,timezone")
+      .select("enabled,timezone,default_resource_id")
       .eq("organization_id", organizationId)
       .maybeSingle(),
     client
@@ -137,16 +145,26 @@ export async function getAgenda(
         .order("starts_at")
         .limit(250);
     })(),
+    (() => {
+      let query = client.from("customer_agenda_blocks").select("id,resource_id,title,starts_at,ends_at").eq("organization_id", organizationId);
+      if (period) query = query.lt("starts_at", period.to).gt("ends_at", period.from);
+      else query = query.gt("ends_at", new Date(Date.now() - 86400000).toISOString());
+      return query.order("starts_at").limit(1000);
+    })(),
   ]);
-  if (settings.error || resources.error || bookings.error)
+  if (settings.error || resources.error || bookings.error || blocks.error)
     throw new Error("Não foi possível consultar a agenda.");
   return {
     settings: settings.data ?? {
+      default_resource_id: null,
       enabled: false,
       timezone: "America/Sao_Paulo",
     },
     resources: resources.data as AgendaResource[],
-    bookings: (bookings.data??[]).map(booking=>({...booking,lead:Array.isArray(booking.lead)?booking.lead[0]??null:booking.lead})) as AgendaBooking[],
+    bookings: [
+      ...(bookings.data??[]).map(booking=>({...booking,lead:Array.isArray(booking.lead)?booking.lead[0]??null:booking.lead})),
+      ...(!leadId ? (blocks.data ?? []).map(block => ({ ...block, lead_id: "", status: "blocked", party_size: 0, confirmed_at: null, version: 1, lead: { display_name: block.title } })) : []),
+    ] as AgendaBooking[],
   };
 }
 
@@ -162,7 +180,7 @@ export async function availableAppointments(
   const [settings, result] = await Promise.all([
     client
       .from("customer_agenda_settings")
-      .select("enabled,timezone")
+      .select("enabled,timezone,default_resource_id")
       .eq("organization_id", organizationId)
       .single(),
     client
@@ -194,6 +212,10 @@ export async function availableAppointments(
     .gt("ends_at", new Date(lower).toISOString());
   if (excludeBookingId) busyQuery = busyQuery.neq("id", excludeBookingId);
   const busy = await busyQuery;
+  const blocks = await client.from("customer_agenda_blocks").select("starts_at,ends_at")
+    .eq("organization_id", organizationId).eq("resource_id", resource.id)
+    .lt("starts_at", new Date(upper).toISOString()).gt("ends_at", new Date(lower).toISOString());
+  if (blocks.error) throw new Error("Não foi possível consultar os bloqueios.");
   if (busy.error)
     throw new Error("Não foi possível consultar a disponibilidade.");
   const slots: Array<{ starts_at: string; ends_at: string }> = [];
@@ -219,6 +241,7 @@ export async function availableAppointments(
       )
     )
       continue;
+    if ((blocks.data ?? []).some(b => Date.parse(b.starts_at) < end && Date.parse(b.ends_at) > start)) continue;
     const overlaps = (busy.data ?? []).filter(
       (b) => Date.parse(b.starts_at) < end && Date.parse(b.ends_at) > start,
     );

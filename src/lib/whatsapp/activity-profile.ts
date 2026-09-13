@@ -43,7 +43,9 @@ const individualNextSteps: Partial<Record<AgentActivityId, { closing: string; ex
   tecnico_ar_condicionado: { closing: "Confira equipamento, serviço e região e ofereça uma janela de atendimento técnico; peças e orçamento dependem da avaliação.", example: "Você procura instalação, limpeza ou reparo do ar-condicionado?" },
   corretor_seguros: { closing: "Organize a cotação conforme bem e proteção desejada e combine a análise das opções; proposta não significa apólice emitida.", example: "Qual bem ou tipo de proteção você quer cotar?" },
 };
-export function activityClosing(id: AgentActivityId) { return individualNextSteps[id]?.closing ?? activityPresets[id].closing; }
+export function activityClosing(id: AgentActivityId) {
+  if (id === "corretor_imoveis" || id === "imobiliaria") return "Conduza o interesse até uma visita efetivamente marcada: consulte o calendário configurado e, com vaga e aceite atual do lead, grave a reserva sem aprovação prévia do responsável nem confirmação redundante. Só após gravar, confirme data, hora e localização cadastrada e avise o responsável. Mudanças posteriores são combinadas pelo responsável com o lead; continue disponível para dúvidas. Agenda incompleta exige esclarecimento ou encaminhamento real, sem promessa vaga de consultar e retornar.";
+  return individualNextSteps[id]?.closing ?? activityPresets[id].closing; }
 export function activityExample(id: AgentActivityId) { return individualNextSteps[id]?.example ?? activityPresets[id].example; }
 export function buildActivityProfileInstruction(id: AgentActivityId, identity?: ProfessionalIdentity) {
   const preset = activityPresets[id];

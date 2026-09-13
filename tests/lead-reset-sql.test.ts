@@ -127,3 +127,30 @@ it("removes earlier archived copies of the same contact while preserving a diffe
   expect((await db.query("select id from leads order by id")).rows).toEqual([other,separate].sort().map(id=>({id})));
   expect((await db.query("select * from conversations")).rows).toEqual([]);
 });
+
+it("resets agenda records and pending handoffs while preserving calendar settings and blocks", async () => {
+  await db.exec("create schema auth; create table auth.users(id uuid primary key); create table agent_registry(id uuid primary key,organization_id uuid); create table whatsapp_instances(id uuid primary key,organization_id uuid);");
+  await db.exec(readFileSync("supabase/migrations/0115_customer_agenda_and_returns.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0116_customer_agenda_notifications.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0136_direct_customer_agenda.sql", "utf8"));
+  const resource=randomUUID(), agent=randomUUID(), instance=randomUUID(), run=randomUUID();
+  await db.query("insert into agent_registry values($1,$2);",[agent,org]);
+  await db.query("insert into whatsapp_instances values($1,$2)",[instance,org]);
+  await db.query("insert into agent_runs(id,organization_id,run_status,metadata) values($1,$2,'completed',$3)",[run,org,JSON.stringify({leadId:lead,conversationId:chat})]);
+  await db.query("insert into customer_agenda_settings(organization_id,enabled) values($1,true)",[org]);
+  await db.query("insert into customer_agenda_resources(id,organization_id,name,service_name,duration_minutes,weekly_hours) values($1,$2,'Pessoa','Visita',60,'[{\"days\":[1,2,3,4,5,6,7],\"start\":\"00:00\",\"end\":\"23:59\"}]')",[resource,org]);
+  const start = new Date(); start.setUTCDate(start.getUTCDate()+7); start.setUTCHours(16,0,0,0);
+  const booked=(await db.query<{b:{id:string}}>("select reserve_customer_appointment($1,$2,$3,$4,1,'one',$5,$6) b",[org,resource,lead,start.toISOString(),chat,agent])).rows[0].b;
+  const repeat=(await db.query<{b:{id:string}}>("select reserve_customer_appointment($1,$2,$3,$4,1,'repeat',$5,$6) b",[org,resource,lead,start.toISOString(),chat,agent])).rows[0].b;
+  expect(repeat.id).toBe(booked.id);
+  await db.query("select block_customer_agenda($1,$2,$3,$4,'Interno','block')",[org,resource,new Date(start.getTime()+7200000).toISOString(),new Date(start.getTime()+10800000).toISOString()]);
+  const request=(await db.query<{id:string}>("insert into customer_agenda_requests(organization_id,lead_id,conversation_id,agent_id,run_id,whatsapp_instance_id,reason,request_text) values($1,$2,$3,$4,$5,$6,'configuration','visita') returning id",[org,lead,chat,agent,run,instance])).rows[0].id;
+  expect((await db.query<{claimed:boolean}>("select claim_customer_agenda_request($1,$2) claimed",[org,request])).rows[0].claimed).toBe(true);
+  await expect(reset()).rejects.toThrow("RESET_ATTENDANCE_BUSY");
+  await db.query("update customer_agenda_requests set status='sent' where id=$1",[request]);
+  await reset();
+  for (const table of ["customer_agenda_requests","customer_agenda_bookings","customer_agenda_events"]) expect((await db.query(`select * from ${table}`)).rows).toHaveLength(0);
+  for (const table of ["customer_agenda_resources","customer_agenda_settings","customer_agenda_blocks"]) expect((await db.query(`select * from ${table}`)).rows).toHaveLength(1);
+  expect((await db.query<{claimed:boolean}>("select claim_customer_agenda_request($1,$2) claimed",[org,request])).rows[0].claimed).toBe(false);
+  await expect(db.query("select reserve_customer_appointment($1,$2,$3,$4,1,'stale',$5,$6)",[org,resource,lead,start.toISOString(),chat,agent])).rejects.toThrow("LEAD_SCOPE");
+});

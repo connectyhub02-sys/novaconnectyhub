@@ -6,8 +6,8 @@ import type { AgendaBooking, AgendaResource } from "@/lib/automations/agenda";
 import { agendaTimezoneLabel, calendarDate, calendarDays, calendarRange, minutesInDay, navigateCalendar, type CalendarView } from "@/lib/automations/calendar-view";
 
 const control = "inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50";
-const colors: Record<string, string> = { booked: "border-blue-200 bg-blue-50 text-blue-800", completed: "border-emerald-200 bg-emerald-50 text-emerald-800", cancelled: "border-slate-200 bg-slate-100 text-slate-500 line-through", no_show: "border-amber-200 bg-amber-50 text-amber-800" };
-const statuses: Record<string, string> = { booked: "Reservado", completed: "Realizado", cancelled: "Cancelado", no_show: "Não compareceu" };
+const colors: Record<string, string> = { blocked: "border-rose-200 bg-rose-50 text-rose-800", booked: "border-blue-200 bg-blue-50 text-blue-800", completed: "border-emerald-200 bg-emerald-50 text-emerald-800", cancelled: "border-slate-200 bg-slate-100 text-slate-500 line-through", no_show: "border-amber-200 bg-amber-50 text-amber-800" };
+const statuses: Record<string, string> = { blocked: "Bloqueado", booked: "Reservado", completed: "Realizado", cancelled: "Cancelado", no_show: "Não compareceu" };
 
 export function AgendaCalendar({ companyId, timezone, resources, revision, onSelect }: {
   companyId: string; timezone: string; resources: AgendaResource[]; revision: number; onSelect: (booking: AgendaBooking) => void;

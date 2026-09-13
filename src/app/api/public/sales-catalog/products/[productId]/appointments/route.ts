@@ -34,7 +34,8 @@ export async function GET(request: NextRequest, context: Context) {
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
     const activation = await readAgendaActivation(client, item.companyId);
     if (!activation.enabled) return NextResponse.json({ enabled: false, slots: [], error: agendaDisabledMessage }, { status: 409, headers: { "Cache-Control": "no-store" } });
-    if (!item.fulfillment.agendaResourceId) return NextResponse.json({ slots: [], contactRequired: true });
+    const resourceId = item.fulfillment.agendaResourceId || activation.defaultResourceId;
+    if (!resourceId) return NextResponse.json({ slots: [], contactRequired: true });
     const timezone = activation.timezone;
     const requested = request.nextUrl.searchParams.get("from");
     const day = request.nextUrl.searchParams.get("day") ?? (requested ? null : localContactTime(new Date(), timezone).day);
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest, context: Context) {
       }
     }
     if (!Number.isFinite(from.getTime()) || from.getTime() > Date.now() + 90 * 86400000) throw new Error("Escolha uma data nos próximos 90 dias.");
-    const slots = await availableAppointments(client, item.companyId, item.fulfillment.agendaResourceId, from, 1, undefined, day ?? undefined);
+    const slots = await availableAppointments(client, item.companyId, resourceId, from, 1, undefined, day ?? undefined);
     return NextResponse.json({ enabled: true, slots, timezone, day }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Agenda indisponível." }, { status: 422 }); }
 }
@@ -67,8 +68,9 @@ export async function POST(request: NextRequest, context: Context) {
     if (!name || !/^\d{10,15}$/.test(phone) || !Number.isFinite(startsAt.getTime()) || startsAt.getTime() > Date.now() + 90 * 86400000) throw new Error("Informe nome, telefone com código do país e um horário disponível.");
     const { client, item } = await loadProduct((await context.params).productId);
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
-    if (!(await readAgendaActivation(client, item.companyId)).enabled) return NextResponse.json({ enabled: false, error: agendaDisabledMessage }, { status: 409 });
-    const resourceId = item.fulfillment.agendaResourceId;
+    const activation = await readAgendaActivation(client, item.companyId);
+    if (!activation.enabled) return NextResponse.json({ enabled: false, error: agendaDisabledMessage }, { status: 409 });
+    const resourceId = item.fulfillment.agendaResourceId || activation.defaultResourceId;
     if (!resourceId) throw new Error("Solicite o atendimento para combinar um horário.");
     const key = `public:${createHash("sha256").update([item.companyId, item.id, resourceId, phone, startsAt.toISOString()].join("|")).digest("hex")}`;
     const previous = await client.from("customer_agenda_bookings").select("starts_at,ends_at,status").eq("organization_id", item.companyId).eq("request_key", key).maybeSingle();

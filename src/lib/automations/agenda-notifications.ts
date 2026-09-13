@@ -146,7 +146,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
           person.phone,
           `event:${e.event_type}`,
           new Date(),
-          `${title}: ${summary}.`,
+          `${title}: ${summary}. ${e.event_type === "booked" || e.event_type === "rescheduled" ? "O horário já foi registrado, sem necessidade de aprovação. " : ""}Se precisar mudar, combine diretamente com o contato${c.lead.phone_number ? `: https://wa.me/${normalizeBrazilianWhatsappPhone(c.lead.phone_number)}` : "."}`,
         );
       }
     if (c.b.status === "booked") {

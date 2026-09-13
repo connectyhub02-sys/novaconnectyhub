@@ -73,6 +73,7 @@ export async function enqueueWhatsappHandoffNotification(data: WhatsappHandoffNo
 export async function processWhatsappHandoffNotification(input: {
   data: WhatsappHandoffNotificationEventData;
   client?: SupabaseClient;
+  beforeSend?: () => Promise<void>;
 }): Promise<WhatsappHandoffNotificationResult> {
   const client = input.client ?? createServiceClient();
   const eventData = input.data;
@@ -134,7 +135,13 @@ export async function processWhatsappHandoffNotification(input: {
   const results = [];
 
   for (const recipient of recipients) {
-    if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
+    if (!(await getContractAccess(instance.organization_id, client)).allowed) {
+      if (!results.length) return { status: "skipped", reason: "billing_blocked" };
+      // Some deliveries were attempted; callers must not replay the whole batch.
+      results.push({ number: recipient, status: "failed", error: "billing_blocked_after_attempt" });
+      break;
+    }
+    await input.beforeSend?.();
     try {
       const response = await callUazapi(credentials, "/send/text", {
       outbound: { instanceId: instance.id, client },
@@ -313,7 +320,7 @@ function buildNotificationText(input: {
     `Lead: ${leadName}`,
     `Numero: ${leadPhone}`,
     `Mensagem: "${requestText}"`,
-    pausedUntil ? `IA pausada ate: ${pausedUntil}` : "IA pausada para atendimento humano.",
+    input.data.source === "agenda_unavailable" ? "Reserva não confirmada. Verifique a configuração e combine o atendimento diretamente com o lead. A conversa continua disponível." : pausedUntil ? `IA pausada ate: ${pausedUntil}` : "IA pausada para atendimento humano.",
     "",
     "Abra o WhatsApp conectado e continue a conversa com esse lead.",
     "Nao responda este alerta; ele serve apenas para te chamar.",
