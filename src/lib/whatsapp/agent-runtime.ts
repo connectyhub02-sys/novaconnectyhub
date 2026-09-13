@@ -9,7 +9,7 @@ import { conversationEnding, conversationEndingAction } from "./conversation-end
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { parseOrderRevisionIntent, normalizeOrderRevisionSpeech, isOrderRevisionNoChangeIntent, type OrderRevisionIntent } from "./order-revision-intent";
-import { classifyCheckoutJourney, isNewPurchaseIntent, isEditableCheckoutOrder } from "./order-lifecycle";
+import { classifyCheckoutJourney, isNewPurchaseIntent, isEditableCheckoutOrder, isPaymentRecoverableCheckoutOrder } from "./order-lifecycle";
 import { applySalesCatalogOrderRevision } from "@/lib/sales-catalog/order-revision";
 import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalog/order-shipping";
 import { assertContractAccess } from "@/lib/billing/contract-access";
@@ -29,7 +29,7 @@ import { deliverPaymentReviewNotification, getLeadPaymentReviews, loadOrderFinan
 
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
+import { normalizeBrazilPhone, isValidCpf, isValidCnpj } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import { readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
 import { updateLeadMetadata } from "@/lib/leads/metadata-update";
@@ -83,6 +83,7 @@ import {
   type SalesCatalogOrderRow,
 } from "@/lib/client-os/sales-catalog";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { readAsaasPaymentRecovery, readAsaasPixSessionRecovery, type AsaasPaymentRecovery } from "@/lib/sales-catalog/asaas";
 import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { loadTransparentCheckout } from "@/lib/sales-catalog/transparent-checkout";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
@@ -290,6 +291,8 @@ type SalesCatalogPaymentLinkResult = {
   preferredMethod?: SalesCatalogRuntimePaymentPreference | null;
   failureReason?: string | null;
   confirmationPending?: boolean;
+  paymentRecovery?: AsaasPaymentRecovery | null;
+  paymentSessionId?: string | null;
 };
 
 type SalesCatalogPaymentSessionLinkRow = {
@@ -2519,6 +2522,7 @@ async function maybeAttachSalesCatalogCustomerNameToOrder(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
+  if (readRuntimePaymentDataRecovery(input.context)) return null;
   const order = findRuntimeCheckoutOrderForAttachment(input.context, input.userText, (item) => (
     !normalizeLeadNameCandidate(item.customerName)
   ));
@@ -2587,6 +2591,7 @@ async function maybeAttachSalesCatalogCustomerBillingDetailsToOrder(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   userText: string;
 }): Promise<RuntimeSalesCatalogOrder[] | null> {
+  if (readRuntimePaymentDataRecovery(input.context)) return null;
   const email = extractRuntimeEmail(input.userText)
     ?? normalizeRuntimeEmail(findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]));
   const document = extractRuntimeCustomerDocument(input.userText)
@@ -6420,15 +6425,19 @@ function buildSalesCatalogCheckoutStateLines(lead: LeadRow | null, scope?: { org
   const storedState = readRecord(readRecord(lead.metadata)?.checkout_runtime_state);
   const checkoutState = storedState && (!scope || (storedState.organization_id === scope.organizationId
     && storedState.conversation_id === scope.conversationId && storedState.instance_id === scope.instanceId)) ? storedState : null;
+  const recovery = checkoutState ? readAsaasPaymentRecovery(checkoutState.payment_recovery) : null;
+  const invalidField = checkoutState?.stage === "payment_customer_correction_pending" && recovery?.safe_to_retry
+    && recovery.category === "validation" ? recovery.field : null;
   return [
     "",
     "DADOS JA CAPTURADOS PARA O PAGAMENTO:",
     "- Antes de enviar Pix ou checkout, colete pelo WhatsApp os dados pessoais exigidos: nome completo, e-mail, CPF/CNPJ e telefone (aproveite o numero da conversa). Para entrega ou cartao, confirme endereco completo com CEP e numero. Pergunte apenas o que ainda falta.",
     "- Os dados ja coletados preenchem o checkout automaticamente. Nunca solicite numero do cartao, validade, CVV ou senha no WhatsApp; esses dados sao informados somente na etapa segura de pagamento.",
-    name ? `- Nome: ${name}. Nao solicite novamente.` : "- Nome ainda nao confirmado.",
-    email ? `- E-mail: ${email}. Nao solicite novamente.` : "- E-mail ainda nao informado.",
-    document ? "- CPF/CNPJ ja recebido. Nao solicite novamente." : "- Documento ainda nao informado; solicite somente se o pagamento exigir.",
-    address ? `- Endereco ja informado: ${address}. Nao solicite novamente; confirme somente eventual dado faltante.` : "- Endereco ainda nao informado.",
+    invalidField === "customer_name" ? "- O provedor rejeitou o nome informado. Solicite apenas o nome completo correto." : name ? `- Nome: ${name}. Nao solicite novamente.` : "- Nome ainda nao confirmado.",
+    invalidField === "customer_email" ? "- O provedor rejeitou o e-mail informado. Solicite apenas o e-mail correto." : email ? `- E-mail: ${email}. Nao solicite novamente.` : "- E-mail ainda nao informado.",
+    invalidField === "customer_document" ? "- O provedor rejeitou o CPF/CNPJ informado. Solicite apenas o documento correto; o valor salvo precisa ser substituído." : document ? "- CPF/CNPJ ja recebido. Nao solicite novamente." : "- Documento ainda nao informado; solicite somente se o pagamento exigir.",
+    invalidField === "billing_address" ? "- O provedor rejeitou o endereço informado. Confirme o endereço correto e recalcule a entrega antes do pagamento." : address ? `- Endereco ja informado: ${address}. Nao solicite novamente; confirme somente eventual dado faltante.` : "- Endereco ainda nao informado.",
+    invalidField === "customer_phone" ? "- O provedor rejeitou o telefone informado. Solicite apenas o telefone com DDD correto." : "",
     cep ? `- CEP ja informado: ${cep}. Nao solicite novamente.` : "- CEP ainda nao informado.",
     "- Use os dados salvos e o pedido atual. Durante a cobranca, nao reinicie a qualificacao nem sugira mais produtos.",
     "- O sistema informa o que falta e entrega o botao. Nunca afirme que um Pix foi gerado ou pago sem o resultado correspondente.",
@@ -9584,7 +9593,7 @@ function findRecentSalesCatalogOrderForSelections(
   }
 
   const matching = orders.filter((order) => {
-    if (!isCurrentRuntimeCheckoutOrder(context, order)) return false;
+    if (!isCurrentRuntimeCheckoutOrder(context, order, true)) return false;
     if (order.items.length !== selections.length || !selections.every(selection =>
       order.items.some(item => item.catalogItemId === selection.item.id && item.quantity === selection.quantity))) return false;
 
@@ -10620,10 +10629,11 @@ function runtimeCheckoutMessagesForNewPurchase(context: NonNullable<Awaited<Retu
 }
 
 function isCurrentRuntimeCheckoutOrder(
-  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, order: RuntimeSalesCatalogOrder,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, order: RuntimeSalesCatalogOrder, paymentRecovery = false,
 ) {
   if (order.companyId !== context.organization.id || order.conversationId !== context.conversationId
-    || (context.lead?.id && order.leadId !== context.lead.id) || !isEditableCheckoutOrder(order)) return false;
+    || (context.lead?.id && order.leadId !== context.lead.id)
+    || !(paymentRecovery ? isPaymentRecoverableCheckoutOrder(order) : isEditableCheckoutOrder(order))) return false;
   const journey = readRuntimeCheckoutJourney(context);
   const startedAt = Date.parse(asString(journey?.started_at) ?? "");
   const createdAt = Date.parse(order.createdAt ?? "");
@@ -11043,6 +11053,19 @@ function normalizeRuntimeCheckoutIntent(text: string) {
   return text.split(/\n+/).map(normalizeOrderRevisionSpeech).filter(Boolean).join("\n");
 }
 
+function readRuntimeActivePaymentOrderId(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const journeyOrder = asString(readRuntimeCheckoutJourney(context)?.order_id);
+  if (journeyOrder) return journeyOrder;
+  const state = readRecord(readRecord(context.lead?.metadata)?.checkout_runtime_state);
+  if (state?.organization_id !== context.organization.id || state.conversation_id !== context.conversationId
+    || state.instance_id !== context.instance.id) return null;
+  const orderId = asString(state.order_id);
+  // A progress receipt can be stale or refer to a different conversation's order.
+  // It selects only an order actually loaded within this conversation's scope.
+  return orderId && context.salesCatalogOrders.some(order => order.id === orderId && order.companyId === context.organization.id
+    && order.conversationId === context.conversationId && order.leadId === context.lead?.id) ? orderId : null;
+}
+
 function buildSalesCatalogOrderIntentText(
   latestInbound: ConversationMessageRow | null,
   _assistantText: string,
@@ -11262,6 +11285,33 @@ async function recordSalesCatalogOrderIntent(input: {
 
   if (!paymentPreference && getEnabledSalesCatalogRuntimePaymentChoices(input.context.salesCatalogSettings).length > 1) {
     return null;
+  }
+
+  // A fresh assistant summary is not a fresh purchase. Keep the already confirmed
+  // failed order instead of deriving another order id from the new preview id.
+  const activePaymentOrderId = readRuntimeActivePaymentOrderId(input.context);
+  const failedOrders = input.context.salesCatalogOrders.filter(order => order.paymentStatus === "failed"
+    && (!activePaymentOrderId || order.id === activePaymentOrderId)
+    && order.checkoutConfirmedAt && isCurrentRuntimeCheckoutOrder(input.context, order, true)
+    && order.items.length === orderCatalogSelections.length && orderCatalogSelections.every(selection =>
+      order.items.some(line => line.catalogItemId === selection.item.id && line.quantity === selection.quantity)));
+  if (failedOrders.length) {
+    const order = failedOrders[0];
+    if (failedOrders.length !== 1 || !order.latestPaymentSessionId) return unavailableRuntimePayment(order.id, order.total, paymentPreference,
+      "Preciso identificar a tentativa do pedido existente antes de continuar.", true);
+    const { data: previous, error } = await input.client.from("sales_catalog_payment_sessions")
+      .select("id, order_id, provider, method, amount, status, provider_payment_id, provider_status, failure_reason, metadata")
+      .eq("organization_id", input.context.organization.id).eq("order_id", order.id).eq("id", order.latestPaymentSessionId)
+      .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
+    const recovery = previous ? readAsaasPixSessionRecovery(previous) : null;
+    const needsCorrection = recovery?.safe_to_retry && recovery.category === "validation" && recovery.field;
+    if (error || !previous || !await loadRuntimePaymentRecoverySnapshot(input.client, input.context, order, previous, Boolean(needsCorrection))) {
+      return unavailableRuntimePayment(order.id, order.total, paymentPreference, "O pedido existente precisa de conferência antes de retomar a cobrança.", true);
+    }
+    if (needsCorrection) return { ...unavailableRuntimePayment(order.id, order.total, paymentPreference, "Um dado do pagador precisa ser corrigido."),
+      paymentRecovery: recovery, paymentSessionId: previous.id };
+    return maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context, orderId: order.id, total: order.total,
+      preferredMethod: paymentPreference });
   }
 
   const confirmationPreview = findRecentSalesCatalogCheckoutConfirmationPreview(input.context.messages, latestInbound);
@@ -11577,11 +11627,14 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       organizationId: input.context.organization.id,
       orderId: input.orderId,
       amount: input.total,
-      payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
+      payerEmail: input.context.salesCatalogOrders.find(order => order.id === input.orderId && order.companyId === input.context.organization.id
+        && order.conversationId === input.context.conversationId)?.customerEmail
+        ?? findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
       preferredMethod: input.preferredMethod ?? null,
       source: "whatsapp_agent",
       actorId: null,
     });
+    const paymentRecovery = "paymentRecovery" in result ? readAsaasPaymentRecovery(result.paymentRecovery) : null;
 
     return {
       orderId: input.orderId,
@@ -11593,7 +11646,10 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       pixQrCode: result.pixQrCode,
       pixTicketUrl: result.pixTicketUrl,
       gatewayUnavailable: result.gatewayUnavailable === true,
-      confirmationPending: result.gatewayUnavailable === true && result.session.providerStatus === "gateway_error",
+      confirmationPending: result.gatewayUnavailable === true && result.session.providerStatus === "gateway_error"
+        && paymentRecovery?.safe_to_retry !== true,
+      paymentRecovery,
+      paymentSessionId: result.session.id,
       paymentDeferred: result.paymentDeferred === true,
       paymentDeferredReason: result.paymentDeferredReason ?? null,
       preferredMethod: input.preferredMethod ?? null,
@@ -12044,6 +12100,134 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
 }
 
 
+function buildRuntimePaymentFieldCorrectionPrompt(field: NonNullable<AsaasPaymentRecovery["field"]>) {
+  const labels = { customer_document: "CPF ou CNPJ", customer_name: "nome completo", customer_email: "e-mail",
+    customer_phone: "telefone com DDD", billing_address: "endereço completo com CEP e número" };
+  return `O provedor não aceitou o ${labels[field]} informado. Me envie o ${labels[field]} correto para continuar o pagamento deste mesmo pedido.`;
+}
+
+async function loadRuntimePaymentRecoverySnapshot(client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, order: RuntimeSalesCatalogOrder, session: SalesCatalogPaymentSessionLinkRow,
+  customerCorrectionOnly = false) {
+  if (session.provider !== "asaas" || session.order_id !== order.id || !isCurrentRuntimeCheckoutOrder(context, order, true)) return null;
+  try {
+    const snapshot = await loadTransparentCheckout(client, session.id);
+    if (snapshot.session.organization_id !== context.organization.id || snapshot.order.id !== order.id
+      || snapshot.order.conversation_id !== context.conversationId || snapshot.order.lead_id !== context.lead?.id
+      || snapshot.review || snapshot.order.checkout_payment_lock
+      || !["draft", "pending_payment"].includes(snapshot.order.status)
+      || !["pending", "failed"].includes(snapshot.order.payment_status)
+      || snapshot.amount !== normalizeCurrencyAmount(order.total)
+      || Number(snapshot.order.checkout_revision ?? 0) !== (order.checkoutRevision ?? 0)) return null;
+    const metadata = readRecord(snapshot.session.metadata) ?? {};
+    const correction = readAsaasPixSessionRecovery(snapshot.session);
+    const canAskForCorrection = customerCorrectionOnly && correction?.safe_to_retry && correction.category === "validation" && correction.field;
+    if (metadata.gateway_request_inflight === true && !canAskForCorrection
+      || ["paid", "approved", "confirmed", "refunded"].includes(snapshot.session.status)) return null;
+    const attempt = snapshot.attempt;
+    if (attempt) {
+      const diagnostic = attempt.diagnostic;
+      const failedBeforeCharge = attempt.state === "error" && diagnostic?.category === "validation"
+        && ["customer_lookup", "customer_create"].includes(diagnostic.stage) && [400, 422].includes(diagnostic.httpStatus ?? 0);
+      if (attempt.state !== "rejected" && !failedBeforeCharge) return null;
+    }
+    const recovery = canAskForCorrection ? correction : readAsaasPaymentRecovery(metadata.payment_recovery);
+    if (!attempt && (order.paymentStatus === "failed" || ["error", "failed", "rejected"].includes(snapshot.session.status))
+      && recovery?.safe_to_retry !== true) return null;
+    return snapshot;
+  } catch { return null; }
+}
+
+function readRuntimePaymentDataRecovery(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const state = readRecord(readRecord(context.lead?.metadata)?.checkout_runtime_state);
+  if (!state || state.organization_id !== context.organization.id || state.conversation_id !== context.conversationId
+    || state.instance_id !== context.instance.id || state.stage !== "payment_customer_correction_pending") return null;
+  const recovery = readAsaasPaymentRecovery(state.payment_recovery);
+  return recovery?.safe_to_retry && recovery.category === "validation" && recovery.field
+    && typeof state.order_id === "string" && typeof state.payment_session_id === "string" ? { state, recovery } : null;
+}
+
+function runtimePaymentCorrectionNeedsConversation(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  // Remove only a leading payer-field correction command. All remaining clauses
+  // still participate: supplying a document never overrides a refusal or cart edit.
+  const remainder = text.replace(/^\s*(?:por favor\s+)?(?:corrig[ae]|corrija|corrigir|alter[ae]|alterar|mud[ae]|mudar|atualiz[ae]|atualizar)\s+(?:(?:o|meu|o meu)\s+)?(?:cpf(?:\s*\/\s*cnpj)?|cnpj|documento|nome|e-?mail|telefone)\s*(?:(?:para|pra)\s+|:\s*)?/i, "");
+  const change = parseOrderRevisionIntent(remainder);
+  return requiresCommerceConversationReply(remainder)
+    || Boolean(change && change.kind !== "payment")
+    || isRuntimeCheckoutDraftChange(remainder, context)
+    || hasRuntimeAddressText(remainder) || /\bcep\b/i.test(remainder);
+}
+
+async function maybeHandleRuntimePaymentDataRecovery(input: {
+  client: SupabaseClient; context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>; token: string; phone: string;
+  latestInbound: ConversationMessageRow | null; userText: string;
+}): Promise<OutboundMessage | null> {
+  const pending = readRuntimePaymentDataRecovery(input.context);
+  if (!pending || !input.context.lead || !input.latestInbound || isNewPurchaseIntent(input.userText)
+    || isHumanHandoffRequest(input.userText) || runtimePaymentCorrectionNeedsConversation(input.userText, input.context)) return null;
+  const { state, recovery } = pending;
+  const field = recovery.field!;
+  // Delivery changes require their own freight quote and new consent, never a payer-only update.
+  if (field === "billing_address") return null;
+  const order = input.context.salesCatalogOrders.find(item => item.id === state.order_id && isCurrentRuntimeCheckoutOrder(input.context, item, true));
+  if (!order) return null;
+  const method = resolveSalesCatalogPaymentMethodRequest(input.userText) ?? readRuntimeOrderPaymentPreference(input.context, order.id);
+  const labelledFields = { customer_document: /\b(?:cpf|cnpj|documento)\b/i, customer_name: /\b(?:nome|chamo)\b/i,
+    customer_email: /\b(?:e-?mail)\b|@/i, customer_phone: /\b(?:telefone|celular|whatsapp)\b/i };
+  const differentlyLabelled = Object.entries(labelledFields).some(([key, pattern]) => key !== field && pattern.test(input.userText))
+    && !labelledFields[field].test(input.userText);
+  const documentText = input.userText.match(/\b(?:cpf(?:\s*\/\s*cnpj)?|cnpj|documento)\s*(?:(?:correto|atual)\s+)?(?:(?:e|é|para|pra)\s*|:\s*)?(\d[\d.\-/\s]*)/i)?.[1]
+    ?? (field === "customer_document" && labelledFields.customer_phone.test(input.userText) ? "" : input.userText);
+  let value = differentlyLabelled ? null : field === "customer_document" ? extractRuntimeCustomerDocument(documentText)
+    : field === "customer_email" ? extractRuntimeEmail(input.userText)
+      : field === "customer_name" ? extractRuntimeCustomerNameFromStructuredReply(input.userText) ?? extractRuntimeCustomerName(input.userText)
+        ?? sanitizeRuntimeCustomerNameCandidate(input.userText, { allowSingleName: false })
+        : normalizeBrazilPhone(input.userText.replace(/^(?:meu\s+)?(?:telefone|celular)(?:\s+é)?\s*:?\s*/i, ""));
+  if (field === "customer_document" && value && !(value.length === 11 ? isValidCpf(value) : isValidCnpj(value))) value = null;
+  const previousValue = field === "customer_document" ? order.customerDocument : field === "customer_email" ? order.customerEmail
+    : field === "customer_name" ? order.customerName : order.customerPhone;
+  if (value && value.trim().toLowerCase() === previousValue?.trim().toLowerCase()) value = null;
+  const { data, error } = await input.client.from("sales_catalog_payment_sessions")
+    .select("id, order_id, provider, method, amount, status, provider_payment_id, provider_status, failure_reason, metadata")
+    .eq("id", String(state.payment_session_id)).eq("organization_id", input.context.organization.id).eq("order_id", order.id)
+    .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
+  const currentRecovery = data ? readAsaasPixSessionRecovery(data) : null;
+  if (error || !data || !currentRecovery?.safe_to_retry || currentRecovery.field !== field
+    || !await loadRuntimePaymentRecoverySnapshot(input.client, input.context, order, data, true)) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, method,
+      "O estado do pagamento mudou. Preciso conferir a tentativa antes de continuar.", true) });
+  }
+  if (!value) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: { ...unavailableRuntimePayment(order.id, order.total, method,
+      "Um dado do pagador precisa ser corrigido."), paymentRecovery: recovery, paymentSessionId: data.id } });
+  }
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  // The RPC takes the order lock, checks scope, the exact rejected field, current
+  // revision, financial evidence and concurrent attempts before replacing the value.
+  const corrected = await input.client.rpc("recover_sales_catalog_payment_customer_field", {
+    p_organization_id: input.context.organization.id, p_order_id: order.id, p_conversation_id: input.context.conversationId,
+    p_lead_id: input.context.lead.id, p_session_id: data.id, p_expected_revision: order.checkoutRevision ?? 0,
+    p_field: field, p_value: value,
+  });
+  if (corrected.error?.message?.includes("CHECKOUT_RECOVERY_INVALID_VALUE") || corrected.error?.message?.includes("CHECKOUT_RECOVERY_VALUE_UNCHANGED")) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: { ...unavailableRuntimePayment(order.id, order.total, method,
+      "O dado informado ainda precisa ser corrigido."), paymentRecovery: recovery, paymentSessionId: data.id } });
+  }
+  if (corrected.error || corrected.data?.order_id !== order.id) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, method,
+      "Não consegui confirmar a correção porque o pedido ou pagamento mudou.", true) });
+  }
+  order.checkoutRevision = Number(corrected.data.checkout_revision);
+  if (field === "customer_document") order.customerDocument = value;
+  else if (field === "customer_email") order.customerEmail = value;
+  else if (field === "customer_name") order.customerName = value;
+  else order.customerPhone = value;
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  const payment = await maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context,
+    orderId: order.id, total: order.total, preferredMethod: method });
+  return payment ? sendSalesCatalogPaymentLink({ ...input, payment }) : null;
+}
+
 async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -12055,6 +12239,9 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
   if (!runtimeAllowsCheckout(input.context)) return null;
   input = { ...input, userText: buildSalesCatalogOrderIntentText(input.latestInbound, "", input.context) || input.userText };
   if (isNewPurchaseIntent(input.userText)) return null;
+  if (readRuntimePaymentDataRecovery(input.context) && runtimePaymentCorrectionNeedsConversation(input.userText, input.context)) return null;
+  const dataRecovery = await maybeHandleRuntimePaymentDataRecovery(input);
+  if (dataRecovery) return dataRecovery;
   const methodRequest = resolveSalesCatalogPaymentMethodRequest(input.userText);
   const revision = parseOrderRevisionIntent(input.userText);
   if (revision && revision.kind !== "payment" && !methodRequest) return null;
@@ -12161,12 +12348,7 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
 
   const metadata = readRecord(data.metadata) ?? {};
   const checkoutUrl = (data.method === "card" ? asString(metadata.public_checkout_url) : null)
-    ?? asString(data.checkout_url);
-
-  if (!checkoutUrl) {
-    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, null,
-      "A tentativa existente não possui um checkout disponível.", true) });
-  }
+    ?? asString(data.checkout_url) ?? "";
 
   const trackingUrl = (data.method === "card" ? asString(metadata.public_checkout_tracking_url) : null)
     ?? asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
@@ -12194,6 +12376,23 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
     return message;
   }
   const currentMethod = resolveSalesCatalogPaymentSessionPreference(data, metadata);
+  // Recover payment on the confirmed order, even when its last card attempt has no URL.
+  const safeSessionRecovery = readAsaasPixSessionRecovery(data);
+  const requiresRecovery = order.paymentStatus === "failed" || ["error", "failed", "rejected"].includes(data.status ?? "")
+    || data.method === "card" && currentMethod !== preferredMethod;
+  if (requiresRecovery) {
+    const fieldCorrection = safeSessionRecovery?.safe_to_retry && safeSessionRecovery.category === "validation" && safeSessionRecovery.field;
+    const snapshot = await loadRuntimePaymentRecoverySnapshot(input.client, input.context, order, data, Boolean(fieldCorrection));
+    if (!snapshot) return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
+      "A tentativa anterior precisa de conferência antes de gerar outro pagamento.", true) });
+    if (safeSessionRecovery?.safe_to_retry && safeSessionRecovery.category === "validation" && safeSessionRecovery.field) {
+      return sendSalesCatalogPaymentLink({ ...input, payment: { ...unavailableRuntimePayment(order.id, order.total, preferredMethod,
+        "Um dado do pagador precisa ser corrigido."), paymentRecovery: safeSessionRecovery, paymentSessionId: data.id } });
+    }
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client: input.client, context: input.context,
+      orderId: order.id, total: order.total, preferredMethod });
+    return payment ? sendSalesCatalogPaymentLink({ ...input, payment }) : null;
+  }
   if (metadata.gateway_request_inflight === true
     || ["paid", "approved", "confirmed", "refunded", "cancelled", "expired", "rejected", "failed"].includes(data.status ?? "")) {
     return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
@@ -12251,6 +12450,11 @@ async function maybeSendExistingSalesCatalogCheckoutLink(input: {
       orderId: order.id, total: order.total ?? (data.amount == null ? null : String(data.amount)), preferredMethod });
     if (!payment) return null;
     return sendSalesCatalogPaymentLink({ ...input, payment });
+  }
+
+  if (!checkoutUrl) {
+    return sendSalesCatalogPaymentLink({ ...input, payment: unavailableRuntimePayment(order.id, order.total, preferredMethod,
+      "A tentativa existente não possui um checkout disponível.", true) });
   }
 
   return sendSalesCatalogPaymentLink({
@@ -12434,9 +12638,9 @@ function findRecentPendingSalesCatalogCheckoutOrder(
     && (hasRecentSalesCatalogCheckoutPromise(latestPrompt, latestInbound)
       || hasRecentSalesCatalogPaymentMethodChoicePrompt(latestPrompt, latestInbound));
   if (!explicitResume && !contextualConfirmation) return null;
-  const activeId = asString(readRuntimeCheckoutJourney(context)?.order_id);
+  const activeId = readRuntimeActivePaymentOrderId(context);
   const candidates = orders.filter((order) => {
-    if (!isCurrentRuntimeCheckoutOrder(context, order) || (activeId && order.id !== activeId)) return false;
+    if (!isCurrentRuntimeCheckoutOrder(context, order, true) || (activeId && order.id !== activeId)) return false;
     if (!order.items.some((item) => Boolean(item.catalogItemId))) return false;
 
     const orderMs = Date.parse(order.createdAt ?? "");
@@ -12591,7 +12795,8 @@ async function sendSalesCatalogPaymentLink(input: {
   try {
     const message = await deliverSalesCatalogPaymentLink(input);
     const delivery = asString(readRecord(message.providerResponse)?.delivery);
-    const stage = input.payment.confirmationPending ? "payment_confirmation_pending"
+    const stage = input.payment.paymentRecovery?.safe_to_retry && input.payment.paymentRecovery.category === "validation" && input.payment.paymentRecovery.field
+      ? "payment_customer_correction_pending" : input.payment.confirmationPending ? "payment_confirmation_pending"
       : input.payment.gatewayUnavailable || delivery === "whatsapp_pix_code_missing" ? "payment_generation_failed"
       : input.payment.paymentDeferred ? "payment_data_pending" : "payment_sent";
     await persistRuntimeCheckoutProgress(input, stage);
@@ -12616,6 +12821,7 @@ async function persistRuntimeCheckoutProgress(input: {
   const state = { stage, order_id: input.payment.orderId, conversation_id: input.context.conversationId,
     organization_id: input.context.organization.id, instance_id: input.context.instance.id,
     preferred_payment_method: input.payment.preferredMethod ?? readRuntimeOrderPaymentPreference(input.context, input.payment.orderId),
+    payment_recovery: input.payment.paymentRecovery ?? null, payment_session_id: input.payment.paymentSessionId ?? null,
     agent_run_id: input.context.run.id, updated_at: new Date().toISOString() };
   await input.client.from("intelligence_events").insert({ scope: "organization", organization_id: input.context.organization.id,
     source_type: "sales_catalog_order", source_id: input.payment.orderId, producer_agent_id: input.context.agent.id,
@@ -12648,6 +12854,14 @@ async function deliverSalesCatalogPaymentLink(input: {
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
   if (!runtimeAllowsCheckout(input.context)) throw new Error("A atividade exige negociacao com o responsavel, sem pagamento automatico.");
+  if (input.payment.paymentRecovery?.safe_to_retry && input.payment.paymentRecovery.category === "validation" && input.payment.paymentRecovery.field) {
+    const text = buildRuntimePaymentFieldCorrectionPrompt(input.payment.paymentRecovery.field);
+    const providerResponse = await sendWhatsappText({ credentials: input.context.credentials, token: input.token, phone: input.phone,
+      text, trackId: `payment_customer_correction_${input.context.run.id}`, mentions: resolveGroupMentions(input.context) });
+    const message: OutboundMessage = { text, mode: "text", providerResponse, persisted: true };
+    await saveOutboundMessage(input.client, input.context, message);
+    return message;
+  }
   if (input.payment.paymentDeferred) {
     return sendSalesCatalogPaymentDeferredWhatsapp(input);
   }
@@ -18697,6 +18911,7 @@ function extractCompleteGeminiAgentText(value: unknown) {
   if (extractGeminiCandidateFinishReason(value) === "MAX_TOKENS") {
     return "Minha resposta ficou incompleta. Ainda preciso conferir a etapa do pedido antes de confirmar o pagamento.";
   }
+
   return extractGeminiText(value);
 }
 

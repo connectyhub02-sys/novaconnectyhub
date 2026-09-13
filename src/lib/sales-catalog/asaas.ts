@@ -566,15 +566,98 @@ export async function ensureAsaasAccessToken(input: {
 }
 
 /** Whether a failed Pix operation could already have created a charge. */
+export type AsaasPaymentRecovery = {
+  safe_to_retry: boolean;
+  stage: "customer_lookup" | "customer_create" | "payment_create" | "pix_qr_code";
+  category: "validation" | "integration" | "unknown";
+  field?: "customer_document" | "customer_name" | "customer_email" | "customer_phone" | "billing_address";
+};
+
+/** Read only our bounded recovery contract; never pass a provider body to the agent. */
+export function readAsaasPaymentRecovery(value: unknown): AsaasPaymentRecovery | null {
+  if (!value || typeof value !== "object") return null;
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.safe_to_retry !== "boolean"
+    || !["customer_lookup", "customer_create", "payment_create", "pix_qr_code"].includes(String(entry.stage))
+    || !["validation", "integration", "unknown"].includes(String(entry.category))) return null;
+  if (entry.field !== undefined && !["customer_document", "customer_name", "customer_email", "customer_phone", "billing_address"].includes(String(entry.field))) return null;
+  if (entry.field !== undefined && entry.category !== "validation") return null;
+  if (entry.stage === "pix_qr_code" && entry.safe_to_retry) return null;
+  return { safe_to_retry: entry.safe_to_retry, stage: entry.stage as AsaasPaymentRecovery["stage"],
+    category: entry.category as AsaasPaymentRecovery["category"],
+    ...(entry.field ? { field: entry.field as AsaasPaymentRecovery["field"] } : {}) };
+}
+
+export function readAsaasPixSessionRecovery(session: {
+  provider?: unknown; method?: unknown; status?: unknown; provider_status?: unknown;
+  provider_payment_id?: unknown; failure_reason?: unknown; metadata?: unknown;
+}): AsaasPaymentRecovery | null {
+  if (session.provider !== "asaas" || session.method !== "pix") return null;
+  const metadata = session.metadata && typeof session.metadata === "object" ? session.metadata as Record<string, unknown> : {};
+  const recovery = readAsaasPaymentRecovery(metadata.payment_recovery);
+  if (recovery) return recovery;
+  // Legacy evidence is deliberately exact: the document is submitted only to
+  // /customers in this Pix adapter, before /payments is called. A missing payment
+  // ID or a generic gateway_error alone cannot establish this outcome.
+  const invalidDocument = "O CPF/CNPJ informado é inválido.";
+  if (metadata.payment_recovery === undefined && session.status === "error" && session.provider_status === "gateway_error"
+    && session.provider_payment_id === null && metadata.gateway_request_inflight === true
+    && session.failure_reason === invalidDocument && metadata.gateway_error === invalidDocument) {
+    return { safe_to_retry: true, stage: "customer_create", category: "validation", field: "customer_document" };
+  }
+  return null;
+}
+
 export class AsaasPixCreationError extends Error {
-  constructor(message: string, public readonly safeToRetry: boolean, public readonly providerPaymentId: string | null = null) {
+  public readonly paymentRecovery: AsaasPaymentRecovery;
+  constructor(message: string, public readonly safeToRetry: boolean, public readonly providerPaymentId: string | null = null,
+    recovery?: Omit<AsaasPaymentRecovery, "safe_to_retry">) {
     super(message);
     this.name = "AsaasPixCreationError";
+    this.safeToRetry = safeToRetry && !providerPaymentId && recovery?.stage !== "pix_qr_code";
+    this.paymentRecovery = { safe_to_retry: this.safeToRetry, stage: recovery?.stage ?? "payment_create",
+      category: recovery?.category ?? "unknown", ...(recovery?.field ? { field: recovery.field } : {}) };
   }
 }
 
 class AsaasRequestError extends Error {
-  constructor(message: string, public readonly httpStatus: number) { super(message); }
+  constructor(message: string, public readonly httpStatus: number,
+    public readonly recovery: Pick<AsaasPaymentRecovery, "category" | "field"> = { category: "unknown" }) { super(message); }
+}
+
+function classifyAsaasRequestRecovery(status: number, body: unknown): Pick<AsaasPaymentRecovery, "category" | "field"> {
+  const category = [400, 422].includes(status) ? "validation" : [401, 403, 404].includes(status) ? "integration" : "unknown";
+  if (category !== "validation") return { category };
+  const errors = body && typeof body === "object" && "errors" in body && Array.isArray(body.errors) ? body.errors : [];
+  const fields = new Set<NonNullable<AsaasPaymentRecovery["field"]>>();
+  for (const error of errors) {
+    if (!error || typeof error !== "object") continue;
+    const code = "code" in error ? error.code : null;
+    if (code === "invalid_cpfCnpj") fields.add("customer_document");
+    // Asaas also returns invalid_object for an invalid customer field. Descriptions
+    // may contain private values: classify a known field, then discard the text.
+    if (code !== "invalid_object") continue;
+    const text = ("description" in error && typeof error.description === "string" ? error.description : "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!/\b(?:invalid[oa]|obrigatori[oa]|informe|informar)\b/.test(text)) continue;
+    if (/\b(?:cpf|cnpj)\b/.test(text)) fields.add("customer_document");
+    else if (/\be-?mail\b/.test(text)) fields.add("customer_email");
+    else if (/\b(?:telefone|celular)\b/.test(text)) fields.add("customer_phone");
+    else if (/\b(?:cep|endereco)\b/.test(text)) fields.add("billing_address");
+    else if (/\bnome\b/.test(text)) fields.add("customer_name");
+  }
+  return { category, ...(fields.size === 1 ? { field: [...fields][0] } : {}) };
+}
+
+function asaasPixRecoveryMessage(recovery: Pick<AsaasPaymentRecovery, "category" | "field">) {
+  if (recovery.category === "validation") {
+    const label = recovery.field === "customer_document" ? "o CPF ou CNPJ" : recovery.field === "customer_email" ? "o e-mail"
+      : recovery.field === "customer_name" ? "o nome completo" : recovery.field === "customer_phone" ? "o telefone"
+        : recovery.field === "billing_address" ? "o endereço com CEP" : "os dados do cadastro";
+    return `Não foi possível preparar o Pix. Confira ${label} antes de tentar novamente.`;
+  }
+  return recovery.category === "integration" ? "Não foi possível preparar o Pix. A configuração do pagamento precisa ser conferida."
+    : "Não foi possível preparar o Pix. Aguarde antes de tentar novamente.";
 }
 
 export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
@@ -593,7 +676,8 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
     notificationDisabled: true,
   }).catch((error: unknown) => {
     // Looking up/creating a customer cannot create a payment.
-    throw new AsaasPixCreationError(error instanceof Error ? error.message : "Não foi possível conferir o cadastro para gerar o Pix.", true);
+    const recovery = error instanceof AsaasRequestError ? error.recovery : { category: "unknown" as const };
+    throw new AsaasPixCreationError(asaasPixRecoveryMessage(recovery), true, null, { ...recovery, stage: "customer_create" });
   });
   const dueDate = input.dueDate ?? formatAsaasDueDate(new Date());
   const payment = await requestAsaas<AsaasPaymentResponse>({
@@ -614,7 +698,9 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
     fallbackMessage: "Nao foi possivel gerar Pix no Asaas.",
   }).catch((error: unknown) => {
     const definitive = error instanceof AsaasRequestError && [400, 401, 403, 404, 422].includes(error.httpStatus);
-    throw new AsaasPixCreationError(error instanceof Error ? error.message : "Pix em conferência. Aguarde antes de tentar novamente.", definitive);
+    const recovery = error instanceof AsaasRequestError ? error.recovery : { category: "unknown" as const };
+    throw new AsaasPixCreationError(definitive ? asaasPixRecoveryMessage(recovery) : "Pix em conferência. Aguarde antes de tentar novamente.",
+      definitive, null, { ...recovery, stage: "payment_create" });
   });
   if (!payment.id) throw new AsaasPixCreationError("Pix em conferência. Aguarde antes de tentar novamente.", false);
   const pixQrCode = payment.id
@@ -624,7 +710,8 @@ export async function createAsaasPixPayment(input: AsaasPixPaymentInput) {
         apiBaseUrl: input.apiBaseUrl,
         paymentId: payment.id,
       }).catch(() => {
-        throw new AsaasPixCreationError("O Pix foi criado, mas o código ainda está em conferência. Aguarde alguns instantes.", false, payment.id ?? null);
+        throw new AsaasPixCreationError("O Pix foi criado, mas o código ainda está em conferência. Aguarde alguns instantes.", false, payment.id ?? null,
+          { stage: "pix_qr_code", category: "unknown" });
       })
     : null;
 
@@ -905,11 +992,11 @@ async function createAsaasCustomer(input: AsaasCustomerInput) {
   const name = sanitizeAsaasText(input.name, 120);
 
   if (!name) {
-    throw new Error("Informe o nome do cliente para criar cobranca no Asaas.");
+    throw new AsaasRequestError("Informe o nome do cliente para criar cobranca no Asaas.", 400, { category: "validation", field: "customer_name" });
   }
 
   if (!cpfCnpj) {
-    throw new Error("Informe CPF ou CNPJ do cliente para criar cobranca no Asaas.");
+    throw new AsaasRequestError("Informe CPF ou CNPJ do cliente para criar cobranca no Asaas.", 400, { category: "validation", field: "customer_document" });
   }
 
   const customer = await requestAsaas<AsaasCustomerResponse>({
@@ -1014,11 +1101,11 @@ async function requestAsaas<T>(input: {
   const body = await response.json().catch(() => null) as (T & { errors?: AsaasErrorItem[]; error?: string; message?: string }) | null;
 
   if (!response.ok || !body) {
-    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status);
+    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status, classifyAsaasRequestRecovery(response.status, body));
   }
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
-    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status);
+    throw new AsaasRequestError(readAsaasErrorMessage(body) ?? input.fallbackMessage, response.status, classifyAsaasRequestRecovery(response.status, body));
   }
 
   return body as T;

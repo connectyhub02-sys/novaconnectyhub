@@ -36,7 +36,7 @@ const exposed = [
   "maybeAttachSalesCatalogCustomerBillingDetailsToOrder", "sendSalesCatalogPaymentDeferredWhatsapp",
   "buildSalesCatalogCheckoutStateLines", "resolveSalesCatalogConfirmedPaymentPreference",
   "recordSalesCatalogOrderIntent", "sendSalesCatalogPaymentLink", "isSalesCatalogPaymentLinkFollowUp",
-  "maybeSendExistingSalesCatalogCheckoutLink", "buildConfiguredNicheCareLines",
+  "maybeSendExistingSalesCatalogCheckoutLink", "maybeHandleRuntimePaymentDataRecovery", "buildConfiguredNicheCareLines",
   "prepareSalesCatalogDeliveryText", "hasSalesCatalogOrderIntent", "hasSalesCatalogCheckoutConfirmationIntent",
   "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction",
   "resolveRuntimeAgentPrompt", "sendEmojiReaction",
@@ -72,6 +72,8 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
       return globals.fetch(url, init);
     } },
     "@/lib/sales-catalog/payment-evidence": paymentEvidence,
+    "@/lib/sales-catalog/asaas": serverModuleHarness("src/lib/sales-catalog/asaas.ts"),
+    "@/lib/account/signup-completion": serverModuleHarness("src/lib/account/signup-completion.ts"),
     "@/lib/sales-catalog/payment-reviews": serverModuleHarness("src/lib/sales-catalog/payment-reviews.ts"),
     "@/lib/sales-catalog/checkout-customer": customer,
     "node:crypto": require("node:crypto"),

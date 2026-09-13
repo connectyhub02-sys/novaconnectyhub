@@ -20,6 +20,17 @@ const context = (messages: ReturnType<typeof message>[]) => ({
   lead: { id: "lead", display_name: null as string | null, metadata: {} as Record<string, unknown> },
 });
 
+// These method-selection cases have an unopened checkout, with no card attempt
+// or financial review. The recovery suite exercises the real snapshot loader.
+const unopenedCheckout = (db: ReturnType<typeof commerceDatabase>, amount: number) => ({
+  loadTransparentCheckout: vi.fn(async (_client: unknown, sessionId: string) => ({
+    session: db.tables.sales_catalog_payment_sessions.find(row => row.id === sessionId),
+    order: { id: "order", organization_id: "store", lead_id: "lead", conversation_id: "conversation",
+      status: "pending_payment", payment_status: "pending", checkout_revision: 0, checkout_payment_lock: null },
+    amount, attempt: null, review: false, enabled: true,
+  })),
+});
+
 describe("WhatsApp commerce regression: real runtime decisions", () => {
   it("saves the card billing address even for a service without physical delivery", async () => {
     const latest = message("inbound", "Rua Exemplo, número 61, Centro, Florianópolis, CEP 88000-000", 2);
@@ -74,7 +85,8 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     });
     const createPayment = vi.fn(async () => ({ session: { provider: "asaas", amount: "573,80" }, checkoutUrl: "https://loja.example/checkout/new", trackingUrl: "https://loja.example/r/tracked", pixQrCode: preferredMethod === "pix" ? "test-pix" : null }));
     const requests: Record<string, unknown>[] = [];
-    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment } }, { fetch: async (_url: string, init: { body: string }) => {
+    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
+      "@/lib/sales-catalog/transparent-checkout": unopenedCheckout(db, 573.8) }, { fetch: async (_url: string, init: { body: string }) => {
       requests.push(JSON.parse(init.body));
       return { ok: true, status: 200, text: async () => JSON.stringify({ id: "delivery" }) };
     } });
@@ -114,7 +126,8 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     });
     const createPayment = vi.fn(async () => ({ session: { provider: "asaas", amount: "52,80" }, checkoutUrl: "https://loja.example/checkout/updated", pixQrCode: preferredMethod === "pix" ? "pix-atual" : null }));
     const requests: Record<string, unknown>[] = [];
-    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment } }, { fetch: async (_url: string, init: { body: string }) => {
+    const call = runtimeHarness({ "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
+      "@/lib/sales-catalog/transparent-checkout": unopenedCheckout(db, 52.8) }, { fetch: async (_url: string, init: { body: string }) => {
       requests.push(JSON.parse(init.body));
       return { ok: true, status: 200, text: async () => JSON.stringify({ id: "fake-delivery" }) };
     } });

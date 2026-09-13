@@ -3,7 +3,7 @@ import { campaignPriceNotice, type CampaignPricing } from "@/lib/commerce/campai
 import "server-only";
 import { resolveConversationSender } from "@/lib/whatsapp/conversation-sender";
 import { assertContractAccess, getContractAccess } from "@/lib/billing/contract-access";
-import { paymentOutcomeCopy } from "./payment-diagnostics";
+import { paymentOutcomeCopy, type PaymentDiagnostic } from "./payment-diagnostics";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -105,6 +105,7 @@ export async function handleSalesCatalogPaymentStatusChange(input: {
   paymentMethod?: string | null;
   paymentMethodLabel: string;
   status: SalesCatalogPaymentStatus;
+  diagnostic?: PaymentDiagnostic | null;
   source: SalesCatalogPostPaymentSource;
 }) {
   if (input.status === "approved") {
@@ -128,6 +129,7 @@ export async function handleSalesCatalogPaymentStatusChange(input: {
     paymentMethod: input.paymentMethod,
     paymentMethodLabel: input.paymentMethodLabel,
     status: notificationStatus,
+    diagnostic: input.diagnostic,
     source: input.source,
   });
   const responsibleNotified = await maybeNotifyResponsiblePaymentStatus({
@@ -700,6 +702,7 @@ async function maybeNotifyPaymentStatus(input: {
   paymentMethod?: string | null;
   paymentMethodLabel: string;
   status: SalesCatalogPaymentNotificationStatus;
+  diagnostic?: PaymentDiagnostic | null;
   source: string;
 }) {
   if (!(await getContractAccess(input.order.organization_id, input.client)).allowed) return false;
@@ -751,6 +754,7 @@ async function maybeNotifyPaymentStatus(input: {
     items: input.items,
     paymentMethod: input.paymentMethodLabel,
     status: input.status,
+    diagnostic: input.diagnostic,
     template: getPaymentStatusTemplate(settings?.messageTemplates ?? null, input.status),
   });
   const credentials = await loadUazapiCredentials(input.client);
@@ -1112,6 +1116,7 @@ function buildPaymentStatusMessage(input: {
   items: OrderItemRow[];
   paymentMethod: string;
   status: SalesCatalogPaymentNotificationStatus;
+  diagnostic?: PaymentDiagnostic | null;
   template: string | null;
 }) {
   const itemSummary = summarizeItemsForMessage(input.items);
@@ -1131,7 +1136,7 @@ function buildPaymentStatusMessage(input: {
 
   // Historical templates may assert that no debit occurred. Only verified facts belong here.
   if (["error", "rejected", "cancelled", "expired"].includes(input.status)) {
-    return `${variables.cliente}, sobre o pedido ${variables.pedido}: ${paymentOutcomeCopy(input.status)}`;
+    return `${variables.cliente}, sobre o pedido ${variables.pedido}: ${paymentOutcomeCopy(input.status, input.diagnostic)}`;
   }
 
   if (template) {

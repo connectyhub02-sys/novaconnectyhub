@@ -55,6 +55,13 @@ export function isEditableCheckoutOrder(order: CheckoutJourneyOrder) {
     && order.fulfillmentStatus !== "fulfilled";
 }
 
+/** A failed payment can be resumed, but is not consent to edit the cart or retry a charge. */
+export function isPaymentRecoverableCheckoutOrder(order: CheckoutJourneyOrder) {
+  return (order.status === "draft" || order.status === "pending_payment")
+    && (order.paymentStatus === "pending" || order.paymentStatus === "failed")
+    && order.fulfillmentStatus !== "fulfilled";
+}
+
 function isPaymentResumeIntent(normalized: string) {
   if (/\b(?:juros|taxa|desconto|parcelas|parcelamento|amanha|depois|mais tarde)\b/.test(normalized)) return false;
   if (/\b(?:ja paguei|paguei|foi pago|pagamento confirmado|comprovante)\b/.test(normalized)) return false;
@@ -126,10 +133,12 @@ export function classifyCheckoutJourney<T extends CheckoutJourneyOrder>(input: {
   }
   if (input.activeOrderId) {
     if (!active) return result(kind, null, "active_order_unavailable");
-    if (kind !== "history" && !isEditableCheckoutOrder(active)) return result(kind, null, "order_not_editable");
+    if (kind !== "history" && !(kind === "payment_resume" ? isPaymentRecoverableCheckoutOrder(active) : isEditableCheckoutOrder(active))) return result(kind, null, "order_not_editable");
     return result(kind, active, kind === "history" ? "order_history" : kind === "revision" ? "order_change" : "payment_request");
   }
-  const candidates = kind === "history" ? scoped : editable;
+  const candidates = kind === "history" ? scoped : kind === "payment_resume"
+    ? scoped.filter(order => isPaymentRecoverableCheckoutOrder(order)
+      && (!Number.isFinite(startedAt) || Date.parse(order.createdAt ?? "") >= startedAt || order.id === input.activeOrderId)) : editable;
   if (candidates.length !== 1) return result(kind, null,
     candidates.length > 1 ? "order_selection_required" : scoped.length ? "order_not_editable" : "order_not_found", candidates.length > 1);
   const order = candidates[0];

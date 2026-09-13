@@ -19,6 +19,11 @@ export function classifyAsaasFailure(status: number | null, endpoint: string, me
 export function paymentOutcomeCopy(status: string, diagnostic?: Partial<PaymentDiagnostic> | null) {
   if (status === "approved") return "Pagamento confirmado!";
   if (status === "rejected") return "Essa tentativa não foi autorizada. O motivo específico não foi informado. Confira com seu banco ou escolha outro cartão ou Pix.";
+  if (status === "error" && diagnostic?.category === "validation" && ["customer_lookup", "customer_create"].includes(diagnostic.stage ?? "")) {
+    return diagnostic.code === "invalid_cpfCnpj"
+      ? "Não foi possível preparar o pagamento porque o CPF/CNPJ do pagador precisa ser corrigido. Envie o documento correto por aqui para continuarmos com o mesmo pedido."
+      : "Não foi possível preparar o pagamento porque os dados do pagador precisam ser conferidos. Podemos corrigir o cadastro por aqui e continuar com o mesmo pedido.";
+  }
   if (status === "error") return diagnostic?.category === "validation"
     ? "Não foi possível concluir o pagamento. Confira os dados do pagador e do cartão antes de tentar novamente."
     : "Não foi possível concluir essa tentativa. O motivo não foi confirmado; isso não significa falta de saldo ou limite. Se apareceu um débito no seu banco, peça ajuda à equipe antes de tentar novamente.";

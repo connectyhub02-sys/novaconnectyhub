@@ -27,6 +27,7 @@ import {
   loadPagBankPlatformBillingConfig,
 } from "./pagbank";
 import {
+  AsaasPixCreationError,
   createAsaasPixPayment,
   ensureAsaasAccessToken,
   extractAsaasPaymentData,
@@ -68,6 +69,7 @@ type OrderRow = {
   shipping_total: string | null;
   shipping_method: string | null;
   total: string | null;
+  checkout_revision?: number | null;
   metadata: JsonRecord | null;
 };
 
@@ -110,7 +112,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
   await assertContractAccess(input.organizationId, input.client);
   const { data: orderRow, error: orderError } = await input.client
     .from("sales_catalog_orders")
-    .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, metadata")
+    .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, checkout_revision, metadata")
     .eq("id", input.orderId)
     .eq("organization_id", input.organizationId)
     .maybeSingle<OrderRow>();
@@ -347,6 +349,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         payment_gateway_label: paymentProviderLabel,
         payment_gateway_mode: connectyHubOwned ? platformBilling?.mode ?? null : getPaymentIntegrationMode(integration),
         preferred_payment_method: preferredMethod,
+        checkout_revision: Number(order.checkout_revision ?? 0),
         pagbank_settings: pagBankSettings ? serializePagBankSessionSettings(pagBankSettings) : null,
         asaas_settings: asaasSettings ? serializeAsaasSessionSettings(asaasSettings) : null,
         commercial_flow_type: paymentOwner.commercialFlowType,
@@ -822,13 +825,19 @@ export async function createSalesCatalogPixPaymentSession(input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : `Erro ao gerar ${paymentMethodLabel}.`;
+    const pixError = paymentProvider === "asaas" && error instanceof AsaasPixCreationError ? error : null;
+    const paymentRecovery = pixError?.paymentRecovery ?? null;
+    // A reservation starts before customer creation. A known failure in that
+    // stage cannot have created a charge; a payment/QR timeout still can.
+    const gatewayRequestInflight = gatewayRequestStarted && pixError?.safeToRetry !== true;
 
-    const { data: failed } = await input.client
+    const { data: failed, error: failureSaveError } = await input.client
       .from("sales_catalog_payment_sessions")
       .update({
         status: "error",
         failure_reason: message,
         provider_status: "gateway_error",
+        ...(pixError?.providerPaymentId ? { provider_payment_id: pixError.providerPaymentId } : {}),
         metadata: buildPaymentSessionMetadata({
           sessionMetadata: inserted.metadata,
           checkoutTracking,
@@ -837,13 +846,18 @@ export async function createSalesCatalogPixPaymentSession(input: {
           paymentProvider,
           gatewayAvailable: false,
           gatewayError: message,
-          extra: { gateway_request_inflight: gatewayRequestStarted },
+          extra: { gateway_request_inflight: gatewayRequestInflight,
+            ...(paymentRecovery ? { payment_recovery: paymentRecovery } : {}) },
         }),
       })
       .eq("id", sessionId)
       .eq("organization_id", input.organizationId)
       .select(paymentSessionSelect)
       .maybeSingle<SalesCatalogPaymentSessionRow>();
+
+    if (failureSaveError || !failed) {
+      throw new Error("Não foi possível registrar o resultado da tentativa de Pix. Confira a tentativa existente antes de continuar.");
+    }
 
     await persistCheckoutOrderReference({
       client: input.client,
@@ -859,6 +873,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       paymentStatus: "pending",
       orderStatus: "pending_payment",
       failureReason: message,
+      providerPaymentId: pixError?.providerPaymentId ?? null,
     });
 
     await input.client.from("intelligence_events").insert({
@@ -897,7 +912,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
     });
 
     return {
-      session: mapSalesCatalogPaymentSession(failed ?? inserted),
+      session: mapSalesCatalogPaymentSession(failed),
       checkoutUrl,
       trackingUrl: checkoutTracking?.trackingUrl ?? null,
       trackingLinkId: checkoutTracking?.id ?? null,
@@ -907,6 +922,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       gatewayUnavailable: true,
       paymentDeferred: false,
       paymentDeferredReason: null,
+      paymentRecovery,
     };
   }
 }
@@ -994,6 +1010,7 @@ async function createDeferredSalesCatalogCheckoutSession(input: {
         payment_deferred_reason: input.reason,
         payment_deferred_label: input.reasonLabel,
         preferred_payment_method: input.preferredMethod,
+        checkout_revision: Number(input.order.checkout_revision ?? 0),
       },
       created_at: now,
       updated_at: now,

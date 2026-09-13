@@ -46,8 +46,9 @@ export async function loadTransparentCheckout(client: SupabaseClient, sessionId:
     name: order.customer_name ?? "", email: order.customer_email ?? "", cpfCnpj: order.customer_document ?? "",
     phone: order.customer_phone ?? "", postalCode: order.destination_cep ?? "", addressNumber: parseCheckoutAddress(order.destination_address).addressNumber ?? "",
   } satisfies CheckoutCardHolder;
-  const { data: attempts } = await client.from("sales_catalog_card_attempts").select("id, organization_id, order_id, source_session_id, payment_session_id, amount, revision, installments, state, updated_at")
+  const { data: attempts, error: attemptsError } = await client.from("sales_catalog_card_attempts").select("id, organization_id, order_id, source_session_id, payment_session_id, amount, revision, installments, state, updated_at, diagnostic")
     .eq("order_id", order.id).eq("organization_id", session.organization_id).order("created_at", { ascending: false }).limit(1);
+  if (attemptsError) throw new CheckoutError("Não foi possível conferir a tentativa anterior. Atualize a página.", 503);
   const attempt = (attempts?.[0] ?? null) as Attempt | null;
   const reviewResult = order.lead_id ? await client.from("sales_catalog_payment_reviews").select("id").eq("organization_id", session.organization_id).eq("lead_id", order.lead_id).neq("status", "resolved").or(`order_id.eq.${order.id},order_id.is.null`).limit(1) : { data: [], error: null };
   if (reviewResult.error) throw new CheckoutError("Não foi possível conferir o pagamento. Atualize a página.", 503);
@@ -229,7 +230,7 @@ async function processTransparentPaymentEffects(client: SupabaseClient, attemptI
     if (inventoryError) throw new CheckoutError("Pagamento registrado; conferindo o estoque do pedido.", 503);
   }
   const { data: session } = await client.from("sales_catalog_payment_sessions").select("provider_payment_id").eq("id", attempt.payment_session_id).single();
-  await handleSalesCatalogPaymentStatusChange({ client, organizationId: attempt.organization_id, orderId: attempt.order_id, paymentSessionId: attempt.payment_session_id, providerPaymentId: session?.provider_payment_id ?? null, paymentMethod: "card", paymentMethodLabel: "Cartão de crédito", status: attempt.state === "unknown" ? "pending" : attempt.state, source: "checkout_card" });
+  await handleSalesCatalogPaymentStatusChange({ client, organizationId: attempt.organization_id, orderId: attempt.order_id, paymentSessionId: attempt.payment_session_id, providerPaymentId: session?.provider_payment_id ?? null, paymentMethod: "card", paymentMethodLabel: "Cartão de crédito", status: attempt.state === "unknown" ? "pending" : attempt.state, diagnostic: attempt.diagnostic, source: "checkout_card" });
   const { error: saveError } = await client.from("sales_catalog_card_attempts").update({ effects_completed_state: attempt.state, effects_claimed_at: null }).eq("id", attemptId).eq("state", attempt.state).eq("effects_claimed_at", attempt.effects_claimed_at);
   if (saveError) throw new CheckoutError("Confirmação em processamento.", 503);
 }

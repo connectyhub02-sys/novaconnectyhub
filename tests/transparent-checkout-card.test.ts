@@ -61,6 +61,31 @@ describe("transparent card boundaries", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][1].method).toBe("GET");
   });
+  it("reports a rejected customer registration separately and never reaches the charge endpoint", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ code: "invalid_object", description: "Documento inválido: dado privado do teste" }] }), { status: 400 }));
+    const adapter = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas-direct")>("src/lib/sales-catalog/asaas-direct.ts", { "./payment-diagnostics": diagnostics }, [], { fetch });
+    await expect(adapter.createAsaasDirectCardPayment({ accessToken: "test", mode: "sandbox", amount: 100, card, holder, installments: 1, remoteIp: "203.0.113.10", externalReference: "test" })).rejects.toMatchObject({
+      definitive: true, declined: false,
+      diagnostic: { stage: "customer_create", category: "validation", code: "invalid_object", httpStatus: 400 },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.map(call => new URL(String(call[0])).pathname)).toEqual(["/v3/customers", "/v3/customers"]);
+  });
+  it("recognizes a definitive card refusal after the charge request without inventing the bank reason", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "cus_test" }] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ code: "invalid_creditCard", description: "Motivo privado do emissor" }] }), { status: 400 }));
+    const adapter = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas-direct")>("src/lib/sales-catalog/asaas-direct.ts", { "./payment-diagnostics": diagnostics }, [], { fetch });
+    await expect(adapter.createAsaasDirectCardPayment({ accessToken: "test", mode: "sandbox", amount: 100, card, holder, installments: 1, remoteIp: "203.0.113.10", externalReference: "test" })).rejects.toMatchObject({
+      definitive: true, declined: true,
+      diagnostic: { stage: "payment_create", category: "declined", code: "invalid_creditCard", httpStatus: 400 },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1][0]).toBe("https://api-sandbox.asaas.com/v3/payments");
+    expect(diagnostics.paymentOutcomeCopy("rejected")).not.toContain("Motivo privado");
+  });
   it("does not cancel a previous payment that the gateway already confirmed", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "pay_previous", status: "CONFIRMED" })));
     const adapter = serverModuleHarness<typeof import("../src/lib/sales-catalog/asaas-direct")>("src/lib/sales-catalog/asaas-direct.ts", { "./payment-diagnostics": diagnostics }, [], { fetch });
