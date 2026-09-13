@@ -110,9 +110,16 @@ export function findLeadNameEvidence(messages: IdentityMessage[]) {
     if (message.direction !== "inbound") continue;
     const text = (message.text_content ?? "").trim();
     const declared = text.match(/^(?:(?:oi|ol[aá]|bom dia|boa tarde|boa noite)[,! .]+)?(?:meu nome(?: completo)?\s*(?:[ée]|eh|:)\s*|(?:eu )?me chamo\s+|pode me chamar de\s+)([\p{L}][\p{L} '\u2019-]{1,79})(?=[,.;!\n]|$)/iu)?.[1];
-    const previous = messages[index - 1];
-    const askedName = previous?.direction === "outbound"
-      && /(?:qual (?:[ée] )?(?:o )?seu nome|como (?:posso|podemos|voc[eê] prefere que eu) (?:te |lhe |o |a )?chamar|(?:me (?:diga|informe)|preciso d[eo]) (?:o )?seu nome)/i.test(previous.text_content ?? "");
+    // A single response can be split across several outbound bubbles. Never cross
+    // another inbound reply: a name request answered or declined is no longer current.
+    const requestParts: string[] = [];
+    for (let prior = index - 1; prior >= 0 && requestParts.length < 8; prior--) {
+      if (messages[prior].direction !== "outbound") break;
+      requestParts.unshift(messages[prior].text_content ?? "");
+    }
+    const request = normalizeSearchText(requestParts.join(" "));
+    const askedName = /\b(?:qual (?:e )?(?:o )?seu nome|como (?:posso|podemos|voce prefere que eu) (?:te |lhe |o |a )?chamar|(?:me (?:diga|informe)|preciso d[eo]) (?:o )?seu nome)\b/.test(request)
+      || /\bpara liberar o pagamento\b.{0,40}\bfaltam?\s+(?:o |seu )?nome completo\b/.test(request);
     const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '\u2019-]{1,79}[.!]?$/u.test(text) ? text.replace(/[.!]$/, "") : null));
     if (candidate && isLikelyPersonalLeadName(candidate)
       && !/\b(?:ele|ela|voce|você|aqui|quero|procuro|falando|corretor|dentista|sou|prefiro|informar|dizer|passar|nao|não|depois)\b/i.test(candidate)) {

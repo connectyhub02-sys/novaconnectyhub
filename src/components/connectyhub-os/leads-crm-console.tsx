@@ -1,6 +1,7 @@
 "use client";
 import { LeadFinancialArchive } from "./lead-financial-archive";
 import { LeadReturnsPanel } from "./lead-returns-panel";
+import { ResetLeadDialog } from "./reset-lead-dialog";
 
 import { useAvailablePaneHeight } from "@/hooks/use-available-pane-height";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -1018,6 +1019,8 @@ function AttendanceCenterView({
   const router = useRouter();
   const paneRef = useAvailablePaneHeight();
   const [mobileBagOpen, setMobileBagOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [resetLeadIds, setResetLeadIds] = useState<Set<string>>(() => new Set());
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [manualReply, setManualReply] = useState("");
   const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
@@ -1045,7 +1048,7 @@ function AttendanceCenterView({
   const notificationSeeded = useRef(false);
   const syncedPushContextKeys = useRef(new Set<string>());
 
-  const attendanceThreads = useMemo(() => buildAttendanceThreads(filteredLeads), [filteredLeads]);
+  const attendanceThreads = useMemo(() => buildAttendanceThreads(filteredLeads.filter((lead) => !resetLeadIds.has(lead.id))), [filteredLeads, resetLeadIds]);
   const queueFilters = useMemo(
     () => buildAttendanceQueueFilters(workspace.attendanceQueues, attendanceThreads),
     [attendanceThreads, workspace.attendanceQueues],
@@ -1696,6 +1699,22 @@ function AttendanceCenterView({
 
   return (
     <div className="space-y-3" onPointerDown={primeAttendanceSoundFromUserGesture}>
+      {resetTarget && <ResetLeadDialog leadId={resetTarget.id} name={resetTarget.name} panelScope={conversationPanelScope}
+        onClose={() => setResetTarget(null)} onDeleted={(leadIds) => {
+          setResetLeadIds((current) => new Set([...current, ...leadIds]));
+          setSelectedThreadKey(null); setSelectedLeadId(""); setConversationPane("inbox");
+          const removedKeys = new Set(leadIds);
+          for (const thread of attendanceThreads) {
+            if (!removedKeys.has(thread.lead.id)) continue;
+            removedKeys.add(thread.key);
+            if (thread.conversationId) removedKeys.add(thread.conversationId);
+          }
+          setManualReply("");
+          setLeadCarts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedKeys.has(key))));
+          setManualMessages((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedKeys.has(key))));
+          setHandoffOverrides((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedKeys.has(key))));
+          setHandoffNotice(null); router.refresh();
+        }} />}
       <div
         className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
         style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
@@ -1883,6 +1902,10 @@ function AttendanceCenterView({
                     >
                       <FileText className="h-4 w-4" />
                       CRM do lead
+                    </button>
+                    <button type="button" onClick={() => setResetTarget({ id: activeLead.id, name: activeLead.name })}
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50">
+                      <RotateCcw className="h-4 w-4" /> Resetar lead
                     </button>
                     <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 xl:hidden" onClick={() => setMobileBagOpen(true)}>
                       {commerceEnabled ? "Sacola / pedido" : "Conta do cliente"}

@@ -9,6 +9,23 @@ const msg = (direction: string, text_content: string, id = "latest") => ({ id, d
 const legacy = { person_name: "Renata Macedo", name: "Renata Macedo", lead_memory: { personName: "Renata Macedo", source: "whatsapp_agent_memory" } };
 
 describe("shared lead identification", () => {
+  it.each([
+    "Para liberar o pagamento, falta nome completo.",
+    "Para liberar o pagamento, faltam nome completo e e-mail.",
+    "Me informe seu nome completo para concluir.",
+  ])("captures the name requested by checkout: %s", async prompt => {
+    const latest = msg("inbound", "Carlos Almeida Santos");
+    const messages = [msg("outbound", prompt, "question"), latest];
+    expect(findLeadNameEvidence(messages)).toMatchObject({ name: "Carlos Almeida Santos", messageId: "latest" });
+    const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "org", metadata: {} }] });
+    const context = { lead: { id: "lead", display_name: null, metadata: {} }, agent: { name: "Atendimento" }, organization: { id: "org" }, messages, salesCatalog: [], salesCatalogOrders: [], behavior: { leadMemory: false } };
+    await runtimeHarness()("maybePersistSalesCatalogLeadContactDetailsFromMessage", { client: db.client, context, userText: latest.text_content });
+    expect(db.tables.leads[0].metadata).toMatchObject({ person_name: "Carlos Almeida Santos", lead_name_evidence: { source: "lead_message" } });
+  });
+  it("recognizes a name request split into outbound bubbles without using a stale request", () => {
+    expect(findLeadNameEvidence([msg("outbound", "Para liberar o pagamento, falta nome completo.", "question"), msg("outbound", "Depois preparo o acesso ao pagamento.", "explanation"), msg("inbound", "Carlos Almeida Santos")])?.name).toBe("Carlos Almeida Santos");
+    expect(findLeadNameEvidence([msg("outbound", "Qual seu nome?", "question"), msg("inbound", "Não quero informar", "refusal"), msg("outbound", "Qual produto você quer?", "product"), msg("inbound", "Caderno Azul")])).toBeNull();
+  });
   it.each([null, "Magno Gomes"])("only attempts to reserve after identification: %s", async leadName => {
     const start = "2099-01-02T12:00:00Z";
     const db = commerceDatabase({ customer_agenda_settings: [{ organization_id: "org", enabled: true }], customer_agenda_offers: [{ organization_id: "org", conversation_id: "conversation", lead_id: "lead", resource_id: "resource", expires_at: "2099-01-01T00:00:00Z", slots: [{ starts_at: start, ends_at: "2099-01-02T13:00:00Z" }], party_size: 1 }] });

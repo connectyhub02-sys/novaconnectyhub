@@ -1462,6 +1462,9 @@ async function assertRunStillTargetsLatestInbound(
 ) {
   const latestInbound = await loadLatestInboundMessage(client, context.conversationId);
 
+  if (activeInbound && !latestInbound) {
+    throw new StaleWhatsappRunError(null);
+  }
   if (isNewerInboundMessage(activeInbound, latestInbound)) {
     throw new StaleWhatsappRunError(latestInbound);
   }
@@ -6790,7 +6793,11 @@ function buildGeminiContents(
   activeInboundMessageId: string | null = null,
   activeInboundText: string | null = null,
 ) {
-  const contents = messages
+  const activeIndex = activeInboundMessageId
+    ? messages.findIndex((message) => message.id === activeInboundMessageId && message.direction === "inbound")
+    : -1;
+  const history = activeIndex >= 0 ? messages.slice(0, activeIndex + 1) : messages;
+  const contents = history
     .map((message) => {
       const text = buildMessageText(message, { activeInboundMessageId, activeInboundText });
       if (!text) return null;
@@ -6802,10 +6809,10 @@ function buildGeminiContents(
     })
     .filter(Boolean);
 
-  if (contents.length === 0) {
+  if (contents.length === 0 || contents.at(-1)?.role === "model" || (activeInboundMessageId && activeIndex < 0)) {
     contents.push({
       role: "user",
-      parts: [{ text: fallbackUserText || "O lead iniciou uma conversa no WhatsApp." }],
+      parts: [{ text: activeInboundText?.trim() || fallbackUserText || "O lead iniciou uma conversa no WhatsApp." }],
     });
   }
 
@@ -11091,10 +11098,10 @@ function guardUnexecutedCheckoutClaim(text: string, context: NonNullable<Awaited
     || (/\b(?:pix|pagamento|pagar|checkout)\b/.test(normalized)
       && /\b(?:botao|codigo|link|pix|qr code)\b.{0,45}\b(?:esta|ta|ficou|fica|segue)\b.{0,30}\b(?:acima|abaixo|em cima|aqui|ali)\b/.test(normalized))
     || /\b(?:liberando|liberei|enviando|segue|aqui esta|ta aqui|ta na mao)\b.{0,80}\b(?:botao|pix|qr code|checkout)\b/.test(normalized)
-    || /\b(?:clicar|clique|clica|copiar|copie|escaneie)\b.{0,60}\b(?:botao|codigo|qr code|link)\b.{0,80}\b(?:abaixo|acima|pix|pagar|pagamento)\b/.test(normalized);
+    || /\b(?:clicar|clique|clica|acessar|acesse|abrir|copiar|copie|escaneie)\b.{0,60}\b(?:botao|codigo|qr code|link)\b.{0,80}\b(?:abaixo|acima|pix|pagar|pagamento)\b/.test(normalized);
   const claimsNewOrder = /\bpedido\b.{0,30}\b(?:fechado|registrado|criado)\b.{0,20}\bsucesso\b/.test(normalized);
   if (!claimsPayment && !claimsNewOrder) return null;
-  return "Ainda preciso concluir a etapa de pagamento no sistema. Não tenho confirmação de envio do Pix nesta tentativa. Vamos retomar o pedido para disponibilizar o pagamento?";
+  return "Ainda preciso concluir a etapa de pagamento no sistema. Não tenho confirmação de envio do link ou código de pagamento nesta tentativa. Vamos retomar o pedido para disponibilizar o pagamento?";
 }
 
 function normalizeRuntimeCheckoutIntent(text: string) {

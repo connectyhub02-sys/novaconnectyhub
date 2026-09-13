@@ -108,6 +108,21 @@ export async function ingestUazapiWebhook(input: {
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
   const message = extractMessageSnapshot(payload);
   const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
+  if (instance && message.phoneNumber && !message.isGroupChat) {
+    const resetStatus = await client.rpc("lead_reset_message_status", {
+      p_organization_id: instance.organization_id,
+      p_phone: message.phoneNumber,
+      p_occurred_at: message.providerOccurredAt,
+      p_inbound: message.direction === "inbound",
+    });
+    if (resetStatus.error) throw new Error("Não foi possível conferir o reset deste contato.");
+    if (resetStatus.data === "pending") throw new Error("Reset do contato aguardando remoção dos arquivos.");
+    if (resetStatus.data === "old") return {
+      eventId: null, eventType, duplicate: true, organizationId: instance.organization_id,
+      whatsappInstanceId: instance.id, leadId: null, conversationId: null,
+      messageId: null, agentRunId: null, status: "duplicate",
+    };
+  }
   if (instance && message.direction === "outbound" && isConversationMessageWebhookEvent(eventType)) {
     const current = findMessageRecord(payload) ?? payload;
     const track = findString(current, ["track_id", "trackId"]) ?? findString(readRecord(current.content) ?? {}, ["track_id", "trackId"]);
@@ -1474,6 +1489,7 @@ type MessageSnapshot = {
   messageType: string | null;
   textContent: string | null;
   occurredAt: string;
+  providerOccurredAt: string | null;
 };
 
 function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
@@ -1513,6 +1529,7 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     messageType,
     textContent,
     occurredAt,
+    providerOccurredAt: parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]), "") || null,
   };
 }
 
@@ -2160,7 +2177,7 @@ function findUnknown(record: JsonRecord, keys: string[]) {
   return null;
 }
 
-function parseOccurredAt(value: unknown) {
+function parseOccurredAt(value: unknown, fallback = new Date().toISOString()) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return new Date(value < 10_000_000_000 ? value * 1000 : value).toISOString();
   }
@@ -2179,7 +2196,7 @@ function parseOccurredAt(value: unknown) {
     }
   }
 
-  return new Date().toISOString();
+  return fallback;
 }
 
 function normalizePhone(value: string | null) {

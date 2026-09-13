@@ -2,6 +2,14 @@
 
 Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
+## Atendimento, checkout e reset integral — 13/09/2026
+
+Implementação autorizada pelo titular, incluindo envio à master e exclusão integral somente do seu contato de teste e cópias arquivadas na mesma empresa. Preservadas as correções existentes em `44e22ad` para negação financeira, cortesia e continuidade do pedido. Novas correções compartilhadas: captura do nome solicitado pelo próprio checkout, bloqueio de promessa de link sem ação e limite do histórico no inbound atual para evitar a rejeição do Gemini por turno final do modelo.
+
+Migration `0134_lead_reset` aplicada na VPS pelo Supabase administrativo. Funções locais/remotas conferidas por hash normalizado. Prévia real em 1,7s; exclusão integral simulada em 6,57s com rollback. Marcadores privados por transação evitam re-arquivamento durante reset, sem desativar gatilhos dos demais atendimentos. API/modal implementados com escopo da empresa, confirmação explícita, tratamento de arquivos pendentes e proteção contra recriação por eventos antigos. O contato de teste reúne oito cópias, nove conversas e 81 arquivos; nenhuma limpeza definitiva até este registro.
+
+Passaram 2.529 testes em 191 arquivos, TypeScript e ESLint. **Pendentes nesta atualização:** envio/implantação da aplicação, conferência visual publicada, limpeza definitiva e verificação dos objetos; novo contato/checkout reais com o titular. O reset não cancela nem estorna transações externas. [Auditoria](auditoria-reset-lead-2026-09-13.md) e [plano](plano-correcao-atendimento-checkout-reset-2026-09-13.md).
+
 ## Controle explícito de ativação da agenda — 12/09/2026
 
 Refinamento solicitado pelo titular após a publicação conjunta: agenda desativada deve mostrar apenas a tela de ativação e não pode habilitar Agendamento em um produto, expor seleção pública de datas ou permitir promessas/operações de agenda pelo agente. Implementada política compartilhada por empresa no cadastro, importação, loja, página do produto e APIs; configurações existentes e edições não relacionadas são preservadas. Ativação explícita vazia permite configurar os atendimentos depois, sem criar disponibilidade fictícia. A página ativa coloca o calendário em destaque e separa **Criar compromisso** de **Atendimentos e horários**; o fuso permanece manual, com nomes claros e sem alterar valores reais. [Detalhes, cobertura e limites](correcao-ativacao-agenda-2026-09-12.md).

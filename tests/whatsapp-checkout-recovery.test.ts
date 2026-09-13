@@ -31,6 +31,9 @@ const context = (reply = "sim") => ({
 const selections = [{ item: product, quantity: 1, source: "confirmation_preview", mentionText: "1x Kit de escritório" }];
 
 describe("checkout continuation without repeating confirmed steps", () => {
+  it("blocks the exact form of a payment promise with no delivered access", () => {
+    expect(runtimeHarness()("guardUnexecutedCheckoutClaim", "Para realizar o pagamento no cartão de crédito de forma segura, basta acessar o link abaixo:", context())).toBeTruthy();
+  });
   it("persists address consent across truncated history and invalidates changed destinations", async () => {
     const call = runtimeHarness(), ctx = context();
     const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "store", metadata: ctx.lead.metadata }] });

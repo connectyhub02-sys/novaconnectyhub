@@ -46,7 +46,7 @@ it("respects cancellation of a processing reminder before the delivery claim",as
 
 it("records exit even on duplicate webhooks, scoped to the sending lead and independent of an agent",async()=>{
   const base=commerceDatabase({leads:[{id:"lead",organization_id:"org",phone_number:"5511999999999"},{id:"other",organization_id:"foreign",phone_number:"5511999999999"}],whatsapp_instances:[{id:"instance",organization_id:"org",provider_instance_id:"provider",provider:"uazapi",status:"connected"}],whatsapp_webhook_events:[{id:"event",provider:"uazapi",provider_message_id:"reply"}]});
-  const client={from:(table:string)=>{
+  const client={rpc:async()=>({data:"allowed",error:null}),from:(table:string)=>{
     const q=base.client.from(table);
     if(table==="whatsapp_webhook_events")q.insert=()=>({select:()=>({single:async()=>({error:{code:"23505"},data:null})})}) as never;
     return q;

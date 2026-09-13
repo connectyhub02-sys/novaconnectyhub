@@ -71,6 +71,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { reconcilePendingTransparentCheckouts } from "@/lib/sales-catalog/transparent-checkout";
 import { archiveLeadMediaBatch } from "@/lib/leads/message-archive";
+import { retryLeadResetAssets } from "@/lib/leads/reset";
 import { recoverPaymentReviewNotifications } from "@/lib/sales-catalog/payment-reviews";
 import { sendResolvedPaymentReviewNotices } from "@/lib/sales-catalog/payment-review-resolution";
 import { reconcilePendingNativeBilling } from "@/lib/billing/native-card-checkout";
@@ -773,7 +774,11 @@ export const connectyhubTransparentCheckoutReconciliation = inngest.createFuncti
 
 export const connectyhubLeadMediaArchive = inngest.createFunction(
   { id: "connectyhub-lead-media-archive", name: "ConnectyHub Lead Message Archive", retries: 2, concurrency: { limit: 1 }, triggers: [{ cron: "* * * * *" }] },
-  async ({ step }) => step.run("preserve-message-media", () => archiveLeadMediaBatch(createServiceClient())),
+  async ({ step }) => {
+    const resets = await step.run("finish-lead-resets", () => retryLeadResetAssets(createServiceClient()));
+    const archives = await step.run("preserve-message-media", () => archiveLeadMediaBatch(createServiceClient()));
+    return { resets, archives };
+  },
 );
 
 export const connectyhubWhatsappContractGuard = inngest.createFunction(
