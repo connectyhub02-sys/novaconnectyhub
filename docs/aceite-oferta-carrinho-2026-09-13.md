@@ -21,7 +21,11 @@ Não houve nova migration SQL, alteração de configuração de loja ou interven
 
 Reprodução e revisão independentes cobrem aceite curto, oferta em bolhas, pergunta posterior, preço copiado, unidade explícita, dados separados, reenvio, recusa, citação, outra conversa/instância, oferta antiga, mudança de catálogo e variantes. Os arquivos novos têm 26 cenários de continuidade da oferta e 18 de versão/identidade; o parser tem 183 testes após a ampliação.
 
-Validação consolidada concluída: **2.296 testes em 180 arquivos aprovados**, sem falhas, usando dois workers. TypeScript, ESLint dos arquivos alterados, diff-check e revisão independente aprovados. Os testes executam as funções reais de interpretação e preparação do pedido, com banco, transporte e provedor substituídos. Conferem prévia, dados persistidos e ausência de pagamento antes do novo aceite. Não comprovam entrega real pelo WhatsApp ou aprovação bancária. Publicação autorizada em preparação; registrar a conferência de produção após o envio.
+Validação consolidada concluída: **2.296 testes em 180 arquivos aprovados**, sem falhas, usando dois workers. TypeScript, ESLint dos arquivos alterados, diff-check e revisão independente aprovados. Os testes executam as funções reais de interpretação e preparação do pedido, com banco, transporte e provedor substituídos. Conferem prévia, dados persistidos e ausência de pagamento antes do novo aceite. Não comprovam entrega real pelo WhatsApp ou aprovação bancária.
+
+## Publicação verificada
+
+Um único push publicou o commit `17f17c61595c9552fc08772a89bfe7078ce7f65b` na master. Vercel `dpl_7GSA2mFLLBi97CEuqjRHiZCumESz` conferida em **Ready / Latest / Production**, concluída em 13/09/2026 às **05:41:25 BRT**, com o domínio principal associado à versão. Consultas de leitura após a publicação: inicial e login HTTP 200; Inngest HTTP 200 com autenticação aceita e 43 funções; checkout inexistente HTTP 404 esperado. Não houve mensagem de teste, cobrança, alteração de dados de clientes ou migration. O reteste está liberado na mesma conversa; o resultado real desse novo percurso permanece pendente. Este complemento posterior ao push fica local para evitar outro build apenas documental.
 
 ## Limites e reteste
 

@@ -11082,7 +11082,11 @@ function guardUnexecutedOrderRevisionClaim(text: string, context: NonNullable<Aw
     return changeVerb && cartTarget
       || /\b(?:produto|item|pedido|carrinho)\b.{0,35}\b(?:adicionado|incluido|atualizado|ajustado|alterado)\b/.test(normalized);
   });
-  if (!claims) return null;
+  // A checkout-ready summary also claims that the proposed cart is resolved,
+  // even when the model avoids verbs such as "adicionei" or "atualizei".
+  const proposesCheckout = isSalesCatalogCheckoutConfirmationPreviewText(text) || isSalesCatalogCartDraftPreviewText(text)
+    || /\b(?:posso|confirma|podemos|vamos)\b.{0,70}\b(?:fechar|finalizar|gerar|enviar)\b.{0,70}\b(?:pedido|checkout|pagamento|pix|link)\b/.test(normalizeSearch(text));
+  if (!claims && !(draft && !draft.applied && proposesCheckout)) return null;
   if (draft?.pending_quantity_item_id) return "A alteração ainda está pendente. Quantas unidades desse produto você quer no total?";
   if (draft?.pending_intent) return "A alteração ainda está pendente. Me informe o nome completo do produto, a versão e a quantidade desejada.";
   if (!draft?.applied && draft?.ready && draft.preview_text) return draft.preview_text;
@@ -11736,6 +11740,7 @@ type RuntimeOrderRevisionDraft = {
   pending_quantity_item_id?: string | null;
   pending_product_role?: "replacement" | null;
   pending_sku_item_id?: string | null;
+  pending_source_message_id?: string | null;
   base_delivery?: { address: string | null; cep: string | null; method: string | null };
   delivery_update?: { address: string | null; cep: string | null } | null;
   legacy_cart_reconciled_at?: string;
@@ -11875,6 +11880,95 @@ function needsRuntimeRevisionSkuChoice(item: RuntimeSalesCatalogItem, text: stri
   const ranked = item.skus.map(sku => ({ sku, score: scoreRuntimeOrderSkuMatch(normalizeSearch(text), sku) }))
     .filter(entry => entry.score > 0).sort((left, right) => right.score - left.score);
   return !ranked[0] || ranked[0].score === ranked[1]?.score || !available(ranked[0].sku);
+}
+
+function recoverRuntimePendingRevisionIntent(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder, draft: RuntimeOrderRevisionDraft, latestInbound: ConversationMessageRow): OrderRevisionIntent | null {
+  const pending = draft.pending_intent;
+  const latestScope = latestInbound as ConversationMessageRow & { organization_id?: string; conversation_id?: string; whatsapp_instance_id?: string };
+  // Recovery prepares a fresh preview only. Never derive an operation from an
+  // assistant summary or reuse evidence after the persisted order has changed.
+  if (!pending || !("productText" in pending) || draft.applied || draft.ready || draft.pending_quantity_item_id
+    || draft.expected_revision !== (order.checkoutRevision ?? 0) || !isCurrentRuntimeCheckoutOrder(context, order)
+    || draft.organization_id !== context.organization.id || draft.conversation_id !== context.conversationId
+    || draft.instance_id !== context.instance.id || draft.order_id !== order.id
+    || latestScope.organization_id && latestScope.organization_id !== context.organization.id
+    || latestScope.conversation_id && latestScope.conversation_id !== context.conversationId
+    || latestScope.whatsapp_instance_id && latestScope.whatsapp_instance_id !== context.instance.id) return null;
+  const now = Date.parse(latestInbound.occurred_at);
+  const orderAt = Date.parse(order.updatedAt ?? order.createdAt ?? "");
+  if (!Number.isFinite(now) || !Number.isFinite(orderAt)) return null;
+  const inbound = context.messages.filter(message => {
+    const scope = message as ConversationMessageRow & { organization_id?: string; conversation_id?: string; whatsapp_instance_id?: string };
+    const at = Date.parse(message.occurred_at);
+    return message.direction === "inbound" && message.id !== latestInbound.id && at > orderAt && at < now
+      && now - at <= runtimeCheckoutDraftLifetimeMs && (!scope.organization_id || scope.organization_id === context.organization.id)
+      && (!scope.conversation_id || scope.conversation_id === context.conversationId)
+      && (!scope.whatsapp_instance_id || scope.whatsapp_instance_id === context.instance.id);
+  }).sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at));
+  const pendingOperation = (text: string) => {
+    const parsed = parseOrderRevisionIntent(normalizeRuntimeCheckoutIntent(text));
+    return parsed?.kind === "clarify" ? parsed.pendingIntent : parsed;
+  };
+  const compatible = (intent: OrderRevisionIntent | null | undefined) => Boolean(intent && "productText" in intent
+    && intent.kind === pending.kind && (normalizeSearch(intent.productText) === normalizeSearch(pending.productText)
+      || !pending.productText.trim()));
+  // New drafts record their originating message; old drafts need the latest
+  // compatible explicit customer command in the available scoped history.
+  const anchorId = draft.pending_source_message_id || draft.source_message_id;
+  let anchor = anchorId ? inbound.findIndex(message => message.id === anchorId) : -1;
+  if (anchorId && anchor < 0) return null;
+  if (!anchorId) anchor = inbound.findLastIndex(message => compatible(pendingOperation(message.text_content ?? "")));
+  const anchorOperation = anchor >= 0 ? pendingOperation(inbound[anchor].text_content ?? "")
+    ?? (draft.pending_source_message_id ? parseOrderRevisionClarification(pending, inbound[anchor].text_content ?? "") : null) : null;
+  if (anchor < 0 || !compatible(anchorOperation)) return null;
+  let candidate: OrderRevisionIntent | null = null;
+  let clarificationBase: OrderRevisionIntent = { ...pending };
+  for (const [index, message] of inbound.slice(anchor).entries()) {
+    const originalSpeech = message.text_content ?? "";
+    // Normalization may remove courtesy/refusal clauses and punctuation; check
+    // the original customer's words before that information is discarded.
+    if (isNewPurchaseIntent(originalSpeech) || isOrderRevisionNoChangeIntent(originalSpeech) || /[?]/.test(originalSpeech)
+      || /\b(?:nao|nunca|nem|depois|amanha|aguarde|esper[ae]|cancela|cancelar|desisti|esquece|esqueca)\b/.test(normalizeSearch(originalSpeech))) return null;
+    const speech = normalizeRuntimeCheckoutIntent(originalSpeech);
+    const normalized = normalizeSearch(speech);
+    if (!normalized) continue;
+    const operation = parseOrderRevisionIntent(speech);
+    if (index > 0 && operation) return null;
+    const quantity = parseOrderRevisionTotalQuantity(speech);
+    if (quantity !== null && "quantity" in clarificationBase) {
+      if (quantity < 1) return null;
+      clarificationBase = { ...clarificationBase, quantity };
+      if (candidate && "quantity" in candidate) Object.assign(candidate, { quantity });
+      continue;
+    }
+    if (/^(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|legal|obrigad[oa]|valeu|sim|ok|certo|pode)[.!\s]*$/.test(normalized)) continue;
+    let clarified: OrderRevisionIntent | null | undefined = index === 0 ? anchorOperation : parseOrderRevisionClarification(clarificationBase, speech);
+    if (!clarified || !("productText" in clarified)) {
+      if (index > 0) candidate = null;
+      continue;
+    }
+    const skuItem = draft.pending_sku_item_id ? context.salesCatalog.find(item => item.id === draft.pending_sku_item_id) : null;
+    if (skuItem && index > 0) clarified = { ...clarified, productText: `${skuItem.title} ${clarified.productText}` };
+    if (draft.pending_product_role === "replacement" && pending.kind === "replace" && index > 0) {
+      clarified = { ...pending, replacementText: clarified.productText, quantity: clarified.quantity };
+    }
+    const eligible = clarified.kind === "add" ? context.salesCatalog : context.salesCatalog.filter(item => draft.items.some(line => line.id === item.id));
+    const matches = selectRuntimeRevisionProducts(eligible, clarified.productText);
+    if (matches.length !== 1) {
+      // A later product-like answer that no longer resolves invalidates an older
+      // answer; it must not silently fall back to the first choice.
+      if (index > 0) candidate = null;
+      continue;
+    }
+    if (clarified.kind === "replace" && selectRuntimeRevisionProducts(context.salesCatalog, clarified.replacementText).length !== 1) {
+      candidate = null;
+      continue;
+    }
+    candidate = clarified;
+    clarificationBase = clarified;
+  }
+  return candidate;
 }
 
 function resolveRuntimeOrderAdditionOffer(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -12026,6 +12120,10 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   if (!isEditableCheckoutOrder(order) || order.checkoutPaymentLock) {
     return reply("Preciso conferir o estado do pagamento e do pedido antes de alterar os itens. Vou manter o pedido como está até essa conferência.");
   }
+  if (draft?.pending_intent && !noChange && (!intent || intent.kind === "payment")
+    && (wantsCheckout || /^(?:(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|resumo|meu pedido|me mostra o pedido)[,.!\s]*)+$/.test(normalizeSearch(speech)))) {
+    intent = recoverRuntimePendingRevisionIntent(context, order, draft, latestInbound) ?? intent;
+  }
   if (draft?.applied) {
     if (!intent && !hasSalesCatalogCheckoutConfirmationIntent(text) && !isRuntimeMissingPaymentRequest(text)) return null;
     const preferredMethod = intent?.kind === "payment" ? intent.paymentMethod ?? draft.preferred_method : draft.preferred_method;
@@ -12068,6 +12166,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.pending_quantity_item_id = null;
     draft.pending_product_role = null;
     draft.pending_sku_item_id = null;
+    draft.pending_source_message_id = null;
     draft.ready = false;
     draft.preview_text = null;
     draft.fingerprint = undefined;
@@ -12123,6 +12222,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.pending_quantity_item_id = null;
     draft.pending_product_role = null;
     draft.pending_sku_item_id = null;
+    draft.pending_source_message_id = latestInbound.id;
     if (intent?.kind === "clarify" || intent?.kind === "cancel") {
       draft.pending_intent = intent.kind === "clarify" && intent.pendingIntent
         ? { ...intent.pendingIntent, ...(intent.preferredPaymentMethod ? { preferredPaymentMethod: intent.preferredPaymentMethod } : {}) } : intent;
