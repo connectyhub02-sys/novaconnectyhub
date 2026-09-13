@@ -38,6 +38,12 @@ Os novos arquivos incluem 20 cenários de conversa, 18 de frete de roupas/eletr�
 
 Limites: produtos/variantes sem correspondência confiável continuam solicitando esclarecimento e preservando o SKU original; não foi implementada uma nova troca arbitrária de variantes do mesmo produto. Checkout hospedado legado com múltiplas parcelas/cobranças ou evidência incompleta requer conferência, sem inferir pagamento integral; o fluxo existente de cartão transparente permanece disponível. Os testes simulam banco/transportes nos cenários de conversa e não comprovam entrega real de WhatsApp, aprovação bancária ou execução real de estoque/comissões. Esses efeitos dependem do reteste do titular e de eventos reais.
 
+## Publicação verificada
+
+Único push à master em `ccca7c18160ca26731e665762b702da993a01098` (`fix: preserve cart revisions and payment choices across conversations`). Vercel `dpl_4CSsGRDpCVSTj6ayeJGWXrbTWh7w` confirmou **Ready / Latest / Production** às **23h12min36s BRT de 12/09**, com o mesmo commit e domínio principal associado. Build remoto concluído em 1m13s. A conferência posterior somente de leitura passou: inicial e login HTTP 200; Inngest HTTP 200, autenticação bem-sucedida e 43 funções; checkout inexistente HTTP 404 esperado.
+
+Reteste liberado para Luna e Gustavo nas mesmas conversas, sem apagar histórico. Nenhuma migration nova, alteração manual de pedido/cadastro, despausa de atendimento, mensagem ou pagamento real de teste foi executado. A observação do fluxo real de atendimento continua pendente do reteste do titular. Esta nota pós-publicação permanece local para evitar uma segunda implantação exclusivamente documental.
+
 ## Pendências para etapa posterior
 
 O cenário próprio de pizzaria/hamburgueria precisa conferir as regras de entrega local, pedido mínimo, gratuidade, área atendida e escolhas de produtos/opções efetivamente disponíveis. Não se presume suporte a combinação de sabores ou outra configuração não cadastrada. A escolha da profissão orienta o atendimento, enquanto as ações e regras do item/empresa continuam sendo validadas. Essa revisão específica não faz parte da publicação atual.

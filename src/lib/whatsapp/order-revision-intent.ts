@@ -121,10 +121,22 @@ function clarify(reason: Extract<OrderRevisionIntent, { kind: "clarify" }>["reas
   return { kind: "clarify", reason };
 }
 
+function stripDisplayedProductPrice(text: string) {
+  // A copied currency annotation is not part of a catalog identity or a count.
+  // Keep unlabelled numbers, variants and malformed amounts for disambiguation;
+  // authoritative pricing still comes from the catalog, never from this text.
+  const amount = "(?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:,\\d{2})?";
+  const perUnit = "(?:\\s+(?:cada|por unidade|a unidade))?";
+  return text
+    .replace(new RegExp(`\\(\\s*r\\$\\s*${amount}${perUnit}\\s*\\)`, "gi"), " ")
+    .replace(new RegExp(`(?:\\s+(?:[-–—]|por)\\s*|\\s+|^)r\\$\\s*${amount}${perUnit}\\s*[.!]?\\s*$`, "i"), "")
+    .replace(/\s+/g, " ").trim();
+}
+
 function cleanProduct(text: string) {
   let product = text.trim().replace(/^[,.:;!?\s]+|[,.:;!?\s]+$/g, "");
   for (;;) {
-    const cleaned = product.replace(contextSuffix, "");
+    const cleaned = stripDisplayedProductPrice(product).replace(contextSuffix, "");
     if (cleaned === product) break;
     product = cleaned;
   }
@@ -147,9 +159,9 @@ function extractProduct(text: string): { productText: string; quantity: number |
   if (/^(?:-\s*\d|\d+[.,/]\d|meia?\b|metade\b|onze\b|doze\b|treze\b|catorze\b|quatorze\b|quinze\b|dezesseis\b|dezessete\b|dezoito\b|dezenove\b|vinte\b|trinta\b|quarenta\b|cinquenta\b|sessenta\b|setenta\b|oitenta\b|noventa\b|cem\b|cento\b|mil\b|algum\w*\b|vari[oa]s\b|primeir[oa]\b|segund[oa]\b|terceir[oa]\b)/.test(productText)) {
     return { productText, quantity: null, invalid: true };
   }
-  const prefix = productText.match(new RegExp(`^(${quantityPattern})\\s*(?:x\\s*|(?:unidades?|unid|un|itens?|pecas?)\\s+(?:de\\s+)?)?\\s+(.+)$`));
+  const prefix = productText.match(new RegExp(`^(${quantityPattern})(?:\\s*x\\s*|\\s+)(.*)$`));
   if (prefix) {
-    productText = cleanProduct(prefix[2]);
+    productText = cleanProduct(prefix[2].replace(/^(?:unidades?|unid|un|itens?|pecas?)(?:\s+(?:de|da|do|das|dos))?(?:\s+|$)/, ""));
     return { productText, quantity: parseQuantity(prefix[1]), invalid: parseQuantity(prefix[1]) === null };
   }
   const suffix = productText.match(new RegExp(`^(.+?)\\s+(?:x\\s*)?(${quantityPattern})\\s+(?:unidades?|unid|un|itens?|pecas?)$`));
@@ -268,7 +280,7 @@ function parseSingleOrderRevisionIntent(text: string): OrderRevisionIntent | nul
 
   if (kind === "replace") {
     const parts = productSource.match(/^(.+?)\s+(?:por|pelo|pela|para|pra)\s+(.+)$/);
-    if (!parts || hasUnresolvedList(parts[1]) || hasUnresolvedList(parts[2])) return clarify();
+    if (!parts || hasUnresolvedList(cleanProduct(parts[1])) || hasUnresolvedList(cleanProduct(parts[2]))) return clarify();
     const oldProduct = extractProduct(parts[1]);
     const newProduct = extractProduct(parts[2]);
     if (oldProduct.invalid || newProduct.invalid || !isSpecificProduct(oldProduct.productText) || !isSpecificProduct(newProduct.productText)) return clarify();

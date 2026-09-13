@@ -11735,6 +11735,7 @@ type RuntimeOrderRevisionDraft = {
   ready: boolean; preview_text: string | null; total: string | null; pending_intent?: OrderRevisionIntent | null; applied?: boolean; fingerprint?: string;
   pending_quantity_item_id?: string | null;
   pending_product_role?: "replacement" | null;
+  pending_sku_item_id?: string | null;
   base_delivery?: { address: string | null; cep: string | null; method: string | null };
   delivery_update?: { address: string | null; cep: string | null } | null;
   legacy_cart_reconciled_at?: string;
@@ -11850,11 +11851,86 @@ function runtimeRevisionSelections(context: NonNullable<Awaited<ReturnType<typeo
 }
 
 function selectRuntimeRevisionProducts(items: RuntimeSalesCatalogItem[], text: string) {
-  const titleKey = (value: string) => normalizeSearch(value).split(/\s+/).map(token => token.length > 3 ? token.replace(/s$/, "") : token).join(" ");
-  const exact = items.filter(item => isSalesCatalogItemSellable(item) && titleKey(item.title) === titleKey(text));
+  const titleKey = (value: string) => normalizeSearch(value).replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean)
+    .map(token => token.length > 3 ? token.replace(/s$/, "") : token).join(" ");
+  const eligible = items.filter(item => item.status === "active" && isSalesCatalogItemSellable(item));
+  const requested = titleKey(text);
+  const exact = items.filter(item => titleKey(item.title) === requested);
   // Short titles and inflected quantities still identify a whole catalog title.
   // Duplicate titles remain ambiguous; never resolve them by array position.
-  return exact.length ? exact : selectSalesCatalogItemsFromText(items, text);
+  if (exact.length) return exact.filter(item => eligible.includes(item));
+  return eligible.filter(item => [item.title, cleanSalesCatalogCustomerTitle(item.title), item.platformProductCode ?? "",
+    ...item.skus.flatMap(sku => [sku.title ?? "", sku.skuCode ?? ""])].some(value => {
+    const candidate = titleKey(value);
+    return candidate && (` ${requested} `.includes(` ${candidate} `)
+      || candidate.split(" ").length > 1 && candidate.split(" ").every(token => normalizedTextHasToken(requested, token)));
+  }));
+}
+
+function needsRuntimeRevisionSkuChoice(item: RuntimeSalesCatalogItem, text: string) {
+  if (!item.skus.length) return false;
+  const available = (sku: RuntimeSalesCatalogItem["skus"][number]) => sku.status === "active"
+    && (sku.stockStatus !== "out_of_stock" || item.inventory.allowBackorder);
+  if (item.skus.length === 1) return !available(item.skus[0]);
+  const ranked = item.skus.map(sku => ({ sku, score: scoreRuntimeOrderSkuMatch(normalizeSearch(text), sku) }))
+    .filter(entry => entry.score > 0).sort((left, right) => right.score - left.score);
+  return !ranked[0] || ranked[0].score === ranked[1]?.score || !available(ranked[0].sku);
+}
+
+function resolveRuntimeOrderAdditionOffer(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow, text: string): OrderRevisionIntent | null {
+  // A short answer accepts only the immediately preceding, explicit item offer.
+  // It requests a revised preview; it does not accept that preview or a payment.
+  const answer = normalizeSearch(text).replace(/[.!]+$/, "").trim();
+  if (!/^(?:(?:sim|s|ok|okay|isso|isso mesmo|claro|beleza|blz)(?:[, ]+)?(?:pode\s+)?(?:coloca|coloque|adiciona|adicione|inclui|inclua|acrescenta|acrescente)?|pode(?:\s+sim|\s+(?:colocar|coloca|adicionar|adiciona|incluir|inclui|acrescentar))?|coloca|coloque|adiciona|adicione|inclui|inclua)(?:\s+(?:esse|essa|isso|por favor))?$/.test(answer)) return null;
+  const quotedContext = extractQuotedMessageContext(latestInbound, context.messages);
+  const now = Date.parse(latestInbound.occurred_at);
+  const burstWindow = Math.min(120, Math.max(30, context.behavior?.timingTextBurstSeconds ?? 0)) * 1000;
+  const messages = context.messages.filter(message => {
+    const scope = message as ConversationMessageRow & { conversation_id?: string; whatsapp_instance_id?: string };
+    return (!scope.conversation_id || scope.conversation_id === context.conversationId)
+      && (!scope.whatsapp_instance_id || scope.whatsapp_instance_id === context.instance.id);
+  });
+  // Resolve a quote only against a saved outbound in this scope. Raw quoted
+  // text cannot substitute a product offer or the newest question.
+  const quotedId = quotedContext ? findQuotedProviderMessageId(readRecord(latestInbound.payload) ?? {}) : null;
+  const quotedMessage = quotedId ? messages.find(message => message.direction === "outbound" && message.provider_message_id
+    && providerMessageIdsMatch(message.provider_message_id, quotedId)) : null;
+  if (quotedContext && (!quotedMessage || now - Date.parse(quotedMessage.occurred_at) > salesCatalogCheckoutConfirmationWindowMs
+    || Date.parse(quotedMessage.occurred_at) >= now)) return { kind: "clarify", reason: "ambiguous" };
+  const previous = messages.filter(message => Date.parse(message.occurred_at) < now)
+    .sort((left, right) => Date.parse(left.occurred_at) - Date.parse(right.occurred_at));
+  while (previous.at(-1)?.direction === "inbound" && now - Date.parse(previous.at(-1)!.occurred_at) <= burstWindow) previous.pop();
+  // Do not reuse an old offer after an unanswered intervening customer turn.
+  if (!quotedMessage && previous.at(-1)?.direction !== "outbound") return null;
+  const block = quotedMessage ? { firstMessage: quotedMessage, text: quotedMessage.text_content ?? "" }
+    : buildRecentOutboundMessageBlocks(messages, latestInbound)[0];
+  if (!block) return null;
+  const activeId = readRuntimeActivePaymentOrderId(context);
+  const orders = context.salesCatalogOrders.filter(order => isCurrentRuntimeCheckoutOrder(context, order, true));
+  const order = orders.find(candidate => candidate.id === activeId) ?? (orders.length === 1 ? orders[0] : null);
+  if (!order || Date.parse(block.firstMessage.occurred_at) < Date.parse(order.createdAt ?? "")) return null;
+  const offers: Array<{ intent: OrderRevisionIntent; sentence: number }> = [];
+  const sentences = block.text.replace(/\s+/g, " ").split(/(?<=[.!?])\s+/);
+  const lastPrompt = sentences.findLastIndex(sentence => /\?/.test(sentence) || /\b(?:quer|posso|vamos|bora|gostaria)\b/.test(normalizeSearch(sentence)));
+  for (const [index, sentence] of sentences.entries()) {
+    const offer = normalizeSearch(sentence).match(/\b(?:quer|posso|vamos|bora|gostaria)\b.{0,60}\b(?:adicionar|adicion[ae]|incluir|inclu[ai]|acrescentar|acrescent[ae]|colocar|coloque)\s+(.+?)[.!?]*$/);
+    if (!offer) continue;
+    const target = offer[1].replace(/\s+(?:ao|no|pro|para o|pra o)\s+(?:seu|teu|nosso)?\s*(?:pedido|carrinho)(?:\s+atual)?$/, "");
+    if (!/^(?:\d+|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)\s/.test(target)) continue;
+    const parsed = parseOrderRevisionIntent(`adicione ${target}`);
+    if (parsed?.kind === "add" && !selectRuntimeRevisionProducts(context.salesCatalog, parsed.productText).length) {
+      // A shortened name in the offer may refer to the full product described in
+      // the same outbound block. Category/attribute-only matches are not identity.
+      const targetTokens = normalizeSearch(parsed.productText).split(/\s+/).filter(Boolean);
+      const described = selectRuntimeRevisionProducts(context.salesCatalog, block.text).filter(item => targetTokens.length
+        && targetTokens.every(token => normalizedTextHasToken(normalizeSearch(item.title), token)));
+      if (described.length === 1) parsed.productText = `${described[0].title} ${parsed.productText}`;
+    }
+    if (parsed?.kind === "add" || parsed?.kind === "clarify" && parsed.pendingIntent?.kind === "add") offers.push({ intent: parsed, sentence: index });
+  }
+  return offers.length === 1 && offers[0].sentence === lastPrompt ? offers[0].intent
+    : offers.length > 1 ? { kind: "clarify", reason: "multiple_operations" } : null;
 }
 
 async function maybeHandleSalesCatalogOrderRevision(input: {
@@ -11879,6 +11955,9 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   const speech = normalizeRuntimeCheckoutIntent(text);
   let intent = parseOrderRevisionIntent(speech);
+  if (!intent || intent.kind === "clarify" && intent.reason === "ambiguous") {
+    intent = resolveRuntimeOrderAdditionOffer(context, latestInbound, speech) ?? intent;
+  }
   const requestedMethod = intent?.kind === "payment" ? intent.paymentMethod : intent?.preferredPaymentMethod;
   const noChange = isOrderRevisionNoChangeIntent(text);
   const wantsCheckout = hasSalesCatalogCheckoutConfirmationIntent(text) || Boolean(resolveSalesCatalogPaymentMethodRequest(text)) || isRuntimeMissingPaymentRequest(text);
@@ -11898,6 +11977,9 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   if (!intent && draft?.pending_intent && !wantsCheckout && !noChange) {
     const clarified = parseOrderRevisionClarification(draft.pending_intent, speech);
+    const pendingSkuItemId = draft.pending_sku_item_id;
+    const skuItem = pendingSkuItemId ? context.salesCatalog.find(item => item.id === pendingSkuItemId) : null;
+    if (clarified && "productText" in clarified && skuItem) clarified.productText = `${skuItem.title} ${clarified.productText}`;
     if (clarified && "productText" in clarified && selectRuntimeRevisionProducts(context.salesCatalog, clarified.productText).length > 0) {
       intent = draft.pending_product_role === "replacement" && draft.pending_intent.kind === "replace"
         ? { ...draft.pending_intent, replacementText: clarified.productText, quantity: clarified.quantity }
@@ -11985,6 +12067,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.pending_intent = null;
     draft.pending_quantity_item_id = null;
     draft.pending_product_role = null;
+    draft.pending_sku_item_id = null;
     draft.ready = false;
     draft.preview_text = null;
     draft.fingerprint = undefined;
@@ -12002,8 +12085,20 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     && !/\b(?:perguntando|duvida|depois|amanha|aguarde|esper[ae])\b/.test(normalizeSearch(text))
     && hasSalesCatalogCheckoutConfirmationIntent(text);
   const lastOutbound = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0]?.text.trim();
+  const previewText = draft.preview_text?.trim();
+  const repeatsSamePreview = Boolean(previewText && lastOutbound?.includes(previewText)
+    && lastOutbound.split(previewText).every(fragment => !fragment.trim()));
   const confirmed = isAffirmation && !draft.delivery_update && !draft.pending_intent && !draft.pending_quantity_item_id
-    && draft.ready && draft.preview_text?.trim() === lastOutbound;
+    && draft.ready && repeatsSamePreview;
+  const clarifiedQuantity = !intent && draft.pending_intent && "productText" in draft.pending_intent
+    ? parseOrderRevisionTotalQuantity(speech) : null;
+  if (clarifiedQuantity !== null && clarifiedQuantity > 0 && draft.pending_intent && "productText" in draft.pending_intent) {
+    draft.pending_intent.quantity = clarifiedQuantity;
+    draft.ready = false;
+    draft.preview_text = null;
+    await persistRuntimeOrderRevision(client, context, draft);
+    return reply(`Certo, ${clarifiedQuantity} ${clarifiedQuantity === 1 ? "unidade" : "unidades"}. Qual é o nome do produto${draft.pending_product_role === "replacement" ? " que entra no pedido" : ""}?`);
+  }
   if ((draft.pending_intent || draft.pending_quantity_item_id) && (!intent || intent.kind === "payment")) {
     await persistRuntimeOrderRevision(client, context, { ...draft, ready: false, preview_text: null });
     if (isAffirmation || intent?.kind === "payment" || wantsCheckout) {
@@ -12027,6 +12122,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.pending_intent = null;
     draft.pending_quantity_item_id = null;
     draft.pending_product_role = null;
+    draft.pending_sku_item_id = null;
     if (intent?.kind === "clarify" || intent?.kind === "cancel") {
       draft.pending_intent = intent.kind === "clarify" && intent.pendingIntent
         ? { ...intent.pendingIntent, ...(intent.preferredPaymentMethod ? { preferredPaymentMethod: intent.preferredPaymentMethod } : {}) } : intent;
@@ -12045,6 +12141,18 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
       }
       const index = draft.items.findIndex(line => line.id === item.id);
       const previous = index >= 0 ? draft.items[index].quantity : 0;
+      const requestSku = async (target: RuntimeSalesCatalogItem, replacement = false) => {
+        draft!.pending_intent = intent;
+        draft!.pending_sku_item_id = target.id;
+        draft!.pending_product_role = replacement ? "replacement" : null;
+        await persistRuntimeOrderRevision(client, context, draft);
+        const options = target.skus.filter(sku => sku.status === "active" && (sku.stockStatus !== "out_of_stock" || target.inventory.allowBackorder))
+          .slice(0, 6).map(sku => [sku.title, sku.skuCode].filter(Boolean).join(" — "));
+        return reply(options.length ? `Qual versão de ${target.title} você quer? Opções disponíveis: ${options.join("; ")}. Mantive a quantidade solicitada e o pedido anterior.`
+          : `Não encontrei uma versão disponível de ${target.title}. Qual outro produto você prefere? O pedido anterior foi mantido.`);
+      };
+      if (intent.kind === "add" && !order.items.some(line => line.catalogItemId === item.id)
+        && needsRuntimeRevisionSkuChoice(item, intent.productText)) return requestSku(item);
       if (intent.kind === "replace") {
         const replacements = selectRuntimeRevisionProducts(context.salesCatalog, intent.replacementText);
         if (replacements.length !== 1) {
@@ -12054,6 +12162,8 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
           return reply("Me diga o nome completo do produto que sai e do produto que entra, para eu confirmar a substituição.");
         }
         const replacement = replacements[0];
+        if (!order.items.some(line => line.catalogItemId === replacement.id)
+          && needsRuntimeRevisionSkuChoice(replacement, intent.replacementText)) return requestSku(replacement, true);
         const quantity = intent.quantity ?? previous;
         draft.items.splice(index, 1);
         const destination = draft.items.find(line => line.id === replacement.id);

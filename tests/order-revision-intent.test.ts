@@ -229,3 +229,51 @@ describe("one cart edit with an independent payment preference", () => {
     expect(parseOrderRevisionTotalQuantity(String(text))).toBe(expected);
   });
 });
+
+describe("product names copied with a displayed price", () => {
+  const pending = { kind: "add" as const, productText: "", quantity: 1 };
+  it("keeps an unresolved addition for an offer acceptance without inventing its product", () => {
+    expect(parseOrderRevisionIntent("sim coloca")).toEqual({ kind: "clarify", reason: "ambiguous", pendingIntent: pending });
+  });
+  it.each([
+    ["Garrafa térmica 500ml (R$314,99)", "garrafa termica 500ml", 1],
+    ["1 unidade de Garrafa térmica 500ml (R$314,99)", "garrafa termica 500ml", 1],
+    ["duas unidades de Garrafa térmica 500ml (R$ 314,99)", "garrafa termica 500ml", 2],
+    ["Garrafa térmica 500ml (R$ 314,99), duas unidades", "garrafa termica 500ml", 2],
+    ["1x Garrafa térmica 500ml - R$ 314,99", "garrafa termica 500ml", 1],
+    ["Garrafa térmica 500ml por R$ 1.314,99", "garrafa termica 500ml", 1],
+    ["Garrafa térmica 500ml R$ 314,99", "garrafa termica 500ml", 1],
+    ["Garrafa térmica (azul) 500ml (R$314,99)", "garrafa termica (azul) 500ml", 1],
+    ["2 unidades de Garrafa térmica 500ml - R$ 314,99 cada", "garrafa termica 500ml", 2],
+    ["Garrafa térmica 500ml (R$ 314,99 por unidade)", "garrafa termica 500ml", 1],
+  ])("extracts product/count without treating currency or its decimal comma as another item: %s", (text, productText, quantity) => {
+    expect(parseOrderRevisionClarification(pending, String(text))).toEqual({ kind: "add", productText, quantity });
+  });
+  it.each([
+    ["adicione 1 unidade de Garrafa térmica 500ml (R$314,99)", { kind: "add", productText: "garrafa termica 500ml", quantity: 1 }],
+    ["retire a Garrafa térmica 500ml (R$314,99)", { kind: "remove", productText: "garrafa termica 500ml", quantity: null }],
+    ["troque a Garrafa térmica 500ml (R$314,99) pela Caneca azul (R$49,99)", { kind: "replace", productText: "garrafa termica 500ml", replacementText: "caneca azul", quantity: null }],
+    ["adicione a Garrafa térmica 500ml (R$314,99) e gere Pix", { kind: "add", productText: "garrafa termica 500ml", quantity: 1, preferredPaymentMethod: "pix" }],
+  ])("handles the same displayed annotation in an explicit edit: %s", (text, expected) => {
+    expect(parseOrderRevisionIntent(text as string)).toEqual(expected);
+  });
+  it.each([
+    "não quero Garrafa térmica 500ml (R$314,99)",
+    "Garrafa térmica 500ml (R$314,99)?",
+    "Garrafa térmica 500ml (R$314,99), mas só amanhã",
+    "Garrafa térmica 500ml (R$314,99) e Caneca azul (R$49,99)",
+    "1,5 Garrafa térmica 500ml (R$314,99)",
+    "-1 Garrafa térmica 500ml (R$314,99)",
+    "0 unidades de Garrafa térmica 500ml (R$314,99)",
+    "R$314,99",
+    "1 unidade de (R$314,99)",
+    "Garrafa térmica 500ml (314,99)",
+    "Garrafa térmica 500ml (R$314,999)",
+  ])("does not remove refusal, question, a second item or invalid numeric input while cleaning a price: %s", text => {
+    expect(parseOrderRevisionClarification(pending, text)).toBeNull();
+  });
+  it("keeps a pending explicit count when only a priced product name is supplied", () => {
+    expect(parseOrderRevisionClarification({ ...pending, quantity: 3, preferredPaymentMethod: "card" }, "Garrafa térmica 500ml (R$314,99)"))
+      .toEqual({ kind: "add", productText: "garrafa termica 500ml", quantity: 3, preferredPaymentMethod: "card" });
+  });
+});
