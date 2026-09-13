@@ -1,6 +1,6 @@
 # Plano completo — continuidade do checkout e reset integral do lead
 
-Data: 13/09/2026. Estado: implementação e regressões concluídas; migration aplicada e exclusão integral simulada com rollback no banco real. Publicação da aplicação e limpeza autorizada em conclusão. Resultados e limites em [auditoria](auditoria-reset-lead-2026-09-13.md).
+Data: 13/09/2026. Estado: implementação publicada na master, migrations 0134/0135 aplicadas, interface validada e limpeza autorizada concluída. O novo contato e checkout reais aguardam o reteste do titular. Resultados e limites em [auditoria](auditoria-reset-lead-2026-09-13.md).
 
 ## Resultado esperado
 

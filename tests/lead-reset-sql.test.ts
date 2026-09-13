@@ -34,6 +34,7 @@ beforeEach(async () => {
     create trigger archive_messages after insert or update or delete on conversation_messages for each row execute function archive_lead_message_trigger();
     create function release_organization_storage_usage(uuid,bigint,integer,text,jsonb) returns void language sql as $$insert into released values($2)$$;`);
   await db.exec(readFileSync("supabase/migrations/0134_lead_reset.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0135_lead_reset_legacy_memory.sql", "utf8"));
   [org, foreign, lead, other, chat, order, actor] = Array.from({ length: 7 }, () => randomUUID());
   await db.query("insert into organizations values($1),($2)", [org, foreign]);
   await db.query("insert into leads(id,organization_id,phone_number) values($1,$2,'5511999999999'),($3,$4,'5511999999999')", [lead,org,other,foreign]);
@@ -93,6 +94,15 @@ it("suppresses re-archiving only during the scoped reset and removes its private
   expect((await db.query("select has_table_privilege('authenticated','lead_reset_internal.active_targets','INSERT') writable")).rows[0]).toEqual({writable:false});
   await db.query("insert into conversation_messages values($1,$2,null,$3,'{}')",[randomUUID(),foreign,other]);
   expect((await db.query("select * from archive_calls")).rows).toHaveLength(2);
+});
+
+it("purges legacy archived memory and detaches usage references without changing company consumption", async () => {
+  await db.exec("alter table usage_events add column lead_id uuid; alter table usage_events add column conversation_id uuid");
+  await db.query("insert into intelligence_memory values($1,$2,'{whatsapp,archived_test_history}',$3),($4,$5,'{knowledge}',$3)",[randomUUID(),org,{source_conversation_id:chat},randomUUID(),foreign]);
+  await db.query("insert into usage_events(id,metadata,amount,lead_id,conversation_id) values($1,'{\"customer_text\":\"private\"}',10,$2,$3)",[randomUUID(),lead,chat]);
+  await reset();
+  expect((await db.query("select organization_id from intelligence_memory")).rows).toEqual([{organization_id:foreign}]);
+  expect((await db.query("select metadata,amount::text,lead_id,conversation_id from usage_events")).rows).toEqual([{metadata:{},amount:"10",lead_id:null,conversation_id:null}]);
 });
 
 it("waits for storage, acknowledges quota only once, rejects old replays and allows a new contact", async () => {
