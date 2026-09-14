@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## Reset por acesso assistido — 14/09/2026
+
+Restrição implementada na base publicada `4c84800`: reset exclusivo de administrador da plataforma durante acesso assistido a cliente, vinculado no servidor às duas sessões Auth reais e à organização. Cliente owner/admin/comum e admin sem contexto assistido não recebem acesso. Expiração/encerramento revogam a capacidade. Inclui bloqueio de autopromoção pelo campo `profiles.is_platform_admin`, cuja permissão direta foi confirmada na VPS. Corpo do reset integral preservado.
+
+2.774 testes gerais e três testes adicionais de visibilidade, lint e build/TypeScript aprovados. Migration `0146` aplicada após ensaio com rollback; persistência e permissões conferidas às 16:31:48 UTC. SQL MD5 `d800732b2c41189035dedeb23deda45e`, corpo do reset `c451b2107b57810d176abea29ee8871a` preservado. Publicação do aplicativo em andamento. Nenhum reset real, envio WhatsApp ou chamada faturável. [Implementação, matriz e limites](reset-acesso-assistido-2026-09-14.md).
+
 ## Precisão de créditos da API — 14/09/2026
 
 Correção delimitada do cálculo decimal, na base publicada `508953c`: elimina o acréscimo espúrio de um milionésimo causado por ponto flutuante, mantendo tarifas, mínimo, pacotes e arredondamento para cima de frações legítimas. 136 testes da API e lint passaram. Compilação e publicação em andamento; nenhum saldo histórico alterado. Diferença histórica de 0,000001 crédito permanece pendente, sem estorno. [Implementação e limites](correcao-precisao-creditos-2026-09-14.md).

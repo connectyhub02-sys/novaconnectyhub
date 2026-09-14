@@ -2300,6 +2300,9 @@ function AdminImpersonationBanner() {
     setError(null);
 
     try {
+      const ended = await fetch("/api/auth/assisted-access/end", { method: "POST" });
+      if (!ended.ok) throw new Error("Não foi possível encerrar o acesso assistido.");
+      window.dispatchEvent(new Event("connectyhub:assisted-access-ended"));
       const supabase = createClient();
       const { error: restoreError } = await supabase.auth.setSession({
         access_token: returnSession.accessToken,

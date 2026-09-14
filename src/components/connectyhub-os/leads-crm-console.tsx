@@ -2,6 +2,7 @@
 import { LeadFinancialArchive } from "./lead-financial-archive";
 import { LeadReturnsPanel } from "./lead-returns-panel";
 import { ResetLeadDialog } from "./reset-lead-dialog";
+import { useAssistedLeadReset } from "@/hooks/use-assisted-lead-reset";
 
 import { useAvailablePaneHeight } from "@/hooks/use-available-pane-height";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -1020,6 +1021,7 @@ function AttendanceCenterView({
   const paneRef = useAvailablePaneHeight();
   const [mobileBagOpen, setMobileBagOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const canResetLead = useAssistedLeadReset(!conversationPanelScope);
   const [resetLeadIds, setResetLeadIds] = useState<Set<string>>(() => new Set());
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [manualReply, setManualReply] = useState("");
@@ -1699,7 +1701,7 @@ function AttendanceCenterView({
 
   return (
     <div className="space-y-3" onPointerDown={primeAttendanceSoundFromUserGesture}>
-      {resetTarget && <ResetLeadDialog leadId={resetTarget.id} name={resetTarget.name} panelScope={conversationPanelScope}
+      {canResetLead && resetTarget && <ResetLeadDialog leadId={resetTarget.id} name={resetTarget.name} panelScope={conversationPanelScope}
         onClose={() => setResetTarget(null)} onDeleted={(leadIds) => {
           setResetLeadIds((current) => new Set([...current, ...leadIds]));
           setSelectedThreadKey(null); setSelectedLeadId(""); setConversationPane("inbox");
@@ -1903,10 +1905,10 @@ function AttendanceCenterView({
                       <FileText className="h-4 w-4" />
                       CRM do lead
                     </button>
-                    <button type="button" onClick={() => setResetTarget({ id: activeLead.id, name: activeLead.name })}
+                    {canResetLead && <button type="button" onClick={() => setResetTarget({ id: activeLead.id, name: activeLead.name })}
                       className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 hover:bg-red-50">
                       <RotateCcw className="h-4 w-4" /> Resetar lead
-                    </button>
+                    </button>}
                     <button type="button" className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 xl:hidden" onClick={() => setMobileBagOpen(true)}>
                       {commerceEnabled ? "Sacola / pedido" : "Conta do cliente"}
                     </button>

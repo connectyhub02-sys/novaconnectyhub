@@ -1,13 +1,15 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deleteR2Object, loadR2Config } from "@/lib/storage/r2";
+import type { AssistedAccess } from "@/lib/admin-assisted-access";
 
 type ResetAsset = { key?: string; bucket?: string; done?: boolean };
 export type LeadResetResult = { jobId: string; deleted: boolean; complete: boolean; counts: Record<string, number>; leadIds?: string[] };
 
-export async function resetLead(client: SupabaseClient, organizationId: string, leadId: string, actorId: string) {
-  const result = await client.rpc("reset_lead_data", {
-    p_organization_id: organizationId, p_lead_id: leadId, p_actor_id: actorId, p_confirm: true,
+export async function resetLead(client: SupabaseClient, organizationId: string, leadId: string, access: AssistedAccess) {
+  const result = await client.rpc("reset_lead_data_assisted", {
+    p_organization_id: organizationId, p_lead_id: leadId, p_confirm: true,
+    p_token_hash: access.tokenHash, p_target_session_id: access.targetSessionId, p_target_user_id: access.targetUserId,
   });
   if (result.error) throw new Error(result.error.message);
   const reset = result.data as LeadResetResult;
