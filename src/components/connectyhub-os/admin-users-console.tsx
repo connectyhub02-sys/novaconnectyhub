@@ -246,7 +246,6 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
 
     try {
       const targetUser = users.find((user) => user.id === userId) ?? null;
-      const link = await getAccessLink(userId);
       const supabase = createClient();
       const {
         data: { session },
@@ -268,7 +267,14 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
         startedAt: new Date().toISOString(),
       });
 
-      window.location.assign(link!);
+      const response = await fetch("/api/admin/users/assisted-access", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok) throw new Error(result?.error ?? "Não foi possível iniciar o acesso assistido.");
+      // Reload the Auth boundary so no administrator cache survives the session switch.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/dashboard");
     } catch (error) {
       clearAdminImpersonationReturn();
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao gerar link de acesso." });

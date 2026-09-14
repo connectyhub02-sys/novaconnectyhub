@@ -54,6 +54,8 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 
 ## Regras de negócio a preservar
 
+- Reset de lead: exclusivo da equipe administradora da plataforma ConnectyHub durante sessão assistida verificável no painel de um cliente. Owner/admin da própria organização, administrador sem esse contexto e flags locais não autorizam. Expiração/encerramento revogam a capacidade. Preservar exclusão integral e proteções do reset. [Regra e validação de 14/09](reset-acesso-assistido-2026-09-14.md).
+
 - Agentes WhatsApp: o padrão inicial de comportamento segue o painel definido pelo titular (espelho, sempre online, rapport suave, citação inteligente, emojis/figurinhas, mídia proativa, conversa leve, memória do clone e qualidade). Voz própria é escolhida pelo cliente. As preferências editáveis devem ser preservadas ao pausar/salvar/reativar; configurações armazenadas e bloqueios efetivos de execução são separados. Estado de publicação e limites da recuperação de configurações antigas ficam no estado operacional.
 - A carteira pode ser compartilhada entre organizações vinculadas. Selecione a tarifa pelo plano da organização responsável e atribua consumo ao executor correto. Custos internos da plataforma usam classificação própria; não criar débito fictício por tarefa administrativa determinística.
 - Tarifas ausentes não autorizam geração gratuita. Recursos experimentais exigem acesso e tarifa confirmados. Preserve consumo pendente, reserva e recuperação após falha. Os preços de referência e multiplicadores dos relatórios são históricos, não garantia de margem atual.
