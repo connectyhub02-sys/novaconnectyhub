@@ -211,9 +211,14 @@ const adminSections: NavSection[] = [
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
       { label: "Integracoes",       href: "/admin/clientes/integracoes", icon: PlugZap, tone: "teal" },
+    ],
+  },
+  {
+    label: "APIs e serviços",
+    items: [
       { label: "API WhatsApp",      href: "/admin/api-whatsapp",      icon: PlugZap, tone: "emerald" },
       { label: "API de AI",         href: "/admin/api-ia",            icon: PlugZap, tone: "emerald" },
-      { label: "Estúdio de Voz e Áudio AI",               href: "/admin/voz",               icon: Megaphone, tone: "violet" },
+      { label: "Estúdio de Voz e Áudio",               href: "/admin/voz",               icon: Megaphone, tone: "violet" },
     ],
   },
   {

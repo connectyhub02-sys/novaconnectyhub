@@ -1,5 +1,15 @@
 # Estado operacional da ConnectyHub
 
+## Administração de AI e Voz — separação local, 14/09/2026
+
+Revisão pedida pelo titular com referência à administração da API WhatsApp. A rota `/admin/voz`, o menu e a API protegida já existiam; não foi necessário recriar o backend. A entrada administrativa agora se chama **Estúdio de Voz e Áudio**, agrupada com API WhatsApp e API de AI em **APIs e serviços**. Cliente mantém **Estúdio de Voz e Áudio AI**.
+
+A rota `/admin/api-ia` antes reutilizava o console cliente, incluindo geração e endpoints da organização atual. Agora usa `AdminAiConsole`: operações/pendências reaproveitam `AiOperations`; clientes/projetos/chaves são consultados por novo endpoint exclusivo de administrador, com prefixos e metadados, sem segredo/hash. Configuração comercial aponta para o catálogo financeiro e a manutenção já existentes. O console cliente continua nas próprias rotas, sem alteração de suas ações de geração.
+
+Voz administra agregados reais por cliente, modelo e operação, filtro por projeto e período, até 50 recibos recentes sem conteúdo/mídia/credenciais. Custos estimados permanecem identificados; custo efetivo mostra também quantas operações foram apuradas. Filtros preservam o RPC e suas permissões. Seletor/diretório limitados a 1.000 projetos, com aviso de truncamento; não representam um limite dos agregados de consumo. Diretório de AI é leitura; alterações comerciais e de clientes usam controles existentes, sem novo mecanismo de débito ou rotação de chaves.
+
+Validação: 14 testes em quatro arquivos, lint, TypeScript e build Next/webpack com 107 páginas aprovados; navegação administrativa e diretório de chaves conferidos na prévia com dados fictícios, sem geração. Viewport de 390 pixels sem transbordamento na conferência. Nenhum envio, cobrança, clonagem, alteração de carteira ou migration. **Local, ainda não publicado nem confirmado em sessão administrativa de produção**. A expansão de oito recursos/Gemini e a matriz comercial continuam pendentes e não estão comprovadas por esta entrega administrativa.
+
 ## Estúdio de Voz e Áudio AI — estrutura visual local, 14/09/2026
 
 Referência visual encaminhada pelo titular incorporada à expansão: nome do produto atualizado em menu, títulos e documentação; exatamente duas seções no cliente, Estúdio de Voz selecionado por padrão e Projetos e chaves API. Removido o cartão redundante de saldo. Uso real resumido acima das seções, com período; histórico, gráficos e detalhamento continuam acessíveis em área expansível. Visão administrativa preservada. Esta etapa não ativa modalidades, muda tarifas, clona vozes ou altera credenciais.

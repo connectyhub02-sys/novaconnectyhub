@@ -16,7 +16,7 @@ const field = "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white 
 const primary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50";
 const statusLabels: Record<string,string> = { completed: "Concluída", failed: "Não concluída", uncertain: "Em conferência", preparing: "Em andamento", reserved: "Em andamento", processing: "Em andamento" };
 
-export function AiConsole({ admin = false }: { admin?: boolean }) {
+export function AiConsole() {
   const [tab,setTab] = useState<"usage"|"projects">("usage");
   const [days,setDays] = useState("30"), [project,setProject] = useState("");
   const [revision,setRevision] = useState(0);
@@ -66,6 +66,5 @@ export function AiConsole({ admin = false }: { admin?: boolean }) {
       <AiPlayground onComplete={()=>setRevision(value=>value+1)}/>
     </>}
     <CreditExplainer/>
-    {admin&&<div className="flex flex-wrap gap-4 text-sm"><Link className="text-blue-800 underline" href="/admin/financeiro">Operação financeira</Link><Link className="text-blue-800 underline" href="/admin/api-ia/operacao">Conferência de solicitações</Link></div>}
   </div>;
 }
