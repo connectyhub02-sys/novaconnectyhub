@@ -4,9 +4,17 @@ import {voiceFailure,voiceJson,VoiceError,voiceBody} from './contract';
 import {voiceCatalog,voiceModels} from './catalog';
 import {downloadVoice,generateVoice,publicVoiceGeneration,recoverVoice,voiceGeneration} from './generations';
 import {createPrivateClone,ownedClone,publicClone,editPrivateClone,deletePrivateClone,cloneSamples,previewPrivateClone} from './clones';
+import {createStudioAsset,ownedStudioAsset,publicStudioAsset,listStudioAssets,studioAssetTicket,deleteStudioAsset,readStudioJson} from './assets';
 export async function voiceRoute(request:Request,path:string[],studio=false) {
   try {
     const auth=await (studio?authenticateVoiceStudio(request):authenticateVoice(request));
+    if(path[0]==='assets'){
+      if(path.length===1&&request.method==='POST')return voiceJson(await createStudioAsset(auth,await readStudioJson(request)),201);
+      if(path.length===1&&request.method==='GET')return voiceJson(await listStudioAssets(auth));
+      if(path.length===2&&request.method==='GET')return voiceJson(publicStudioAsset(await ownedStudioAsset(auth,path[1])));
+      if(path.length===2&&request.method==='DELETE')return voiceJson(await deleteStudioAsset(auth,path[1]));
+      if(path.length===3&&path[2]==='download'&&request.method==='POST')return voiceJson(await studioAssetTicket(auth,path[1],'download'));
+    }
     if(path[0]==='voices'){
       if(path.length===3&&path[2]==='preview'&&request.method==='POST')return voiceJson(await previewPrivateClone(auth,path[1],request));
       if(path.length===1&&request.method==='POST')return voiceJson(await createPrivateClone(auth,request));

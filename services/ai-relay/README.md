@@ -80,3 +80,31 @@ confirma a opção habilitada, não um teste de integração real com o Google.
 
 Testes do transporte usam servidor HTTP local e provedor simulado:
 `npx vitest run tests/ai-upload-relay.test.mjs tests/ai-upload-tickets.test.ts --maxWorkers=2`.
+
+## Arquivos privados do Estúdio — implementação local, ativação separada
+
+`STUDIO_ASSETS_ENABLED=true` habilita `/studio-assets/:id` no relay e a criação
+de tickets na aplicação. Depende da migration 0148, do proxy para esse caminho e
+do diretório persistente `STUDIO_ASSET_DIR` (padrão Docker `/app/state/studio-assets`).
+Ao contrário dos recibos do upload Gemini acima, esse subdiretório contém os
+áudios privados dos clientes. Inclua-o no backup privado recuperável e na
+política de retenção antes de ativar. Não exponha o diretório pelo servidor web.
+
+O upload reserva armazenamento da carteira responsável, sem débito de IA. O
+cliente recebe um ticket de uso único; download e exclusão também exigem tickets
+emitidos após autorização de organização e projeto. Revalida projeto, contrato
+e chave antes de consumir cada ticket. A conclusão ou exclusão é reconciliada
+após reinício sem repetir operação do fornecedor; exclusão libera a cota uma vez.
+
+FFmpeg/ffprobe fazem parte da imagem. Há um único stream de áudio, até20 MB e
+30 minutos, com dois pedidos simultâneos no relay. Duração é obtida por
+decodificação de amostras, com tempo limitado; o processo permite somente
+protocolo pipe e uma lista de contêineres. Não recebe URLs nem usa duração
+informada pelo cliente. O arquivo original permanece privado; PCM de medição
+é descartado. MIME é metadado de download e não determina sua validade.
+
+O endpoint de controle é `/api/internal/studio/relay`, autenticado pelo mesmo
+segredo servidor-servidor. Não há chave de fornecedor no transporte de assets.
+Testes: `studio-assets-contract`, `studio-assets-sql`, `studio-assets-relay` e
+`studio-audio-measure`. Validam infraestrutura local/simulada; não comprovam
+publicação na VPS ou recuperação do seu backup.

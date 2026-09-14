@@ -394,3 +394,9 @@ Mapa de origem nativa da Betel confirmado no ambiente de produção e aceito pel
 Correção focada `0a8e2bb` integrada localmente à release atual, build e TypeScript finais aprovados; publicação em andamento. Reconhece variante móvel brasileira com/sem nono dígito, usa responsáveis atuais por agente e revalida antes de IA/voz/envio e follow-up. Preserva histórico técnico e avisos administrativos; nenhuma mudança cadastral ou migration.100 testes focados aprovados na base integrada. [Causa, verificações e limites](correcao-responsaveis-whatsapp-2026-09-14.md). Reteste real após publicação permanece pendente.
 
 Publicação da correção confirmada às 18:00 BRT: `fe81625d`, Vercel `dpl_DFt5MJAooejHXPjnKTMUma8u2yZ5` Ready e aliases principais. Relatório anterior registra as verificações; nenhum teste real foi disparado. Registro pós-publicação mantido para o próximo pacote, evitando deploy apenas documental.
+
+## Assets privados do Estúdio — preparação local em 14/09
+
+Implementados arquivos privados na VPS com ticket de uso único, escopo organização/projeto, revalidação de contrato/chave e reserva/liberação de armazenamento. FFmpeg mede duração por decodificação com limite de30 minutos/20 MB, sem URLs externas, sem usar duração declarada pelo cliente. Upload, download e exclusão exigem autorização; confirmações são recuperadas após reinício. Não há consumo de fornecedor ou débito de IA nesta etapa.
+
+27 testes dirigidos passaram (SQL PostgreSQL local, transporte HTTP local, isolamento, duração sintética e regressões do relay), além de TypeScript/lint. Migration0148, nova imagem com FFmpeg, volume privado incluído no backup e flag `STUDIO_ASSETS_ENABLED` ainda **não publicados/ativados**. Isso não conclui as modalidades do Estúdio; operações, liquidação, ferramentas da interface e ativação comercial continuam em desenvolvimento. Nenhum arquivo pessoal ou geração paga utilizado nos testes.
