@@ -1,3 +1,4 @@
+import * as operationHours from "../../src/lib/sales-catalog/operation-hours";
 import * as localDelivery from "../../src/lib/sales-catalog/local-delivery";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
@@ -14,6 +15,7 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
       if (name in imports) return imports[name];
+      if (name === "./operation-hours" || name === "@/lib/sales-catalog/operation-hours") return operationHours;
       if (name === "./local-delivery" || name === "@/lib/sales-catalog/local-delivery") return localDelivery;
       if (name.endsWith("/outbound-delivery")) return { fetchWhatsappOutbound: (url: unknown, init: unknown) => {
         if (typeof globals.fetch !== "function") throw new Error("HTTP mock required for outbound transport");

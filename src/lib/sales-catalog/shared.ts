@@ -1,3 +1,4 @@
+import type { SalesCatalogOperationHours } from "./operation-hours";
 import type { SalesCatalogCategoryIconId } from "./category-icons";
 
 export type SalesCatalogItemStatus = "active" | "draft" | "archived";
@@ -131,6 +132,7 @@ export type SalesCatalogAsaasSettings = {
 };
 
 export type SalesCatalogOrderPolicy = {
+  operations?: SalesCatalogOperationHours;
   minimumOrderValue: string | null;
   reservationPolicy: SalesCatalogReservationPolicy;
   allowOrderWithoutPayment: boolean;

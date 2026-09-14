@@ -10,8 +10,8 @@ Base remota conferida por fetch na retomada: `2301a69311e006348e35052f5899425902
 | P0.2 | C09–C11/C18; links e entrega para todos os emissores | Implementado na fronteira comum e nos emissores; integrações sintéticas aprovadas |
 | P0.3 | C12–C18; agenda factual e eventos para ambos | Implementado; reserva/contexto e claim de aviso verificados em SQL; cancelamento para ambos verificado no preparador real |
 | P1.1 | C03/C18/C19/C24; busca e variantes | Busca indexada/paginada implementada; 105 itens sintéticos, variantes e isolamento verificados |
-| P1.2 | C20–C22; área e cotação única | Implementado e validado localmente; migration 0140 aplicada; aplicativo em publicação |
-| P1.3 | C22; horários de operação | Pendente |
+| P1.2 | C20–C22; área e cotação única | Publicado em 96bfae2; migrations 0140–0141 aplicadas e verificadas |
+| P1.3 | C22; horários de operação | Implementado; validação e publicação em conclusão |
 | P2.1 | C23/C24; composição de alimentos | Pendente |
 | P2.2–2.3 | C14/C20/C25; profissional, serviços e domicílio | Pendente |
 | P3 | C26; extensões dependentes de produto | Delimitar contratos e decisões materiais, sem alegação de suporte antecipada |
@@ -67,3 +67,15 @@ Validação: 2.612 testes gerais aprovados; após os complementos finais, 98 tes
 Migration `0140_revision_delivery_snapshot` aplicada em transação, MD5 do SQL normalizado `b5fc785ab7597a585615fdba84abe3da`, idêntico ao arquivo. Alteração restrita a dois corpos de função, com hashes antes/depois; nenhuma atualização de registros de pedidos/clientes na publicação. O hash do corpo de reset normalizado permaneceu `263f7828053dc20e10505a043f79f84d`. Aplicativo desta etapa ainda em preparação de publicação; horários, alimentação e serviços permanecem pendentes.
 
 Conferência posterior à 0140 encontrou `set_checkout_delivery` com execução também por anon/authenticated, apesar do contrato local de serviço. Migration adicional `0141_checkout_delivery_rpc_permissions` restringe o acesso a service_role; único chamador no aplicativo é a rota validada de checkout via serviço. MD5 do SQL normalizado `2bc6c3a2336860a4cdbce0f8506ff894`; 29 testes SQL, incluindo permissões, aprovados. Nenhum corpo financeiro ou registro de cliente foi alterado por essa correção de acesso.
+
+P1.2 publicado na master em `96bfae204c15969782ff79093d65e6c8dd4c19e2`: Vercel `dpl_9aeetRfhCprBQ4sjSEhG1iHuTVtX` Ready / Latest / Production em 13/09 às 22:05:10 BRT (14/09 01:05:10 UTC), domínio principal vinculado. 0141 confirmada com anon/authenticated sem execução e service_role com execução. Reteste real de clientes permanece com o titular. P1.3 continua nesta tarefa.
+
+## Horários operacionais — P1.3
+
+Configuração opcional, inicialmente desativada, no painel do catálogo: fuso IANA, janelas distintas de recebimento, preparo, entrega e retirada, intervalos, virada da meia-noite, datas fechadas e pausa temporária. Nenhum horário, feriado ou tempo de produção foi ativado para empresa real. Estimativas opcionais de preparo/entrega são conferidas contra as janelas; não inferem disponibilidade de equipe ou capacidade de cozinha e não substituem a agenda de serviços.
+
+O cálculo determinístico atua na proposta e no novo pedido WhatsApp, criação de pedido público, revisão confirmada, edição de entrega/ofertas e início de cobrança. Configuração ativada inválida bloqueia o fechamento. Revisão recusada libera seu claim antes de tentar aposentar pagamentos; replay concluído e consulta de tentativa de cartão em andamento continuam disponíveis após fechar. A página do cartão mostra indisponibilidade antes de coletar dados e permite consultar novamente. Alterar horários não cancela pedidos ou pagamentos anteriores, nem revoga um código Pix já emitido no provedor. Não há agendamento de pedidos futuros nesta etapa; combinação fora da janela depende de atendimento.
+
+Complemento P1.2: a criação inicial agora grava também `shipping_quote`; leitura aceita o snapshot legado `initial_shipping` somente quando não existe o snapshot posterior. Um snapshot vazio de entrega atualizado não ressuscita a localização antiga. Duas regressões de leitura conferem essa precedência.
+
+Validação: suíte geral com 2.632 testes aprovada; complementos de horários, integração, revisão e WhatsApp aprovados (59 testes na rodada direcionada, mais dois casos de cartão). TypeScript, ESLint e build Next/webpack aprovados. Prévia dos componentes reais em desktop e celular, dados fictícios, sem overflow horizontal, campos sem horários presumidos, janela 18:00–02:00 e pausa/validação conferidas. Sem nova migration, envio ou transação real de teste. Alimentação, recursos de serviços e domicílio continuam no escopo.

@@ -9,7 +9,7 @@ import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { detectCheckoutCardBrand, type CheckoutCardBrand } from "@/lib/sales-catalog/card-brand";
 import { PaymentBrandBadge } from "./payment-brand-badge";
 
-type Quote = { recurring?: boolean; campaignNotice?: string | null; amount: number; revision: number; holder: CheckoutCardHolder; maxInstallments: number; enabled: boolean; paid: boolean; closed: boolean; review?: boolean; attempt: { id: string; state: string } | null; shipping: number };
+type Quote = { operation?: { allowed: boolean; message: string | null; estimate: string | null }; recurring?: boolean; campaignNotice?: string | null; amount: number; revision: number; holder: CheckoutCardHolder; maxInstallments: number; enabled: boolean; paid: boolean; closed: boolean; review?: boolean; attempt: { id: string; state: string } | null; shipping: number };
 type Props = { sessionId: string; selectedOrderBumpIds: string[]; externalBusy?: boolean; offers?: ReactNode; onBusyChange: (busy: boolean) => void; onApproved: () => void };
 const money = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 const inputClass = "mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base text-slate-950 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50";
@@ -57,7 +57,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || busy || !quote || quote.review) return;
+    if (submitting.current || busy || !quote || quote.review || quote.operation?.allowed === false) return;
     const form = new FormData(event.currentTarget);
     let card;
     let paymentRequested = false;
@@ -111,6 +111,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
   if (loading) return <p className="mt-5 flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Conferindo seu pedido…</p>;
   if (quote?.paid) return <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900"><CheckCircle2 className="mb-2 h-6 w-6" /><p className="font-bold">Pagamento aprovado!</p><p className="mt-1 text-sm">Seu pedido está confirmado. Você acompanha os próximos passos pelo WhatsApp.</p></div>;
   if (quote?.closed) return <p className="mt-4 text-sm">Este pedido foi encerrado. Continue pelo WhatsApp para fazer um novo pedido.</p>;
+  if (quote?.operation?.allowed === false && !waiting) return <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{quote.operation.message}</p><button type="button" onClick={() => loadQuote().catch(error => setMessage(error.message))} className="mt-2 min-h-11 underline">Conferir disponibilidade novamente</button>{message ? <p>{message}</p> : null}</div>;
   if (quote?.review) return <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Pagamento em conferência pela equipe. Aguarde antes de tentar pagar novamente. O resultado será informado pelo WhatsApp.</p>;
   if (quote && !quote.enabled && !waiting) return <p role="status" className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">O cartão está temporariamente indisponível. Continue pelo WhatsApp para combinar o pagamento com a loja.</p>;
   if (!quote) return <div role="alert" className="mt-4 text-sm text-rose-700">{message}<button type="button" className="mt-3 block underline" onClick={() => loadQuote().catch(error => setMessage(error.message))}>Conferir pedido novamente</button></div>;
@@ -131,6 +132,7 @@ export function AsaasCardForm({ sessionId, selectedOrderBumpIds, externalBusy = 
       {differentHolder && holder ? <div className="space-y-3 rounded-lg border border-slate-200 p-3"><p className="text-xs text-slate-600">Informe os dados do titular para validar o cartão.</p>{([{ key: "name", label: "Nome completo" }, { key: "email", label: "E-mail" }, { key: "cpfCnpj", label: "CPF/CNPJ" }, { key: "phone", label: "Telefone" }, { key: "postalCode", label: "CEP" }, { key: "addressNumber", label: "Número do endereço" }] as const).map(field => <label key={field.key} className="block text-xs font-semibold text-slate-700">{field.label}<input value={holder[field.key]} required type={field.key === "email" ? "email" : "text"} onChange={event => setHolder({ ...holder, [field.key]: event.target.value })} className={inputClass} /></label>)}</div> : null}
     </fieldset>}
     {!waiting ? offers : null}
+    {quote.operation?.estimate ? <p className="text-xs leading-5 text-slate-600">{quote.operation.estimate}</p> : null}
     {quote.campaignNotice ? <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">{quote.campaignNotice}</p> : null}
     {quote.recurring ? <label className="flex items-start gap-2 text-xs leading-5"><input name="recurring" type="checkbox" required className="mt-1"/>{storeRecurringConsent}</label> : null}
     {!waiting ? <button type="submit" disabled={busy} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--store-button,#1d4ed8)] px-3 text-sm font-bold text-[color:var(--store-button-text,#fff)] disabled:opacity-60">{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}{sending ? "Processando pagamento…" : `Pagar ${money(quote.amount)}`}</button> : null}

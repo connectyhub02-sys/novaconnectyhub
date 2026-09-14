@@ -1,3 +1,4 @@
+import { evaluateOrderOperation } from "./operation-hours";
 import "server-only";
 import { boundDeliveryCoordinates, validDeliveryPoint } from "./local-delivery";
 import type { SalesCatalogGeoPoint } from "./shared";
@@ -14,7 +15,7 @@ export async function loadCheckoutDelivery(client: SupabaseClient, sessionId: st
   const snapshot = await loadTransparentCheckout(client, sessionId);
   const { order, items, session } = snapshot;
   const customer = pickCustomer(draft ?? order);
-  if (!draft) customer.coordinates = boundDeliveryCoordinates(record(order.metadata).shipping_quote, customer.destination_address, customer.destination_cep);
+  if (!draft) customer.coordinates = boundDeliveryCoordinates(record(order.metadata).shipping_quote ?? record(order.metadata).initial_shipping, customer.destination_address, customer.destination_cep);
   const ids = [...new Set(items.map(item => item.catalog_item_id).filter(Boolean))];
   const { data: products, error } = await client.from("intelligence_memory").select("id, organization_id, title, content, metadata, created_at, updated_at").eq("organization_id", session.organization_id).eq("memory_type", "sales_catalog_item").in("id", ids);
   if (error) throw new CheckoutError("Não foi possível conferir os produtos para a entrega.", 503);
@@ -27,14 +28,18 @@ export async function loadCheckoutDelivery(client: SupabaseClient, sessionId: st
   const settings = await getOrganizationSalesCatalogShippingSettings(client, session.organization_id);
   const subtotal = normalizeCurrencyAmount(order.subtotal) ?? 0;
   const delivery = quoteOrderDelivery({ entries, settings, subtotal, cep: customer.destination_cep ?? "", address: customer.destination_address ?? "", coordinates: customer.coordinates });
-  const selected = chooseOrderDeliveryQuote(delivery.quotes, order.shipping_method);
+  const operationFor = (pickup: boolean) => evaluateOrderOperation(snapshot.settings?.orderPolicy?.operations, delivery.physical ? pickup ? "pickup" : "delivery" : "none");
+  const quotes = delivery.quotes.filter(quote => operationFor(quote.pickup).allowed);
+  const selected = chooseOrderDeliveryQuote(quotes, order.shipping_method);
+  const operation = operationFor(selected?.pickup ?? false);
+  const operationError = !quotes.length && !operation.allowed ? operation.message : null;
   const requireAddress = delivery.physical || snapshot.settings?.asaas.enabledMethods.includes("credit_card") !== false;
   const needsLocation = Boolean(settings?.localDeliveryEnabled && settings.localDeliveryAuthority !== "cep" && settings.localDeliveryAuthority !== "address" && settings.localDeliveryZones.some(zone => zone.active && (zone.shape === "radius" || zone.shape === "polygon")));
-  return { snapshot, customer, requireAddress, needsLocation, ...delivery, selectedId: selected?.id ?? "", revision: Number(order.checkout_revision ?? 0), subtotal, discount: normalizeCurrencyAmount(order.discount_total) ?? 0 };
+  return { snapshot, customer, requireAddress, needsLocation, ...delivery, quotes, operationError, error: operationError ?? delivery.error, selectedId: selected?.id ?? "", revision: Number(order.checkout_revision ?? 0), subtotal, discount: normalizeCurrencyAmount(order.discount_total) ?? 0 };
 }
 
 export function publicDeliveryQuote(data: Awaited<ReturnType<typeof loadCheckoutDelivery>>) {
-  return { customer: data.customer, needsLocation: data.needsLocation, requireAddress: data.requireAddress, physical: data.physical, quotes: data.quotes, selectedId: data.selectedId, revision: data.revision, subtotal: data.subtotal, discount: data.discount, error: data.error };
+  return { customer: data.customer, needsLocation: data.needsLocation, requireAddress: data.requireAddress, physical: data.physical, quotes: data.quotes, selectedId: data.selectedId, revision: data.revision, subtotal: data.subtotal, discount: data.discount, error: data.error, operationError: data.operationError };
 }
 
 export async function saveCheckoutDelivery(client: SupabaseClient, sessionId: string, body: Record<string, unknown>) {
@@ -47,6 +52,8 @@ export async function saveCheckoutDelivery(client: SupabaseClient, sessionId: st
   if (data.requireAddress && (!parseCheckoutAddress(customer.destination_address).address || (customer.destination_address?.trim().length ?? 0) < 12)) throw new CheckoutError("Informe o endereço completo com rua, número, bairro e cidade.", 422);
   const selected = data.quotes.find(quote => quote.id === body.serviceId);
   if (data.physical && !selected) throw new CheckoutError(data.error ?? "Escolha uma opção de entrega disponível.", 422);
+  const operation = evaluateOrderOperation(snapshot.settings?.orderPolicy?.operations, data.physical ? selected?.pickup ? "pickup" : "delivery" : "none");
+  if (!operation.allowed) throw new CheckoutError(operation.message!, 409);
   const shipping = selected?.amount ?? 0;
   const order = snapshot.order;
   const { data: payments, error } = await client.from("sales_catalog_payment_sessions").select("id, provider_payment_id, metadata").eq("organization_id", snapshot.session.organization_id).eq("order_id", order.id).in("status", ["created", "pending", "error"]);

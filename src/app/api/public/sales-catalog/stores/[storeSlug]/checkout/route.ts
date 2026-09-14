@@ -185,6 +185,7 @@ export async function POST(
   const subtotalCents = resolvedItems.reduce((total, entry) => total + entry.totalCents, 0);
   const subtotal = formatMoneyCents(subtotalCents);
   const delivery = await preparePublicOrderDelivery({ client, organizationId: organization.id, entries: resolvedItems, subtotal: subtotalCents / 100, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
+  if (!delivery.operation.allowed) return NextResponse.json({ error: delivery.operation.message }, { status: 422 });
   const total = delivery.total;
   const now = new Date().toISOString();
   let savedLead: LeadRow | null = null;

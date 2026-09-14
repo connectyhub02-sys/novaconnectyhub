@@ -1,3 +1,4 @@
+import { readOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { normalizeAgentPromptBuilderConfig } from "@/lib/whatsapp/agent-prompt-templates";
 import "server-only";
@@ -2054,6 +2055,7 @@ function readOrderPolicy(value: unknown, fallback: ClientSalesCatalogSettings["o
   const reservationPolicy = readString(record.reservation_policy) ?? readString(record.reservationPolicy);
 
   return {
+    operations: record.operations ? readOperationHours(record.operations) : fallback.operations,
     minimumOrderValue: readString(record.minimum_order_value) ?? readString(record.minimumOrderValue) ?? fallback.minimumOrderValue,
     reservationPolicy: reservationPolicy ? normalizeReservationPolicy(reservationPolicy) : fallback.reservationPolicy,
     allowOrderWithoutPayment: readNullableBoolean(record.allow_order_without_payment) ?? readNullableBoolean(record.allowOrderWithoutPayment) ?? fallback.allowOrderWithoutPayment,

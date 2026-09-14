@@ -1,3 +1,4 @@
+import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
 import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { activityDefaultDestination, activityRepresentation, buildActivityProfileInstruction } from "./activity-profile";
@@ -1888,7 +1889,7 @@ async function loadOrganizationSalesCatalogOrders(
   const financialSummaries = await loadOrderFinancialSummary(client, input.organizationId, orderIds);
   return orderRows.map((order) => ({
     ...mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []),
-    shippingQuote: readRecord(order.metadata)?.shipping_quote,
+    shippingQuote: readRecord(order.metadata)?.shipping_quote ?? readRecord(order.metadata)?.initial_shipping,
     checkoutConfirmedAt: asString(readRecord(order.metadata)?.checkout_confirmed_at),
     checkoutRevision: Number((order as SalesCatalogOrderRow & { checkout_revision?: number }).checkout_revision ?? 0),
     checkoutPaymentLock: (order as SalesCatalogOrderRow & { checkout_payment_lock?: string | null }).checkout_payment_lock ?? null,
@@ -6242,6 +6243,7 @@ function buildSalesCatalogCommerceLines(
     settings.asaas.recurringEnabled
       ? "- Produto recorrente pode ser tratado como assinatura somente quando o produto também estiver marcado como recorrente; não transforme assinatura em Pix único."
       : "- Não ofereça assinatura ou cobrança recorrente automática; se o produto estiver marcado como recorrente, explique que precisa de confirmação humana.",
+    operationHoursSummary(settings.orderPolicy.operations),
     settings.orderPolicy.minimumOrderValue ? `- Pedido mínimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
     `- Reserva do pedido: ${formatRuntimeReservationPolicy(settings.orderPolicy.reservationPolicy)}.`,
     `- Pode fechar sem pagamento: ${settings.orderPolicy.allowOrderWithoutPayment ? "sim" : "não"}.`,
@@ -9693,6 +9695,8 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     intentText: shippingIntentText,
     previewSavedAddress: input.recoverSavedAddress,
   });
+  const operation = evaluateOrderOperation(input.context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(selections.map(selection => selection.item), shipping?.shippingMethod));
+  if (!operation.allowed) return operation.message!;
   const shippingLine = buildSalesCatalogOrderConfirmationShippingLine(shipping);
   const shouldHoldFinalTotal = hasPhysicalSalesCatalogSelection(selections)
     && canResolveSalesCatalogDeliveryForSelections(input.context, selections)
@@ -9707,6 +9711,7 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     "Antes de fechar, confirma se o pedido ficou assim:",
     lines.join("\n"),
     shippingLine,
+    operation.estimate,
     shouldHoldFinalTotal ? "Ainda preciso calcular a entrega antes do total final." : "",
     totalLine,
     input.recoverSavedAddress && shipping?.destinationAddress ? `Endereço salvo: ${shipping.destinationAddress}.` : "",
@@ -11495,6 +11500,9 @@ async function recordSalesCatalogOrderIntent(input: {
     return null;
   }
 
+  const operation = evaluateOrderOperation(input.context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(orderSelections.map(selection => selection.item), initialShipping?.shippingMethod));
+  if (!operation.allowed) return null;
+
   const payableTotal = initialShipping
     ? addRuntimeMoney(total, initialShipping.shippingTotal) ?? total
     : total;
@@ -11554,7 +11562,9 @@ async function recordSalesCatalogOrderIntent(input: {
           mention_preview: selection.mentionText,
         })),
         billing_cycles: Array.from(new Set(items.map((item) => item.billingCycle))),
+        operation_estimate: operation.estimate,
         initial_shipping: initialShipping?.metadata ?? null,
+        shipping_quote: initialShipping?.metadata ?? null,
         commercial_flow_type: commercialFlowType,
         revenue_owner_type: revenueOwnerType,
         commission_eligible: commissionEligible,
@@ -12456,6 +12466,11 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     await persistRuntimeOrderRevision(client, context, null);
     return reply("Os itens e as quantidades já correspondem ao pedido salvo. Mantive o pedido e o pagamento existentes, sem gerar uma nova cobrança.");
   }
+  const operation = evaluateOrderOperation(context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(selections.map(selection => selection.item), quote?.name));
+  if (!operation.allowed) {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return reply(operation.message!);
+  }
   const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, order.id);
   const shipping = { total: quote?.amount ?? 0, method: quote?.name ?? null,
     destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address,
@@ -12466,7 +12481,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     try {
       await applySalesCatalogOrderRevision({ client, organizationId: context.organization.id, leadId: context.lead.id,
         conversationId: context.conversationId, orderId: order.id, expectedRevision: draft.expected_revision, requestId: draft.request_id,
-        rows, shipping,
+        rows, shipping, operationHours: context.salesCatalogSettings?.orderPolicy?.operations,
         expectedTotal: normalizeCurrencyAmount(total)!, preferredPaymentMethod: draft.preferred_method });
     } catch {
       await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
@@ -12487,7 +12502,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   draft.fingerprint = fingerprint;
   draft.preview_text = [draft.legacy_cart_reconciled_at ? "O resumo anterior contém itens que ainda não foram gravados no pedido. Confira a proposta completa:" : "Confira a alteração do seu pedido:", selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line).join("\n"),
     quote ? `Frete: R$ ${formatRuntimeOrderMoney(quote.amount)} (${quote.name}).` : "",
-    `Total: R$ ${total}.`, draft.address && !quote?.pickup ? `Entrega: ${draft.address}.` : "", draft.preferred_method ? `Pagamento: ${draft.preferred_method === "card" ? "cartão" : "Pix"}.` : "", "Confirma essa alteração?"].filter(Boolean).join("\n\n");
+    operation.estimate, `Total: R$ ${total}.`, draft.address && !quote?.pickup ? `Entrega: ${draft.address}.` : "", draft.preferred_method ? `Pagamento: ${draft.preferred_method === "card" ? "cartão" : "Pix"}.` : "", "Confirma essa alteração?"].filter(Boolean).join("\n\n");
   await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
   const result = await reply(draft.preview_text);
   await persistRuntimeOrderRevision(client, context, { ...draft, ready: true });

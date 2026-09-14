@@ -1,3 +1,4 @@
+import { defaultOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { describe, expect, it, vi } from "vitest";
 import { runtimeHarness } from "./helpers/whatsapp-runtime-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
@@ -37,6 +38,14 @@ const context = () => ({
 type Selection = { item: { id: string }; quantity: number };
 
 describe("physical WhatsApp checkout after a natural multipart summary", () => {
+  it("does not ask to confirm a new order while receiving is paused", () => {
+    const ctx = context();
+    Object.assign(ctx, { salesCatalogSettings: { orderPolicy: { operations: { ...defaultOperationHours(), enabled: true, schedules: { ...defaultOperationHours().schedules, orders: { enabled: true, windows: [{ day: 0, start: "00:00", end: "24:00" }] } }, pausedUntil: "2099-01-01T00:00:00Z" } } } });
+    const call = runtimeHarness();
+    const text = call("buildSalesCatalogOrderConfirmationPrompt", { context: ctx, selections: [{ item: catalog[0], quantity: 1 }], intentText: customerData, latestInbound: ctx.messages.at(-1) });
+    expect(text).toContain("pausou"); expect(text).not.toContain("Posso fechar");
+  });
+
   it("resolves shortened and reordered titles without buying the other brand", () => {
     const call = runtimeHarness();
     const selections = call<Selection[]>("resolveSalesCatalogOrderSelections", { context: context(), currentItems: [], responseText: "", intentText: "sim pode aguardando" });
@@ -200,6 +209,14 @@ describe("local delivery uses the same regional quote in the initial conversatio
 
 
 describe("location survives confirmation only for the current destination", () => {
+  it.each([undefined, {}])("loads the initial quote only when no newer snapshot exists: %j", async newer => {
+    const quote = { coordinates: { lat: -27.5, lng: -48.5 }, destination_address: "Rua Exemplo, 42", cep: "88010000" };
+    const db = commerceDatabase({ sales_catalog_orders: [{ id: "order", organization_id: "store", lead_id: "lead", metadata: { initial_shipping: quote, shipping_quote: newer } }], sales_catalog_order_items: [] });
+    const call = runtimeHarness({ "@/lib/client-os/sales-catalog": { mapSalesCatalogOrder: (row: unknown) => row } });
+    const orders = await call<Array<{ shippingQuote: unknown }>>("loadOrganizationSalesCatalogOrders", db.client, { organizationId: "store", leadId: "lead", conversationId: "conversation" });
+    expect(orders[0].shippingQuote).toEqual(newer ?? quote);
+  });
+
   it("preserves the received pin after the address and clears it after another address", () => {
     const addr=message("inbound", "Rua das Flores, numero 42, Centro, Florianópolis, CEP 88010000", 1);
     const pin={...message("inbound", "Minha localização", 2),payload:{latitude:-27.5,longitude:-48.5}};

@@ -1,3 +1,4 @@
+import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
 import { assertPublicCommerceAccess } from "./public-commerce-access";
 import { ensureStoreRecurringAgreement } from "@/lib/commerce/store-campaigns";
 import { assertStoreAgreementPayable } from "@/lib/commerce/store-payment-guard";
@@ -67,6 +68,7 @@ export function publicCheckoutQuote(snapshot: Awaited<ReturnType<typeof loadTran
   return {
     amount, revision: Number(order.checkout_revision ?? 0), holder,
     recurring: pricing?.recurring === true, campaignNotice: pricing ? campaignPriceNotice(pricing) + renewalNotice : null,
+    operation: evaluateOrderOperation(settings?.orderPolicy?.operations, orderOperationMode(snapshot.items, order.shipping_method)),
     enabled: snapshot.enabled,
     review: snapshot.review,
     maxInstallments: pricing?.recurring ? 1 : Math.min(12, Math.max(1, settings?.asaas.maxInstallments ?? 1)),
@@ -95,6 +97,8 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
   }
   await assertContractAccess(session.organization_id,client);
   await assertStoreAgreementPayable(client, session.organization_id, order.id);
+  const operation = evaluateOrderOperation(settings?.orderPolicy?.operations, orderOperationMode(items, order.shipping_method));
+  if (!operation.allowed) throw new CheckoutError(operation.message ?? "A loja está fora do horário de operação.", 409);
   if (!snapshot.enabled) throw new CheckoutError("O cartão está temporariamente indisponível nesta loja. Continue pelo WhatsApp.", 503);
   if (["confirmed", "refunded"].includes(order.payment_status) || ["paid", "in_preparation", "shipped", "delivered", "cancelled"].includes(order.status)) throw new CheckoutError("Este pedido já foi finalizado.", 409);
   if (requiresSalesCatalogShippingBeforePayment(order, items)) throw new CheckoutError("Confirme o endereço e o frete pelo WhatsApp antes de pagar.", 409);

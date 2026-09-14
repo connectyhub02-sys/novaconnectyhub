@@ -1,3 +1,4 @@
+import { readOperationHours, validateOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { deliveryMoneyCents } from "@/lib/sales-catalog/local-delivery";
 import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
 import { randomUUID } from "node:crypto";
@@ -1159,6 +1160,8 @@ async function saveCatalogSettings(input: {
     commerceDefaults.asaas,
   );
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
+  const operationError = orderPolicy.operations && validateOperationHours(orderPolicy.operations);
+  if (operationError) throw new Error(operationError);
   const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
   const automationSettings = normalizeAutomationSettings(input.body?.automationSettings, commerceDefaults.automationSettings);
@@ -4090,6 +4093,7 @@ function normalizeOrderPolicy(value: unknown, fallback: ReturnType<typeof create
   const reservationPolicy = readFormString(record.reservationPolicy ?? record.reservation_policy);
 
   return {
+    operations: record.operations ? readOperationHours(record.operations) : fallback.operations,
     minimumOrderValue: normalizeOptionalText(readFormString(record.minimumOrderValue ?? record.minimum_order_value), 40) ?? fallback.minimumOrderValue,
     reservationPolicy: reservationPolicy ? normalizeReservationPolicy(reservationPolicy) : fallback.reservationPolicy,
     allowOrderWithoutPayment: readBoolean(record.allowOrderWithoutPayment ?? record.allow_order_without_payment) ?? fallback.allowOrderWithoutPayment,
@@ -4336,6 +4340,7 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
 
 function serializeOrderPolicy(policy: ReturnType<typeof createDefaultSalesCatalogCommerceSettings>["orderPolicy"]) {
   return {
+    operations: policy.operations ?? null,
     minimum_order_value: policy.minimumOrderValue,
     reservation_policy: policy.reservationPolicy,
     allow_order_without_payment: policy.allowOrderWithoutPayment,

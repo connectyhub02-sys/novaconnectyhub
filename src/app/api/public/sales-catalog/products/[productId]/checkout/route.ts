@@ -112,6 +112,7 @@ export async function POST(
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
   const totalAmount = (amount * quantity).toFixed(2);
   const delivery = await preparePublicOrderDelivery({ client, organizationId: row.organization_id, entries: [{ item, quantity }], subtotal: amount * quantity, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
+  if (!delivery.operation.allowed) return NextResponse.json({ error: delivery.operation.message }, { status: 422 });
   const checkoutIntentKey = createPublicCheckoutIntentKey([
     "sales_catalog_public_product",
     row.organization_id,

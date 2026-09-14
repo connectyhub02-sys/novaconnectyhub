@@ -1,4 +1,5 @@
 "use client";
+import { OperationHoursEditor } from "./operation-hours-editor";
 import { AgendaResourceSelect } from "./agenda-resource-select";
 import { AgendaActivationNotice, useAgendaActivation } from "./use-agenda-activation";
 import { DialogFrame } from "@/components/ui/dialog-frame";
@@ -1750,6 +1751,7 @@ export function SalesCatalogConsole({
             recurringEnabled: settingsDraft.asaas.recurringEnabled,
           },
           orderPolicy: {
+            operations: settingsDraft.orderPolicy.operations,
             minimumOrderValue: cleanInput(settingsDraft.orderPolicy.minimumOrderValue, 40),
             reservationPolicy: settingsDraft.orderPolicy.reservationPolicy,
             allowOrderWithoutPayment: settingsDraft.orderPolicy.allowOrderWithoutPayment,
@@ -3646,6 +3648,7 @@ export function SalesCatalogConsole({
               </div>
 
               <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet">
+                <OperationHoursEditor value={settingsDraft.orderPolicy.operations} onChange={operations => updateOrderPolicy({ operations })} />
                 <div className="grid gap-3 lg:grid-cols-2">
                   <label className="block">
                     <FieldLabel>Pedido minimo</FieldLabel>

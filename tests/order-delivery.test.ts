@@ -60,7 +60,7 @@ describe("self-service shipping", () => {
     expect(shipping.quoteOrderDelivery({ ...input(), settings: local, subtotal: 29.99 }).quotes).toEqual([]);
   });
   it("reuses CRM delivery data before a new order is sent for payment", async () => {
-    const prepare = serverModuleHarness<typeof import("@/lib/sales-catalog/public-order-delivery")>("src/lib/sales-catalog/public-order-delivery.ts", { "@/lib/client-os/sales-catalog": { getOrganizationSalesCatalogShippingSettings: vi.fn().mockResolvedValue(settings) }, "./checkout-customer": customers, "./order-shipping": shipping });
+    const prepare = serverModuleHarness<typeof import("@/lib/sales-catalog/public-order-delivery")>("src/lib/sales-catalog/public-order-delivery.ts", { "@/lib/client-os/sales-catalog": { getOrganizationSalesCatalogShippingSettings: vi.fn().mockResolvedValue(settings), getOrganizationSalesCatalogSettings: vi.fn().mockResolvedValue(null) }, "./checkout-customer": customers, "./order-shipping": shipping });
     const result = await prepare.preparePublicOrderDelivery({ client: {} as never, organizationId: "store", entries: input().entries, subtotal: 467.41, customer: { id: "new", customer_name: "Maria Exemplo" }, lead: { metadata: { email: "cliente@example.com", customer_document: "12345678909", delivery_cep: "88330786", delivery_address: input().address } } });
     expect(result).toMatchObject({ shippingTotal: "70.00", total: "537.41", customer: { destination_cep: "88330786", destination_address: input().address } });
   });

@@ -1,3 +1,4 @@
+import { evaluateOrderOperation, orderOperationMode, type SalesCatalogOperationHours } from "./operation-hours";
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -39,6 +40,7 @@ export type SalesCatalogOrderRevisionInput = {
   shipping: { total: number | string; method: string | null; destinationCep: string | null; destinationAddress: string | null; quote?: Record<string, unknown> };
   expectedTotal: number | string;
   preferredPaymentMethod?: "pix" | "card" | null;
+  operationHours?: SalesCatalogOperationHours;
 };
 
 export type RevisedSalesCatalogOrder = Record<string, unknown> & {
@@ -101,6 +103,8 @@ export async function applySalesCatalogOrderRevision(input: SalesCatalogOrderRev
   if (claim.claimed !== true) throw revisionError(new Error("CHECKOUT_REVISION_BUSY"));
   let retirementStarted = false;
   try {
+    const operation = evaluateOrderOperation(input.operationHours, orderOperationMode(input.rows, input.shipping.method));
+    if (!operation.allowed) throw new Error("CHECKOUT_OPERATION_CLOSED");
     if (claim.needs_retirement === true) {
       retirementStarted = true;
       await retireCheckoutPaymentsBeforeCartChange(input.client, input.organizationId, input.orderId);

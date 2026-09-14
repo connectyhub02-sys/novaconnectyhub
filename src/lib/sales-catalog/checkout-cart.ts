@@ -1,3 +1,4 @@
+import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
 import "server-only";
 import { boundDeliveryCoordinates } from "./local-delivery";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -46,14 +47,18 @@ export async function setSalesCatalogCheckoutOrderBumps(input: { client: Supabas
       });
       const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
       const subtotal = nextItems.reduce((sum, row) => sum + (normalizeCurrencyAmount(row.total) ?? 0), 0);
-      const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: boundDeliveryCoordinates(record(order.metadata).shipping_quote, order.destination_address, order.destination_cep) });
+      const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: boundDeliveryCoordinates(record(order.metadata).shipping_quote ?? record(order.metadata).initial_shipping, order.destination_address, order.destination_cep) });
       const quote = chooseOrderDeliveryQuote(result.quotes, shippingMethod);
       if (!quote) throw new Error(result.error ?? "Confira as opções em Seus dados e entrega antes de adicionar a oferta.");
       shipping = quote.amount;
       shippingMethod = quote.name;
     }
   }
-  if (!sameSelection || pricesChanged) await retireCheckoutPaymentsBeforeCartChange(client, organizationId, orderId);
+  if (!sameSelection || pricesChanged) {
+    const operation = evaluateOrderOperation(settings?.orderPolicy?.operations, orderOperationMode(nextItems, shippingMethod));
+    if (!operation.allowed) throw new Error(operation.message ?? "A loja está fora do horário de operação.");
+    await retireCheckoutPaymentsBeforeCartChange(client, organizationId, orderId);
+  }
   const { data: updated, error: saveError } = await client.rpc("set_checkout_order_bumps", {
     p_order_id: orderId, p_organization_id: organizationId, p_revision: input.revision ?? Number(order.checkout_revision), p_rows: rows, p_shipping: shipping, p_shipping_method: shippingMethod,
   });

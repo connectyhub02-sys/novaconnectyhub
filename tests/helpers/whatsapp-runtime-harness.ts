@@ -1,3 +1,4 @@
+import * as operationHours from "@/lib/sales-catalog/operation-hours";
 import * as activityProfile from "@/lib/whatsapp/activity-profile";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -87,6 +88,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/sales-catalog/shared": catalogShared,
     "@/lib/sales-catalog/shipping-calculator": shipping,
     "@/lib/sales-catalog/local-delivery": localDelivery,
+    "@/lib/sales-catalog/operation-hours": operationHours,
     "@/lib/sales-catalog/mercado-pago": money.exports,
     "@/lib/sales-catalog/order-shipping": serverModuleHarness("src/lib/sales-catalog/order-shipping.ts", {
       "./shipping-calculator": shipping, "./mercado-pago": money.exports,

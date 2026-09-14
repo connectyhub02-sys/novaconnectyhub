@@ -1,3 +1,4 @@
+import { defaultOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 vi.mock("server-only", () => ({}));
@@ -22,6 +23,20 @@ function fixture() {
   return { input, rpc, saved, calls };
 }
 describe("confirmed revision payment orchestration", () => {
+  it("rejects a new revision during a pause before retiring payment and releases its claim", async () => {
+    const f = fixture(); f.input.operationHours = { ...defaultOperationHours(), enabled: true };
+    await expect(applySalesCatalogOrderRevision(f.input)).rejects.toMatchObject({ code: "CHECKOUT_OPERATION_CLOSED" });
+    expect(mocks.retire).not.toHaveBeenCalled();
+    expect(f.calls).toEqual(["begin_sales_catalog_order_revision", "fail_sales_catalog_order_revision"]);
+    expect(f.rpc).toHaveBeenLastCalledWith("fail_sales_catalog_order_revision", expect.objectContaining({ p_uncertain: false }));
+  });
+  it("returns an already completed revision even after operational hours close", async () => {
+    const f = fixture(); f.input.operationHours = { ...defaultOperationHours(), enabled: true };
+    f.rpc.mockResolvedValueOnce({ data: { replay: true, order: f.saved } as never, error: null });
+    expect(await applySalesCatalogOrderRevision(f.input)).toEqual(f.saved);
+    expect(f.rpc).toHaveBeenCalledOnce(); expect(mocks.retire).not.toHaveBeenCalled();
+  });
+
   it("claims the exact scoped proposal before retiring payments, then commits once", async () => {
     const f = fixture();
     expect(await applySalesCatalogOrderRevision(f.input)).toEqual(f.saved);

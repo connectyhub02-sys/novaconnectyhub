@@ -1,3 +1,4 @@
+import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -148,6 +149,18 @@ export async function createSalesCatalogPixPaymentSession(input: {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
   }
 
+  const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
+    client: input.client,
+    organizationId: input.organizationId,
+    orderId: order.id,
+  });
+  const connectyHubOwned = paymentOwner.owner === "connectyhub";
+  const catalogSettings = !connectyHubOwned
+    ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId)
+    : null;
+  const operation = evaluateOrderOperation(catalogSettings?.orderPolicy?.operations, orderOperationMode(items, order.shipping_method));
+  if (!operation.allowed) throw new Error(operation.message ?? "A loja está fora do horário de operação.");
+
   const needsShippingBeforePayment = requiresSalesCatalogShippingBeforePayment(order, items);
   const needsCustomerNameBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerName(order);
   const needsCustomerEmailBeforePayment = input.source === "whatsapp_agent" && !hasSalesCatalogOrderCustomerEmail(order, input.payerEmail);
@@ -187,12 +200,6 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   if (input.deferProvider) return createDeferredSalesCatalogCheckoutSession({ ...input, order, items, amount, preferredMethod, reason: "subscription_renewal", reasonLabel: "Confira sua renovação no checkout." });
 
-  const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
-    client: input.client,
-    organizationId: input.organizationId,
-    orderId: order.id,
-  });
-  const connectyHubOwned = paymentOwner.owner === "connectyhub";
   const paymentProvider = await resolvePaymentGatewayProvider({
     client: input.client,
     organizationId: input.organizationId,
@@ -214,9 +221,6 @@ export async function createSalesCatalogPixPaymentSession(input: {
     });
   }
 
-  const catalogSettings = (paymentProvider === "pagbank" || paymentProvider === "asaas") && !connectyHubOwned
-    ? await getOrganizationSalesCatalogSettings(input.client, input.organizationId).catch(() => null)
-    : null;
   const pagBankSettings = catalogSettings?.pagBank ?? null;
   const asaasSettings = catalogSettings?.asaas ?? null;
   let integration: PaymentGatewayIntegration | null = null;
