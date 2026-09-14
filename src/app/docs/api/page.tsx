@@ -8,9 +8,9 @@ import { connectyhubOpenApiSpec } from "@/lib/connectyhub-api/openapi";
 import { buildApiDocsStructuredData } from "@/lib/seo/structured-data";
 
 export const metadata: Metadata = {
-  title: "API WhatsApp, API de AI e API de Voz AI | ConnectyHub",
+  title: "API WhatsApp, API de AI e Estúdio de Voz e Áudio AI | ConnectyHub",
   description:
-    "Documentação pública da API WhatsApp, API de AI e API de Voz AI ConnectyHub. Endpoints, clonagem privada, autenticação, créditos e OpenAPI JSON.",
+    "Documentação pública da API WhatsApp, API de AI e Estúdio de Voz e Áudio AI ConnectyHub. Endpoints, clonagem privada, autenticação, créditos e OpenAPI JSON.",
   keywords: [
     "API WhatsApp ConnectyHub",
     "API de AI ConnectyHub",
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: "/docs/api" },
   openGraph: {
-    title: "API WhatsApp, API de AI e API de Voz AI | ConnectyHub",
+    title: "API WhatsApp, API de AI e Estúdio de Voz e Áudio AI | ConnectyHub",
     description:
       "Integre WhatsApp e geração de IA: referência pública, exemplos e OpenAPI JSON de cada API.",
     url: "/docs/api",
@@ -33,9 +33,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "API WhatsApp, API de AI e API de Voz AI | ConnectyHub",
+    title: "API WhatsApp, API de AI e Estúdio de Voz e Áudio AI | ConnectyHub",
     description:
-      "Documentação pública da API WhatsApp, API de AI e API de Voz AI, com exemplos e downloads OpenAPI JSON.",
+      "Documentação pública da API WhatsApp, API de AI e Estúdio de Voz e Áudio AI, com exemplos e downloads OpenAPI JSON.",
     images: ["/opengraph-image"],
   },
   robots: {

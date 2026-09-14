@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## Estúdio de Voz e Áudio AI — estrutura visual local, 14/09/2026
+
+Referência visual encaminhada pelo titular incorporada à expansão: nome do produto atualizado em menu, títulos e documentação; exatamente duas seções no cliente, Estúdio de Voz selecionado por padrão e Projetos e chaves API. Removido o cartão redundante de saldo. Uso real resumido acima das seções, com período; histórico, gráficos e detalhamento continuam acessíveis em área expansível. Visão administrativa preservada. Esta etapa não ativa modalidades, muda tarifas, clona vozes ou altera credenciais.
+
+Lint, TypeScript e diff-check aprovados. Prévia do componente real com dados fictícios e mutações bloqueadas conferida no navegador: abertura no Estúdio, navegação para projetos, expansão do histórico e largura móvel de 390 pixels sem transbordamento horizontal. Ainda local, não publicada; integra o pacote maior de expansão em andamento. Novas modalidades e matriz de custo/acesso continuam pendentes; esta revisão visual não comprova sua implementação.
+
 ## API de Voz AI — rótulo de acesso à API, local em 14/09/2026
 
 Pedido pontual do titular: **Projetos e chaves API** substitui **Projetos e chaves** na aba, título da seção e indicação correspondente no guia público de Voz. Alteração somente textual, conferida na prévia local ao abrir a aba, com lint e diff-check aprovados. Não publicada; aguarda autorização desta publicação. Não inclui o plano de expansão do Estúdio nem altera a API de AI, ações, permissões, credenciais ou cobrança.
