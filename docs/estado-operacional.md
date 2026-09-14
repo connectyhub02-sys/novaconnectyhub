@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## API de Voz — revisão visual local, 14/09/2026
+
+Por solicitação do titular, a interface foi alinhada ao painel existente de API de IA: nome API de Voz no menu/metadados/cabeçalho, fundo claro, ações azuis, saldo compartilhado em destaque, abas Painel de uso / Projetos e chaves / Estúdio de Voz. Gráficos de créditos e solicitações usam os agregados reais já existentes, com tabela acessível e fuso UTC explicitado. Histórico em itens expansíveis, estados traduzidos, carregamento e falha sem apresentar saldo/consumo zero fictício; botões e abas ajustados para celular. Operações, endpoints, tarifas, clones e credenciais preservados. Nenhuma migration nesta revisão.
+
+Tipos, lint, build Next/webpack (107 páginas) e nove regressões existentes de contrato/isolamento/ledger passaram. Inspeção visual do componente real em prévia local com dados fictícios e mutações bloqueadas: desktop 1440x900 e celular 390x844, uso, Estúdio, projetos/chaves, vazio e erro. Referência comparada ao código e tela publicada da API de IA. **Correção visual ainda não publicada**; produção permanece no pacote 878eea3 descrito abaixo.
+
+Homologação Betel da versão publicada: síntese única de Evelyn concluída em 14/09 às 18:13:35 UTC, geração `4b04635f-1aab-4dbc-b1fb-b1b3a71ae923`, MP3 de 119.162 bytes. A tarefa Betel confirmou recuperação do mesmo áudio e replay da mesma idempotência. Consulta independente no banco ConnectyHub confirmou completed, reserva zero, cinco créditos, exatamente um evento de uso e um débito; nenhuma nova síntese na conciliação. Sem WhatsApp nem nova clonagem. Compartilhamento do resultado financeiro entre tarefas foi bloqueado pela revisão automática por exigir autorização do destinatário/payload; não confundir com falha na geração ou cobrança.
+
 ## ConnectyHub Voz — pacote inicial publicado, 14/09/2026
 
 Publicação confirmada após autorização específica do titular: commit `878eea363d570263f4acbb59dc6e14bd9b628058` enviado à master sem force, preservando `312a02d`. Vercel `dpl_Et3twiFZ9eNYqJFbFNPBMtPpJTfZ` Ready/Production, criada às 18:01:24 UTC e vinculada aos domínios principal/www. OpenAPI e guia de Voz retornam HTTP 200; `/api/v1/voice/models` sem chave retorna 401. Com a chave Betel existente, models/voices/generations retornaram 200 com projeto e carteira corretos; Evelyn apareceu exclusivamente como clone privado vinculado. Estúdio, API e Gestão conferidos na sessão real do cliente; painel administrativo e documentação `/docs/api#voz` também abriram. Nenhuma geração realizada nesta conferência.
