@@ -1,10 +1,12 @@
 # Estado operacional da ConnectyHub
 
-## Reset por acesso assistido — 14/09/2026
+## Reset por acesso assistido — publicado em 14/09/2026
 
 Restrição implementada na base publicada `4c84800`: reset exclusivo de administrador da plataforma durante acesso assistido a cliente, vinculado no servidor às duas sessões Auth reais e à organização. Cliente owner/admin/comum e admin sem contexto assistido não recebem acesso. Expiração/encerramento revogam a capacidade. Inclui bloqueio de autopromoção pelo campo `profiles.is_platform_admin`, cuja permissão direta foi confirmada na VPS. Corpo do reset integral preservado.
 
 2.774 testes gerais e três testes adicionais de visibilidade, lint e build/TypeScript aprovados. Migration `0146` aplicada após ensaio com rollback; persistência e permissões conferidas às 16:31:48 UTC. SQL MD5 `d800732b2c41189035dedeb23deda45e`, corpo do reset `c451b2107b57810d176abea29ee8871a` preservado. Publicação do aplicativo em andamento. Nenhum reset real, envio WhatsApp ou chamada faturável. [Implementação, matriz e limites](reset-acesso-assistido-2026-09-14.md).
+
+Concluído: aplicativo `312a02d`, Vercel `dpl_HycZAX7Dyz7fA3MUN1PXdBqpqG3U` Ready/Latest/Production no domínio principal às 16:34:21 UTC. Entrada assistida pelo Admin OS observada; botão e modal apareceram no cliente e o modal foi cancelado. Retorno ao administrador revogou a capacidade no banco e removeu o botão da outra aba. Zero novos resets; último job permaneceu anterior a esta tarefa. RPCs públicas diretas negadas com 401/42501, home/login 200. Matriz adversarial e expiração testadas de forma isolada. Registro pós-publicação mantido local para a próxima entrega documental.
 
 ## Precisão de créditos da API — 14/09/2026
 

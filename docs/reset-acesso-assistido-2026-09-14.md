@@ -27,3 +27,18 @@ A conferência de produção encontrou UPDATE para authenticated no campo `profi
 - Ensaio DDL no SQL Editor ConnectyHub VPS executado com rollback e ausência posterior da tabela/migration confirmada. MD5 do SQL LF: `d800732b2c41189035dedeb23deda45e`. Corpo do reset antes/depois: `c451b2107b57810d176abea29ee8871a`. RLS, wrapper exclusivo do serviço, entrada antiga fechada e trigger habilitado verificados no ensaio.
 
 Migration `0146` aplicada e persistência conferida em consulta independente às 16:31:48 UTC: mesmo hash, RLS ativo, novo reset negado a anon/authenticated, entrada antiga negada a service_role e capacidade fictícia rejeitada. Nenhum registro de acesso assistido havia sido criado. Publicação do aplicativo e verificação da interface em andamento. Não houve reset real. Conferir abaixo o registro posterior à implantação antes de considerar a interface observada em produção.
+
+## Publicação e observação concluídas
+
+Aplicativo `312a02d7dd8cd75822cbc346586204e1221e17db` enviado à master. Vercel `dpl_HycZAX7Dyz7fA3MUN1PXdBqpqG3U` Ready / Latest / Production, vinculado ao domínio principal às 13:34:21 BRT (16:34:21 UTC). Build remoto terminou em 1m47s. Master remota preservou `4c84800` e o restante das correções anteriores. TypeScript foi repetido após o último teste adicionado e passou.
+
+Verificações não destrutivas no domínio principal:
+
+- Home e login HTTP 200; rota de reset sem sessão HTTP 401.
+- Chamadas HTTP anônimas diretas às RPCs `reset_lead_data`, `reset_lead_data_assisted` e `check_admin_assisted_session` retornaram HTTP 401 / SQLSTATE 42501, permission denied. Os parâmetros eram fictícios e não pediam confirmação de exclusão.
+- Retorno da sessão administrativa legada ao Admin OS funcionou. Acesso pelo botão Acessar painel a cliente existente criou um registro assistido real: uma sessão ativa, uma capacidade validada pelo SQL, dois usuários/sessões vinculados conforme o novo contrato.
+- No atendimento do cliente, Resetar lead apareceu. Modal de exclusão integral aberto, aviso e foco em Cancelar conferidos, e cancelamento executado. Nenhum POST de reset foi confirmado.
+- Outra aba do mesmo atendimento mostrou o botão antes do encerramento. Ao voltar ao Admin OS na aba originadora, o banco confirmou zero sessões assistidas ativas/validadas; a outra aba removeu botão e modal. O registro assistido revogado permanece como auditoria.
+- `max(lead_reset_jobs.started_at)` ficou em `2026-09-14T00:43:10.15779Z` antes e depois do teste assistido, anterior a esta tarefa; nenhum novo reset foi executado.
+
+Limites: a matriz de owner/admin/usuário comum, expiração de 30 minutos, tenant divergente, banimento, remoção de sessão e autopromoção foi exercitada em banco isolado/testes HTTP simulados; não houve alteração desses estados em contas reais para testes. A navegação superior diretamente para JSON foi bloqueada pelo navegador, mas a consulta da capacidade pela interface e sua resposta visível foram observadas. Não houve reset de lead real, WhatsApp, inferência paga, pedido ou alteração financeira/credencial. Registro pós-publicação mantido em commit documental local para incorporação à próxima entrega, evitando um deploy só documental.

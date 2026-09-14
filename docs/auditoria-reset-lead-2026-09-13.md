@@ -1,5 +1,7 @@
 # Auditoria do atendimento e requisito de exclusão integral — 13/09/2026
 
+**Regra de acesso atualizada em 14/09:** a visibilidade geral descrita neste registro histórico foi substituída por acesso exclusivo de administrador da plataforma em sessão assistida verificável no painel de cliente. O contrato de exclusão integral continua válido. [Implementação publicada e evidências](reset-acesso-assistido-2026-09-14.md).
+
 ## Escopo e evidências
 
 Leitura de produção autorizada pelo titular: conversa atual com Gustavo e três conversas arquivadas visíveis no painel (Gustavo com o titular, Luna com o titular e Luna com Elaine). Dados pessoais, mensagens integrais, links de pagamento e credenciais não são reproduzidos neste relatório.
