@@ -1,3 +1,4 @@
+import * as responsibleAttendance from "../src/lib/whatsapp/responsible-attendance";
 import * as contactMessage from "../src/lib/automations/lead-contact-message";
 import * as followUpGeneration from "../src/lib/whatsapp/follow-up-generation";
 import * as conversationEnding from "../src/lib/whatsapp/conversation-ending";
@@ -87,6 +88,7 @@ function fixture() {
   }));
   const prepareContact = vi.fn(async (): Promise<string | null> => "https://fixture.invalid/contato/preferencias/10000000-0000-4000-8000-000000000001");
   const imports = {
+    "./responsible-attendance": responsibleAttendance,
     "./follow-up-generation": followUpGeneration,
     "./conversation-ending": conversationEnding,
     "@/lib/automations/lead-contact-preferences": { prepareLeadContact: prepareContact },
@@ -187,6 +189,31 @@ function fixture() {
   };
 }
 describe("follow-up execution gates", () => {
+  it("blocks a queued follow-up to a registered responsible without generation or debit", async () => {
+    const f = fixture();
+    f.db.tables.agent_registry[0].metadata = { responsible_humans: [{ phone: "5547999999999" }] };
+    f.db.tables.leads[0].phone_number = "554799999999";
+    await expect(f.execute()).rejects.toBeInstanceOf(responsibleAttendance.ResponsibleAttendanceBlocked);
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.metering).not.toHaveBeenCalled();
+  });
+  it("rechecks a responsible added during generation before sending", async () => {
+    const f = fixture();
+    f.metering.mockImplementationOnce(async () => {
+      f.db.tables.agent_registry[0].metadata = { responsible_humans: [{ phone: "5547999999999" }] };
+      return { usageEventId: "usage", billingMode: "credits", chargeCredits: 1 };
+    });
+    await expect(f.execute()).rejects.toBeInstanceOf(responsibleAttendance.ResponsibleAttendanceBlocked);
+    const calls = f.fetch.mock.calls as unknown as Array<[string]>;
+    expect(calls.some(([url]) => String(url).includes("/send/"))).toBe(false);
+    expect(f.metering).toHaveBeenCalledTimes(1);
+  });
+  it("does not block another agent's lead and respects removed responsibles", async () => {
+    const f = fixture();
+    f.db.tables.agent_registry.push({ id: "another", organization_id: "org", metadata: { responsible_humans: [{ phone: "5547999999999" }] } });
+    f.db.tables.agent_registry[0].metadata = { responsible_humans: [], responsible_human: { phone: "5547999999999" } };
+    expect(await f.execute()).toMatchObject({ status: "sent" });
+  });
   it("recovers an existing payment with distinct purchase and unsubscribe buttons", async () => {
     const f = fixture();
     f.db.tables.leads[0].metadata = { checkout_runtime_state: {stage:"payment_sent",order_id:"order"} };

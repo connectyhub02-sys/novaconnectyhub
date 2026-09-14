@@ -2,6 +2,7 @@ import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsap
 import { prepareLeadContact } from "@/lib/automations/lead-contact-preferences";
 import { leadContactMessage, sendLeadContactMessage } from "@/lib/automations/lead-contact-message";
 import "server-only";
+import { assertAgentAttendanceAllowed, ResponsibleAttendanceBlocked } from "./responsible-attendance";
 import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { getContractAccess } from "@/lib/billing/contract-access";
 import { getLeadPaymentReviews, refreshLeadOrderFinance } from "@/lib/sales-catalog/payment-reviews";
@@ -123,6 +124,10 @@ export async function processWhatsappProactiveFollowUp(input: {
     if (result.status === "skipped") await updateDispatch(client, taskId, { status: "skipped", reason: result.reason, lease_until: null }, data.claimToken);
     return result;
   } catch (error) {
+    if (error instanceof ResponsibleAttendanceBlocked) {
+      await updateDispatch(client, taskId, { status: "skipped", reason: "agent_responsible", lease_until: null }, data.claimToken);
+      return { status: "skipped", reason: "agent_responsible" };
+    }
     // Sending remains unresolved if confirmation could not be persisted.
     await client.from("automation_dispatches").update({ status: "failed", reason: error instanceof Error ? error.message.slice(0, 250) : "execution_failed", updated_at: new Date().toISOString() }).eq("id", taskId).eq("claim_token", data.claimToken).eq("status", "processing");
     throw error;
@@ -186,6 +191,10 @@ async function executeWhatsappProactiveFollowUp(input: {
     if(checkout?.stage!=="payment_sent" || checkout.order_id!==eventData.salesCatalogOrderId)return {status:"skipped",reason:"payment_delivery_not_confirmed"};
   }
 
+  const assertAttendance = () => assertAgentAttendanceAllowed(client, {
+    organizationId: eventData.organizationId, agentId: eventData.agentId, phone,
+  });
+  await assertAttendance();
   const billable = await assertBillableAccess({ organizationId: eventData.organizationId, client })
     .then(() => true)
     .catch(() => false);
@@ -268,6 +277,7 @@ async function executeWhatsappProactiveFollowUp(input: {
   const checkoutLink = eventData.salesCatalogOrderId && eventData.salesCatalogFollowUpKind === "abandoned_order"
     ? await loadFollowUpCheckout(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId) : "";
 
+  await assertAttendance();
   const followUpGeneration = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
@@ -370,6 +380,7 @@ async function executeWhatsappProactiveFollowUp(input: {
   await updateDispatch(client, eventData.dispatchId!, { status: "sending", send_started_at: new Date().toISOString(), lease_until: new Date(Date.now() + 120000).toISOString() }, eventData.claimToken);
   const providerResponse = await sendLeadContactMessage(
     async (path, body) => {
+      await assertAttendance();
       const result = await callUazapi(credentials, path, { method: "POST", token, body, outbound: { instanceId: eventData.whatsappInstanceId, client } });
       if (result.ok) { deliveredText = String(body.text ?? ""); deliveredChoices = Array.isArray(body.choices) ? body.choices : []; }
       return result;
