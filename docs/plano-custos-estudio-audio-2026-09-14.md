@@ -14,7 +14,9 @@ Leitura do cadastro ativo: TTS multilíngue avulso possui 0,008 crédito/caracte
 
 Gemini 3.1 Flash TTS tem cadastros distintos: `text_to_speech` por caractere (0,002 crédito, mínimo 2) e `voice_generation_audio` por tokens (0,0024 entrada, 0,048 saída, mínimo 1). O segundo usa custos R$0,000006/entrada e R$0,00012/saída. Confirmar a política do Estúdio antes de escolher uma dessas bases; nunca somar os dois esquemas à mesma operação. Transcrição Gemini também tem tarifas por tokens para modelos específicos; isso não habilita automaticamente a transcrição de outro fornecedor.
 
-## Proposta para novos recursos — não ativada
+## Base aprovada para novos recursos — não ativada
+
+Em 14/09/2026, o titular aprovou na tarefa de origem a base R$6/US$, multiplicador 4, crédito nominal R$0,01 e mínimo 5 créditos para operações novas, condicionada à confirmação dos custos efetivos antes de ativar. Preservar tarifas atuais. A autorização não inclui compra de planos nem orçamento irrestrito para testes pagos. Não repetir a pergunta sobre esta base; informar divergências materiais de custo e decisões concretas restantes.
 
 A coluna de referência usa preços públicos consultados. A proposta aplica `USD × 6 × 4 / 0,01`; mínimo sugerido de 5 créditos por operação nova e arredondamento final em seis casas. Duração sugerida: medir o arquivo no servidor, arredondar segundos uma vez, converter para minutos. Não arredondar cada etapa como nova cobrança. Tarifas existentes acima não são substituídas por esta proposta.
 
@@ -36,6 +38,6 @@ Fontes: [tabela pública de voz](https://elevenlabs.io/pricing/api), [alinhament
 ## Pontos que impedem ativação comercial, não desenvolvimento
 
 - Confirmar preço aplicável por modalidade e custos de prévia/salvamento/desenho/dicionários. A referência pública atual diverge do custo antigo cadastrado de TTS; não corrigir silenciosamente nem chamar essa diferença de lucro comprovado.
-- Aprovar novas tarifas, mínimo e base Gemini. Não autoriza geração paga de teste; orçamento de teste deve ser definido por modalidade depois do preço.
+- Confirmar tabela efetiva por modalidade e escolher uma única base Gemini. A fórmula e o mínimo de novas operações já foram aprovados; não há autorização para dupla cobrança nem para alterar tarifas atuais. O orçamento de testes pagos continua pendente e deve ser definido por modalidade depois do preço.
 - Implementar arquivos privados e limites na VPS, jobs/recibos, reserva/liquidação única, recuperação e isolamento. Gemini não pode reutilizar diretamente o helper WhatsApp com repetição automática/R2 como se fosse o transporte privado idempotente do Estúdio.
 - Todos os planos podem receber acesso ao produto, inclusive Free, preservando carteira e franquia de cada plano; acesso não significa créditos ilimitados.
