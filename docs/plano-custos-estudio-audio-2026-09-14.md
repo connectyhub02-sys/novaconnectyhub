@@ -80,3 +80,26 @@ Tarifas atuais de TTS/clonagem preservadas. Gemini3.1 usa somente a base existen
 `voice_generation_audio` entrada/saída, validada na tabela oficial; não somar tarifa
 por caractere. A confirmação da tabela efetiva ElevenLabs permanece necessária
 para as novas ativações, mesmo após sucesso dos testes de transporte.
+
+## Fechamento do teste publicado — 14/09, 20:32 BRT
+
+Gemini 3.1 foi ativado com as duas tarifas já existentes, sem alteração de preço.
+O percurso real painel → Inngest VPS → Gemini → storage privado → carteira passou
+em produção `47c58ab5`. Consumo informado: 16 tokens de entrada e 172 de saída;
+referência de custo US$ 0,003456 / R$ 0,020736; débito único 8,2944 créditos.
+A reserva máxima de 393,9696 foi liquidada e zerada. Repetição recuperou o mesmo
+recibo, sem outra geração ou débito. WAV validado em hash, decodificação e player.
+Resultado sintético removido, mantendo recibo/cobrança; arquivo local de evidência
+continua privado. O teste exigiu sincronizar as duas funções novas no Inngest.
+
+Total agregado conservador atualizado: **US$ 0,653893**, incluindo todos os testes
+anteriores e os tetos ainda mantidos onde o fornecedor não informou custo individual.
+Não é valor de fatura nem custo médio comercial comprovado. Saldo do limite
+autorizado: US$ 0,346107; nenhuma nova rodada está programada.
+
+As nove novas operações ElevenLabs continuam desabilitadas comercialmente até
+confirmar a tabela efetiva da conta. Dicionários também precisam da permissão
+`pronunciation_dictionaries_write`. O titular já autorizou a configuração mínima;
+aguardamos login na conta que possui a chave, não nova aprovação genérica.
+Gemini 2.5 permanece sem tarifa habilitada. Geração TTS e clonagem anteriores
+permanecem com suas configurações preservadas.

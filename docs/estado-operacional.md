@@ -426,3 +426,46 @@ anterior no paralelismo padrão teve apenas timeouts nos testes PGlite.
 Relay atualizado e `/health` confirmou Live, uploads e Studio assets; diretório
 privado do Estúdio com modo 0700 e usuário node. Flags da aplicação configuradas
 para a próxima publicação; capacidades financeiras continuam fechadas até confirmação.
+
+### Publicação e teste real do Estúdio — 14/09/2026, 20:32 BRT
+
+Publicação integrada `7fd9fe3c` e correção `47c58ab5` concluídas. Último deploy
+`dpl_JTpZ5ytexd1WK7ySgka9mY11ZU7D`, Ready, com os dois domínios de produção.
+O pacote `17731ed` está incluído por ancestralidade. A correção aceita IDs de modelo
+com versão decimal no formulário, mantendo a validação pela lista permitida.
+
+O teste real encontrou as duas funções novas ainda ausentes do registro do Inngest.
+PUT `/api/inngest` respondeu 200, `Successfully registered`, `modified: true`;
+`connectyhub-connectyhub-studio-operation` e `connectyhub-connectyhub-studio-recovery`
+foram verificadas no banco da VPS. O evento foi reenviado com o mesmo recibo,
+sem criar outra reserva. Próximas publicações devem conferir esse registro;
+não presumir que o polling sozinho já sincronizou funções novas.
+
+Gemini 3.1 TTS habilitado com as tarifas existentes de entrada/saída, sem somar
+caracteres. Teste sintético no painel Betel Voz concluiu o recibo
+`e33f7b71-1570-4546-a612-da9fb70f31fb`: 16 tokens de entrada, 172 de saída,
+8,2944 créditos debitados, reserva final zero (cotação máxima 393,9696).
+Repetição pela interface recuperou o mesmo recibo; banco confirmou exatamente
+um evento de uso e um débito. WAV de 257.324 bytes/5,36 segundos, SHA-256
+`542fdee7a3ef63eeea64f15991f22b7683b8ea25261f90cbbdf20e0821ab8234`, decodificado
+sem erro pelo FFmpeg e carregado pelo player do navegador. Resultado de teste
+removido de forma idempotente; recibo e débito preservados. Nenhum clone de cliente
+ou arquivo pessoal foi usado. Evidências privadas ficam no diretório temporário
+`connectyhub-studio-provider-tests`; não versionar chaves ou arquivos de clientes.
+
+Upload/download real de asset privado também passou: 201/200, hash igual,
+5,16 segundos aferidos, acesso anônimo 401 e exclusão idempotente.
+A cópia do backup `connectyhub-20260914T224327Z.tar.gz` foi concluída fora da VPS,
+em `C:/Users/conne/Documents/ConnectyHub-private-backups`, com tamanho e SHA-256
+iguais aos acima e ACL restrita. É um snapshot anterior às migrations 0148/0149,
+não uma cópia do estado posterior ao teste; não equivale a backup externo automático.
+
+Total conservador dos testes: US$ 0,653893 de US$ 1 autorizado. Referência calculada,
+não fatura: custos individuais ausentes continuam contabilizados pelo teto reservado.
+Não resta reserva de teste aguardando geração. Novas modalidades ElevenLabs seguem
+desabilitadas comercialmente: falta login na conta proprietária da chave para
+confirmar tarifas e ajustar apenas `pronunciation_dictionaries_write`. A autorização
+do recurso já existe; a pendência é acesso à conta correta. Gemini 2.5 segue
+desabilitado por falta de tarifa correspondente. TTS/clonagem já existentes não
+tiveram tarifas alteradas. As demais modalidades passaram no transporte sintético,
+mas ainda não no percurso comercial completo painel/carteira.
