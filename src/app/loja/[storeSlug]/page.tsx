@@ -94,6 +94,7 @@ export default async function StorePage({ params, searchParams }: StorePageProps
             description: product.description,
             category: product.category,
             priceCents: product.priceCents,
+            foodComposition: product.foodComposition,
             coverUrl: product.coverUrl,
             stockLabel: product.stockLabel,
           })),

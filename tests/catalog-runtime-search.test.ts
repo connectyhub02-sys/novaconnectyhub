@@ -22,6 +22,7 @@ describe("scoped complete catalog SQL", () => {
     db=new PGlite();
     await db.exec("create role anon;create role authenticated;create role service_role;create table intelligence_memory(id uuid primary key,organization_id uuid,scope text,memory_type text,title text,content text,metadata jsonb,created_at timestamptz default now(),updated_at timestamptz default now());create table sales_catalog_skus(id uuid primary key,organization_id uuid,catalog_item_id uuid,title text,sku_code text,attributes jsonb,status text);");
     await db.exec(readFileSync("supabase/migrations/0139_catalog_runtime_search.sql","utf8"));
+    await db.exec("create or replace function" + readFileSync("supabase/migrations/0142_food_composition.sql","utf8").split("-- BEGIN FOOD SEARCH:")[1].split("create or replace function")[1]);
     for(let i=0;i<105;i++) await item(`Pizza ${String(i).padStart(3,"0")}`,{},org,`2025-01-${String(1+i%28).padStart(2,"0")}T12:00:00Z`);
   },45000);
   afterAll(async()=>{await db?.close();});
@@ -39,6 +40,11 @@ describe("scoped complete catalog SQL", () => {
     await db.query("insert into sales_catalog_skus values($1,$2,$3,'Grande','CAL-42',$4,'active')",[randomUUID(),org,old,{borda:"catupiry"}]);
     expect((await find("catupiry")).items.map(i=>i.id)).toEqual([old]);
     expect((await find("CAL-42")).items.map(i=>i.id)).toContain(old);
+  });
+  it("finds a flavor or combo choice absent from the product title beyond the initial batch",async()=>{
+    const old=await item("Especial da casa",{food_composition:{enabled:true,flavors:[{name:"Alcachofra"}],groups:[{name:"Bebida",options:[{name:"Maracujá"}]}]}});
+    expect((await find("alcachofra")).items.map(item=>item.id)).toContain(old);
+    expect((await find("maracujá")).items.map(item=>item.id)).toContain(old);
   });
   it("has stable nonoverlapping pages beyond eighty results",async()=>{
     const pages=await Promise.all([0,20,40,60,80,100].map(offset=>find("pizza",offset)));

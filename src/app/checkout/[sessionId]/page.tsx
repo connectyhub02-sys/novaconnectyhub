@@ -1,3 +1,4 @@
+import { CheckoutFoodEditor } from "@/components/checkout/checkout-food-editor";
 import { StoreSubscription } from "@/components/commerce/store-subscription";
 import { StoreOffers } from "@/components/commerce/store-offers";
 import type { CampaignPricing } from "@/lib/commerce/campaigns";
@@ -361,6 +362,7 @@ export default async function CheckoutPage({
             </summary>
             <div className="border-t border-slate-200 px-3 pb-3">
             {missingCustomerFields.length ? <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-900">Confira os dados pendentes: {missingCustomerFields.join(", ")}.</p> : null}
+            {session.provider === "asaas" && !paid && !failed && items.some(item => readRecord(item.metadata).food_composition) ? <CheckoutFoodEditor key={`food:${session.id}:${order.checkout_revision}`} sessionId={session.id} /> : null}
             {!paid && !failed ? <StoreOffers sessionId={session.id} pricing={order.metadata?.campaign_pricing as CampaignPricing | undefined}/> : null}
             <StoreSubscription sessionId={session.id}/>
             {session.provider === "asaas" && !paid && !failed ? <CheckoutDeliveryEditor key={`${session.id}:${order.checkout_revision}`} sessionId={session.id} initiallyOpen={shippingBlocked || missingCustomerFields.length > 0} initialCustomer={{ customer_name: order.customer_name, customer_phone: order.customer_phone, customer_email: order.customer_email, customer_document: order.customer_document, destination_cep: order.destination_cep, destination_address: order.destination_address }}>{customerSummary}</CheckoutDeliveryEditor> : customerSummary}
@@ -565,6 +567,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 break-words text-xs font-semibold leading-4 text-slate-950" title={item.title}>{item.title}</p>
+        {typeof readRecord(readRecord(item.metadata).food_composition).summary === "string" ? <p className="mt-2 whitespace-pre-line text-xs leading-5 text-slate-600">{String(readRecord(readRecord(item.metadata).food_composition).summary)}</p> : null}
         <div className="mt-0.5 flex items-center justify-between gap-2"><span className="text-[11px] text-slate-500">Qtd. {item.quantity ?? 1}</span><span className="shrink-0 text-xs font-bold text-slate-950">{price}</span></div>
       </div>
     </div>

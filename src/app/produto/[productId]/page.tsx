@@ -267,9 +267,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const activityId = getAgentPromptTemplate(item.activityProfile?.templateId).id;
   const identity = item.activityProfile?.professionalIdentity;
   const canCheckout = item.salesDestination === "connectyhub_checkout"
-    && price !== null
+    && (price !== null || item.foodComposition?.enabled === true)
     && !(item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder);
-  const priceLabel = price !== null ? formatCurrency(price) : "Sob consulta";
+  const priceLabel = item.foodComposition?.enabled ? "Monte para ver o preço" : price !== null ? formatCurrency(price) : "Sob consulta";
 
   const galleryMedia = item.media.filter((media) => media.kind === "image" || media.kind === "video");
   const documents = item.media.filter((media) => media.kind === "document");

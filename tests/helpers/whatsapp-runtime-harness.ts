@@ -1,3 +1,5 @@
+import * as foodComposition from "@/lib/sales-catalog/food-composition";
+import * as foodConversation from "@/lib/sales-catalog/food-conversation";
 import * as operationHours from "@/lib/sales-catalog/operation-hours";
 import * as activityProfile from "@/lib/whatsapp/activity-profile";
 import { readFileSync } from "node:fs";
@@ -26,7 +28,7 @@ import { serverModuleHarness } from "./server-module-harness";
 
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
-  "buildGeminiContents",
+  "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",
   "recoverRuntimePendingRevisionIntent",
   "guardUnexecutedOrderRevisionClaim",
   "buildRuntimeSalesCatalogShippingQuoteContext", "buildRuntimeShippingCartItem", "buildSalesCatalogShippingPolicyLines", "isRuntimeCheckoutDraftChange",
@@ -72,6 +74,8 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   const money = { exports: {} };
   runInNewContext(currency, { module: money, exports: money.exports, require: () => ({}), process, URL });
   const imports: Record<string, unknown> = {
+    "@/lib/sales-catalog/food-composition": foodComposition,
+    "@/lib/sales-catalog/food-conversation": foodConversation,
     "@/lib/whatsapp/outbound-delivery": { fetchWhatsappOutbound: (url: unknown, init: unknown) => {
       if (typeof globals.fetch !== "function") throw new Error("HTTP mock required for outbound transport");
       return globals.fetch(url, init);

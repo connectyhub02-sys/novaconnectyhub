@@ -1,3 +1,5 @@
+import { quoteFoodComposition, foodSnapshotForUnit, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
+import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
@@ -42,6 +44,7 @@ type LeadRow = {
 };
 
 type PublicCartItem = {
+  foodUnits?: unknown[];
   productId: string;
   quantity: number;
 };
@@ -54,7 +57,7 @@ export async function POST(
     headers: request.headers,
     requestUrl: request.url,
     routeKey: "sales-catalog-store-checkout",
-    maxPayloadBytes: 24 * 1024,
+    maxPayloadBytes: 128 * 1024,
     rateLimit: {
       limit: 10,
       windowMs: 60_000,
@@ -138,7 +141,8 @@ export async function POST(
     return NextResponse.json({ error: "Um ou mais produtos nao estao mais disponiveis nesta loja." }, { status: 422 });
   }
 
-  const resolvedItems = cartItems.map((cartItem) => {
+  let resolvedItems: Array<{ item: ClientSalesCatalogItem; quantity: number; unitPriceCents: number; totalCents: number; foodComposition: FoodCompositionSnapshot | null; foodUnitIndex: number | null }>;
+  try { resolvedItems = cartItems.flatMap<(typeof resolvedItems)[number]>((cartItem) => {
     const row = rowsById.get(cartItem.productId);
 
     if (!row) {
@@ -157,6 +161,8 @@ export async function POST(
       throw new Error(`O produto "${item.title}" esta esgotado no momento.`);
     }
 
+    const composition = quoteFoodComposition(item.foodComposition, cartItem.foodUnits, cartItem.quantity);
+    if (composition) return composition.units.map((unit, index) => ({ item, quantity: 1, unitPriceCents: unit.totalCents, totalCents: unit.totalCents, foodComposition: foodSnapshotForUnit(composition, index), foodUnitIndex: index }));
     const price = getCommerceOfferPrice(item);
 
     if (!price) {
@@ -166,13 +172,9 @@ export async function POST(
     const unitPriceCents = Math.round(price * 100);
     const totalCents = unitPriceCents * cartItem.quantity;
 
-    return {
-      item,
-      quantity: cartItem.quantity,
-      unitPriceCents,
-      totalCents,
-    };
-  });
+    return [{ item, quantity: cartItem.quantity, unitPriceCents, totalCents, foodComposition: null, foodUnitIndex: null }];
+  }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Confira os produtos e montagens." }, { status: 422 }); }
+  if (resolvedItems.length > 100) return NextResponse.json({ error: "Este pedido permite até 100 unidades montadas." }, { status: 422 });
   const hasPlatformItems = resolvedItems.some((entry) => Boolean(entry.item.platformProductId));
   const hasClientItems = resolvedItems.some((entry) => !entry.item.platformProductId);
 
@@ -217,6 +219,7 @@ export async function POST(
       productId: entry.item.id,
       quantity: entry.quantity,
       unitPriceCents: entry.unitPriceCents,
+      foodComposition: entry.foodComposition,
     })).sort((left, right) => left.productId.localeCompare(right.productId)),
     orderLeadId,
     conversationId,
@@ -312,7 +315,7 @@ export async function POST(
     tag: entry.item.tag,
     quantity: entry.quantity,
     unit_price: formatMoneyCents(entry.unitPriceCents),
-    sale_price: formatMoneyCents(entry.unitPriceCents),
+    sale_price: entry.foodComposition ? null : formatMoneyCents(entry.unitPriceCents),
     total: formatMoneyCents(entry.totalCents),
     product_origin_type: entry.item.productOriginType,
     commercial_flow_type: entry.item.commercialFlowType,
@@ -332,6 +335,7 @@ export async function POST(
       access_instructions: entry.item.fulfillment.accessInstructions,
     },
     metadata: {
+      ...(entry.foodComposition ? { food_composition: entry.foodComposition, food_unit_index: entry.foodUnitIndex } : {}),
       source: entry.item.source,
       category: entry.item.category,
       currency: entry.item.currency,
@@ -664,7 +668,8 @@ function buildCheckoutLeadMetadata(
 function readPublicCartItems(value: unknown): PublicCartItem[] {
   if (!Array.isArray(value)) return [];
 
-  const byProductId = new Map<string, number>();
+  const byProductId = new Map<string, PublicCartItem>();
+  if (value.length > 40) return [];
 
   for (const raw of value.slice(0, 40)) {
     const record = readRecord(raw);
@@ -673,12 +678,14 @@ function readPublicCartItems(value: unknown): PublicCartItem[] {
 
     if (!productId || quantity <= 0) continue;
 
-    byProductId.set(productId, Math.min(20, (byProductId.get(productId) ?? 0) + quantity));
+    const previous = byProductId.get(productId);
+    const hasFood = Array.isArray(record.foodUnits) || Boolean(previous?.foodUnits);
+    const combinedQuantity = (previous?.quantity ?? 0) + quantity;
+    if (hasFood && (!Number.isSafeInteger(record.quantity) || Number(record.quantity) !== quantity || combinedQuantity > 20)) return [];
+    byProductId.set(productId, { productId, quantity: Math.min(20, combinedQuantity), ...(hasFood ? { foodUnits: [...(previous?.foodUnits ?? []), ...(Array.isArray(record.foodUnits) ? record.foodUnits : [])] } : {}) });
   }
 
-  return Array.from(byProductId.entries())
-    .slice(0, 20)
-    .map(([productId, quantity]) => ({ productId, quantity }));
+  return byProductId.size > 20 ? [] : Array.from(byProductId.values());
 }
 
 function publicGuardResponse(guard: PublicWriteGuardResult) {

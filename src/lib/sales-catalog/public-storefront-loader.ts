@@ -591,7 +591,9 @@ export async function loadStoreProducts(
     trackingLinkId: string | null;
   },
 ) {
-  const { data } = await client
+  const rows: SalesCatalogMemoryRow[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await client
     .from("intelligence_memory")
     .select("id, organization_id, title, content, metadata, created_at, updated_at")
     .eq("scope", "organization")
@@ -599,10 +601,16 @@ export async function loadStoreProducts(
     .eq("memory_type", "sales_catalog_item")
     .filter("metadata->>status", "eq", "active")
     .order("updated_at", { ascending: false })
-    .limit(160)
+    .order("id", { ascending: true })
+    .range(offset, offset + 499)
     .returns<SalesCatalogMemoryRow[]>();
 
-  const items = ((data ?? []) as SalesCatalogMemoryRow[])
+    if (error) throw new Error("Não foi possível consultar o catálogo completo da loja.");
+    rows.push(...(data ?? []));
+    if (!data || data.length < 500) break;
+  }
+
+  const items = [...new Map(rows.map(row => [row.id, row])).values()]
     .map(mapSalesCatalogItem)
     .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
     .sort(compareStoreCatalogItems);
@@ -631,9 +639,9 @@ export function mapStorefrontProduct(
   const price = getCommerceOfferPrice(item);
   const cover = item.media.find((media) => media.kind === "image") ?? null;
   const canCheckout = item.salesDestination === "connectyhub_checkout"
-    && price !== null
+    && (price !== null || item.foodComposition?.enabled === true)
     && !(item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder);
-  const compareAtLabel = salePrice !== null && basePrice !== null && basePrice > salePrice
+  const compareAtLabel = !item.foodComposition?.enabled && salePrice !== null && basePrice !== null && basePrice > salePrice
     ? formatCurrency(basePrice)
     : null;
 
@@ -643,7 +651,8 @@ export function mapStorefrontProduct(
     description: item.description,
     shortDescription: createShortDescription(item.description),
     category: item.category ?? "Produto",
-    priceLabel: price !== null ? formatCurrency(price) : "Sob consulta",
+    foodComposition: item.foodComposition,
+    priceLabel: item.foodComposition?.enabled ? "Monte para ver o preço" : price !== null ? formatCurrency(price) : "Sob consulta",
     priceCents: price !== null ? Math.round(price * 100) : null,
     compareAtLabel,
     coverUrl: cover?.storageUrl ?? null,

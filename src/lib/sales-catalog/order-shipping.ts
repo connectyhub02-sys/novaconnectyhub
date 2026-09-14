@@ -9,6 +9,7 @@ export type OrderShippingEntry = { item: ClientSalesCatalogItem; quantity: numbe
 /** One parcel for the whole cart; quantities, weight tiers and free-shipping thresholds are authoritative. */
 export function quoteOrderDelivery(input: { entries: OrderShippingEntry[]; settings: ClientSalesCatalogShippingSettings | null; cep: string; address?: string; coordinates?: SalesCatalogGeoPoint | null; subtotal: number }) {
   const physical = input.entries.filter(entry => entry.item.fulfillment.mode === "physical");
+  const regionalOnly = physical.some(entry => entry.item.foodComposition?.enabled && entry.item.foodComposition.localOnly);
   const quotes: OrderDeliveryQuote[] = [];
   if (!physical.length) return { physical: false, quotes, error: null };
   if (input.settings?.localPickup) quotes.push({ id: "pickup", name: "Retirada na loja", amount: 0, minDays: null, maxDays: null, pickup: true });
@@ -21,7 +22,7 @@ export function quoteOrderDelivery(input: { entries: OrderShippingEntry[]; setti
   const result = /^\d{8}$/.test(input.cep.replace(/\D/g, ""))
     ? calculateSalesCatalogShippingQuotes({ item: aggregate, settings: input.settings, cep: input.cep })
     : { quotes: [], error: "Informe o CEP para calcular a entrega." };
-  for (const quote of result.quotes) {
+  for (const quote of regionalOnly ? [] : result.quotes) {
     const amount = shippingAmount(quote.price);
     if (amount !== null && amount >= 0) quotes.push({ id: quote.serviceId, name: quote.serviceName, amount, minDays: quote.minDays, maxDays: quote.maxDays, pickup: false });
   }

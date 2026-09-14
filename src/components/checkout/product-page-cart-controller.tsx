@@ -1,4 +1,5 @@
 "use client";
+import { foodLineQuote, readFoodUnitSelections, type FoodUnitSelection } from "@/lib/sales-catalog/food-composition";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -76,7 +77,7 @@ export function ProductPageCartController({
 
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity }))),
+      JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity, foodUnits: line.foodUnits }))),
     );
     publishCommerceAgentEvent("cart_snapshot_updated", { cart_lines: cart.length, items: cart.map(line => ({ product_id: line.product.id, quantity: line.quantity })) });
   }, [cart, cartLoaded, storageKey]);
@@ -103,12 +104,13 @@ export function ProductPageCartController({
     return () => window.removeEventListener(connectyStoreCartOpenEvent, handleCartOpen);
   }, [readStoredCart, tracking.organizationId]);
 
-  const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
+  const totalCents = cart.reduce((total, line) => total + (foodLineQuote(line.product, line.quantity, line.foodUnits).totalCents ?? 0), 0);
   const customerContactReady = Boolean(customerName.trim())
     && isValidCustomerPhone(customerPhone)
     && isValidCustomerEmail(customerEmail);
   const checkoutReady = cart.length > 0
-    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number")
+    && cart.every(line => !foodLineQuote(line.product, line.quantity, line.foodUnits).error)
+    && cart.every((line) => line.product.canCheckout && (typeof line.product.priceCents === "number" || line.product.foodComposition?.enabled === true))
     && customerContactReady;
 
   function updateQuantity(productId: string, quantity: number) {
@@ -138,7 +140,7 @@ export function ProductPageCartController({
     );
 
     setCart((current) => current.map((line) => (
-      line.product.id === productId ? { ...line, quantity: nextQuantity } : line
+      line.product.id === productId ? { ...line, quantity: nextQuantity, foodUnits: line.foodUnits?.slice(0, nextQuantity) } : line
     )));
   }
 
@@ -176,6 +178,7 @@ export function ProductPageCartController({
           items: cart.map((line) => ({
             productId: line.product.id,
             quantity: line.quantity,
+            foodUnits: line.foodUnits,
           })),
         }),
       });
@@ -229,6 +232,7 @@ export function ProductPageCartController({
       onCheckout={createCheckout}
       onClose={() => setCartOpen(false)}
       onUpdateQuantity={updateQuantity}
+      onUpdateFood={(productId, foodUnits) => setCart(current => current.map(line => line.product.id === productId ? { ...line, foodUnits } : line))}
     />
   );
 }
@@ -240,12 +244,12 @@ function readCartFromStorage(storageKey: string, products: PublicStorefrontProdu
     .map((line) => {
       const product = productById.get(line.productId);
 
-      return product && product.canCheckout ? { product, quantity: clampQuantity(line.quantity) } : null;
+      return product && product.canCheckout ? { product, quantity: clampQuantity(line.quantity), foodUnits: readFoodUnitSelections(line.foodUnits) } as PublicStorefrontCartLine : null;
     })
     .filter((line): line is PublicStorefrontCartLine => Boolean(line));
 }
 
-function safeParseCart(value: string | null): Array<{ productId: string; quantity: number }> {
+function safeParseCart(value: string | null): Array<{ productId: string; quantity: number; foodUnits?: FoodUnitSelection[] }> {
   if (!value) return [];
 
   try {
@@ -259,9 +263,9 @@ function safeParseCart(value: string | null): Array<{ productId: string; quantit
         const productId = typeof line.productId === "string" ? line.productId : null;
         const quantity = clampQuantity(Number(line.quantity));
 
-        return productId ? { productId, quantity } : null;
+        return productId ? { productId, quantity, foodUnits: readFoodUnitSelections(line.foodUnits) } : null;
       })
-      .filter((line): line is { productId: string; quantity: number } => Boolean(line));
+      .filter((line): line is { productId: string; quantity: number; foodUnits: FoodUnitSelection[] } => Boolean(line));
   } catch {
     return [];
   }

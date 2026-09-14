@@ -1,3 +1,6 @@
+import * as foodComposition from "../../src/lib/sales-catalog/food-composition";
+import * as foodOrder from "../../src/lib/sales-catalog/food-order";
+import * as foodConversation from "../../src/lib/sales-catalog/food-conversation";
 import * as operationHours from "../../src/lib/sales-catalog/operation-hours";
 import * as localDelivery from "../../src/lib/sales-catalog/local-delivery";
 import { readFileSync } from "node:fs";
@@ -15,6 +18,10 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
       if (name in imports) return imports[name];
+      if (name === "./food-composition" || name === "@/lib/sales-catalog/food-composition") return foodComposition;
+      if (name === "./food-payment-guard" || name === "@/lib/sales-catalog/food-payment-guard") return serverModuleHarness("src/lib/sales-catalog/food-payment-guard.ts", imports, [], globals);
+      if (name === "./food-order" || name === "@/lib/sales-catalog/food-order") return foodOrder;
+      if (name === "./food-conversation" || name === "@/lib/sales-catalog/food-conversation") return foodConversation;
       if (name === "./operation-hours" || name === "@/lib/sales-catalog/operation-hours") return operationHours;
       if (name === "./local-delivery" || name === "@/lib/sales-catalog/local-delivery") return localDelivery;
       if (name.endsWith("/outbound-delivery")) return { fetchWhatsappOutbound: (url: unknown, init: unknown) => {

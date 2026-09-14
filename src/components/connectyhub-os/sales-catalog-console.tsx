@@ -1,4 +1,6 @@
 "use client";
+import { FoodCompositionEditor } from "./food-composition-editor";
+import { defaultFoodComposition } from "@/lib/sales-catalog/food-composition";
 import { OperationHoursEditor } from "./operation-hours-editor";
 import { AgendaResourceSelect } from "./agenda-resource-select";
 import { AgendaActivationNotice, useAgendaActivation } from "./use-agenda-activation";
@@ -811,6 +813,7 @@ export function SalesCatalogConsole({
   const [allowBackorder, setAllowBackorder] = useState(false);
   const [inventoryNotes, setInventoryNotes] = useState("");
   const [skuDrafts, setSkuDrafts] = useState<SkuDraft[]>([]);
+  const [foodComposition, setFoodComposition] = useState(defaultFoodComposition());
   const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
   const [suggestedDestination, setSuggestedDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
   const agendaActivation = useAgendaActivation(selectedCompanyId);
@@ -2212,6 +2215,7 @@ export function SalesCatalogConsole({
       formData.set("lowStockThreshold", lowStockThreshold);
       formData.set("allowBackorder", String(allowBackorder));
       formData.set("inventoryNotes", inventoryNotes);
+      formData.set("foodComposition", JSON.stringify(foodComposition));
       formData.set("fulfillmentMode", fulfillmentMode);
       formData.set("agendaResourceId", agendaResourceId);
     formData.set("schedulingRequired", String(schedulingRequired));
@@ -3138,6 +3142,7 @@ export function SalesCatalogConsole({
     setAllowBackorder(item.inventory.allowBackorder);
     setInventoryNotes(item.inventory.notes ?? "");
     setSkuDrafts(item.skus.map(buildSkuDraftFromSku));
+    setFoodComposition(item.foodComposition ?? defaultFoodComposition());
     setFulfillmentMode(item.fulfillment.mode);
     setAgendaResourceId(item.fulfillment.agendaResourceId ?? "");
     setSchedulingRequired(item.fulfillment.schedulingRequired);
@@ -3209,6 +3214,7 @@ export function SalesCatalogConsole({
     setAllowBackorder(false);
     setInventoryNotes("");
     setSkuDrafts([]);
+    setFoodComposition(defaultFoodComposition());
     setFulfillmentMode("physical");
     setAgendaResourceId("");
     setSchedulingRequired(false);
@@ -5283,6 +5289,7 @@ export function SalesCatalogConsole({
               </>
             ) : null}
 
+            {productFormTab === "pricing" ? <FoodCompositionEditor value={foodComposition} onChange={setFoodComposition} /> : null}
             {productFormTab === "pricing" ? (
             <div className="grid gap-3">
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -8058,6 +8065,7 @@ function OrderCard({
 
       <OrderOperationalChecklist order={order} paymentSession={paymentSession} />
 
+      {order.items.filter(item => item.foodSummary).map(item => <div key={item.id} className="rounded-xl border border-slate-700 p-3 text-sm"><p className="font-semibold">{item.title}</p><p className="whitespace-pre-line">{item.foodSummary}</p></div>)}
       {order.items.some((item) => item.attributes.length > 0) ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {order.items.flatMap((item) => item.attributes.map((attribute) => (

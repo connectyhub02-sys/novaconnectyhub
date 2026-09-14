@@ -1,3 +1,4 @@
+import { readFoodComposition, validateFoodComposition } from "@/lib/sales-catalog/food-composition";
 import { readOperationHours, validateOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { deliveryMoneyCents } from "@/lib/sales-catalog/local-delivery";
 import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
@@ -230,6 +231,12 @@ export async function POST(request: NextRequest) {
   const inventory = readProductInventoryPayload(formData);
   const offer = readProductOfferPayload(formData);
   const fulfillment = readProductFulfillmentPayload(formData);
+  const foodPayload = formData.has("foodComposition") ? parseJson(String(formData.get("foodComposition"))) : null;
+  if (formData.has("foodComposition") && (!foodPayload || typeof foodPayload !== "object" || Array.isArray(foodPayload))) return NextResponse.json({ error: "Confira a configuração da montagem." }, { status: 422 });
+  const foodComposition = readFoodComposition(foodPayload);
+  const foodError = validateFoodComposition(foodComposition);
+  if (foodError || foodComposition.enabled && (fulfillment.mode !== "physical" || salesDestination !== "connectyhub_checkout")) return NextResponse.json({ error: foodError ?? "A montagem deve ser um produto físico vendido no checkout." }, { status: 422 });
+
   const shipping = readProductShippingPayload(formData);
   const pageContent = readProductPageContentPayload(formData);
   const billingCycle = normalizeBillingCycle(readFormString(formData.get("billingCycle")));
@@ -237,6 +244,7 @@ export async function POST(request: NextRequest) {
     ? normalizeBillingInterval(readFormString(formData.get("billingInterval")))
     : "month";
   const skus = readProductSkusPayload(formData.get("skus"));
+  if (foodComposition.enabled && (billingCycle !== "one_time" || skus.filter(sku => sku.status === "active").length > 1)) return NextResponse.json({ error: "Use a montagem em venda avulsa. Cadastre tamanhos e sabores na montagem, sem múltiplas variações de estoque neste produto." }, { status: 422 });
   const storeFeatured = readFormBoolean(formData.get("storeFeatured")) ?? false;
   const storeFeaturedRank = storeFeatured
     ? normalizeNullableInteger(formData.get("storeFeaturedRank"), 1, 999)
@@ -316,6 +324,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Confira a ativação da agenda desta empresa." }, { status: 422 });
     }
     const existingMetadata = readRecord(existingRow?.metadata) ?? {};
+    const effectiveFood = formData.has("foodComposition") ? foodComposition : readFoodComposition(existingMetadata.food_composition);
+    if (effectiveFood.enabled && (validateFoodComposition(effectiveFood) || fulfillment.mode !== "physical" || salesDestination !== "connectyhub_checkout" || billingCycle !== "one_time" || skus.filter(sku => sku.status === "active").length > 1)) return NextResponse.json({ error: "Confira a montagem: produto físico avulso, vendido no checkout, com tamanhos e sabores definidos na montagem." }, { status: 422 });
     const previousMedia = readSalesCatalogMediaMetadata(existingMetadata.media);
     let media: SalesCatalogMedia[] = previousMedia;
     let removedMedia: SalesCatalogMedia[] = [];
@@ -473,6 +483,7 @@ export async function POST(request: NextRequest) {
       attributes: serializeItemAttributes(attributes),
       inventory: serializeProductInventory(inventory),
       offer: serializeProductOffer(offer),
+      food_composition: formData.has("foodComposition") ? foodComposition : existingMetadata.food_composition ?? null,
       fulfillment: serializeProductFulfillment(fulfillment),
       shipping: serializeProductShipping(shipping),
       page_content: serializeProductPageContent(pageContent),

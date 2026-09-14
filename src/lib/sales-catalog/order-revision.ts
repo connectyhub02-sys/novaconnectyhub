@@ -30,8 +30,9 @@ export type SalesCatalogOrderRevisionRow = {
 export type SalesCatalogOrderRevisionInput = {
   client: SupabaseClient;
   organizationId: string;
-  leadId: string;
-  conversationId: string;
+  leadId: string | null;
+  conversationId: string | null;
+  checkoutSessionId?: string;
   orderId: string;
   expectedRevision: number;
   /** Persisted proposal ID, retained across job retries. Never use a new ID on retry. */
@@ -76,7 +77,7 @@ function revisionError(error: unknown) {
 /** Called only after the customer confirms the exact persisted proposal. */
 export async function applySalesCatalogOrderRevision(input: SalesCatalogOrderRevisionInput): Promise<RevisedSalesCatalogOrder> {
   if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 || !input.requestId.trim() || input.requestId.length > 200
-    || !input.leadId || !input.conversationId || !input.rows.length || input.rows.length > 100
+    || (!input.checkoutSessionId && (!input.leadId || !input.conversationId)) || !input.rows.length || input.rows.length > 100
     || input.rows.some(row => !Number.isSafeInteger(row.quantity) || row.quantity < 1 || row.quantity > 100000
       || row.organization_id && row.organization_id !== input.organizationId || row.order_id && row.order_id !== input.orderId)) {
     throw revisionError(new Error("CHECKOUT_INVALID_CART"));
@@ -92,9 +93,10 @@ export async function applySalesCatalogOrderRevision(input: SalesCatalogOrderRev
     expected_total: total,
     preferred_payment_method: input.preferredPaymentMethod ?? null,
   };
-  const { data: claim, error: claimError } = await input.client.rpc("begin_sales_catalog_order_revision", {
+  const { data: claim, error: claimError } = await input.client.rpc(input.checkoutSessionId ? "begin_sales_catalog_checkout_revision" : "begin_sales_catalog_order_revision", {
     p_order_id: input.orderId, p_organization_id: input.organizationId, p_lead_id: input.leadId, p_conversation_id: input.conversationId,
     p_revision: input.expectedRevision, p_request_id: input.requestId, p_claim_token: claimToken, p_payload: payload,
+    ...(input.checkoutSessionId ? { p_session_id: input.checkoutSessionId } : {}),
   });
   if (claimError || !claim) throw revisionError(claimError);
   // Completion is checked by the database before revision/financial state. A retry must

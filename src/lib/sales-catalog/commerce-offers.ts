@@ -50,7 +50,7 @@ export async function loadCommerceOffers(input: { client: SupabaseClient; organi
 }
 
 export function canAddCommerceOfferDirectly(item: ClientSalesCatalogItem) {
-  return item.skus.filter(sku => sku.status === "active").length <= 1 && !item.attributes.some(attribute => attribute.values.length > 1) && !item.fulfillment.schedulingRequired;
+  return !item.foodComposition?.enabled && item.skus.filter(sku => sku.status === "active").length <= 1 && !item.attributes.some(attribute => attribute.values.length > 1) && !item.fulfillment.schedulingRequired;
 }
 
 export function getCommerceOfferPrice(item: ClientSalesCatalogItem, now = Date.now()) {

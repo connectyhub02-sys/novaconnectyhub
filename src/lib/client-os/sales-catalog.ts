@@ -1,3 +1,4 @@
+import { readFoodComposition } from "@/lib/sales-catalog/food-composition";
 import { readOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { normalizeAgentPromptBuilderConfig } from "@/lib/whatsapp/agent-prompt-templates";
@@ -1026,6 +1027,7 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     skus: readSkus(metadata.skus, readString(row.organization_id) ?? "", row.id),
     offer: readProductOffer(metadata.offer),
     fulfillment: readProductFulfillment(metadata.fulfillment),
+    foodComposition: metadata.food_composition ? readFoodComposition(metadata.food_composition) : undefined,
     shipping: readProductShipping(metadata.shipping),
     billingCycle: normalizeBillingCycle(readString(metadata.billing_cycle)),
     billingInterval: normalizeBillingInterval(readString(metadata.billing_interval)),
@@ -1178,6 +1180,7 @@ export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientS
 
   return {
     id: row.id,
+    foodSummary: readString(readRecord(metadata.food_composition)?.summary),
     orderId: row.order_id,
     companyId: readString(row.organization_id) ?? "",
     catalogItemId: readString(row.catalog_item_id),

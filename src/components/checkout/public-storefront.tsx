@@ -1,4 +1,7 @@
 "use client";
+import { FoodUnitEditor } from "./food-unit-editor";
+import type { FoodCompositionPolicy } from "@/lib/sales-catalog/food-composition";
+import { foodLineQuote, readFoodUnitSelections, type FoodUnitSelection } from "@/lib/sales-catalog/food-composition";
 
 import { useDialogFocus } from "@/hooks/use-dialog-focus";
 import Image from "next/image";
@@ -82,6 +85,7 @@ export type PublicStorefrontTrackingParams = {
 };
 
 export type PublicStorefrontProduct = {
+  foodComposition?: FoodCompositionPolicy;
   id: string;
   title: string;
   description: string;
@@ -101,6 +105,7 @@ export type PublicStorefrontProduct = {
 };
 
 export type PublicStorefrontCartLine = {
+  foodUnits?: FoodUnitSelection[];
   product: PublicStorefrontProduct;
   quantity: number;
 };
@@ -198,13 +203,13 @@ export function PublicStorefront({
       }
 
       try {
-        const parsed = JSON.parse(stored) as Array<{ productId: string; quantity: number }>;
+        const parsed = JSON.parse(stored) as Array<{ productId: string; quantity: number; foodUnits?: FoodUnitSelection[] }>;
         const byId = new Map(products.map((product) => [product.id, product]));
         const nextCart = parsed
           .map((line) => {
             const product = byId.get(line.productId);
             const quantity = clampQuantity(line.quantity);
-            return product && product.canCheckout ? { product, quantity } : null;
+            return product && product.canCheckout ? { product, quantity, foodUnits: readFoodUnitSelections(line.foodUnits) } as CartLine : null;
           })
           .filter((line): line is CartLine => Boolean(line));
 
@@ -224,7 +229,7 @@ export function PublicStorefront({
 
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity }))),
+      JSON.stringify(cart.map((line) => ({ productId: line.product.id, quantity: line.quantity, foodUnits: line.foodUnits }))),
     );
     publishCommerceAgentEvent("cart_snapshot_updated", { cart_lines: cart.length, items: cart.map(line => ({ product_id: line.product.id, quantity: line.quantity })) });
   }, [cart, cartLoaded, storageKey]);
@@ -425,12 +430,13 @@ export function PublicStorefront({
     showHomeCategorySections,
   ]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
-  const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
+  const totalCents = cart.reduce((total, line) => total + (foodLineQuote(line.product, line.quantity, line.foodUnits).totalCents ?? 0), 0);
   const customerContactReady = Boolean(customerName.trim())
     && isValidStorefrontPhone(customerPhone)
     && isValidStorefrontEmail(customerEmail);
   const checkoutReady = cart.length > 0
-    && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number")
+    && cart.every(line => !foodLineQuote(line.product, line.quantity, line.foodUnits).error)
+    && cart.every((line) => line.product.canCheckout && (typeof line.product.priceCents === "number" || line.product.foodComposition?.enabled === true))
     && customerContactReady;
   const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
   const textColor = normalizeStorefrontTextColor(storefront.textColor) ?? "#111111";
@@ -518,7 +524,7 @@ export function PublicStorefront({
     );
 
     setCart((current) => current.map((line) => (
-      line.product.id === productId ? { ...line, quantity: nextQuantity } : line
+      line.product.id === productId ? { ...line, quantity: nextQuantity, foodUnits: line.foodUnits?.slice(0, nextQuantity) } : line
     )));
   }
 
@@ -566,6 +572,7 @@ export function PublicStorefront({
           items: cart.map((line) => ({
             productId: line.product.id,
             quantity: line.quantity,
+            foodUnits: line.foodUnits,
           })),
         }),
       });
@@ -729,6 +736,7 @@ export function PublicStorefront({
         onCheckout={createCheckout}
         onClose={() => setCartOpen(false)}
         onUpdateQuantity={updateQuantity}
+      onUpdateFood={(productId, foodUnits) => setCart(current => current.map(line => line.product.id === productId ? { ...line, foodUnits } : line))}
       />
     </main>
   );
@@ -1503,6 +1511,7 @@ export function CartDrawer({
   setCustomerEmail,
   onClose,
   onUpdateQuantity,
+  onUpdateFood,
   onCheckout,
 }: {
   organizationId?: string;
@@ -1523,6 +1532,7 @@ export function CartDrawer({
   setCustomerEmail: (value: string) => void;
   onClose: () => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
+  onUpdateFood?: (productId: string, units: FoodUnitSelection[]) => void;
   onCheckout: () => void;
 }) {
   const dialogRef = useDialogFocus(closeCartDrawer, open);
@@ -1570,7 +1580,7 @@ export function CartDrawer({
                   </div>
                   <div className="min-w-0">
                     <p className="line-clamp-2 text-sm font-semibold leading-5 text-[color:var(--store-text)]">{line.product.title}</p>
-                    <p className="mt-1 text-sm font-semibold text-[color:var(--store-card-text)]">{line.product.priceLabel}</p>
+                    <p className="mt-1 text-sm font-semibold text-[color:var(--store-card-text)]">{line.product.foodComposition?.enabled ? "Preço conforme a montagem abaixo" : line.product.priceLabel}</p>
                     <div className="mt-3 inline-flex h-9 items-center rounded-[8px] border border-[#e5e2d8] bg-white">
                       <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-accent)]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
                         <Minus className="h-3.5 w-3.5" />
@@ -1581,6 +1591,7 @@ export function CartDrawer({
                       </button>
                     </div>
                   </div>
+                  {line.product.foodComposition?.enabled && onUpdateFood ? <FoodUnitEditor policy={line.product.foodComposition} quantity={line.quantity} value={line.foodUnits} onChange={units => onUpdateFood(line.product.id, units)} /> : null}
                 </div>
               ))}
             </div>

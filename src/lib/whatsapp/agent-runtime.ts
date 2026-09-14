@@ -1,3 +1,5 @@
+import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
+import { quoteFoodComposition, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
 import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
 import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
@@ -6099,6 +6101,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
     "- Quando houver varias fotos/videos, nao prometa enviar tudo no WhatsApp. Use uma midia principal e direcione o restante para a pagina do produto.",
     "- Se o lead pedir mais fotos, video ou detalhes visuais, responda curto e use a pagina do produto para a galeria completa.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
+    ...foodConversationInstructions(sellableItems.slice(0, 40)),
     ...sellableItems.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
         ? `${item.media.length} arquivo(s): ${item.media.map((media) => media.kind).join(", ")}`
@@ -6584,7 +6587,7 @@ function runtimeDeliveryQuoteForContext(item: RuntimeSalesCatalogItem, settings:
   return { ...national, quotes: [quote, ...national.quotes], error: null };
 }
 
-type RuntimeShippingCartSelection = { item: RuntimeSalesCatalogItem; quantity: number; mentionText?: string | null };
+type RuntimeShippingCartSelection = { foodUnits?: FoodUnitSelection[]; item: RuntimeSalesCatalogItem; quantity: number; mentionText?: string | null };
 
 function buildRuntimeShippingCartItem(selections: RuntimeShippingCartSelection[], subtotal?: number) {
   const physical = selections.filter(selection => selection.item.fulfillment.mode === "physical");
@@ -6594,7 +6597,7 @@ function buildRuntimeShippingCartItem(selections: RuntimeShippingCartSelection[]
     ...selection, source: "cart_draft", mentionText: selection.mentionText ?? null, quantitySignal: null, fractionalQuantity: null,
   }))));
   if (value === null || !Number.isFinite(value)) return null;
-  return { ...base, price: String(value), shipping: { ...base.shipping,
+  return { ...base, foodComposition: physical.find(selection => selection.item.foodComposition?.enabled && selection.item.foodComposition.localOnly)?.item.foodComposition ?? base.foodComposition, price: String(value), shipping: { ...base.shipping,
     profile: physical.some(selection => selection.item.shipping.profile === "custom") ? "custom" as const
       : physical.every(selection => selection.item.shipping.profile === "free") ? "free" as const : "default" as const,
     weightGrams: physical.filter(selection => selection.item.shipping.profile !== "free")
@@ -8201,6 +8204,8 @@ async function sendAgentResponse(input: {
     await saveOutboundMessage(input.client, context, outbound);
     return [outbound];
   }
+  const foodProposal = extractFoodConversationProposal(input.text, context.salesCatalog);
+  input = { ...input, text: foodProposal.text };
   const catalogReference = resolveCurrentCatalogReference(context.salesCatalog, buildSalesCatalogOrderIntentText(latestInbound, "", context), context.messages);
   const quotedPhotoRequest = catalogReference.quoted && /\b(fotos?|galeria|detalhes|imagens)\b/i.test(latestInbound?.text_content ?? "");
   if (quotedPhotoRequest) input = { ...input, text: catalogReference.items.length === 1
@@ -8233,7 +8238,7 @@ async function sendAgentResponse(input: {
   const cleanText = applyTextEmojiPreference(normalizeAssistantText(ensureLinkPromiseIsActionable(safeCatalogText, context)), context.behavior);
   const orderIntentText = normalizeRuntimeCheckoutIntent(buildSalesCatalogOrderIntentText(latestInbound, cleanText, context));
   if (checkoutAllowed) await invalidateRuntimeCheckoutDraft(input.client, context, orderIntentText);
-  const hasConfirmedCheckoutIntent = checkoutAllowed && hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
+  const hasConfirmedCheckoutIntent = checkoutAllowed && !foodProposal.items && hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText);
   const hasPendingDeliveryDetailsIntent = checkoutAllowed && hasPendingSalesCatalogDeliveryDetailsResolution(context.messages, latestInbound, orderIntentText);
   const hasConfirmedCartOfferIntent = checkoutAllowed && hasRecentSalesCatalogCartOfferConfirmation(context, orderIntentText);
   const recoveryRequested = checkoutAllowed && !hasConfirmedCheckoutIntent && hasRuntimeCheckoutRecoveryIntent(context, orderIntentText)
@@ -8263,7 +8268,7 @@ async function sendAgentResponse(input: {
     leadCatalogItems,
     catalogReference.quoted && !hasOrderIntent ? [] : leadCatalogItems.length > 0 && !hasOrderIntent ? [] : hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
   );
-  const checkoutOrderSelections = checkoutAllowed ? resolveSalesCatalogOrderSelections({
+  let checkoutOrderSelections = checkoutAllowed ? resolveSalesCatalogOrderSelections({
     context,
     currentItems: selectedCatalogItems,
     responseText: cleanText,
@@ -8271,6 +8276,25 @@ async function sendAgentResponse(input: {
   })
     .filter(isRuntimeCheckoutOrderSelection)
     .slice(0, salesCatalogCheckoutItemLimit) : [];
+  const foodRequested = !requiresCommerceConversationReply(orderIntentText) && (hasOrderIntent || isRuntimeCheckoutDraftChange(orderIntentText, context));
+  if (foodProposal.items && foodRequested) {
+    const proposedIds = new Set(foodProposal.items.map(item => item.productId));
+    checkoutOrderSelections = [...checkoutOrderSelections.filter(selection => !proposedIds.has(selection.item.id)), ...foodProposal.items.map(proposed => ({
+      item: context.salesCatalog.find(item => item.id === proposed.productId)!, quantity: proposed.units.length, foodUnits: proposed.units,
+      source: "current_response" as const, mentionText: null, quantitySignal: null, fractionalQuantity: null,
+    }))].filter(isRuntimeCheckoutOrderSelection);
+  }
+  const foodSelections = checkoutOrderSelections.filter(selection => selection.item.foodComposition?.enabled);
+  let foodError = foodRequested ? foodProposal.error : null;
+  if (checkoutOrderSelections.reduce((sum, selection) => sum + (selection.item.foodComposition?.enabled ? selection.quantity : 1), 0) > 100) foodError = "Este pedido permite até 100 unidades montadas. Reduza a quantidade para continuar.";
+  for (const selection of foodSelections) { try { const snapshot = quoteFoodComposition(selection.item.foodComposition, selection.foodUnits, selection.quantity)!; if (selection.foodSnapshot && !foodSnapshotsEqual(snapshot, selection.foodSnapshot)) throw new Error("Uma opção da montagem mudou. Confira as escolhas e o novo preço antes de confirmar."); } catch (error) { foodError = error instanceof Error ? error.message : "Confira a montagem."; } }
+  if (foodError && (hasOrderIntent || foodRequested)) {
+    const candidates = foodSelections.length ? foodSelections.map(selection => selection.item) : selectedCatalogItems.filter(item => item.foodComposition?.enabled);
+    if (candidates.length) { const message = await maybeSendSalesCatalogProductPageLinks({ ...input, latestInbound, items: candidates, chunkIndex: 0, chunksTotal: 1, persistedChunks: await loadPersistedOutboundChunks(input.client, context.run.id, "text"), foodMessage: `${foodError} Você pode conferir cada unidade na página do produto.` }); return message ? [message] : []; }
+    input = { ...input, text: "Preciso conferir o produto e as escolhas de cada unidade antes do total." };
+    const outbound = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone, text: input.text, chunkIndex: 0, chunksTotal: 1, trackIdPrefix: "food_clarification" });
+    return outbound ? [outbound] : [];
+  }
   const deliveryDetailsPrompt = buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt({
     context,
     latestInbound,
@@ -8279,14 +8303,14 @@ async function sendAgentResponse(input: {
     hasOrderIntent,
   });
   const shouldWaitForDeliveryDetails = Boolean(deliveryDetailsPrompt);
-  const shouldRequestCheckoutConfirmation = !shouldWaitForDeliveryDetails && shouldRequestSalesCatalogCheckoutConfirmation({
+  const shouldRequestCheckoutConfirmation = !shouldWaitForDeliveryDetails && (Boolean(foodProposal.items && foodRequested) || shouldRequestSalesCatalogCheckoutConfirmation({
     hasOrderIntent,
     hasConfirmedCheckoutIntent: hasConfirmedCheckoutIntent && !needsSalesCatalogCheckoutTotalConfirmation({
       context, selections: checkoutOrderSelections, intentText: orderIntentText,
     }),
     intentText: orderIntentText,
     selections: checkoutOrderSelections,
-  });
+  }));
   const paymentMethodChoicePrompt = shouldWaitForDeliveryDetails || shouldRequestCheckoutConfirmation
     ? null
     : buildSalesCatalogPaymentMethodChoicePrompt({
@@ -9408,6 +9432,8 @@ function mergeRuntimeSalesCatalogItems(...groups: RuntimeSalesCatalogItem[][]) {
 }
 
 type RuntimeSalesCatalogOrderSelection = {
+  foodUnits?: FoodUnitSelection[];
+  foodSnapshot?: FoodCompositionSnapshot;
   item: RuntimeSalesCatalogItem;
   quantity: number;
   source:
@@ -9432,7 +9458,16 @@ const salesCatalogCheckoutItemLimit = 10;
 const salesCatalogCartHistoryWindowMs = 2 * 60 * 60 * 1000;
 const salesCatalogCheckoutConfirmationWindowMs = 2 * 60 * 60 * 1000;
 
-function resolveSalesCatalogOrderSelections(input: {
+function resolveSalesCatalogOrderSelections(input: { context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>; currentItems: RuntimeSalesCatalogItem[]; responseText: string; intentText: string }): RuntimeSalesCatalogOrderSelection[] {
+  const selections = resolveBaseSalesCatalogOrderSelections(input);
+  const saved = resolveRuntimeRecoverableCheckoutDraft(input.context);
+  if (saved.some(selection => selection.item.foodComposition?.enabled) && !isRuntimeCheckoutDraftChange(input.intentText, input.context)) {
+    return saved;
+  }
+  return selections;
+}
+
+function resolveBaseSalesCatalogOrderSelections(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   currentItems: RuntimeSalesCatalogItem[];
   responseText: string;
@@ -10091,6 +10126,11 @@ function buildRecentSalesCatalogPaymentMethodMemoryText(
 }
 
 function buildSalesCatalogOrderPreviewItem(selection: RuntimeSalesCatalogOrderSelection) {
+  if (selection.item.foodComposition?.enabled) {
+    try { const food = quoteFoodComposition(selection.item.foodComposition, selection.foodUnits, selection.quantity)!;
+      return { line: `- ${selection.quantity}x ${cleanSalesCatalogCustomerTitle(selection.item.title)}\n${food.summary}`, total: formatRuntimeOrderMoney(food.totalCents / 100) };
+    } catch { return { line: `- ${selection.quantity}x ${cleanSalesCatalogCustomerTitle(selection.item.title)}: confira a montagem de cada unidade.`, total: null }; }
+  }
   const mentionText = selection.mentionText ?? "";
   const sku = resolveRuntimeOrderSku(selection.item, mentionText);
   const selectedAttributes = resolveRuntimeOrderSelectedAttributes(selection.item, sku, mentionText);
@@ -11132,7 +11172,8 @@ function resolveRuntimeRecoverableCheckoutDraft(context: NonNullable<Awaited<Ret
   const blockAt = Date.parse(block?.firstMessage.occurred_at ?? "");
   const storedMatches = draft?.conversation_id === context.conversationId && draft?.instance_id === context.instance.id
     && draft?.organization_id === context.organization.id && storedAt < now && now - storedAt <= runtimeCheckoutDraftLifetimeMs;
-  const useStored = storedMatches && (!Number.isFinite(blockAt) || storedAt >= blockAt);
+  const hasFoodDraft = Array.isArray(draft?.items) && draft.items.some(entry => Array.isArray(readRecord(entry)?.food_units));
+  const useStored = storedMatches && (!Number.isFinite(blockAt) || storedAt >= blockAt || hasFoodDraft);
   const sourceAt = useStored ? storedAt : blockAt;
   if (!Number.isFinite(sourceAt) || sourceAt >= now || now - sourceAt > runtimeCheckoutDraftLifetimeMs) return [];
   // A later order or changed/cancelled cart supersedes this draft, even if it is still in the model's history.
@@ -11150,6 +11191,8 @@ function resolveRuntimeRecoverableCheckoutDraft(context: NonNullable<Awaited<Ret
     const item = context.salesCatalog.find(candidate => candidate.id === row?.id);
     if (!item || typeof row?.quantity !== "number" || !Number.isInteger(row.quantity) || row.quantity < 1) return [];
     const selection: RuntimeSalesCatalogOrderSelection = { item, quantity: row.quantity, source: "cart_draft",
+      foodSnapshot: row.food_snapshot as FoodCompositionSnapshot | undefined,
+      foodUnits: Array.isArray(row.food_units) ? row.food_units as FoodUnitSelection[] : undefined,
       mentionText: typeof row.mention_text === "string" ? row.mention_text : null, quantitySignal: null, fractionalQuantity: null };
     if (!isRuntimeCheckoutOrderSelection(selection) || !isSalesCatalogItemSellable(item)) return [];
     selections.push(selection);
@@ -11177,7 +11220,7 @@ async function persistRuntimeCheckoutDraft(client: SupabaseClient, context: NonN
   if (!context.lead?.id || !latestInbound || selections.length === 0) return;
   const draft = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
     updated_at: latestInbound.occurred_at, items: selections.map(selection => ({ id: selection.item.id,
-      quantity: selection.quantity, mention_text: selection.mentionText })) };
+      quantity: selection.quantity, mention_text: selection.mentionText, ...(selection.foodUnits ? { food_units: selection.foodUnits, food_snapshot: quoteFoodComposition(selection.item.foodComposition, selection.foodUnits, selection.quantity) } : {}) })) };
   const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
     buildUpdate: metadata => {
       const current = readRecord(metadata.checkout_cart_draft);
@@ -11348,6 +11391,9 @@ function priceRuntimeSalesCatalogSelections(selections: RuntimeSalesCatalogOrder
 
     return {
       item,
+      foodUnits: selection.foodUnits,
+      foodComposition: null as FoodCompositionSnapshot | null,
+      foodUnitIndex: null as number | null,
       sku,
       quantity: selection.quantity,
       attributes: selectedAttributes.attributes.length > 0
@@ -11365,6 +11411,12 @@ function priceRuntimeSalesCatalogSelections(selections: RuntimeSalesCatalogOrder
       quantitySignal: selection.quantitySignal,
       fractionalQuantity: selection.fractionalQuantity,
     };
+  }).flatMap(priced => {
+    if (!priced.item.foodComposition?.enabled) return [priced];
+    const food = quoteFoodComposition(priced.item.foodComposition, priced.foodUnits, priced.quantity)!;
+    return food.units.map((unit, index) => ({ ...priced, sku: null, quantity: 1, foodUnits: [unit.selection],
+      foodComposition: foodSnapshotForUnit(food, index), foodUnitIndex: index, unitPrice: formatRuntimeOrderMoney(unit.totalCents / 100), salePrice: null,
+      total: formatRuntimeOrderMoney(unit.totalCents / 100), attributes: [], attributeModifiers: [], attributeModifierTotal: null }));
   });
 }
 
@@ -11383,6 +11435,8 @@ function buildRuntimeSalesCatalogOrderRows(selections: ReturnType<typeof priceRu
     mentionText,
     quantitySignal,
     fractionalQuantity,
+    foodComposition,
+    foodUnitIndex,
   }) => {
     return {
       order_id: orderId,
@@ -11414,6 +11468,7 @@ function buildRuntimeSalesCatalogOrderRows(selections: ReturnType<typeof priceRu
         access_instructions: item.fulfillment.accessInstructions,
       },
       metadata: {
+        ...(foodComposition ? { food_composition: foodComposition, food_unit_index: foodUnitIndex } : {}),
         category: item.category,
         currency: sku?.currency ?? item.currency,
         source: item.source,
@@ -11462,6 +11517,11 @@ async function recordSalesCatalogOrderIntent(input: {
     responseText: input.text,
     intentText,
   });
+  for (const selection of cartSelections.filter(selection => selection.item.foodComposition?.enabled)) {
+    try { const food = quoteFoodComposition(selection.item.foodComposition, selection.foodUnits, selection.quantity)!;
+      if (selection.foodSnapshot && !foodSnapshotsEqual(food, selection.foodSnapshot)) return null;
+    } catch { return null; }
+  }
   const checkoutCatalogSelections = cartSelections.filter((selection) => selection.item.salesDestination === "connectyhub_checkout");
   const unavailableItems = checkoutCatalogSelections
     .map((selection) => selection.item)
@@ -11578,6 +11638,7 @@ async function recordSalesCatalogOrderIntent(input: {
   const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
     ?? extractRuntimeCustomerDocument(customerDataText);
   const orderSelections = priceRuntimeSalesCatalogSelections(orderCatalogSelections, intentText, input.text);
+  if (orderSelections.length > 100) return null;
   const primaryItem = orderSelections[0].item;
   const total = sumRuntimeOrderTotal(orderSelections);
   const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
@@ -11648,6 +11709,7 @@ async function recordSalesCatalogOrderIntent(input: {
         selected_catalog_item_ids: items.map((item) => item.id),
         selected_catalog_item_tags: items.map((item) => item.tag),
         conversation_cart_items: orderSelections.map((selection) => ({
+          ...(selection.foodComposition ? { food_composition: selection.foodComposition, food_unit_index: selection.foodUnitIndex } : {}),
           catalog_item_id: selection.item.id,
           title: selection.item.title,
           tag: selection.item.tag,
@@ -12281,6 +12343,13 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   const order = draft ? scopedOrders.find(candidate => candidate.id === draft!.order_id) : journey.order
     ?? (wantsCheckout ? activeOrderId ? scopedOrders.find(candidate => candidate.id === activeOrderId)
       : editableOrders.length === 1 ? editableOrders[0] : null : null);
+  if (order?.items.some(item => item.foodSummary) && isCurrentRuntimeCheckoutOrder(context, order) && intent && intent.kind !== "payment" && !(intent.kind === "clarify" && ["inquiry", "negated"].includes(intent.reason)) && order.latestPaymentSessionId) {
+    const replyText = "Você pode alterar a montagem e as observações de cada unidade no checkout. Confira o novo total e confirme antes do próximo pagamento.";
+    const providerResponse = await sendWhatsappInteractiveButtons({ credentials: context.credentials, token: input.token, phone: input.phone, text: replyText,
+      choices: [`Revisar montagem|${buildSalesCatalogCheckoutUrl(order.latestPaymentSessionId)}`], footerText: resolveInteractiveButtonFooterText(context.organization), trackId: `food_revision_${context.run.id}` });
+    const outbound: OutboundMessage = { text: replyText, mode: "text", providerResponse, interactiveButton: true, persisted: true };
+    await saveOutboundMessage(client, context, outbound); return outbound;
+  }
   const legacyCart = order && (!intent || intent.kind === "payment") ? recoverRuntimeRevisionLegacyCart(context, order, draft, latestInbound) : null;
   if (order && requestedMethod && isCurrentRuntimeCheckoutOrder(context, order, true)
     && isSalesCatalogRuntimePaymentPreferenceEnabled(getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings), requestedMethod)) {
@@ -13930,6 +13999,7 @@ function formatSalesCatalogRuntimePaymentProviderLabel(provider: string | null |
 }
 
 async function maybeSendSalesCatalogProductPageLinks(input: {
+  foodMessage?: string;
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   token: string;

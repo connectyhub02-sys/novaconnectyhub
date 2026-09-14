@@ -11,8 +11,8 @@ Base remota conferida por fetch na retomada: `2301a69311e006348e35052f5899425902
 | P0.3 | C12–C18; agenda factual e eventos para ambos | Implementado; reserva/contexto e claim de aviso verificados em SQL; cancelamento para ambos verificado no preparador real |
 | P1.1 | C03/C18/C19/C24; busca e variantes | Busca indexada/paginada implementada; 105 itens sintéticos, variantes e isolamento verificados |
 | P1.2 | C20–C22; área e cotação única | Publicado em 96bfae2; migrations 0140–0141 aplicadas e verificadas |
-| P1.3 | C22; horários de operação | Implementado; validação e publicação em conclusão |
-| P2.1 | C23/C24; composição de alimentos | Pendente |
+| P1.3 | C22; horários de operação | Publicado em cd9f5b5; deploy Ready conferido |
+| P2.1 | C23/C24; composição de alimentos | Implementado e validado; 0142 aplicada; aplicativo em publicação (relatório de 14/09) |
 | P2.2–2.3 | C14/C20/C25; profissional, serviços e domicílio | Pendente |
 | P3 | C26; extensões dependentes de produto | Delimitar contratos e decisões materiais, sem alegação de suporte antecipada |
 | Integração/publicação | C27, regressões, tipos/lint/build, SQL, diff, deploy | Pendente |
@@ -79,3 +79,17 @@ O cálculo determinístico atua na proposta e no novo pedido WhatsApp, criação
 Complemento P1.2: a criação inicial agora grava também `shipping_quote`; leitura aceita o snapshot legado `initial_shipping` somente quando não existe o snapshot posterior. Um snapshot vazio de entrega atualizado não ressuscita a localização antiga. Duas regressões de leitura conferem essa precedência.
 
 Validação: suíte geral com 2.632 testes aprovada; complementos de horários, integração, revisão e WhatsApp aprovados (59 testes na rodada direcionada, mais dois casos de cartão). TypeScript, ESLint e build Next/webpack aprovados. Prévia dos componentes reais em desktop e celular, dados fictícios, sem overflow horizontal, campos sem horários presumidos, janela 18:00–02:00 e pausa/validação conferidas. Sem nova migration, envio ou transação real de teste. Alimentação, recursos de serviços e domicílio continuam no escopo.
+
+Publicado na master em `cd9f5b59af8d7701a2b8928caf0dbd3e583f873d`, Vercel `dpl_82VyoGrsxaG7pedfsL6WaXPyFPKc` Ready / Latest / Production às 22:32:21 BRT de 13/09, com domínio principal e commit conferidos. Alimentação em implementação; nenhum teste de atendimento real efetuado.
+
+## Reteste real noturno — retorno à prioridade P0
+
+A pedido do titular, alimentação foi pausada e seu trabalho local preservado. Auditoria completa do histórico acessível de Gustavo/Renata no WhatsApp pessoal, complementada por logs, encontrou falhas posteriores aos deploys P0. [Relatório](auditoria-reteste-gustavo-renata-2026-09-13-noite.md) contém sequência, origem humana/IA, citações, artefatos, tempos, configuração e limites.
+
+Pacote isolado publicado em `4ecc86709f7fe874723f51993425e97a485434ad`, Vercel `dpl_3EJDTJDrx5PtetoDH222gxr6wCH5` Ready/Latest/Production conferido até 23:26 BRT de 13/09: vínculo de foto/link à citação validada; esclarecimento de conflito entre foto antiga e texto; continuidade de agenda em mensagens sucessivas; resultado factual no lugar de promessas; validação de prévias/frete e restrição de indicação/fechamento dos anabolizantes observados. Sem migration, configuração de cliente ou teste externo transacional.
+
+101 testes focados aprovados; suíte final 2.652 aprovados/uma falha SQL, com reexecução isolada do arquivo 10/10 aprovada. Build/TypeScript/lint finais aprovados. Isso não equivale a reteste real aprovado: o titular ainda precisa conferir a entrega e a conversa. A agenda da Renata necessita vínculo explícito de imóvel/calendário; a correção não inventa esse cadastro. Alimentação, recursos e domicílio permanecem no escopo, não publicados nesta etapa.
+
+## P2.1 retomado — 14/09/2026
+
+O titular autorizou continuar alimentação sem dependência do reteste ou do cadastro da Renata. Montagem individual, sabores/frações, preços/limites, adicionais/combos e observações implementados no painel, loja, conversa e revisão do checkout. Entrega e horários usam as regras compartilhadas. 2.682 testes gerais e 115 direcionados posteriores aprovados; build/TypeScript/lint aprovados e UI conferida em desktop/390px. 0142 aplicada e verificada; aplicativo em publicação. [Relatório, evidências e limites](alimentacao-montagem-2026-09-14.md). P2.2–2.3 e P3 continuam pendentes.

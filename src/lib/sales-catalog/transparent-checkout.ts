@@ -1,4 +1,6 @@
 import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
+import { assertFoodOrderCurrent } from "./food-order";
+import { assertFoodOrderDelivery } from "./food-payment-guard";
 import { assertPublicCommerceAccess } from "./public-commerce-access";
 import { ensureStoreRecurringAgreement } from "@/lib/commerce/store-campaigns";
 import { assertStoreAgreementPayable } from "@/lib/commerce/store-payment-guard";
@@ -97,6 +99,8 @@ export async function payTransparentCheckout(client: SupabaseClient, sessionId: 
   }
   await assertContractAccess(session.organization_id,client);
   await assertStoreAgreementPayable(client, session.organization_id, order.id);
+  await assertFoodOrderCurrent(client, session.organization_id, items, settings?.trackInventory ?? false);
+  await assertFoodOrderDelivery(client, session.organization_id, order, items);
   const operation = evaluateOrderOperation(settings?.orderPolicy?.operations, orderOperationMode(items, order.shipping_method));
   if (!operation.allowed) throw new CheckoutError(operation.message ?? "A loja está fora do horário de operação.", 409);
   if (!snapshot.enabled) throw new CheckoutError("O cartão está temporariamente indisponível nesta loja. Continue pelo WhatsApp.", 503);
@@ -312,6 +316,6 @@ export async function validateTransparentInventory(client: SupabaseClient, organ
       status = sku.stock_status;
       quantity = sku.stock_quantity;
     }
-    if (!product.inventory.allowBackorder && (status === "out_of_stock" || trackInventory && quantity !== null && quantity < (item.quantity ?? 1))) throw new CheckoutError("Um produto ficou indisponível. Continue pelo WhatsApp para ajustar seu pedido.", 409);
+    if (!product.inventory.allowBackorder && (status === "out_of_stock" || trackInventory && quantity !== null && quantity < items.filter(row => row.catalog_item_id === item.catalog_item_id && (row.sku_id ?? null) === (item.sku_id ?? null)).reduce((sum, row) => sum + (row.quantity ?? 1), 0))) throw new CheckoutError("Um produto ficou indisponível. Continue pelo WhatsApp para ajustar seu pedido.", 409);
   }
 }

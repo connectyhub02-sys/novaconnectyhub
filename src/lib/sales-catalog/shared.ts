@@ -1,3 +1,4 @@
+import type { FoodCompositionPolicy } from "./food-composition";
 import type { SalesCatalogOperationHours } from "./operation-hours";
 import type { SalesCatalogCategoryIconId } from "./category-icons";
 
@@ -324,6 +325,7 @@ export type ClientSalesCatalogWhatsappInstance = {
 };
 
 export type ClientSalesCatalogItem = {
+  foodComposition?: FoodCompositionPolicy;
   id: string;
   companyId: string;
   title: string;
@@ -405,6 +407,7 @@ export function isSalesCatalogDisplayableProduct(item: ClientSalesCatalogItem) {
 }
 
 export type ClientSalesCatalogOrderItem = {
+  foodSummary?: string | null;
   id: string;
   orderId: string;
   companyId: string;

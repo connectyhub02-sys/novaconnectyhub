@@ -1,4 +1,6 @@
 import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
+import { assertFoodOrderCurrent } from "./food-order";
+import { assertFoodOrderDelivery } from "./food-payment-guard";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -76,6 +78,7 @@ type OrderRow = {
 
 type OrderItemRow = {
   id: string;
+  catalog_item_id?: string | null;
   title: string;
   quantity: number | null;
   unit_price: string | null;
@@ -133,7 +136,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const { data: itemRows } = await input.client
     .from("sales_catalog_order_items")
-    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment, metadata")
+    .select("id, catalog_item_id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment, metadata")
     .eq("order_id", order.id)
     .order("created_at", { ascending: true });
   const items = (itemRows ?? []) as OrderItemRow[];
@@ -286,6 +289,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
     : `Nao foi possivel localizar a conta ${paymentProviderLabel} para este pagamento.`;
 
   const sessionId = randomUUID();
+  await assertFoodOrderCurrent(input.client, input.organizationId, items, catalogSettings?.trackInventory ?? false);
+  await assertFoodOrderDelivery(input.client, input.organizationId, order, items);
   const idempotencyKey = randomUUID();
   const externalReference = `sales_catalog_order:${order.id}:${sessionId}`;
   const checkoutUrl = buildSalesCatalogCheckoutUrl(sessionId);

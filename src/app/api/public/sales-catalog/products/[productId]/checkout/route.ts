@@ -1,3 +1,4 @@
+import { quoteFoodComposition, foodSnapshotForUnit } from "@/lib/sales-catalog/food-composition";
 import { publicCommerceBlockResponse } from "@/lib/sales-catalog/public-commerce-access";
 import { getCommerceOfferPrice } from "@/lib/sales-catalog/commerce-offers";
 import { randomUUID } from "node:crypto";
@@ -42,7 +43,7 @@ export async function POST(
     headers: request.headers,
     requestUrl: request.url,
     routeKey: "sales-catalog-product-checkout",
-    maxPayloadBytes: 16 * 1024,
+    maxPayloadBytes: 128 * 1024,
     rateLimit: {
       limit: 10,
       windowMs: 60_000,
@@ -91,7 +92,7 @@ export async function POST(
 
   const amount = getCommerceOfferPrice(item);
 
-  if (!amount) {
+  if (!amount && !item.foodComposition?.enabled) {
     return NextResponse.json({ error: "Este produto ainda nao tem preco valido para checkout." }, { status: 422 });
   }
 
@@ -100,6 +101,7 @@ export async function POST(
   const agentId = normalizeUuid(readString(body.agentId));
   const leadPhone = normalizePhone(readString(body.leadPhone));
   const trackingLinkId = normalizeUuid(readString(body.trackingLinkId));
+  if (item.foodComposition?.enabled && (!Number.isSafeInteger(body.quantity ?? 1) || Number(body.quantity ?? 1) < 1 || Number(body.quantity ?? 1) > 20)) return NextResponse.json({ error: "Confira a quantidade de unidades, de 1 a 20." }, { status: 422 });
   const quantity = normalizeQuantity(body.quantity);
   let lead = leadId ? await loadLead(client, row.organization_id, leadId) : null;
 
@@ -110,11 +112,16 @@ export async function POST(
   const customerPhone = normalizePhone(lead?.phone_number) ?? leadPhone;
   const customerName = readString(lead?.display_name) ?? "Lead WhatsApp";
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
-  const totalAmount = (amount * quantity).toFixed(2);
-  const delivery = await preparePublicOrderDelivery({ client, organizationId: row.organization_id, entries: [{ item, quantity }], subtotal: amount * quantity, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
+  let composition;
+  try { composition = quoteFoodComposition(item.foodComposition, body.foodUnits, quantity); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Confira a montagem." }, { status: 422 }); }
+  const subtotalAmount = composition ? composition.totalCents / 100 : (amount ?? 0) * quantity;
+  const totalAmount = subtotalAmount.toFixed(2);
+  const delivery = await preparePublicOrderDelivery({ client, organizationId: row.organization_id, entries: [{ item, quantity }], subtotal: subtotalAmount, customer: { id: "new-order", customer_name: customerName, customer_phone: customerPhone, customer_email: customerEmail }, lead });
   if (!delivery.operation.allowed) return NextResponse.json({ error: delivery.operation.message }, { status: 422 });
   const checkoutIntentKey = createPublicCheckoutIntentKey([
     "sales_catalog_public_product",
+    composition,
     row.organization_id,
     item.id,
     quantity,
@@ -201,7 +208,7 @@ export async function POST(
 
   const { error: itemError } = await client
     .from("sales_catalog_order_items")
-    .insert({
+    .insert((composition ? composition.units.map((_, index) => foodSnapshotForUnit(composition, index)) : [null]).map((food, index) => ({
       order_id: orderId,
       organization_id: row.organization_id,
       catalog_item_id: item.id,
@@ -209,10 +216,10 @@ export async function POST(
       sku_code: null,
       title: item.title,
       tag: item.tag,
-      quantity,
-      unit_price: item.price ?? amount,
-      sale_price: String(amount),
-      total: totalAmount,
+      quantity: food ? 1 : quantity,
+      unit_price: food ? (food.totalCents / 100).toFixed(2) : item.price ?? amount,
+      sale_price: food ? null : String(amount),
+      total: food ? (food.totalCents / 100).toFixed(2) : totalAmount,
       product_origin_type: item.productOriginType,
       commercial_flow_type: item.commercialFlowType,
       revenue_owner_type: item.revenueOwnerType,
@@ -231,6 +238,7 @@ export async function POST(
         access_instructions: item.fulfillment.accessInstructions,
       },
       metadata: {
+        ...(food ? { food_composition: food, food_unit_index: index } : {}),
         source: item.source,
         category: item.category,
         currency: item.currency,
@@ -244,7 +252,7 @@ export async function POST(
         commission_policy_type: item.commissionPolicyType,
         commission_eligible: item.commissionEligible,
       },
-    });
+    })));
 
   if (itemError) {
     return NextResponse.json({ error: itemError.message }, { status: 500 });

@@ -104,6 +104,8 @@ export function calculateSalesCatalogShippingQuotes(input: {
   const weightSource = input.item.shipping.weightGrams ? "product" : "default";
   const weightGrams = input.item.shipping.weightGrams ?? defaultWeightGrams;
 
+  if (input.item.foodComposition?.enabled && input.item.foodComposition.localOnly) return { destination, weightGrams, weightSource, quotes: [], error: "Confira a área de entrega local deste produto." };
+
   if (!input.settings.shippingEnabled) {
     return {
       destination,
