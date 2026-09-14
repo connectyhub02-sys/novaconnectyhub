@@ -36,3 +36,10 @@ it('quotes voice design by the explicit sample text and accepts native catalog v
  expect(parseStudioInput({operation:'gemini_tts',voice_id:'gemini:kore',text:'Olá.'}).voice_id).toBe('gemini:kore');
  expect(()=>parseStudioInput({operation:'gemini_tts',voice_id:'Kore',text:'Olá.'})).toThrow();
 });
+
+it('accepts explicit model ids with version dots sent by the Studio and rejects other models',()=>{
+ for(const model_id of ['gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts']){
+  expect(parseStudioInput({operation:'gemini_tts',model_id,voice_id:'gemini:kore',text:'Teste.'})).toMatchObject({model_id});
+ }
+ for(const model_id of ['../../other','gemini-new','https://example.com'])expect(()=>parseStudioInput({operation:'gemini_tts',model_id,voice_id:'gemini:kore',text:'Teste.'})).toThrow();
+});

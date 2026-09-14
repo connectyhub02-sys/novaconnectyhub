@@ -26,7 +26,7 @@ export function parseStudioInput(raw:unknown):StudioInput{
  const b=object(raw),op=b.operation;
  if(typeof op!=='string'||!Object.hasOwn(studioDefinitions,op))throw fail('Escolha uma operação disponível.');
  const operation=op as StudioOperation,d=studioDefinitions[operation];
- const result:StudioInput={operation,model_id:b.model_id===undefined?d.model:identifier(b.model_id)};
+ const result:StudioInput={operation,model_id:b.model_id===undefined?d.model:text(b.model_id,1,100)};
  if(operation!=='gemini_tts'&&result.model_id!==d.model)throw fail('Modelo não suportado para esta operação.');
  if(operation==='gemini_tts'&&!['gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts'].includes(result.model_id))throw fail('Modelo de voz não suportado.');
  const allowed=['operation','model_id'];
