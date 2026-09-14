@@ -1,8 +1,14 @@
 # Estado operacional da ConnectyHub
 
-## Nomes dos produtos API — ajuste local, 14/09/2026
+## API de Voz AI — rótulo de acesso à API, local em 14/09/2026
 
-Refinamento explícito do titular após conferir a publicação visual: os nomes de produto passam a **API de AI** e **API de Voz AI**. Alterados menu do cliente/admin, cabeçalhos, títulos, rótulos de acesso e referências de produto na documentação pública/guia/OpenAPI. As referências genéricas à inteligência artificial não foram traduzidas globalmente. Rotas `api-ia`, `voz`, âncoras, IDs, contratos, credenciais, tarifas e modelos permanecem iguais. Estúdio de Voz mantém o nome da funcionalidade. Ajuste de texto em validação, ainda não publicado neste registro.
+Pedido pontual do titular: **Projetos e chaves API** substitui **Projetos e chaves** na aba, título da seção e indicação correspondente no guia público de Voz. Alteração somente textual, conferida na prévia local ao abrir a aba, com lint e diff-check aprovados. Não publicada; aguarda autorização desta publicação. Não inclui o plano de expansão do Estúdio nem altera a API de AI, ações, permissões, credenciais ou cobrança.
+
+## Nomes dos produtos API — publicado, 14/09/2026
+
+Refinamento explícito do titular após conferir a publicação visual: os nomes de produto passam a **API de AI** e **API de Voz AI**. Alterados menu do cliente/admin, cabeçalhos, títulos, rótulos de acesso e referências de produto na documentação pública/guia/OpenAPI. As referências genéricas à inteligência artificial não foram traduzidas globalmente. Rotas `api-ia`, `voz`, âncoras, IDs, contratos, credenciais, tarifas e modelos permanecem iguais. Estúdio de Voz mantém o nome da funcionalidade.
+
+Publicado em `d620d5cf14ecd4025f9ac2bd29cc2bd9710abf76`, Vercel `dpl_JADqu45RpqngkC32NztCivjwefEM` Ready / Production, criada em 14/09 às 16:00:28 BRT, ambos os domínios vinculados. Lint e build local completo com TypeScript/107 páginas aprovados. Confirmados nomes no menu, título, cabeçalho e breadcrumb das duas páginas no navegador de produção; OpenAPI público dos dois serviços responde com os novos nomes e as mesmas bases. Nenhum teste pago ou alteração operacional. Nota pós-publicação mantida local até próxima entrega, sem novo deploy apenas documental.
 
 ## API de Voz — revisão visual publicada, 14/09/2026
 

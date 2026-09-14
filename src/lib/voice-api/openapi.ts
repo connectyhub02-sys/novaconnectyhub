@@ -25,7 +25,7 @@ export const voiceOpenApiSpec={openapi:'3.1.0',info:{title:'ConnectyHub API de V
 export const voiceGuide=`# ConnectyHub API de Voz AI
 
 Base: https://www.connectyhub.com.br/api/v1/voice
-Crie um projeto e uma chave em /dashboard/voz → Projetos e chaves. O acesso exige conta ativa e saldo disponível para a operação; nenhum agente é obrigatório. Use Authorization: Bearer CHAVE_DE_VOZ. Não use chave WhatsApp, LLM ou do fornecedor.
+Crie um projeto e uma chave em /dashboard/voz → Projetos e chaves API. O acesso exige conta ativa e saldo disponível para a operação; nenhum agente é obrigatório. Use Authorization: Bearer CHAVE_DE_VOZ. Não use chave WhatsApp, LLM ou do fornecedor.
 
 ## Propriedade
 Cada chave pertence a um projeto. Trocar/revogar a chave não transfere os clones ou áudios para outro projeto. Confira project_id e billing_organization_id no catálogo e nos recibos. Todo ID direto passa pela mesma autorização; não envie organizationId no payload. Clones do projeto A não são visíveis ou utilizáveis no projeto B, mesmo na mesma conta. Vozes comuns são um catálogo autorizado separado. Apenas prévias públicas de vozes comuns têm URL pública; amostras, clones e áudios privados exigem autenticação.
