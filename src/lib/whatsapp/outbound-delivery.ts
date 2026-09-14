@@ -6,7 +6,7 @@ import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
 import { whatsappTrackingOrigin } from "./tracking-origin";
 import { collectOutboundLinks, rewriteOutboundBody, planOutboundMessages } from "./outbound-links";
 
-export type WhatsappOutboundScope = { instanceId: string; client?: SupabaseClient; source?: string; sensitive?: boolean };
+export type WhatsappOutboundScope = { instanceId: string; client?: SupabaseClient; source?: string; sensitive?: boolean; apiOrganizationId?: string };
 type Body = Record<string, unknown>;
 
 function archiveBody(body: Body, sensitive: boolean) {
@@ -79,6 +79,16 @@ export async function fetchWhatsappOutbound(input: RequestInfo | URL, init: Requ
   if (!scope?.instanceId) throw new Error("Remetente obrigatório para registrar o envio de WhatsApp.");
   const client = scope.client ?? createServiceClient();
   const original = JSON.parse(String(init.body ?? "{}")) as Body;
+  // Set only by the authenticated gateway after checking instance ownership.
+  // Neither a caller payload nor request Host can opt out of CRM/tracking.
+  const nativeOrigin = scope.apiOrganizationId
+    ? whatsappTrackingOrigin(scope.apiOrganizationId,"",process.env.WHATSAPP_NATIVE_LINK_ORIGINS_JSON ?? "")
+    : "";
+  if (nativeOrigin) {
+    if (typeof original.track_id !== "string" || !original.track_id.trim()) {
+      return Response.json({error:"transport_track_id_required",retryable:false},{status:422});
+    }
+  }
   if (path === "/send/status" && collectOutboundLinks(original).length) throw new Error("Status do WhatsApp não aceita botões de link. Envie esse conteúdo por mensagem para manter o link com botão e o registro por destinatário.");
   const urlFor = (next: string) => { const url = new URL(endpoint); url.pathname = endpoint.pathname.slice(0, -path.length) + next; return url; };
   const claimToken = randomUUID();
@@ -104,6 +114,27 @@ export async function fetchWhatsappOutbound(input: RequestInfo | URL, init: Requ
   };
   let started = false;
   try {
+    // External projects own their CRM and click history. Keep only the stable
+    // technical operation receipt; no lead, delivery archive or CH link is made.
+    // Existing archived operations continue through their original replay path.
+    if (nativeOrigin && operation && !operation.delivery_ids.length) {
+      // Validate new sends only: an old stored replay must retain its receipt
+      // even if its original destination predates the native-origin policy.
+      try { collectOutboundLinks(original,nativeOrigin); } catch {
+        await checkpoint({status:"failed"});
+        return Response.json({error:"native_link_origin_required",retryable:false},{status:422});
+      }
+      await checkpoint({status:"sending"});
+      started = true;
+      const response = await fetch(input,init);
+      const data = await response.clone().json().catch(()=>null);
+      const ok = response.ok && data && !data.error && data.success!==false && data.status!=="error";
+      const definitive = response.status>=400 && response.status<500 && response.status!==408;
+      const providerId = [data?.messageid,data?.id,data?.key?.id].find(value=>typeof value==="string");
+      await checkpoint({status:ok?"sent":definitive?"failed":"uncertain",response_status:response.status,
+        response:ok?{success:true,...(providerId?{id:providerId,messageid:providerId}:{})}:null});
+      return response;
+    }
     let messages: Prepared[] = [];
     let originalProviderId: string | null = null;
     const completed = new Set<string>();

@@ -4,6 +4,7 @@ import { isExplicitLeadOptOut, leadOptOutButtonReply } from "@/lib/automations/l
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 
 import { createHash } from "node:crypto";
+import { whatsappTrackingOrigin } from "./tracking-origin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
 import { sendLeadReplyPushNotifications } from "@/lib/push/web-push";
@@ -45,6 +46,7 @@ type WhatsappGroupTargetPolicy = {
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
+  connectyhub_api_client_id?: string | null;
   provider_instance_id: string | null;
   phone_number: string | null;
   instance_token_encrypted: string | null;
@@ -90,6 +92,7 @@ export type UazapiWebhookIngestResult = {
   agentRunId: string | null;
   status: "received" | "processed" | "unmapped" | "duplicate" | "error";
   error?: string;
+  transportOnly?: boolean;
 };
 
 export async function ingestUazapiWebhook(input: {
@@ -108,6 +111,25 @@ export async function ingestUazapiWebhook(input: {
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
   const message = extractMessageSnapshot(payload);
   const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
+  // Only server-mapped API instances may delegate their CRM to the customer.
+  // The original payload is still forwarded by the authenticated webhook route;
+  // this receipt retains deduplication metadata, not a second message archive.
+  if (instance?.connectyhub_api_client_id && whatsappTrackingOrigin(instance.organization_id, "", process.env.WHATSAPP_NATIVE_LINK_ORIGINS_JSON ?? "")) {
+    const event = await insertWebhookEvent(client, {
+      eventType, payload: { transport_only: true }, payloadHash: hashPayload(payload),
+      headers: {}, providerInstanceId, whatsappInstanceId: instance.id,
+      organizationId: instance.organization_id, providerMessageId: message.providerMessageId,
+      providerChatId: null, source: "api-native-transport",
+    });
+    if (!event.duplicate) {
+      await syncInstanceConnectionFromWebhook(client, { eventType, instance, payload, suppressCatchup: true });
+      await markWebhookEvent(client, event.eventId, "processed");
+    }
+    return { eventId: event.eventId, eventType, duplicate: event.duplicate,
+      organizationId: instance.organization_id, whatsappInstanceId: instance.id,
+      leadId: null, conversationId: null, messageId: null, agentRunId: null,
+      status: event.duplicate ? "duplicate" : "processed", transportOnly: true };
+  }
   if (instance && message.phoneNumber && !message.isGroupChat) {
     const resetStatus = await client.rpc("lead_reset_message_status", {
       p_organization_id: instance.organization_id,
@@ -394,7 +416,7 @@ export async function ingestUazapiWebhook(input: {
 async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
+    .select("id, organization_id, connectyhub_api_client_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .neq("status", "archived")
@@ -408,7 +430,7 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
 
   const { data: byProviderName } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
+    .select("id, organization_id, connectyhub_api_client_id, provider_instance_id, phone_number, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
     .neq("status", "archived")
@@ -425,6 +447,7 @@ async function syncInstanceConnectionFromWebhook(
     eventType: string;
     instance: WhatsappInstanceRow;
     payload: JsonRecord;
+    suppressCatchup?: boolean;
   },
 ) {
   if (!isConnectionWebhookEvent(input.eventType)) {
@@ -439,7 +462,7 @@ async function syncInstanceConnectionFromWebhook(
 
   const now = new Date().toISOString();
   const previousStatus = asString(input.instance.status);
-  const shouldScheduleCatchup = shouldScheduleReconnectCatchup(input.instance, status, now);
+  const shouldScheduleCatchup = !input.suppressCatchup && shouldScheduleReconnectCatchup(input.instance, status, now);
   const update: JsonRecord = {
     status,
     last_heartbeat_at: now,

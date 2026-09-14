@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       organizationId: ingest.organizationId,
       conversationId: ingest.conversationId,
       receivedAt: new Date().toISOString(),
-      payloadPreview: previewPayload(payload),
+      payloadPreview: ingest.transportOnly ? { transportOnly: true } : previewPayload(payload),
     }),
   );
 
