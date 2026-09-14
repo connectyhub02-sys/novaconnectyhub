@@ -40,6 +40,36 @@ function fixture(options: { empty?: boolean; finish?: string; fail?: string } = 
 }
 
 describe("direct agenda attendance", () => {
+  it("interprets a date continuation with the preceding unanswered acceptance", async () => {
+    const f = fixture();
+    const runtime = runtimeHarness();
+    const messages = [
+      { id: "question", direction: "outbound", text_content: "Qual dia e horário para a visita?", occurred_at: "2030-09-15T11:58:00Z" },
+      { id: "accepted", direction: "inbound", text_content: "podemos sim na terça as 15 horas", occurred_at: "2030-09-15T11:59:20Z" },
+      { id: "next", direction: "inbound", text_content: "na proxima terça", occurred_at: "2030-09-15T11:59:37Z" },
+    ];
+    const userText = runtime<string>("buildSalesCatalogOrderIntentText", messages.at(-1), "", { messages, behavior: {} });
+    expect(userText).toBe("podemos sim na terça as 15 horas\nna proxima terça");
+    const result = await f.turn({ userText, messages, catalogItemId: "property" });
+    expect(f.fetch).toHaveBeenCalledTimes(1); expect(result?.booked).toBe(true);
+    expect(f.rpc).toHaveBeenCalledWith("reserve_customer_appointment_item", expect.objectContaining({ p_item: "property" }));
+  });
+  it("reports missing item linkage on a date continuation rather than promising a consultation", async () => {
+    const f = fixture(); f.tables.customer_agenda_settings[0].default_resource_id = null;
+    const result = await f.turn({ userText: "na próxima terça", messages: [{ direction: "outbound", text_content: "Qual dia e horário para a visita?" }], catalogItemId: "property" });
+    expect(result).toMatchObject({ booked: false, handoffReason: expect.stringContaining("não tem agenda vinculada") });
+    expect(f.rpc).not.toHaveBeenCalled(); expect(f.fetch).not.toHaveBeenCalled();
+  });
+  it("does not replace a date correction or refusal with an earlier acceptance", async () => {
+    const f = fixture(); f.decide({ intent: "none" });
+    const result = await f.turn({ userText: "não, na próxima terça não posso", messages: [{ direction: "outbound", text_content: "Qual horário para visita?" }] });
+    expect(result?.booked).toBe(false); expect(f.rpc).not.toHaveBeenCalled();
+  });
+  it("blocks the exact future promises when the agenda returned no action", () => {
+    const runtime = runtimeHarness(); const result = { booked: false, fallback: "Qual dia e horário você prefere?" };
+    expect(runtime("enforceAgendaResponse", "Perfeito! Deixa eu só checar a minha agenda aqui para ver se tenho essa vaga certinha na próxima terça às 15h. Só um minutinho que já te confirmo se dá tudo certo!", "na próxima terça", result)).toBe(result.fallback);
+    expect(runtime("enforceAgendaResponse", "O imóvel tem três quartos.", "na próxima terça", result)).toBe("O imóvel tem três quartos.");
+  });
   it("reserves a concrete accepted time without prior offer or owner approval, then confirms location", async () => {
     const f = fixture();
     const result = await f.turn();

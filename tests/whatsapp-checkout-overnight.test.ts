@@ -41,6 +41,29 @@ function fixture(reply = "sim") {
 }
 
 describe("checkout recovery after the conversation resumes hours later", () => {
+  it("replaces a generated preview and invented free delivery with a computed proposal", async () => {
+    const { context, db, send, createPayment } = fixture("esse");
+    context.messages = [msg("outbound", "Posso mostrar uma proposta?", 0), msg("inbound", "esse", 1)];
+    context.salesCatalogShippingSettings.rules[0].price = "70,00";
+    context.salesCatalogShippingSettings.rules[0].freeShippingThreshold = "800,00";
+    context.lead.metadata = {};
+    context.messages.unshift(msg("inbound", address, -1));
+    db.tables.conversation_messages = [{ ...context.messages.at(-1), conversation_id: "conversation", whatsapp_instance_id: "instance" }];
+    const response = (await send("Tudo confirmado! Segue a prévia final do seu pedido:\n- 2x Kit de escritório (R$ 90,00)\nTotal: R$ 180,00. Frete grátis liberado! Pagamento via cartão."))
+      .map(m => m.text).join("\n");
+    expect(response).not.toContain("Tudo confirmado"); expect(response).not.toContain("Frete grátis liberado");
+    expect(response).toContain("250,00"); expect(response).toContain("70,00");
+    expect(createPayment).not.toHaveBeenCalled(); expect(db.tables.sales_catalog_orders ?? []).toHaveLength(0);
+  });
+  it("does not turn an invented brand in a generated preview into a confirmed cart", async () => {
+    const { context, db, send, createPayment } = fixture("esse");
+    context.messages = [msg("outbound", "Posso mostrar uma proposta?", 0), msg("inbound", "esse", 1)];
+    db.tables.conversation_messages = [{ ...context.messages.at(-1), conversation_id: "conversation", whatsapp_instance_id: "instance" }];
+    const response = (await send("Tudo confirmado! Segue a prévia final do seu pedido:\n- 1x Kit de escritório Marca Inexistente: R$ 90,00\nTotal: R$ 90,00. Frete grátis!"))
+      .map(m => m.text).join("\n");
+    expect(response).toContain("não corresponde ao catálogo"); expect(response).not.toContain("Tudo confirmado");
+    expect(createPayment).not.toHaveBeenCalled(); expect(db.tables.sales_catalog_orders ?? []).toHaveLength(0);
+  });
   it("recovers a transcribed resend request whose last complaint ends with não", async () => {
     const { context, db, send, createPayment, requests } = fixture("Cara, manda de novo pra mim aqui que eu não tô conseguindo não. Manda de novo o Pix pra mim aí, o botão do Pix");
     context.messages.at(-1)!.message_type = "AudioMessage";

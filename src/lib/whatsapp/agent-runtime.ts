@@ -23,6 +23,8 @@ function enforceAgendaResponse(text: string, userText: string, result: { disable
   if (result.disabled && (scheduling.test(text) || scheduling.test(userText))) return result.fallback;
   if (!result.booked && /\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return result.fallback;
   if (!result.booked && /\b(?:vou|vamos|assim que|deixei|já)\b.{0,100}\b(?:consultar|confirmar|reservar|anotad[oa]|retorno|retornar)\b/i.test(text) && (scheduling.test(text) || scheduling.test(userText))) return result.fallback;
+  if (!result.booked && (scheduling.test(text) || scheduling.test(userText))
+    && /\b(?:deixa\s+eu|vou|vamos|s[oó]\s+um\s+minutinho|j[aá]\s+te)\b[\s\S]{0,160}\b(?:checar|verificar|olhar|confirmo|confirmar|retorno|retornar)\b/i.test(text)) return result.fallback;
   return text;
 }
 import { loadPlatformCustomerContext } from "@/lib/billing/customer-journey";
@@ -1001,20 +1003,21 @@ async function processWhatsappAgentRunWithScope(input: {
         }).catch(() => null)
       : null;
 
-    const agendaItem = resolveCatalogAgendaFocus(context.salesCatalog, userText, context.messages);
+    const agendaUserText = buildSalesCatalogOrderIntentText(latestInbound, "", context) || userText;
+    const agendaItem = resolveCatalogAgendaFocus(context.salesCatalog, agendaUserText, context.messages);
     let agendaTurn = lead?.id && !isGroupChat
       ? await import("@/lib/automations/agenda-agent").then(({ processAgendaTurn }) => processAgendaTurn({
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
-          agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
+          agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText: agendaUserText,
           leadName: resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata }),
           catalogItemId: agendaItem?.salesDestination === "appointment" ? agendaItem.id : null,
-          catalogAmbiguous: hasAmbiguousAgendaFocus(context.salesCatalog, userText, context.messages),
+          catalogAmbiguous: hasAmbiguousAgendaFocus(context.salesCatalog, agendaUserText, context.messages),
           catalogAppointment: agendaItem?.salesDestination === "appointment", catalogResourceId: agendaItem?.salesDestination === "appointment" ? agendaItem.fulfillment.agendaResourceId : undefined,
           messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
         })).catch(async (error) => {
           console.error("agenda_turn_failed", { runId: run.id, message: error instanceof Error ? error.message : "unknown" });
           const { unavailableAgendaTurn, agendaRequest } = await import("@/lib/automations/agenda-agent");
-          return agendaRequest(userText, context.messages) ? unavailableAgendaTurn("Falha ao consultar ou gravar a agenda") : null;
+          return agendaRequest(agendaUserText, context.messages) ? unavailableAgendaTurn("Falha ao consultar ou gravar a agenda") : null;
         })
       : null;
     if (agendaTurn?.handoffReason && lead?.id) {
@@ -6000,6 +6003,27 @@ function effectiveRuntimeDestination(item: RuntimeSalesCatalogItem, agent?: Pick
   if (item.actionVersion || item.salesDestination !== "connectyhub_checkout") return item.salesDestination;
   return activityDefaultDestination(normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]).templateId);
 }
+function isRestrictedMedicalCatalogItem(item: RuntimeSalesCatalogItem) {
+  return /\b(?:anabolizante|anabolizantes|testosterona|testo|drostanolona|masteron|oxandrolona|trembolona|nandrolona|metenolona|primobolan|stanozolol|durateston)\b/.test(normalizeSearch(item.title));
+}
+
+function restrictedMedicalCommerceReply(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, response: string) {
+  if (!context.salesCatalog.some(isRestrictedMedicalCatalogItem)) return null;
+  const latest = findLatestInbound(context.messages);
+  const current = latest?.text_content ?? "";
+  const requested = resolveCurrentCatalogReference(context.salesCatalog, current, context.messages).items;
+  const mentioned = selectSalesCatalogItemsFromText(context.salesCatalog, response);
+  const recent = buildRecentOutboundMessageBlocks(context.messages, latest).slice(0, 1)
+    .flatMap(block => selectSalesCatalogItemsFromText(context.salesCatalog, block.text));
+  const healthRecommendation = /\b(?:recomenda|indica|preferencia|ganhar massa|massa seca|secar|injetavel|ciclo|kit)\b/.test(normalizeSearch(current));
+  const continuation = hasSalesCatalogCheckoutConfirmationIntent(current) || hasSalesCatalogOrderIntent(current)
+    || Boolean(detectSalesCatalogPreferredPaymentMethod(current));
+  if (requested.some(isRestrictedMedicalCatalogItem) || mentioned.some(isRestrictedMedicalCatalogItem)
+    || (healthRecommendation && !requested.length) || (continuation && !requested.length && recent.some(isRestrictedMedicalCatalogItem))) {
+    return "Não posso recomendar combinações de anabolizantes para objetivos físicos nem organizar a compra desses medicamentos por aqui. Para avaliar indicação e tratamento, procure um profissional de saúde habilitado. Não vou gerar pedido ou pagamento para esses medicamentos.";
+  }
+  return null;
+}
 function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; salesCatalog: RuntimeSalesCatalogItem[]; messages: ConversationMessageRow[] }, text?: string) {
   const inbound = findLatestInbound(context.messages);
   const current = text ?? inbound?.text_content ?? "";
@@ -6010,8 +6034,8 @@ function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; sal
     selected = recent.flatMap(block => selectSalesCatalogItemsFromText(context.salesCatalog, block.text));
     if (/\b(?:agend|hor.rio|visita|avalia|reuni.o|test.drive)/i.test(recent[0]?.text ?? "") && !/\b(?:pedido|pagamento|comprar)\b/i.test(current)) return false;
   }
-  if (selected.length) return selected.every(item => effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
-  return resolveRuntimeCommerceJourney(context.agent) === "checkout" && (!context.salesCatalog.length || context.salesCatalog.some(item => effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout"));
+  if (selected.length) return selected.every(item => !isRestrictedMedicalCatalogItem(item) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
+  return resolveRuntimeCommerceJourney(context.agent) === "checkout" && (!context.salesCatalog.length || context.salesCatalog.some(item => !isRestrictedMedicalCatalogItem(item) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout"));
 }
 
 function resolveRuntimeCommerceJourney(agent?: Pick<AgentRow, "metadata">) {
@@ -8168,6 +8192,20 @@ async function sendAgentResponse(input: {
   const commerceJourney = resolveRuntimeCommerceJourney(context.agent);
   const checkoutAllowed = runtimeAllowsCheckout(context);
   const latestInbound = findLatestInbound(context.messages);
+  const medicalReply = restrictedMedicalCommerceReply(context, input.text);
+  if (medicalReply) {
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+    const providerResponse = await sendWhatsappText({ credentials: context.credentials, token: input.token, phone: input.phone,
+      text: medicalReply, trackId: `medical_boundary_${context.run.id}`, mentions: resolveGroupMentions(context) });
+    const outbound: OutboundMessage = { text: medicalReply, mode: "text", providerResponse, persisted: true };
+    await saveOutboundMessage(input.client, context, outbound);
+    return [outbound];
+  }
+  const catalogReference = resolveCurrentCatalogReference(context.salesCatalog, buildSalesCatalogOrderIntentText(latestInbound, "", context), context.messages);
+  const quotedPhotoRequest = catalogReference.quoted && /\b(fotos?|galeria|detalhes|imagens)\b/i.test(latestInbound?.text_content ?? "");
+  if (quotedPhotoRequest) input = { ...input, text: catalogReference.items.length === 1
+    ? `Fotos e detalhes de ${formatSalesCatalogCustomerMention(catalogReference.items[0])}.`
+    : "Não consegui identificar com segurança o imóvel ou produto dessa mensagem citada. Qual é o nome da opção que você quer ver?" };
   const revisionClaimReply = checkoutAllowed ? guardUnexecutedOrderRevisionClaim(input.text, context) : null;
   if (revisionClaimReply) {
     // A model's prose must never become proof that an existing cart was changed.
@@ -8205,8 +8243,8 @@ async function sendAgentResponse(input: {
     || hasConfirmedCheckoutIntent
     || hasPendingDeliveryDetailsIntent
     || hasConfirmedCartOfferIntent);
-  let leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
-  if (!leadCatalogItems.length && /\b(fotos?|galeria|detalhes|imagens)\b/i.test(orderIntentText)) {
+  let leadCatalogItems = quotedPhotoRequest && catalogReference.items.length !== 1 ? [] : catalogReference.items;
+  if (!catalogReference.quoted && !leadCatalogItems.length && /\b(fotos?|galeria|detalhes|imagens)\b/i.test(orderIntentText)) {
     const focused = resolveCatalogAgendaFocus(context.salesCatalog, orderIntentText, context.messages);
     if (focused) leadCatalogItems = [focused];
   }
@@ -8223,7 +8261,7 @@ async function sendAgentResponse(input: {
   });
   const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
     leadCatalogItems,
-    leadCatalogItems.length > 0 && !hasOrderIntent ? [] : hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
+    catalogReference.quoted && !hasOrderIntent ? [] : leadCatalogItems.length > 0 && !hasOrderIntent ? [] : hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems,
   );
   const checkoutOrderSelections = checkoutAllowed ? resolveSalesCatalogOrderSelections({
     context,
@@ -8293,7 +8331,10 @@ async function sendAgentResponse(input: {
         })
       : "O pagamento ainda não foi enviado. Preciso conferir qual pedido você quer retomar: me confirma os produtos e as quantidades?"
     : null;
-  const rawDeliveryText = recoveryPrompt ?? unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? (
+  const modelPreview = checkoutAllowed && !shouldUseControlledPaymentStepText && !recoveryPrompt && !unresolvedCheckoutPrompt
+    && !deliveryDetailsPrompt && !shouldRequestCheckoutConfirmation && !paymentMethodChoicePrompt
+    ? validateModelCatalogPreview(context, latestInbound, cleanText, orderIntentText) : null;
+  const rawDeliveryText = recoveryPrompt ?? unresolvedCheckoutPrompt ?? deliveryDetailsPrompt ?? modelPreview?.text ?? (
     shouldRequestCheckoutConfirmation
       ? buildSalesCatalogOrderConfirmationPrompt({
           context,
@@ -8310,6 +8351,7 @@ async function sendAgentResponse(input: {
   if (recoveryRequested ? recoverySelections.length > 0 : shouldRequestCheckoutConfirmation || shouldWaitForDeliveryDetails) {
     await persistRuntimeCheckoutDraft(input.client, context, recoverySelections.length > 0 ? recoverySelections : checkoutOrderSelections);
   }
+  if (modelPreview?.selections.length) await persistRuntimeCheckoutDraft(input.client, context, modelPreview.selections);
   const deliveryText = normalizeTemporalGreetingInOutboundText(
     suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems),
     context.behavior,
@@ -9218,26 +9260,75 @@ function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCa
   });
 }
 
+function selectCatalogReferenceItems(items: RuntimeSalesCatalogItem[], text: string) {
+  const matches = selectSalesCatalogItemsFromText(items, text);
+  // A shorter title inside a longer title is not a second item. A separately
+  // mentioned shorter title remains ambiguous and must still be clarified.
+  return matches.filter(item => {
+    const title = normalizeSearch(item.title);
+    let remaining = normalizeSearch(text);
+    let removedLonger = false;
+    for (const other of matches) {
+      const longer = normalizeSearch(other.title);
+      if (other.id !== item.id && longer.length > title.length && longer.includes(title) && remaining.includes(longer)) {
+        remaining = remaining.split(longer).join(" "); removedLonger = true;
+      }
+    }
+    return !removedLonger || remaining.includes(title);
+  });
+}
+
+function resolveCurrentCatalogReference(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {
+  const current = selectCatalogReferenceItems(items, text);
+  const latest = findLatestInbound(messages);
+  const quotedId = latest ? findQuotedProviderMessageId(readRecord(latest.payload) ?? {}) : null;
+  if (current.length || !quotedId) return { items: current, quoted: Boolean(quotedId) };
+  const quoted = messages.find(message => message.direction === "outbound" && message.id !== latest?.id
+    && message.provider_message_id && providerMessageIdsMatch(message.provider_message_id, quotedId)
+    && Date.parse(message.occurred_at) < Date.parse(latest?.occurred_at ?? ""));
+  return { items: quoted ? selectCatalogReferenceItems(items, quoted.text_content ?? "") : [], quoted: true };
+}
+
+function hasConflictingCatalogPhoto(items: RuntimeSalesCatalogItem[], focused: RuntimeSalesCatalogItem, messages: ConversationMessageRow[]) {
+  const recent = messages.slice(-12);
+  const photoIndex = recent.findLastIndex(message => message.direction === "outbound" && /image/i.test(message.message_type ?? ""));
+  if (photoIndex < 0) return false;
+  const photographed = selectCatalogReferenceItems(items, recent[photoIndex].text_content ?? "");
+  if (photographed.length !== 1 || photographed[0].id === focused.id) return false;
+  // A new explicit choice can resolve an old mismatch. A pronoun or an AI's
+  // repeated title cannot tell us whether the customer chose the photo or prose.
+  for (const message of recent.slice(photoIndex + 1)) {
+    if (message.direction !== "inbound") continue;
+    const index = messages.findIndex(candidate => candidate.id === message.id);
+    if (resolveCurrentCatalogReference(items, message.text_content ?? "", messages.slice(0, index + 1)).items.length === 1) return false;
+  }
+  return true;
+}
+
 function hasAmbiguousAgendaFocus(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {
-  const current = selectSalesCatalogItemsFromText(items, text);
+  const reference = resolveCurrentCatalogReference(items, text, messages);
+  const current = reference.items;
+  if (reference.quoted) return current.length !== 1;
   if (current.length) return current.length > 1;
-  if (!/^(sim|ok|pode|quero|confirmo|combinado|sou |amanh[aã]|hoje)|\b(agenda|hor[aá]rio|visita)\b/i.test(text)) return false;
+  if (!/^(sim|ok|pode|quero|confirmo|combinado|sou |amanh[aã]|hoje|na |no |para )|\b(agenda|hor[aá]rio|visita)\b/i.test(text)) return false;
   for (const message of messages.slice(-6).reverse()) {
-    const matches = selectSalesCatalogItemsFromText(items, message.text_content ?? "");
-    if (matches.length) return matches.length > 1;
+    const matches = selectCatalogReferenceItems(items, message.text_content ?? "");
+    if (matches.length) return matches.length > 1 || hasConflictingCatalogPhoto(items, matches[0], messages);
   }
   return false;
 }
 
 function resolveCatalogAgendaFocus(items: RuntimeSalesCatalogItem[], text: string, messages: ConversationMessageRow[]) {
-  const current = selectSalesCatalogItemsFromText(items, text);
+  const reference = resolveCurrentCatalogReference(items, text, messages);
+  const current = reference.items;
+  if (reference.quoted) return current.length === 1 ? current[0] : undefined;
   if (current.length) return current.length === 1 ? current[0] : undefined;
   const normalized = normalizeSearch(text);
   if (/\b(?:outro|outra|mudar de|trocar de)\b/.test(normalized)) return undefined;
-  if (!/^(?:sim|ok|pode|quero|confirmo|esse|essa|amanha|hoje)\b|\b(?:agendar|agenda|horario|visita|consulta|avaliacao|reservar|foto|fotos|galeria|imagens|detalhes)\b/.test(normalized)) return undefined;
+  if (!/^(?:sim|ok|pode|podemos|quero|confirmo|esse|essa|amanha|hoje|na|no|para)\b|\b(?:agendar|agenda|horario|visita|consulta|avaliacao|reservar|foto|fotos|galeria|imagens|detalhes|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/.test(normalized)) return undefined;
   for (const message of messages.slice(-6).reverse()) {
-    const matches = selectSalesCatalogItemsFromText(items, message.text_content ?? "");
-    if (matches.length) return matches.length === 1 ? matches[0] : undefined;
+    const matches = selectCatalogReferenceItems(items, message.text_content ?? "");
+    if (matches.length) return matches.length === 1 && !hasConflictingCatalogPhoto(items, matches[0], messages) ? matches[0] : undefined;
   }
   return undefined;
 }
@@ -10461,6 +10552,16 @@ function shouldUseSalesCatalogConversationCartHistory(intentText: string, curren
 
   return /\b(tudo|todos|todas|esses|essas|eles|elas|ambos|ambas|carrinho|produtos|itens|junto|juntos|junta|somar)\b/.test(normalized)
     || /\b(os dois|as duas|fechar tudo|fecha tudo)\b/.test(normalized);
+}
+
+function validateModelCatalogPreview(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, latestInbound: ConversationMessageRow | null, text: string, intentText: string) {
+  if (!isSalesCatalogCheckoutConfirmationPreviewText(text) && !isSalesCatalogCartDraftPreviewText(text)) return null;
+  const selections = selectSalesCatalogOrderSelectionsFromText(context.salesCatalog, text, "confirmation_preview");
+  if (!selections.length || !selections.every(isRuntimeCheckoutOrderSelection)) {
+    return { selections: [], text: "O nome ou a versão de um item dessa proposta não corresponde ao catálogo. Preciso conferir essa diferença antes de pedir dados ou confirmar valores. Me indique a opção cadastrada que você quer; nenhum pagamento foi gerado por esta proposta." };
+  }
+  const delivery = buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt({ context, latestInbound, selections, intentText, hasOrderIntent: true });
+  return { selections, text: delivery ?? buildSalesCatalogOrderConfirmationPrompt({ context, latestInbound, selections, intentText }) };
 }
 
 function selectSalesCatalogOrderSelectionsFromText(

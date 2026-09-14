@@ -161,7 +161,8 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function sendSalesCatalogPaymentLink",
     );
 
-    expect(delivery).toContain("let leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText)");
+    // Quoted selection is exercised by the outbound integration cases in
+    // whatsapp-activity-commerce.test.ts; do not require the old text-only selector.
     expect(delivery).toContain("hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems");
     expect(delivery).toContain("suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems)");
     expect(checkoutRuntime).toContain("function buildRecentOutboundMessageBlocks");

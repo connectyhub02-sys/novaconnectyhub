@@ -41,7 +41,9 @@ type Decision = {
 export function agendaRequest(text: string, messages: Input["messages"] = []) {
   if (/\b(pedido|pagamento|pix|cart[aã]o|frete|entrega|comprar|compra)\b/i.test(text) && !/\b(visita|agendamento|remarcar)\b/i.test(text)) return false;
   const pattern = /\b(agend\w*|marcar|remarcar|reserv\w*|visita|hor[aá]rios?)\b/i;
-  return pattern.test(text) || (/^(sim|ok|combinado|pode|sou |meu nome|amanh[aã]|\d)/i.test(text.trim()) && messages.slice(-6).some(m => pattern.test(m.text_content ?? "")));
+  const continuation = /^(sim|ok|combinado|pode|podemos|sou |meu nome|amanh[aã]|\d)/i.test(text.trim())
+    || /\b(hoje|amanh[aã]|pr[oó]xim[oa]|segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|domingo|\d{1,2}[:h]\d{0,2})\b/i.test(text);
+  return pattern.test(text) || (continuation && messages.slice(-6).some(m => pattern.test(m.text_content ?? "")));
 }
 export function unavailableAgendaTurn(reason: string): AgendaTurnResult {
   const reply = "Não consegui reservar esse horário: a agenda precisa ser verificada pelo responsável. Nenhuma visita foi confirmada.";

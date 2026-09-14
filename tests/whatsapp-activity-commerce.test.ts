@@ -37,6 +37,52 @@ function fixture(activity: string, text = "ate um milhão eu consigo pagar") {
 }
 
 describe("activity-specific commercial execution", () => {
+  it.each(["Ipiranga", "Vila Ipiranga"])("uses the quoted %s for both photo and button, despite a later offer", async title => {
+    const { context, product, send, requests } = fixture("corretor_imoveis", "me manda as fotos dessa pra eu ver");
+    Object.assign(product, { title, salesDestination: "appointment" });
+    const second = { ...product, id: "second", title: "Pioneiros", tag: "{{produto_segundo}}", media: [{ kind: "image", storageUrl: "https://media.example/second.jpg", title: "Pioneiros" }] };
+    context.salesCatalog.push(second);
+    if (title === "Vila Ipiranga") context.salesCatalog.push({ ...second, id: "short", title: "Ipiranga", tag: "{{produto_curto}}" });
+    const inbound = context.messages.at(-1)!;
+    Object.assign(inbound, { payload: { message: { quoted: "quoted-provider", content: { contextInfo: { quotedMessage: { conversation: `Conheça ${title}` } } } } } });
+    context.messages = [{ ...context.messages[0], id: "quoted", provider_message_id: "quoted-provider", text_content: `Conheça ${title}` } as typeof inbound,
+      { ...context.messages[0], id: "later", text_content: "Também tenho Pioneiros" }, inbound];
+    await send("Fotos de Pioneiros {{produto_segundo}}");
+    const output = JSON.stringify(requests);
+    expect(output).toContain("https://media.example/house.jpg"); expect(output).toContain("https://store.example/produto/house");
+    expect(output).not.toContain("second.jpg"); expect(output).not.toContain("/produto/second");
+    expect(output).not.toContain("Fotos de Pioneiros");
+  });
+  it.each(["missing", "ambiguous"])("does not fall back to the last property for an %s quote", async kind => {
+    const { context, product, send, requests } = fixture("corretor_imoveis", "me manda as fotos dessa");
+    Object.assign(product, { title: "Ipiranga", salesDestination: "appointment" });
+    context.salesCatalog.push({ ...product, id: "second", title: "Pioneiros", tag: "{{produto_segundo}}" });
+    Object.assign(context.messages[0], { provider_message_id: "quoted-provider", text_content: "Ipiranga ou Pioneiros" });
+    context.messages.at(-1)!.payload = { quoted: kind === "missing" ? "unseen" : "quoted-provider" };
+    await send("Fotos de Pioneiros {{produto_segundo}}");
+    expect(requests.some(r => r.url.endsWith("/send/media") || r.url.endsWith("/send/menu"))).toBe(false);
+    expect(JSON.stringify(requests)).toContain("Não consegui identificar");
+  });
+  it("blocks personalized anabolic recommendations and checkout without affecting common products", async () => {
+    const { context, product, send, requests, db, call } = fixture("generic_sales", "sim, pode fechar e mandar o pagamento");
+    product.title = "Testosterona medicamento"; product.salesDestination = "connectyhub_checkout";
+    context.messages[0].text_content = "Confirma o pedido de Testosterona medicamento?";
+    expect(call("runtimeAllowsCheckout", context)).toBe(false);
+    await send("Combinação ideal para ganhar massa. Testosterona medicamento {{produto_casa}}");
+    expect(JSON.stringify(requests)).toContain("Não posso recomendar");
+    expect(JSON.stringify(requests)).not.toContain("Combinação ideal");
+    expect(requests.some(r => r.url.endsWith("/send/menu") || r.url.endsWith("/send/media"))).toBe(false);
+    expect(db.tables.sales_catalog_orders ?? []).toHaveLength(0);
+  });
+  it("keeps an explicit common product separate from a restricted item in the same catalog", async () => {
+    const { context, product, send, requests, call } = fixture("generic_sales", "Quero comprar Kit de escritório");
+    product.title = "Kit de escritório";
+    context.salesCatalog.push({ ...product, id: "restricted", title: "Testosterona medicamento", tag: "{{produto_restrito}}" });
+    context.messages[0].text_content = "Testosterona medicamento";
+    expect(call("runtimeAllowsCheckout", context)).toBe(true);
+    await send("Kit de escritório está no catálogo.");
+    expect(JSON.stringify(requests)).not.toContain("Não posso recomendar");
+  });
   it.each(["corretor_imoveis", "dentista", "advogado"])("enforces direct individual service for %s despite a legacy reception prompt", activity => {
     const { context, call } = fixture(activity);
     const agent = { ...context.agent, prompt: "Ofereça consultar com o profissional responsável." };
@@ -56,6 +102,17 @@ describe("activity-specific commercial execution", () => {
     expect(focus.fulfillment.agendaResourceId).toBe("dentist-agenda");
     expect(call("runtimeAllowsCheckout", { ...context, salesCatalog: [service] }, "Quero a Avaliação odontológica")).toBe(false);
     expect(call("resolveCatalogAgendaFocus", [service], "Quero outro serviço", context.messages)).toBeUndefined();
+  });
+  it("asks for a choice when an old photo and subsequent prose identify different properties", () => {
+    const { context, product, call } = fixture("corretor_imoveis", "na próxima terça");
+    Object.assign(product, { title: "Vila Ipiranga", salesDestination: "appointment" });
+    context.salesCatalog.push({ ...product, id: "other", title: "Vilas Boas", tag: "{{produto_outro}}" });
+    const inbound = context.messages.at(-1)!;
+    context.messages = [{ ...context.messages[0], id: "photo", message_type: "image", text_content: "Vilas Boas | R$ 850.000" },
+      { ...inbound, id: "liked", text_content: "essa gostei mais" },
+      { ...context.messages[0], id: "offer", text_content: "Essa da Vila Ipiranga é ótima. Qual dia e horário para visitar?" }, inbound];
+    expect(call("resolveCatalogAgendaFocus", context.salesCatalog, "na próxima terça", context.messages)).toBeUndefined();
+    expect(call("resolveCatalogAgendaFocus", context.salesCatalog, "Quero visitar Vila Ipiranga", context.messages)).toMatchObject({ id: product.id });
   });
   it("does not choose an agenda when the latest offer mentions two services", () => {
     const { product, context, call } = fixture("dentista");
