@@ -3,7 +3,7 @@
   "info": {
     "title": "ConnectyHub WhatsApp API",
     "version": "1.0.0",
-    "description": "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados.\n\n## Cobertura Uazapi\n\nA ConnectyHub usa a documentacao Uazapi 2.1.1 como uma das bases do gateway WhatsApp, mas entrega uma fronteira propria de produto: autenticacao por chave ConnectyHub, isolamento por cliente, auditoria de uso, webhooks por tenant e sanitizacao de dados sensiveis.\n\nCobertura atual: 132 paths Uazapi analisados, 125 paths expostos em /provider/*, 17 paths nativos ConnectyHub e 7 paths bloqueados por seguranca/administracao.\n\nUse as rotas nativas sempre que existirem. Use /provider/* para recursos avancados ainda nao promovidos para contrato ConnectyHub estavel. Rotas de admintoken, webhook global e controle de processo do provedor nao sao expostas a clientes."
+    "description": "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados.\n\n## Cobertura Uazapi\n\nA ConnectyHub usa a documentacao Uazapi 2.1.1 como uma das bases do gateway WhatsApp, mas entrega uma fronteira propria de produto: autenticacao por chave ConnectyHub, isolamento por cliente, auditoria de uso, webhooks por tenant e sanitizacao de dados sensiveis.\n\nCobertura atual: 132 paths Uazapi analisados, 125 paths expostos em /provider/*, 18 paths nativos ConnectyHub e 7 paths bloqueados por seguranca/administracao.\n\nUse as rotas nativas sempre que existirem. Use /provider/* para recursos avancados ainda nao promovidos para contrato ConnectyHub estavel. Rotas de admintoken, webhook global e controle de processo do provedor nao sao expostas a clientes."
   },
   "servers": [
     {
@@ -2736,6 +2736,113 @@
         "responses": {
           "200": {
             "description": "Retry executado"
+          }
+        }
+      }
+    },
+    "/links/{id}/resolve": {
+      "get": {
+        "tags": [
+          "Nativo ConnectyHub"
+        ],
+        "summary": "Resolver link de WhatsApp da organização",
+        "operationId": "connectyhubResolveOutboundLink",
+        "description": "Somente backend autenticado com instances:read. Retorna destino persistido após validar organização. GET registra clique, exceto bots/prévias identificados por User-Agent ou Purpose/Sec-Purpose. Não aceita destino/host no pedido; não envie a chave ao navegador nem ao destino.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "UUID v4 do link"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Destino aprovado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "destination"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "destination": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chave inválida"
+          },
+          "403": {
+            "description": "Sem acesso"
+          },
+          "404": {
+            "description": "Link inexistente ou de outra organização"
+          },
+          "503": {
+            "description": "Consulta indisponível"
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Nativo ConnectyHub"
+        ],
+        "summary": "Validar destino sem registrar clique",
+        "operationId": "connectyhubPreviewOutboundLink",
+        "description": "Mesma autenticação/propriedade do GET. Sem contagem. Use redirect manual; Location nunca autoriza encaminhar a chave ao destino.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "UUID v4 do link"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Destino válido, sem clique registrado",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chave inválida"
+          },
+          "403": {
+            "description": "Sem acesso"
+          },
+          "404": {
+            "description": "Link inexistente ou de outra organização"
+          },
+          "503": {
+            "description": "Consulta indisponível"
           }
         }
       }
@@ -23702,7 +23809,7 @@
     },
     "counts": {
       "sourcePaths": 132,
-      "nativePaths": 17,
+      "nativePaths": 18,
       "providerProxyPaths": 125,
       "intentionallyBlockedPaths": 7,
       "unexpectedMissingPaths": 0,

@@ -10,7 +10,7 @@ const yamlOutputPath = path.resolve("docs/connectyhub-openapi-spec.yaml");
 
 const rawSpec = yaml.load(fs.readFileSync(sourcePath, "utf8"));
 
-const HTTP_METHODS = ["get", "post", "put", "patch", "delete"];
+const HTTP_METHODS = ["get", "post", "put", "patch", "delete", "head"];
 const CONNECTYHUB_BASE_URL = "https://www.connectyhub.com.br/api/v1";
 const PROVIDER_PREFIX = "/provider";
 const EXAMPLE_INSTANCE_ID = "ch-api-atendimento-01";
@@ -590,6 +590,22 @@ const nativePaths = {
       parameters: [pathParam("deliveryId", "ID da entrega")],
       responses: { "200": { description: "Retry executado" } },
     },
+  },
+  "/links/{id}/resolve": {
+    get: {
+      tags: ["Nativo ConnectyHub"], summary: "Resolver link de WhatsApp da organização",
+      operationId: "connectyhubResolveOutboundLink",
+      description: "Somente backend autenticado com instances:read. Retorna destino persistido após validar organização. GET registra clique, exceto bots/prévias identificados por User-Agent ou Purpose/Sec-Purpose. Não aceita destino/host no pedido; não envie a chave ao navegador nem ao destino.",
+      parameters: [pathParam("id", "UUID v4 do link")],
+      responses: {"200": {description: "Destino aprovado",content:{"application/json":{schema:{type:"object",required:["ok","destination"],properties:{ok:{type:"boolean",enum:[true]},destination:{type:"string",format:"uri"}}}}}},"401":{description:"Chave inválida"},"403":{description:"Sem acesso"},"404":{description:"Link inexistente ou de outra organização"},"503":{description:"Consulta indisponível"}}
+    },
+    head: {
+      tags: ["Nativo ConnectyHub"], summary: "Validar destino sem registrar clique",
+      operationId: "connectyhubPreviewOutboundLink",
+      description: "Mesma autenticação/propriedade do GET. Sem contagem. Use redirect manual; Location nunca autoriza encaminhar a chave ao destino.",
+      parameters: [pathParam("id", "UUID v4 do link")],
+      responses:{"302":{description:"Destino válido, sem clique registrado",headers:{Location:{schema:{type:"string",format:"uri"}}}},"401":{description:"Chave inválida"},"403":{description:"Sem acesso"},"404":{description:"Link inexistente ou de outra organização"},"503":{description:"Consulta indisponível"}}
+    }
   },
   "/usage": {
     get: {

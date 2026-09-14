@@ -1,10 +1,21 @@
+import * as trackingOrigin from "../src/lib/whatsapp/tracking-origin";
 import * as billingMessages from "../src/lib/billing/platform-billing-messages";
 import * as noticeActions from "../src/lib/billing/account-notice-actions";
 import { createHash, randomUUID } from "node:crypto";
-import { expect,it,vi } from "vitest";
+import { afterEach,expect,it,vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
 import * as links from "../src/lib/whatsapp/outbound-links";
+afterEach(()=>vi.unstubAllEnvs());
+it("uses the reserved organization origin and ignores payload origin",async()=>{
+ vi.stubEnv("WHATSAPP_TRACKING_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
+ const f=fixture();
+ await f.send("/send/text",{number:"phone",text:"https://shop.invalid/item",origin:"https://untrusted.invalid"});
+ const saved=f.db.tables.whatsapp_outbound_links[0];
+ const wire=String(f.fetch.mock.calls[0][1].body);
+ expect(wire).toContain(`https://betel.example/w/${saved.id}`);
+ expect(saved).toMatchObject({organization_id:"org",target_url:"https://shop.invalid/item"});
+});
 function fixture(){
  const db=commerceDatabase();
  const rpc=vi.fn(async(_name:string,args:Record<string,unknown>)=>{
@@ -21,7 +32,7 @@ function fixture(){
  const client={...db.client,rpc};
  const fetch=vi.fn(async(...args:[URL,RequestInit])=>{void args;return new Response('{"id":"receipt"}',{status:200});});
  const service=serverModuleHarness<typeof import("../src/lib/whatsapp/outbound-delivery")>("src/lib/whatsapp/outbound-delivery.ts",{
-  "node:crypto":{randomUUID,createHash},"@/lib/supabase/service":{createServiceClient:()=>client},"@/lib/sales-catalog/mercado-pago":{getAppBaseUrl:()=>"https://app.invalid"},"./outbound-links":links,
+  "node:crypto":{randomUUID,createHash},"@/lib/supabase/service":{createServiceClient:()=>client},"@/lib/sales-catalog/mercado-pago":{getAppBaseUrl:()=>"https://app.invalid"},"./outbound-links":links,"./tracking-origin":trackingOrigin,
  },[],{fetch});
  return{db,rpc,fetch,service,send:(path:string,body:unknown,extra={})=>service.fetchWhatsappOutbound(`https://provider.invalid/api${path}`,{method:"POST",body:JSON.stringify(body)},{instanceId:"instance",client:client as never,...extra})};
 }
