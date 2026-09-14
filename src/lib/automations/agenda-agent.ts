@@ -217,7 +217,9 @@ export async function processAgendaTurn(
     const same = bookings.find(b => b.resource_id === resource.id && Date.parse(b.starts_at) === Date.parse(decision.startsAt!));
     if (same && acceptedTime(input.userText)) {
       if (catalogItemId && same.appointment_context?.catalog_item_id !== catalogItemId) return {
-        ...result, reply: "Você já tem um agendamento nesse horário para outro item. Quer remarcar a reserva existente ou escolher outro horário para este atendimento?",
+        ...result, reply: same.appointment_context?.catalog_item_id
+          ? "Você já tem um agendamento nesse horário para outro item. Quer remarcar a reserva existente ou escolher outro horário para este atendimento?"
+          : "Você já tem um agendamento nesse horário, mas o item da reserva anterior não está identificado. Quer conferir a reserva com o responsável ou escolher outro horário?",
       };
       return bookingReply(same, resource, agenda.settings.timezone);
     }

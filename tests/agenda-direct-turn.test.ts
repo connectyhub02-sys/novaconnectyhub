@@ -73,6 +73,11 @@ describe("direct agenda attendance", () => {
     expect(result).toMatchObject({ booked: false, reply: expect.stringContaining("outro item") });
     expect(f.rpc).toHaveBeenCalledTimes(1);
   });
+  it("does not describe an unidentified legacy reservation as a different property",async()=>{
+    const f=fixture();await f.turn();
+    const result=await f.turn({runId:"next",catalogItemId:"property"});
+    expect(result?.reply).toContain("não está identificado");expect(result?.reply).not.toContain("outro item");expect(f.rpc).toHaveBeenCalledTimes(1);
+  });
   it("does not reserve from an availability question even if the interpreter says book", async () => {
     const f = fixture(); await f.turn({ userText: "Tem horário amanhã às 13?" });
     expect(f.rpc).not.toHaveBeenCalled();
