@@ -37,6 +37,8 @@ Fontes: [tabela pública de voz](https://elevenlabs.io/pricing/api), [alinhament
 
 ## Pontos que impedem ativação comercial, não desenvolvimento
 
+Marco técnico de 14/09: adaptadores internos para transcrição, isolamento, troca de voz e alinhamento preparados em `src/lib/voice-api/audio-provider.ts`. Upload binário limitado a 20 MB, destino fixo do fornecedor, resposta limitada, sem redirect ou repetição automática; isolamento adicional não é ativado implicitamente na troca de voz. Seis testes isolados, lint, TypeScript e build aprovados. Nenhuma rota pública usa esses adaptadores: ainda faltam arquivos privados, aferição de duração, reserva/liquidação adequada e conciliação. Isso não comprova entrega comercial nem preço/acesso das quatro modalidades e não habilita geração.
+
 - Confirmar preço aplicável por modalidade e custos de prévia/salvamento/desenho/dicionários. A referência pública atual diverge do custo antigo cadastrado de TTS; não corrigir silenciosamente nem chamar essa diferença de lucro comprovado.
 - Confirmar tabela efetiva por modalidade e escolher uma única base Gemini. A fórmula e o mínimo de novas operações já foram aprovados; não há autorização para dupla cobrança nem para alterar tarifas atuais. O orçamento de testes pagos continua pendente e deve ser definido por modalidade depois do preço.
 - Implementar arquivos privados e limites na VPS, jobs/recibos, reserva/liquidação única, recuperação e isolamento. Gemini não pode reutilizar diretamente o helper WhatsApp com repetição automática/R2 como se fosse o transporte privado idempotente do Estúdio.
