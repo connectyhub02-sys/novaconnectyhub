@@ -53,10 +53,10 @@ it("downloads only the actual platform contact, never the recipient's phone", as
   const body = await response.text(); expect(body).toContain("TEL;TYPE=CELL:+5511888888888"); expect(body).not.toContain("5511999999999");
   expect(f.optOut).not.toHaveBeenCalled();
 });
-it("keeps checkout/Pix and unsubscribe within three buttons and every text fallback", () => {
+it("retains all account actions for grouping by the shared transport", () => {
   const links = { unsubscribeUrl: "https://fixture.invalid/avisos/key", contactUrl: "https://fixture.invalid/avisos/key/contato" };
   const choices = actions.noticeActionChoices(links, { label: "Pagar", url: "https://fixture.invalid/pay" }, "pix-code");
-  expect(choices).toEqual(["Copiar código Pix|copy:pix-code", `Salvar contato|${links.contactUrl}`, `Sair da lista|${links.unsubscribeUrl}`]);
-  expect(actions.noticeActionsMessage("Aviso", links)).toContain(links.unsubscribeUrl);
+  expect(choices).toEqual(["Pagar|https://fixture.invalid/pay", "Copiar código Pix|copy:pix-code", `Salvar contato|${links.contactUrl}`, `Sair da lista|${links.unsubscribeUrl}`]);
+  expect(actions.noticeActionsMessage("Aviso", links)).not.toContain("https://");
   expect(() => actions.connectyHubContactCard("123\r\nINJECTED:yes")).toThrow();
 });

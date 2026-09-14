@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import * as noticeActions from "../src/lib/billing/account-notice-actions";
 import * as billingMessages from "../src/lib/billing/platform-billing-messages";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { runtimeHarness } from "./helpers/whatsapp-runtime-harness";
@@ -27,7 +28,7 @@ type Notice = { deliveryMode: string; message: string; fallbackError: string | n
 function billing(fetch: unknown) {
   return serverModuleHarness<{ sendBillingWhatsappNotice: (input: typeof billingInput) => Promise<Notice> }>(
     "src/lib/billing/platform-billing-webhook.ts",
-    { "@/lib/billing/platform-billing-messages": billingMessages }, ["sendBillingWhatsappNotice"], { fetch },
+    { "@/lib/billing/platform-billing-messages": billingMessages, "./account-notice-actions": noticeActions }, ["sendBillingWhatsappNotice"], { fetch },
   );
 }
 
@@ -55,57 +56,34 @@ function store(fetch: unknown) {
 }
 
 describe("Pix payment card across the platform and storefronts", () => {
-  it("sends the discounted invoice amount with the same Pix and internal checkout", async () => {
+  it("keeps the invoice message, checkout and exact Pix as explicit actions", async () => {
     const p = provider();
     const result = await billing(p.fetch).sendBillingWhatsappNotice(billingInput);
     expect(p.requests).toHaveLength(1);
-    expect(p.requests[0]).toMatchObject({ path: "/send/request-payment", body: {
-      amount: 9.99, itemName: "Scale", invoiceNumber: "INVOICE1", pixCode: billingInput.pixCode,
-      paymentLink: billingInput.button.url, track_id: billingInput.trackId, track_source: "connectyhub",
+    expect(p.requests[0]).toMatchObject({ path: "/send/menu", body: {
+      choices: [`Finalizar pagamento|${billingInput.button.url}`, `Copiar código Pix|copy:${billingInput.pixCode}`],
+      track_id: billingInput.trackId, track_source: "connectyhub",
     } });
-    expect(p.requests[0].body).not.toHaveProperty("pixKey");
-    expect(result.deliveryMode).toBe("payment_request");
+    expect(p.requests[0].body.text).toContain("R$ 9,99");
     expect(result.message).toContain("R$ 497,00");
+    expect(result.deliveryMode).toBe("button");
+    expect(result.message).not.toContain("https:");
   });
-
-  it("keeps a usable checkout and copy button when the native format is rejected", async () => {
-    const p = provider([400, 200]);
-    const result = await billing(p.fetch).sendBillingWhatsappNotice(billingInput);
-    expect(p.requests.map(r => r.path)).toEqual(["/send/request-payment", "/send/menu"]);
-    expect(p.requests[1].body.choices).toEqual([`Copiar código Pix|copy:${billingInput.pixCode}`]);
-    expect(p.requests[1].body.text).toContain(billingInput.button.url);
-    expect(result.message).toBe(p.requests[1].body.text);
-    expect(result.fallbackError).toBeTruthy();
-  });
-
-  it("archives the exact text including code and checkout when both interactive formats fail", async () => {
-    const p = provider([400, 400, 200]);
-    const result = await billing(p.fetch).sendBillingWhatsappNotice(billingInput);
-    expect(p.requests.map(r => r.path)).toEqual(["/send/request-payment", "/send/menu", "/send/text"]);
-    expect(result.message).toContain(billingInput.pixCode);
-    expect(result.message).toContain(billingInput.button.url);
-    expect(result.message).toBe(p.requests[2].body.text);
-    expect(result.deliveryMode).toBe("text_fallback");
-  });
-
-  it.each([408, 500])("does not duplicate a billing message after ambiguous HTTP %s", async status => {
+  it.each([400, 404, 408, 422, 500])("does not degrade or duplicate required billing actions after HTTP %s", async status => {
     const p = provider([status]);
     await expect(billing(p.fetch).sendBillingWhatsappNotice(billingInput)).rejects.toThrow();
-    expect(p.requests).toHaveLength(1);
+    expect(p.requests.map(r => r.path)).toEqual(["/send/menu"]);
   });
-
   it("keeps checkout-only notices as link buttons", async () => {
     const p = provider();
     await billing(p.fetch).sendBillingWhatsappNotice({ ...billingInput, pixCode: "" });
-    expect(p.requests[0].path).toBe("/send/menu");
     expect(p.requests[0].body.choices).toEqual([`Finalizar pagamento|${billingInput.button.url}`]);
   });
-
-  it("does not invent a total for old notices missing an invoice amount", async () => {
+  it("does not derive a new amount from the plan price when invoice data is missing", async () => {
     const p = provider();
     await billing(p.fetch).sendBillingWhatsappNotice({ ...billingInput, paymentSummary: { ...billingInput.paymentSummary, amount: NaN } });
-    expect(p.requests[0].path).toBe("/send/menu");
-    expect(p.requests[0].body.text).toContain(billingInput.button.url);
+    expect(p.requests[0].body).not.toHaveProperty("amount");
+    expect(p.requests[0].body.choices).toContain(`Finalizar pagamento|${billingInput.button.url}`);
   });
 
   it("sends only Copiar Pix for stores and keeps reconciliation data internal", async () => {

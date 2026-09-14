@@ -40,6 +40,7 @@ function isExplicitNoChangeClause(text: string) {
   if (/\bnada (?:menos|mais) que\b/.test(text)) return false;
   const changes = "(?:mudar|mude|muda|alterar|altere|altera|trocar|troque|troca|mexer|mexa|revisar|editar)";
   return new RegExp(`\\b${changes}\\s+(?:absolutamente\\s+)?(?:nada|nenhum(?:a)?\\s+(?:coisa|item|produto|detalhe))\\b`).test(text)
+    || /\bnao\s+(?:tem|ha|existe|houve)\s+(?:nenhuma\s+)?(?:alteracao|mudanca|troca)(?:\s+(?:nos?|dos?)\s+(?:produtos?|itens|pedido))?\b/.test(text)
     || /\bnao\s+(?:(?:quero|preciso|precisa|pedi|solicitei)\s+)?(?:de\s+)?nenhum(?:a)?\s+(?:alteracao|mudanca|ajuste|troca)\b/.test(text)
     || new RegExp(`\\bnao\\s+(?:(?:quero|preciso|precisa)\\s+)?${changes}(?:\\s+(?:no|o|meu|esse|este|nesse)\\s+(?:pedido|carrinho))?[.!?]*$`).test(text);
 }
@@ -88,7 +89,7 @@ function revisionSpeech(text: string) {
     piece = piece.replace(/^(?:agora|ent[aã]o|a[ií]|mas|por[eé]m)[,:]?\s+/i, "").replace(/\s+/g, " ").trim();
     let segment = normalized(piece);
     if (!segment) continue;
-    const thanks = segment.match(/\b(?:obrigad[oa]|valeu|agradeco|agradecemos|agradecendo|agradecer|agradeci|grato|grata)\b/);
+    const thanks = segment.match(/\b(?:obrigad[oa]|valeu|agradeco|agradecemos|agradecendo|agradecer|agradeci|grato|grata|parabens)\b/);
     if (thanks) {
       hasGratitude = true;
       const remainder = piece.slice(thanks.index! + thanks[0].length).replace(/^[,:;!?.\s]+/, "");
@@ -198,6 +199,9 @@ function parseSingleOrderRevisionIntent(text: string): OrderRevisionIntent | nul
   const commandText = normalizeOrderRevisionSpeech(text);
   const input = normalized(commandText);
   if (!input) return null;
+  // "Tirar uma dúvida" is a conversational act, never removal of merchandise.
+  if (/\b(?:tira|tirar|tire)\s+(?:(?:uma|minha|essa|esta|a)\s+)?duvida\b/.test(input)
+    && !/\b(?:adicion|inclu|remov|exclu|substitu)/.test(input)) return null;
   if (/^(?:(?:sim|top|ok|beleza)[,!]?\s+)?(?:(?:pode\s+)?deixa(?:r)?|fica|ficar|mantenha)\s+(?:assim|como esta|igual)[.!]*$/.test(input)) return null;
   if (/\b(?:quanto|qual|calcula|calcule|calcular)\b.*\b(?:frete|taxa de entrega|custo de entrega)\b/.test(input)) return null;
 
@@ -220,7 +224,8 @@ function parseSingleOrderRevisionIntent(text: string): OrderRevisionIntent | nul
     // Speech may repeat the same payment request. Every clause must still be about payment.
     const repeatsPayment = paymentSignal && actions.every((action, index) =>
       new RegExp(`^(?:${verbs.replace})$`).test(action[0])
-      && /\b(?:pix|cartao|credito|debito|pagamento)\b/.test(input.slice(action.index, actions[index + 1]?.index)),
+      && (/\b(?:pix|cartao|credito|debito|pagamento)\b/.test(input.slice(action.index, actions[index + 1]?.index))
+        || index > 0 && /^(?:troca|troque|muda|mude|altera|altere)\s+(?:pra|para)\s+mim[.!]*$/.test(input.slice(action.index).trim())),
     );
     if (!repeatsPayment) return clarify("multiple_operations");
   }

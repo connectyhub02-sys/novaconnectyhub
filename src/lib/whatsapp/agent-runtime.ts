@@ -88,6 +88,7 @@ import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment
 import { readAsaasPaymentRecovery, readAsaasPixSessionRecovery, type AsaasPaymentRecovery } from "@/lib/sales-catalog/asaas";
 import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { loadTransparentCheckout } from "@/lib/sales-catalog/transparent-checkout";
+import { searchRuntimeCatalog } from "@/lib/sales-catalog/runtime-search";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import {
   formatSalesCatalogBillingCycleWithInterval,
@@ -1004,6 +1005,7 @@ async function processWhatsappAgentRunWithScope(input: {
           client, organizationId: organization.id, conversationId: context.conversationId, leadId: lead.id,
           agentId: agent.id, runId: run.id, credentials: context.geminiCredentials, userText,
           leadName: resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata }),
+          catalogItemId: agendaItem?.salesDestination === "appointment" ? agendaItem.id : null,
           catalogAmbiguous: hasAmbiguousAgendaFocus(context.salesCatalog, userText, context.messages),
           catalogAppointment: agendaItem?.salesDestination === "appointment", catalogResourceId: agendaItem?.salesDestination === "appointment" ? agendaItem.fulfillment.agendaResourceId : undefined,
           messages: context.messages, assertCurrent: () => assertRunStillTargetsLatestInbound(client, context, latestInbound),
@@ -1145,6 +1147,7 @@ async function processWhatsappAgentRunWithScope(input: {
       context,
       token,
       phone,
+      actionUrls: agendaTurn?.actionUrls,
       text: aiText,
     });
 
@@ -1318,6 +1321,23 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     const financial = await loadPlatformCustomerContext(client, leadId).catch(() => "O financeiro está temporariamente indisponível. Não confirme recebimento, não afirme recusa nem reenvie nova cobrança incerta. Oriente a consultar o painel ou solicite conferência humana.");
     knowledge.unshift({ id: "platform-financial-live", title: "CONTA DO CLIENTE — CONSULTA FINANCEIRA ATUAL", content: financial,
       metadata: { extracted_text: true, platform_financial_live: true }, created_at: new Date().toISOString() });
+  }
+
+  if (!isPlatformWhatsapp) {
+    const search = await searchRuntimeCatalog(client, {
+      organizationId: run.organization_id, agentId: run.agent_id, instanceId: whatsappInstanceId, messages,
+      referencedIds: salesCatalogOrders.flatMap(order => order.items.map(item => item.catalogItemId).filter((id): id is string => Boolean(id))),
+    }).catch(() => null);
+    if (search) {
+      const prioritized = new Map(search.items.map(item => [item.id, item]));
+      for (const item of salesCatalog) if (!prioritized.has(item.id)) prioritized.set(item.id, item);
+      salesCatalog.splice(0, salesCatalog.length, ...prioritized.values());
+    }
+    knowledge.unshift({ id: "catalog-search-live", title: "CONSULTA AO CATÁLOGO", created_at: new Date().toISOString(), metadata: { extracted_text: true },
+      content: search
+        ? `Busca atual: ${JSON.stringify(search.query)}; página ${search.offset / 20 + 1}; ${search.items.length} itens encontrados ou preservados do pedido. ${search.hasMore ? "Há outras opções; o cliente pode pedir mais opções." : "Fim dos resultados desta busca, não prova de ausência de um produto descrito com outras palavras."} Os primeiros itens do catálogo correspondem à consulta, seguidos dos itens de contexto. Nunca afirme não ter um produto apenas pelo recorte; esclareça nome, categoria ou versão quando necessário.`
+        : "A busca completa está indisponível. O catálogo abaixo é apenas um recorte: não afirme ausência de um produto nem prometa ter consultado tudo. Peça uma referência específica ou ofereça conferência pelo responsável.",
+    });
   }
 
   if (!isPlatformWhatsapp && leadId) {
@@ -8167,6 +8187,7 @@ async function sendAgentResponse(input: {
   token: string;
   phone: string;
   text: string;
+  actionUrls?: string[];
 }) {
   const { context } = input;
   const commerceJourney = resolveRuntimeCommerceJourney(context.agent);
@@ -8183,7 +8204,7 @@ async function sendAgentResponse(input: {
     await saveOutboundMessage(input.client, context, outbound);
     return [outbound];
   }
-  const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, {
+  const renderedLinks = renderLinkButtonTags(verifiedAssistantLinkText(input.text, context, input.actionUrls), context.linkButtons, {
     lead: context.lead,
     conversationId: context.conversationId,
     agent: context.agent,
@@ -8209,7 +8230,11 @@ async function sendAgentResponse(input: {
     || hasConfirmedCheckoutIntent
     || hasPendingDeliveryDetailsIntent
     || hasConfirmedCartOfferIntent);
-  const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
+  let leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText);
+  if (!leadCatalogItems.length && /\b(fotos?|galeria|detalhes|imagens)\b/i.test(orderIntentText)) {
+    const focused = resolveCatalogAgendaFocus(context.salesCatalog, orderIntentText, context.messages);
+    if (focused) leadCatalogItems = [focused];
+  }
   const assistantCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
     selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
@@ -8616,10 +8641,10 @@ async function sendCompanyLocationReply(input: {
   const mapsUrl = input.reply.location?.serviceMode === "public_storefront"
     ? resolveCompanyLocationMapUrl(input.reply.location)
     : null;
-  let messageText = input.reply.text;
+  const messageText = input.reply.text;
   let providerResponse: unknown;
   let interactiveButton = false;
-  let buttonFallback = false;
+  const buttonFallback = false;
 
   if (mapsUrl) {
     try {
@@ -8636,32 +8661,12 @@ async function sendCompanyLocationReply(input: {
       });
       interactiveButton = true;
     } catch (error) {
-      const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de localizacao.");
-      messageText = `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`;
-      const textProviderResponse = await sendWhatsappText({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        text: messageText,
-        trackId: `company_location_maps_fallback_${input.context.run.id}`,
-        replyId: input.latestInbound?.provider_message_id ?? undefined,
-        mentions: resolveGroupMentions(input.context, input.latestInbound),
-      });
-
-      providerResponse = {
-        fallback: true,
-        reason: "company_location_button_failed",
-        error: errorMessage,
-        mapsUrl,
-        textProviderResponse,
-      };
-      buttonFallback = true;
       await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-        chunkIndex: 1,
-        chunksTotal: 1,
-        errorMessage,
-        providerResponse,
+        chunkIndex: 1, chunksTotal: 1,
+        errorMessage: describeRuntimeError(error, "Falha ao entregar botão obrigatório."),
+        providerResponse: { delivery: "required_button_unconfirmed", destination: "location" },
       }).catch(() => {});
+      throw error;
     }
   } else {
     providerResponse = await sendWhatsappText({
@@ -8932,7 +8937,7 @@ async function sendTextOutboundChunk(input: {
   const messageText = normalizeOutboundLanguageText(input.text);
   let providerResponse: unknown;
   let interactiveButton = false;
-  let buttonFallback = false;
+  const buttonFallback = false;
 
   if (interactiveMenu) {
     try {
@@ -8949,30 +8954,12 @@ async function sendTextOutboundChunk(input: {
       });
       interactiveButton = true;
     } catch (error) {
-      const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao WhatsApp.");
-      const textProviderResponse = await sendWhatsappText({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        text: messageText,
-        trackId: `agent_button_fallback_${input.context.run.id}_${input.chunkIndex}`,
-        replyId: input.replyId,
-        mentions: resolveGroupMentions(input.context, input.mentionMessage),
-      });
-
-      providerResponse = {
-        fallback: true,
-        reason: "interactive_button_failed",
-        error: errorMessage,
-        textProviderResponse,
-      };
-      buttonFallback = true;
       await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-        chunkIndex: input.chunkIndex,
-        chunksTotal: input.chunksTotal,
-        errorMessage,
-        providerResponse: textProviderResponse,
+        chunkIndex: input.chunkIndex, chunksTotal: input.chunksTotal,
+        errorMessage: describeRuntimeError(error, "Falha ao entregar botão obrigatório."),
+        providerResponse: { delivery: "required_button_unconfirmed", destination: "configured_link" },
       }).catch(() => {});
+      throw error;
     }
   } else {
     providerResponse = await sendWhatsappText({
@@ -9099,18 +9086,19 @@ async function persistInteractiveButtonFallbackEvent(
     providerResponse: unknown;
   },
 ) {
+  const unconfirmed = readRecord(input.providerResponse)?.delivery === "required_button_unconfirmed";
   await client.from("intelligence_events").insert({
     scope: "organization",
     organization_id: context.organization.id,
     source_type: "whatsapp",
     source_id: context.conversationId,
     producer_agent_id: context.agent.id,
-    event_type: "whatsapp.button.fallback_text",
-    title: "Botao WhatsApp enviado como texto",
+    event_type: unconfirmed ? "whatsapp.button.delivery_unconfirmed" : "whatsapp.button.fallback_text",
+    title: unconfirmed ? "Entrega do botão WhatsApp não confirmada" : "Código Pix enviado como texto",
     summary: preview(input.errorMessage, 500),
     confidence: 0.72,
     visibility: "organization",
-    tags: ["whatsapp", "button", "fallback", "text"],
+    tags: unconfirmed ? ["whatsapp", "button", "delivery_unconfirmed"] : ["whatsapp", "button", "fallback", "text"],
     payload: {
       agentRunId: context.run.id,
       conversationId: context.conversationId,
@@ -9122,6 +9110,30 @@ async function persistInteractiveButtonFallbackEvent(
       providerResponse: sanitizeProviderData(input.providerResponse),
     },
   });
+}
+
+function verifiedAssistantLinkText(text: string, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, actionUrls: string[] = []) {
+  const approved = new Set((context.linkButtons ?? []).flatMap(link => [link.url, link.trackingUrl,
+    buildLeadAwareTrackingUrl(link, { lead: context.lead, conversationId: context.conversationId, agent: context.agent })]));
+  for (const url of actionUrls) approved.add(url);
+  for (const item of context.salesCatalog ?? []) {
+    if (item.status === "active" && item.salesDestination === "external_site") {
+      if (item.productUrl) approved.add(item.productUrl);
+      if (item.externalLinkButtonTrackingUrl) approved.add(item.externalLinkButtonTrackingUrl);
+    }
+  }
+  for (const location of context.companyLocations ?? []) {
+    if (location.serviceMode === "public_storefront") {
+      const url = resolveCompanyLocationMapUrl(location);
+      if (url) approved.add(url);
+    }
+  }
+  // Generated catalog/payment URLs are never source data. Dedicated actions
+  // construct them from the selected entity and the current payment session.
+  return text.replace(/https?:\/\/[^\s<>"'\]\}]+/gi, raw => {
+    const url = raw.replace(/[.,;!?)]+$/, "");
+    return approved.has(url) ? raw : "";
+  }).replace(/\[([^\]]+)\]\(\s*\)/g, "$1").replace(/\(\s*\)/g, "").trim();
 }
 
 function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) {
@@ -9247,7 +9259,7 @@ function resolveCatalogAgendaFocus(items: RuntimeSalesCatalogItem[], text: strin
   if (current.length) return current.length === 1 ? current[0] : undefined;
   const normalized = normalizeSearch(text);
   if (/\b(?:outro|outra|mudar de|trocar de)\b/.test(normalized)) return undefined;
-  if (!/^(?:sim|ok|pode|quero|confirmo|esse|essa|amanha|hoje)\b|\b(?:agendar|agenda|horario|visita|consulta|avaliacao|reservar)\b/.test(normalized)) return undefined;
+  if (!/^(?:sim|ok|pode|quero|confirmo|esse|essa|amanha|hoje)\b|\b(?:agendar|agenda|horario|visita|consulta|avaliacao|reservar|foto|fotos|galeria|imagens|detalhes)\b/.test(normalized)) return undefined;
   for (const message of messages.slice(-6).reverse()) {
     const matches = selectSalesCatalogItemsFromText(items, message.text_content ?? "");
     if (matches.length) return matches.length === 1 ? matches[0] : undefined;
@@ -12050,7 +12062,9 @@ function resolveRuntimeOrderAdditionOffer(context: NonNullable<Awaited<ReturnTyp
   latestInbound: ConversationMessageRow, text: string): OrderRevisionIntent | null {
   // A short answer accepts only the immediately preceding, explicit item offer.
   // It requests a revised preview; it does not accept that preview or a payment.
-  const answer = normalizeSearch(text).replace(/[.!]+$/, "").trim();
+  const answer = normalizeSearch(text).replace(/[.!]+$/, "").trim()
+    .replace(/\s+vou levar (?:ele|ela|esse|essa)(?: tambem)?$/, "")
+    .replace(/^e para incluir$/, "inclua");
   if (!/^(?:(?:sim|s|ok|okay|isso|isso mesmo|claro|beleza|blz)(?:[, ]+)?(?:pode\s+)?(?:coloca|coloque|adiciona|adicione|inclui|inclua|acrescenta|acrescente)?|pode(?:\s+sim|\s+(?:colocar|coloca|adicionar|adiciona|incluir|inclui|acrescentar))?|coloca|coloque|adiciona|adicione|inclui|inclua)(?:\s+(?:esse|essa|isso|por favor))?$/.test(answer)) return null;
   const quotedContext = extractQuotedMessageContext(latestInbound, context.messages);
   const now = Date.parse(latestInbound.occurred_at);
@@ -12098,6 +12112,14 @@ function resolveRuntimeOrderAdditionOffer(context: NonNullable<Awaited<ReturnTyp
     }
     if (parsed?.kind === "add" || parsed?.kind === "clarify" && parsed.pendingIntent?.kind === "add") offers.push({ intent: parsed, sentence: index });
   }
+  // Resolve demonstratives only after the precise offer parser has retained its
+  // quantity and SKU. A bare "sim coloca" cannot invent an unspecified quantity.
+  const explicitAdd = /\b(?:inclua|inclui|incluir|adicione|adiciona|coloca|coloque|acrescente)\b/.test(answer);
+  if (!offers.length && explicitAdd && (quotedMessage || /\b(?:esse|essa|ele|ela)\b/.test(normalizeSearch(text)))) {
+    const selected = selectRuntimeRevisionProducts(context.salesCatalog, block.text);
+    if (selected.length === 1) return { kind: "add", productText: `${selected[0].title} ${block.text}`, quantity: 1 };
+    if (selected.length > 1) return { kind: "clarify", reason: "ambiguous" };
+  }
   return offers.length === 1 && offers[0].sentence === lastPrompt ? offers[0].intent
     : offers.length > 1 ? { kind: "clarify", reason: "multiple_operations" } : null;
 }
@@ -12124,7 +12146,8 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   const speech = normalizeRuntimeCheckoutIntent(text);
   let intent = parseOrderRevisionIntent(speech);
-  if (!intent || intent.kind === "clarify" && intent.reason === "ambiguous") {
+  if (!intent || intent.kind === "clarify" && intent.reason === "ambiguous"
+    || intent.kind === "add" && /^(?:vou levar )?(?:ele|ela|esse|essa)(?: tambem)?$/.test(normalizeSearch(intent.productText))) {
     intent = resolveRuntimeOrderAdditionOffer(context, latestInbound, speech) ?? intent;
   }
   const requestedMethod = intent?.kind === "payment" ? intent.paymentMethod : intent?.preferredPaymentMethod;
@@ -12194,6 +12217,18 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   if (!isEditableCheckoutOrder(order) || order.checkoutPaymentLock) {
     return reply("Preciso conferir o estado do pagamento e do pedido antes de alterar os itens. Vou manter o pedido como está até essa conferência.");
+  }
+  if (intent?.kind === "payment" && draft && !draft.applied) {
+    const unchanged = !draft.pending_sku_item_id && draft.items.length === order.items.length && draft.items.every(item => order.items.some(line => line.catalogItemId === item.id && line.quantity === item.quantity
+      && (normalizeSearch(item.mention_text ?? "") === normalizeSearch([line.title, ...(line.attributes ?? []).flatMap(attribute => attribute.values)].join(" "))
+        || !item.mention_text && !line.skuId && !(line.attributes ?? []).length)))
+      && draft.address === order.destinationAddress && draft.cep === order.destinationCep && draft.method === order.shippingMethod;
+    const onlyPayment = /\b(?:so|apenas|somente)\s+(?:troca|troque|muda|mude|alterar|o pagamento|a forma)\b/.test(normalizeSearch(text));
+    if ((unchanged && !draft.pending_quantity_item_id && draft.pending_intent?.kind === "clarify" && !draft.pending_intent.pendingIntent) || onlyPayment) {
+      // Discard an incompatible interpretation, never execute its proposed edit.
+      await persistRuntimeOrderRevision(client, context, null);
+      return null;
+    }
   }
   if (draft?.pending_intent && !noChange && (!intent || intent.kind === "payment")
     && (wantsCheckout || /^(?:(?:oi|ola|bom dia|boa tarde|boa noite|tudo bem|resumo|meu pedido|me mostra o pedido)[,.!\s]*)+$/.test(normalizeSearch(speech)))) {
@@ -13287,9 +13322,9 @@ async function deliverSalesCatalogPaymentLink(input: {
 
   const text = "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
   let providerResponse: unknown;
-  let messageText = text;
+  const messageText = text;
   let interactiveButton = false;
-  let buttonFallback = false;
+  const buttonFallback = false;
   const paymentUrl = buildSalesCatalogPaymentActionUrl(input.payment);
 
   try {
@@ -13305,33 +13340,12 @@ async function deliverSalesCatalogPaymentLink(input: {
     });
     interactiveButton = true;
   } catch (error) {
-    if (!(error instanceof UazapiRuntimeRequestError && error.definitive)) throw error;
-    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
-    const textProviderResponse = await sendWhatsappText({
-      credentials: input.context.credentials,
-      token: input.token,
-      phone: input.phone,
-      text: messageText,
-      trackId: `agent_payment_button_fallback_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-      mentions: resolveGroupMentions(input.context),
-    });
-
-    providerResponse = {
-      fallback: true,
-      reason: "payment_interactive_button_failed",
-      error: errorMessage,
-      checkoutUrl: input.payment.checkoutUrl,
-      trackingUrl: paymentUrl,
-      textProviderResponse,
-    };
-    buttonFallback = true;
     await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-      chunkIndex: 1,
-      chunksTotal: 1,
-      errorMessage,
-      providerResponse,
-    });
+      chunkIndex: 1, chunksTotal: 1,
+      errorMessage: describeRuntimeError(error, "Falha ao entregar botão obrigatório."),
+      providerResponse: { delivery: "required_button_unconfirmed", destination: "payment" },
+    }).catch(() => {});
+    throw error;
   }
   const message: OutboundMessage = {
     text: messageText,
@@ -13866,10 +13880,10 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
       ? "Você pode consultar os detalhes e as fotos disponíveis nesta página."
       : "Separei a página do produto com os detalhes completos para você ver com calma."
     : "Separei as páginas dos produtos com os detalhes completos para você comparar com calma.";
-  let messageText = text;
+  const messageText = text;
   let providerResponse: unknown;
   let interactiveButton = false;
-  let buttonFallback = false;
+  const buttonFallback = false;
 
   try {
     providerResponse = await sendWhatsappInteractiveButtons({
@@ -13885,38 +13899,12 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
     });
     interactiveButton = true;
   } catch (error) {
-    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de produto.");
-    const fallbackLinks = choices
-      .map((choice) => {
-        const [label, url] = choice.split("|");
-        return `${label}: ${url}`;
-      })
-      .join("\n");
-    messageText = `${text}\n${fallbackLinks}`;
-    const textProviderResponse = await sendWhatsappText({
-      credentials: input.context.credentials,
-      token: input.token,
-      phone: input.phone,
-      text: messageText,
-      trackId: `agent_product_button_fallback_${input.context.run.id}_${items[0].id.slice(0, 8)}`,
-      replyId: input.latestInbound?.provider_message_id ?? undefined,
-      mentions: resolveGroupMentions(input.context),
-    });
-
-    providerResponse = {
-      fallback: true,
-      reason: "product_interactive_button_failed",
-      error: errorMessage,
-      textProviderResponse,
-      productIds: items.map((item) => item.id),
-    };
-    buttonFallback = true;
     await persistInteractiveButtonFallbackEvent(input.client, input.context, {
-      chunkIndex: input.chunkIndex,
-      chunksTotal: input.chunksTotal,
-      errorMessage,
-      providerResponse,
-    });
+      chunkIndex: 1, chunksTotal: 1,
+      errorMessage: describeRuntimeError(error, "Falha ao entregar botão obrigatório."),
+      providerResponse: { delivery: "required_button_unconfirmed", destination: "product" },
+    }).catch(() => {});
+    throw error;
   }
 
   const message: OutboundMessage = {

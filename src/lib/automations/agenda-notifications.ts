@@ -90,7 +90,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
     const eventIds = (events.data ?? [])
       .filter((e) => e.booking_id === id)
       .map((e) => e.id);
-    if (!c.settings.enabled) {
+    if (!c.settings.enabled && !(events.data ?? []).some(e => e.booking_id === id && e.version === c.b.version && e.event_type === "cancel")) {
       if (eventIds.length)
         await client
           .from("customer_agenda_events")
@@ -105,7 +105,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const summary = `${c.lead.display_name ?? "Cliente"} · ${c.resource.service_name} · ${c.resource.name} · ${when}`;
+    const summary = `${c.lead.display_name ?? "Cliente"} · ${c.b.appointment_context?.item_title || c.resource.service_name} · ${c.resource.name} · ${when}`;
     const rows: Array<Record<string, unknown>> = [];
     const push = (
       audience: string,
@@ -128,7 +128,11 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
     };
     for (const e of (events.data ?? []).filter(
       (e) => e.booking_id === id && e.version === c.b.version,
-    ))
+    )) {
+      if (e.event_type === "cancel") {
+        push("lead", c.lead.phone_number ?? "", "event:cancel", new Date(),
+          `Seu agendamento de ${c.b.appointment_context?.item_title || c.resource.service_name}, em ${when}, foi cancelado. Esse horário não está mais reservado.`);
+      }
       for (const person of c.responsibles) {
         const title =
           (
@@ -149,6 +153,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
           `${title}: ${summary}. ${e.event_type === "booked" || e.event_type === "rescheduled" ? "O horário já foi registrado, sem necessidade de aprovação. " : ""}Se precisar mudar, combine diretamente com o contato${c.lead.phone_number ? `: https://wa.me/${normalizeBrazilianWhatsappPhone(c.lead.phone_number)}` : "."}`,
         );
       }
+    }
     if (c.b.status === "booked") {
       const reminderAt = new Date(Date.parse(c.b.starts_at) - 30 * 60000);
       if (
@@ -161,7 +166,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
           c.lead.phone_number ?? "",
           "reminder",
           reminderAt,
-          `Seu horário de ${c.resource.service_name} é ${when}. Está confirmado?`,
+          `Seu horário de ${c.b.appointment_context?.item_title || c.resource.service_name} é ${when}. Está confirmado?`,
         );
       for (const person of c.responsibles)
         push(
@@ -176,7 +181,7 @@ export async function prepareAgendaNotifications(client: SupabaseClient) {
       const inserted = await client
         .from("customer_agenda_notices")
         .upsert(rows, {
-          onConflict: "booking_id,booking_version,kind,recipient_phone",
+          onConflict: "booking_id,booking_version,kind,audience,recipient_phone",
           ignoreDuplicates: true,
         });
       if (inserted.error) throw new Error(inserted.error.message);
@@ -252,7 +257,7 @@ export async function dispatchAgendaNotifications(
               n.recipient_phone && !optedOut
           : c.responsibles.some((person) => person.phone === n.recipient_phone);
       if (
-        !c.settings.enabled ||
+        (!c.settings.enabled && n.kind !== "event:cancel") ||
         c.b.version !== n.booking_version ||
         !allowedRecipient ||
         (n.kind === "reminder" &&
@@ -339,18 +344,7 @@ export async function dispatchAgendaNotifications(
         continue;
       }
       const delivery = unsubscribeUrl ? leadContactMessage(n.message_text, unsubscribeUrl, choices) : { text: n.message_text, choices };
-      const start = await client
-        .from("customer_agenda_notices")
-        .update({
-          status: "sending",
-          lease_until: new Date(Date.now() + 120000).toISOString(),
-        })
-        .eq("id", n.id)
-        .eq("status", "processing")
-        .eq("claim_token", claimToken)
-        .gt("lease_until", new Date().toISOString())
-        .select("id")
-        .maybeSingle();
+      const start = await client.rpc("begin_customer_agenda_notice", { p_notice: n.id, p_claim: claimToken });
       if (start.error) throw new Error("delivery_claim_failed");
       if (!start.data) continue;
       sending = true;

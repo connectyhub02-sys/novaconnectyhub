@@ -51,17 +51,16 @@ it("distinguishes a missing purchase button from the unsubscribe action", () => 
   expect(checkout.claimsMissingFollowUpCheckout("Precisa de ajuda com seu pedido?", "")).toBe(false);
   expect(checkout.claimsMissingFollowUpCheckout("Continue pelo botão de pagamento.", "https://fixture.invalid/checkout/session")).toBe(false);
 });
-it("sends two URL buttons without duplicate links in text, retaining unrelated URLs", async () => {
+it("supplies payment and unsubscribe actions to the shared transport", async () => {
   const buy = "https://fixture.invalid/checkout/session", exit = "https://fixture.invalid/sair";
   const send = vi.fn(async (path: string, body: Record<string, unknown>) => { void path; void body; return { ok: true, status: 200 }; });
   await sendLeadContactMessage(send, { ...leadContactMessage(`Continue seu pedido. https://fixture.invalid/ajuda\n${buy}`, exit, [`Continuar pagamento|${buy}`]), hideButtonLinks: true }, async () => true);
-  expect(send.mock.calls[0][1]).toMatchObject({ choices: [`Continuar pagamento|${buy}`, `Sair da lista|${exit}`], text: "Continue seu pedido. https://fixture.invalid/ajuda" });
+  expect(send.mock.calls[0][1]).toMatchObject({ choices: [`Continuar pagamento|${buy}`, `Sair da lista|${exit}`], text: `Continue seu pedido. https://fixture.invalid/ajuda\n${buy}` });
 });
-it("uses text with both links only after explicit format rejection", async () => {
+it("does not retry a rejected follow-up as text", async () => {
   const buy = "https://fixture.invalid/checkout/session", exit = "https://fixture.invalid/sair";
   const send = vi.fn(async (path: string, body: Record<string, unknown>) => { void path; void body; return { ok: false, status: 400 }; });
   await sendLeadContactMessage(send, { ...leadContactMessage(`Continue o pedido: ${buy}`, exit, [`Continuar pagamento|${buy}`]), hideButtonLinks: true }, async () => true);
-  expect(send.mock.calls[1][0]).toBe("/send/text");
-  expect(send.mock.calls[1][1].text).toContain(buy);
-  expect(send.mock.calls[1][1].text).toContain(exit);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][1].choices).toEqual([`Continuar pagamento|${buy}`, `Sair da lista|${exit}`]);
 });

@@ -89,6 +89,7 @@ export function resolveMetaSocialDispatchTarget(input: {
   allowPublicReplies?: boolean;
 }): MetaSocialDispatchTarget {
   const text = normalizeDispatchText(input.text);
+  if (/https?:\/\//i.test(text)) throw new Error("Este adaptador social ainda não entrega botões de link. A mensagem não foi enviada; use um canal com botões ou revise a resposta sem prometer acesso por link.");
   const pageId = normalizeId(input.pageId);
   const instagramBusinessId = normalizeId(input.instagramBusinessId);
   const externalUserId = normalizeId(input.externalUserId);

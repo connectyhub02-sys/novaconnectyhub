@@ -1,12 +1,13 @@
 export type AccountNoticeActions = { unsubscribeUrl: string; contactUrl?: string };
 
 export function noticeActionsMessage(message: string, actions: AccountNoticeActions) {
-  return `${message}${actions.contactUrl ? `\n\nSalve o contato da ConnectyHub na sua agenda: ${actions.contactUrl}` : ""}\n\nSair da lista de avisos da conta: ${actions.unsubscribeUrl}`;
+  return `${message}${actions.contactUrl ? "\n\nVocê pode salvar o contato pelo botão." : ""}`;
 }
 
 export function noticeActionChoices(actions: AccountNoticeActions, checkout: { label: string; url: string } | null, pixCode?: string | null) {
   return [
-    ...(pixCode ? [`Copiar código Pix|copy:${pixCode}`] : checkout ? [`${checkout.label}|${checkout.url}`] : []),
+    ...(checkout ? [`${checkout.label}|${checkout.url}`] : []),
+    ...(pixCode ? [`Copiar código Pix|copy:${pixCode}`] : []),
     ...(actions.contactUrl ? [`Salvar contato|${actions.contactUrl}`] : []),
     `Sair da lista|${actions.unsubscribeUrl}`,
   ];

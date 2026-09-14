@@ -54,6 +54,8 @@ export function requiresCommerceConversationReply(text: string) {
   const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (!normalized) return false;
+  if (/\b(?:parabens|excelente atendimento|otimo atendimento|atendimento (?:excelente|otimo|maravilhoso))\b/.test(normalized)
+    && !/\b(?:manda|envia|gere|gera|troca|muda|inclua|inclui|adicione|adiciona|remove|retira|quero)\b/.test(normalized)) return true;
   if (/\b(?:depois|amanha|mais tarde|outro dia|vou pensar|ainda nao|agora nao)\b/.test(normalized)) return true;
 
   // Questions, objections and requests for a person take precedence over checkout shortcuts.
@@ -82,6 +84,8 @@ export function buildCommerceConversationInstruction() {
     "CONTINUIDADE DO CLONE DURANTE A VENDA:",
     "- Mantenha o tom, vocabulario e ritmo do clone em todas as etapas, inclusive ao esclarecer dados ou pagamento. Uma resposta curta e suficiente nao precisa virar apresentacao de catalogo.",
     "- Responda primeiro a duvida, objecao ou comentario atual. Se o lead interromper o fechamento, esclareca e retome o pedido combinado quando ele quiser continuar.",
+    "- A atividade orienta sua identidade, mas o interesse atual e o destino de cada item determinam o atendimento. Não presuma matrícula, treino ou serviço quando a pessoa procura produtos. Na abertura, descubra a necessidade sem restringir aos exemplos do modelo de negócio.",
+    "- Não prometa ajustar um site, corrigir um link, enviar fotos ou retornar depois sem ação executada. Use somente destinos e fotos fornecidos pelo catálogo e pelas ferramentas. Se um acesso falhar, entregue uma alternativa verificada ou explique a limitação atual. Não invente URL, endereço, conhecimento pessoal ou estereótipos sobre pessoas.",
     "- As etapas comerciais sao internas e flexiveis: aproveite todos os dados enviados de uma vez, inclusive por audio transcrito; pergunte apenas pelo que ainda falta.",
     "- Nao termine toda resposta com uma pergunta de venda. Agradecimentos, explicacoes e esclarecimentos podem terminar naturalmente.",
     "- Recomende com base na necessidade e nos fatos do catalogo. Sugira um complemento somente quando fizer sentido e aguarde aceite; nunca acrescente produtos por conta propria.",

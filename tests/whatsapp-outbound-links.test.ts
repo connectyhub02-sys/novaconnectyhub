@@ -10,7 +10,7 @@ it("turns every distinct visible URL into a tracked button, preserving punctuati
 it("preserves Pix copy actions, existing CTA labels and attachment URLs",()=>{
  const f=prepare("/send/menu",{number:"phone",type:"button",text:"Pague aqui: https://pay.invalid",imageButton:"https://assets.invalid/image.png",choices:["Pagar|url:https://pay.invalid","Copiar Pix|copy:000201https://pix.invalid/key","Sair da lista|https://app.invalid/avisos/key"]});
  expect(f.links).toHaveLength(2);expect(f.body.imageButton).toBe("https://assets.invalid/image.png");
- expect(f.messages[0].body.choices).toEqual(["Pagar|https://app.invalid/w/0","Copiar Pix|copy:000201https://pix.invalid/key","Sair da lista|https://app.invalid/w/1"]);
+ expect(f.messages[0].body.choices).toEqual(["Pagar|url:https://app.invalid/w/0","Copiar Pix|copy:000201https://pix.invalid/key","Sair da lista|https://app.invalid/w/1"]);
 });
 it("keeps quick replies separate from navigation buttons for WhatsApp Web",()=>{
  const f=prepare("/send/menu",{number:"phone",type:"button",text:"Mensagem",choices:["Confirmar|confirm","Abrir|https://shop.invalid","Copiar|copy:123"]});

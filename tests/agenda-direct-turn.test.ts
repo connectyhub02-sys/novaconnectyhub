@@ -20,7 +20,7 @@ function fixture(options: { empty?: boolean; finish?: string; fail?: string } = 
   const fetch = vi.fn(async () => Response.json({ candidates: [{ finishReason: options.finish ?? "STOP", content: { parts: [{ text: JSON.stringify(decision) }] } }] }));
   const rpc = vi.fn(async (_name: string, p: Record<string, unknown>) => {
     if (options.fail) return { data: null, error: { message: options.fail } };
-    const booking = { id: "booking", organization_id: "org", resource_id: p.p_resource, lead_id: p.p_lead, starts_at: p.p_start, ends_at: "2030-09-16T17:00:00.000Z", status: "booked", request_key: p.p_key, version: 1 };
+    const booking = { id: "booking", organization_id: "org", resource_id: p.p_resource, lead_id: p.p_lead, starts_at: p.p_start, ends_at: "2030-09-16T17:00:00.000Z", status: "booked", request_key: p.p_key, version: 1, appointment_context: p.p_item ? {catalog_item_id:p.p_item, item_title:"Apartamento de teste", location_address:null, location_url:null} : {} };
     f.tables.customer_agenda_bookings.push(booking);
     return { data: booking, error: null };
   });
@@ -43,10 +43,10 @@ describe("direct agenda attendance", () => {
   it("reserves a concrete accepted time without prior offer or owner approval, then confirms location", async () => {
     const f = fixture();
     const result = await f.turn();
-    expect(f.rpc).toHaveBeenCalledWith("reserve_customer_appointment", expect.objectContaining({ p_start: start, p_lead: "lead", p_resource: "resource" }));
+    expect(f.rpc).toHaveBeenCalledWith("reserve_customer_appointment_item", expect.objectContaining({ p_start: start, p_lead: "lead", p_resource: "resource" }));
     expect(result).toMatchObject({ booked: true, bookingId: "booking" });
     expect(result?.reply).toContain("13:00"); expect(result?.reply).toContain("Rua de teste, 123"); expect(result?.reply).toContain("maps.google.com");
-    expect(result?.reply).toContain("mudança");
+    expect(result?.reply).toContain("mudança"); expect(result?.reply).not.toContain("America/");
   });
   it("keeps an accepted time through the name answer without asking for acceptance again", async () => {
     const f = fixture();
@@ -54,6 +54,23 @@ describe("direct agenda attendance", () => {
     expect(f.rpc).not.toHaveBeenCalled();
     f.decide({ intent: "none" });
     expect(await f.turn({ runId: "next", userText: "Sou Magno" })).toMatchObject({ booked: true });
+    expect(f.rpc).toHaveBeenCalledTimes(1);
+  });
+  it("retains the selected property through a one-word name and confirms only registered location", async () => {
+    const f = fixture();
+    await f.turn({ catalogItemId: "property", leadName: null });
+    expect(f.tables.customer_agenda_offers[0].catalog_item_id).toBe("property");
+    const result = await f.turn({ runId: "name", userText: "Magno" });
+    expect(f.rpc).toHaveBeenCalledWith("reserve_customer_appointment_item", expect.objectContaining({p_item:"property"}));
+    expect(result?.reply).toContain("Apartamento de teste");
+    expect(result?.reply).toContain("local ainda não foi cadastrado");
+    expect(result?.reply).not.toContain("Rua de teste");
+  });
+  it("does not confirm a different property just because the existing reservation has the same time", async () => {
+    const f = fixture();
+    await f.turn({ catalogItemId: "first-property" });
+    const result = await f.turn({ runId: "other-run", catalogItemId: "second-property" });
+    expect(result).toMatchObject({ booked: false, reply: expect.stringContaining("outro item") });
     expect(f.rpc).toHaveBeenCalledTimes(1);
   });
   it("does not reserve from an availability question even if the interpreter says book", async () => {

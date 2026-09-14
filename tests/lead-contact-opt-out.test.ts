@@ -47,23 +47,23 @@ it("preserves every agenda action without mixing URL and quick reply buttons",as
   const delivery=leadContactMessage("Seu horário",url,["Confirmar|agenda-action:a","Remarcar|agenda-action:b","Cancelar|agenda-action:c"]);
   const send=vi.fn(async()=>({ok:true,status:200}));
   await sendLeadContactMessage(send,delivery,async()=>true);
-  expect(send.mock.calls[0]).toEqual(["/send/menu",{...delivery,type:"list",listButton:"Opções do agendamento"}]);
-  expect(delivery.choices).toHaveLength(4);expect(delivery.choices.at(-1)).toBe("Sair da lista|sair_da_lista");expect(delivery.text).toContain(url);
+  expect(send.mock.calls[0]).toEqual(["/send/menu",{...delivery,type:"button"}]);
+  expect(delivery.choices).toHaveLength(4);expect(delivery.choices.at(-1)).toBe(`Sair da lista|${url}`);expect(delivery.text).not.toContain(url);
 });
-it.each([400,404,405,422])("falls back after explicit rejection %i, retaining the exit link",async status=>{
+it.each([400,404,405,422])("preserves required actions and returns a definitive rejection %i without text fallback",async status=>{
   const send=vi.fn().mockResolvedValueOnce({ok:false,status}).mockResolvedValueOnce({ok:true,status:200});
   await sendLeadContactMessage(send,leadContactMessage("Mensagem",url),async()=>true);
-  expect(send.mock.calls[1][0]).toBe("/send/text");expect(send.mock.calls[1][1].text).toContain(url);expect(send.mock.calls[1][1].choices).toBeUndefined();
+  expect(send).toHaveBeenCalledTimes(1);expect(send.mock.calls[0][1].choices).toContain(`Sair da lista|${url}`);
 });
 it.each([0,408,429,500,503])("does not duplicate ambiguous or retry-later delivery %i",async status=>{
   const send=vi.fn(async()=>({ok:false,status}));
   await sendLeadContactMessage(send,leadContactMessage("Mensagem",url),async()=>true);
   expect(send).toHaveBeenCalledTimes(1);
 });
-it("checks consent again before a fallback",async()=>{
+it("checks consent before sending required actions",async()=>{
   const send=vi.fn(async()=>({ok:false,status:400}));
-  await sendLeadContactMessage(send,leadContactMessage("Mensagem",url),async()=>false);
-  expect(send).toHaveBeenCalledTimes(1);
+  await expect(sendLeadContactMessage(send,leadContactMessage("Mensagem",url),async()=>false)).rejects.toThrow("não autorizado");
+  expect(send).not.toHaveBeenCalled();
 });
 it("recognizes actual exit replies without treating quoted buttons or appointment cancellation as unsubscribe",()=>{
   expect(isExplicitLeadOptOut("Sair da lista")).toBe(true);expect(isExplicitLeadOptOut("sair_da_lista")).toBe(true);

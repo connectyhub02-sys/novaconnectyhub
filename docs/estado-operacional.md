@@ -2,6 +2,10 @@
 
 Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
+## Atendimento, links globais e busca — banco publicado em 13/09/2026
+
+Execução do plano retomada pelo titular, com Gustavo e Renata como prioridades. Migrações `0137`–`0139` aplicadas e verificadas no Supabase da VPS: contexto factual do item na reserva, avisos independentes por audiência, claim/versionamento final, recibos por operação de envio e busca indexada/paginada de catálogo/SKU. Hashes do SQL conferidos com os arquivos locais; permissões de execução restritas ao serviço e RLS ativo. A transação preservou os registros anteriores de reservas, ofertas, avisos e eventos, sem repetir eventos nem criar reservas. A função de reset permaneceu inalterada. **Aplicativo ainda em preparação de publicação neste registro**, sem teste real dos agentes. [Escopo, inventário de emissores, validação e etapas pendentes](execucao-atendimento-32-perfis-2026-09-13.md).
+
 ## Atendimento, checkout e reset integral — 13/09/2026
 
 Implementação autorizada pelo titular, incluindo envio à master e exclusão integral somente do seu contato de teste e cópias arquivadas na mesma empresa. Preservadas as correções existentes em `44e22ad` para negação financeira, cortesia e continuidade do pedido. Novas correções compartilhadas: captura do nome solicitado pelo próprio checkout, bloqueio de promessa de link sem ação e limite do histórico no inbound atual para evitar a rejeição do Gemini por turno final do modelo.

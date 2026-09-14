@@ -113,6 +113,17 @@ describe("activity-specific commercial execution", () => {
     expect(JSON.stringify(db.tables.conversation_messages)).not.toMatch(/importado do whatsapp/i);
   });
 
+  it("replaces an invented gallery URL with the selected property's canonical button", async () => {
+    const {context,product,send,requests,db}=fixture("corretor_imoveis","Me envie mais fotos");
+    product.salesDestination="appointment";
+    context.messages[0].text_content="Veja o Imovel comercial.";
+    await send("Veja a galeria do Imovel comercial em https://www.connectyhub.com.br/produto/uuid-inventado");
+    const output=JSON.stringify(requests);
+    expect(output).not.toContain("uuid-inventado");
+    expect(output).toContain("https://store.example/produto/house");
+    expect(output).toContain("Ver detalhes e fotos");
+    expect(db.tables.sales_catalog_orders??[]).toHaveLength(0);
+  });
   it.each(["empty", "draft"])("does not create a public product link for an %s catalog", async scenario => {
     const { context, product, send, requests } = fixture("corretor_imoveis", "Quero ver mais fotos do Imovel comercial");
     if (scenario === "empty") context.salesCatalog = [];

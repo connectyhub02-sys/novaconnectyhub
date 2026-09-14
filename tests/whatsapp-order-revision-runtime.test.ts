@@ -127,6 +127,28 @@ function scenario(options: { quantities?: [string, number][]; freightAvailable?:
 }
 
 describe("revising a persisted WhatsApp order", () => {
+  it("keeps the audited compliment and doubt outside cart changes", async () => {
+    const s=scenario();
+    for(const text of ["Top parabens pelo atendimento", "me tira uma duvida antes de eu pagar"]){
+      expect(await s.turn(text)).toBeNull();
+    }
+    expect(s.persistence).not.toHaveBeenCalled();expect(s.createPayment).not.toHaveBeenCalled();expect(s.draft()).toBeFalsy();
+  });
+  it("resolves an explicit add after the unique recommendation without accepting the new total", async () => {
+    const s=scenario();s.assistant("Limonada, R$ 10,00. Posso incluir no seu pedido?");
+    const result=await s.turn("sim inclua vou levar ele tambem");
+    expect(result?.text).toContain("Limonada");
+    expect(s.draft()?.items).toContainEqual(expect.objectContaining({id:"lemonade",quantity:1}));
+    expect(s.persistence).not.toHaveBeenCalled();expect(s.createPayment).not.toHaveBeenCalled();
+  });
+  it("dismisses the denied old edit and records only the repeated Pix preference", async () => {
+    const s=scenario();await s.turn("troca isso");
+    await s.turn("não tem alteração nos produtos");
+    expect(s.draft()).toBeNull();
+    expect(await s.turn("Troca por pix, troca pra mim")).toBeNull();
+    expect(s.ctx.lead.metadata.checkout_payment_preferences).toMatchObject({conversation:{preferred_payment_method:"pix",order_id:"order"}});
+    expect(s.persistence).not.toHaveBeenCalled();expect(s.createPayment).not.toHaveBeenCalled();
+  });
   it("interprets an unanswered inbound burst before accepting its final sim", async () => {
     const s = scenario();
     s.customer("adicione uma limonada");

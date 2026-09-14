@@ -2283,111 +2283,22 @@ async function sendBillingWhatsappNotice(input: {
   trackId: string;
   actions?: AccountNoticeActions;
 }): Promise<BillingWhatsappNoticeResult> {
-  if (input.actions) {
-    // Include unsubscribe in the same message as checkout/Pix; every fallback keeps the link.
-    const baseMessage = input.pixCode && input.button && !input.message.includes(input.button.url)
-      ? `${input.message}\n\nAbrir no painel: ${input.button.url}` : input.message;
-    const text = noticeActionsMessage(baseMessage, input.actions);
-    try {
-      const providerResponse = await callUazapi(input.credentials, "/send/menu", { outbound: input.outbound,
-        method: "POST", token: input.token, body: {
-          number: input.phone, type: "button", text,
-          choices: noticeActionChoices(input.actions, input.button, input.pixCode),
-          footerText: "ConnectyHub", track_source: "connectyhub", track_id: input.trackId,
-        },
-      });
-      return { providerResponse, deliveryMode: "button", message: text, button: input.button, fallbackError: null };
-    } catch (error) {
-      if (!(error instanceof BillingNoticeProviderError && error.definitive && [400, 404, 405, 422].includes(error.status ?? 0))) throw error;
-      const message = `${text}${input.button && !text.includes(input.button.url) ? `\n\nAbrir no painel: ${input.button.url}` : ""}${input.pixCode ? `\n\nPix copia e cola:\n${input.pixCode}` : ""}`;
-      const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound, method: "POST", token: input.token, body: { number: input.phone, text: message, linkPreview: false, track_source: "connectyhub", track_id: `${input.trackId}_fallback` } });
-      return { providerResponse, deliveryMode: "text_fallback", message, button: input.button, fallbackError: error.message };
-    }
-  }
-  let paymentRequestError: string | null = null;
-  if (input.button && input.pixCode && input.paymentSummary && Number.isFinite(input.paymentSummary.amount) && input.paymentSummary.amount > 0) {
-    // The total is the invoice amount after discounts/add-ons, never the plan's list price.
-    const message = `${input.message}\n\nCopie o Pix pelo botão ou abra os dados da cobrança para acessar o checkout ConnectyHub.`;
-    try {
-      const providerResponse = await callUazapi(input.credentials, "/send/request-payment", { outbound: input.outbound,
-        method: "POST",
-        token: input.token,
-        body: {
-          number: input.phone,
-          title: "Pagamento ConnectyHub",
-          text: message,
-          footer: "ConnectyHub",
-          itemName: input.paymentSummary.itemName,
-          invoiceNumber: input.paymentSummary.invoiceNumber,
-          amount: Number(input.paymentSummary.amount.toFixed(2)),
-          pixCode: input.pixCode,
-          paymentLink: input.button.url,
-          readchat: true,
-          readmessages: true,
-          track_source: "connectyhub",
-          track_id: input.trackId,
-        },
-      });
-      return { providerResponse, deliveryMode: "payment_request", message, button: input.button, fallbackError: null };
-    } catch (error) {
-      if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
-      paymentRequestError = error.message;
-    }
-  }
-
-  if (input.button) {
-    const buttonMessage = input.pixCode
-      ? `${input.message}${input.message.includes(input.button.url) ? "" : `\n\nFinalizar no checkout: ${input.button.url}`}\n\nCopie o Pix pelo botão abaixo para pagar no seu banco.`
-      : buildCheckoutButtonMessage(input.message, input.button.url);
-
-    try {
-      const providerResponse = await callUazapi(input.credentials, "/send/menu", { outbound: input.outbound,
-        method: "POST",
-        token: input.token,
-        body: {
-          number: input.phone,
-          type: "button",
-          text: buttonMessage,
-          choices: input.pixCode ? [`Copiar código Pix|copy:${input.pixCode}`] : [`${input.button.label}|${input.button.url}`],
-          footerText: "ConnectyHub",
-          readchat: true,
-          readmessages: true,
-          track_source: "connectyhub",
-          track_id: paymentRequestError ? `${input.trackId}_copy` : input.trackId,
-        },
-      });
-
-      return {
-        providerResponse,
-        deliveryMode: "button",
-        message: buttonMessage,
-        button: input.button,
-        fallbackError: paymentRequestError,
-      };
-    } catch (error) {
-      if (!(error instanceof BillingNoticeProviderError && error.definitive)) throw error;
-      const fallbackError = [paymentRequestError, error.message].filter(Boolean).join("; ");
-      const fallbackMessage = input.pixCode ? `${input.message}${input.message.includes(input.button.url) ? "" : `\n\nFinalizar no checkout: ${input.button.url}`}\n\nPix copia e cola:\n${input.pixCode}` : input.message;
-      const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound,
-        method: "POST",
-        token: input.token,
-        body: {
-          number: input.phone,
-          text: fallbackMessage,
-          linkPreview: false,
-          track_source: "connectyhub",
-          track_id: `${input.trackId}_fallback`,
-        },
-      });
-
-      return {
-        providerResponse,
-        deliveryMode: "text_fallback",
-        message: fallbackMessage,
-        button: input.button,
-        fallbackError,
-      };
-    }
+  if (input.actions || input.button) {
+    const text = input.actions ? noticeActionsMessage(input.message, input.actions) : input.message;
+    const choices = input.actions
+      ? noticeActionChoices(input.actions, input.button, input.pixCode)
+      : [
+          ...(input.button ? [`${input.button.label}|${input.button.url}`] : []),
+          ...(input.pixCode ? [`Copiar código Pix|copy:${input.pixCode}`] : []),
+        ];
+    // The common transport strips visible URLs and splits groups if necessary.
+    // A failed required button is a failed/uncertain notice, never a text fallback.
+    const providerResponse = await callUazapi(input.credentials, "/send/menu", {
+      outbound: input.outbound, method: "POST", token: input.token,
+      body: { number: input.phone, type: "button", text, choices,
+        footerText: "ConnectyHub", track_source: "connectyhub", track_id: input.trackId },
+    });
+    return { providerResponse, deliveryMode: "button", message: text, button: input.button, fallbackError: null };
   }
 
   const providerResponse = await callUazapi(input.credentials, "/send/text", { outbound: input.outbound,
@@ -2454,28 +2365,6 @@ function resolveCheckoutActionUrl(metadata: JsonRecord | null | undefined) {
   }
 
   return null;
-}
-
-function buildCheckoutButtonMessage(message: string, checkoutUrl: string) {
-  const escapedUrl = escapeRegExp(checkoutUrl);
-  const withoutUrl = message
-    .replace(new RegExp(escapedUrl, "g"), "")
-    .replace(/https?:\/\/\S+/gi, "")
-    .replace(/\s+([,.!?;:])/g, "$1")
-    .replace(/\b(?:Finalize|Conclua|Acesse|Abra)\s+(?:por aqui|no painel|pelo painel)?\s*:?\s*\.?/gi, "Toque no botao abaixo para continuar.")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  if (!withoutUrl) {
-    return "Tudo certo. Toque no botao abaixo para continuar.";
-  }
-
-  if (/\bbotao abaixo\b/i.test(withoutUrl) || /\bcheckout\b/i.test(withoutUrl)) {
-    return withoutUrl;
-  }
-
-  return `${withoutUrl}\n\nToque no botao abaixo para continuar.`;
 }
 
 async function loadBillingNotificationEvent(client: SupabaseClient, eventId: string) {
@@ -3099,10 +2988,6 @@ function formatMetadataDate(value: unknown) {
 
 function preview(value: string, max: number) {
   return value.length > max ? `${value.slice(0, max - 3)}...` : value;
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function readResponse(response: Response) {

@@ -46,7 +46,7 @@ describe("customer agenda", () => {
       ),
     );
     await db.exec(`alter table agent_registry add column metadata jsonb;
-      create table intelligence_memory(id uuid primary key,organization_id uuid,scope text,memory_type text,metadata jsonb);
+      create table intelligence_memory(id uuid primary key,organization_id uuid,scope text,memory_type text,metadata jsonb,title text);
       create table sales_catalog_import_jobs(default_sales_destination text);
       create table sales_catalog_import_items(id uuid primary key,organization_id uuid,sales_destination text,status text,metadata jsonb,source_evidence jsonb,fulfillment jsonb,warnings text[]);
       create table sales_catalog_order_items(order_id uuid,organization_id uuid,catalog_item_id uuid);
@@ -55,9 +55,45 @@ describe("customer agenda", () => {
     await db.exec(readFileSync("supabase/migrations/0130_catalog_item_appointments.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/0131_explicit_agenda_activation.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/0136_direct_customer_agenda.sql", "utf8"));
+    await db.exec("alter table whatsapp_instances add column metadata jsonb");
+    await db.exec(readFileSync("supabase/migrations/0137_agenda_item_context_and_notices.sql", "utf8"));
   }, 45000);
   afterAll(async () => {
     await db?.close();
+  });
+  it("persists a real catalog subject, rejects a foreign item and preserves its snapshot on replay", async () => {
+    const f=await fixture(), item=randomUUID(), key=randomUUID();
+    await db.query("update customer_agenda_settings set default_resource_id=$1 where organization_id=$2",[f.resource,f.org]);
+    await db.query("insert into intelligence_memory(id,organization_id,scope,memory_type,metadata,title) values($1,$2,'organization','sales_catalog_item',$3,'Apartamento real de teste')",[item,f.org,{status:"active",sales_destination:"appointment",action_version:1}]);
+    const start=new Date();start.setUTCDate(start.getUTCDate()+8);start.setUTCHours(15,0,0,0);
+    const query="select reserve_customer_appointment_item($1,$2,$3,$4,1,$5,$6) result";
+    const params=[f.org,f.resource,f.lead,start.toISOString(),key,item];
+    const first=(await db.query<{result:Record<string,unknown>}>(query,params)).rows[0].result;
+    expect(first.appointment_context).toMatchObject({catalog_item_id:item,item_title:"Apartamento real de teste"});
+    await db.query("update intelligence_memory set title='Título alterado' where id=$1",[item]);
+    expect((await db.query<{result:Record<string,unknown>}>(query,params)).rows[0].result).toEqual(first);
+    await expect(db.query(query,[...params.slice(0,4),randomUUID(),randomUUID()])).rejects.toThrow("CATALOG_APPOINTMENT_UNAVAILABLE");
+    expect((await db.query("select id from customer_agenda_bookings where organization_id=$1",[f.org])).rows).toHaveLength(1);
+  });
+  it("separates notice receipts by audience and rejects a stale final claim after cancellation", async () => {
+    const f=await fixture();const booked=await f.book();const claim=randomUUID(), notice=randomUUID();
+    await db.query("insert into customer_agenda_notices(id,organization_id,booking_id,booking_version,recipient_phone,audience,kind,due_at,message_text,status,claim_token,lease_until) values($1,$2,$3,1,'5511999999999','lead','reminder',now(),'Lembrete','processing',$4,now()+interval '2 minutes')",[notice,f.org,booked.id,claim]);
+    await db.query("insert into customer_agenda_notices(organization_id,booking_id,booking_version,recipient_phone,audience,kind,due_at,message_text) values($1,$2,1,'5511999999999','responsible','reminder',now(),'Responsável')",[f.org,booked.id]);
+    await db.query("select update_customer_appointment($1,$2,1,'cancel','panel')",[f.org,booked.id]);
+    expect((await db.query<{allowed:boolean}>("select begin_customer_agenda_notice($1,$2) allowed",[notice,claim])).rows[0].allowed).toBe(false);
+    expect((await db.query<{status:string}>("select status from customer_agenda_notices where id=$1",[notice])).rows[0].status).toBe("skipped");
+  });
+  it.each(["assigned_whatsapp_instance_ids", "whatsapp_instance_ids"])("enforces instance-only catalog restrictions through %s", async field => {
+    const f=await fixture(), item=randomUUID(), agent=randomUUID(), instance=randomUUID();
+    await db.query("update customer_agenda_settings set default_resource_id=$1 where organization_id=$2",[f.resource,f.org]);
+    await db.query("insert into intelligence_memory(id,organization_id,scope,memory_type,metadata,title) values($1,$2,'organization','sales_catalog_item',$3,'Restrito')",[item,f.org,{status:"active",sales_destination:"appointment",[field]:[instance]}]);
+    const start=new Date();start.setUTCDate(start.getUTCDate()+8);start.setUTCHours(15,0,0,0);
+    const query="select reserve_customer_appointment_item($1,$2,$3,$4,1,$5,$6,null,$7) result";
+    const params=[f.org,f.resource,f.lead,start.toISOString(),randomUUID(),item,agent];
+    await expect(db.query(query,params)).rejects.toThrow("AGENT_SCOPE");
+    await db.query("insert into agent_registry(id,organization_id) values($1,$2)",[agent,f.org]);
+    await db.query("insert into whatsapp_instances(id,organization_id,metadata) values($1,$2,$3)",[instance,f.org,{agent_id:agent}]);
+    expect((await db.query<{result:{appointment_context:unknown}}>(query,params)).rows[0].result.appointment_context).toMatchObject({catalog_item_id:item});
   });
   it("keeps reservation execution limited to the internal service", async () => {
     const {rows} = await db.query<{anon:boolean;authenticated:boolean;service:boolean}>(`select has_function_privilege('anon','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') anon, has_function_privilege('authenticated','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') authenticated, has_function_privilege('service_role','reserve_customer_appointment(uuid,uuid,uuid,timestamptz,integer,text,uuid,uuid,uuid,integer)','execute') service`);

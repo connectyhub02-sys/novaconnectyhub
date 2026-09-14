@@ -71,7 +71,7 @@ function scenario(options: { realCheckout?: boolean; deliveryStatus?: number } =
 describe("payment method changes throughout the same WhatsApp conversation", () => {
   it.each([200, 422, 408, 500])("loads the existing checkout, sends the selected method and records the delivery outcome (HTTP %s)", async deliveryStatus => {
     const s = scenario({ realCheckout: true, deliveryStatus });
-    const uncertain = deliveryStatus === 408 || deliveryStatus === 500;
+    const uncertain = deliveryStatus !== 200;
     const request = s.turn("melhor muda pra mim estou sem saldo no pix muda para cartão de credito");
     if (uncertain) await expect(request).rejects.toThrow();
     else expect(await request).not.toBeNull();
@@ -84,7 +84,7 @@ describe("payment method changes throughout the same WhatsApp conversation", () 
     } });
     const url = `/checkout/${s.snapshot.session.id}?payment_method=card`;
     expect(s.requests[0].body.choices).toEqual([expect.stringContaining(url)]);
-    if (deliveryStatus === 422) expect(s.requests.at(-1)?.body.text).toContain(url);
+    if (deliveryStatus === 422) { expect(s.requests.every(r=>r.url.endsWith("/send/menu"))).toBe(true); expect(s.requests.every(r=>!String(r.body.text).includes("https://"))).toBe(true); }
     else expect(s.requests).toHaveLength(1);
     expect(s.db.tables.conversation_messages.filter(row => row.direction === "outbound")).toHaveLength(uncertain ? 0 : 1);
   });

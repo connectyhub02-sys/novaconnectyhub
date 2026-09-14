@@ -18,7 +18,7 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
         return globals.fetch(url, init);
       } };
       return {};
-    }, URL, Date, Buffer, process, console, AbortSignal, ...globals,
+    }, URL, Date, Buffer, process, console, AbortSignal, Response, ...globals,
   });
   return loadedModule.exports as T;
 }

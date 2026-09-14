@@ -22,8 +22,29 @@ function agenda(audience="lead") {
     "@/lib/whatsapp/uazapi-credentials":{loadUazapiCredentials:async()=>({baseUrl:"https://provider.invalid"})},
     "@/lib/security/credentials-crypto":{decryptCredentialValue:()=>"test"},"@/lib/billing/contract-access":{getContractAccess:async()=>({allowed:true})},
   },[],{fetch});
-  return {db,prepare,fetch,run:()=>service.dispatchAgendaNotifications(db.client as never)};
+  const client = {...db.client, rpc:async (_name:string, args:Record<string,unknown>)=>{
+    const notice=db.tables.customer_agenda_notices.find(n=>n.id===args.p_notice && n.claim_token===args.p_claim && n.status==="processing");
+    const booking=db.tables.customer_agenda_bookings[0];
+    const allowed=Boolean(notice && booking.version===notice.booking_version && booking.status==="booked");
+    if(allowed) notice!.status="sending";
+    return {data:allowed,error:null};
+  }};
+  return {db,prepare,fetch,run:()=>service.dispatchAgendaNotifications(client as never),prepareNotices:()=>service.prepareAgendaNotifications({ ...client, from(table:string) {
+    const query=client.from(table);
+    if(table==="customer_agenda_notices") query.upsert=(rows:Record<string,unknown>)=>query.insert(rows);
+    return query;
+  }} as never)};
 }
+it("queues separate lead and responsible cancellation notices once, even after the panel disables scheduling",async()=>{
+  const f=agenda();
+  Object.assign(f.db.tables.customer_agenda_bookings[0],{status:"cancelled",version:2,appointment_context:{item_title:"Apartamento correto"}});
+  Object.assign(f.db.tables.customer_agenda_settings[0],{enabled:false,timezone:"America/Sao_Paulo"});
+  f.db.tables.customer_agenda_events=[{id:"event",organization_id:"org",booking_id:"booking",version:2,event_type:"cancel",notices_prepared_at:null}];
+  await f.prepareNotices(); await f.prepareNotices();
+  const notices=f.db.tables.customer_agenda_notices.filter(n=>n.kind==="event:cancel");
+  expect(notices).toHaveLength(2);expect(notices.map(n=>n.audience).sort()).toEqual(["lead","responsible"]);
+  for(const notice of notices){expect(notice.booking_version).toBe(2);expect(notice.message_text).toContain("Apartamento correto");}
+});
 it("includes and archives the unsubscribe action on lead reminders",async()=>{
   const f=agenda();expect(await f.run()).toEqual({sent:1});
   expect(f.fetch.mock.calls[0][0]).toMatch(/\/send\/menu$/);

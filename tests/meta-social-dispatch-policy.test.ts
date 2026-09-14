@@ -7,6 +7,9 @@ import {
 } from "../src/lib/meta/social-dispatch-policy";
 
 describe("Meta social dispatch policy", () => {
+  it.each(["instagram_direct", "facebook_messenger", "instagram_comments", "facebook_comments"] as const)("rejects visible URLs before dispatch on %s until its button adapter is implemented", channel => {
+    expect(() => resolveMetaSocialDispatchTarget({ channel, pageId: "page", externalUserId: "person", sourceCommentId: "comment", text: "Acesse https://fixture.invalid/checkout" })).toThrow("botões de link");
+  });
   it("routes direct Instagram messages through the page messages endpoint", () => {
     expect(resolveMetaSocialDispatchTarget({
       channel: "instagram_direct",

@@ -11,6 +11,6 @@ it("keeps Pix, checkout, save contact and unsubscribe accessible in a single not
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0][0]).toBe("https://fixture.invalid/send/menu");
   const body = JSON.parse(String(fetch.mock.calls[0][1].body));
-  expect(body.text).toContain("https://fixture.invalid/checkout");
-  expect(body.choices).toEqual(["Copiar código Pix|copy:pix-fixture", "Salvar contato|https://fixture.invalid/avisos/key/contato", "Sair da lista|https://fixture.invalid/avisos/key"]);
+  expect(body.text).not.toContain("https://");
+  expect(body.choices).toEqual(["Abrir cobrança|https://fixture.invalid/checkout", "Copiar código Pix|copy:pix-fixture", "Salvar contato|https://fixture.invalid/avisos/key/contato", "Sair da lista|https://fixture.invalid/avisos/key"]);
 });

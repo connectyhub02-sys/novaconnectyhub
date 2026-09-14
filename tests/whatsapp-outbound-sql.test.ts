@@ -17,8 +17,15 @@ it("commits every outbound to the lead archive, isolates companies and records c
    create table intelligence_events(scope text,organization_id uuid,source_type text,source_id uuid,event_type text,title text,summary text,visibility text,tags text[],payload jsonb);`);
   await db.exec(readFileSync("supabase/migrations/0081_lead_journey_archive.sql","utf8"));
   await db.exec(readFileSync("supabase/migrations/0124_whatsapp_outbound_tracking_archive.sql","utf8"));
+  await db.exec(readFileSync("supabase/migrations/0138_whatsapp_outbound_operations.sql","utf8"));
   const org=randomUUID(),foreign=randomUUID(),instance=randomUUID(),other=randomUUID(),delivery=randomUUID(),foreignDelivery=randomUUID(),key=randomUUID();
   await db.query("insert into organizations values($1),($2)",[org,foreign]);await db.query("insert into whatsapp_instances values($1,$2),($3,$4)",[instance,org,other,foreign]);
+  const operation=(await db.query<{result:{id:string;claimed:boolean}}>("select claim_whatsapp_outbound_operation($1,$2,$3,$4) result",[instance,"a".repeat(64),"b".repeat(64),randomUUID()])).rows[0].result;
+  expect(operation.claimed).toBe(true);
+  expect((await db.query<{result:{claimed:boolean}}>("select claim_whatsapp_outbound_operation($1,$2,$3,$4) result",[instance,"a".repeat(64),"b".repeat(64),randomUUID()])).rows[0].result.claimed).toBe(false);
+  await expect(db.query("select claim_whatsapp_outbound_operation($1,$2,$3,$4)",[instance,"a".repeat(64),"c".repeat(64),randomUUID()])).rejects.toThrow("OUTBOUND_KEY_CONFLICT");
+  await db.query("update whatsapp_outbound_operations set status='failed' where id=$1",[operation.id]);
+  expect((await db.query<{result:{claimed:boolean}}>("select claim_whatsapp_outbound_operation($1,$2,$3,$4) result",[instance,"a".repeat(64),"b".repeat(64),randomUUID()])).rows[0].result.claimed).toBe(true);
   const reserve=async(id:string,from:string)=>db.query<{result:{lead_id:string;organization_id:string}}>("select prepare_whatsapp_outbound($1,$2,'5511999999999','/send/text','test','text','Olá',$3) result",[id,from,{text:"Olá",password:"never archive"}]);
   const result=(await reserve(delivery,instance)).rows[0].result;
   const second=(await reserve(foreignDelivery,other)).rows[0].result;

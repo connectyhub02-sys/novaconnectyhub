@@ -72,7 +72,7 @@ describe("Public AI OpenAPI contract", () => {
 
   it("keeps the downloadable guide identical to the page source and local handoff", () => {
     const guide = renderAiGuide();
-    expect(readFileSync("docs/guia-integracao-api-llm.md", "utf8")).toBe(guide);
+    expect(readFileSync("docs/guia-integracao-api-llm.md", "utf8").replace(/\r\n/g, "\n")).toBe(guide);
     expect(new Set(aiDocPages.map(page => page.id)).size).toBe(aiDocPages.length);
     for (const page of aiDocPages) expect(guide).toContain(`## ${page.title}`);
     expect(guide).toContain("Operações por recurso");

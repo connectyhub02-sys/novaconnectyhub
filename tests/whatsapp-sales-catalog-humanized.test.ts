@@ -161,7 +161,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function sendSalesCatalogPaymentLink",
     );
 
-    expect(delivery).toContain("const leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText)");
+    expect(delivery).toContain("let leadCatalogItems = selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText)");
     expect(delivery).toContain("hasOrderIntent && !shouldUseAssistantCatalogItems ? [] : assistantCatalogItems");
     expect(delivery).toContain("suppressDuplicateSalesCatalogOrderProductMentions(rawDeliveryText, deliveryCatalogItems)");
     expect(checkoutRuntime).toContain("function buildRecentOutboundMessageBlocks");

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const attendanceSource = readFileSync("src/components/connectyhub-os/leads-crm-console.tsx", "utf8");
+const attendanceSource = readFileSync("src/components/connectyhub-os/leads-crm-console.tsx", "utf8").replace(/\r\n/g, "\n");
 
 function sourceBetween(start: string, end: string) {
   const startIndex = attendanceSource.indexOf(start);

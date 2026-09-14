@@ -17,6 +17,7 @@ export type AgendaResource = {
   location_url?: string | null;
 };
 export type AgendaBooking = {
+  appointment_context?: Record<string, string | null>;
   id: string;
   resource_id: string;
   lead_id: string;

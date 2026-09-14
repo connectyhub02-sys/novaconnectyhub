@@ -56,7 +56,7 @@ it("records one successful notice after a definite customer sender failure and a
   const firstBody = JSON.parse(String(f.fetch.mock.calls[0]?.[1]?.body));
   const fallbackBody = JSON.parse(String(f.fetch.mock.calls[1]?.[1]?.body));
   expect(firstBody.text).toContain("Fiquei sem créditos");
-  expect(fallbackBody.text).toBe("Seus créditos acabaram.\n\nSair da lista de avisos da conta: https://fixture.invalid/avisos/key");
+  expect(fallbackBody.text).toBe("Seus créditos acabaram.");
   expect(f.updates.find(update => update.status === "sent")).toMatchObject({ message_preview: fallbackBody.text, metadata: { sent_message_body: fallbackBody.text } });
   expect(fallbackBody.choices).toContain("Sair da lista|https://fixture.invalid/avisos/key");
 });
@@ -81,9 +81,13 @@ it("does not bypass an opt-out received between the customer failure and platfor
   expect(await f.deliver()).toBe(false); expect(f.fetch).toHaveBeenCalledTimes(1);
   expect(f.updates.at(-1)).toMatchObject({ status: "skipped" });
 });
-it("keeps a working unsubscribe link when interactive buttons are rejected", async () => {
+it("preserves required buttons when a definite rejection permits the configured sender fallback", async () => {
   const f = setup([422, 200]); expect(await f.deliver()).toBe(true);
-  expect(f.fetch.mock.calls[1][0]).toBe("https://fixture.invalid/send/text");
-  expect(JSON.parse(String(f.fetch.mock.calls[1][1].body)).text).toContain("Sair da lista de avisos da conta: https://fixture.invalid/avisos/key");
-  expect(f.resolver.loadPlatformNotificationSender).not.toHaveBeenCalled();
+  expect(f.fetch).toHaveBeenCalledTimes(2);
+  for (const [url, options] of f.fetch.mock.calls) {
+    expect(url).toBe("https://fixture.invalid/send/menu");
+    const body = JSON.parse(String(options.body));
+    expect(body.choices).toContain("Sair da lista|https://fixture.invalid/avisos/key");
+    expect(body.text).not.toMatch(/https?:\/\//);
+  }
 });

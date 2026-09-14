@@ -119,6 +119,7 @@ export function findLeadNameEvidence(messages: IdentityMessage[]) {
     }
     const request = normalizeSearchText(requestParts.join(" "));
     const askedName = /\b(?:qual (?:e )?(?:o )?seu nome|como (?:posso|podemos|voce prefere que eu) (?:te |lhe |o |a )?chamar|(?:me (?:diga|informe)|preciso d[eo]) (?:o )?seu nome)\b/.test(request)
+      || /\bcom quem (?:eu )?(?:falo|estou falando|tenho o prazer de falar)\b/.test(request)
       || /\bpara liberar o pagamento\b.{0,40}\bfaltam?\s+(?:o |seu )?nome completo\b/.test(request);
     const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '\u2019-]{1,79}[.!]?$/u.test(text) ? text.replace(/[.!]$/, "") : null));
     if (candidate && isLikelyPersonalLeadName(candidate)

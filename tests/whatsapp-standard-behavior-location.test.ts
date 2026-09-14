@@ -303,7 +303,8 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(resolver).toContain("location: null");
     expect(sender).toContain("Abrir no Google Maps|${mapsUrl}");
     expect(sender).toContain("company_location_maps_");
-    expect(sender).toContain("company_location_button_failed");
+    expect(sender).toContain("required_button_unconfirmed");
+    expect(sender).not.toContain("company_location_maps_fallback");
   });
 
   it("keeps replies as text when the lead explicitly asks not to receive audio", () => {

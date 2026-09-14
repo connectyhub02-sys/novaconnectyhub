@@ -135,7 +135,7 @@ describe("payment recovery and duplicate prevention", () => {
     expect(requests).toEqual(["https://whatsapp.invalid/send/menu"]);
     expect(db.tables.leads[0].metadata).toMatchObject({ checkout_runtime_state: { stage: "payment_delivery_unconfirmed", order_id: "order" } });
   });
-  it("falls back to the same internal card checkout URL after a definitive button rejection", async () => {
+  it("keeps a rejected card button unconfirmed without a loose checkout fallback", async () => {
     const ctx = context(), db = commerceDatabase({ leads: [{ id: "lead", organization_id: "store", metadata: ctx.lead.metadata }] });
     const requests: { url: string; body: Record<string, unknown> }[] = [];
     const call = runtimeHarness({}, { fetch: async (url: string, init: { body: string }) => {
@@ -143,12 +143,12 @@ describe("payment recovery and duplicate prevention", () => {
       const ok = url.endsWith("/send/text");
       return { ok, status: ok ? 200 : 422, text: async () => JSON.stringify(ok ? { id: "delivered" } : { error: "Unsupported button" }) };
     } });
-    await call("sendSalesCatalogPaymentLink", { client: db.client, context: ctx, token: "fake", phone: "5511999999999",
+    await expect(call("sendSalesCatalogPaymentLink", { client: db.client, context: ctx, token: "fake", phone: "5511999999999",
       payment: { orderId: "order", amount: "90,00", provider: "asaas", preferredMethod: "card",
-        checkoutUrl: "https://loja.example/checkout/session", pixQrCode: null } });
-    expect(requests.map(request => request.url)).toEqual(["https://whatsapp.invalid/send/menu", "https://whatsapp.invalid/send/menu", "https://whatsapp.invalid/send/text"]);
-    expect(requests[2].body.text).toContain("https://loja.example/checkout/session?payment_method=card");
-    expect(db.tables.leads[0].metadata).toMatchObject({ checkout_runtime_state: { stage: "payment_sent" } });
+        checkoutUrl: "https://loja.example/checkout/session", pixQrCode: null } })).rejects.toThrow();
+    expect(requests.map(request => request.url)).toEqual(["https://whatsapp.invalid/send/menu", "https://whatsapp.invalid/send/menu"]);
+    expect(requests[0].body.choices).toContain("Finalizar pedido|https://loja.example/checkout/session?payment_method=card");
+    expect(db.tables.leads[0].metadata).toMatchObject({ checkout_runtime_state: { stage: "payment_delivery_unconfirmed" } });
   });
   const pendingSession = (patch = {}) => ({ id: "session", organization_id: "store", order_id: "order",
     method: "pix", provider: "asaas", amount: "90,00", status: "pending", expires_at: "2099-01-01T00:00:00Z",

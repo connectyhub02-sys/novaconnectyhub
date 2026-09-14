@@ -9,6 +9,7 @@ export type AgendaTurnResult = {
   reply?: string;
   handoffReason?: string;
   bookingId?: string;
+  actionUrls?: string[];
   context: string;
   booked: boolean;
   fallback: string;
@@ -26,6 +27,7 @@ type Input = {
   messages: Array<{ direction: string; text_content: string | null }>;
   assertCurrent: () => Promise<void>;
   catalogResourceId?: string | null;
+  catalogItemId?: string | null;
   catalogAppointment?: boolean;
   catalogAmbiguous?: boolean;
 };
@@ -51,11 +53,14 @@ function acceptedTime(text: string) {
     && /\b(sim|confirmo|confirmado|pode|podemos marcar|quero|marc[ae]|reserv[ae]|fechado|combinado|isso)\b/.test(value)
     && !/\b(tem|teria|quais|qual|disponivel|disponibilidade)\b/.test(value);
 }
-function bookingReply(booking: { id: string; starts_at: string }, resource: { service_name: string; location_address?: string | null; location_url?: string | null }, timezone: string): AgendaTurnResult {
+function bookingReply(booking: { id: string; starts_at: string; appointment_context?: Record<string, string | null> }, resource: { service_name: string; location_address?: string | null; location_url?: string | null }, timezone: string): AgendaTurnResult {
   const when = new Date(booking.starts_at).toLocaleString("pt-BR", { timeZone: timezone, dateStyle: "full", timeStyle: "short" });
-  const location = [resource.location_address, resource.location_url].filter(Boolean).join("\n");
-  const reply = `Seu agendamento de ${resource.service_name} está confirmado para ${when} (${timezone.replaceAll("_", " ")}).\n${location ? `Local: ${location}` : "O local ainda não foi cadastrado; combine esse detalhe com o responsável."}\nSe houver necessidade de mudança, você será avisado.`;
-  return { booked: true, bookingId: booking.id, context: "RESERVA GRAVADA. Use a confirmação factual, sem pedir nova aprovação nem afirmar entrega do aviso.", fallback: reply, reply };
+  const snapshot = booking.appointment_context && Object.keys(booking.appointment_context).length ? booking.appointment_context : null;
+  const subject = snapshot?.item_title || snapshot?.service_name || resource.service_name;
+  const location = [snapshot ? snapshot.location_address : resource.location_address, snapshot ? snapshot.location_url : resource.location_url].filter(Boolean).join("\n");
+  const reply = `Seu agendamento de ${subject} está confirmado para ${when}.\n${location ? `Local: ${location}` : "O local ainda não foi cadastrado; combine esse detalhe com o responsável."}\nSe houver necessidade de mudança, você será avisado.`;
+  const locationUrl = snapshot ? snapshot.location_url : resource.location_url;
+  return { booked: true, bookingId: booking.id, actionUrls: locationUrl ? [locationUrl] : [], context: "RESERVA GRAVADA. Use a confirmação factual, sem pedir nova aprovação nem afirmar entrega do aviso.", fallback: reply, reply };
 }
 export function disabledAgendaTurn(): AgendaTurnResult {
   return {
@@ -87,7 +92,7 @@ export async function processAgendaTurn(
   if (cached.data) return cached.data.result as AgendaTurnResult;
   const committed = await client
     .from("customer_agenda_bookings")
-    .select("id,resource_id,starts_at,ends_at,status")
+    .select("id,resource_id,starts_at,ends_at,status,appointment_context")
     .eq("organization_id", org)
     .eq("lead_id", input.leadId)
     .eq("request_key", `agent:${input.runId}`)
@@ -121,6 +126,8 @@ export async function processAgendaTurn(
     .maybeSingle();
   if (offered.error) throw new Error(offered.error.message);
   if (targetResource && offered.data?.resource_id !== targetResource) offered.data = null;
+  if (input.catalogItemId && offered.data?.catalog_item_id && offered.data.catalog_item_id !== input.catalogItemId) offered.data = null;
+  const catalogItemId = input.catalogItemId ?? offered.data?.catalog_item_id ?? null;
   const baseContext = `Agenda da empresa habilitada. Serviços/recursos: ${JSON.stringify(agenda.resources.filter((r) => r.enabled).map((r) => ({ id: r.id, name: r.name, service: r.service_name, duration: r.duration_minutes, kind: r.kind })))}. Reservas atuais deste lead: ${JSON.stringify(bookings)}. Só afirme reserva ou alteração quando a ferramenta confirmar. Não exponha IDs internos.`;
   if (!offered.data && !relevant) return { context: baseContext + " Não prometa consultas ou retorno futuro sem uma ação efetiva.", booked: false, fallback: "Qual dia e horário você prefere?" };
   const nameReply = Boolean(offered.data?.accepted && input.leadName && input.userText.toLocaleLowerCase().includes(input.leadName.toLocaleLowerCase()) &&
@@ -208,18 +215,23 @@ export async function processAgendaTurn(
     const party = resource.kind === "table" ? (decision.partySize ?? offered.data?.party_size) : 1;
     if (!Number.isInteger(party) || party < 1) return { ...result, reply: "Para quantas pessoas será a mesa?" };
     const same = bookings.find(b => b.resource_id === resource.id && Date.parse(b.starts_at) === Date.parse(decision.startsAt!));
-    if (same && acceptedTime(input.userText)) return bookingReply(same, resource, agenda.settings.timezone);
+    if (same && acceptedTime(input.userText)) {
+      if (catalogItemId && same.appointment_context?.catalog_item_id !== catalogItemId) return {
+        ...result, reply: "Você já tem um agendamento nesse horário para outro item. Quer remarcar a reserva existente ou escolher outro horário para este atendimento?",
+      };
+      return bookingReply(same, resource, agenda.settings.timezone);
+    }
     const slots = await availableAppointments(client, org, resource.id, new Date(decision.startsAt), party);
     const exact = slots.find(slot => Date.parse(slot.starts_at) === Date.parse(decision.startsAt!));
     if (!exact) {
       const alternatives = slots.slice(0, 3);
-      const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, slots: alternatives, party_size: party, accepted: false, replace_booking_id: null, replace_version: null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
+      const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, catalog_item_id: catalogItemId, slots: alternatives, party_size: party, accepted: false, replace_booking_id: null, replace_version: null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
       if (stored.error) throw new Error("Falha ao guardar alternativas.");
       const reply = alternatives.length ? `Esse horário não está disponível. Tenho ${alternatives.map(slot => new Date(slot.starts_at).toLocaleString("pt-BR", { timeZone: agenda.settings.timezone })).join(" ou ")}. Qual você prefere?` : "Não encontrei vagas nesse período. Qual outra data funciona para você?";
       return { ...result, fallback: reply, reply };
     }
     if (!offered.data || !offered.data.slots.some((slot: { starts_at: string }) => Date.parse(slot.starts_at) === Date.parse(exact.starts_at))) {
-      offered.data = { resource_id: resource.id, slots: [exact], party_size: party, replace_booking_id: null, replace_version: null, accepted: false };
+      offered.data = { resource_id: resource.id, catalog_item_id: catalogItemId, slots: [exact], party_size: party, replace_booking_id: null, replace_version: null, accepted: false };
     }
     decision.intent = "book";
   }
@@ -273,13 +285,14 @@ export async function processAgendaTurn(
       result.context +=
         " Nenhuma reserva realizada. Peça que o lead escolha e confirme um dos horários oferecidos.";
     else if (!input.leadName) {
-      const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, slots: [chosen], party_size: offered.data.party_size, accepted: true, replace_booking_id: offered.data.replace_booking_id ?? null, replace_version: offered.data.replace_version ?? null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
+      const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, catalog_item_id: catalogItemId, slots: [chosen], party_size: offered.data.party_size, accepted: true, replace_booking_id: offered.data.replace_booking_id ?? null, replace_version: offered.data.replace_version ?? null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
       if (stored.error) throw new Error("Falha ao guardar o horário escolhido.");
       result.context += " Nenhuma reserva realizada: falta o nome da pessoa. Peça o nome para concluir este agendamento, sem pedir novamente dados já informados. Preserve a escolha do horário; a reserva só existe depois de gravada.";
       result.fallback = "Para concluir o agendamento, como posso te chamar?";
       result.reply = result.fallback;
     } else {
-      const saved = await client.rpc("reserve_customer_appointment", {
+      const saved = await client.rpc("reserve_customer_appointment_item", {
+        p_item: catalogItemId,
         p_org: org,
         p_resource: resource.id,
         p_lead: input.leadId,
@@ -295,7 +308,7 @@ export async function processAgendaTurn(
         if (saved.error.message.includes("SLOT_UNAVAILABLE")) {
           const alternatives = (await availableAppointments(client, org, resource.id, new Date(chosen.starts_at), offered.data.party_size, offered.data.replace_booking_id ?? undefined)).slice(0, 3);
           await input.assertCurrent();
-          const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, slots: alternatives, party_size: offered.data.party_size, accepted: false, replace_booking_id: offered.data.replace_booking_id ?? null, replace_version: offered.data.replace_version ?? null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
+          const stored = await client.from("customer_agenda_offers").upsert({ organization_id: org, conversation_id: input.conversationId, lead_id: input.leadId, resource_id: resource.id, catalog_item_id: catalogItemId, slots: alternatives, party_size: offered.data.party_size, accepted: false, replace_booking_id: offered.data.replace_booking_id ?? null, replace_version: offered.data.replace_version ?? null, expires_at: new Date(Date.now() + 30 * 60000).toISOString() });
           if (stored.error) throw new Error("Falha ao guardar alternativas.");
           const reply = alternatives.length ? `Esse horário acabou de ser ocupado. Tenho ${alternatives.map(slot => new Date(slot.starts_at).toLocaleString("pt-BR", { timeZone: agenda.settings.timezone })).join(" ou ")}. Qual você prefere?` : "Esse horário acabou de ser ocupado. Qual outra data funciona para você?";
           return { ...result, fallback: reply, reply };
@@ -350,6 +363,7 @@ export async function processAgendaTurn(
           conversation_id: input.conversationId,
           lead_id: input.leadId,
           resource_id: resource.id,
+          catalog_item_id: catalogItemId,
           slots,
           accepted: false,
           party_size: party,
