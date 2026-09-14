@@ -1,3 +1,4 @@
+import * as responsibleAttendance from "../../src/lib/whatsapp/responsible-attendance";
 import * as foodComposition from "../../src/lib/sales-catalog/food-composition";
 import * as foodOrder from "../../src/lib/sales-catalog/food-order";
 import * as foodConversation from "../../src/lib/sales-catalog/food-conversation";
@@ -18,6 +19,7 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
     module: loadedModule, exports: loadedModule.exports, require: (name: string) => {
       if (name === "server-only") return {};
       if (name in imports) return imports[name];
+      if (name === "./responsible-attendance" || name === "@/lib/whatsapp/responsible-attendance") return responsibleAttendance;
       if (name === "./food-composition" || name === "@/lib/sales-catalog/food-composition") return foodComposition;
       if (name === "./food-payment-guard" || name === "@/lib/sales-catalog/food-payment-guard") return serverModuleHarness("src/lib/sales-catalog/food-payment-guard.ts", imports, [], globals);
       if (name === "./food-order" || name === "@/lib/sales-catalog/food-order") return foodOrder;

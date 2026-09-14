@@ -32,6 +32,7 @@ type ConversationRow = {
 };
 
 export type ReconnectCatchupMessageCandidate = {
+  payload?: unknown;
   id?: string;
   direction: string | null;
   provider_message_id: string | null;
@@ -337,7 +338,7 @@ async function enqueueLatestUnansweredInbound(input: {
 
   const { data: messages, error: messagesError } = await input.client
     .from("conversation_messages")
-    .select("id, direction, provider_message_id, provider_chat_id, message_type, text_content, occurred_at, created_at")
+    .select("id, direction, provider_message_id, provider_chat_id, message_type, text_content, occurred_at, created_at, payload")
     .eq("conversation_id", conversation.id)
     .order("occurred_at", { ascending: false })
     .limit(12);
@@ -373,6 +374,7 @@ async function enqueueLatestUnansweredInbound(input: {
     messageType: latestInbound.message_type,
     textContent: latestInbound.text_content,
     eventType: "reconnect_catchup",
+    senderPayload: latestInbound.payload,
     allowPausedConversation: humanFallback.allowPausedConversation,
     humanFallbackResumeAt: humanFallback.resumeAt,
     metadata: {

@@ -8,6 +8,7 @@ import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
+import { assertAgentAttendanceAllowed, ResponsibleAttendanceBlocked } from "./responsible-attendance";
 import { resolveWhatsappBehavior } from "./activity-setup";
 import { conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
@@ -17,7 +18,7 @@ import { classifyCheckoutJourney, isNewPurchaseIntent, isEditableCheckoutOrder, 
 import { applySalesCatalogOrderRevision } from "@/lib/sales-catalog/order-revision";
 import { quoteOrderDelivery, chooseOrderDeliveryQuote } from "@/lib/sales-catalog/order-shipping";
 import { assertContractAccess } from "@/lib/billing/contract-access";
-const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string }>();
+const outboundBillingScope = new AsyncLocalStorage<{ organizationId: string; client: SupabaseClient; instanceId?: string; assertAttendance?: () => Promise<void> }>();
 
 function enforceAgendaResponse(text: string, userText: string, result: { disabled?: boolean; booked: boolean; fallback: string; reply?: string }) {
   if (result.reply) return result.reply;
@@ -592,6 +593,17 @@ async function processWhatsappAgentRunWithScope(input: {
   }
 
   try {
+    const attendanceInput = {
+      organizationId: organization.id, agentId: agent.id,
+      platformAgent: isPlatformWhatsappContext(context),
+      phone: context.phoneNumber ?? lead?.phone_number,
+      providerChatId: context.providerChatId,
+      isGroupChat: isWhatsappGroupChatContext(context),
+      payload: findLatestInbound(context.messages)?.payload,
+    };
+    const assertAttendance = () => assertAgentAttendanceAllowed(client, attendanceInput);
+    if (outboundScope) outboundScope.assertAttendance = assertAttendance;
+    await assertAttendance();
     if (!behavior.agentEnabled) {
       return await completeRun(client, run.id, "Agente desativado pelo comportamento.", { skipped: true, reason: "agent_disabled" });
     }
@@ -1199,6 +1211,9 @@ async function processWhatsappAgentRunWithScope(input: {
       text_usage_charge_credits: textMetering?.chargeCredits ?? null,
     });
   } catch (error) {
+    if (error instanceof ResponsibleAttendanceBlocked) {
+      return await completeRun(client, run.id, error.message, { skipped: true, reason: "agent_responsible" });
+    }
     if (error instanceof StaleWhatsappRunError) {
       return await completeRun(client, run.id, error.message, {
         skipped: true,
@@ -1503,6 +1518,7 @@ async function assertRunStillTargetsLatestInbound(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   activeInbound: ConversationMessageRow | null,
 ) {
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const latestInbound = await loadLatestInboundMessage(client, context.conversationId);
 
   if (activeInbound && !latestInbound) {
@@ -5516,6 +5532,7 @@ async function analyzeAndPersistLeadQualification(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -8897,6 +8914,7 @@ async function sendAudioOutboundChunk(input: {
   const messageText = normalizeOutboundLanguageText(input.text);
 
   try {
+    await outboundBillingScope.getStore()?.assertAttendance?.();
     const generatedAudio = await generateConnectyVoiceAudio({
       organizationId: context.organization.id,
       userId: null,
@@ -8946,6 +8964,7 @@ async function sendAudioOutboundChunk(input: {
     await saveOutboundMessage(input.client, context, message);
     return { ...message, persisted: true };
   } catch (error) {
+    if (error instanceof ResponsibleAttendanceBlocked) throw error;
     return sendAudioReplyFallbackText({
       client: input.client,
       context,
@@ -14670,6 +14689,7 @@ async function classifySmartReplyTargets(input: {
     ...input.chunks.map((chunk, index) => `${index + 1}. ${preview(chunk, 500)}`),
   ].join("\n");
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -15720,6 +15740,7 @@ async function evaluateTuringScore(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -16763,6 +16784,7 @@ async function extractConversationLearning(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -16885,6 +16907,7 @@ async function extractLeadMemory(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17032,6 +17055,7 @@ async function extractCloneMemory(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17130,6 +17154,7 @@ async function extractConversationArcSummary(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17219,6 +17244,7 @@ async function extractNegotiationState(
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
   url.searchParams.set("key", context.geminiCredentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17824,6 +17850,7 @@ function sleep(ms: number) {
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, label: string) {
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -17884,6 +17911,7 @@ async function callUazapi(
 ) {
   const scope = outboundBillingScope.getStore();
   if (scope) await assertContractAccess(scope.organizationId, scope.client);
+  if (/^\/(send|sender)\//.test(path)) await scope?.assertAttendance?.();
   const fetchInit = {
     method: options.method,
     headers: {
@@ -18028,6 +18056,7 @@ async function analyzeDownloadedMediaWithGemini(input: {
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizeGeminiModel(input.model))}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -18840,6 +18869,7 @@ async function classifyHumanHandoffIntentWithGemini(input: {
     buildHumanHandoffConversationContext(input.context.messages),
   ].join("\n");
 
+  await outboundBillingScope.getStore()?.assertAttendance?.();
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

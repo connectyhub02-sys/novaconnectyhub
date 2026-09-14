@@ -17,6 +17,7 @@ import {
   syncLeadAvatarFromUazapi,
 } from "./lead-avatar-sync";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
+import { matchesAgentResponsible } from "./responsible-attendance";
 import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
 import {
   cancelQueuedWhatsappRunsForConversation,
@@ -337,6 +338,7 @@ export async function ingestUazapiWebhook(input: {
           messageType: message.messageType,
           textContent: message.textContent,
           eventType,
+          senderPayload: payload,
           allowPausedConversation: Boolean(autoResume),
           humanFallbackResumeAt: autoResume?.resumeAt ?? null,
         })
@@ -1088,6 +1090,7 @@ export async function enqueueWhatsappAgentRun(
     messageType: string | null;
     textContent: string | null;
     eventType: string;
+    senderPayload?: unknown;
     allowPausedConversation?: boolean;
     humanFallbackResumeAt?: string | null;
     metadata?: JsonRecord | null;
@@ -1140,7 +1143,7 @@ export async function enqueueWhatsappAgentRun(
       }
     : {};
 
-  if (!isGroupChat && isWhatsappHandoffNotificationRecipient(behavior, input.phoneNumber)) {
+  if (matchesAgentResponsible(agent.metadata, { phone: input.phoneNumber, providerChatId: input.providerChatId, isGroupChat, payload: input.senderPayload })) {
     return null;
   }
 
