@@ -209,8 +209,13 @@ export async function meterUsageEvent(
     && (rates.some(rate => ["input_token", "output_token"].includes(rate.unit))
       || (input.provider === "gemini" && !["text_to_speech", "voice_reply_whatsapp", "voice_reply_economy"].includes(input.featureCode)))
     && !rates.some(rate => rate.unit === unit && rate.connectyPricePerUnit > 0));
+  // A configured zero creation fee is different from an absent tariff. This
+  // exception is limited to ElevenLabs cloning and never grants free TTS/LLM.
+  const explicitZeroClone = input.provider === "elevenlabs" && input.featureCode === "voice_clone"
+    && calculated.matchedRates.some(rate => rate.id && rate.unit === "request")
+    && calculated.chargeCredits === 0;
   if (billingMode !== "free" && status === "completed"
-    && (calculated.matchedRates.length === 0 || calculated.chargeCredits <= 0 || incompleteDirectionalRates)
+    && (calculated.matchedRates.length === 0 || (calculated.chargeCredits <= 0 && !explicitZeroClone) || incompleteDirectionalRates)
     && input.connectyChargeCreditsOverride === undefined) {
     await recordUsageEvent(client, {
       organizationId, userId: input.userId, provider: input.provider, featureCode: input.featureCode,

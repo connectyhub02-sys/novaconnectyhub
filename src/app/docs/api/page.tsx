@@ -8,9 +8,9 @@ import { connectyhubOpenApiSpec } from "@/lib/connectyhub-api/openapi";
 import { buildApiDocsStructuredData } from "@/lib/seo/structured-data";
 
 export const metadata: Metadata = {
-  title: "Documentação das APIs WhatsApp e IA / LLM | ConnectyHub",
+  title: "Documentação das APIs WhatsApp, IA e Voz | ConnectyHub",
   description:
-    "Documentação pública das APIs WhatsApp e IA / LLM ConnectyHub. Endpoints, autenticação, exemplos, créditos e downloads OpenAPI JSON.",
+    "Documentação pública das APIs WhatsApp, IA / LLM e Voz ConnectyHub. Endpoints, clonagem privada, autenticação, créditos e OpenAPI JSON.",
   keywords: [
     "API WhatsApp ConnectyHub",
     "API de IA ConnectyHub",

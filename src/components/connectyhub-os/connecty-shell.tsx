@@ -213,6 +213,7 @@ const adminSections: NavSection[] = [
       { label: "Integracoes",       href: "/admin/clientes/integracoes", icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",      href: "/admin/api-whatsapp",      icon: PlugZap, tone: "emerald" },
       { label: "API de IA",         href: "/admin/api-ia",            icon: PlugZap, tone: "emerald" },
+      { label: "Voz",               href: "/admin/voz",               icon: Megaphone, tone: "violet" },
     ],
   },
   {
@@ -252,6 +253,7 @@ const clientSections: NavSection[] = [
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "API de IA",        href: "/dashboard/api-ia",           icon: PlugZap, tone: "emerald" },
+      { label: "Voz",              href: "/dashboard/voz",              icon: Megaphone, tone: "violet" },
       { label: "Créditos e recargas", href: "/dashboard/creditos", icon: Coins, tone: "amber" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
       { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { AiApiDocs, AiDocsSidePanel, AiDocsNavigation, isAiDocSection } from "./ai-api-docs";
+import { VoiceApiDocs } from "./voice-api-docs";
 import {
   BookOpen,
   CheckCircle2,
@@ -74,6 +75,7 @@ type ParsedBodyResult =
 export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
   const hash = useSyncExternalStore(subscribeDocsHash, () => window.location.hash.slice(1), () => "");
   const aiSection = isAiDocSection(hash) ? hash : null;
+  const voiceSection = hash === "voz";
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<SelectedDoc>({ type: "overview" });
   const [sideTab, setSideTab] = useState<SideTab>("try");
@@ -83,7 +85,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
 
   function selectWhatsApp(doc: SelectedDoc) {
     setSelected(doc);
-    if (aiSection) window.location.hash = "whatsapp";
+    if (aiSection || voiceSection) window.location.hash = "whatsapp";
   }
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -127,11 +129,12 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
       <div className="mx-auto grid max-w-[1760px] gap-0 px-4 py-6 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:px-8 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
         <aside aria-label="Navegação da documentação" className="max-h-[26rem] min-w-0 overflow-y-auto lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:border-r lg:border-white/10 lg:pr-5">
           <nav aria-label="Escolher API" className="mb-5 grid grid-cols-2 gap-2">
-            <a href="#whatsapp" onClick={() => setSelected({ type: "overview" })} aria-current={!aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${!aiSection ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-white/10 text-slate-400 hover:text-white"}`}><Webhook className="h-4 w-4 shrink-0" />WhatsApp</a>
+            <a href="#whatsapp" onClick={() => setSelected({ type: "overview" })} aria-current={!aiSection && !voiceSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${!aiSection && !voiceSection ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-white/10 text-slate-400 hover:text-white"}`}><Webhook className="h-4 w-4 shrink-0" />WhatsApp</a>
             <a href="#ia" aria-current={aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${aiSection ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-100" : "border-white/10 text-slate-300 hover:text-white"}`}><Sparkles className="h-4 w-4 shrink-0" />IA / LLM</a>
           </nav>
           {aiSection ? <AiDocsNavigation selected={aiSection} /> : null}
-          <div hidden={Boolean(aiSection)}>
+          <a href="#voz" aria-current={voiceSection ? "page" : undefined} className={`mt-2 flex min-h-12 items-center justify-center rounded-lg border px-3 py-3 text-sm font-bold ${voiceSection ? "border-violet-300/30 bg-violet-300/15 text-violet-100" : "border-white/10 text-slate-300 hover:text-white"}`}>Voz · Estúdio e API</a>
+          <div hidden={Boolean(aiSection) || voiceSection}>
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
             <Search className="h-4 w-4 text-slate-500" />
             <input
@@ -230,7 +233,8 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
 
         <div id="doc-content" className="min-w-0 scroll-mt-24 pt-8 lg:pt-0 lg:pl-8 xl:pr-8">
           <div hidden={!aiSection}><AiApiDocs section={aiSection ?? "ia"} /></div>
-          {!aiSection ? <>
+          {voiceSection ? <VoiceApiDocs /> : null}
+          {!aiSection && !voiceSection ? <>
           {selected.type === "overview" ? <Overview catalog={catalog} /> : null}
           {selectedGroup ? <TagView group={selectedGroup} onSelectEndpoint={(id) => selectWhatsApp({ type: "endpoint", id })} /> : null}
           {selectedEndpoint ? <EndpointView endpoint={selectedEndpoint} /> : null}
@@ -239,7 +243,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
         </div>
 
         <aside className="mt-8 min-w-0 lg:col-start-2 xl:sticky xl:top-20 xl:col-start-auto xl:mt-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:border-l xl:border-white/10 xl:pl-5">
-          {aiSection ? <AiDocsSidePanel /> : <SidePanel
+          {voiceSection ? <div className="rounded-xl border border-violet-300/20 p-5 text-sm text-slate-300"><p className="font-semibold text-white">Conta → projeto → chave</p><p className="mt-3 leading-6">O catálogo e os recibos identificam o projeto e a conta pagadora. Use uma chave dedicada de Voz; amostras e áudios privados nunca recebem acesso público.</p><a href="/docs/api/voz/openapi.json" className="mt-4 block text-violet-200 underline">Baixar OpenAPI de Voz</a></div> : aiSection ? <AiDocsSidePanel /> : <SidePanel
             apiToken={apiToken}
             baseUrl={baseUrl}
             catalog={catalog}

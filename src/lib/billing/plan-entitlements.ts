@@ -23,7 +23,8 @@ export type PlanFeatureCode =
   | "google_ads_analytics"
   | "ai_traffic_manager"
   | "connectyhub_api"
-  | "llm_api";
+  | "llm_api"
+  | "voice_api";
 
 export type BillingAccessStateLike =
   | "trial_active"
@@ -61,6 +62,11 @@ const paidPlanRank: Record<Exclude<CommercialPlanCode, "trial">, number> = {
 };
 
 export const planFeatureDefinitions: Record<PlanFeatureCode, PlanFeatureDefinition> = {
+  voice_api: {
+    code: "voice_api", name: "Voz", minimumPlanCode: "starter", minimumPlanLabel: "Start",
+    allowedTitle: "Voz disponível", allowedDescription: "Crie áudios no Estúdio ou pela API com os créditos da sua conta.",
+    blockedTitle: "Ative o acesso a Voz", blockedDescription: "Disponível no teste válido e em todos os planos ativos, sem exigir agente.",
+  },
   llm_api: {
     code: "llm_api", name: "API de IA", minimumPlanCode: "starter", minimumPlanLabel: "Start",
     allowedTitle: "API de IA disponível", allowedDescription: "Use seus créditos ConnectyHub em projetos externos, com chaves e limites por projeto.",

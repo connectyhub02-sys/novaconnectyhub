@@ -19,6 +19,16 @@ function meteringHarness(overrides = {}) {
 }
 
 describe("usage billing integrity", () => {
+  it("respects explicitly configured zero clone creation, but rejects missing clone and zero TTS tariffs", async () => {
+    for(const [feature,hasRate,allowed] of [["voice_clone",true,true],["voice_clone",false,false],["text_to_speech",true,false]] as const){
+      const record=vi.fn().mockResolvedValue({id:'usage'}),debit=vi.fn();
+      const db=commerceDatabase({organizations:[{id:'org',plan_code:'pro',status:'active'}],provider_cost_centers:[{id:'cc',provider:'elevenlabs'}],provider_features:[{id:'f',cost_center_id:'cc',feature_code:feature,enabled:true,billable:true}],billing_rates:hasRate?[{id:'zero',cost_center_id:'cc',feature_id:'f',active:true,unit:'request',connecty_price_per_unit:0,provider_cost_per_unit:0,minimum_charge_credits:0}]:[]});
+      const result=meteringHarness({recordUsageEvent:record,recordUsageAndDebitCredits:debit}).meterUsageEvent(db.client as never,{organizationId:'org',provider:'elevenlabs',featureCode:feature,requests:1,quantity:1,requestId:'clone'});
+      if(allowed){expect(await result).toMatchObject({chargeCredits:0,debited:false});expect(record.mock.calls[0][1].status).toBe('completed');}
+      else {await expect(result).rejects.toThrow('tarifa indisponível');expect(record.mock.calls[0][1].status).toBe('pending');}
+      expect(debit).not.toHaveBeenCalled();
+    }
+  });
   it("reads tariffs beyond the first REST page", async () => {
     const rates=Array.from({length:1001},(_,index)=>({id:String(index).padStart(4,"0"),cost_center_id:"cc",feature_id:"f",model_id:"m",active:true,
       unit:"input_token",provider_cost_per_unit:.001,connecty_price_per_unit:index===1000?.02:.01,minimum_charge_credits:0,
