@@ -5,11 +5,13 @@ import {aiModelDefinition,publicModelId} from '@/lib/ai-api/model-catalog';
 import {completeExtendedContent} from '@/lib/ai-api/extended-content';
 import {streamExtendedContent} from '@/lib/ai-api/streaming';
 import {countAiTokens} from '@/lib/ai-api/count-tokens';
-import {geminiContractVersion,unwrapGeminiResult} from '@/lib/ai-api/gemini-contract';
+import {geminiContractVersion,unwrapGeminiResult,translateGeminiResources} from '@/lib/ai-api/gemini-contract';
 import {readAiJson,aiHttpFailure} from '@/lib/ai-api/http';
 import {nativeEmbeddingInput} from '@/lib/ai-api/native-embedding';
 import {completeExtendedEmbedding} from '@/lib/ai-api/extended-embeddings';
 import {geminiResourceApi,geminiResourceCollections} from '@/lib/ai-api/gemini-resources';
+import {geminiBatchApi} from '@/lib/ai-api/gemini-batches';
+import {geminiFileSearchApi} from '@/lib/ai-api/gemini-file-search';
 
 export const runtime='nodejs';
 export const maxDuration=120;
@@ -31,6 +33,8 @@ function modelName(value:string) {
 export async function GET(request:Request,context:Context) {
   try {
     const {resource}=await context.params;
+    if(resource[0]==='fileSearchStores')return Response.json(await geminiFileSearchApi(sdkRequest(request,true),resource),{headers});
+    if(resource[0]==='batches')return Response.json(await geminiBatchApi(sdkRequest(request,true),resource),{headers});
     if(geminiResourceCollections.includes(resource[0] as never))return Response.json(await geminiResourceApi(sdkRequest(request,true),resource),{headers});
     if(resource[0]!=='models'||resource.length>2)throw new AiApiError('unsupported_method',404,'Método não disponível nesta versão. Consulte a matriz de compatibilidade.');
     const client=createServiceClient(),auth=await authenticateAi(sdkRequest(request),client);
@@ -55,6 +59,8 @@ export async function GET(request:Request,context:Context) {
 export async function POST(request:Request,context:Context) {
   try {
     const {resource}=await context.params;
+    if(resource[0]==='fileSearchStores')return Response.json(await geminiFileSearchApi(sdkRequest(request,true),resource),{headers});
+    if(resource[0]==='batches'||resource[0]==='models'&&/:(batchGenerateContent|asyncBatchEmbedContent)$/.test(resource[1]??''))return Response.json(await geminiBatchApi(sdkRequest(request,true),resource),{headers});
     if(geminiResourceCollections.includes(resource[0] as never))return Response.json(await geminiResourceApi(sdkRequest(request,true),resource),{headers});
     const match=resource.length===2&&resource[0]==='models'?resource[1].match(/^([a-zA-Z0-9.-]+):(generateContent|streamGenerateContent|countTokens|embedContent|batchEmbedContents)$/):null;
     if(!match)throw new AiApiError('unsupported_method',404,'Método não disponível nesta versão. Consulte a matriz de compatibilidade.');
@@ -68,9 +74,9 @@ export async function POST(request:Request,context:Context) {
       const embeddings=(result.data as unknown[]).map(value=>({values:record(value).embedding}));
       return Response.json({...batch?{embeddings}:{embedding:embeddings[0]},usageMetadata:result.usageMetadata,connectyhub:{...record(result.connectyhub),metering_basis:result.meteringBasis}},{headers});
     }
-    if(raw.cachedContent&&typeof raw.cachedContent==='string')raw.cachedContent=raw.cachedContent.replace(/^cachedContents\//,'caches/');
+    translateGeminiResources(raw);
     if(match[2]==='countTokens') {
-      if(raw.generateContentRequest){const g=record(raw.generateContentRequest);if(g.model)g.model=modelName(String(g.model).replace(/^models\//,''));if(typeof g.cachedContent==='string')g.cachedContent=g.cachedContent.replace(/^cachedContents\//,'caches/');}
+      if(raw.generateContentRequest){const g=record(raw.generateContentRequest);if(g.model)g.model=modelName(String(g.model).replace(/^models\//,''));translateGeminiResources(g);}
       return Response.json(await countAiTokens(sdk,id,raw),{headers});
     }
     if(raw.model&&modelName(String(raw.model).replace(/^models\//,''))!==id)throw new AiApiError('model_key_mismatch',422,'Modelo divergente.');
@@ -79,10 +85,11 @@ export async function POST(request:Request,context:Context) {
     return Response.json(unwrapGeminiResult(result),{headers});
   }catch(error){return failure(error);}
 }
-export async function DELETE(request:Request,context:Context){try{return Response.json(await geminiResourceApi(sdkRequest(request),(await context.params).resource),{headers});}catch(error){return failure(error);}}
+export async function DELETE(request:Request,context:Context){try{const {resource}=await context.params;const handler=resource[0]==='batches'?geminiBatchApi:resource[0]==='fileSearchStores'?geminiFileSearchApi:geminiResourceApi;return Response.json(await handler(sdkRequest(request),resource),{headers});}catch(error){return failure(error);}}
 export async function PATCH(request:Request,context:Context){try{return Response.json(await geminiResourceApi(sdkRequest(request,true),(await context.params).resource),{headers});}catch(error){return failure(error);}}
 function failure(error:unknown) {
   const response=aiHttpFailure(error);
   // Google SDKs understand numeric error.code; keep application codes in details.
-  return response.json().then(body=>Response.json({error:{code:response.status,status:response.status===401?'UNAUTHENTICATED':response.status===429?'RESOURCE_EXHAUSTED':response.status>=500?'UNAVAILABLE':'INVALID_ARGUMENT',message:body.error.message,details:[{reason:body.error.code,request_id:body.error.request_id}]}},{status:response.status,headers:{...headers,...(response.headers.has('Retry-After')?{'Retry-After':response.headers.get('Retry-After')!}:{})}}));
+  const status=({401:'UNAUTHENTICATED',402:'FAILED_PRECONDITION',403:'PERMISSION_DENIED',404:'NOT_FOUND',405:'UNIMPLEMENTED',409:'ABORTED',429:'RESOURCE_EXHAUSTED'} as Record<number,string>)[response.status]??(response.status>=500?'UNAVAILABLE':'INVALID_ARGUMENT');
+  return response.json().then(body=>Response.json({error:{code:response.status,status,message:body.error.message,details:[{reason:body.error.code,request_id:body.error.request_id}]}},{status:response.status,headers:{...headers,...(response.headers.has('Retry-After')?{'Retry-After':response.headers.get('Retry-After')!}:{})}}));
 }

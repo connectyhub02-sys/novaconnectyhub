@@ -2,6 +2,18 @@ type Json = Record<string, unknown>;
 const object = (value:unknown):Json => value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {};
 export const geminiContractVersion = 'gemini-v1beta-2026-09-14';
 export const isGeminiContract = (request:Request) => request.headers.get('x-connectyhub-contract') === geminiContractVersion;
+/** Translate public SDK resource names; ownership remains enforced downstream. */
+export function translateGeminiResources(body:Json) {
+  if(typeof body.cachedContent==='string')body.cachedContent=body.cachedContent.replace(/^cachedContents\//,'caches/');
+  for(const value of Array.isArray(body.tools)?body.tools:[]) {
+    const search=object(object(value).fileSearch);
+    if(Array.isArray(search.fileSearchStoreNames)&&search.stores===undefined) {
+      search.stores=search.fileSearchStoreNames.map(name=>typeof name==='string'?name.replace(/^fileSearchStores\//,'stores/'):name);
+      delete search.fileSearchStoreNames;
+    }
+  }
+  return body;
+}
 const pick = (raw:Json, fields:string[]) => Object.fromEntries(fields.filter(k=>raw[k]!==undefined).map(k=>[k,raw[k]]));
 
 /** Preserve documented inference metadata, not arbitrary transport/configuration

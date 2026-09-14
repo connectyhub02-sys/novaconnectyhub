@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {serverModuleHarness} from './helpers/server-module-harness';
 import type * as Resources from '../src/lib/ai-api/gemini-resources';
+import {translateGeminiResources} from '../src/lib/ai-api/gemini-contract';
 class AiApiError extends Error {constructor(public code:string,public status:number,message:string){super(message);}}
 const record=(v:unknown)=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 function fixture() {
@@ -15,6 +16,7 @@ function fixture() {
     './cache-management':{updateAiCache:async(_c:unknown,_r:unknown,body:unknown)=>{calls.push(['update',body]);}},
     './model-catalog':{aiModelDefinition:(id:string)=>id==='public'?{}:null,publicModelId:()=> 'public'},
     './http':{readAiJson:(r:Request)=>r.json()},
+    './gemini-contract':{translateGeminiResources},
   },[],{Request});
   const run=(method:string,path:string,body?:unknown)=>api.geminiResourceApi(new Request(`https://example/api/v1beta/${path}`,{method,...(body?{body:JSON.stringify(body)}:{})}),path.split('?')[0].split('/'));
   return {api,calls,row,run};

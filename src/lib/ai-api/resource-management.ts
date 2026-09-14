@@ -18,7 +18,7 @@ export async function readAiEnvironmentFiles(client:SupabaseClient,row:Record<st
   return Response.json({object:'list',data:files,next_cursor:response.next_page_token??null},{headers:{'Cache-Control':'no-store'}});
 }
 
-export async function removeAiStoredResource(client:SupabaseClient,row:Record<string,unknown>) {
+export async function removeAiStoredResource(client:SupabaseClient,row:Record<string,unknown>,options:{force?:boolean}={}) {
   if(row.kind==='cache')return refreshAiResource(client,row,true);
   if(row.kind==='store') {
     const active=await client.from('ai_resources').select('id').eq('project_id',row.project_id).eq('kind','document').eq('metadata->>store_id',row.id).in('status',['preparing','processing','uncertain','settling']).limit(1);
@@ -27,7 +27,8 @@ export async function removeAiStoredResource(client:SupabaseClient,row:Record<st
   const name=row.kind==='document'?record(row.metadata).document_name:row.provider_name;
   if(name && ['store','document','interaction','batch','agent','environment'].includes(String(row.kind))) {
     const prefix=({interaction:'interactions/',agent:'agents/',environment:'environments/'} as Record<string,string>)[String(row.kind)]??'';
-    try {await aiProviderRequest(client,`/v1beta/${prefix}${name}${row.kind==='store'?'?force=true':''}`,'DELETE');}
+    const query=row.kind==='store'?`?force=${options.force!==false}`:row.kind==='document'&&options.force!==undefined?`?force=${options.force}`:'';
+    try {await aiProviderRequest(client,`/v1beta/${prefix}${name}${query}`,'DELETE');}
     catch(error){if(!(error instanceof AiProviderFailure&&error.status===404))throw error;}
   }
   const update=await client.from('ai_resources').update({status:'deleted',updated_at:new Date().toISOString()}).eq('id',row.id);

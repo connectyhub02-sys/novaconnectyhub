@@ -5,6 +5,10 @@ Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento 
 
 ## API LLM — infraestrutura de 14/09/2026
 
+Pacote incremental publicado: `68ae22b`, Vercel `dpl_3jxPYR4jvxuVjLcLVuNYLQcsoq2r` Ready/Production e domínio principal conferidos às 05:51 UTC. Relay de arquivos/Live ativo por HTTPS na VPS; upload por ticket e conexão privada com a aplicação verificados sem arquivo real nem inferência paga. Documentação 1.6.0, 15 operações nativas Gemini e preços públicos respondendo. Paridade completa e homologação real de todas as modalidades continuam pendentes.
+
+Complementos posteriores de lotes (6 métodos) e File Search (9) foram autorizados diretamente pelo titular para publicação. O SDK oficial passou em dez chamadas offline; 2.735 testes, lint e build com TypeScript aprovados. Publicação em andamento: não confundir 30 métodos locais com os 15 do último checkpoint publicado. O compartilhamento com a tarefa de origem continua aguardando autorização específica. [Matriz e limites](matriz-paridade-gemini-2026-09-14.md).
+
 Proteção financeira 0143 aplicada e conferida. Migrations 0144 (tickets descartáveis de upload) e 0145 (capacidade por carteira/global) publicadas às 05:06 UTC no Supabase da VPS: RPCs novas exclusivas do serviço, RLS ativo, trigger habilitado e proteção financeira preservada. Nenhum saldo/preço/pedido alterado e nenhuma geração ou cobrança real de teste. A implementação LLM permanece em desenvolvimento; esta publicação SQL não comprova paridade integral nem transporte completo em produção. [Evidências, limites e etapa de publicação](implementacao-api-llm-2026-09-14.md).
 
 ## Atendimento, links globais e busca — publicado em 13/09/2026

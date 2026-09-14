@@ -7,6 +7,7 @@ import {removeAiStoredResource} from './resource-management';
 import {updateAiCache} from './cache-management';
 import {aiModelDefinition,publicModelId} from './model-catalog';
 import {readAiJson} from './http';
+import {translateGeminiResources} from './gemini-contract';
 
 type Row=Record<string,unknown>;
 export const geminiResourceCollections=['files','cachedContents'] as const;
@@ -40,7 +41,7 @@ export async function geminiResourceApi(request:Request,parts:string[],client=cr
     return {[collection]:rows.slice(0,size).map(row=>geminiResourceObject(row,collection)),...(rows.length>size?{nextPageToken:String(offset+size)}:{})};
   }
   if(request.method==='POST'&&!id&&collection==='cachedContents') {
-    const body=record(await readAiJson(request));
+    const body=translateGeminiResources(record(await readAiJson(request)));
     if(Object.keys(body).some(k=>!['model','contents','systemInstruction','tools','toolConfig','displayName','ttl','expireTime'].includes(k)))throw new AiApiError('unsupported_parameter',422,'Campo de cache não suportado.');
     const supplied=String(body.model??auth.key.model_id??'').replace(/^models\//,''),model=aiModelDefinition(supplied)?supplied:publicModelId(supplied);
     if(model==='connectyhub-auto')throw new AiApiError('model_unavailable',404,'Modelo não disponível.');

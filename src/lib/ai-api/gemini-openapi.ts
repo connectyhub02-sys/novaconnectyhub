@@ -1,6 +1,8 @@
 import {advancedAiSchemas} from './advanced-openapi';
 import {geminiContractVersion} from './gemini-contract';
 import {geminiResourcePaths,geminiResourceSchemas} from './gemini-resource-openapi';
+import {geminiBatchPaths,geminiBatchSchemas} from './gemini-batch-openapi';
+import {geminiFileSearchPaths,geminiFileSearchSchemas} from './gemini-file-search-openapi';
 const ref=(name:string)=>({$ref:`#/components/schemas/${name}`});
 const json=(schema:object)=>({'application/json':{schema}});
 const model={name:'model',in:'path',required:true,schema:{type:'string'},example:'flash-3.5'};
@@ -9,6 +11,8 @@ const failures=Object.fromEntries([400,401,402,403,404,409,413,422,429,502,503].
 const post=(method:string,request:string,response:string,stream=false)=>({operationId:`gemini${method}`,parameters:[model,identity],requestBody:{required:true,content:json(ref(request))},responses:{200:{description:'Resultado do contrato versionado',content:stream?{'text/event-stream':{schema:{type:'string'},description:'Eventos GenerateContentResponse incrementais, sem marcador [DONE]. Créditos no evento final.'}}:json(ref(response))},...failures}});
 export const geminiOpenApiSpec={openapi:'3.1.0',info:{title:'ConnectyHub · contrato Gemini',version:geminiContractVersion,description:'Compatibilidade versionada para geração, streaming, contagem, embeddings, consulta de arquivos e ciclo de caches. Não inclui todo o SDK; upload e Live usam transporte ConnectyHub próprio.'},servers:[{url:'https://www.connectyhub.com.br/api/v1beta'}],security:[{Bearer:[]},{SDKKey:[]}],paths:{
   ...geminiResourcePaths,
+  ...geminiBatchPaths,
+  ...geminiFileSearchPaths,
   '/models':{get:{operationId:'geminiListModels',parameters:[{name:'pageSize',in:'query',schema:{type:'integer',minimum:1,maximum:100,default:50}},{name:'pageToken',in:'query',schema:{type:'string'}}],responses:{200:{description:'Catálogo configurado',content:json({type:'object',properties:{models:{type:'array',items:ref('Model')},nextPageToken:{type:'string'}}})},...failures}}},
   '/models/{model}':{get:{operationId:'geminiGetModel',parameters:[model],responses:{200:{description:'Modelo',content:json(ref('Model'))},...failures}}},
   '/models/{model}:generateContent':{post:post('GenerateContent','ContentRequest','GenerateContentResponse')},
@@ -16,7 +20,7 @@ export const geminiOpenApiSpec={openapi:'3.1.0',info:{title:'ConnectyHub · cont
   '/models/{model}:countTokens':{post:post('CountTokens','CountRequest','CountResponse')},
   '/models/{model}:embedContent':{post:post('EmbedContent','EmbedRequest','EmbedResponse')},
   '/models/{model}:batchEmbedContents':{post:post('BatchEmbedContents','BatchEmbedRequest','BatchEmbedResponse')},
-},components:{securitySchemes:{Bearer:{type:'http',scheme:'bearer'},SDKKey:{type:'apiKey',in:'header',name:'x-goog-api-key'}},schemas:{...advancedAiSchemas,...geminiResourceSchemas,
+},components:{securitySchemes:{Bearer:{type:'http',scheme:'bearer'},SDKKey:{type:'apiKey',in:'header',name:'x-goog-api-key'}},schemas:{...advancedAiSchemas,...geminiResourceSchemas,...geminiBatchSchemas,...geminiFileSearchSchemas,
   Model:{type:'object',properties:{name:{type:'string'},displayName:{type:'string'},version:{type:'string'},inputTokenLimit:{type:'integer'},outputTokenLimit:{type:'integer'},supportedGenerationMethods:{type:'array',items:{type:'string'}}}},
   Error:{type:'object',properties:{error:{type:'object',properties:{code:{type:'integer'},status:{type:'string'},message:{type:'string'},details:{type:'array',items:{type:'object',properties:{reason:{type:'string'},request_id:{type:'string'}}}}}}}},
   CountRequest:{oneOf:[{type:'object',additionalProperties:false,required:['contents'],properties:{contents:advancedAiSchemas.ContentRequest.properties.contents}},{type:'object',additionalProperties:false,required:['generateContentRequest'],properties:{generateContentRequest:ref('ContentRequest')}}]},

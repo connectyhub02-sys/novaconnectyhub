@@ -7,6 +7,7 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { aiRequestExamples, aiResponseExample, aiSseExample } from "../src/lib/ai-api/examples";
 import { aiDocPages, aiJavascriptExample } from "../src/lib/ai-api/documentation";
 import { renderAiGuide } from "../src/lib/ai-api/guide";
+import {geminiOpenApiSpec} from '../src/lib/ai-api/gemini-openapi';
 
 describe("Public AI OpenAPI contract", () => {
   it("documents only implemented public routes with an independent AI credential", () => {
@@ -22,7 +23,8 @@ describe("Public AI OpenAPI contract", () => {
   });
 
   it("resolves every schema reference in the downloadable JSON", () => {
-    const spec = JSON.parse(JSON.stringify(aiOpenApiSpec));
+    for(const definition of [aiOpenApiSpec,geminiOpenApiSpec]) {
+    const spec = JSON.parse(JSON.stringify(definition));
     let references = 0;
     function walk(value: unknown) {
       if (!value || typeof value !== "object") return;
@@ -36,6 +38,7 @@ describe("Public AI OpenAPI contract", () => {
     }
     walk(spec);
     expect(references).toBeGreaterThan(10);
+    }
   });
 
   it("provides a request example accepted by the real gateway and documents its limits", () => {

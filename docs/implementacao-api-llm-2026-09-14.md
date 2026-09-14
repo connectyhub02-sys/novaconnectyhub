@@ -61,3 +61,35 @@ Acesso SSH foi recuperado pelo método original documentado. CLI global estava e
 Suíte geral: **2.713 testes em 210 arquivos**, todos aprovados. Complemento posterior de CORS/limite de upload e recursos nativos: **13 testes**, aprovados. TypeScript e ESLint dos arquivos alterados passaram. Build de produção Webpack passou, com 103 páginas estáticas; Turbopack local recusou o junction de node_modules fora do worktree, sem alteração do bundler configurado para a Vercel.
 
 Relay iniciado na VPS e proxy Caddy validado/recarregado com backup da configuração anterior. HTTPS público /health retornou 200; PUT sem ticket retornou 401, sem contato com o provedor. Imagem mínima, volume privado, limite de 512 MB/1 CPU e filesystem somente leitura. Preflight público confirmado: HTTP 204 com autorização de PUT e cabeçalhos do ticket. Aplicativo ainda aguarda push/deploy. [Matriz de 85 métodos REST e pendências de paridade](matriz-paridade-gemini-2026-09-14.md).
+
+## Publicação incremental confirmada — 14/09, 05:51 UTC
+
+Commit `68ae22b` na master, implantação `dpl_3jxPYR4jvxuVjLcLVuNYLQcsoq2r` Ready/Production. Inspeção do domínio principal confirmou a implantação e os aliases com/sem www; logs de produção confirmaram o commit e build Turbopack com TypeScript aprovados. OpenAPI ConnectyHub 1.6.0 e Gemini versionado responderam HTTP 200, com 65 e 15 operações respectivamente; tarifas públicas retornaram 35 modelos. Rotas privadas e upload sem credencial retornaram 401. Controle privado autenticado recusou ticket fictício inexistente via RPC com 401, comprovando carregamento do segredo e comunicação com o banco, sem chamada ao Google.
+
+Relay HTTPS ativo: health 200, preflight 204; configuração de limites e volume persistente preservada. Não houve arquivo pessoal, inferência Live real nem geração paga para homologação. A compatibilidade integral permanece pendente na matriz. Este registro posterior permanece local até o próximo pacote para evitar deploy somente documental.
+
+## Complemento de lotes antes da publicação
+
+Adicionados seis métodos nativos, totalizando 21 adaptadores: criação de lotes de geração e embeddings e consulta/listagem/cancelamento/exclusão. A reserva e liquidação existentes continuam únicas; contagens exatas anteriores ao envio ficam preservadas por item para embeddings que omitem usageMetadata. Resultados nativos são persistidos e o envelope metadata.output é compatível com o SDK oficial. Identidades locais e metadados do cliente permanecem separados dos nomes e índices internos.
+
+Validação: 23 testes de rotas/lotes/ciclo de recursos; teste offline com SDK @google/genai 2.22.0, sem requisições externas; lint e build Webpack com TypeScript aprovados. Suíte geral: 2.716 passaram e sete testes SQL excederam 5 segundos sob concorrência; os sete arquivos foram repetidos com dois processos e margem de 30 segundos, com 22 testes aprovados. Após a revisão documental, 13 testes de documentação/rotas passaram. Nenhuma mudança de migration, preço ou configuração real nesta etapa; nenhuma geração, cancelamento de lote real ou cobrança de teste.
+
+### Dependências de autorização nesta retomada
+
+A revisão automática rejeitou o comando de commit/publicação do complemento na master por exigir autorização explícita para este escopo. O comando foi bloqueado antes de executar; HEAD e produção permanecem em `68ae22b`. As alterações de lotes continuam locais, testadas e disponíveis para revisão. Solicitada autorização direta ao titular; não houve nova tentativa de publicação após a rejeição.
+
+O envio de checkpoints à tarefa de origem também passou a ser bloqueado pela revisão automática, inclusive um retorno reduzido ao progresso. Foi solicitada autorização explícita para esse destino. Isso não representa indisponibilidade dos serviços nem falha nos testes; são permissões pendentes para publicação e comunicação entre tarefas. Não considerar a matriz integral concluída.
+
+## Complemento File Search concluído localmente — 14/09, 06:40 UTC
+
+Nove métodos nativos adicionados: coleções (criar/listar/consultar/excluir), importar arquivo, documentos (listar/consultar/excluir) e consultar operação de indexação. Total local de 30 métodos, enquanto o último pacote publicado mantém 15. OpenAPI e guia são gerados das mesmas definições. Coleções/documentos pertencem ao projeto autenticado, documentos são conferidos contra a coleção pai e referências do SDK são traduzidas antes da validação central. A exclusão nativa envia force=false por padrão; a regra anterior dos endpoints ConnectyHub foi preservada. Recusa do fornecedor não marca o documento como excluído.
+
+Indexação reutiliza a operação financeira existente. A consulta não reenvia arquivo nem cria nova reserva; resposta sem identidade confirmada do documento não é liquidada como sucesso. Não houve mudança de tarifas, planos, carteira, recarga, migrations ou serviços publicados neste complemento. File Search aceita apenas arquivos previamente enviados pelo transporte ConnectyHub; upload binário nativo, embeddingModel personalizado e listagens com atualização individual em tempo real não são implementados.
+
+Verificação: **48 testes direcionados**, **2.735 testes gerais em 213 arquivos**, ESLint e build Webpack com TypeScript aprovados. SDK oficial @google/genai 2.22.0 executou dez chamadas com transporte totalmente simulado, incluindo File Search e resultado com parent/documentName; zero chamadas externas. Não houve arquivo pessoal, indexação real ou cobrança de teste. Build compilou em 37,3 segundos e TypeScript em 25,8 segundos, gerando 103 páginas. O build local usa Webpack devido ao junction de dependências do worktree; nenhuma configuração de bundler foi alterada.
+
+Os complementos permanecem sem commit/push após a rejeição anterior. O pedido de aprovação original cobria seis métodos de lotes; a revisão agora inclui também os nove de File Search. Ainda falta autorização direta para publicar esse conjunto e para compartilhar um checkpoint com “Correções da API LLM”. Nenhuma nova tentativa de publicação ou mensagem entre tarefas foi feita após os bloqueios. Demais métodos da matriz continuam explicitamente pendentes; esta entrega incremental não encerra a paridade aplicável.
+
+## Autorização direta para publicação
+
+Após receber o resumo dos complementos e dos testes, o titular autorizou verbalmente a publicação de lotes e File Search. A master remota foi conferida e permanece em 68ae22b, sem alterações concorrentes a integrar. Publicação retomada dentro desse escopo, sem alterar preços, migrations ou realizar gerações pagas de teste. A autorização de compartilhamento com a tarefa de origem não foi presumida a partir da autorização de publicação.

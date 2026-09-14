@@ -61,7 +61,7 @@ export async function createAuthorizedAiResource(client:SupabaseClient,request:R
       kind:'store',metadata:{display_name:String(body.display_name??'Coleção').slice(0,200)}}).select('*').single();
     if(saved.error||!saved.data)throw new Error('Não foi possível criar a coleção.');
     try {const result=await aiProviderRequest(client,'/v1beta/fileSearchStores','POST',{displayName:record(saved.data.metadata).display_name});
-      return publicAiResource(await updateResource(client,saved.data.id,{provider_name:result.name,status:'active'}));
+      return publicAiResource(await updateResource(client,saved.data.id,{provider_name:result.name,status:'active',metadata:{...record(saved.data.metadata),store_response:result}}));
     }catch(error){await updateResource(client,saved.data.id,{status:'failed'});throw error;}
   }
   const kind=resourceKinds[collection];if(!kind)throw new AiApiError('resource_not_found',404,'Operação não encontrada.');
@@ -78,17 +78,19 @@ export async function createAuthorizedAiResource(client:SupabaseClient,request:R
     }
     if(collection==='batches') {
       if(!Array.isArray(body.requests)||!body.requests.length||body.requests.length>100)throw new AiApiError('invalid_batch',422,'Envie entre 1 e 100 solicitações por lote.');
-      const items=[],itemPrices:AiPriceCard[]=[];let total:AiUnits={};const base={...operation.prices},combined:AiPriceCard={};
+      const items=[],itemPrices:AiPriceCard[]=[],itemCounts:Row[]=[],clientMetadata:Row[]=[];let total:AiUnits={};const base={...operation.prices},combined:AiPriceCard={};
       for(const [index,item] of body.requests.entries()) {
         operation.prices={...base};
         const entry=record(item), prepared=operation.model.family==='embeddings'?await prepareAiEmbedding(client,auth,operation,entry.request??entry):await prepareExtendedContent(client,auth,operation,entry.request??entry);
+        itemCounts.push('count' in prepared?record(prepared.count):{});
+        clientMetadata.push(record(entry.metadata));
         const prices=batchAiPrices(operation.prices);itemPrices.push(prices);
         for(const [meter,price] of Object.entries(prices))combined[`item${index}_${meter}`]=price;
         total=addAiUnits(total,Object.fromEntries(Object.entries(prepared.units).map(([meter,quantity])=>[`item${index}_${meter}`,quantity])));
         items.push({request:{...prepared.body,model:`models/${operation.model.providerId}`},metadata:{key:String(entry.key??index),index:String(index)}});
       }
       operation.prices=combined;
-      return await dispatchResource(client,operation,'batch',{count:items.length,item_prices:itemPrices,display_name:body.display_name},total,
+      return await dispatchResource(client,operation,'batch',{count:items.length,item_prices:itemPrices,item_counts:itemCounts,client_metadata:clientMetadata,display_name:body.display_name},total,
         `/v1beta/models/${operation.model.providerId}:${operation.model.family==='embeddings'?'asyncBatchEmbedContent':'batchGenerateContent'}`,{batch:{displayName:String(body.display_name??'Lote').slice(0,200),inputConfig:{requests:{requests:items}}}});
     }
     if(collection==='documents') {
@@ -96,7 +98,7 @@ export async function createAuthorizedAiResource(client:SupabaseClient,request:R
       const file=await getOwnedAiResource(client,auth,String(body.file).replace(/^files\//,''),'file');
       if(store.status!=='active'||file.status!=='active')throw new AiApiError('resource_not_ready',422,'O arquivo e a coleção precisam estar prontos.');
       const prepared=await prepareExtendedContent(client,auth,operation,{contents:[{parts:[{fileData:{fileUri:`files/${file.id}`}}]}]});
-      return await dispatchResource(client,operation,'document',{store_id:store.id,size:prepared.units.input,display_name:record(file.metadata).display_name},
+      return await dispatchResource(client,operation,'document',{store_id:store.id,store_provider_name:store.provider_name,size:prepared.units.input,display_name:record(file.metadata).display_name,custom_metadata:body.custom_metadata},
         {indexing_input:prepared.units.input},`/v1beta/${store.provider_name}:importFile`,{fileName:file.provider_name,
           ...(body.custom_metadata?{customMetadata:body.custom_metadata}:{}),...(body.chunking_config?{chunkingConfig:body.chunking_config}:{})});
     }
@@ -240,10 +242,11 @@ export async function refreshAiResource(client:SupabaseClient,row:Row,remove=fal
     const result=await aiProviderRequest(client,path);
     let units:AiUnits={},output:Row={},status='completed',media:Row[]=[];
     if(row.kind==='batch') {
+      metadata.native_operation=result;
       const batch=record(record(result.metadata).batch??result.metadata??result), value=record(result.response??batch);
       const terminal=result.done===true||['BATCH_STATE_SUCCEEDED','BATCH_STATE_FAILED','BATCH_STATE_CANCELLED','BATCH_STATE_EXPIRED'].includes(String(batch.state??result.state));
-      if(!terminal)return publicAiResource(row);
-      const destination=record(value.output??value),items=rows(record(destination.inlinedResponses).inlinedResponses);
+      if(!terminal)return publicAiResource(await updateResource(client,row.id,{metadata}));
+      const destination=record(value.output??batch.output??value),items=rows(record(destination.inlinedResponses).inlinedResponses);
       const stats=record(batch.batchStats??value.batchStats);
       if(!items.length&&!(Number(stats.successfulRequestCount)===0&&Number(stats.pendingRequestCount??0)===0&&Number(stats.failedRequestCount)===Number(metadata.count)))throw new Error('Resultado do lote ainda não disponível para conferência.');
       if(items.length&&items.length!==Number(metadata.count))throw new Error('Resultado parcial do lote.');
@@ -255,7 +258,7 @@ export async function refreshAiResource(client:SupabaseClient,row:Row,remove=fal
         seen.add(index);
         if(item.response){
           const prices=Array.isArray(metadata.item_prices)?metadata.item_prices[index] as AiPriceCard:operation.prices;
-          const measured=operation.model.family==='embeddings'?measureAiEmbedding(item.response,prices):measureAiContent(item.response,prices);
+          const measured=operation.model.family==='embeddings'?measureAiEmbedding(item.response,prices,Array.isArray(metadata.item_counts)?record(metadata.item_counts[index]):undefined):measureAiContent(item.response,prices);
           units=addAiUnits(units,Object.fromEntries(Object.entries(measured).map(([meter,quantity])=>[`item${index}_${meter}`,quantity])));
           outputs.push({key:record(item.metadata).key??index,response:operation.model.family==='embeddings'?{object:'embedding',embedding:embeddingValues(item.response)}:publicContentResponse(item.response,operation.id,operation.model.id)});}
         else outputs.push({key:record(item.metadata).key??index,error:{code:'generation_failed',message:'Não foi possível gerar este item.'}});
@@ -268,9 +271,12 @@ export async function refreshAiResource(client:SupabaseClient,row:Row,remove=fal
       units={[String(metadata.meter)]:media.length*(metadata.extension?7:Number(metadata.seconds))};
       output={id:row.id,object:'video',videos:media.map((_,i)=>({url:`/api/v1/ai/videos/${row.id}/content?index=${i}`,mime_type:'video/mp4'}))};
     }else if(row.kind==='document') {
-      if(result.done!==true)return publicAiResource(row);
-      if(result.error){await failAiOperation(client,operation,new AiProviderFailure(400,false),true);return publicAiResource(await updateResource(client,row.id,{status:'failed'}));}
-      units={indexing_input:Number(metadata.size)};metadata.document_name=record(result.response).documentName;
+      metadata.native_operation=result;
+      if(result.done!==true)return publicAiResource(await updateResource(client,row.id,{metadata}));
+      if(result.error){await failAiOperation(client,operation,new AiProviderFailure(400,false),true);return publicAiResource(await updateResource(client,row.id,{status:'failed',metadata}));}
+      const documentName=record(result.response).documentName;
+      if(typeof documentName!=='string'||!/^fileSearchStores\/[A-Za-z0-9_-]+\/documents\/[A-Za-z0-9_-]+$/.test(documentName)||metadata.store_provider_name&&!documentName.startsWith(`${metadata.store_provider_name}/documents/`))throw new Error('Identidade do documento em conferência.');
+      units={indexing_input:Number(metadata.size)};metadata.document_name=documentName;
       output={id:row.id,object:'document',store:metadata.store_id,status:'active'};
     }else if(row.kind==='interaction') {
       if(!['completed','requires_action','failed','cancelled'].includes(String(result.status)))return publicAiResource(row);

@@ -13,7 +13,7 @@ class AiApiError extends Error{constructor(public code:string,public status:numb
 class AiProviderFailure extends Error{constructor(public status:number,public uncertain:boolean){super('provider failure');}}
 const pricing=serverModuleHarness<typeof import('../src/lib/ai-api/operation-pricing')>('src/lib/ai-api/operation-pricing.ts');
 const rate={id:'price',cost:.001,credits:.1};
-function fixture(kind:string,provider:Row,metadata:Row={}) {
+function fixture(kind:string,provider:Row,metadata:Row={},family='text') {
   const id='00000000-0000-4000-8000-000000000001';
   const row={id,request_id:id,project_id:'project',key_id:'key',organization_id:'org',model_id:'flash-3.5',kind,status:'processing',provider_name:'batches/internal',created_at:new Date(Date.now()-3600000).toISOString(),
     metadata:{prices:{input:rate,output:rate,cache_hour:rate},plan_code:'starter',execution_kind:kind,...metadata}};
@@ -21,10 +21,11 @@ function fixture(kind:string,provider:Row,metadata:Row={}) {
   const client={...db.client,rpc:async()=>({data:true,error:null})};
   const rpc=async(_client:unknown,name:string,body:Row)=>{if(name==='settle_ai_operation'){settlements.push(body);return {response:body.p_response};}return {};};
   const api=serverModuleHarness<typeof Resources>('src/lib/ai-api/resources.ts',{
-    './gateway':{record,AiApiError,rpc},'./model-catalog':{aiModelDefinition:()=>({id:'flash-3.5',family:'text'})},
+    './gateway':{record,AiApiError,rpc},'./model-catalog':{aiModelDefinition:()=>({id:'flash-3.5',family})},
     './provider-http':{AiProviderFailure,aiProviderRequest:async(_client:unknown,path:string)=>{http.push(path);return provider;}},
     './operation-ledger':{settleAiOperation:async(_client:unknown,_op:unknown,units:Row,result:Row)=>{settlements.push({units,result});return {...result,connectyhub:{credits:1}};}},
     './operation-pricing':pricing,'./content-metering':metering,'./interaction-metering':interactions,
+    './extended-embeddings':serverModuleHarness<typeof Embeddings>('src/lib/ai-api/extended-embeddings.ts',{'./content-metering':metering,'./gateway':{record}}),
   });
   return {api,client:client as never,db,row,settlements,http};
 }
@@ -43,6 +44,38 @@ describe('Resource completion and recovery',()=>{
   it('does not settle incomplete or duplicate batch entries',async()=>{
     const f=fixture('batch',{done:true,response:{inlinedResponses:{inlinedResponses:[{error:{}}]}}},{count:2});
     await expect(f.api.refreshAiResource(f.client,f.row)).rejects.toThrow('parcial');expect(f.settlements).toHaveLength(0);
+  });
+  it('reads native metadata.output and preserves it through settlement without a second debit',async()=>{
+    const response={usageMetadata:{promptTokenCount:10,candidatesTokenCount:2},candidates:[{content:{parts:[{text:'result',thoughtSignature:'opaque'}]}}]};
+    const provider={done:true,metadata:{state:'BATCH_STATE_SUCCEEDED',output:{inlinedResponses:{inlinedResponses:[{metadata:{index:'0'},response}]}}}};
+    const f=fixture('batch',provider,{count:1,item_prices:[{input:rate,output:rate}]});
+    await f.api.refreshAiResource(f.client,f.row);
+    expect(record(f.db.tables.ai_resources[0].metadata).native_operation).toEqual(provider);
+    await f.api.refreshAiResource(f.client,f.db.tables.ai_resources[0]);
+    expect(f.settlements).toHaveLength(1);expect(f.http).toHaveLength(1);
+  });
+  it('uses exact stored content counts for batch embeddings without usage metadata',async()=>{
+    const f=fixture('batch',{done:true,response:{inlinedResponses:{inlinedResponses:[{response:{embedding:{values:[.1,.2]}}}]}}},
+      {count:1,item_prices:[{input:rate}],item_counts:[{totalTokens:17}]},'embeddings');
+    await f.api.refreshAiResource(f.client,f.row);
+    expect(f.settlements[0].units).toEqual({item0_input:17,item0_output:0});
+  });
+  it('does not settle indexing with missing or foreign document identity',async()=>{
+    for(const documentName of [undefined,'fileSearchStores/other/documents/doc']) {
+      const f=fixture('document',{done:true,response:{documentName}},{store_provider_name:'fileSearchStores/owned',size:23});
+      await expect(f.api.refreshAiResource(f.client,f.row)).rejects.toThrow('Identidade do documento');
+      expect(f.settlements).toHaveLength(0);
+      expect(f.db.tables.ai_resources[0].status).toBe('processing');
+    }
+  });
+  it('settles confirmed indexing once and retains its native operation for polling',async()=>{
+    const provider={done:true,response:{documentName:'fileSearchStores/owned/documents/doc'}};
+    const f=fixture('document',provider,{store_provider_name:'fileSearchStores/owned',store_id:'owned',size:23});
+    await f.api.refreshAiResource(f.client,f.row);
+    expect(f.settlements[0].units).toEqual({indexing_input:23});
+    expect(record(f.db.tables.ai_resources[0].metadata).native_operation).toEqual(provider);
+    await f.api.refreshAiResource(f.client,f.db.tables.ai_resources[0]);
+    expect(f.settlements).toHaveLength(1);expect(f.http).toHaveLength(1);
   });
   it('can settle an entirely failed batch with zero confirmed generated items',async()=>{
     const f=fixture('batch',{done:true,metadata:{batchStats:{successfulRequestCount:'0',failedRequestCount:'2'},state:'BATCH_STATE_FAILED'}},{count:2});
