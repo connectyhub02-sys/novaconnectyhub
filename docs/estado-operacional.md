@@ -2,6 +2,11 @@
 
 Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
+
+## API LLM — infraestrutura de 14/09/2026
+
+Proteção financeira 0143 aplicada e conferida. Migrations 0144 (tickets descartáveis de upload) e 0145 (capacidade por carteira/global) publicadas às 05:06 UTC no Supabase da VPS: RPCs novas exclusivas do serviço, RLS ativo, trigger habilitado e proteção financeira preservada. Nenhum saldo/preço/pedido alterado e nenhuma geração ou cobrança real de teste. A implementação LLM permanece em desenvolvimento; esta publicação SQL não comprova paridade integral nem transporte completo em produção. [Evidências, limites e etapa de publicação](implementacao-api-llm-2026-09-14.md).
+
 ## Atendimento, links globais e busca — publicado em 13/09/2026
 
 Execução do plano retomada pelo titular, com Gustavo e Renata como prioridades. Migrações `0137`–`0139` aplicadas e verificadas no Supabase da VPS: contexto factual do item na reserva, avisos independentes por audiência, claim/versionamento final, recibos por operação de envio e busca indexada/paginada de catálogo/SKU. Hashes do SQL conferidos com os arquivos locais; permissões de execução restritas ao serviço e RLS ativo. A transação preservou os registros anteriores de reservas, ofertas, avisos e eventos, sem repetir eventos nem criar reservas. A função de reset permaneceu inalterada. Aplicativo publicado na master em `8a4d893` + `c4010b1`; Vercel `dpl_UTuojL48rHZGLvvcHEQsECVpYGgn` Ready / Latest / Production às 21:27:48 BRT, com domínio principal conferido. Home/login HTTP 200, endpoint de checkout inexistente HTTP 404 esperado. Suíte geral 2.581 testes e complementos aprovados, tipos/lint/build aprovados; sem teste real dos agentes. P1.2 e etapas seguintes continuam em desenvolvimento. [Escopo, inventário de emissores, validação e etapas pendentes](execucao-atendimento-32-perfis-2026-09-13.md).

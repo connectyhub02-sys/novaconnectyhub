@@ -1,0 +1,44 @@
+{
+  "audit_period_brt": ["2026-09-13", "2026-09-14"],
+  "local_commit": "2301a69311e006348e35052f5899425902ebd491",
+  "scope": "Read-only external AI API readiness audit; no production changes or paid requests",
+  "public_docs": {
+    "guide": {"url":"https://www.connectyhub.com.br/docs/api/ia/guide.md","status":200,"bytes":493388,"sha256":"ec53c911e61511ffee3529624222e32944a77c18863281e744953093bca776ad"},
+    "openapi": {"url":"https://www.connectyhub.com.br/docs/api/ia/openapi.json","status":200,"bytes":112089,"sha256":"d48ce3c44e5c686f7d0b768194d40809a0d731455ddd9a6f999bd22297def9f1","version":"1.5.0","paths":37,"operations":62}
+  },
+  "production_aggregate_observations": {
+    "projects":3,"active_keys":0,"revoked_keys":3,
+    "completed_requests":1,"failed_requests":2,
+    "latest_completed_utc":"2026-09-08T16:08:16.99399+00:00",
+    "latest_failed_utc":"2026-09-08T16:00:14.432959+00:00",
+    "completed_billing_mode":"internal_shadow",
+    "completed_provider_cost_estimate_brl":0.002475,
+    "completed_charged_credits":0,"completed_reserved_credits":0,
+    "failed_billing_mode":"customer_billable","failed_charge_credits":0,
+    "external_ai_credit_transactions":0,"ai_resources":0,
+    "credit_topup_policies":0,"credit_topup_runs":0,"active_vault_cards":0,
+    "active_operation_rates":168,"operation_plan_codes":[null],"nominal_cost_multiple_min":4,"nominal_cost_multiple_max":4
+  },
+  "critical_acl_observation": {
+    "source":"pg_proc, pg_namespace, pg_roles, has_function_privilege, has_schema_privilege; read-only SQL",
+    "functions":["claim_ai_request","reserve_ai_credits","finish_ai_request","settle_ai_operation","save_credit_topup_policy","claim_credit_topup","fulfill_confirmed_billing_payment"],
+    "all_security_definer":true,"all_owner":"postgres",
+    "all_acl":"{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "anon_execute":true,"authenticated_execute":true,"service_role_execute":true,
+    "anon_schema_usage":true,"authenticated_schema_usage":true,
+    "anon_superuser":false,"authenticated_superuser":false,
+    "anon_bypassrls":false,"authenticated_bypassrls":false,
+    "auth_uid_literal_found":false,"current_user_literal_found":false,
+    "financial_rpc_invoked":false,"http_exploitation_attempted":false,"acl_modified":false
+  },
+  "packs":[
+    {"price_brl":47,"credits":5000,"effective_multiple":3.76,"estimated_margin_pct":73.4042553191},
+    {"price_brl":97,"credits":12000,"effective_multiple":3.2333333333,"estimated_margin_pct":69.0721649485},
+    {"price_brl":197,"credits":30000,"effective_multiple":2.6266666667,"estimated_margin_pct":61.9289340102},
+    {"price_brl":397,"credits":75000,"effective_multiple":2.1173333333,"estimated_margin_pct":52.7707808564}
+  ],
+  "http_without_valid_key":{"models":401,"chat_completions":401,"generate_content":401,"embeddings":401,"files":401,"google_header_synthetic":401,"count_tokens":404,"live":503},
+  "tests":{"passed":135,"files":22,"real_paid_e2e":false,"groups":[{"passed":76,"files":16},{"passed":59,"files":6}]},
+  "limitations":["No active external key","No external billed success observed","No Google invoice reconciliation","No real automatic top-up or card enrollment","No full model-by-model live certification","Admin context is not a real client authorization test"],
+  "verdict":"NOT_READY_FOR_GENERAL_EXTERNAL_RELEASE"
+}

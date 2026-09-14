@@ -38,8 +38,11 @@ export const aiContextExample = {
 export const aiStreamExample = { ...aiChatExample, stream: true, stream_options: { include_usage: true } };
 const chunk = { id: aiResponseExample.id, object: "chat.completion.chunk", created: aiResponseExample.created, model: "connectyhub-auto" };
 export const aiSseExample = [
-  `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: aiResponseExample.choices[0].message.content }, finish_reason: null }] })}`,
+  `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }] })}`,
+  `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { content: "Uma API permite que sistemas " }, finish_reason: null }] })}`,
+  `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { content: "troquem informações por regras definidas." }, finish_reason: null }] })}`,
   `data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: "stop" }], connectyhub: aiResponseExample.connectyhub })}`,
+  `data: ${JSON.stringify({ ...chunk, choices: [], usage: {prompt_tokens: 14, completion_tokens: 18, total_tokens: 32} })}`,
   "data: [DONE]",
 ].join("\n\n") + "\n\n";
 export const aiRequestExample = {

@@ -1,4 +1,5 @@
 import { publicAiModelDefinitions } from "./public-models";
+import {geminiResponse,geminiContractVersion} from './gemini-contract';
 type Json = Record<string, unknown>;
 const object = (value: unknown): Json => value && typeof value === "object" && !Array.isArray(value) ? value as Json : {};
 export const publicAiModel = "connectyhub-auto";
@@ -32,6 +33,10 @@ export function publicAiRequest(value: unknown) {
 
 export function publicAiResult(value: unknown) {
   const raw=object(value);
+  if(raw.object==='content.response'&&raw.contract===geminiContractVersion){
+    const credits=object(raw.connectyhub);
+    return {id:raw.id,object:raw.object,model:raw.model,created:raw.created,contract:geminiContractVersion,...geminiResponse(raw),connectyhub:{request_id:credits.request_id,project_id:credits.project_id,credits:Number(credits.credits??0)}};
+  }
   if(['interaction','video','batch','document','cache','live.session'].includes(String(raw.object))) {
     const safe:Json={};for(const key of ['id','object','model','status','steps','videos','results','store'])if(raw[key]!==undefined)safe[key]=raw[key];
     const credits=object(raw.connectyhub);return {...safe,connectyhub:{request_id:credits.request_id,project_id:credits.project_id,credits:Number(credits.credits??0)}};
@@ -39,6 +44,7 @@ export function publicAiResult(value: unknown) {
   if(raw.object==="embedding.list") {
     const credits=object(raw.connectyhub);
     return {id:raw.id,object:"embedding.list",model:publicAiModelDefinitions.some(model=>model.id===raw.model)?raw.model:publicAiModel,
+      ...(raw.contract===geminiContractVersion?{contract:geminiContractVersion,usageMetadata:raw.usageMetadata,meteringBasis:raw.meteringBasis}:{}),
       data:(Array.isArray(raw.data)?raw.data:[]).map(item=>{const entry=object(item);return {object:"embedding",index:entry.index,embedding:entry.embedding};}),
       connectyhub:{request_id:credits.request_id,project_id:credits.project_id,credits:Number(credits.credits??0)}};
   }

@@ -1,6 +1,6 @@
 # Integração com a API de IA ConnectyHub
 
-Referência 1.5.0 · 10/09/2026
+Referência 1.6.0 · 14/09/2026
 
 - Página pública: https://www.connectyhub.com.br/docs/api#ia
 - OpenAPI JSON: https://www.connectyhub.com.br/docs/api/ia/openapi.json
@@ -42,6 +42,8 @@ Este guia descreve o contrato público implementado. Exemplos de consumo são il
 - [Pesquisa em arquivos](https://www.connectyhub.com.br/docs/api#ia-search-files)
 - [Agentes e ambientes](https://www.connectyhub.com.br/docs/api#ia-managed)
 - [Tempo real](https://www.connectyhub.com.br/docs/api#ia-live)
+- [Contrato Gemini](https://www.connectyhub.com.br/docs/api#ia-gemini-compatibility)
+- [Tarifas e limites](https://www.connectyhub.com.br/docs/api#ia-prices-limits)
 - [Qual integração usar](https://www.connectyhub.com.br/docs/api#ia-escolher-interface)
 - [Cobrança por recurso](https://www.connectyhub.com.br/docs/api#ia-creditos-detalhados)
 - [Webhooks de resultados](https://www.connectyhub.com.br/docs/api#ia-webhooks)
@@ -62,6 +64,9 @@ Este guia descreve o contrato público implementado. Exemplos de consumo são il
 - [Processar vários itens em lote](https://www.connectyhub.com.br/docs/api#ia-exemplo-lote)
 - [Criar um contexto reutilizável](https://www.connectyhub.com.br/docs/api#ia-exemplo-cache)
 - [Criar vetores para busca semântica](https://www.connectyhub.com.br/docs/api#ia-exemplo-vetores)
+- [/prices](https://www.connectyhub.com.br/docs/api#ia-http-get-prices)
+- [/models/{model}:countTokens](https://www.connectyhub.com.br/docs/api#ia-http-post-models-modelcounttokens)
+- [/files/uploads](https://www.connectyhub.com.br/docs/api#ia-http-post-files-uploads)
 - [/webhooks](https://www.connectyhub.com.br/docs/api#ia-http-post-webhooks)
 - [/webhooks](https://www.connectyhub.com.br/docs/api#ia-http-get-webhooks)
 - [/webhooks/{id}](https://www.connectyhub.com.br/docs/api#ia-http-get-webhooks-id)
@@ -220,7 +225,7 @@ A disponibilidade abaixo corresponde à API pública. Recursos do painel e dos a
 | Análise de imagens | Envie PNG, JPEG ou WebP inline em image_url. A resposta é textual. |
 | Respostas baseadas em seus dados | Busque os dados no seu sistema e inclua os trechos relevantes na mensagem. |
 | Variação da resposta | Ajuste temperature quando precisar; o preenchimento é opcional. |
-| Entrega por eventos SSE | Use streamGenerateContent para partes incrementais; Chat Completions com stream=true entrega após concluir. |
+| Entrega por eventos SSE | Use streamGenerateContent para partes incrementais; Chat Completions com stream=true entrega partes incrementais. |
 | Recuperação de operações | Use Idempotency-Key e GET /requests/{request_id}. |
 | Acompanhamento de consumo | Leia os créditos na resposta e acompanhe os gráficos no painel. |
 
@@ -434,7 +439,7 @@ curl 'https://www.connectyhub.com.br/api/v1/ai/chat/completions' \
 | messages | Lista obrigatória | De 1 a 100 mensagens; inclua pelo menos uma user. Envie somente o histórico necessário. |
 | model | Texto opcional | O ID do modelo escolhido; a omissão usa o modelo da chave. |
 | temperature | Número opcional; padrão 0.7 | De 0 a 2. Menor favorece consistência, maior amplia variação; não garante respostas idênticas. |
-| stream | Booleano opcional; padrão false | true solicita entrega SSE após concluir a geração. |
+| stream | Booleano opcional; padrão false | true solicita entrega SSE incremental; créditos são confirmados ao final. |
 | stream_options | Objeto opcional | Aceita include_usage booleano somente com stream=true. Os créditos continuam no evento final independentemente dessa opção. |
 
 ### Formato das mensagens
@@ -501,7 +506,7 @@ Uma resposta parcial requer tratamento pela aplicação. Examine finish_reason a
 
 | HTTP | Descrição |
 | --- | --- |
-| 200 | Resposta concluída ou recuperada. stream=true entrega SSE após a conclusão, com créditos no evento final e data: [DONE]. |
+| 200 | Resposta concluída ou recuperada. stream=true entrega SSE incremental durante a geração, com créditos no evento final e data: [DONE]. |
 | 400 | JSON inválido |
 | 401 | Confira a chave do projeto |
 | 402 | Confira o saldo disponível e o acesso da conta |
@@ -816,7 +821,7 @@ Mantenha a chave e os registros de recuperação no servidor. Use uma nova ident
 
 ## Receber a resposta como eventos
 
-stream=true muda o formato da entrega. O processamento é concluído antes de os eventos serem enviados.
+stream=true entrega partes durante a geração. Os créditos são confirmados no encerramento.
 
 ### Corpo da requisição
 
@@ -840,9 +845,15 @@ Use POST /chat/completions com os mesmos cabeçalhos de autenticação e idempot
 ### Sequência real do protocolo · valores ilustrativos
 
 ```text
-data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[{"index":0,"delta":{"role":"assistant","content":"Uma API permite que sistemas troquem informações por regras definidas."},"finish_reason":null}]}
+data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[{"index":0,"delta":{"content":"Uma API permite que sistemas "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[{"index":0,"delta":{"content":"troquem informações por regras definidas."},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"connectyhub":{"request_id":"00000000-0000-4000-8000-000000000001","credits":1,"project_id":"00000000-0000-4000-8000-000000000002"}}
+
+data: {"id":"chatcmpl-00000000-0000-4000-8000-000000000001","object":"chat.completion.chunk","created":1788883732,"model":"connectyhub-auto","choices":[],"usage":{"prompt_tokens":14,"completion_tokens":18,"total_tokens":32}}
 
 data: [DONE]
 
@@ -853,13 +864,14 @@ data: [DONE]
 
 | Ordem | Conteúdo | Ação do cliente |
 | --- | --- | --- |
-| 1 | choices[0].delta.role e delta.content | Leia o texto completo. |
-| 2 | delta vazio, finish_reason e connectyhub | Confira a conclusão e os créditos; guarde request_id. |
-| 3 | data: [DONE] | Finalize a leitura. |
+| 1..N | choices[0].delta.role, delta.content ou delta.tool_calls | Acumule as partes na ordem recebida. |
+| Final | delta vazio, finish_reason e connectyhub | Confira a conclusão e os créditos; guarde request_id. |
+| Opcional | choices vazio e usage | Presente quando stream_options.include_usage=true. |
+| Término | data: [DONE] | Finalize a leitura. |
 
 ### Escolha do protocolo
 
-Chat Completions mantém a entrega SSE após concluir. Para geração incremental, use /models/{model}:streamGenerateContent. Para áudio bidirecional, use /live com um modelo compatível. Na geração incremental, o evento content.completed informa os créditos antes de data: [DONE].
+Chat Completions e /models/{model}:streamGenerateContent entregam geração incremental. A base /api/v1beta tem o formato Gemini, sem [DONE]. Para áudio bidirecional, use /live quando habilitado. Uma reconexão idempotente pode entregar a resposta já concluída em um único trecho; não repete a geração.
 
 Implemente um leitor SSE que mantenha o buffer entre leituras: um bloco HTTP pode conter vários eventos ou apenas parte de um evento. Separe os eventos pela linha em branco e só faça JSON.parse no conteúdo de data quando ele não for [DONE]. Para ferramentas de terminal, curl -N permite visualizar os eventos.
 
@@ -1085,7 +1097,7 @@ Na geração, error contém code e message; request_id e X-Request-Id aparecem q
 
 | HTTP | Descrição |
 | --- | --- |
-| 200 | Resposta concluída ou recuperada. stream=true entrega SSE após a conclusão, com créditos no evento final e data: [DONE]. |
+| 200 | Resposta concluída ou recuperada. stream=true entrega SSE incremental durante a geração, com créditos no evento final e data: [DONE]. |
 | 400 | JSON inválido |
 | 401 | Confira a chave do projeto |
 | 402 | Confira o saldo disponível e o acesso da conta |
@@ -1314,11 +1326,11 @@ https://www.connectyhub.com.br/api/v1/ai/models/flash-3.5:generateContent
 
 Leia candidates[].content.parts: text é texto; functionCall é uma solicitação de função; executableCode e codeExecutionResult mostram código e resultado. Preserve thoughtSignature ao reenviar uma chamada. A cobrança aparece somente em connectyhub.credits.
 
-Análise de áudio aceita WAV, MP3, MP4, AAC, OGG e FLAC. Vídeo aceita MP4, WebM e QuickTime. Imagens aceitam PNG, JPEG e WebP; documentos aceitam PDF ou texto simples. Use inlineData com mimeType e data base64 ou um arquivo do projeto. O JSON completo pode ter até 20 MB.
+Análise de áudio aceita WAV, MP3, MP4, AAC, OGG e FLAC. Vídeo aceita MP4, WebM e QuickTime. Imagens aceitam PNG, JPEG e WebP; documentos aceitam PDF ou texto simples. Use inlineData com mimeType e data base64 ou um arquivo do projeto. O JSON completo tem limite de 4 MB. Arquivos maiores exigem o transporte direto quando habilitado.
 
 ### Entrega em eventos
 
-POST /models/{model}:streamGenerateContent entrega partes incrementais por SSE, seguidas de content.completed com os créditos confirmados e [DONE]. Partes recebidas antes da conclusão são provisórias. Chat Completions com stream=true mantém a entrega após concluir.
+POST /models/{model}:streamGenerateContent entrega partes incrementais por SSE, seguidas de content.completed com os créditos confirmados e [DONE]. Partes recebidas antes da conclusão são provisórias. Chat Completions com stream=true também entrega partes incrementais.
 
 ---
 
@@ -1340,7 +1352,7 @@ Arquivos pertencem ao projeto; uma chave de outro projeto não pode consultá-lo
 
 ### Analisar um arquivo
 
-1. Envie data em base64 puro, mime_type e display_name. O arquivo pode ter até 20 MB.
+1. Para arquivos pequenos, envie data em base64 puro, mime_type e display_name, respeitando o limite de 4 MB do JSON. Arquivos de até 20 MB dependem do relay; consulte a seção Tarifas e limites.
 2. Guarde id e name da resposta. Consulte GET /files/{id} até status=active; processing ainda não está pronto.
 3. Envie name em fileData.fileUri junto com sua pergunta para generateContent.
 4. Observe expires_at; arquivos expirados precisam ser enviados novamente. Exclua com DELETE /files/{id} quando terminar.
@@ -1442,7 +1454,7 @@ Use o arquivo JSON para consultar tipos, exemplos e respostas HTTP ou importar a
 
 ### Versão da referência
 
-OpenAPI 1.5.0: geração multimodal, Interações, recursos persistentes e tempo real com consumo em créditos. Confira a ativação operacional no catálogo antes de integrar.
+OpenAPI 1.6.0: geração multimodal, Interações, recursos persistentes e tempo real com consumo em créditos. Confira a ativação operacional no catálogo antes de integrar.
 
 Para compartilhar com outra equipe ou assistente de programação, baixe também o Guia de integração em Markdown. O guia e as páginas usam a mesma fonte de conteúdo.
 
@@ -1821,6 +1833,81 @@ Para música em tempo real, use uma chave compatível e envie clientContent, mus
 
 ---
 
+## Contrato Gemini versionado
+
+Base alternativa /api/v1beta, versão gemini-v1beta-2026-09-14. O contrato /api/v1/ai continua disponível.
+
+Use a chave ConnectyHub em Authorization: Bearer ou x-goog-api-key nesta base. Nunca envie uma chave Google. O modelo público é vinculado à chave. A resposta preserva usageMetadata, safetyRatings, citationMetadata, groundingMetadata, logprobs e thoughtSignature quando retornados pelo modelo, além de connectyhub com os créditos. Crédito não é token: entrada, saída, raciocínio e ferramentas podem ter tarifas diferentes.
+
+### Compatibilidade por operação
+
+| Operação | Contrato entregue | Limite ou dependência |
+| --- | --- | --- |
+| models.list / models.get | GET /api/v1beta/models e /models/{model} | Catálogo autorizado, paginação pageSize/pageToken. Disponibilidade configurada não substitui teste do provedor. |
+| generateContent / streamGenerateContent | POST /api/v1beta/models/{model}:generateContent e :streamGenerateContent | Texto, mídia, funções e metadados conforme o modelo. SSE Gemini sem [DONE]. |
+| countTokens | POST /api/v1beta/models/{model}:countTokens | contents ou generateContentRequest; não reserva nem debita créditos. Consome limite de requisições. |
+| embedContent / batchEmbedContents | POST /api/v1beta/models/{model}:embedContent e :batchEmbedContents | 1 a 100 itens; autoTruncate=false. Quando não há usageMetadata, usa countTokens do mesmo conteúdo, identificado como provider_countTokens. |
+| files.list/get/delete; caches.create/list/get/update/delete | GET/DELETE /api/v1beta/files/{id}; /api/v1beta/cachedContents | Identificadores isolados por projeto. Cache aceita renovação de expiração; upload continua pelo transporte ConnectyHub. |
+| Lotes e Interações | Contrato ConnectyHub /api/v1/ai/batches e /interactions | Não são substituição transparente de todos os métodos do SDK Gemini. |
+| Live / música em tempo real | POST /api/v1/ai/live e WebSocket próprio | Exige implantação do relay e habilitação operacional. Retorna 503 enquanto indisponível. Não é o transporte Live do SDK Google. |
+| Grounding Search/Maps | Condicionado à autorização contratual aplicável | Não presuma que a disponibilidade técnica autorize redistribuir resultados em uma API revendida. |
+| Outros tiers e métodos não listados | Não anunciados como equivalência completa | PRIORITY/FLEX sem tarifa publicada são rejeitados; recursos do fornecedor ainda não homologados permanecem pendentes. |
+
+### JavaScript · geração com o SDK Google
+
+```javascript
+import {GoogleGenAI} from '@google/genai';
+const ai = new GoogleGenAI({
+  apiKey: process.env.CONNECTYHUB_AI_API_KEY,
+  httpOptions: {baseUrl:'https://www.connectyhub.com.br/api',apiVersion:'v1beta',
+    headers:{'Idempotency-Key':'pedido-123-gemini-1'}},
+});
+const response = await ai.models.generateContent({model:'flash-3.5',contents:'Resuma o pedido.'});
+console.log(response.text, response.usageMetadata);
+// Preserve a mesma identidade e corpo ao recuperar esta operação.
+// Para outra operação, crie outra identidade; não reutilize esta globalmente.
+```
+
+### Contagem sem geração
+
+```bash
+curl 'https://www.connectyhub.com.br/api/v1beta/models/flash-3.5:countTokens' \
+  -H "Authorization: Bearer $CONNECTYHUB_AI_API_KEY" -H 'Content-Type: application/json' \
+  --data '{"contents":[{"role":"user","parts":[{"text":"Olá"}]}]}'
+```
+
+### Contexto e segurança
+
+Devolva thoughtSignature e resultados de função sem modificá-los. Isso não concede autorização para executar ferramentas: valide os argumentos no seu sistema. Arquivos e caches aceitam apenas identidades do próprio projeto. serviceTier STANDARD mantém a tarifa vigente; candidateCount de 1 a 8 depende do modelo e multiplica a reserva máxima de saída.
+
+OpenAPI separado do contrato Gemini: https://www.connectyhub.com.br/docs/api/ia/gemini-openapi.json. A referência oficial do fornecedor é https://ai.google.dev/api; restrições de Grounding: https://ai.google.dev/gemini-api/terms. O suporte documentado acima é o contrato ConnectyHub, não uma declaração de paridade total ou de homologação de todos os modelos.
+
+---
+
+## Consultar tarifas e controlar consumo
+
+GET /api/v1/ai/prices retorna tarifas vigentes em créditos, com versão verificável.
+
+Sem chave, /prices mostra a tabela base. Com chave ativa, aplica o plano da carteira responsável. Use ?model=flash-3.5 para filtrar. Cada item contém rates com meter, unit, credits_per_unit e version. A versão muda quando a tarifa pública muda. Os valores não são custo Google nem conversão de dólar; o valor efetivo de cada crédito depende do pacote ou plano contratado. Os preços comerciais existentes foram preservados.
+
+A operação reserva um orçamento antes do envio. Na liquidação, usa consumo confirmado e as tarifas registradas naquela operação; libera a diferença ou mantém a operação em conferência se não puder conciliá-la. O mínimo e o arredondamento são informados pela tabela. Recarga automática exige política e cartão autorizados, com pacote, limiar e teto próprios; consultar preços não autoriza recarga.
+
+### Limites operacionais iniciais
+
+| Escopo | Controle | Como reagir |
+| --- | --- | --- |
+| Carteira responsável | 30 requisições/minuto e 4 operações simultâneas, compartilhadas pelos projetos | 429 com Retry-After. Não crie várias chaves para contornar a capacidade. |
+| Gateway | 120 requisições/minuto e 16 operações simultâneas | Limites de proteção ajustáveis pela operação; não representam a quota garantida do Google. |
+| Corpo JSON | 2 MB no Chat; até 4 MB nas demais rotas HTTP | Base64 aumenta o tamanho. Use transporte direto de arquivo quando estiver habilitado. |
+| Arquivos grandes | Até 20.000.000 bytes pelo relay privado | /files/uploads exige transporte habilitado e retorna 503 quando indisponível. Não envie 20 MB em JSON para a Vercel. |
+| Live | 16 conexões no processo, até 15 minutos por conexão | Consulte disponibilidade; use novo ticket para nova sessão. |
+
+### Repetição e falhas
+
+Após 429, aguarde Retry-After e aplique espera progressiva com variação. Preserve corpo e Idempotency-Key. Se existe request_id, consulte /requests/{id}: processing/uncertain não autoriza uma nova geração equivalente. Uma queda do cliente não cancela a contabilização. Erro dentro de SSE pode ocorrer após HTTP 200; o término do socket sozinho não comprova liquidação.
+
+---
+
 ## Escolha o caminho para sua aplicação
 
 Comece pela tarefa. A chave define o modelo; cada interface tem um formato próprio.
@@ -1829,7 +1916,7 @@ Comece pela tarefa. A chave define o modelo; cada interface tem um formato próp
 
 | Necessidade | Operação | Resultado |
 | --- | --- | --- |
-| Conversa simples ou cliente com messages | POST /chat/completions | choices[0].message; stream entrega após concluir. |
+| Conversa simples ou cliente com messages | POST /chat/completions | choices[0].message; stream entrega partes incrementais. |
 | Controle multimodal e geração incremental | POST /models/{model}:generateContent ou :streamGenerateContent | candidates[].content.parts; SSE incremental na segunda rota. |
 | Ferramentas, pesquisa e continuação gerenciada | POST /interactions | Recurso consultável; resultado em result.steps. |
 | Vídeo assíncrono | POST /videos | Acompanhe até concluir e baixe com autenticação. |
@@ -3674,6 +3761,184 @@ Uma geração concluída informa o consumo em connectyhub.credits; recursos ass�
 
 ---
 
+## Consultar tarifas vigentes em créditos
+
+Sem chave retorna tabela base; com chave, plano da carteira. Não altera saldo, plano ou autorização de recarga.
+
+**GET /prices**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| model | query | Não |  {"type":"string"} |
+
+HTTP 200: Tarifas públicas sem custo privado do provedor
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| object | string | Não | Valor: "price.list" |
+| as_of | string | Não | format: date-time |
+| scope | valor JSON | Não | Aceita: base_rates, billing_plan |
+| data | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].model | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].version | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].minimum_credits_per_operation | number | Não | Consulte o tipo e os campos relacionados. |
+| data[].rounding | string | Não | Valor: "ceil_6_decimals" |
+| data[].currency | string | Não | Valor: "ConnectyHub credits" |
+| data[].rates | array | Não | Consulte o tipo e os campos relacionados. |
+| data[].rates[].meter | string | Não | Consulte o tipo e os campos relacionados. |
+| data[].rates[].unit | valor JSON | Não | Aceita: token, token_hour, second, call, song |
+| data[].rates[].credits_per_unit | number | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 401: Confira o código de erro e o estado da operação
+
+HTTP 404: Confira o código de erro e o estado da operação
+
+HTTP 429: Confira o código de erro e o estado da operação
+
+HTTP 503: Confira o código de erro e o estado da operação
+
+### Cobrança e recuperação
+
+Consultar configuração, estado ou resultado não inicia outra geração. Use a chave do mesmo projeto.
+
+---
+
+## Contar conteúdo sem gerar resposta
+
+Referência dos campos públicos desta operação.
+
+**POST /models/{model}:countTokens**
+
+### Cabeçalhos e parâmetros
+
+| Nome | Local | Obrigatório | Uso |
+| --- | --- | --- | --- |
+| model | path | Sim |  {"type":"string"} |
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| alternativa1.contents | array | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest | ContentRequest | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.model | string | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.store | boolean | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.serviceTier | valor JSON | Não | Aceita: STANDARD, SERVICE_TIER_UNSPECIFIED |
+| alternativa2.generateContentRequest.contents | array | Sim | minItems: 1 |
+| alternativa2.generateContentRequest.contents[].role | valor JSON | Não | Aceita: user, model · Padrão: "user" |
+| alternativa2.generateContentRequest.contents[].parts | array | Sim | minItems: 1 |
+| alternativa2.generateContentRequest.systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.systemInstruction.parts[].text | string | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. De 1 a 8 alternativas conforme suporte do modelo. Saída textual ou mídia conforme o modelo. |
+| alternativa2.generateContentRequest.generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.candidateCount | integer | Não | minimum: 1 · maximum: 8 |
+| alternativa2.generateContentRequest.generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
+| alternativa2.generateContentRequest.generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
+| alternativa2.generateContentRequest.generationConfig.responseSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.responseJsonSchema | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.responseModalities | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig | SpeechConfig | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig.languageCode | string | Não | Idioma da fala, conforme suporte. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig.voiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig.multiSpeakerVoiceConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.imageConfig | ImageConfig | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.imageConfig.aspectRatio | valor JSON | Não | Aceita: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9 |
+| alternativa2.generateContentRequest.generationConfig.imageConfig.imageSize | valor JSON | Não | Resoluções aceitas variam por modelo e têm consumo diferente. · Aceita: 512, 1K, 2K, 4K |
+| alternativa2.generateContentRequest.generationConfig.thinkingConfig | ThinkingConfig | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.thinkingConfig.thinkingLevel | valor JSON | Não | Esforço de raciocínio conforme suporte do modelo. · Aceita: MINIMAL, LOW, MEDIUM, HIGH |
+| alternativa2.generateContentRequest.generationConfig.thinkingConfig.includeThoughts | boolean | Não | O contrato público não entrega raciocínio interno; use o resultado e as justificativas da resposta. |
+| alternativa2.generateContentRequest.generationConfig.mediaResolution | string | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.seed | integer | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.presencePenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.generationConfig.frequencyPenalty | number | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa1.functionDeclarations | array | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa2.codeExecution | object | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa3.urlContext | object | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa4.webSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa5.computerUse | object | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.tools[].alternativa6.fileSearch | object | Sim | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.cachedContent | string | Não | Nome caches/ID deste projeto. |
+| alternativa2.generateContentRequest.toolConfig | object | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.safetySettings | array | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.safetySettings[].category | string | Não | Consulte o tipo e os campos relacionados. |
+| alternativa2.generateContentRequest.safetySettings[].threshold | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 200: Contagem medida pelo provedor, sem reserva/débito
+
+### Resposta 200 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| totalTokens | integer | Não | Consulte o tipo e os campos relacionados. |
+| cachedContentTokenCount | integer | Não | Consulte o tipo e os campos relacionados. |
+| promptTokensDetails | array | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 401: Confira o código de erro e o estado da operação
+
+HTTP 422: Confira o código de erro e o estado da operação
+
+HTTP 429: Confira o código de erro e o estado da operação
+
+HTTP 503: Confira o código de erro e o estado da operação
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
+## Preparar transporte direto de até 20 MB
+
+Requer relay habilitado; retorna 503 quando indisponível. Envie os bytes por PUT na URL devolvida, com Authorization: Bearer access_key e Content-Type. O ticket não é a chave Google nem a chave permanente da API.
+
+**POST /files/uploads**
+
+### Corpo · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| size_bytes | integer | Sim | minimum: 1 · maximum: 20000000 |
+| mime_type | string | Sim | Consulte o tipo e os campos relacionados. |
+| display_name | string | Não | Consulte o tipo e os campos relacionados. |
+
+HTTP 201: Ticket de uso único, válido por dois minutos
+
+### Resposta 201 · application/json
+
+| Campo | Tipo | Obrigatório no objeto | Descrição |
+| --- | --- | --- | --- |
+| id | string | Não | Consulte o tipo e os campos relacionados. |
+| upload_url | string | Não | Consulte o tipo e os campos relacionados. |
+| access_key | string | Não | Consulte o tipo e os campos relacionados. |
+| method | string | Não | Valor: "PUT" |
+| expires_at | string | Não | Consulte o tipo e os campos relacionados. |
+| max_size_bytes | number | Não | Valor: 20000000 |
+
+HTTP 401: Confira o código de erro e o estado da operação
+
+HTTP 422: Confira o código de erro e o estado da operação
+
+HTTP 429: Confira o código de erro e o estado da operação
+
+HTTP 503: Confira o código de erro e o estado da operação
+
+### Cobrança e recuperação
+
+Gerações, ferramentas, indexação e armazenamento faturável usam créditos. Configurar ou pausar uma integração não é uma geração. Preserve a identidade de cada execução; consulte seu estado após uma falha de conexão.
+
+---
+
 ## Cadastrar webhook
 
 Notifica alterações futuras das solicitações do projeto. Não executa IA. A chave de assinatura é exibida somente na criação.
@@ -4574,6 +4839,13 @@ Recurso isolado por projeto. As execuções reservam créditos antes do envio e 
 | contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thought | boolean | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.language | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.code | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.outcome | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.output | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
 | contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
@@ -5045,14 +5317,17 @@ Recurso isolado por projeto. As execuções reservam créditos antes do envio e 
 | requests | array | Sim | minItems: 1 · maxItems: 100 |
 | requests[].key | string | Não | Consulte o tipo e os campos relacionados. |
 | requests[].request | ContentRequest ou EmbeddingRequest | Sim | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.model | string | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.store | boolean | Não | Consulte o tipo e os campos relacionados. |
+| requests[].request.alternativa1.serviceTier | valor JSON | Não | Aceita: STANDARD, SERVICE_TIER_UNSPECIFIED |
 | requests[].request.alternativa1.contents | array | Sim | minItems: 1 |
 | requests[].request.alternativa1.systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
 | requests[].request.alternativa1.systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
-| requests[].request.alternativa1.generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| requests[].request.alternativa1.generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. De 1 a 8 alternativas conforme suporte do modelo. Saída textual ou mídia conforme o modelo. |
 | requests[].request.alternativa1.generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
 | requests[].request.alternativa1.generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
 | requests[].request.alternativa1.generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
-| requests[].request.alternativa1.generationConfig.candidateCount | number | Não | Valor: 1 |
+| requests[].request.alternativa1.generationConfig.candidateCount | integer | Não | minimum: 1 · maximum: 8 |
 | requests[].request.alternativa1.generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
 | requests[].request.alternativa1.generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
 | requests[].request.alternativa1.generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
@@ -8092,7 +8367,7 @@ Consultar configuração, estado ou resultado não inicia outra geração. Use a
 
 ## Gerar conteúdo multimodal
 
-Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
+Modelo da URL deve ser o vinculado à chave. JSON completo de até 4 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
 
 **POST /models/{model}:generateContent**
 
@@ -8107,6 +8382,9 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 
 | Campo | Tipo | Obrigatório no objeto | Descrição |
 | --- | --- | --- | --- |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| store | boolean | Não | Consulte o tipo e os campos relacionados. |
+| serviceTier | valor JSON | Não | Aceita: STANDARD, SERVICE_TIER_UNSPECIFIED |
 | contents | array | Sim | minItems: 1 |
 | contents[].role | valor JSON | Não | Aceita: user, model · Padrão: "user" |
 | contents[].parts | array | Sim | minItems: 1 |
@@ -8124,6 +8402,13 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 | contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thought | boolean | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.language | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.code | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.outcome | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.output | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
 | contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
@@ -8132,11 +8417,11 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 | systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
 | systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
 | systemInstruction.parts[].text | string | Sim | Consulte o tipo e os campos relacionados. |
-| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. De 1 a 8 alternativas conforme suporte do modelo. Saída textual ou mídia conforme o modelo. |
 | generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
-| generationConfig.candidateCount | number | Não | Valor: 1 |
+| generationConfig.candidateCount | integer | Não | minimum: 1 · maximum: 8 |
 | generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
 | generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
@@ -8274,7 +8559,7 @@ Gerações, ferramentas, indexação e armazenamento faturável usam créditos. 
 
 ## Receber conteúdo em SSE
 
-Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
+Modelo da URL deve ser o vinculado à chave. JSON completo de até 4 MB. Texto, funções, imagens e voz conforme o modelo da chave. SSE entrega partes durante a geração, seguido da confirmação dos créditos.
 
 **POST /models/{model}:streamGenerateContent**
 
@@ -8289,6 +8574,9 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 
 | Campo | Tipo | Obrigatório no objeto | Descrição |
 | --- | --- | --- | --- |
+| model | string | Não | Consulte o tipo e os campos relacionados. |
+| store | boolean | Não | Consulte o tipo e os campos relacionados. |
+| serviceTier | valor JSON | Não | Aceita: STANDARD, SERVICE_TIER_UNSPECIFIED |
 | contents | array | Sim | minItems: 1 |
 | contents[].role | valor JSON | Não | Aceita: user, model · Padrão: "user" |
 | contents[].parts | array | Sim | minItems: 1 |
@@ -8306,6 +8594,13 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 | contents[].parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].thought | boolean | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.language | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].executableCode.code | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult | object | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.outcome | string | Não | Consulte o tipo e os campos relacionados. |
+| contents[].parts[].codeExecutionResult.output | string | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
 | contents[].parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
 | contents[].parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
@@ -8314,11 +8609,11 @@ Modelo da URL deve ser o vinculado à chave. JSON completo de até 20 MB. Texto,
 | systemInstruction | object | Não | Consulte o tipo e os campos relacionados. |
 | systemInstruction.parts | array | Não | Consulte o tipo e os campos relacionados. |
 | systemInstruction.parts[].text | string | Sim | Consulte o tipo e os campos relacionados. |
-| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. Uma alternativa por solicitação. Saída textual ou mídia conforme o modelo. |
+| generationConfig | object | Não | Configurações opcionais, aceitas conforme o modelo. De 1 a 8 alternativas conforme suporte do modelo. Saída textual ou mídia conforme o modelo. |
 | generationConfig.temperature | number | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.topP | number | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.topK | integer | Não | Consulte o tipo e os campos relacionados. |
-| generationConfig.candidateCount | number | Não | Valor: 1 |
+| generationConfig.candidateCount | integer | Não | minimum: 1 · maximum: 8 |
 | generationConfig.maxOutputTokens | integer | Não | Capacidade da resposta; configuração automática quando omitida. · minimum: 1 · maximum: 65536 |
 | generationConfig.stopSequences | array | Não | Consulte o tipo e os campos relacionados. |
 | generationConfig.responseMimeType | valor JSON | Não | Aceita: text/plain, application/json |
@@ -8451,6 +8746,13 @@ Use uma chave vinculada a um modelo Embedding. Texto único, lista com até 100 
 | content.parts[].functionResponse.name | string | Sim | Consulte o tipo e os campos relacionados. |
 | content.parts[].functionResponse.id | string | Não | Consulte o tipo e os campos relacionados. |
 | content.parts[].functionResponse.response | object | Sim | Consulte o tipo e os campos relacionados. |
+| content.parts[].thought | boolean | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].executableCode | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].executableCode.language | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].executableCode.code | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].codeExecutionResult | object | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].codeExecutionResult.outcome | string | Não | Consulte o tipo e os campos relacionados. |
+| content.parts[].codeExecutionResult.output | string | Não | Consulte o tipo e os campos relacionados. |
 | content.parts[].thoughtSignature | string | Não | Contexto opaco; preserve ao reenviar uma chamada de função. |
 | content.parts[].videoMetadata | object | Não | Consulte o tipo e os campos relacionados. |
 | content.parts[].videoMetadata.startOffset | string | Não | Consulte o tipo e os campos relacionados. |
@@ -8519,7 +8821,7 @@ Gerações, ferramentas, indexação e armazenamento faturável usam créditos. 
 
 ## Enviar arquivo do projeto
 
-Arquivo de até 20 MB em base64 puro (sem prefixo data:); JSON de até 28 MB. O arquivo precisa estar active antes do uso. Upload não gera conteúdo nem debita créditos; a análise é uma chamada cobrada. Cada envio cria um arquivo distinto.
+Upload JSON para arquivos pequenos: corpo de até 4 MB, incluindo base64 e metadados. Arquivos de até 20 MB exigem o relay direto; não cabem no transporte da Vercel. O arquivo precisa estar active antes do uso. Upload não gera conteúdo nem debita créditos; a análise é uma chamada cobrada. Cada envio cria um arquivo distinto.
 
 **POST /files**
 
@@ -8832,7 +9134,7 @@ Envie texto, histórico ou imagens PNG/JPEG/WebP inline e receba uma resposta te
 | stream_options | object | Não | Compatibilidade com clientes SSE. Use somente com stream=true. Os créditos são sempre informados no evento final, independentemente de include_usage. |
 | stream_options.include_usage | boolean | Não | Consulte o tipo e os campos relacionados. |
 
-HTTP 200: Resposta concluída ou recuperada. stream=true entrega SSE após a conclusão, com créditos no evento final e data: [DONE].
+HTTP 200: Resposta concluída ou recuperada. stream=true entrega SSE incremental durante a geração, com créditos no evento final e data: [DONE].
 
 ### Resposta 200 · application/json
 

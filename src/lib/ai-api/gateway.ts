@@ -14,6 +14,7 @@ import { AiInputError, parseAdvancedAiOptions, parseAiMessages } from "./advance
 import { aiModelDefinition, publicModelId } from "./model-catalog";
 import { publicAiResult } from "./public-response";
 import { implementedAiCapabilities, releaseAiModelIds } from "./capabilities";
+import {collectGeminiStream,chatStreamDeltas} from './provider-stream';
 
 type Json = Record<string, unknown>;
 export class AiApiError extends Error {
@@ -31,7 +32,9 @@ export async function authenticateAi(request: Request, client = createServiceCli
   if (!secret) throw new AiApiError("invalid_api_key", 401, "Informe uma chave de API de IA ConnectyHub válida.");
   const { data: key, error } = await client.from("ai_api_keys").select("id,project_id,status,model_id").eq("key_hash", hashAiSecret(secret)).maybeSingle();
   if (error) throw new AiApiError("service_unavailable", 503, "Não foi possível verificar a chave.");
-  return authorizeAiKey(client, key);
+  const auth=await authorizeAiKey(client, key);
+  await rpc(client,'admit_ai_gateway_request',{p_org:auth.billingOrganizationId});
+  return auth;
 }
 
 // Server-only entry point for a persisted schedule. The worker reloads the key;
@@ -92,7 +95,8 @@ export async function listAiModels(client = createServiceClient()) {
   return { defaultModel, models };
 }
 
-export async function completeAi(request: Request, raw: unknown, client: SupabaseClient = createServiceClient(), format: "chat" | "native" | "embedding" = "chat") {
+export type ChatStreamHooks={ready:(info:{requestId:string;replayed:boolean})=>void;chunk:(chunk:Json)=>void};
+export async function completeAi(request: Request, raw: unknown, client: SupabaseClient = createServiceClient(), format: "chat" | "native" | "embedding" = "chat", hooks?:ChatStreamHooks) {
   const auth = await authenticateAi(request, client);
   let input;
   try { input = format === "embedding" ? parseEmbeddingInput(raw) : format === "native" ? parseNativeAiInput(raw,65536) : parseAiInput(raw,8192); }
@@ -106,7 +110,7 @@ export async function completeAi(request: Request, raw: unknown, client: Supabas
   const claimed = await rpc(client, "claim_ai_request", { p_key: auth.key.id, p_idempotency: idempotency, p_hash: hashAiSecret(JSON.stringify(format !== "chat" ? {format,...identity} : identity)) });
   const requestId = String(claimed.id);
   if (!claimed.claimed) {
-    if (claimed.status === "completed") return { response: publicAiResult(claimed.response), stream: input.stream, requestId, replayed: true, organizationId: auth.billingOrganizationId };
+    if (claimed.status === "completed") return { response: publicAiResult(claimed.response), usage:record(claimed.response).usage, stream: input.stream, requestId, replayed: true, organizationId: auth.billingOrganizationId };
     const error=new AiApiError(claimed.status === "failed" ? "previous_request_failed" : "request_in_progress", 409, claimed.status === "failed" ? "A tentativa anterior falhou. Consulte o histórico e use uma nova Idempotency-Key para outra tentativa." : "Esta solicitação já está sendo processada ou conciliada. Reutilize a mesma Idempotency-Key para consultar o resultado.");
     error.requestId=requestId;throw error;
   }
@@ -153,13 +157,20 @@ export async function completeAi(request: Request, raw: unknown, client: Supabas
     // Do not bind generation to the caller's abort signal: finish accounting even
     // if their connection disappears. No provider retry after dispatch.
     const generationBody = format === "embedding" ? { model: `models/${model}`, content: input.providerBody.contents[0], embedContentConfig: record(input.providerBody).embedContentConfig } : input.providerBody;
-    const generated = await fetch(`${endpoint}:${format === "embedding" ? "embedContent" : "generateContent"}`, { method: "POST", headers, body: JSON.stringify(generationBody), signal: AbortSignal.timeout(90000) });
+    const incremental=format==='chat'&&input.stream&&!!hooks;
+    const generated = await fetch(`${endpoint}:${format === "embedding" ? "embedContent" : incremental?'streamGenerateContent?alt=sse':"generateContent"}`, { method: "POST", headers, body: JSON.stringify(generationBody), signal: AbortSignal.timeout(90000) });
     if (!generated.ok) {
       if ([400,401,403,404,422,429].includes(generated.status)) dispatched = false;
       const code = generated.status === 403 ? "provider_access_denied" : generated.status === 401 ? "provider_credentials_invalid" : generated.status === 429 ? "provider_rate_limited" : "provider_unavailable";
       throw new AiApiError(code, 502, "Não foi possível concluir a geração. Consulte o estado pelo identificador da solicitação.");
     }
-    const data = record(await generated.json());
+    let data:Json;
+    if(incremental) {
+      if(!generated.body)throw new AiApiError('provider_unavailable',502,'A resposta do provedor foi interrompida.');
+      hooks.ready({requestId,replayed:false});
+      const deltas=chatStreamDeltas(requestId,publicModelId(model),Math.floor(Date.now()/1000));
+      data=await collectGeminiStream(generated.body,chunk=>deltas(chunk).forEach(hooks.chunk));
+    } else data=record(await generated.json());
     const vector = record(data.embedding).values;
     if (format === "embedding" && (!Array.isArray(vector) || !vector.length || vector.some(value => typeof value !== "number" || !Number.isFinite(value)))) throw new AiApiError("invalid_embedding_response",502,"A resposta aguarda conferência. Consulte a solicitação antes de repetir.");
     const embeddingCount = Number(record(data.usageMetadata).promptTokenCount ?? count);
@@ -189,7 +200,7 @@ export async function completeAi(request: Request, raw: unknown, client: Supabas
     const persisted = await client.from("ai_requests").update({ result_snapshot: settlement }).eq("id", requestId).eq("status", "processing");
     if (persisted.error) throw new AiApiError("settlement_pending", 503, "O consumo está em conferência. Consulte esta solicitação antes de tentar novamente.");
     const settled = await rpc(client, "settle_ai_operation", settlement);
-    return { response: publicAiResult(settled.response), stream: input.stream, requestId, replayed: false, organizationId: auth.billingOrganizationId };
+    return { response: publicAiResult(settled.response), usage:chatResponse.usage, stream: input.stream, requestId, replayed: false, organizationId: auth.billingOrganizationId };
   } catch (error) {
     await rpc(client, "finish_ai_request", { p_request: requestId, p_status: dispatched ? "uncertain" : "failed", p_error: error instanceof AiApiError ? error.code : "internal_error" }).catch(() => undefined);
     const outward=error instanceof AiApiError?error:new AiApiError("request_failed",503,"Não foi possível concluir. Consulte esta solicitação no histórico antes de iniciar outra.");
@@ -200,7 +211,7 @@ export async function rpc(client: SupabaseClient, name: string, args: Json): Pro
   const { data, error } = await client.rpc(name, args);
   if (error) {
     const code = error.message.match(/ai_[a-z_]+/)?.[0] ?? "service_unavailable";
-    const status = /insufficient|budget|contract/.test(code) ? 402 : /rate_limit/.test(code) ? 429 : /conflict|state/.test(code) ? 409 : /key_inactive/.test(code) ? 401 : 503;
+    const status = /insufficient|budget|contract/.test(code) ? 402 : /rate_limit/.test(code) ? 429 : /conflict|state/.test(code) ? 409 : /key_inactive|upload_ticket_invalid/.test(code) ? 401 : 503;
     throw new AiApiError(code, status, status === 402 ? "Confira o saldo disponível e o acesso da sua conta ConnectyHub." : "Não foi possível processar a solicitação. Consulte o histórico no painel.");
   }
   return record(data);

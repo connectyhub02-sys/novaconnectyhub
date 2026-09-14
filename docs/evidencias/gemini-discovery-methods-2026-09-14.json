@@ -1,0 +1,432 @@
+{
+  "source": "https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta",
+  "retrieved_on": "2026-09-14",
+  "discovery_revision": "20260910",
+  "methods": [
+    {
+      "id": "generativelanguage.auth_tokens.create",
+      "httpMethod": "POST",
+      "path": "v1beta/auth_tokens"
+    },
+    {
+      "id": "generativelanguage.batches.cancel",
+      "httpMethod": "POST",
+      "path": "v1beta/{+name}:cancel"
+    },
+    {
+      "id": "generativelanguage.batches.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.batches.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.batches.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.batches.updateEmbedContentBatch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}:updateEmbedContentBatch"
+    },
+    {
+      "id": "generativelanguage.batches.updateGenerateContentBatch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}:updateGenerateContentBatch"
+    },
+    {
+      "id": "generativelanguage.cachedContents.create",
+      "httpMethod": "POST",
+      "path": "v1beta/cachedContents"
+    },
+    {
+      "id": "generativelanguage.cachedContents.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.cachedContents.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.cachedContents.list",
+      "httpMethod": "GET",
+      "path": "v1beta/cachedContents"
+    },
+    {
+      "id": "generativelanguage.cachedContents.patch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.create",
+      "httpMethod": "POST",
+      "path": "v1beta/corpora"
+    },
+    {
+      "id": "generativelanguage.corpora.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.list",
+      "httpMethod": "GET",
+      "path": "v1beta/corpora"
+    },
+    {
+      "id": "generativelanguage.corpora.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.permissions.create",
+      "httpMethod": "POST",
+      "path": "v1beta/{+parent}/permissions"
+    },
+    {
+      "id": "generativelanguage.corpora.permissions.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.permissions.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.corpora.permissions.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+parent}/permissions"
+    },
+    {
+      "id": "generativelanguage.corpora.permissions.patch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.dynamic.generateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateContent"
+    },
+    {
+      "id": "generativelanguage.dynamic.streamGenerateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:streamGenerateContent"
+    },
+    {
+      "id": "generativelanguage.environments.create",
+      "httpMethod": "POST",
+      "path": "v1beta/environments:create"
+    },
+    {
+      "id": "generativelanguage.environments.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/environments/{id}:delete"
+    },
+    {
+      "id": "generativelanguage.environments.files.media.download",
+      "httpMethod": "GET",
+      "path": "v1beta/{+parent}/files/{+path}"
+    },
+    {
+      "id": "generativelanguage.environments.get",
+      "httpMethod": "GET",
+      "path": "v1beta/environments/{id}:get"
+    },
+    {
+      "id": "generativelanguage.environments.list",
+      "httpMethod": "GET",
+      "path": "v1beta/environments:list"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.create",
+      "httpMethod": "POST",
+      "path": "v1beta/fileSearchStores"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.documents.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.documents.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.documents.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+parent}/documents"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.importFile",
+      "httpMethod": "POST",
+      "path": "v1beta/{+fileSearchStoreName}:importFile"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.list",
+      "httpMethod": "GET",
+      "path": "v1beta/fileSearchStores"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.fileSearchStores.upload.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.files.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.files.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.files.list",
+      "httpMethod": "GET",
+      "path": "v1beta/files"
+    },
+    {
+      "id": "generativelanguage.files.register",
+      "httpMethod": "POST",
+      "path": "v1beta/files:register"
+    },
+    {
+      "id": "generativelanguage.generatedFiles.list",
+      "httpMethod": "GET",
+      "path": "v1beta/generatedFiles"
+    },
+    {
+      "id": "generativelanguage.generatedFiles.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.media.upload",
+      "httpMethod": "POST",
+      "path": "v1beta/files"
+    },
+    {
+      "id": "generativelanguage.media.uploadToFileSearchStore",
+      "httpMethod": "POST",
+      "path": "v1beta/{+fileSearchStoreName}:uploadToFileSearchStore"
+    },
+    {
+      "id": "generativelanguage.models.asyncBatchEmbedContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:asyncBatchEmbedContent"
+    },
+    {
+      "id": "generativelanguage.models.batchEmbedContents",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:batchEmbedContents"
+    },
+    {
+      "id": "generativelanguage.models.batchEmbedText",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:batchEmbedText"
+    },
+    {
+      "id": "generativelanguage.models.batchGenerateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:batchGenerateContent"
+    },
+    {
+      "id": "generativelanguage.models.countMessageTokens",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:countMessageTokens"
+    },
+    {
+      "id": "generativelanguage.models.countTextTokens",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:countTextTokens"
+    },
+    {
+      "id": "generativelanguage.models.countTokens",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:countTokens"
+    },
+    {
+      "id": "generativelanguage.models.embedContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:embedContent"
+    },
+    {
+      "id": "generativelanguage.models.embedText",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:embedText"
+    },
+    {
+      "id": "generativelanguage.models.generateAnswer",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateAnswer"
+    },
+    {
+      "id": "generativelanguage.models.generateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateContent"
+    },
+    {
+      "id": "generativelanguage.models.generateMessage",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateMessage"
+    },
+    {
+      "id": "generativelanguage.models.generateText",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateText"
+    },
+    {
+      "id": "generativelanguage.models.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.models.list",
+      "httpMethod": "GET",
+      "path": "v1beta/models"
+    },
+    {
+      "id": "generativelanguage.models.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.models.operations.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}/operations"
+    },
+    {
+      "id": "generativelanguage.models.predict",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:predict"
+    },
+    {
+      "id": "generativelanguage.models.predictLongRunning",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:predictLongRunning"
+    },
+    {
+      "id": "generativelanguage.models.streamGenerateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:streamGenerateContent"
+    },
+    {
+      "id": "generativelanguage.tunedModels.asyncBatchEmbedContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:asyncBatchEmbedContent"
+    },
+    {
+      "id": "generativelanguage.tunedModels.batchGenerateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:batchGenerateContent"
+    },
+    {
+      "id": "generativelanguage.tunedModels.create",
+      "httpMethod": "POST",
+      "path": "v1beta/tunedModels"
+    },
+    {
+      "id": "generativelanguage.tunedModels.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.generateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateContent"
+    },
+    {
+      "id": "generativelanguage.tunedModels.generateText",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:generateText"
+    },
+    {
+      "id": "generativelanguage.tunedModels.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.list",
+      "httpMethod": "GET",
+      "path": "v1beta/tunedModels"
+    },
+    {
+      "id": "generativelanguage.tunedModels.operations.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.operations.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}/operations"
+    },
+    {
+      "id": "generativelanguage.tunedModels.patch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.permissions.create",
+      "httpMethod": "POST",
+      "path": "v1beta/{+parent}/permissions"
+    },
+    {
+      "id": "generativelanguage.tunedModels.permissions.delete",
+      "httpMethod": "DELETE",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.permissions.get",
+      "httpMethod": "GET",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.permissions.list",
+      "httpMethod": "GET",
+      "path": "v1beta/{+parent}/permissions"
+    },
+    {
+      "id": "generativelanguage.tunedModels.permissions.patch",
+      "httpMethod": "PATCH",
+      "path": "v1beta/{+name}"
+    },
+    {
+      "id": "generativelanguage.tunedModels.streamGenerateContent",
+      "httpMethod": "POST",
+      "path": "v1beta/{+model}:streamGenerateContent"
+    },
+    {
+      "id": "generativelanguage.tunedModels.transferOwnership",
+      "httpMethod": "POST",
+      "path": "v1beta/{+name}:transferOwnership"
+    }
+  ]
+}

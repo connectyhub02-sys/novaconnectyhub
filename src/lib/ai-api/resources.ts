@@ -71,7 +71,7 @@ export async function createAuthorizedAiResource(client:SupabaseClient,request:R
     if(collection==='caches') {
       if(!operation.model.capabilities.includes('cache'))throw new AiApiError('model_capability_unavailable',422,'Este modelo não oferece cache.');
       const ttl=positive(body.ttl_seconds??3600,86400*7);
-      const prepared=await prepareExtendedContent(client,auth,operation,{contents:body.contents,systemInstruction:body.systemInstruction,tools:body.tools});
+      const prepared=await prepareExtendedContent(client,auth,operation,{contents:body.contents,systemInstruction:body.systemInstruction,tools:body.tools,toolConfig:body.toolConfig});
       const size=prepared.units.input; const cacheBody={...prepared.body};delete cacheBody.generationConfig;
       return await dispatchResource(client,operation,'cache',{size,ttl_seconds:ttl,display_name:body.display_name},{cache_hour:size*ttl/3600},'/v1beta/cachedContents',
         {...cacheBody,model:`models/${operation.model.providerId}`,ttl:`${ttl}s`,displayName:String(body.display_name??'Contexto').slice(0,200)});

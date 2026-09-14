@@ -106,7 +106,7 @@ describe('Schedule and webhook boundaries',()=>{
     const db=commerceDatabase({ai_triggers:[{id:'trigger',enabled:true,next_run_at:'2099'}],ai_trigger_runs:[run],ai_api_keys:[{id:'key',project_id:'project',status:'active'}]});
     const calls:Row[]=[];
     const api=moduleFor({'./gateway':{AiApiError,record,rpc,authorizeAiKey:async(_c:unknown,key:Row)=>{expect(key.status).toBe('active');return {key,project:{id:'project'}};}},'./resources':{createAuthorizedAiResource:async(_c:unknown,request:Request,auth:Row,collection:string,body:Row)=>{calls.push({id:request.headers.get('Idempotency-Key'),auth,collection,body});return {id:'request',request_id:'request'};}}});
-    const client={...db.client,rpc:async(_n:string,args:Row)=>{Object.assign(db.tables.ai_trigger_runs[0],{lease_id:args.p_lease});return {data:{...run},error:null};}};
+    const client={...db.client,rpc:async(name:string,args:Row)=>{if(name==='admit_ai_gateway_request')return {data:{},error:null};Object.assign(db.tables.ai_trigger_runs[0],{lease_id:args.p_lease});return {data:{...run},error:null};}};
     expect(await api.processAiTriggers(client as never)).toEqual({submitted:1});expect(calls[0]).toMatchObject({id:'trigger:run-1',collection:'interactions',body:{input:'hello'}});
     expect(db.tables.ai_trigger_runs[0]).toMatchObject({status:'submitted',request_id:'request'});
     await api.processAiTriggers(client as never);expect(calls).toHaveLength(1);
@@ -119,5 +119,15 @@ describe('Schedule and webhook boundaries',()=>{
     const result=await api.aiAutomationApi(client as never,{project:{id:'project'}} as never,new Request('https://local/api'),['webhooks','hook']);
     expect(JSON.stringify(result)).not.toContain('private');expect(result).not.toHaveProperty('secret_encrypted');
     await expect(api.aiAutomationApi(client as never,{project:{id:'other'}} as never,new Request('https://local/api'),['webhooks','hook'])).rejects.toMatchObject({status:404});
+  });
+  it('keeps a capacity-rejected run pending for the same leased retry without generation',async()=>{
+    const db=commerceDatabase({ai_triggers:[{id:'trigger',enabled:true,next_run_at:'2099'}],ai_trigger_runs:[{id:'run',trigger_id:'trigger',project_id:'project',key_id:'key',status:'pending'}],ai_api_keys:[{id:'key',project_id:'project',status:'active'}],ai_requests:[]});
+    let generated=0;
+    const api=moduleFor({'./gateway':{AiApiError,record,rpc:async(_c:unknown,name:string,args:Row)=>{
+      if(name==='admit_ai_gateway_request'){expect(args.p_org).toBe('wallet');throw new AiApiError('ai_rate_limit_requests',429,'limit');}
+      db.tables.ai_trigger_runs[0].lease_id=args.p_lease;return {...db.tables.ai_trigger_runs[0]};
+    },authorizeAiKey:async()=>({billingOrganizationId:'wallet'})},'./resources':{createAuthorizedAiResource:async()=>{generated++;}}});
+    expect(await api.processAiTriggers(db.client as never)).toEqual({submitted:0});
+    expect(db.tables.ai_trigger_runs[0].status).toBe('pending');expect(generated).toBe(0);
   });
 });

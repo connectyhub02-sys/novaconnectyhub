@@ -4,8 +4,11 @@ const object = (value: unknown): Json => value && typeof value === "object" && !
 const fail = (message: string): never => { throw new AiInputError("invalid_content_request", message); };
 export function parseNativeAiInput(raw: unknown, outputLimit: number) {
   const body = object(raw);
-  const accepted = ["model", "contents", "systemInstruction", "generationConfig", "tools", "toolConfig", "safetySettings", "cachedContent"];
+  const accepted = ["model", "contents", "systemInstruction", "generationConfig", "tools", "toolConfig", "safetySettings", "cachedContent", "store", "serviceTier"];
   if (Object.keys(body).some(key => !accepted.includes(key))) fail("Campo não suportado na geração de conteúdo.");
+  if (body.store !== undefined && typeof body.store !== 'boolean') fail('store deve ser booleano.');
+  // Other tiers have different prices; never silently bill them as Standard.
+  if (body.serviceTier !== undefined && !['STANDARD', 'SERVICE_TIER_UNSPECIFIED'].includes(String(body.serviceTier))) fail('Somente serviceTier STANDARD possui tarifa publicada neste contrato.');
   if (!Array.isArray(body.contents) || !body.contents.length) fail("Informe contents com pelo menos uma mensagem.");
   const capabilities: string[] = [];
   if (body.systemInstruction !== undefined) {
@@ -17,8 +20,10 @@ export function parseNativeAiInput(raw: unknown, outputLimit: number) {
     if (!Array.isArray(content.parts) || !content.parts.length || (content.role !== undefined && !["user", "model"].includes(String(content.role)))) fail("Mensagem de conteúdo inválida.");
     const parts = (content.parts as unknown[]).map(rawPart => {
       const part = object(rawPart);
-      if (Object.keys(part).some(key => !["text", "inlineData", "fileData", "functionCall", "functionResponse", "thoughtSignature", "videoMetadata"].includes(key))) fail("Parte de conteúdo inválida.");
-      const keys = ["text", "inlineData", "fileData", "functionCall", "functionResponse"].filter(key => part[key] !== undefined);
+      if (Object.keys(part).some(key => !["text", "inlineData", "fileData", "functionCall", "functionResponse", "thought", "thoughtSignature", "videoMetadata", "executableCode", "codeExecutionResult"].includes(key))) fail("Parte de conteúdo inválida.");
+      if (part.thought !== undefined && typeof part.thought !== 'boolean') fail('thought deve ser booleano.');
+      if (part.thoughtSignature !== undefined && typeof part.thoughtSignature !== 'string') fail('thoughtSignature deve ser string.');
+      const keys = ["text", "inlineData", "fileData", "functionCall", "functionResponse", "executableCode", "codeExecutionResult"].filter(key => part[key] !== undefined);
       if (keys.length !== 1) fail("Informe um único tipo de conteúdo em cada parte.");
       if (part.text !== undefined && typeof part.text !== "string") fail("text precisa ser uma string.");
       if (part.inlineData) {
@@ -46,7 +51,8 @@ export function parseNativeAiInput(raw: unknown, outputLimit: number) {
   if (Object.keys(generationConfig).some(key => !allowedConfig.includes(key))) fail("Configuração de geração não suportada.");
   const maxTokens = Number(generationConfig.maxOutputTokens ?? Math.min(8192, outputLimit));
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > outputLimit) fail("Configuração de tamanho de resposta inválida para esta operação.");
-  if (generationConfig.candidateCount !== undefined && generationConfig.candidateCount !== 1) fail("Esta operação retorna uma alternativa por solicitação.");
+  const candidateCount = Number(generationConfig.candidateCount ?? 1);
+  if (!Number.isInteger(candidateCount) || candidateCount < 1 || candidateCount > 8) fail('candidateCount deve estar entre 1 e 8; disponibilidade depende do modelo.');
   if (generationConfig.responseSchema || generationConfig.responseJsonSchema || generationConfig.responseMimeType === "application/json") capabilities.push("structured_output");
   if (Array.isArray(generationConfig.responseModalities)) for (const modality of generationConfig.responseModalities) {
     if (!["TEXT", "IMAGE", "AUDIO"].includes(String(modality))) fail("Modalidade de saída inválida.");
@@ -58,7 +64,7 @@ export function parseNativeAiInput(raw: unknown, outputLimit: number) {
     if (!Array.isArray(body.tools)) fail("tools precisa ser uma lista.");
     for (const rawTool of body.tools as unknown[]) {
       const tool = object(rawTool);
-      const types: Record<string, [string, string]> = { functionDeclarations: ["functionDeclarations", "functions"], codeExecution: ["codeExecution", "code_execution"], webSearch: ["googleSearch", "web_search"], urlContext: ["urlContext", "url_context"], maps: ["googleMaps", "maps"], computerUse: ["computerUse", "computer_use"], fileSearch: ["fileSearch", "file_search"] };
+      const types: Record<string, [string, string]> = { functionDeclarations: ["functionDeclarations", "functions"], codeExecution: ["codeExecution", "code_execution"], webSearch: ["googleSearch", "web_search"], googleSearch: ["googleSearch", "web_search"], urlContext: ["urlContext", "url_context"], maps: ["googleMaps", "maps"], googleMaps: ["googleMaps", "maps"], computerUse: ["computerUse", "computer_use"], fileSearch: ["fileSearch", "file_search"] };
       if (Object.keys(tool).length !== 1) fail("Declare um tipo por ferramenta.");
       const type = Object.keys(tool)[0]; if (!types[type]) fail("Ferramenta não suportada.");
       tools.push({ [types[type][0]]: tool[type] }); capabilities.push(types[type][1]);
@@ -70,7 +76,9 @@ export function parseNativeAiInput(raw: unknown, outputLimit: number) {
   }
   return { model: typeof body.model === "string" ? body.model : "connectyhub-auto", stream: false, maxTokens,
     capabilities: [...new Set(capabilities)], providerBody: {
-      contents, generationConfig: { ...generationConfig, maxOutputTokens: maxTokens, candidateCount: 1 },
+      contents, generationConfig: { ...generationConfig, maxOutputTokens: maxTokens, candidateCount },
+      ...(body.store !== undefined ? {store: body.store} : {}),
+      ...(body.serviceTier !== undefined ? {serviceTier: body.serviceTier} : {}),
       ...(body.systemInstruction ? { systemInstruction: body.systemInstruction } : {}),
       ...(tools.length ? { tools } : {}), ...(body.toolConfig ? { toolConfig: body.toolConfig } : {}),
       ...(body.safetySettings ? { safetySettings: body.safetySettings } : {}), ...(body.cachedContent ? { cachedContent: body.cachedContent } : {}),

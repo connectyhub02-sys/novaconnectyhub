@@ -8,6 +8,7 @@ import {beginAiOperation,reserveAiOperation,settleAiOperation,failAiOperation,ty
 import {aiProviderRequest} from './provider-http';
 import {measureAiContent} from './content-metering';
 import {addAiUnits,type AiUnits,type AiPriceCard} from './operation-pricing';
+import {isGeminiContract,geminiContractVersion} from './gemini-contract';
 
 export function measureAiEmbedding(raw:unknown,prices:AiPriceCard,fallback?:Record<string,unknown>) {
   const metadata=record(record(raw).usageMetadata),count=metadata.promptTokenCount??fallback?.totalTokens;
@@ -44,7 +45,8 @@ export async function completeExtendedEmbedding(client:SupabaseClient,request:Re
   if(operation.replay)return operation.replay;
   let dispatched=false;
   try {
-    const inputs=Array.isArray(body.input)?body.input.map(input=>({...body,input})):[body];
+    const native=isGeminiContract(request);
+    const inputs=native&&Array.isArray(body.requests)?body.requests.map(input=>({...record(input),model:body.model})):Array.isArray(body.input)?body.input.map(input=>({...body,input})):[body];
     if(!inputs.length||inputs.length>100)throw new AiApiError('invalid_embedding',422,'Envie de 1 a 100 entradas.');
     const prepared=[];let budget:AiUnits={};
     for(const input of inputs){const item=await prepareAiEmbedding(client,auth,operation,input);prepared.push(item);budget=addAiUnits(budget,item.units);}
@@ -53,7 +55,11 @@ export async function completeExtendedEmbedding(client:SupabaseClient,request:Re
     const result=await aiProviderRequest(client,`/v1beta/models/${operation.model.providerId}:${multiple?'batchEmbedContents':'embedContent'}`,'POST',multiple?{requests:prepared.map(p=>p.body)}:prepared[0].body);
     const results=multiple?(Array.isArray(result.embeddings)?result.embeddings.map(embedding=>({embedding})):[]):[result];
     if(results.length!==prepared.length)throw new Error('Resultado incompleto.');
-    const units=measureAiEmbedding(result,operation.prices);
-    return await settleAiOperation(client,operation,units,{id:operation.id,object:'embedding.list',model:operation.model.id,data:results.map((r,index)=>({object:'embedding',index,embedding:embeddingValues(r)}))});
+    // autoTruncate=false: countTokens measured the exact same provider content.
+    // Some embedding responses omit usageMetadata; never substitute a length estimate.
+    const units=record(result.usageMetadata).promptTokenCount!==undefined?measureAiEmbedding(result,operation.prices):prepared.reduce((sum,p)=>addAiUnits(sum,p.units),{} as AiUnits);
+    return await settleAiOperation(client,operation,units,{id:operation.id,object:'embedding.list',model:operation.model.id,
+      ...(native?{contract:geminiContractVersion,usageMetadata:result.usageMetadata??{promptTokenCount:prepared.reduce((sum,p)=>sum+Number(p.count.totalTokens),0)},meteringBasis:result.usageMetadata?'provider_usage':'provider_countTokens'}:{}),
+      data:results.map((r,index)=>({object:'embedding',index,embedding:embeddingValues(r)}))});
   }catch(error){await failAiOperation(client,operation,error,dispatched);throw error;}
 }

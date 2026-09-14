@@ -11,7 +11,7 @@ import { renderAiGuide } from "../src/lib/ai-api/guide";
 describe("Public AI OpenAPI contract", () => {
   it("documents only implemented public routes with an independent AI credential", () => {
     expect(aiOpenApiSpec.servers[0].url).toBe("https://www.connectyhub.com.br/api/v1/ai");
-    expect(Object.keys(aiOpenApiSpec.paths)).toHaveLength(37);
+    expect(Object.keys(aiOpenApiSpec.paths)).toHaveLength(40);
     for (const path of Object.keys(aiOpenApiSpec.paths)) {
       const resource=['caches','batches','videos','stores','documents','interactions','agents','environments','webhooks','triggers'].includes(path.split('/')[1]);
       const route = resource?'/[...resource]':path.startsWith("/models/") ? "/models/[operation]" : path.replace("{request_id}", "[requestId]").replace("{id}","[id]");
@@ -44,7 +44,7 @@ describe("Public AI OpenAPI contract", () => {
     expect(() => gateway.parseAiInput({ ...aiChatExample, tools: [] }, 2048)).toThrow();
     const request = aiOpenApiSpec.components.schemas.ChatRequest;
     expect(request.additionalProperties).toBe(false);
-    expect(JSON.stringify(aiOpenApiSpec)).not.toMatch(/\btokens?\b|gemini|resolves_to|requests_per_minute/i);
+    expect(JSON.stringify(aiOpenApiSpec)).not.toMatch(/apiKey.*chy_ai_[a-f0-9]{64}|providerCostPerUnit|resolves_to/);
     expect(aiOpenApiSpec.paths["/chat/completions"].post.responses["200"].content).toHaveProperty("text/event-stream");
   });
 
@@ -77,12 +77,15 @@ describe("Public AI OpenAPI contract", () => {
     for (const page of aiDocPages) expect(guide).toContain(`## ${page.title}`);
     expect(guide).toContain("Operações por recurso");
     for(const resource of ['/interactions','/videos','/batches','/caches','/live'])expect(guide).toContain(resource);
-    expect(guide + JSON.stringify(aiOpenApiSpec)).not.toMatch(/gemini|google|\btokens?\b|requests_per_minute/i);
+    expect(guide).toContain('Contrato Gemini versionado');
+    expect(guide).toContain('não uma declaração de paridade total');
   });
 
-  it("publishes the actual buffered SSE wire format, including final credits", async () => {
+  it("routes streaming through the incremental handler and keeps final accounting alive", async () => {
+    let afterWork:unknown;
     const route = serverModuleHarness<{ POST: (request: Request) => Promise<Response> }>("src/app/api/v1/ai/chat/completions/route.ts", {
-      "next/server": { NextResponse: { json: Response.json.bind(Response) }, after: () => undefined },
+      "next/server": { NextResponse: { json: Response.json.bind(Response) }, after: (callback:unknown) => {afterWork=callback;} },
+      '@/lib/ai-api/chat-stream':{streamChatAi:async()=>({response:new Response(aiSseExample,{headers:{'Content-Type':'text/event-stream'}}),completion:Promise.resolve('org')})},
       "@/lib/ai-api/gateway": {
         completeAi: async () => ({ response: aiResponseExample, requestId: aiResponseExample.connectyhub.request_id, stream: true, replayed: false }),
         AiApiError: class extends Error {},
@@ -91,6 +94,7 @@ describe("Public AI OpenAPI contract", () => {
     const response = await route.POST(new Request("https://app.invalid/api/v1/ai/chat/completions", { method: "POST", body: JSON.stringify(aiRequestExamples.eventos.value) }));
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(await response.text()).toBe(aiSseExample);
+    expect(typeof afterWork).toBe('function');
   });
 
   it("runs the documented JavaScript request without credentials in browser code", async () => {

@@ -92,6 +92,7 @@ export async function processAiTriggers(client:SupabaseClient) {
         const key=await client.from('ai_api_keys').select('id,project_id,status,model_id').eq('id',run.key_id).eq('project_id',run.project_id).single();
         if(key.error)throw new Error('Não foi possível verificar chave.');
         const auth=await authorizeAiKey(client,key.data);
+        await rpc(client,'admit_ai_gateway_request',{p_org:auth.billingOrganizationId});
         const response=await createAuthorizedAiResource(client,new Request('https://www.connectyhub.com.br/api/v1/ai/interactions',{method:'POST',headers:{'Idempotency-Key':`trigger:${run.id}`}}),auth,'interactions',run.interaction);
         patch={status:'submitted',request_id:('request_id' in response ? response.request_id : undefined)??response.id,error_code:null};submitted++;
       }
@@ -100,6 +101,7 @@ export async function processAiTriggers(client:SupabaseClient) {
       const original=await client.from('ai_requests').select('id,status').eq('project_id',run.project_id).eq('idempotency_key',`trigger:${run.id}`).maybeSingle();
       if(original.error)continue;
       if(original.data)patch={status:'submitted',request_id:original.data.id,error_code:null};
+      else if(error instanceof AiApiError&&error.status===429)continue; // Retry the same run after its lease expires; no generation was admitted.
       else if(error instanceof AiApiError&&error.status<500)patch={status:'failed',error_code:error.code};
       else if(statusForAccessControlError(error,503)<500)patch={status:'failed',error_code:'account_access_denied'};
       else continue; // Lease expiry retries verification; no unconfirmed failure is discarded.

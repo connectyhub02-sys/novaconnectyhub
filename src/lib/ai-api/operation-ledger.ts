@@ -5,6 +5,8 @@ import { AiApiError, authenticateAi, hashAiSecret, record, rpc } from "./gateway
 import { aiModelDefinition } from "./model-catalog";
 import { loadAiPriceCard, priceAiUnits, type AiPriceCard, type AiUnits } from "./operation-pricing";
 import { AiProviderFailure } from "./provider-http";
+import {isGeminiContract,geminiContractVersion} from './gemini-contract';
+import {publicAiPriceCard} from './public-pricing';
 
 export type AiAuth = Awaited<ReturnType<typeof authenticateAi>>;
 export type AiOperation = { id: string; auth: AiAuth; model: NonNullable<ReturnType<typeof aiModelDefinition>>; prices: AiPriceCard; kind: string; replay?: Record<string, unknown> };
@@ -15,7 +17,7 @@ export async function beginAiOperation(client: SupabaseClient, request: Request,
   if (!model) throw new AiApiError("model_unavailable", 422, "Modelo não disponível.");
   const key = request.headers.get("idempotency-key") ?? randomUUID();
   if (!/^[\x21-\x7e]{1,128}$/.test(key)) throw new AiApiError("invalid_idempotency_key", 422, "Identidade da operação inválida.");
-  const claimed = await rpc(client, "claim_ai_request", { p_key: auth.key.id, p_idempotency: key, p_hash: hashAiSecret(JSON.stringify({ kind, ...body, model: modelId })) });
+  const claimed = await rpc(client, "claim_ai_request", { p_key: auth.key.id, p_idempotency: key, p_hash: hashAiSecret(JSON.stringify({ kind, ...body, model: modelId,...(isGeminiContract(request)?{contract:geminiContractVersion}:{}) })) });
   const operation: AiOperation = { id: String(claimed.id), auth, model, prices: {}, kind };
   if (!claimed.claimed) {
     if (claimed.status === "completed") return { ...operation, replay: record(claimed.response) };
@@ -48,11 +50,11 @@ export async function reserveAiOperation(client: SupabaseClient, operation: AiOp
 }
 export async function settleAiOperation(client: SupabaseClient, operation: AiOperation, units: AiUnits, result: Record<string,unknown>) {
   const price = priceAiUnits(operation.prices,units);
-  const response = {...result,connectyhub:{request_id:operation.id,project_id:operation.auth.project.id,credits:price.credits}};
+  const response = {...result,connectyhub:{request_id:operation.id,project_id:operation.auth.project.id,credits:operation.auth.billing.planCode==='internal'?0:price.credits}};
   const settlement = {p_request:operation.id,p_status:"completed",p_response:response,p_usage:{input:Math.ceil(units.input??0),output:Math.ceil(units.output??0),
     cost:price.cost,charge:operation.auth.billing.planCode === "internal" ? 0 : price.credits,creditUnitBrl:.01,
     featureCode:`external_ai_${operation.kind}`,billingMode:operation.auth.billing.planCode === "internal" ? "internal_shadow" : operation.auth.billing.planCode === "trial" ? "trial_billable" : "customer_billable",
-    metering:{version:"ai_resources_v1",kind:operation.kind,units,breakdown:price.breakdown}}};
+    metering:{version:"ai_resources_v1",pricingVersion:publicAiPriceCard(operation.prices).version,kind:operation.kind,units,breakdown:price.breakdown}}};
   const persisted=await client.from("ai_requests").update({result_snapshot:settlement}).eq("id",operation.id).in("status",["processing","uncertain"]);
   if(persisted.error) throw new Error("Consumo em conferência.");
   // The SQL extension can enlarge the reservation under the wallet lock if actual

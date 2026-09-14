@@ -5,6 +5,10 @@ import { AiApiError, record, type authenticateAi } from "./gateway";
 type Auth = Awaited<ReturnType<typeof authenticateAi>>;
 const provider = "https://generativelanguage.googleapis.com";
 
+export function aiFileMetadata(file:Record<string,unknown>) {
+  return Object.fromEntries(['createTime','updateTime','expirationTime','sha256Hash','videoMetadata','error'].filter(key=>file[key]!==undefined).map(key=>[key,file[key]]));
+}
+
 export function publicAiFile(row: Record<string, unknown>) {
   const metadata = record(row.metadata);
   return { id: row.id, name: `files/${row.id}`, display_name: metadata.display_name, mime_type: metadata.mime_type, size_bytes: metadata.size_bytes, status: row.status, created_at: row.created_at, expires_at: row.expires_at };
@@ -30,7 +34,7 @@ export async function uploadAiFile(client: SupabaseClient, auth: Auth, input: un
     if (!completed.ok) throw new Error("Upload failed");
     const file = record(record(await completed.json()).file);
     if (typeof file.name !== "string" || !/^files\/[a-zA-Z0-9_-]+$/.test(file.name)) throw new Error("Invalid file response");
-    const update = { provider_name: file.name, status: file.state === "ACTIVE" ? "active" : file.state === "FAILED" ? "failed" : "processing", metadata: { ...record(resource.metadata), uri: file.uri }, expires_at: file.expirationTime ?? null, updated_at: new Date().toISOString() };
+    const update = { provider_name: file.name, status: file.state === "ACTIVE" ? "active" : file.state === "FAILED" ? "failed" : "processing", metadata: { ...record(resource.metadata), uri: file.uri, file_response:aiFileMetadata(file) }, expires_at: file.expirationTime ?? null, updated_at: new Date().toISOString() };
     const persisted = await client.from("ai_resources").update(update).eq("id", resource.id).eq("status","preparing").select("id").maybeSingle();
     if (persisted.error || !persisted.data) {
       await fetch(`${provider}/v1beta/${file.name}`, { method: "DELETE", headers: { "x-goog-api-key": apiKey }, signal: AbortSignal.timeout(10000) }).catch(() => undefined);
@@ -67,7 +71,7 @@ export async function refreshAiFile(client: SupabaseClient, auth: Auth, id: stri
   if (!response.ok && response.status !== 404) throw new AiApiError("service_unavailable", 503, "Não foi possível atualizar o arquivo.");
   const file = remove || response.status === 404 ? {} : record(await response.json());
   const status = remove ? "deleted" : response.status === 404 ? "expired" : file.state === "ACTIVE" ? "active" : file.state === "FAILED" ? "failed" : "processing";
-  const update = await client.from("ai_resources").update({ status, updated_at: new Date().toISOString() }).eq("id", row.id).neq("status","deleted").select("id").maybeSingle();
+  const update = await client.from("ai_resources").update({ status, ...(!remove&&response.ok?{metadata:{...record(row.metadata),file_response:aiFileMetadata(file)},expires_at:file.expirationTime??row.expires_at}:{}), updated_at: new Date().toISOString() }).eq("id", row.id).neq("status","deleted").select("id").maybeSingle();
   if (update.error) throw new AiApiError("service_unavailable", 503, "Não foi possível registrar a atualização.");
   return publicAiFile({ ...row, status:update.data?status:"deleted" });
 }

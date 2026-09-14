@@ -6,11 +6,12 @@ import * as embedding from "../src/lib/ai-api/embedding-input";
 import * as catalog from "../src/lib/ai-api/model-catalog";
 import * as capabilities from "../src/lib/ai-api/capabilities";
 import * as publicResponse from "../src/lib/ai-api/public-response";
+import * as providerStream from '../src/lib/ai-api/provider-stream';
 import {serverModuleHarness} from "./helpers/server-module-harness";
 import {commerceDatabase} from "./helpers/commerce-database";
 import type {completeAi} from "../src/lib/ai-api/gateway";
 const metering=serverModuleHarness<typeof import("../src/lib/billing/metered-usage")>("src/lib/billing/metered-usage.ts");
-function fixture(model="flash-3.5",count=12,output?:Record<string,unknown>){
+function fixture(model="flash-3.5",count=12,output?:Record<string,unknown>,upstream?:ReadableStream<Uint8Array>){
   const providerId=catalog.aiModelDefinition(model)!.providerId;
   const secret=`chy_ai_${"a".repeat(64)}`;
   const db=commerceDatabase({ai_api_keys:[{id:"key",project_id:"project",key_hash:crypto.createHash("sha256").update(secret).digest("hex"),status:"active",model_id:model}],ai_projects:[{id:"project",organization_id:"org",status:"active"}],ai_public_models:[{id:model,enabled:true}],provider_models:[{provider_model_id:providerId,enabled:true,metadata:{external_ai_available:true},"provider_cost_centers.enabled":true,"provider_cost_centers.provider":"gemini"}],ai_requests:[{id:"request",status:"processing"}]});
@@ -29,7 +30,7 @@ function fixture(model="flash-3.5",count=12,output?:Record<string,unknown>){
   }});
   const files:Record<string,unknown>={resolveAiFileParts:async()=>[]};
   const api=serverModuleHarness<{completeAi:typeof completeAi}>("src/lib/ai-api/gateway.ts",{
-    "node:crypto":crypto,"./advanced-input":advanced,"./native-input":native,"./embedding-input":embedding,"./model-catalog":catalog,"./capabilities":capabilities,"./public-response":publicResponse,"./files":files,
+    "node:crypto":crypto,"./provider-stream":providerStream,"./advanced-input":advanced,"./native-input":native,"./embedding-input":embedding,"./model-catalog":catalog,"./capabilities":capabilities,"./public-response":publicResponse,"./files":files,
     "@/lib/billing/credit-economics":{CONNECTY_CREDIT_UNIT_BRL:.01},
     "@/lib/billing/access-control":{assertOrganizationOperationalAccess:async()=>({planCode:"scale"}),assertOrganizationFeatureAccess:async()=>({})},
     "@/lib/billing/contract-access":{assertContractAccess:async()=>({billing_organization_id:"org"})},
@@ -41,15 +42,33 @@ function fixture(model="flash-3.5",count=12,output?:Record<string,unknown>){
   },[],{fetch:async(url:string,init:RequestInit)=>{
     http.push({url,body:JSON.parse(String(init.body))});
     if(url.endsWith(":countTokens"))return Response.json({totalTokens:count});
+    if(upstream)return new Response(upstream,{headers:{'content-type':'text/event-stream'}});
     return Response.json(output??{candidates:[{content:{parts:[{text:"Olá"}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:count,candidatesTokenCount:3,thoughtsTokenCount:2},modelVersion:providerId});
   }});
   const request=()=>new Request("https://local.invalid/api/v1/ai/chat/completions",{headers:{authorization:`Bearer ${secret}`,"Idempotency-Key":"same-operation"}});
-  return {run:(body:unknown,format:"chat"|"native"|"embedding"="chat")=>api.completeAi(request(),body,client as never,format),calls,http};
+  return {run:(body:unknown,format:"chat"|"native"|"embedding"="chat",hooks?:Parameters<typeof completeAi>[4])=>api.completeAi(request(),body,client as never,format,hooks),calls,http};
 }
 describe("Model binding, metering and replay",()=>{
+  it('delivers a delta before upstream completion and settles exactly once on replay',async()=>{
+    let upstream!:ReadableStreamDefaultController<Uint8Array>;
+    const stream=new ReadableStream<Uint8Array>({start(c){upstream=c;}}),encoder=new TextEncoder();
+    const f=fixture('flash-3.5',12,undefined,stream),chunks:Record<string,unknown>[]=[];
+    let first!:()=>void;const delivered=new Promise<void>(resolve=>first=resolve);
+    const hooks={ready:()=>undefined,chunk:(chunk:Record<string,unknown>)=>{chunks.push(chunk);if(JSON.stringify(chunk).includes('Olá'))first();}};
+    const body={messages:[{role:'user',content:'Oi'}],stream:true};
+    const result=f.run(body,'chat',hooks);
+    upstream.enqueue(encoder.encode('data: '+JSON.stringify({candidates:[{content:{parts:[{text:'Olá'}]}}]})+'\r\n\r\n'));
+    await delivered;
+    expect(f.calls.some(call=>call.name==='settle_ai_operation')).toBe(false);
+    expect(f.http[1].url).toContain(':streamGenerateContent?alt=sse');
+    upstream.enqueue(encoder.encode('data: '+JSON.stringify({candidates:[{finishReason:'STOP'}],usageMetadata:{promptTokenCount:12,candidatesTokenCount:3}})+'\n\n'));upstream.close();
+    const completed=await result;expect(completed.response).toMatchObject({choices:[{message:{content:'Olá'}}]});
+    const replay=await f.run(body,'chat',hooks);expect(replay.replayed).toBe(true);expect(replay.usage).toMatchObject({prompt_tokens:12,completion_tokens:3});
+    expect(f.calls.filter(call=>call.name==='settle_ai_operation')).toHaveLength(1);expect(f.http).toHaveLength(2);
+  });
   it("rejects changing the bound model before an idempotency claim or provider dispatch",async()=>{
     const f=fixture();await expect(f.run({model:"flash-3.6",messages:[{role:"user",content:"Oi"}]})).rejects.toMatchObject({code:"model_key_mismatch"});
-    expect(f.calls).toHaveLength(0);expect(f.http).toHaveLength(0);
+    expect(f.calls.map(call=>call.name)).toEqual(['admit_ai_gateway_request']);expect(f.http).toHaveLength(0);
   });
   it("uses the key model and returns a replay without spending or dispatching twice",async()=>{
     const f=fixture();const body={messages:[{role:"user",content:"Oi"}]};

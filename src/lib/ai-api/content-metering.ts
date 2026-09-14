@@ -1,4 +1,5 @@
 import type { AiUnits, AiPriceCard } from "./operation-pricing";
+import {geminiResponse,geminiContractVersion} from './gemini-contract';
 const obj = (v: unknown): Record<string,unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string,unknown> : {};
 const list = (v: unknown) => Array.isArray(v) ? v : [];
 function count(v: unknown) { const n=Number(v??0); if(!Number.isFinite(n)||n<0)throw new Error("Medição inválida.");return n; }
@@ -59,8 +60,9 @@ export function publicGrounding(value: unknown) {
   };
 }
 
-export function publicContentResponse(data: unknown, id: string, model: string) {
+export function publicContentResponse(data: unknown, id: string, model: string, nativeContract=false) {
   const raw=obj(data);
+  if(nativeContract)return {id,object:'content.response',model,created:Math.floor(Date.now()/1000),contract:geminiContractVersion,...geminiResponse(raw)};
   return { id,object:"content.response",model,created:Math.floor(Date.now()/1000),
     candidates:list(raw.candidates).map(c=>{const candidate=obj(c);return {index:candidate.index??0,finishReason:candidate.finishReason,
       content:{role:"model",parts:list(obj(candidate.content).parts).map(obj).filter(p=>p.thought!==true).map(p=>Object.fromEntries(

@@ -25,7 +25,7 @@ execute na raiz do projeto:
 
 ```sh
 docker build -f services/ai-relay/Dockerfile -t connectyhub-ai-relay .
-docker run --env-file /caminho/seguro/relay.env -p 3120:3120 connectyhub-ai-relay
+docker run --restart unless-stopped --memory 512m --cpus 1 --env-file /caminho/seguro/relay.env -p 127.0.0.1:3120:3120 connectyhub-ai-relay
 ```
 
 O arquivo de ambiente é operacional e não deve ser commitado. O serviço exige
@@ -43,7 +43,40 @@ Não funciona hospedado somente como uma função HTTP de curta duração.
 
 Tickets não utilizados são liberados pelo reconciliador. Sessões que perdem a
 conexão de controle ficam incertas, com as últimas medições preservadas.
-O endpoint HTTP da porta do serviço retorna apenas `{ok:true}` para liveness;
+O endpoint HTTP `/health` retorna `{ok:true,version:"2026-09-14",live:true}` para liveness;
 isso não comprova disponibilidade de modelo, saldo ou comunicação com o controle.
 
+O processo limita a 16 conexões simultâneas (incluindo handshakes) e 15 minutos
+por conexão. Uma sessão expirada precisa de nova operação e ticket. Os checkpoints
+de carteira continuam a cada cinco segundos; nenhuma chave Google é enviada ao cliente.
+O limite de processo é adicional ao limite de concorrência por carteira da aplicação.
+Não habilite `AI_RELAY_PUBLIC_URL` antes de validar TLS, controle autenticado,
+conexão com ticket, encerramento e liquidação. A implantação ainda exige acesso SSH
+à VPS; a presença deste código não comprova serviço publicado.
+
 Testes locais: `npx vitest run tests/ai-relay.test.mjs tests/ai-resource-billing.test.ts --maxWorkers=2`.
+
+## Transporte de arquivos
+
+Habilite `AI_UPLOAD_RELAY_ENABLED=true` tanto na aplicação quanto no serviço somente
+depois de publicar a migration 0144 e validar o caminho HTTPS `/uploads/*` no proxy.
+O cliente prepara o envio em `POST /api/v1/ai/files/uploads` e recebe um ticket de uso
+único com validade de dois minutos. Envia os bytes por PUT diretamente à VPS,
+com Content-Length e Content-Type iguais aos declarados. Limite: 20.000.000 bytes,
+quatro uploads simultâneos no processo, dois por carteira. A chave do provedor
+permanece no controle/relay. O upload não executa geração nem débito de créditos.
+
+Monte um volume privado persistente em `/app/state` (variável `AI_UPLOAD_STATE_DIR`):
+adicione `--mount source=connectyhub-ai-relay-state,target=/app/state` ao docker run.
+O diretório pertence ao usuário node, modo 0700. Ele armazena somente identificadores
+de confirmações pendentes, nunca os bytes dos arquivos ou as chaves. O processo
+reconcilia essas confirmações a cada 15 segundos e após reiniciar; não reenvia bytes.
+Inclua o volume no backup operacional. Falha entre a criação no provedor e a gravação
+do recibo pode exigir investigação pelo suporte; não instrua repetição cega do upload.
+
+No proxy, limite o corpo a 20 MB e mantenha o endpoint interno de controle autenticado.
+Preserve a publicação exclusiva no loopback. O sinal `uploads:true` de `/health`
+confirma a opção habilitada, não um teste de integração real com o Google.
+
+Testes do transporte usam servidor HTTP local e provedor simulado:
+`npx vitest run tests/ai-upload-relay.test.mjs tests/ai-upload-tickets.test.ts --maxWorkers=2`.

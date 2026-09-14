@@ -9,6 +9,7 @@ import { aiProviderRequest } from "./provider-http";
 import { measureAiContent, publicContentResponse } from "./content-metering";
 import type { AiUnits } from "./operation-pricing";
 import { resolveActiveBillingRates } from '@/lib/billing/metered-usage';
+import {isGeminiContract} from './gemini-contract';
 
 export async function prepareExtendedContent(client:SupabaseClient,auth:AiAuth,operation:AiOperation,raw:unknown) {
   if(/^(deep-research|antigravity)/.test(operation.model.providerId))throw new AiApiError('use_interactions',422,'Use /interactions para executar este modelo especializado.');
@@ -51,15 +52,16 @@ export async function prepareExtendedContent(client:SupabaseClient,auth:AiAuth,o
     }
     if(operation.prices.cached_input)operation.prices.cached_input={...operation.prices.input,cost:operation.prices.input.cost/10,credits:operation.prices.input.credits/10};
   }
-  const units:AiUnits={input:Math.max(0,count-cached),cached_input:cached,output:input.maxTokens};
-  if(model.family==='image'||modalities.includes('IMAGE')) {units.image_output=input.maxTokens;units.output=input.maxTokens;}
-  if(model.family==='voice'||modalities.includes('AUDIO')) {units.audio_output=input.maxTokens;units.output=0;}
+  const outputBudget=input.maxTokens*Number(config.candidateCount??1);
+  const units:AiUnits={input:Math.max(0,count-cached),cached_input:cached,output:outputBudget};
+  if(model.family==='image'||modalities.includes('IMAGE')) {units.image_output=outputBudget;units.output=outputBudget;}
+  if(model.family==='voice'||modalities.includes('AUDIO')) {units.audio_output=outputBudget;units.output=0;}
   if(model.family==='transcription'&&operation.prices.audio_input){units.audio_input=count;units.input=0;}
   if(input.capabilities.includes('web_search'))units.search=10;
   if(input.capabilities.includes('maps'))units.maps=10;
   if(model.family==='image'&&!modalities.length) config.responseModalities=['TEXT','IMAGE'];
   if(model.family==='voice'&&!modalities.length) config.responseModalities=['AUDIO'];
-  return {body,units,input};
+  return {body,units,input,countResponse};
 }
 
 export async function completeExtendedContent(request:Request,raw:unknown,client:SupabaseClient=createServiceClient()) {
@@ -72,6 +74,6 @@ export async function completeExtendedContent(request:Request,raw:unknown,client
     await reserveAiOperation(client,operation,units);
     await rpc(client,'start_ai_request',{p_request:operation.id});dispatched=true;
     const result=await aiProviderRequest(client,`/v1beta/models/${operation.model.providerId}:generateContent`,'POST',body);
-    return await settleAiOperation(client,operation,measureAiContent(result,operation.prices),publicContentResponse(result,operation.id,operation.model.id));
+    return await settleAiOperation(client,operation,measureAiContent(result,operation.prices),publicContentResponse(result,operation.id,operation.model.id,isGeminiContract(request)));
   }catch(error){await failAiOperation(client,operation,error,dispatched);throw error;}
 }

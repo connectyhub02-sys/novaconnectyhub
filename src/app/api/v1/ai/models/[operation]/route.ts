@@ -4,6 +4,7 @@ import { streamExtendedContent } from '@/lib/ai-api/streaming';
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadPublicAiModels } from "@/lib/ai-api/model-service";
 import {aiHttpFailure} from '@/lib/ai-api/http';
+import {countAiTokens} from '@/lib/ai-api/count-tokens';
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -25,12 +26,13 @@ export async function GET(request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   try {
     const { operation } = await context.params;
-    const match = operation.match(/^([a-z0-9.-]+):(generateContent|streamGenerateContent)$/);
+    const match = operation.match(/^([a-z0-9.-]+):(generateContent|streamGenerateContent|countTokens)$/);
     if (!match) return Response.json({ error: "Operação não encontrada." }, { status: 404, headers });
     const reader = request.body?.getReader();
     const chunks: Uint8Array[] = []; let size = 0;
-    if (reader) while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > 20_000_000) { await reader.cancel(); throw new AiApiError("body_too_large", 413, "O conteúdo deve ter até 20 MB."); } chunks.push(part.value); }
+    if (reader) while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > 4_000_000) { await reader.cancel(); throw new AiApiError("body_too_large", 413, "O conteúdo deve ter até 20 MB."); } chunks.push(part.value); }
     let body; try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw new AiApiError("invalid_json", 400, "Envie um JSON válido."); }
+    if(match[2]==='countTokens')return Response.json(await countAiTokens(request,match[1],body),{headers});
     if(match[2]==='streamGenerateContent')return streamExtendedContent(request,{...body,model:match[1]});
     const result = await completeExtendedContent(request, { ...body, model: match[1] });
     return Response.json(result, { headers });

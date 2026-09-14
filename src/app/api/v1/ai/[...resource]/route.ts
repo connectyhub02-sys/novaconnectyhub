@@ -20,7 +20,7 @@ export async function POST(request:Request,context:Context) {
       return json(await refreshAiResource(client,row,true));
     }
     if(id)throw new AiApiError('resource_not_found',404,'Operação não encontrada.');
-    return json(await createAiResource(client,request,collection,await readAiJson(request,20_000_000)));
+    return json(await createAiResource(client,request,collection,await readAiJson(request,4_000_000)));
   }catch(error){return aiHttpFailure(error);}
 }
 export async function GET(request:Request,context:Context) {
