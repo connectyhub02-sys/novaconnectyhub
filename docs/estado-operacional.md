@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## ConnectyHub Voz — estrutura aplicada e aplicativo em publicação, 14/09/2026
+
+Estúdio do cliente, projetos/chaves dedicadas, clones privados, geração/download/recibos, gestão de consumo e painel administrativo implementados. Cobrança usa a carteira existente e as tarifas efetivas da operação equivalente; taxa zero explicitamente cadastrada de clonagem preservada, sem liberar TTS/LLM sem tarifa. Uma prévia fixa por clone tem custo absorvido e recibo único. Clones e mídia são isolados por organização/projeto, inclusive após rotação de chave; importação administrativa de voz existente exige evidência de consentimento e propriedade. Não houve alteração de tarifas, plano ou recarga.
+
+Migration `0147_connectyhub_voice` aplicada na VPS após ensaio com rollback, MD5 LF `52786b3c82fdea943393d0834be76a1a`. Bucket privado, RLS e RPCs restritas ao serviço conferidos. Ensaio transacional no banco real validou reserva, conclusão repetida com débito único e contabilização de armazenamento; tudo revertido, sem síntese/cobrança persistida. Segurança de reset `0146` / aplicativo `312a02d` incorporada e preservada, assim como seu registro de observação em produção.
+
+**2.787 testes em 221 arquivos**, lint e build/TypeScript (107 páginas) aprovados. Documentação pública integra `/docs/api#voz`, OpenAPI e guia. Publicação do aplicativo e teste integrado Betel ainda precisam da confirmação abaixo; testes locais não comprovam síntese real. O clone Evelyn existente foi consultado no fornecedor com sucesso, sem recriação. [Cobertura integral do fornecedor, recursos implementados e dependências concretas](matriz-connectyhub-voz-2026-09-14.md). Este pacote não comprova paridade completa com ElevenLabs; streaming/timestamps e demais famílias ainda estão discriminados como não implementados.
+
 ## Reset por acesso assistido — publicado em 14/09/2026
 
 Restrição implementada na base publicada `4c84800`: reset exclusivo de administrador da plataforma durante acesso assistido a cliente, vinculado no servidor às duas sessões Auth reais e à organização. Cliente owner/admin/comum e admin sem contexto assistido não recebem acesso. Expiração/encerramento revogam a capacidade. Inclui bloqueio de autopromoção pelo campo `profiles.is_platform_admin`, cuja permissão direta foi confirmada na VPS. Corpo do reset integral preservado.
