@@ -381,3 +381,14 @@ Pendências materiais: reteste do titular após publicação; imóveis da Renata
 ## Alimentação retomada — 14/09/2026
 
 Autorização explícita do titular revogou a pausa. Montagem por unidade, preços/limites cadastrados, revisão confirmada, busca completa e validações de entrega/cobrança implementadas e testadas; correções urgentes de 4ecc867 preservadas. Migration 0142 aplicada e verificada, seis novas funções restritas ao serviço, triggers ativos e índice válido. Nenhuma configuração real de montagem ativada. Aplicativo em publicação. [Evidências e limites](alimentacao-montagem-2026-09-14.md). Recursos de serviços/domicílio e retestes reais permanecem pendentes, sem bloquear esta entrega.
+
+
+## Estúdio e transporte nativo Betel — 14/09/2026
+
+Release `94d34012875830a2ed1130259b21d851ad95794e` publicada em produção: Vercel `dpl_J5eiTWsuSiX7F1jVFGYPJtTRNHV4`, Ready e aliases `connectyhub.com.br`/`www`, build concluído às 17:40 BRT. Inclui layout cliente e separação administrativa API de AI / Estúdio de Voz e Áudio, transporte nativo Betel e quatro adaptadores internos de áudio ainda sem rotas públicas. Isso não conclui a expansão das modalidades nem ativa novas tarifas.
+
+Mapa de origem nativa da Betel confirmado no ambiente de produção e aceito pelo parser real: API transporta os links da Betel e webhook não cria outro CRM para as instâncias API dessa organização. Links legados permanecem. A tarefa proprietária da Betel confirmou oito requisições HEAD de quatro links legados, com destinos corretos e contadores inalterados; nenhum clique/envio real foi gerado. Aplicação/login/documentação retornaram200 e API de voz sem credencial401. Integração consolidada aprovada em40 testes de transporte, webhook nativo e links.
+
+## Atendimento aos responsáveis — 14/09/2026
+
+Correção focada `0a8e2bb` integrada localmente à release atual, build e TypeScript finais aprovados; publicação em andamento. Reconhece variante móvel brasileira com/sem nono dígito, usa responsáveis atuais por agente e revalida antes de IA/voz/envio e follow-up. Preserva histórico técnico e avisos administrativos; nenhuma mudança cadastral ou migration.100 testes focados aprovados na base integrada. [Causa, verificações e limites](correcao-responsaveis-whatsapp-2026-09-14.md). Reteste real após publicação permanece pendente.
