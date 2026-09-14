@@ -22,7 +22,11 @@ function sdkRequest(request:Request,preserveBody=false) {
   const sdkKey=h.get('x-goog-api-key');
   if(!h.has('authorization')&&sdkKey)h.set('authorization',`Bearer ${sdkKey}`);
   h.delete('x-goog-api-key');h.set('x-connectyhub-contract',geminiContractVersion);
-  return preserveBody?new Request(request,{headers:h}):new Request(request.url,{method:request.method,headers:h});
+  // Next wraps incoming requests in a proxy. Passing that proxy to the native
+  // Request constructor fails Undici's private-field brand check.
+  const init:RequestInit&{duplex?:'half'}={method:request.method,headers:h};
+  if(preserveBody&&!['GET','HEAD'].includes(request.method)&&request.body){init.body=request.body;init.duplex='half';}
+  return new Request(request.url,init);
 }
 function modelId(value:string) {return aiModelDefinition(value)?value:publicModelId(value);}
 function modelName(value:string) {

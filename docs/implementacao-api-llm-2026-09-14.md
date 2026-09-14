@@ -93,3 +93,11 @@ Os complementos permanecem sem commit/push após a rejeição anterior. O pedido
 ## Autorização direta para publicação
 
 Após receber o resumo dos complementos e dos testes, o titular autorizou verbalmente a publicação de lotes e File Search. A master remota foi conferida e permanece em 68ae22b, sem alterações concorrentes a integrar. Publicação retomada dentro desse escopo, sem alterar preços, migrations ou realizar gerações pagas de teste. A autorização de compartilhamento com a tarefa de origem não foi presumida a partir da autorização de publicação.
+
+## Publicação e verificação dos complementos — 14/09, 12:54 UTC
+
+Commit b742e91 publicado na master; Vercel dpl_3KkcsSjxQTiiNHyLpKM6BpWEj3uj Ready/Production, domínio principal e aliases conferidos. Logs confirmaram commit, build Turbopack e TypeScript aprovados. OpenAPI público respondeu 200 com 30 operações e guia com File Search; preços e login responderam 200. O POST de upload sem credencial respondeu 401. Porém GET files, batches e fileSearchStores retornaram 503 genérico antes de autenticar. A publicação, sozinha, não foi considerada validação operacional.
+
+Falha reproduzida no build local e no servidor de desenvolvimento Next.js: ao copiar o objeto Request encapsulado pelo framework, o construtor nativo recusava o acesso a seu estado privado. O adaptador agora constrói a requisição pela URL, método e cabeçalhos, encaminhando o stream do corpo com duplex=half quando aplicável. Sem leitura antecipada do corpo, sem nova chamada ao fornecedor, sem mudança financeira. Diagnóstico temporário foi removido antes do commit.
+
+Regressão adicionada com Request envolvido em Proxy, preservando SDK auth, Idempotency-Key e corpo de POST/PATCH. Vinte e quatro testes direcionados, ESLint e build Webpack com TypeScript passaram. Servidor Next.js real confirmou 401 para seis probes anônimos (models/files/batches/fileSearchStores, criação de lote e coleção), eliminando o 503 local. Servidores locais de reprodução encerrados; republicação corretiva em andamento neste registro.
