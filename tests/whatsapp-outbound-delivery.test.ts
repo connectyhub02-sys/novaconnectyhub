@@ -7,6 +7,59 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
 import * as links from "../src/lib/whatsapp/outbound-links";
 afterEach(()=>vi.unstubAllEnvs());
+it("transports native API links unchanged without CH CRM or tracking and replays once",async()=>{
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
+ const f=fixture();
+ const body={number:"phone",text:"Veja https://betel.example/w/native",file:"https://media.example/audio.mp3",type:"audio",track_id:"native-one",choices:["Abrir|https://betel.example/w/native"]};
+ expect((await f.send("/send/media",body,{apiOrganizationId:"org"})).status).toBe(200);
+ expect(JSON.parse(String(f.fetch.mock.calls[0][1].body))).toEqual(body);
+ expect(String(f.fetch.mock.calls[0][0])).toBe("https://provider.invalid/api/send/media");
+ await f.send("/send/media",body,{apiOrganizationId:"org"});
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+ expect(f.db.tables.whatsapp_outbound_deliveries??[]).toHaveLength(0);
+ expect(f.db.tables.whatsapp_outbound_links??[]).toHaveLength(0);
+ expect(f.rpc.mock.calls.every(([name])=>name==="claim_whatsapp_outbound_operation")).toBe(true);
+ expect(f.db.tables.whatsapp_outbound_operations[0]).toMatchObject({status:"sent",delivery_ids:[]});
+});
+it("blocks untrusted navigation and missing stable keys before native dispatch",async()=>{
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
+ const f=fixture();
+ expect((await f.send("/send/text",{number:"phone",text:"https://evil.example",track_id:"native-block"},{apiOrganizationId:"org"})).status).toBe(422);
+ expect((await f.send("/send/menu",{number:"phone",choices:["Abrir|https://user:password@betel.example/w/id"],track_id:"native-credentials"},{apiOrganizationId:"org"})).status).toBe(422);
+ expect((await f.send("/send/menu",{number:"phone",choices:["Abrir|url:javascript:alert(1)"],track_id:"native-script"},{apiOrganizationId:"org"})).status).toBe(422);
+ expect((await f.send("/send/text",{number:"phone",text:"https://betel.example/w/id"},{apiOrganizationId:"org"})).status).toBe(422);
+ expect(f.fetch).not.toHaveBeenCalled();
+ expect(f.db.tables.whatsapp_outbound_operations.every(row=>row.status==="failed")).toBe(true);
+ expect(f.db.tables.whatsapp_outbound_deliveries??[]).toHaveLength(0);
+});
+it("replays legacy archived receipts after native mode activation without new sends",async()=>{
+ const f=fixture();
+ const body={number:"phone",text:"https://shop.invalid/old",track_id:"before-native"};
+ await f.send("/send/text",body,{apiOrganizationId:"org"});
+ const archived=f.db.tables.whatsapp_outbound_deliveries.length;
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
+ expect((await f.send("/send/text",body,{apiOrganizationId:"org"})).status).toBe(200);
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+ expect(f.db.tables.whatsapp_outbound_deliveries).toHaveLength(archived);
+});
+it("cannot enable native mode from payload or another organization's configuration",async()=>{
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({other:"https://betel.example"}));
+ const f=fixture();
+ await f.send("/send/text",{number:"phone",text:"https://betel.example/w/id",apiOrganizationId:"other",native_links:true},{apiOrganizationId:"org"});
+ expect(f.db.tables.whatsapp_outbound_deliveries.length).toBeGreaterThan(0);
+ expect(f.db.tables.whatsapp_outbound_links).toHaveLength(1);
+ expect(String(f.fetch.mock.calls[0][1].body)).toContain("https://app.invalid/w/");
+});
+it("preserves an uncertain native receipt without automatically sending again",async()=>{
+ vi.stubEnv("WHATSAPP_NATIVE_LINK_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
+ const f=fixture();f.fetch.mockRejectedValue(Error("timeout"));
+ const body={number:"phone",text:"https://betel.example/w/id",track_id:"native-timeout"};
+ expect((await f.send("/send/text",body,{apiOrganizationId:"org"})).status).toBe(502);
+ expect((await f.send("/send/text",body,{apiOrganizationId:"org"})).status).toBe(503);
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+ expect(f.db.tables.whatsapp_outbound_operations[0].status).toBe("uncertain");
+ expect(f.db.tables.whatsapp_outbound_deliveries??[]).toHaveLength(0);
+});
 it("uses the reserved organization origin and ignores payload origin",async()=>{
  vi.stubEnv("WHATSAPP_TRACKING_ORIGINS_JSON",JSON.stringify({org:"https://betel.example"}));
  const f=fixture();

@@ -14,21 +14,29 @@ function choiceUrl(choice: string) {
   return /^https?:\/\//i.test(action) ? { label: choice.slice(0, split), target: action } : null;
 }
 
-export function collectOutboundLinks(body: Body): Array<{target: string; label: string}> {
+export function collectOutboundLinks(body: Body, allowedOrigin?: string): Array<{target: string; label: string}> {
   const links = new Map<string, string>();
   const add = (target: string, label = "Abrir link") => {
-    try { const url = new URL(target); if (url.username || url.password || !/^https?:$/.test(url.protocol)) return; } catch { return; }
+    try {
+      const url = new URL(target);
+      if (url.username || url.password || !/^https?:$/.test(url.protocol) || (allowedOrigin && url.origin!==allowedOrigin)) throw new Error("Invalid navigation origin");
+    } catch {
+      if (allowedOrigin) throw new Error("Native navigation must use its configured origin");
+      return;
+    }
     if (label === "Abrir link" && /\/(contato\/preferencias|avisos)\//.test(target)) label=target.endsWith("/contato")?"Salvar contato":"Sair da lista";
     if (!links.has(target) || label !== "Abrir link") links.set(target, label);
   };
   const walk = (value: unknown, field = "") => {
     if (typeof value === "string") {
       if (field === "choices") {
+        if (allowedOrigin && /\|url:/.test(value)) add(value.slice(value.indexOf("|url:")+5));
         const action = choiceUrl(value);
         if (action) { add(action.target, action.label); return; }
         // Image blocks, Pix payloads and reply IDs are not navigation links.
         if (/^\{|\|(copy:|call:)/.test(value) || value.includes("|")) return;
       } else if (!displayFields.has(field)) return;
+      if (allowedOrigin && ["url","buttonUrl","button_url","paymentLink"].includes(field) && value) add(value);
       for (const found of value.matchAll(urlPattern)) add(trimUrl(found[0]));
     } else if (Array.isArray(value)) value.forEach(item => walk(item, field));
     else if (value && typeof value === "object") Object.entries(value).forEach(([key,item]) => walk(item,key));

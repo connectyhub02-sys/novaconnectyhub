@@ -1103,7 +1103,7 @@ export async function sendGatewayTextMessage(
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/text", {
-    outbound: { instanceId: instance.id, client: auth.client },
+    outbound: { instanceId: instance.id, client: auth.client, apiOrganizationId: auth.apiClient.organization_id },
     method: "POST",
     token,
     body: {
@@ -1260,7 +1260,7 @@ export async function sendGatewayMediaMessage(
   });
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/media", {
-    outbound: { instanceId: instance.id, client: auth.client },
+    outbound: { instanceId: instance.id, client: auth.client, apiOrganizationId: auth.apiClient.organization_id },
     method: "POST",
     token,
     body: providerBody,
@@ -1451,7 +1451,7 @@ export async function proxyGatewayProviderRequest(
   const providerStartedAt = Date.now();
   const providerBody = normalizeProviderProxyRequestBody(input.path, input.body);
   const result = await callUazapi(credentials, input.path, {
-    outbound: { instanceId: instance.id, client: auth.client },
+    outbound: { instanceId: instance.id, client: auth.client, apiOrganizationId: auth.apiClient.organization_id },
     method: input.method,
     token,
     body: providerBody,
@@ -3326,7 +3326,7 @@ async function callInstanceUazapi(
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, input.providerPath, {
-    outbound: { instanceId: instance.id, client: auth.client },
+    outbound: { instanceId: instance.id, client: auth.client, apiOrganizationId: auth.apiClient.organization_id },
     method: input.method,
     token,
     body: input.body,

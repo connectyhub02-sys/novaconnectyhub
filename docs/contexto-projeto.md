@@ -63,6 +63,7 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 - Avisos de plano, pagamento e créditos priorizam o agente escolhido/do cliente; agente indisponível ou ausência de agente no painel usam o remetente da plataforma. Instâncias de clientes que só usam a API não são apropriadas para enviar avisos por conta própria.
 - A comunicação do agente ao administrador pode usar primeira pessoa; avisos do remetente global falam do painel/conta. Preserve preferências e opt-out existentes. Não contorne opt-out nem derive autorização para campanhas da mera existência de um telefone.
 - Envios WhatsApp devem passar pelos caminhos centralizados de rastreamento, botão/link quando suportado, e arquivo do lead. Confirme limitações do provedor e fallback implementado; a presença de um helper não prova cobertura de todos os caminhos.
+- Exceção explícita de 14/09: a API WhatsApp da Betel usa transporte independente configurado no servidor; links, cliques e CRM ficam na Betel, preservando recibos técnicos, idempotência e uso na CH. Não aplicar essa exceção a outras organizações ou instâncias internas. [Contrato e ativação](betel-transporte-nativo-2026-09-14.md).
 
 ## Trabalho e evidência
 

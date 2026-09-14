@@ -16,6 +16,8 @@ Cada GET humano é uma abertura, não um visitante único. Não repetir automati
 
 ## Ativação Betel
 
-Origem pretendida: `https://betel-leil-es.vercel.app`. O mapeamento permanece desligado até confirmação da publicação e validação do adaptador Betel. A publicação do resolvedor é independente. Depois da ativação, novos links devem usar a origem Betel; destinos e isolamento continuam sendo responsabilidade da ConnectyHub.
+Origem: `https://betel-leil-es.vercel.app`. O adaptador anterior foi publicado e passou na validação conjunta de oito HEADs, sem incremento de cliques, antes da ativação do mapa na produção CH. Commit `2e0409c2`, Vercel `dpl_FMNemmo5JCcZtTXouewovymz7MBw` Ready / Production, criada em 14/09 às 17:07:55 BRT. Nenhum envio real.
+
+Depois dessa ativação, o titular refinou o escopo: novos links/CRM da Betel serão nativos do cliente, com CH apenas transporte. [Novo contrato](betel-transporte-nativo-2026-09-14.md). Este resolvedor permanece para links históricos; a extensão de eventos CH foi cancelada.
 
 Validação local: isolamento por organização, destino persistido, rejeição de destinos inseguros/loop, origem confiável, HEAD/prévias sem cliques, preservação do arquivo e envio idempotente. Sem envio real de WhatsApp, clique real ou mudança de tarifas. Não declarar o domínio ativo apenas pela existência do código.
