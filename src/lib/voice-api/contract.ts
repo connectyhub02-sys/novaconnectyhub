@@ -33,7 +33,7 @@ export function voiceFailure(error: unknown) {
   return Response.json({error:{code:'service_unavailable',message:'Não foi possível concluir. Consulte a solicitação antes de tentar novamente.'}},{status:503,headers:{'Cache-Control':'no-store'}});
 }
 export function voiceJson(data:unknown,status=200) { return Response.json(data,{status,headers:{'Cache-Control':'no-store'}}); }
-export async function voiceBody(request:Request,limit:number) {
+export async function voiceBody(request:Pick<Request,'headers'|'body'>,limit:number) {
   if(Number(request.headers.get('content-length')??0)>limit)throw new VoiceError('body_limit',413,'Corpo acima do limite.');
   const reader=request.body?.getReader();if(!reader)return new Uint8Array();const chunks:Uint8Array[]=[];let size=0;
   try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>limit)throw new VoiceError('body_limit',413,'Corpo acima do limite.');chunks.push(value);}}

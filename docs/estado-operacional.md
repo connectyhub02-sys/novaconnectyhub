@@ -392,3 +392,5 @@ Mapa de origem nativa da Betel confirmado no ambiente de produção e aceito pel
 ## Atendimento aos responsáveis — 14/09/2026
 
 Correção focada `0a8e2bb` integrada localmente à release atual, build e TypeScript finais aprovados; publicação em andamento. Reconhece variante móvel brasileira com/sem nono dígito, usa responsáveis atuais por agente e revalida antes de IA/voz/envio e follow-up. Preserva histórico técnico e avisos administrativos; nenhuma mudança cadastral ou migration.100 testes focados aprovados na base integrada. [Causa, verificações e limites](correcao-responsaveis-whatsapp-2026-09-14.md). Reteste real após publicação permanece pendente.
+
+Publicação da correção confirmada às 18:00 BRT: `fe81625d`, Vercel `dpl_DFt5MJAooejHXPjnKTMUma8u2yZ5` Ready e aliases principais. Relatório anterior registra as verificações; nenhum teste real foi disparado. Registro pós-publicação mantido para o próximo pacote, evitando deploy apenas documental.

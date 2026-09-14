@@ -43,3 +43,12 @@ Marco técnico de 14/09: adaptadores internos para transcrição, isolamento, tr
 - Confirmar tabela efetiva por modalidade e escolher uma única base Gemini. A fórmula e o mínimo de novas operações já foram aprovados; não há autorização para dupla cobrança nem para alterar tarifas atuais. O orçamento de testes pagos continua pendente e deve ser definido por modalidade depois do preço.
 - Implementar arquivos privados e limites na VPS, jobs/recibos, reserva/liquidação única, recuperação e isolamento. Gemini não pode reutilizar diretamente o helper WhatsApp com repetição automática/R2 como se fosse o transporte privado idempotente do Estúdio.
 - Todos os planos podem receber acesso ao produto, inclusive Free, preservando carteira e franquia de cada plano; acesso não significa créditos ilimitados.
+
+
+## Segundo marco técnico — transportes restantes
+
+Adaptadores internos locais adicionados para diálogo v3 (2.000 caracteres totais/10 vozes), desenho com texto explícito e salvamento separado da prévia, dicionários privados por versão e dublagem de áudio v1 para um idioma de destino. Sem URLs externas de entrada, compartilhamento de dicionário ou repetição automática de POST. Não inclui edição Enterprise de dublagem nem migração automática para v2.
+
+Gemini possui transporte separado com vozes nativas do catálogo atual, resposta PCM limitada convertida em WAV e uso de tokens preservado. Consumo ausente fica pendente de conciliação; não vira geração gratuita. Não chama o helper WhatsApp que repete tentativas e publica em R2.18 testes isolados de contratos/transportes passaram; integração com operações, arquivos privados, tarifação e interface ainda pendente. Nenhuma geração externa ou tarifa ativada.
+
+Contratos conferidos na documentação oficial e no SDK instalado: [diálogo](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert), [desenho](https://elevenlabs.io/docs/api-reference/text-to-voice/design), [salvamento](https://elevenlabs.io/docs/api-reference/text-to-voice/create), [dicionários](https://elevenlabs.io/docs/api-reference/pronunciation-dictionaries/create-from-rules), [dublagem v1](https://elevenlabs.io/docs/api-reference/legacy/dubbing/create), [voz Gemini](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation).
