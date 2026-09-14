@@ -1,3 +1,4 @@
+import { deliveryMoneyCents } from "@/lib/sales-catalog/local-delivery";
 import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -1570,6 +1571,7 @@ async function saveShippingSettings(input: {
     configured: true,
     shipping_enabled: shippingEnabled,
     local_delivery_enabled: localDeliveryEnabled,
+    local_delivery_authority: normalizeLocalDeliveryAuthority(input.body?.localDeliveryAuthority),
     local_pickup: localPickup,
     origin_cep: originCep,
     default_handling_days: defaultHandlingDays,
@@ -1781,7 +1783,7 @@ function assertShippingSettingsReady(input: {
   }
 
   const incompleteZones = input.activeLocalDeliveryZones
-    .filter((zone) => !hasShippingMoneyValue(zone.price) || zone.minDays === null || zone.maxDays === null)
+    .filter((zone) => deliveryMoneyCents(zone.price) === null || zone.orderMinimum != null && deliveryMoneyCents(zone.orderMinimum) === null || zone.freeDeliveryThreshold != null && deliveryMoneyCents(zone.freeDeliveryThreshold) === null || zone.minDays === null || zone.maxDays === null)
     .map((zone) => zone.name);
 
   if (incompleteZones.length > 0) {
@@ -1795,11 +1797,11 @@ function assertShippingSettingsReady(input: {
       }
 
       if (zone.shape === "neighborhoods") {
-        return zone.neighborhoods.length === 0 && zone.cities.length === 0;
+        return zone.neighborhoods.length === 0;
       }
 
-      return zone.polygon.length < 3
-        && (!isValidGeoPoint(zone.baseLatitude, zone.baseLongitude) || zone.radiusKm === null || zone.radiusKm <= 0);
+      if (zone.shape === "cep") return !/^\d{8}$/.test(zone.cepStart ?? "") || !/^\d{8}$/.test(zone.cepEnd ?? "") || zone.cepStart! > zone.cepEnd!;
+      return zone.polygon.length < 3;
     })
     .map((zone) => zone.name);
 
@@ -5089,6 +5091,9 @@ function normalizeLocalDeliveryZones(value: unknown): SalesCatalogLocalDeliveryZ
       name: normalizeOptionalText(readFormString(record.name), 80) ?? `Zona local ${zones.length + 1}`,
       active: readBoolean(record.active) ?? false,
       shape,
+      priority: normalizeNullableInteger(record.priority, 0, 1000) ?? 0,
+      cepStart: normalizeOptionalText(readFormString(record.cepStart ?? record.cep_start), 10)?.replace(/\D/g, "") ?? null,
+      cepEnd: normalizeOptionalText(readFormString(record.cepEnd ?? record.cep_end), 10)?.replace(/\D/g, "") ?? null,
       baseAddress: normalizeOptionalText(readFormString(record.baseAddress ?? record.base_address), 220),
       baseLatitude: normalizeNullableCoordinate(record.baseLatitude ?? record.base_latitude, -90, 90),
       baseLongitude: normalizeNullableCoordinate(record.baseLongitude ?? record.base_longitude, -180, 180),
@@ -5116,6 +5121,9 @@ function serializeLocalDeliveryZone(zone: SalesCatalogLocalDeliveryZone) {
     name: zone.name,
     active: zone.active,
     shape: zone.shape,
+    priority: zone.priority ?? 0,
+    cep_start: zone.cepStart ?? null,
+    cep_end: zone.cepEnd ?? null,
     base_address: zone.baseAddress,
     base_latitude: zone.baseLatitude,
     base_longitude: zone.baseLongitude,
@@ -5147,6 +5155,7 @@ function formatLocalDeliveryZoneContent(zone: SalesCatalogLocalDeliveryZone) {
 }
 
 function formatLocalDeliveryScope(zone: SalesCatalogLocalDeliveryZone) {
+  if (zone.shape === "cep") return `CEP ${zone.cepStart ?? "pendente"} a ${zone.cepEnd ?? "pendente"}`;
   if (zone.shape === "neighborhoods") {
     const neighborhoods = zone.neighborhoods.length ? `bairros ${zone.neighborhoods.join(", ")}` : "";
     const cities = zone.cities.length ? `cidades ${zone.cities.join(", ")}` : "";
@@ -5173,13 +5182,14 @@ function formatLocalDeliveryScope(zone: SalesCatalogLocalDeliveryZone) {
 }
 
 function formatLocalDeliveryShapeLabel(shape: SalesCatalogLocalDeliveryZoneShape) {
+  if (shape === "cep") return "faixa de CEP";
   if (shape === "neighborhoods") return "bairros";
   if (shape === "polygon") return "mapa";
   return "raio";
 }
 
 function normalizeLocalDeliveryZoneShape(value: string | null): SalesCatalogLocalDeliveryZoneShape {
-  if (value === "neighborhoods" || value === "polygon") return value;
+  if (value === "neighborhoods" || value === "polygon" || value === "cep") return value;
   return "radius";
 }
 
@@ -5672,3 +5682,5 @@ function createAttributeId(value: string) {
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "atributo";
 }
+
+function normalizeLocalDeliveryAuthority(value: unknown) { return value === "coordinates" || value === "cep" || value === "address" ? value : "auto"; }

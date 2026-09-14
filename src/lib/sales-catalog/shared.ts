@@ -678,13 +678,17 @@ export type SalesCatalogGeoPoint = {
   lng: number;
 };
 
-export type SalesCatalogLocalDeliveryZoneShape = "radius" | "neighborhoods" | "polygon";
+export type SalesCatalogLocalDeliveryZoneShape = "radius" | "neighborhoods" | "polygon" | "cep";
+export type SalesCatalogLocalDeliveryAuthority = "auto" | "coordinates" | "cep" | "address";
 
 export type SalesCatalogLocalDeliveryZone = {
   id: string;
   name: string;
   active: boolean;
   shape: SalesCatalogLocalDeliveryZoneShape;
+  priority?: number;
+  cepStart?: string | null;
+  cepEnd?: string | null;
   baseAddress: string | null;
   baseLatitude: number | null;
   baseLongitude: number | null;
@@ -711,6 +715,7 @@ export type ClientSalesCatalogShippingSettings = {
   defaultHandlingDays: number | null;
   rules: SalesCatalogShippingRule[];
   localDeliveryZones: SalesCatalogLocalDeliveryZone[];
+  localDeliveryAuthority?: SalesCatalogLocalDeliveryAuthority;
   createdAt: string | null;
   updatedAt: string | null;
 };

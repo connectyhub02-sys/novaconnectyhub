@@ -1,3 +1,4 @@
+import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { activityDefaultDestination, activityRepresentation, buildActivityProfileInstruction } from "./activity-profile";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
@@ -270,7 +271,7 @@ type RuntimeLinkButton = {
 };
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
-type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder & { checkoutConfirmedAt?: string | null; financialSummary?: string; checkoutRevision?: number; checkoutPaymentLock?: string | null; preferredPaymentMethod?: SalesCatalogRuntimePaymentPreference | null };
+type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder & { shippingQuote?: unknown; checkoutConfirmedAt?: string | null; financialSummary?: string; checkoutRevision?: number; checkoutPaymentLock?: string | null; preferredPaymentMethod?: SalesCatalogRuntimePaymentPreference | null };
 type RuntimeOrganizationLocation = OrganizationLocation;
 type SalesCatalogRuntimePaymentPreference = "pix" | "card";
 type SalesCatalogRuntimePaymentChoice = {
@@ -330,7 +331,7 @@ type RuntimeSalesCatalogShippingQuote = {
 
 type RuntimeLocalDeliveryMatch = {
   zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number];
-  source: "coordinates" | "text";
+  source: "coordinates" | "text" | "cep";
   coordinates: { lat: number; lng: number } | null;
   destinationAddress: string | null;
 };
@@ -1887,6 +1888,7 @@ async function loadOrganizationSalesCatalogOrders(
   const financialSummaries = await loadOrderFinancialSummary(client, input.organizationId, orderIds);
   return orderRows.map((order) => ({
     ...mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []),
+    shippingQuote: readRecord(order.metadata)?.shipping_quote,
     checkoutConfirmedAt: asString(readRecord(order.metadata)?.checkout_confirmed_at),
     checkoutRevision: Number((order as SalesCatalogOrderRow & { checkout_revision?: number }).checkout_revision ?? 0),
     checkoutPaymentLock: (order as SalesCatalogOrderRow & { checkout_payment_lock?: string | null }).checkout_payment_lock ?? null,
@@ -1981,6 +1983,11 @@ async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
   if (entries.some(row => !row.item || !Number.isSafeInteger(row.quantity) || row.quantity < 1)) return null;
   const catalogItem = buildRuntimeShippingCartItem(entries as Array<{ item: RuntimeSalesCatalogItem; quantity: number }>, normalizeCurrencyAmount(order.subtotal) ?? undefined);
   if (!catalogItem) return null;
+  if (shippingSettings.localDeliveryEnabled && resolveRuntimeLocalDeliveryMatch({
+    latestInbound: input.latestInbound, text: input.userText, cep,
+    zones: shippingSettings.localDeliveryZones, authority: shippingSettings.localDeliveryAuthority,
+    subtotal: normalizeCurrencyAmount(order.subtotal) ?? 0, customShipping: catalogItem.shipping.profile === "custom",
+  })) return null;
 
   const result = calculateSalesCatalogShippingQuotes({
     item: catalogItem,
@@ -2189,6 +2196,9 @@ async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
     latestInbound: input.latestInbound,
     text: input.userText,
     zones: activeZones,
+    customShipping: order.items.some(line => input.context.salesCatalog.find(item => item.id === line.catalogItemId)?.shipping.profile === "custom"),
+    subtotal: normalizeCurrencyAmount(order.subtotal) ?? 0,
+    authority: shippingSettings.localDeliveryAuthority,
   });
 
   if (!match || !match.zone.price) return null;
@@ -2236,6 +2246,8 @@ async function maybeAttachSalesCatalogLocalDeliveryToOrder(input: {
           max_days: match.zone.maxDays,
           source: match.source,
           coordinates: match.coordinates,
+          destination_address: destinationAddress,
+          cep: order.destinationCep,
           zone_id: match.zone.id,
           zone_name: match.zone.name,
           notes: match.zone.notes,
@@ -2336,10 +2348,15 @@ async function maybeAttachSavedSalesCatalogDeliveryToOrder(input: {
   const localMatch = resolveRuntimeLocalDeliveryMatch({
     latestInbound: null,
     text: savedAddress.address,
+    cep: savedAddress.cep,
+    coordinates: savedAddress.coordinates,
+    subtotal: normalizeCurrencyAmount(order.subtotal) ?? 0,
+    authority: shippingSettings.localDeliveryAuthority,
     zones: activeZones,
+    customShipping: order.items.some(line => input.context.salesCatalog.find(item => item.id === line.catalogItemId)?.shipping.profile === "custom"),
   });
-  const orderItem = order.items.find((item) => item.catalogItemId);
-  const catalogItem = input.context.salesCatalog.find((item) => item.id === orderItem?.catalogItemId) ?? null;
+  const deliveryEntries = order.items.map(line => ({ item: input.context.salesCatalog.find(item => item.id === line.catalogItemId), quantity: line.quantity }));
+  const catalogItem = deliveryEntries.every(entry => entry.item) ? buildRuntimeShippingCartItem(deliveryEntries as RuntimeShippingCartSelection[], normalizeCurrencyAmount(order.subtotal) ?? undefined) : null;
   const nationalQuote = shippingSettings.shippingEnabled && savedAddress.cep && catalogItem
     ? calculateSalesCatalogShippingQuotes({
         item: catalogItem,
@@ -3008,6 +3025,10 @@ function resolveInitialSalesCatalogOrderShipping(input: {
   const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
     latestInbound: null,
     text: shippingIntentText,
+    coordinates: resolveRuntimeCurrentDeliveryCoordinates(input.context),
+    subtotal: normalizeCurrencyAmount(physicalItem.price) ?? 0,
+    customShipping: physicalItem.shipping.profile === "custom",
+    authority: shippingSettings?.localDeliveryAuthority,
     zones: shippingSettings?.configured && shippingSettings.localDeliveryEnabled
       ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
       : [],
@@ -3017,7 +3038,7 @@ function resolveInitialSalesCatalogOrderShipping(input: {
     const shippingMethod = `Entrega local - ${localDeliveryMatch.zone.name}`;
 
     return {
-      destinationCep: null,
+      destinationCep: extractFirstBrazilianCep(shippingIntentText),
       destinationAddress: localDeliveryMatch.destinationAddress,
       shippingTotal: localDeliveryMatch.zone.price,
       shippingMethod,
@@ -3031,6 +3052,8 @@ function resolveInitialSalesCatalogOrderShipping(input: {
         max_days: localDeliveryMatch.zone.maxDays,
         match_source: localDeliveryMatch.source,
         coordinates: localDeliveryMatch.coordinates,
+        destination_address: localDeliveryMatch.destinationAddress,
+        cep: extractFirstBrazilianCep(shippingIntentText),
         zone_id: localDeliveryMatch.zone.id,
         zone_name: localDeliveryMatch.zone.name,
         notes: localDeliveryMatch.zone.notes,
@@ -3154,6 +3177,10 @@ function resolveSavedSalesCatalogOrderShipping(input: {
   const localDeliveryMatch = resolveRuntimeLocalDeliveryMatch({
     latestInbound: null,
     text: savedAddress.address,
+    cep: savedAddress.cep,
+    subtotal: normalizeCurrencyAmount(input.physicalItem.price) ?? 0,
+    customShipping: input.physicalItem.shipping.profile === "custom",
+    authority: shippingSettings.localDeliveryAuthority,
     zones: shippingSettings.localDeliveryEnabled
       ? shippingSettings.localDeliveryZones.filter((zone) => zone.active)
       : [],
@@ -3225,74 +3252,37 @@ function resolveSavedSalesCatalogOrderShipping(input: {
   };
 }
 
+function resolveRuntimeCurrentDeliveryCoordinates(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const boundary = resolveSalesCatalogCartBoundaryMs(context.salesCatalogOrders, context);
+  let coordinates: { lat: number; lng: number } | null = null;
+  for (const message of context.messages) {
+    if (message.direction !== "inbound" || boundary !== null && Date.parse(message.occurred_at) < boundary) continue;
+    const text = message.text_content ?? "";
+    // A new textual destination invalidates an earlier pin. A later confirmation
+    // can reuse the pin received after that address in this current purchase.
+    if (extractRuntimeAddress(null, text)) coordinates = null;
+    const point = extractRuntimeCoordinates(message, text);
+    if (point) coordinates = point;
+  }
+  return coordinates;
+}
+
 function resolveRuntimeLocalDeliveryMatch(input: {
   latestInbound: ConversationMessageRow | null;
   text: string;
   zones: ClientSalesCatalogShippingSettings["localDeliveryZones"];
+  subtotal: number;
+  customShipping?: boolean;
+  coordinates?: { lat: number; lng: number } | null;
+  cep?: string | null;
+  authority?: ClientSalesCatalogShippingSettings["localDeliveryAuthority"];
 }): RuntimeLocalDeliveryMatch | null {
-  if (input.zones.length === 0) return null;
-
-  const coordinates = extractRuntimeCoordinates(input.latestInbound, input.text);
+  if (!input.zones.length || input.customShipping) return null;
+  const coordinates = input.coordinates ?? extractRuntimeCoordinates(input.latestInbound, input.text);
   const destinationAddress = extractRuntimeAddress(input.latestInbound, input.text);
-
-  if (coordinates) {
-    const coordinateMatch = input.zones.find((zone) => runtimeLocalDeliveryZoneContainsPoint(zone, coordinates));
-
-    if (coordinateMatch) {
-      return {
-        zone: coordinateMatch,
-        source: "coordinates",
-        coordinates,
-        destinationAddress,
-      };
-    }
-  }
-
-  const normalizedText = normalizeSearch([destinationAddress, input.text].filter(Boolean).join(" "));
-  if (!normalizedText) return null;
-
-  const textMatch = input.zones.find((zone) => runtimeLocalDeliveryZoneMatchesText(zone, normalizedText));
-  if (!textMatch) return null;
-
-  return {
-    zone: textMatch,
-    source: "text",
-    coordinates,
-    destinationAddress,
-  };
-}
-
-function runtimeLocalDeliveryZoneContainsPoint(
-  zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number],
-  point: { lat: number; lng: number },
-) {
-  if (zone.shape === "radius") {
-    const basePoint = toRuntimeCoordinatePoint(zone.baseLatitude, zone.baseLongitude);
-
-    return zone.radiusKm !== null
-      && zone.radiusKm > 0
-      && basePoint !== null
-      && calculateRuntimeDistanceKm(point, basePoint) <= zone.radiusKm;
-  }
-
-  if (zone.shape === "polygon") {
-    return zone.polygon.length >= 3 && isRuntimePointInsidePolygon(point, zone.polygon);
-  }
-
-  return false;
-}
-
-function runtimeLocalDeliveryZoneMatchesText(
-  zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number],
-  normalizedText: string,
-) {
-  const places = zone.shape === "neighborhoods"
-    ? [zone.name, ...zone.neighborhoods, ...zone.cities]
-    : [zone.name];
-  return places.some((place) => {
-    const normalizedPlace = normalizeSearch(place);
-    return normalizedPlace.length >= 3 && normalizedText.includes(normalizedPlace);
-  });
+  const quote = quoteLocalDelivery({ ...input, coordinates, address: destinationAddress ?? input.text, cep: input.cep ?? extractFirstBrazilianCep(input.text) });
+  if (quote.reason !== "available" || !quote.zone || quote.amount === null) return null;
+  return { zone: { ...quote.zone, price: quote.amount.toFixed(2) }, source: quote.source === "address" ? "text" : quote.source, coordinates, destinationAddress };
 }
 
 function extractRuntimeCoordinates(latestInbound: ConversationMessageRow | null, text: string) {
@@ -3422,6 +3412,7 @@ function hasRuntimeAddressText(text: string) {
 }
 
 type LeadSavedDeliveryAddress = {
+  coordinates?: { lat: number; lng: number } | null;
   address: string;
   cep: string | null;
 };
@@ -3455,6 +3446,7 @@ function readLeadSavedDeliveryAddress(metadata: JsonRecord | null | undefined): 
 
   return {
     address,
+    coordinates: boundDeliveryCoordinates(record.delivery_location, address, directCep ?? historyCep ?? extractFirstBrazilianCep(address)),
     cep: directCep ?? historyCep ?? extractFirstBrazilianCep(address),
   };
 }
@@ -3640,43 +3632,6 @@ function toRuntimeCoordinatePoint(lat: number | null | undefined, lng: number | 
     && Math.abs(lng) <= 180
       ? { lat, lng }
       : null;
-}
-
-function calculateRuntimeDistanceKm(
-  left: { lat: number; lng: number },
-  right: { lat: number; lng: number },
-) {
-  const earthRadiusKm = 6371;
-  const latDistance = toRadians(right.lat - left.lat);
-  const lngDistance = toRadians(right.lng - left.lng);
-  const leftLat = toRadians(left.lat);
-  const rightLat = toRadians(right.lat);
-  const halfChord = Math.sin(latDistance / 2) ** 2
-    + Math.cos(leftLat) * Math.cos(rightLat) * Math.sin(lngDistance / 2) ** 2;
-
-  return 2 * earthRadiusKm * Math.asin(Math.sqrt(halfChord));
-}
-
-function toRadians(value: number) {
-  return value * (Math.PI / 180);
-}
-
-function isRuntimePointInsidePolygon(
-  point: { lat: number; lng: number },
-  polygon: Array<{ lat: number; lng: number }>,
-) {
-  let inside = false;
-
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
-    const currentPoint = polygon[index];
-    const previousPoint = polygon[previous];
-    const intersects = ((currentPoint.lng > point.lng) !== (previousPoint.lng > point.lng))
-      && (point.lat < ((previousPoint.lat - currentPoint.lat) * (point.lng - currentPoint.lng)) / (previousPoint.lng - currentPoint.lng) + currentPoint.lat);
-
-    if (intersects) inside = !inside;
-  }
-
-  return inside;
 }
 
 function runtimeSalesCatalogOrderRequiresShippingBeforePayment(order: RuntimeSalesCatalogOrder) {
@@ -6359,6 +6314,8 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     "REGRAS DE ENTREGA E FRETE:",
     `- Frete por entrega: ${settings.shippingEnabled ? "habilitado" : "desativado"}.`,
     `- Entrega local: ${settings.localDeliveryEnabled ? "habilitada" : "desativada"}.`,
+    `- Critério local: ${settings.localDeliveryAuthority ?? "auto"}. Automático usa localização recebida quando há mapa/raio, depois CEP com faixa cadastrada, depois bairro e cidade. Não substitua um critério que recusou o destino por outro. Somente a cotação atual do sistema confirma taxa e atendimento.`,
+    "- Zonas sobrepostas usam a maior prioridade cadastrada; empate exige conferência. Nunca escolha a mais barata ou prometa isenção fora da configuração.",
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     "- Se o arquivo do lead ja tiver endereco/CEP salvos e o lead fizer novo pedido, primeiro pergunte se pode entregar no mesmo endereco. Se ele confirmar, use o endereco salvo; se ele corrigir, grave o novo endereco.",
     settings.shippingEnabled
@@ -6386,6 +6343,7 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
 function formatLocalDeliveryZoneRuntimeLine(zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number]) {
   const parts = [
     formatLocalDeliveryZoneRuntimeScope(zone),
+    `prioridade ${zone.priority ?? 0}`,
     zone.price ? `taxa ${zone.price}` : "",
     zone.minDays !== null || zone.maxDays !== null ? `prazo ${formatLocalDeliveryZoneRuntimeDeadline(zone.minDays, zone.maxDays)}` : "",
     zone.orderMinimum ? `pedido minimo ${zone.orderMinimum}` : "",
@@ -6397,6 +6355,7 @@ function formatLocalDeliveryZoneRuntimeLine(zone: ClientSalesCatalogShippingSett
 }
 
 function formatLocalDeliveryZoneRuntimeScope(zone: ClientSalesCatalogShippingSettings["localDeliveryZones"][number]) {
+  if (zone.shape === "cep") return `CEP ${zone.cepStart ?? "pendente"} até ${zone.cepEnd ?? "pendente"}`;
   if (zone.shape === "neighborhoods") {
     const neighborhoods = zone.neighborhoods.length > 0 ? `bairros ${zone.neighborhoods.join(", ")}` : "";
     const cities = zone.cities.length > 0 ? `cidades ${zone.cities.join(", ")}` : "";
@@ -6541,16 +6500,19 @@ function buildRuntimeSalesCatalogShippingQuoteContext(input: {
   userText: string;
 }): RuntimeSalesCatalogShippingQuote[] {
   const checkoutItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
-  if (!input.settings?.configured || !input.settings.shippingEnabled || checkoutItems.length === 0) return [];
+  if (!input.settings?.configured || !input.settings.shippingEnabled && !input.settings.localDeliveryEnabled || checkoutItems.length === 0) return [];
 
   const cart = input.context ? resolveRuntimeShippingCartContext(input.context, input.userText) : null;
-  const cep = extractFirstBrazilianCep(input.userText) ?? cart?.cep;
-  if (!cep) return [];
+  const mentionedAddress = extractRuntimeAddress(null, input.userText);
+  const cep = extractFirstBrazilianCep(input.userText) ?? (mentionedAddress ? null : cart?.cep) ?? "";
+  const address = mentionedAddress ?? cart?.address ?? input.userText;
+  const coordinates = extractRuntimeCoordinates(input.context ? findLatestInbound(input.context.messages) : null, input.userText) ?? (mentionedAddress ? null : cart?.coordinates);
+  if (!cep && !input.settings.localDeliveryEnabled) return [];
 
   if (cart?.selections.length) {
     const aggregate = buildRuntimeShippingCartItem(cart.selections, cart.subtotal);
     if (!aggregate) return [];
-    const result = calculateSalesCatalogShippingQuotes({ item: aggregate, settings: input.settings, cep });
+    const result = runtimeDeliveryQuoteForContext(aggregate, input.settings, cep, address, coordinates);
     return [{ itemId: "current_cart", itemTitle: "Prévia do carrinho completo; confirme os itens e o endereço antes de concluir",
       itemTag: null, cep, destination: result.destination ? `${result.destination.uf} - ${result.destination.state}` : null,
       quotes: result.quotes, error: result.error }];
@@ -6572,7 +6534,7 @@ function buildRuntimeSalesCatalogShippingQuoteContext(input: {
   }
 
   return selectedItems.slice(0, 3).map((item) => {
-    const result = calculateSalesCatalogShippingQuotes({ item, settings: input.settings!, cep });
+    const result = runtimeDeliveryQuoteForContext(item, input.settings!, cep, address, coordinates);
 
     return {
       itemId: item.id,
@@ -6584,6 +6546,16 @@ function buildRuntimeSalesCatalogShippingQuoteContext(input: {
       error: result.error,
     };
   });
+}
+
+function runtimeDeliveryQuoteForContext(item: RuntimeSalesCatalogItem, settings: ClientSalesCatalogShippingSettings, cep: string, address: string, coordinates?: { lat: number; lng: number } | null) {
+  const national = calculateSalesCatalogShippingQuotes({ item, settings, cep });
+  if (!settings.localDeliveryEnabled || item.shipping.profile === "custom") return national;
+  const local = quoteLocalDelivery({ zones: settings.localDeliveryZones, authority: settings.localDeliveryAuthority, subtotal: normalizeCurrencyAmount(item.price) ?? 0, cep, address, coordinates });
+  if (local.reason !== "available" || !local.zone || local.amount === null) return national.quotes.length ? national : { ...national, error: local.error };
+  const zone = local.zone;
+  const quote: SalesCatalogShippingQuote = { serviceId: `local:${zone.id}`, serviceName: `Entrega local - ${zone.name}`, provider: "manual", price: local.amount.toFixed(2), minDays: zone.minDays, maxDays: zone.maxDays, cep, uf: "", state: "", weightGrams: national.weightGrams, weightSource: national.weightSource, notes: zone.notes };
+  return { ...national, quotes: [quote, ...national.quotes], error: null };
 }
 
 type RuntimeShippingCartSelection = { item: RuntimeSalesCatalogItem; quantity: number; mentionText?: string | null };
@@ -6605,22 +6577,23 @@ function buildRuntimeShippingCartItem(selections: RuntimeShippingCartSelection[]
 }
 
 function resolveRuntimeShippingCartContext(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, userText: string):
-  { selections: RuntimeShippingCartSelection[]; cep: string | null; subtotal?: number } | null {
+  { selections: RuntimeShippingCartSelection[]; cep: string | null; address?: string | null; coordinates?: { lat: number; lng: number } | null; subtotal?: number } | null {
   if (isNewPurchaseIntent(userText)) return null;
   const revision = readRuntimeOrderRevision(context);
   const rows = revision && !revision.applied ? revision.items : null;
   if (revision && rows) {
     const selections = rows.map(row => ({ item: context.salesCatalog.find(item => item.id === row.id), quantity: row.quantity, mentionText: row.mention_text }));
     if (selections.some(row => !row.item || !Number.isSafeInteger(row.quantity) || row.quantity < 1)) return null;
-    return { selections: selections as RuntimeShippingCartSelection[], cep: revision.cep?.replace(/\D/g, "") ?? null };
+    return { selections: selections as RuntimeShippingCartSelection[], cep: revision.cep?.replace(/\D/g, "") ?? null, address: revision.address, coordinates: boundDeliveryCoordinates(revision.location_quote, revision.address, revision.cep) };
   }
   const draft = resolveRuntimeRecoverableCheckoutDraft(context);
-  if (draft.length) return { selections: draft, cep: readLeadSavedDeliveryAddress(context.lead?.metadata)?.cep?.replace(/\D/g, "") ?? null };
+  if (draft.length) { const saved = readLeadSavedDeliveryAddress(context.lead?.metadata); return { selections: draft, cep: saved?.cep?.replace(/\D/g, "") ?? null, address: saved?.address, coordinates: saved?.coordinates }; }
   const orders = context.salesCatalogOrders.filter(order => isCurrentRuntimeCheckoutOrder(context, order));
   if (orders.length !== 1) return null;
   const selections = orders[0].items.map(row => ({ item: context.salesCatalog.find(item => item.id === row.catalogItemId), quantity: row.quantity, mentionText: row.title }));
   if (selections.some(row => !row.item || !Number.isSafeInteger(row.quantity) || row.quantity < 1)) return null;
   return { selections: selections as RuntimeShippingCartSelection[], cep: orders[0].destinationCep?.replace(/\D/g, "") ?? null,
+    address: orders[0].destinationAddress, coordinates: boundDeliveryCoordinates(orders[0].shippingQuote, orders[0].destinationAddress, orders[0].destinationCep),
     subtotal: normalizeCurrencyAmount(orders[0].subtotal) ?? undefined };
 }
 
@@ -11830,6 +11803,7 @@ type RuntimeOrderRevisionDraft = {
   pending_source_message_id?: string | null;
   base_delivery?: { address: string | null; cep: string | null; method: string | null };
   delivery_update?: { address: string | null; cep: string | null } | null;
+  location_quote?: { coordinates: { lat: number; lng: number }; destination_address: string; cep: string | null } | null;
   legacy_cart_reconciled_at?: string;
 };
 
@@ -12155,9 +12129,10 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   const wantsCheckout = hasSalesCatalogCheckoutConfirmationIntent(text) || Boolean(resolveSalesCatalogPaymentMethodRequest(text)) || isRuntimeMissingPaymentRequest(text);
   // Refusal or a question is never a new proposal. Existing proposals remain unaccepted.
   if (intent?.kind === "clarify" && (intent.reason === "negated" || intent.reason === "inquiry")) return null;
+  const mentionedCoordinates = extractRuntimeCoordinates(latestInbound, speech);
   const mentionedAddress = extractRuntimeAddress(null, speech);
   const mentionedCep = extractFirstBrazilianCep(speech);
-  if (!intent && draft && !noChange && (mentionedAddress && normalizeSearch(mentionedAddress) !== normalizeSearch(draft.address ?? "")
+  if (!intent && draft && !noChange && !mentionedCoordinates && (mentionedAddress && normalizeSearch(mentionedAddress) !== normalizeSearch(draft.address ?? "")
     || mentionedCep && mentionedCep !== (draft.cep?.replace(/\D/g, "") ?? null))) {
     intent = { kind: "delivery", deliveryText: speech };
   }
@@ -12397,6 +12372,8 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
         return reply("Qual forma de pagamento disponível você prefere para o pedido atualizado?");
       }
       draft.preferred_method = intent.paymentMethod;
+    } else if (mentionedCoordinates && draft.address && !draft.delivery_update) {
+      draft.location_quote = { coordinates: mentionedCoordinates, destination_address: draft.address, cep: draft.cep };
     } else if (intent?.kind === "delivery" || (!draft.ready && (extractRuntimeAddress(null, text) || extractFirstBrazilianCep(text)))) {
       const deliveryText = intent?.kind === "delivery" ? intent.deliveryText : text;
       const address = extractRuntimeAddress(null, deliveryText);
@@ -12457,13 +12434,13 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   draft.cep = draft.cep?.replace(/\D/g, "") || null;
   const delivery = quoteOrderDelivery({ entries: selections, settings: context.salesCatalogShippingSettings,
-    subtotal, cep: draft.cep ?? "", address: draft.address ?? "" });
+    subtotal, cep: draft.cep ?? "", address: draft.address ?? "", coordinates: boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep) ?? boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep) });
   const quote = chooseOrderDeliveryQuote(delivery.quotes, draft.method);
   if (delivery.physical && (!quote || !quote.pickup && (!draft.address || !hasRuntimeCompleteDeliveryAddress(draft.address)))) {
     await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
     return reply(!draft.cep && !quote?.pickup ? "Mantive os itens da revisão. Me informe o CEP e o endereço completo para calcular a entrega."
       : !draft.address ? "Já tenho o CEP. Me informe rua, número, bairro e cidade para completar a entrega."
-        : "Mantive os itens e o endereço, mas não encontrei uma tarifa de entrega para essa revisão. Você prefere outro endereço ou combinar a entrega com a equipe?");
+        : delivery.error ? `Mantive os itens e o endereço. Para a entrega: ${delivery.error}` : "Mantive os itens e o endereço, mas não encontrei uma tarifa de entrega para essa revisão. Você prefere outro endereço ou combinar a entrega com a equipe?");
   }
   const payable = subtotal - (normalizeCurrencyAmount(order.discountTotal) ?? 0) + (quote?.amount ?? 0);
   if (payable <= 0) {
@@ -12473,6 +12450,7 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   const total = formatRuntimeOrderMoney(payable);
   const unchangedItems = draft.items.length === order.items.length && draft.items.every(item => order.items.some(line => line.catalogItemId === item.id && line.quantity === item.quantity));
   if (unchangedItems && draft.address === order.destinationAddress && draft.cep === order.destinationCep && draft.method === order.shippingMethod
+    && (!draft.location_quote || JSON.stringify(boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep)) === JSON.stringify(boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep)))
     && normalizeCurrencyAmount(total) === normalizeCurrencyAmount(order.total) && draft.preferred_method === order.preferredPaymentMethod) {
     await invalidateRuntimeCheckoutDraft(client, context, text);
     await persistRuntimeOrderRevision(client, context, null);
@@ -12480,7 +12458,8 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
   }
   const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, order.id);
   const shipping = { total: quote?.amount ?? 0, method: quote?.name ?? null,
-    destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address };
+    destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address,
+    quote: quote ? { ...quote, coordinates: quote.pickup ? null : boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep) ?? boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep), destination_address: draft.address, cep: draft.cep } : {} };
   const fingerprint = createHash("sha256").update(JSON.stringify({ rows, shipping, total, preferredMethod: draft.preferred_method })).digest("hex");
   if (confirmed && draft.total === total && draft.fingerprint === fingerprint) {
     await assertRunStillTargetsLatestInbound(client, context, latestInbound);

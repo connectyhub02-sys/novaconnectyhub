@@ -30,6 +30,7 @@ beforeAll(async () => {
   await db.exec(readFileSync("supabase/migrations/0076_transparent_checkout_attempts.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0080_payment_evidence_and_reviews.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0132_sales_catalog_order_revisions.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0140_revision_delivery_snapshot.sql", "utf8").split("-- Customer, freight")[0]);
   await db.query("insert into organizations values ($1)", [org]);
   await db.query("insert into intelligence_memory(id,organization_id,memory_type,title,metadata) values ($1,$3,'sales_catalog_item','Pizza','{\"price\":\"40\"}'),($2,$3,'sales_catalog_item','Limonada','{\"price\":\"10\"}')", [pizza, lemonade, org]);
   await db.query("insert into sales_catalog_skus(id,organization_id,catalog_item_id) values ($1,$2,$3)", [sku, org, lemonade]);
@@ -64,6 +65,15 @@ async function finish(f: Awaited<ReturnType<typeof fixture>>) {
 async function rows(f: Awaited<ReturnType<typeof fixture>>) { return (await db.query("select title,quantity,total from sales_catalog_order_items where order_id=$1 order by title", [f.order])).rows; }
 
 describe.sequential("confirmed full-cart revision transaction", () => {
+  it("commits the confirmed destination point with the revision and preserves it on replay", async () => {
+    const f = await fixture();
+    const p = payload();
+    const snapshot = { coordinates: { lat: -27.5, lng: -48.5 }, destination_address: p.shipping.destination_address, cep: p.shipping.destination_cep };
+    await begin(f, { ...p, shipping: { ...p.shipping, quote: snapshot } } as typeof p);
+    const result = await finish(f);
+    expect(result.metadata.shipping_quote).toEqual(snapshot);
+    expect((await begin(f, { ...p, shipping: { ...p.shipping, quote: snapshot } } as typeof p)).order?.metadata.shipping_quote).toEqual(snapshot);
+  });
   it.each([
     ["add", [item(pizza), item(lemonade)], 53],
     ["increase", [item(pizza, 3)], 123],

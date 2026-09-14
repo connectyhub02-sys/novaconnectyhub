@@ -1,4 +1,5 @@
 import "server-only";
+import { boundDeliveryCoordinates } from "./local-delivery";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrganizationSalesCatalogSettings, getOrganizationSalesCatalogShippingSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { buildCheckoutOrderBumpRows, loadValidatedOrderBumpItems } from "./checkout-order-bumps";
@@ -45,7 +46,7 @@ export async function setSalesCatalogCheckoutOrderBumps(input: { client: Supabas
       });
       const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
       const subtotal = nextItems.reduce((sum, row) => sum + (normalizeCurrencyAmount(row.total) ?? 0), 0);
-      const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "" });
+      const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: boundDeliveryCoordinates(record(order.metadata).shipping_quote, order.destination_address, order.destination_cep) });
       const quote = chooseOrderDeliveryQuote(result.quotes, shippingMethod);
       if (!quote) throw new Error(result.error ?? "Confira as opções em Seus dados e entrega antes de adicionar a oferta.");
       shipping = quote.amount;

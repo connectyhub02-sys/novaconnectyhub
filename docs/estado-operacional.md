@@ -2,9 +2,15 @@
 
 Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
-## Atendimento, links globais e busca — banco publicado em 13/09/2026
+## Atendimento, links globais e busca — publicado em 13/09/2026
 
-Execução do plano retomada pelo titular, com Gustavo e Renata como prioridades. Migrações `0137`–`0139` aplicadas e verificadas no Supabase da VPS: contexto factual do item na reserva, avisos independentes por audiência, claim/versionamento final, recibos por operação de envio e busca indexada/paginada de catálogo/SKU. Hashes do SQL conferidos com os arquivos locais; permissões de execução restritas ao serviço e RLS ativo. A transação preservou os registros anteriores de reservas, ofertas, avisos e eventos, sem repetir eventos nem criar reservas. A função de reset permaneceu inalterada. **Aplicativo ainda em preparação de publicação neste registro**, sem teste real dos agentes. [Escopo, inventário de emissores, validação e etapas pendentes](execucao-atendimento-32-perfis-2026-09-13.md).
+Execução do plano retomada pelo titular, com Gustavo e Renata como prioridades. Migrações `0137`–`0139` aplicadas e verificadas no Supabase da VPS: contexto factual do item na reserva, avisos independentes por audiência, claim/versionamento final, recibos por operação de envio e busca indexada/paginada de catálogo/SKU. Hashes do SQL conferidos com os arquivos locais; permissões de execução restritas ao serviço e RLS ativo. A transação preservou os registros anteriores de reservas, ofertas, avisos e eventos, sem repetir eventos nem criar reservas. A função de reset permaneceu inalterada. Aplicativo publicado na master em `8a4d893` + `c4010b1`; Vercel `dpl_UTuojL48rHZGLvvcHEQsECVpYGgn` Ready / Latest / Production às 21:27:48 BRT, com domínio principal conferido. Home/login HTTP 200, endpoint de checkout inexistente HTTP 404 esperado. Suíte geral 2.581 testes e complementos aprovados, tipos/lint/build aprovados; sem teste real dos agentes. P1.2 e etapas seguintes continuam em desenvolvimento. [Escopo, inventário de emissores, validação e etapas pendentes](execucao-atendimento-32-perfis-2026-09-13.md).
+
+## Entrega regional — migration aplicada em 13/09/2026
+
+P1.2 implementado e validado localmente: critério único de bairro/cidade, CEP, raio/polígono, prioridade de sobreposição, mínimo e isenção do carrinho, ponto vinculado ao destino e descarte ao mudar o endereço. Migration `0140_revision_delivery_snapshot` aplicada com hash do SQL `b5fc785ab7597a585615fdba84abe3da`, preservando as funções de bloqueio/claim e o reset. Sem atualização de registros de clientes pela publicação. Aplicativo em preparação; suíte geral 2.612 testes, complementos e build aprovados; revisão visual isolada desktop/celular. Horários, alimentação e serviços continuam pendentes.
+
+Conferência posterior à 0140 encontrou `set_checkout_delivery` com execução também por anon/authenticated, apesar do contrato local de serviço. Migration adicional `0141_checkout_delivery_rpc_permissions` restringe o acesso a service_role; único chamador no aplicativo é a rota validada de checkout via serviço. MD5 do SQL normalizado `2bc6c3a2336860a4cdbce0f8506ff894`; 29 testes SQL, incluindo permissões, aprovados. Nenhum corpo financeiro ou registro de cliente foi alterado por essa correção de acesso.
 
 ## Atendimento, checkout e reset integral — 13/09/2026
 

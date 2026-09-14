@@ -29,6 +29,9 @@ beforeAll(async () => {
   await db.exec(readFileSync("supabase/migrations/0077_commerce_offer_history.sql", "utf8"));
   await db.exec("alter table leads add column display_name text, add column phone_number text, add column metadata jsonb default '{}', add column last_event_summary text, add column updated_at timestamptz");
   await db.exec(readFileSync("supabase/migrations/0079_checkout_self_service_delivery.sql", "utf8"));
+  const deliveryMigration = readFileSync("supabase/migrations/0140_revision_delivery_snapshot.sql", "utf8");
+  await db.exec(deliveryMigration.slice(deliveryMigration.indexOf("-- Customer, freight")));
+  await db.exec(readFileSync("supabase/migrations/0141_checkout_delivery_rpc_permissions.sql", "utf8"));
   await db.exec(`alter table intelligence_events add column occurred_at timestamptz default now();
     create table conversations(id uuid primary key,organization_id uuid,lead_id uuid,metadata jsonb default '{}');
     create table conversation_messages(id uuid primary key,organization_id uuid,lead_id uuid,conversation_id uuid,direction text,text_content text,payload jsonb default '{}',created_at timestamptz default now(),updated_at timestamptz default now());
@@ -284,4 +287,10 @@ describe.sequential("durable transparent checkout transactions", () => {
     expect((await db.query("select status from lead_commerce_offer_states where lead_id=$1 and catalog_item_id=$2", [lead, product])).rows).toEqual([{ status: "accepted" }]);
     await expect(db.query("select create_checkout_upsell_order($1,$2,$3,$4,null,$5,5,'Entrega')", [child, org, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", product, JSON.stringify(item)])).rejects.toThrow("CHECKOUT_PARENT_NOT_PAID");
   });
+});
+
+
+it("keeps the delivery RPC restricted to the validated server route", async () => {
+  const result = await db.query("select has_function_privilege('anon','public.set_checkout_delivery(uuid,bigint,jsonb,numeric,text,jsonb)','execute') as anon, has_function_privilege('authenticated','public.set_checkout_delivery(uuid,bigint,jsonb,numeric,text,jsonb)','execute') as authenticated, has_function_privilege('service_role','public.set_checkout_delivery(uuid,bigint,jsonb,numeric,text,jsonb)','execute') as service");
+  expect(result.rows[0]).toEqual({anon:false,authenticated:false,service:true});
 });

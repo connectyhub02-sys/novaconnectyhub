@@ -1079,6 +1079,7 @@ export function mapSalesCatalogShippingSettings(row: SalesCatalogMemoryRow): Cli
     configured: readBoolean(metadata.configured),
     shippingEnabled,
     localDeliveryEnabled,
+    localDeliveryAuthority: normalizeLocalDeliveryAuthority(metadata.local_delivery_authority ?? metadata.localDeliveryAuthority),
     localPickup: readBoolean(metadata.local_pickup),
     originCep: readString(metadata.origin_cep),
     defaultHandlingDays: readNumber(metadata.default_handling_days),
@@ -1521,6 +1522,9 @@ function readLocalDeliveryZones(value: unknown): SalesCatalogLocalDeliveryZone[]
         name,
         active: readNullableBoolean(record.active) ?? true,
         shape,
+        priority: readNumber(record.priority) ?? 0,
+        cepStart: readString(record.cep_start ?? record.cepStart)?.replace(/\D/g, "") ?? null,
+        cepEnd: readString(record.cep_end ?? record.cepEnd)?.replace(/\D/g, "") ?? null,
         baseAddress: readString(record.base_address) ?? readString(record.baseAddress),
         baseLatitude: readNumber(record.base_latitude) ?? readNumber(record.baseLatitude),
         baseLongitude: readNumber(record.base_longitude) ?? readNumber(record.baseLongitude),
@@ -1540,7 +1544,7 @@ function readLocalDeliveryZones(value: unknown): SalesCatalogLocalDeliveryZone[]
 }
 
 function normalizeLocalDeliveryZoneShape(value: string | null): SalesCatalogLocalDeliveryZoneShape {
-  if (value === "neighborhoods" || value === "polygon") return value;
+  if (value === "neighborhoods" || value === "polygon" || value === "cep") return value;
   return "radius";
 }
 
@@ -2395,3 +2399,5 @@ function createAttributeId(value: string) {
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "atributo";
 }
+
+function normalizeLocalDeliveryAuthority(value: unknown) { return value === "coordinates" || value === "cep" || value === "address" ? value : "auto"; }

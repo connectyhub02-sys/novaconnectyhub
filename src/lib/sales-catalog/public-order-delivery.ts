@@ -1,4 +1,5 @@
 import "server-only";
+import { boundDeliveryCoordinates } from "./local-delivery";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrganizationSalesCatalogShippingSettings } from "@/lib/client-os/sales-catalog";
 import { hasCheckoutBillingAddress, resolveCheckoutCustomer, type CheckoutCustomerOrder } from "./checkout-customer";
@@ -12,13 +13,14 @@ export async function preparePublicOrderDelivery(input: {
 }) {
   const customer = resolveCheckoutCustomer(input.customer, input.lead);
   const settings = await getOrganizationSalesCatalogShippingSettings(input.client, input.organizationId);
-  const result = quoteOrderDelivery({ entries: input.entries, settings, subtotal: input.subtotal, cep: customer.destination_cep ?? "", address: customer.destination_address ?? "" });
+  const coordinates = boundDeliveryCoordinates(input.lead?.metadata?.delivery_location, customer.destination_address, customer.destination_cep);
+  const result = quoteOrderDelivery({ entries: input.entries, settings, subtotal: input.subtotal, cep: customer.destination_cep ?? "", address: customer.destination_address ?? "", coordinates });
   const selected = hasCheckoutBillingAddress(customer) ? chooseOrderDeliveryQuote(result.quotes) : null;
   return {
     customer,
     shippingTotal: selected ? selected.amount.toFixed(2) : result.physical ? null : "0.00",
     shippingMethod: selected?.name ?? null,
     total: (input.subtotal + (selected?.amount ?? 0)).toFixed(2),
-    shippingQuote: selected ? { ...selected, cep: customer.destination_cep, source: "public_store", calculated_at: new Date().toISOString() } : null,
+    shippingQuote: selected ? { ...selected, coordinates, destination_address: customer.destination_address, cep: customer.destination_cep, source: "public_store", calculated_at: new Date().toISOString() } : null,
   };
 }

@@ -178,3 +178,35 @@ describe("physical WhatsApp checkout after a natural multipart summary", () => {
     expect(call("buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt", input)).toContain("só o CEP");
   });
 });
+
+
+describe("local delivery uses the same regional quote in the initial conversation", () => {
+  it.each([[1, "12.50"], [2, "0.00"]])("calculates the full cart with quantity %s", (quantity, expected) => {
+    const item = { ...catalog[0], price: "60.00" };
+    const ctx = { ...context(), messages: [], salesCatalogShippingSettings: { ...shippingSettings, shippingEnabled: false, localDeliveryEnabled: true, localDeliveryZones: [
+      { id: "local", name: "Centro", shape: "neighborhoods", active: true, neighborhoods: ["Centro"], cities: ["Florianópolis"], price: "12,50", orderMinimum: "30", freeDeliveryThreshold: "100", minDays: 0, maxDays: 0 },
+    ] } };
+    const address = "Rua das Flores, numero 42, Centro, Florianópolis, CEP 88010000";
+    const result = runtimeHarness()< { shippingTotal: string; destinationCep: string } >("resolveInitialSalesCatalogOrderShipping", { context: ctx, selections: [{ item, quantity }], intentText: address });
+    expect(result).toMatchObject({ shippingTotal: expected, destinationCep: "88010000" });
+  });
+  it("does not accept another city that has the same neighborhood name", () => {
+    const ctx = { ...context(), messages: [], salesCatalogShippingSettings: { ...shippingSettings, shippingEnabled: false, localDeliveryEnabled: true, localDeliveryZones: [
+      { id: "local", name: "Centro", shape: "neighborhoods", active: true, neighborhoods: ["Centro"], cities: ["Florianópolis"], price: "12,50", minDays: 0, maxDays: 0 },
+    ] } };
+    expect(runtimeHarness()("resolveInitialSalesCatalogOrderShipping", { context: ctx, selections: [{ item: catalog[0], quantity: 1 }], intentText: "Rua das Flores, numero 42, Centro, Outra Cidade, CEP 88010000" })).toBeNull();
+  });
+});
+
+
+describe("location survives confirmation only for the current destination", () => {
+  it("preserves the received pin after the address and clears it after another address", () => {
+    const addr=message("inbound", "Rua das Flores, numero 42, Centro, Florianópolis, CEP 88010000", 1);
+    const pin={...message("inbound", "Minha localização", 2),payload:{latitude:-27.5,longitude:-48.5}};
+    const ctx={...context(),messages:[addr,pin,message("inbound","sim pode fechar",3)],salesCatalogShippingSettings:{...shippingSettings,shippingEnabled:false,localDeliveryEnabled:true,localDeliveryZones:[{id:"map",name:"Área central",shape:"radius",active:true,baseLatitude:-27.5,baseLongitude:-48.5,radiusKm:1,price:"10",minDays:0,maxDays:0}]}};
+    const call=runtimeHarness();const input={context:ctx,selections:[{item:catalog[0],quantity:1}],intentText:"sim pode fechar"};
+    expect(call("resolveInitialSalesCatalogOrderShipping",input)).toMatchObject({shippingTotal:"10.00",metadata:{coordinates:{lat:-27.5,lng:-48.5}}});
+    ctx.messages.push(message("inbound","Rua Nova, numero 90, Outro bairro, Florianópolis, CEP 88020000",4));
+    expect(call("resolveInitialSalesCatalogOrderShipping",input)).toBeNull();
+  });
+});

@@ -48,6 +48,17 @@ describe("self-service shipping", () => {
     expect(shipping.quoteOrderDelivery({ ...input(), settings: local }).quotes[0]).toMatchObject({ id: "local:zone", amount: 10 });
     expect(shipping.quoteOrderDelivery({ ...input(), settings: local, address: "Rua Exemplo, 61, Centro, Outra Cidade" }).quotes).toEqual([]);
   });
+  it("quotes map delivery without guessing a CEP and requires a new point after destination changes", () => {
+    const local = { ...settings, shippingEnabled: false, localDeliveryEnabled: true, localDeliveryZones: [{ id: "zone", name: "Área central", active: true, shape: "radius", baseLatitude: -27, baseLongitude: -48, radiusKm: 1, price: "10", minDays: 0, maxDays: 0 }] } as ClientSalesCatalogShippingSettings;
+    expect(shipping.quoteOrderDelivery({ ...input(), settings: local, cep: "", coordinates: { lat: -27, lng: -48 } }).quotes[0]).toMatchObject({ id: "local:zone", amount: 10 });
+    expect(shipping.quoteOrderDelivery({ ...input(), settings: local }).quotes).toEqual([]);
+  });
+  it("keeps free local delivery only while the changed cart meets the configured threshold", () => {
+    const local = { ...settings, shippingEnabled: false, localDeliveryEnabled: true, localDeliveryZones: [{ id: "zone", name: "Centro", active: true, shape: "neighborhoods", neighborhoods: ["Centro"], cities: ["Balneário Camboriú"], price: "10", orderMinimum: "30", freeDeliveryThreshold: "100", minDays: 0, maxDays: 0 }] } as ClientSalesCatalogShippingSettings;
+    expect(shipping.quoteOrderDelivery({ ...input(), settings: local, subtotal: 100 }).quotes[0].amount).toBe(0);
+    expect(shipping.quoteOrderDelivery({ ...input(), settings: local, subtotal: 99.99 }).quotes[0].amount).toBe(10);
+    expect(shipping.quoteOrderDelivery({ ...input(), settings: local, subtotal: 29.99 }).quotes).toEqual([]);
+  });
   it("reuses CRM delivery data before a new order is sent for payment", async () => {
     const prepare = serverModuleHarness<typeof import("@/lib/sales-catalog/public-order-delivery")>("src/lib/sales-catalog/public-order-delivery.ts", { "@/lib/client-os/sales-catalog": { getOrganizationSalesCatalogShippingSettings: vi.fn().mockResolvedValue(settings) }, "./checkout-customer": customers, "./order-shipping": shipping });
     const result = await prepare.preparePublicOrderDelivery({ client: {} as never, organizationId: "store", entries: input().entries, subtotal: 467.41, customer: { id: "new", customer_name: "Maria Exemplo" }, lead: { metadata: { email: "cliente@example.com", customer_document: "12345678909", delivery_cep: "88330786", delivery_address: input().address } } });

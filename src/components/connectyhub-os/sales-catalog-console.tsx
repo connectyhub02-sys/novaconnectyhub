@@ -397,6 +397,7 @@ type ShippingDraft = {
   defaultHandlingDays: string;
   rules: SalesCatalogShippingRule[];
   localDeliveryZones: SalesCatalogLocalDeliveryZone[];
+  localDeliveryAuthority: "auto" | "coordinates" | "cep" | "address";
 };
 
 type CompanyLocationDraft = {
@@ -2094,11 +2095,15 @@ export function SalesCatalogConsole({
             })),
             notes: cleanInput(rule.notes, 160),
           })),
+          localDeliveryAuthority: shippingDraft.localDeliveryAuthority,
           localDeliveryZones: shippingDraft.localDeliveryZones.map((zone) => ({
             id: zone.id,
             name: cleanInput(zone.name, 80) ?? zone.name,
             active: zone.active,
             shape: zone.shape,
+            priority: zone.priority ?? 0,
+            cepStart: zone.cepStart ?? null,
+            cepEnd: zone.cepEnd ?? null,
             baseAddress: cleanInput(zone.baseAddress, 220),
             baseLatitude: zone.baseLatitude,
             baseLongitude: zone.baseLongitude,
@@ -4284,6 +4289,8 @@ export function SalesCatalogConsole({
                   loadingGoogleMapsConfig={loadingGoogleMapsConfig}
                   selectedZone={selectedLocalDeliveryZone}
                   zones={shippingDraft.localDeliveryZones}
+                  authority={shippingDraft.localDeliveryAuthority}
+                  onAuthorityChange={value => setShippingDraft(current => ({ ...current, localDeliveryAuthority: value }))}
                   onAddZone={addLocalDeliveryZone}
                   onChangeZoneShape={changeLocalDeliveryZoneShape}
                   onRemoveZone={removeLocalDeliveryZone}
@@ -8519,6 +8526,8 @@ function CatalogItemCard({
 }
 
 type LocalDeliveryZonesEditorProps = {
+  authority: ShippingDraft["localDeliveryAuthority"];
+  onAuthorityChange: (value: ShippingDraft["localDeliveryAuthority"]) => void;
   googleMapsConfig: GoogleMapsConfig | null;
   loadingGoogleMapsConfig: boolean;
   selectedZone: SalesCatalogLocalDeliveryZone | null;
@@ -8876,7 +8885,8 @@ function CompanyLocationAddressSearch({
   );
 }
 
-function LocalDeliveryZonesEditor({
+export function LocalDeliveryZonesEditor({
+  authority, onAuthorityChange,
   googleMapsConfig,
   loadingGoogleMapsConfig,
   selectedZone,
@@ -8887,7 +8897,7 @@ function LocalDeliveryZonesEditor({
   onSelectZone,
   onUpdateZone,
 }: LocalDeliveryZonesEditorProps) {
-  const radiusDisabled = !selectedZone || selectedZone.shape === "neighborhoods";
+  const radiusDisabled = !selectedZone || selectedZone.shape !== "radius";
 
   return (
     <section className="rounded-xl border border-amber-300/35 bg-amber-300/5 p-3">
@@ -8898,7 +8908,7 @@ function LocalDeliveryZonesEditor({
             <FieldLabel>Entrega local por area</FieldLabel>
           </div>
           <p className="text-[12px] leading-5 text-slate-400">
-            Use raio, bairros/cidades ou desenho no mapa. O agente so oferece entrega onde existir zona ativa.
+            Use raio, bairro e cidade, faixa de CEP ou desenho no mapa. O agente so oferece entrega onde existir zona ativa.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -8920,6 +8930,7 @@ function LocalDeliveryZonesEditor({
             <Tags className="h-3.5 w-3.5" />
             Bairros
           </button>
+          <button type="button" onClick={() => onAddZone("cep")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10" style={{ borderColor: "var(--ch-border)" }}>CEP</button>
           <button
             type="button"
             onClick={() => onAddZone("polygon")}
@@ -8932,6 +8943,12 @@ function LocalDeliveryZonesEditor({
         </div>
       </div>
 
+      <label className="mt-4 block text-[12px] text-slate-300">Critério para conferir o destino
+        <select value={authority} onChange={event => onAuthorityChange(event.target.value as ShippingDraft["localDeliveryAuthority"])} className="mt-1 h-11 w-full rounded-lg border bg-[var(--ch-panel)] px-3" style={{ borderColor: "var(--ch-border)" }}>
+          <option value="auto">Automático: localização, CEP, bairro e cidade</option><option value="coordinates">Somente localização (raio ou mapa)</option><option value="cep">Somente faixa de CEP</option><option value="address">Somente bairro e cidade</option>
+        </select>
+        <span className="mt-2 block text-slate-400">No automático, a localização recebida prevalece quando há zona no mapa; depois o CEP, se houver faixa cadastrada; depois bairro e cidade. Um destino fora do critério escolhido não usa outro para liberar a entrega.</span>
+      </label>
       {zones.length > 0 ? (
         <div className="mt-4 grid gap-4 2xl:grid-cols-[240px_minmax(0,1fr)]">
           <div className="space-y-2">
@@ -8998,8 +9015,8 @@ function LocalDeliveryZonesEditor({
 
                 <div>
                   <FieldLabel>Tipo de area</FieldLabel>
-                  <div className="grid grid-cols-3 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
-                    {(["radius", "neighborhoods", "polygon"] as const).map((shape) => (
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4" style={{ borderColor: "var(--ch-border)" }}>
+                    {(["radius", "neighborhoods", "cep", "polygon"] as const).map((shape) => (
                       <button
                         key={shape}
                         type="button"
@@ -9009,13 +9026,15 @@ function LocalDeliveryZonesEditor({
                           selectedZone.shape === shape ? "bg-amber-300 text-slate-950" : "text-slate-400 hover:bg-amber-400/10 hover:text-amber-100",
                         )}
                       >
-                        {shape === "radius" ? "Raio" : shape === "neighborhoods" ? "Bairros" : "Mapa"}
+                        {shape === "radius" ? "Raio" : shape === "neighborhoods" ? "Bairros" : shape === "cep" ? "CEP" : "Mapa"}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="lg:col-span-2">
+                <label className="block lg:col-span-2"><FieldLabel>Prioridade da zona</FieldLabel><input type="number" min={0} max={1000} value={selectedZone.priority ?? 0} onChange={event => onUpdateZone(selectedZone.id, { priority: Math.min(1000, Math.max(0, Math.trunc(Number(event.target.value)))) })} className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px]" style={{ borderColor: "var(--ch-border)" }} /><span className="mt-1 block text-[11px] text-slate-400">Em sobreposição, vale a maior prioridade. Se empatar, a taxa fica pendente para conferência da loja.</span></label>
+                {selectedZone.shape === "cep" ? <div className="grid gap-3 sm:grid-cols-2 lg:col-span-2">{(["cepStart", "cepEnd"] as const).map(key => <label key={key}><FieldLabel>{key === "cepStart" ? "CEP inicial" : "CEP final"}</FieldLabel><input inputMode="numeric" maxLength={9} value={selectedZone[key] ?? ""} onChange={event => onUpdateZone(selectedZone.id, { [key]: event.target.value.replace(/\D/g, "").slice(0, 8) })} className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px]" /></label>)}</div> : null}
+                <div className="lg:col-span-2" hidden={selectedZone.shape === "cep" || selectedZone.shape === "neighborhoods"}>
                   <LocalDeliveryAddressSearch
                     apiKey={googleMapsConfig?.browserApiKey ?? ""}
                     configured={Boolean(googleMapsConfig?.configured)}
@@ -9025,7 +9044,7 @@ function LocalDeliveryZonesEditor({
                   />
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
+                <div hidden={selectedZone.shape === "cep" || selectedZone.shape === "neighborhoods"} className="grid gap-3 sm:grid-cols-3 lg:col-span-2">
                   <label className="block">
                     <FieldLabel>Latitude</FieldLabel>
                     <input
@@ -9148,12 +9167,12 @@ function LocalDeliveryZonesEditor({
                     value={selectedZone.notes ?? ""}
                     onChange={(event) => onUpdateZone(selectedZone.id, { notes: event.target.value.slice(0, 220) })}
                     className="min-h-20 w-full rounded-lg border bg-transparent px-3 py-2 text-[12px] outline-none"
-                    placeholder="Ex: confirmar portaria, taxa extra em condominio distante, nao entregar apos 23h"
+                    placeholder="Ex: informar portaria e ponto de referência"
                     style={{ borderColor: "var(--ch-border)" }}
                   />
                 </label>
 
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2" hidden={selectedZone.shape === "cep" || selectedZone.shape === "neighborhoods"}>
                   <LocalDeliveryMapEditor
                     apiKey={googleMapsConfig?.browserApiKey ?? ""}
                     configured={Boolean(googleMapsConfig?.configured)}
@@ -10671,6 +10690,7 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
       services: [],
       notes: null,
     })),
+    localDeliveryAuthority: settings?.localDeliveryAuthority ?? "auto",
     localDeliveryZones: cloneLocalDeliveryZones(settings?.localDeliveryZones ?? []),
   };
 }
@@ -10893,7 +10913,7 @@ function createLocalDeliveryZone(shape: SalesCatalogLocalDeliveryZoneShape, inde
       ? `Raio ${index + 1}`
       : shape === "neighborhoods"
         ? `Bairros ${index + 1}`
-        : `Mapa ${index + 1}`,
+        : shape === "cep" ? `Faixa de CEP ${index + 1}` : `Mapa ${index + 1}`,
     active: true,
     shape,
     baseAddress: null,
@@ -10930,12 +10950,14 @@ function resolvePreferredLocalDeliveryZoneId(zones: SalesCatalogLocalDeliveryZon
 }
 
 function formatLocalDeliveryZoneShape(shape: SalesCatalogLocalDeliveryZoneShape) {
+  if (shape === "cep") return "Faixa de CEP";
   if (shape === "neighborhoods") return "Bairros e cidades";
   if (shape === "polygon") return "Area desenhada no mapa";
   return "Raio da empresa";
 }
 
 function formatLocalDeliveryZoneScope(zone: SalesCatalogLocalDeliveryZone) {
+  if (zone.shape === "cep") return `CEP ${zone.cepStart ?? "pendente"} a ${zone.cepEnd ?? "pendente"}`;
   const deadline = formatQuoteDeadline(zone.minDays, zone.maxDays).toLowerCase();
   const price = zone.price ? `taxa ${zone.price}` : "taxa pendente";
 

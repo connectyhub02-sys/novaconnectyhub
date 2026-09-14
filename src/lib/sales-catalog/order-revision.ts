@@ -36,7 +36,7 @@ export type SalesCatalogOrderRevisionInput = {
   /** Persisted proposal ID, retained across job retries. Never use a new ID on retry. */
   requestId: string;
   rows: SalesCatalogOrderRevisionRow[];
-  shipping: { total: number | string; method: string | null; destinationCep: string | null; destinationAddress: string | null };
+  shipping: { total: number | string; method: string | null; destinationCep: string | null; destinationAddress: string | null; quote?: Record<string, unknown> };
   expectedTotal: number | string;
   preferredPaymentMethod?: "pix" | "card" | null;
 };
@@ -86,7 +86,7 @@ export async function applySalesCatalogOrderRevision(input: SalesCatalogOrderRev
   const claimToken = randomUUID();
   const payload = {
     rows: input.rows,
-    shipping: { total: shipping, method: input.shipping.method, destination_cep: input.shipping.destinationCep, destination_address: input.shipping.destinationAddress },
+    shipping: { total: shipping, method: input.shipping.method, destination_cep: input.shipping.destinationCep, destination_address: input.shipping.destinationAddress, ...(input.shipping.quote ? { quote: input.shipping.quote } : {}) },
     expected_total: total,
     preferred_payment_method: input.preferredPaymentMethod ?? null,
   };

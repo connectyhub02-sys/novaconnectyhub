@@ -7,6 +7,7 @@ import * as leadNames from "@/lib/whatsapp/lead-names";
 import * as metadataUpdate from "@/lib/leads/metadata-update";
 import * as catalogShared from "@/lib/sales-catalog/shared";
 import * as shipping from "@/lib/sales-catalog/shipping-calculator";
+import * as localDelivery from "@/lib/sales-catalog/local-delivery";
 import * as language from "@/lib/whatsapp/outbound-language";
 import * as templates from "@/lib/whatsapp/agent-prompt-templates";
 import * as activitySetup from "@/lib/whatsapp/activity-setup";
@@ -85,6 +86,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/leads/metadata-update": metadataUpdate,
     "@/lib/sales-catalog/shared": catalogShared,
     "@/lib/sales-catalog/shipping-calculator": shipping,
+    "@/lib/sales-catalog/local-delivery": localDelivery,
     "@/lib/sales-catalog/mercado-pago": money.exports,
     "@/lib/sales-catalog/order-shipping": serverModuleHarness("src/lib/sales-catalog/order-shipping.ts", {
       "./shipping-calculator": shipping, "./mercado-pago": money.exports,
