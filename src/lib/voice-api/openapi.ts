@@ -16,7 +16,7 @@ export const voiceOpenApiSpec={openapi:'3.1.0',info:{title:'ConnectyHub Voz',ver
  '/generations/{id}/audio':{get:{operationId:'downloadVoiceAudio',summary:'Baixar MP3 privado após liquidação concluída',parameters:[id],responses:{200:{description:'MP3 autenticado, sem cache público',content:{'audio/mpeg':{schema:{type:'string',format:'binary'}}}},...errors}}},
 },components:{securitySchemes:{VoiceKey:{type:'http',scheme:'bearer',bearerFormat:'ch_voice_…'}},schemas:{
  Error:{type:'object',properties:{error:{type:'object',required:['code','message'],properties:{code:{type:'string'},message:{type:'string'},request_id:{type:'string'}}}}},
- VoiceInput:{type:'object',additionalProperties:false,required:['text','voice_id'],properties:{text:{type:'string',minLength:1,maxLength:4800,description:'Espaços normalizados antes da medição.'},voice_id:{type:'string'},model_id:{type:'string',default:'eleven_multilingual_v2'},voice_settings:{type:'object',additionalProperties:false,properties:{stability:{type:'number',minimum:0,maximum:1,default:.48},similarity_boost:{type:'number',minimum:0,maximum:1,default:.78},style:{type:'number',minimum:0,maximum:1,default:.22},use_speaker_boost:{type:'boolean',default:true}}}}},
+ VoiceInput:{type:'object',additionalProperties:false,required:['text','voice_id'],properties:{text:{type:'string',minLength:1,maxLength:4800,description:'Espaços normalizados antes da medição.'},voice_id:{type:'string'},model_id:{type:'string',description:'Opcional. Consulte GET /models para obter os identificadores compatíveis.'},voice_settings:{type:'object',additionalProperties:false,properties:{stability:{type:'number',minimum:0,maximum:1,default:.48},similarity_boost:{type:'number',minimum:0,maximum:1,default:.78},style:{type:'number',minimum:0,maximum:1,default:.22},use_speaker_boost:{type:'boolean',default:true}}}}},
  Voice:{type:'object',properties:{voice_id:{type:'string'},name:{type:'string'},kind:{type:'string',enum:['common','private']},status:{type:'string'},preview_url:{type:['string','null']},language:{type:['string','null']}}},
  Clone:{type:'object',properties:{id:{type:'string'},voice_id:{type:['string','null']},project_id:{type:'string'},generation_id:{type:'string'},name:{type:'string'},status:{type:'string',enum:['creating','ready','verification_required','uncertain','deleting','deleted','failed']},kind:{type:'string',const:'private'}}},
  CloneResult:{type:'object',properties:{clone:ref('Clone'),generation:ref('Generation'),billing_organization_id:{type:'string'},replayed:{type:'boolean'}}},
@@ -25,7 +25,7 @@ export const voiceOpenApiSpec={openapi:'3.1.0',info:{title:'ConnectyHub Voz',ver
 export const voiceGuide=`# ConnectyHub Voz
 
 Base: https://www.connectyhub.com.br/api/v1/voice
-Crie um projeto e uma chave em /dashboard/voz → API. O acesso exige conta ativa e saldo disponível para a operação; nenhum agente é obrigatório. Use Authorization: Bearer CHAVE_DE_VOZ. Não use chave WhatsApp, LLM ou ElevenLabs.
+Crie um projeto e uma chave em /dashboard/voz → Projetos e chaves. O acesso exige conta ativa e saldo disponível para a operação; nenhum agente é obrigatório. Use Authorization: Bearer CHAVE_DE_VOZ. Não use chave WhatsApp, LLM ou do fornecedor.
 
 ## Propriedade
 Cada chave pertence a um projeto. Trocar/revogar a chave não transfere os clones ou áudios para outro projeto. Confira project_id e billing_organization_id no catálogo e nos recibos. Todo ID direto passa pela mesma autorização; não envie organizationId no payload. Clones do projeto A não são visíveis ou utilizáveis no projeto B, mesmo na mesma conta. Vozes comuns são um catálogo autorizado separado. Apenas prévias públicas de vozes comuns têm URL pública; amostras, clones e áudios privados exigem autenticação.
@@ -46,5 +46,5 @@ Tarifas são as mesmas do painel para a operação equivalente: criação de clo
 JSON error.code/message/request_id.401 chave;402 saldo;403 acesso;404 recurso ausente/privado;409 conflito/pendente;413 tamanho;422 parâmetros;429 capacidade;502 fornecedor;503 serviço/tarifa/conciliação. Nunca trate um HTTP 200 com status failed/uncertain como sucesso.
 
 ## Cobertura
-Esta versão entrega catálogo autorizado, clonagem instantânea privada, gestão/amostras/prévia, TTS, recuperação/download e uso. Não oferece proxy irrestrito do fornecedor. STT, música, efeitos, dublagem, voice changer, diálogo, timestamps/streaming, PVC, Agents e Studio avançado exigem adaptadores/medição/tarifas e validação próprios; sua presença na API ElevenLabs não os torna disponíveis aqui.
+Esta versão entrega catálogo autorizado, clonagem instantânea privada, gestão/amostras/prévia, TTS, recuperação/download e uso. Não oferece proxy irrestrito do fornecedor. STT, música, efeitos, dublagem, voice changer, diálogo, timestamps/streaming, PVC, Agents e Studio avançado exigem adaptadores/medição/tarifas e validação próprios; recursos de outros serviços não são automaticamente disponibilizados por esta API.
 `;

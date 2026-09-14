@@ -3,6 +3,7 @@ import type {VoiceAuth} from './auth';
 import {listWhatsappAudioVoices} from '@/lib/elevenlabs/voices';
 import {resolveActiveBillingRates,calculateMeteredUsageCharge} from '@/lib/billing/metered-usage';
 import {VoiceError} from './contract';
+import {voiceModelName} from './model-presentation';
 // A shared provider credential is never an authorization to use its private
 // catalog. Only premade voices and locally owned project clones are returned.
 export async function voiceCatalog(auth:VoiceAuth) {
@@ -27,8 +28,8 @@ export async function voiceModels(auth:VoiceAuth) {
   const models=[];
   for(const row of data??[]) {
     try {const rates=await voiceRates(auth,row.provider_model_id);const rate=rates.find(r=>r.unit==='character')!;
-      models.push({model_id:row.provider_model_id,name:row.display_name,available:true,credits_per_character:rate.connectyPricePerUnit,minimum_credits:rate.minimumChargeCredits});
-    } catch(e) {if(!(e instanceof VoiceError) || e.code!=='pricing_unavailable') throw e;models.push({model_id:row.provider_model_id,name:row.display_name,available:false,reason:e.code});}
+      models.push({model_id:row.provider_model_id,name:voiceModelName(row.provider_model_id),available:true,credits_per_character:rate.connectyPricePerUnit,minimum_credits:rate.minimumChargeCredits});
+    } catch(e) {if(!(e instanceof VoiceError) || e.code!=='pricing_unavailable') throw e;models.push({model_id:row.provider_model_id,name:voiceModelName(row.provider_model_id),available:false,reason:e.code});}
   }
   let cloning:{available:boolean;credits?:number;preview_included?:boolean}={available:false};
   try {const {price}=await quoteClone(auth);cloning={available:true,credits:price.chargeCredits,preview_included:true};}catch(e){if(!(e instanceof VoiceError))throw e;}
