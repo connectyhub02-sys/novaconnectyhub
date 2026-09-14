@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
+import { whatsappTrackingOrigin } from "./tracking-origin";
 import { collectOutboundLinks, rewriteOutboundBody, planOutboundMessages } from "./outbound-links";
 
 export type WhatsappOutboundScope = { instanceId: string; client?: SupabaseClient; source?: string; sensitive?: boolean };
@@ -29,7 +30,8 @@ async function prepare(client:SupabaseClient,scope:WhatsappOutboundScope,path:st
   };
   const identity=await reserve(firstId,path,original);
   const links=collectOutboundLinks(original).map(link=>({...link,id:randomUUID(),url:""}));
-  for(const link of links)link.url=`${getAppBaseUrl()}/w/${link.id}`;
+  const linkOrigin=links.length?whatsappTrackingOrigin(identity.organization_id,getAppBaseUrl()):null;
+  for(const link of links)link.url=`${linkOrigin}/w/${link.id}`;
   if(links.length){
     const saved=await client.from("whatsapp_outbound_links").insert(links.map(link=>({id:link.id,delivery_id:firstId,organization_id:identity.organization_id,lead_id:identity.lead_id,target_url:link.target,label:link.label})));
     if(saved.error)throw new Error("Não foi possível preparar os links rastreáveis.");

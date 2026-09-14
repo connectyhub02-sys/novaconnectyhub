@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## Links WhatsApp no domínio do cliente — 14/09/2026
+
+Resolvedor autenticado `GET/HEAD /api/v1/links/{id}/resolve` implementado para a organização da chave WhatsApp (`instances:read`). Retorna somente o destino armazenado; HEAD e prévias não incrementam cliques. A origem de novos links pode ser selecionada por organização em `WHATSAPP_TRACKING_ORIGINS_JSON`, configuração exclusiva do servidor, sem aceitar Host/destino do pedido. Links antigos e demais organizações preservados. Sem migration ou alteração financeira.
+
+39 testes offline de origem, isolamento, destino, prévia, arquivo e entrega passaram; lint, diff-check e build Next/webpack com TypeScript e 107 páginas aprovados. Publicação e teste HEAD conjunto ainda em conclusão. Mapeamento Betel inicialmente desligado e só será ativado após confirmação da rota publicada pela tarefa Betel. Nenhum WhatsApp, clique real, inferência ou cobrança de teste. [Contrato e ativação](links-whatsapp-origem-cliente-2026-09-14.md).
+
 ## Administração de AI e Voz — separação local, 14/09/2026
 
 Revisão pedida pelo titular com referência à administração da API WhatsApp. A rota `/admin/voz`, o menu e a API protegida já existiam; não foi necessário recriar o backend. A entrada administrativa agora se chama **Estúdio de Voz e Áudio**, agrupada com API WhatsApp e API de AI em **APIs e serviços**. Cliente mantém **Estúdio de Voz e Áudio AI**.
