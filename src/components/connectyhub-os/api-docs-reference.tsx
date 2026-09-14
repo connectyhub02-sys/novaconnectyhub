@@ -123,7 +123,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
     <section id="referencia" className="border-t border-white/10 bg-[#05070a] pt-20">
       <header className="mx-auto max-w-[1760px] border-b border-white/10 px-4 pb-6 pt-8 sm:px-6 lg:px-8">
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">Documentação pública ConnectyHub</p>
-        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">WhatsApp e IA / LLM</h1>
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">WhatsApp, IA e Voz</h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">Duas APIs, uma referência. Escolha a integração no menu para consultar endpoints, exemplos e baixar o OpenAPI JSON de cada serviço. A documentação é aberta; cada API usa sua própria chave de acesso.</p>
       </header>
       <div className="mx-auto grid max-w-[1760px] gap-0 px-4 py-6 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:px-8 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
