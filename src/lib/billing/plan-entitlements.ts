@@ -68,9 +68,9 @@ export const planFeatureDefinitions: Record<PlanFeatureCode, PlanFeatureDefiniti
     blockedTitle: "Ative o acesso a Voz", blockedDescription: "Disponível no teste válido e em todos os planos ativos, sem exigir agente.",
   },
   llm_api: {
-    code: "llm_api", name: "API de IA", minimumPlanCode: "starter", minimumPlanLabel: "Start",
-    allowedTitle: "API de IA disponível", allowedDescription: "Use seus créditos ConnectyHub em projetos externos, com chaves e limites por projeto.",
-    blockedTitle: "Ative seu acesso à API de IA", blockedDescription: "Disponível no teste válido e em todos os planos ativos, usando o saldo da conta.",
+    code: "llm_api", name: "API de AI", minimumPlanCode: "starter", minimumPlanLabel: "Start",
+    allowedTitle: "API de AI disponível", allowedDescription: "Use seus créditos ConnectyHub em projetos externos, com chaves e limites por projeto.",
+    blockedTitle: "Ative seu acesso à API de AI", blockedDescription: "Disponível no teste válido e em todos os planos ativos, usando o saldo da conta.",
   },
   whatsapp_core: {
     code: "whatsapp_core",

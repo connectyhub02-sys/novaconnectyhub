@@ -1,5 +1,15 @@
 # Estado operacional da ConnectyHub
 
+## Nomes dos produtos API — ajuste local, 14/09/2026
+
+Refinamento explícito do titular após conferir a publicação visual: os nomes de produto passam a **API de AI** e **API de Voz AI**. Alterados menu do cliente/admin, cabeçalhos, títulos, rótulos de acesso e referências de produto na documentação pública/guia/OpenAPI. As referências genéricas à inteligência artificial não foram traduzidas globalmente. Rotas `api-ia`, `voz`, âncoras, IDs, contratos, credenciais, tarifas e modelos permanecem iguais. Estúdio de Voz mantém o nome da funcionalidade. Ajuste de texto em validação, ainda não publicado neste registro.
+
+## API de Voz — revisão visual publicada, 14/09/2026
+
+Após confirmação direta do titular nesta tarefa, pacote `17731ed31b326a00dad0cbc1205ccaa9509f0edf` enviado à master, preservando `878eea3`, sem force. Vercel `dpl_729JcggaNELwVjymigtPyS6P2x93` Ready / Production, URL `novaconnectyhub-l49fz1zpn-nova-connectyhub-s-projects.vercel.app`, vinculada aos domínios principal e www. Log remoto confirmou master/17731ed, compilação, TypeScript e 107 páginas; build encerrado às 18:54:14 UTC. As rejeições anteriores foram resolvidas pela autorização direta, sem execução indireta.
+
+Conferência em produção na sessão existente do cliente: API de Voz em título, cabeçalho e menu; painel claro com gráficos/histórico carregados; Estúdio e catálogo com nomes comerciais neutros e Evelyn privada preservada. Desktop e viewport 390x844 inspecionados, com campos/abas legíveis. Guia Markdown e OpenAPI retornaram HTTP 200, sem menções à marca do fornecedor. IDs técnicos permanecem compatíveis. Nenhuma geração, clonagem, alteração de chave, tarifa, carteira ou mensagem de teste nesta publicação. Evidências locais anteriores: nove regressões, lint, tipos e build aprovados. Streaming/timestamps/dicionários não integram este pacote. Este registro posterior permanece local para evitar novo deploy apenas documental.
+
 ## API de Voz — revisão visual local, 14/09/2026
 
 Por solicitação do titular, a interface foi alinhada ao painel existente de API de IA: nome API de Voz no menu/metadados/cabeçalho, fundo claro, ações azuis, saldo compartilhado em destaque, abas Painel de uso / Projetos e chaves / Estúdio de Voz. Gráficos de créditos e solicitações usam os agregados reais já existentes, com tabela acessível e fuso UTC explicitado. Histórico em itens expansíveis, estados traduzidos, carregamento e falha sem apresentar saldo/consumo zero fictício; botões e abas ajustados para celular. Operações, endpoints, tarifas, clones e credenciais preservados. Nenhuma migration nesta revisão.

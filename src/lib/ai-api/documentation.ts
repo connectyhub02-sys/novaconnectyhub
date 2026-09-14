@@ -92,8 +92,8 @@ except (URLError, TimeoutError):
     raise`;
 
 export const aiDocPages: AiDocPage[] = [
-  { id: "ia", label: "Começar com IA", group: "Começar", title: "Inteligência para seus projetos", description: "Referência da API de IA ConnectyHub: recursos, integração, mensagens, respostas e créditos em um só lugar.", blocks: [
-    steps("Sua primeira integração", ["Entre no painel de API de IA, dê um nome ao projeto e escolha o modelo. Flash 3.5 é a opção recomendada.", "Copie a chave exibida e guarde-a no servidor do seu sistema.", "Envie messages para /chat/completions. Leia a resposta e acompanhe os créditos no painel."]),
+  { id: "ia", label: "Começar com IA", group: "Começar", title: "Inteligência para seus projetos", description: "Referência da API de AI ConnectyHub: recursos, integração, mensagens, respostas e créditos em um só lugar.", blocks: [
+    steps("Sua primeira integração", ["Entre no painel de API de AI, dê um nome ao projeto e escolha o modelo. Flash 3.5 é a opção recomendada.", "Copie a chave exibida e guarde-a no servidor do seu sistema.", "Envie messages para /chat/completions. Leia a resposta e acompanhe os créditos no painel."]),
     code("Endereço e autenticação", `Base URL: ${aiBaseUrl}\nAuthorization: Bearer SUA_CHAVE\nContent-Type: application/json`, "text"),
     code("Primeira solicitação · Bash", aiCurlExample, "bash"),
     text("Configure CONNECTYHUB_AI_API_KEY no ambiente do servidor. Troque a Idempotency-Key do exemplo por uma identidade própria para cada operação e preserve-a nos reenvios."),
@@ -108,8 +108,8 @@ export const aiDocPages: AiDocPage[] = [
   ] },
   { id: "ia-autenticacao", label: "Autenticação e projetos", group: "Começar", title: "Uma chave para cada projeto", description: "Cada chave identifica o projeto e a conta responsável pelo consumo.", blocks: [
     steps("Configuração", ["Crie o projeto no painel /dashboard/api-ia. A chave completa aparece na criação; armazene-a em um local seguro.", "Configure CONNECTYHUB_AI_API_KEY no ambiente do seu servidor.", "Envie Authorization: Bearer SUA_CHAVE em todas as rotas de IA."]),
-    table("Configuração do cliente HTTP", ["Campo", "Valor"], [["Base URL", aiBaseUrl], ["Authorization", "Bearer seguido da chave da API de IA"], ["Content-Type", "application/json nas solicitações com corpo"], ["model", "connectyhub-auto, se sua ferramenta exigir; pode ser omitido"], ["Execução", "Servidor do seu sistema, com projeto ativo, acesso da conta e créditos disponíveis"]]),
-    text("A chave WhatsApp não autentica na API de IA. Chaves do mesmo projeto podem consultar as solicitações desse projeto; chaves de outro projeto não têm acesso a elas. Revogar uma chave impede seu uso futuro."),
+    table("Configuração do cliente HTTP", ["Campo", "Valor"], [["Base URL", aiBaseUrl], ["Authorization", "Bearer seguido da chave da API de AI"], ["Content-Type", "application/json nas solicitações com corpo"], ["model", "connectyhub-auto, se sua ferramenta exigir; pode ser omitido"], ["Execução", "Servidor do seu sistema, com projeto ativo, acesso da conta e créditos disponíveis"]]),
+    text("A chave WhatsApp não autentica na API de AI. Chaves do mesmo projeto podem consultar as solicitações desse projeto; chaves de outro projeto não têm acesso a elas. Revogar uma chave impede seu uso futuro."),
     note("Aplicações web e móveis", "Mantenha a chave fora do navegador, aplicativo distribuído e repositório público. O frontend conversa com seu backend; o backend chama a ConnectyHub. Use diretamente o domínio com www para evitar redirecionamento entre hosts."),
   ] },
   { id: "ia-models", label: "Modelos e perfis", group: "Endpoints", method: "GET", path: "/models", title: "Modelos e perfis de inteligência", description: aiOpenApiSpec.paths["/models"].get.description, blocks: [
@@ -245,7 +245,7 @@ export const aiDocPages: AiDocPage[] = [
   ]},
   { id: "ia-schemas", label: "Schemas e downloads", group: "Referência", title: "Contrato completo em OpenAPI", description: "Use o arquivo JSON para consultar tipos, exemplos e respostas HTTP ou importar a referência no seu cliente de API.", blocks: [
     table("Schemas", ["Nome", "Uso"], [["ChatRequest", "Campos da solicitação, exemplos e dependência de stream_options."], ["Message / TextPart / ImagePart", "Papéis da conversa e partes de conteúdo."], ["ChatCompletion", "Resposta textual concluída."], ["ChatChunk", "Estrutura dos eventos SSE; o terminador [DONE] não é JSON."], ["CreditUsage", "Identificadores e consumo em créditos."], ["AiRequest", "Situação da operação, consumo e resposta recuperada."], ["ModelList", "Identificação pública da API."], ["AiError / SimpleError", "Os dois formatos de erro do contrato atual."]]),
-    steps("Importar no cliente de API", ["Baixe o OpenAPI JSON de IA / LLM nesta página.", "Importe como especificação OpenAPI 3.1 no seu cliente HTTP.", "Configure a base de produção e a chave da API de IA em uma variável privada.", "Escolha um exemplo de messages e uma Idempotency-Key própria antes de enviar."]),
+    steps("Importar no cliente de API", ["Baixe o OpenAPI JSON de IA / LLM nesta página.", "Importe como especificação OpenAPI 3.1 no seu cliente HTTP.", "Configure a base de produção e a chave da API de AI em uma variável privada.", "Escolha um exemplo de messages e uma Idempotency-Key própria antes de enviar."]),
     note("Versão da referência", "OpenAPI 1.6.0: geração multimodal, Interações, recursos persistentes e tempo real com consumo em créditos. Confira a ativação operacional no catálogo antes de integrar."),
     text("Para compartilhar com outra equipe ou assistente de programação, baixe também o Guia de integração em Markdown. O guia e as páginas usam a mesma fonte de conteúdo."),
   ] },

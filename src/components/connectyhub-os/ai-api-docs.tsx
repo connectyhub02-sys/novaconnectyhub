@@ -25,7 +25,7 @@ export function AiDocsNavigation({ selected }: { selected: string }) {
   const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const filtered = aiDocPages.filter(page => normalize(JSON.stringify(page)).includes(normalize(query.trim())));
   const groups = [...new Set(filtered.map(page => page.group))];
-  return <nav aria-label="Seções da API de IA" className="space-y-5">
+  return <nav aria-label="Seções da API de AI" className="space-y-5">
     <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2"><Search className="h-4 w-4 shrink-0 text-slate-400" /><input aria-label="Buscar na documentação de IA" value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar recurso, campo ou erro" className="min-h-9 min-w-0 w-full bg-transparent text-xs text-slate-200 outline-none" /></label>
     {!filtered.length && <p role="status" className="text-sm text-slate-400">Nenhuma seção encontrada. Tente outro termo.</p>}
     {groups.map(group => <div key={group}><p className="mb-2 px-3 font-mono text-[10px] uppercase tracking-widest text-slate-500">{group}</p><div className="space-y-1">{filtered.filter(page => page.group === group).map(section => <a key={section.id} href={`#${section.id}`} aria-current={selected === section.id ? "page" : undefined} className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-3 text-sm ${selected === section.id ? "bg-emerald-300/10 font-bold text-emerald-100" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
@@ -36,7 +36,7 @@ export function AiDocsNavigation({ selected }: { selected: string }) {
 }
 
 export function AiDocsSidePanel() {
-  return <div className="space-y-5 rounded-xl border border-emerald-300/20 bg-slate-950/70 p-5"><h2 className="flex items-center gap-2 text-sm font-bold text-emerald-200"><Sparkles className="h-4 w-4" />Conectar à API de IA</h2><p className={paragraph}>Crie o projeto, copie sua chave e configure este endereço no servidor do seu sistema.</p><Code title="Configuração" code={`Base URL: ${aiBaseUrl}\nAuthorization: Bearer SUA_CHAVE`} /><AiDocsDownload /><p className="text-xs leading-6 text-slate-400">Referência pública com recursos, exemplos, respostas e créditos. Compartilhe o guia com sua equipe ou ferramenta de desenvolvimento.</p><Link href="/dashboard/api-ia" className={link}><KeyRound className="h-4 w-4" />Criar projeto e chave<ArrowRight className="h-4 w-4" /></Link></div>;
+  return <div className="space-y-5 rounded-xl border border-emerald-300/20 bg-slate-950/70 p-5"><h2 className="flex items-center gap-2 text-sm font-bold text-emerald-200"><Sparkles className="h-4 w-4" />Conectar à API de AI</h2><p className={paragraph}>Crie o projeto, copie sua chave e configure este endereço no servidor do seu sistema.</p><Code title="Configuração" code={`Base URL: ${aiBaseUrl}\nAuthorization: Bearer SUA_CHAVE`} /><AiDocsDownload /><p className="text-xs leading-6 text-slate-400">Referência pública com recursos, exemplos, respostas e créditos. Compartilhe o guia com sua equipe ou ferramenta de desenvolvimento.</p><Link href="/dashboard/api-ia" className={link}><KeyRound className="h-4 w-4" />Criar projeto e chave<ArrowRight className="h-4 w-4" /></Link></div>;
 }
 
 export function AiApiDocs({ section }: { section: AiDocSection }) {
@@ -45,7 +45,7 @@ export function AiApiDocs({ section }: { section: AiDocSection }) {
   const article = useRef<HTMLElement>(null);
   useEffect(() => { article.current?.scrollIntoView({ block: "start" }); }, [section]);
   return <article ref={article} className="min-w-0 scroll-mt-24 space-y-7" aria-label={page.title}>
-    <header><p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">API de IA ConnectyHub · {page.group}</p><h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">{page.title}</h2><p className={`mt-4 ${paragraph}`}>{page.description}</p></header>
+    <header><p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">API de AI ConnectyHub · {page.group}</p><h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">{page.title}</h2><p className={`mt-4 ${paragraph}`}>{page.description}</p></header>
     {page.path && <div className="flex min-w-0 flex-wrap gap-3 rounded-lg border border-white/10 p-4"><strong className="font-mono text-xs text-emerald-200">{page.method}</strong><code className="break-all text-sm">{page.path}</code></div>}
     {page.id === "ia" && <div className="grid gap-3 sm:grid-cols-3">{[[String(Object.keys(aiOpenApiSpec.paths).length), "Rotas públicas"], [String(aiDocPages.length), "Seções de referência"], ["Créditos", "Consumo da conta"]].map(([value, label]) => <div key={label} className={card}><strong className="text-2xl font-black text-emerald-200">{value}</strong><p className="mt-2 text-xs leading-5 text-slate-400">{label}</p></div>)}</div>}
     {page.group === 'Tutoriais completos' && page.blocks.filter(block=>block.kind==='code'&&['bash','javascript','python'].includes(block.language)).length>1
@@ -54,7 +54,7 @@ export function AiApiDocs({ section }: { section: AiDocSection }) {
     {!!responses.length && <Rows title="Respostas HTTP" columns={["HTTP", "Descrição"]} rows={responses} />}
     {page.id === "ia-schemas" || page.id === "ia" ? <AiDocsDownload /> : null}
     <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-5"><a href="#ia-recursos" className={link}>Recursos disponíveis<ArrowRight className="h-4 w-4" /></a><a href="#ia-schemas" className={link}>Schemas e downloads<ArrowRight className="h-4 w-4" /></a></div>
-    <footer className="text-xs leading-6 text-slate-400">API de IA ConnectyHub · <a className="text-emerald-200 underline" href="#whatsapp">API WhatsApp</a> · Referência {aiOpenApiSpec.info.version}</footer>
+    <footer className="text-xs leading-6 text-slate-400">API de AI ConnectyHub · <a className="text-emerald-200 underline" href="#whatsapp">API WhatsApp</a> · Referência {aiOpenApiSpec.info.version}</footer>
   </article>;
 }
 

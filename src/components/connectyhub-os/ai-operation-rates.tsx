@@ -15,7 +15,7 @@ export function AiOperationRates() {
     const response=await fetch('/api/admin/billing/ai-rates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model_id:model,meter,provider_cost:Number(cost),credit_price:Number(price),plan_code:plan.trim()||null})});
     const data=await response.json();if(!response.ok)throw Error(data.error);setRates(current=>[data.rate,...current]);setMessage('Nova tarifa vigente. Operações em andamento mantêm o preço reservado.');
   }catch(error){setMessage(error instanceof Error?error.message:'Falha ao salvar.');}finally{setBusy(false);}}
-  return <Panel title="Tarifas dos recursos da API de IA" eyebrow="centro de custo" collapsible>
+  return <Panel title="Tarifas dos recursos da API de AI" eyebrow="centro de custo" collapsible>
     <p className="mb-4 text-sm">Configure custo em reais e preço em créditos por unidade de consumo. A tarifa vigente mais específica do modelo e do plano tem prioridade. Consultas, segundos, músicas e armazenamento têm medição própria.</p>
     <form onSubmit={save} className="grid gap-3 md:grid-cols-3">
       <label className="grid gap-1 text-xs">Modelo<select className={field} value={model} onChange={e=>setModel(e.target.value)}><option value="*">Todos os modelos</option>{publicAiModelDefinitions.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>

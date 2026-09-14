@@ -123,17 +123,17 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
     <section id="referencia" className="border-t border-white/10 bg-[#05070a] pt-20">
       <header className="mx-auto max-w-[1760px] border-b border-white/10 px-4 pb-6 pt-8 sm:px-6 lg:px-8">
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-300">Documentação pública ConnectyHub</p>
-        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">WhatsApp, IA e Voz</h1>
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">API WhatsApp, API de AI e API de Voz AI</h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">Duas APIs, uma referência. Escolha a integração no menu para consultar endpoints, exemplos e baixar o OpenAPI JSON de cada serviço. A documentação é aberta; cada API usa sua própria chave de acesso.</p>
       </header>
       <div className="mx-auto grid max-w-[1760px] gap-0 px-4 py-6 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:px-8 xl:grid-cols-[320px_minmax(0,1fr)_420px]">
         <aside aria-label="Navegação da documentação" className="max-h-[26rem] min-w-0 overflow-y-auto lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:border-r lg:border-white/10 lg:pr-5">
           <nav aria-label="Escolher API" className="mb-5 grid grid-cols-2 gap-2">
             <a href="#whatsapp" onClick={() => setSelected({ type: "overview" })} aria-current={!aiSection && !voiceSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${!aiSection && !voiceSection ? "border-cyan-300/30 bg-cyan-300/15 text-cyan-100" : "border-white/10 text-slate-400 hover:text-white"}`}><Webhook className="h-4 w-4 shrink-0" />WhatsApp</a>
-            <a href="#ia" aria-current={aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${aiSection ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-100" : "border-white/10 text-slate-300 hover:text-white"}`}><Sparkles className="h-4 w-4 shrink-0" />IA / LLM</a>
+            <a href="#ia" aria-current={aiSection ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-bold ${aiSection ? "border-emerald-300/30 bg-emerald-300/15 text-emerald-100" : "border-white/10 text-slate-300 hover:text-white"}`}><Sparkles className="h-4 w-4 shrink-0" />API de AI</a>
           </nav>
           {aiSection ? <AiDocsNavigation selected={aiSection} /> : null}
-          <a href="#voz" aria-current={voiceSection ? "page" : undefined} className={`mt-2 flex min-h-12 items-center justify-center rounded-lg border px-3 py-3 text-sm font-bold ${voiceSection ? "border-violet-300/30 bg-violet-300/15 text-violet-100" : "border-white/10 text-slate-300 hover:text-white"}`}>Voz · Estúdio e API</a>
+          <a href="#voz" aria-current={voiceSection ? "page" : undefined} className={`mt-2 flex min-h-12 items-center justify-center rounded-lg border px-3 py-3 text-sm font-bold ${voiceSection ? "border-violet-300/30 bg-violet-300/15 text-violet-100" : "border-white/10 text-slate-300 hover:text-white"}`}>API de Voz AI</a>
           <div hidden={Boolean(aiSection) || voiceSection}>
           <div className="mb-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-3">
             <Search className="h-4 w-4 text-slate-500" />
@@ -243,7 +243,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
         </div>
 
         <aside className="mt-8 min-w-0 lg:col-start-2 xl:sticky xl:top-20 xl:col-start-auto xl:mt-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:border-l xl:border-white/10 xl:pl-5">
-          {voiceSection ? <div className="rounded-xl border border-violet-300/20 p-5 text-sm text-slate-300"><p className="font-semibold text-white">Conta → projeto → chave</p><p className="mt-3 leading-6">O catálogo e os recibos identificam o projeto e a conta pagadora. Use uma chave dedicada de Voz; amostras e áudios privados nunca recebem acesso público.</p><a href="/docs/api/voz/openapi.json" className="mt-4 block text-violet-200 underline">Baixar OpenAPI de Voz</a></div> : aiSection ? <AiDocsSidePanel /> : <SidePanel
+          {voiceSection ? <div className="rounded-xl border border-violet-300/20 p-5 text-sm text-slate-300"><p className="font-semibold text-white">Conta → projeto → chave</p><p className="mt-3 leading-6">O catálogo e os recibos identificam o projeto e a conta pagadora. Use uma chave dedicada de Voz; amostras e áudios privados nunca recebem acesso público.</p><a href="/docs/api/voz/openapi.json" className="mt-4 block text-violet-200 underline">Baixar OpenAPI de Voz AI</a></div> : aiSection ? <AiDocsSidePanel /> : <SidePanel
             apiToken={apiToken}
             baseUrl={baseUrl}
             catalog={catalog}
@@ -274,7 +274,7 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
           A API WhatsApp combina as rotas nativas da ConnectyHub com o catalogo avancado permitido. O cliente usa
           a nossa chave, o nosso endpoint e o instanceId publico; a ConnectyHub faz a ponte e registra a auditoria.
         </p>
-        <a href="#ia" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-100 hover:bg-emerald-300/20"><Sparkles className="h-4 w-4" />Procurando geração de texto e análise de imagens? Ver API de IA / LLM</a>
+        <a href="#ia" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-bold text-emerald-100 hover:bg-emerald-300/20"><Sparkles className="h-4 w-4" />Procurando geração de texto e análise de imagens? Ver API de AI / LLM</a>
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">

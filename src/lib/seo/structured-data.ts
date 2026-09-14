@@ -122,7 +122,7 @@ export function buildApiDocsStructuredData(input: {
       {
         "@type": "WebAPI",
         "@id": `${docsUrl}#ia-api`,
-        name: "ConnectyHub API de IA / LLM",
+        name: "ConnectyHub API de AI / LLM",
         description: "Geração de texto, imagens inline, catálogo de modelos e consulta de solicitações com créditos compartilhados e idempotência.",
         documentation: `${docsUrl}#ia`,
         url: "https://www.connectyhub.com.br/api/v1/ai",
