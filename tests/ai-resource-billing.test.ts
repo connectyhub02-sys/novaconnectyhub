@@ -48,6 +48,19 @@ async function fixture(){
   return f;
 }
 describe('Resource wallet transactions',()=>{
+  it('persists the decimal quote once and releases the entire reservation on replay',async()=>{
+    const f=await fixture();try{
+      const quote=pricing.priceAiUnits({input:{...rate,credits:.0036},output:{...rate,credits:.0216}},{input:16,output:61});
+      const r=await f.claim('decimal-settlement');await f.reserve(r.id,5);await f.db.query('select start_ai_request($1)',[r.id]);
+      const usage=JSON.stringify({input:16,output:61,cost:quote.cost,charge:quote.credits,featureCode:'external_ai_generation'});
+      for(let i=0;i<2;i++)await f.db.query("select settle_ai_operation($1,'completed',$2,'{}')",[r.id,usage]);
+      const wallet=(await f.db.query<{balance_credits:string;reserved_credits:string}>('select * from credit_wallets where organization_id=$1',[f.org])).rows[0];
+      expect(Number(wallet.balance_credits)).toBe(98.6248);expect(Number(wallet.reserved_credits)).toBe(0);
+      const debits=await f.db.query<{amount_credits:string}>('select amount_credits from credit_transactions');
+      expect(debits.rows.map(row=>Number(row.amount_credits))).toEqual([-1.3752]);
+      expect((await f.db.query('select * from usage_events')).rows).toHaveLength(1);
+    }finally{await f.db.close();}
+  });
   it('settles excess real usage once, into the proper cost-center feature',async()=>{
     const f=await fixture();try{
       const r=await f.claim('media');await f.reserve(r.id,10);await f.db.query('select start_ai_request($1)',[r.id]);

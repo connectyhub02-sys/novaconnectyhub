@@ -6,7 +6,35 @@ import { aiModelDefinition } from "./model-catalog";
 export type AiUnits = Record<string, number>;
 export type AiPrice = { id: string; cost: number; credits: number };
 export type AiPriceCard = Record<string, AiPrice>;
-export const aiMoney = (n: number) => Math.ceil(n * 1e6) / 1e6;
+type Decimal = { coefficient: bigint; scale: number };
+const powerOfTen = (scale: number) => BigInt(10) ** BigInt(scale);
+
+// Interpret the supplied quantity/rate as its decimal representation before
+// multiplication. An epsilon after floating-point arithmetic would also erase
+// legitimate fractions just above a microcredit boundary.
+function decimal(value: number): Decimal {
+  if (!Number.isFinite(value) || value < 0) throw new Error("Valor de cobrança inválido.");
+  const [mantissa, exponent = '0'] = value.toString().split('e');
+  const [integer, fraction = ''] = mantissa.split('.');
+  const coefficient = BigInt(integer + fraction);
+  const scale = fraction.length - Number(exponent);
+  return scale < 0 ? { coefficient: coefficient * powerOfTen(-scale), scale: 0 } : { coefficient, scale };
+}
+function addDecimal(a: Decimal, b: Decimal): Decimal {
+  const scale = Math.max(a.scale, b.scale);
+  return { coefficient: a.coefficient * powerOfTen(scale - a.scale) + b.coefficient * powerOfTen(scale - b.scale), scale };
+}
+function decimalNumber(value: Decimal): number {
+  const result = Number(`${value.coefficient}e-${value.scale}`);
+  if (!Number.isFinite(result)) throw new Error("Valor de cobrança inválido.");
+  return result;
+}
+function ceilCredits(value: Decimal): number {
+  if (value.scale <= 6) return decimalNumber(value);
+  const divisor = powerOfTen(value.scale - 6);
+  return decimalNumber({ coefficient: (value.coefficient + divisor - BigInt(1)) / divisor, scale: 6 });
+}
+export const aiMoney = (n: number) => ceilCredits(decimal(n));
 export async function loadAiPriceCard(client: SupabaseClient, modelId: string, planCode: string | null) {
   const model = aiModelDefinition(modelId);
   if (!model) throw new Error("Modelo não cadastrado.");
@@ -35,17 +63,22 @@ export async function loadAiPriceCard(client: SupabaseClient, modelId: string, p
 
 /** No guessed zero rates: an unpriced dimension blocks dispatch/settlement. */
 export function priceAiUnits(card: AiPriceCard, units: AiUnits, minimum = true) {
-  let cost = 0, credits = 0;
+  let cost = 0;
+  let credits: Decimal = { coefficient: BigInt(0), scale: 0 };
   const breakdown: Array<{ meter: string; units: number; cost: number; credits: number; rate_id: string }> = [];
   for (const [meter, quantity] of Object.entries(units)) {
     if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Medição de consumo inválida.");
     if (!quantity) continue;
     const rate = card[meter];
     if (!rate || !Number.isFinite(rate.credits) || rate.credits <= 0 || !Number.isFinite(rate.cost) || rate.cost < 0) throw new Error(`Tarifa ausente para ${meter}.`);
-    cost += quantity * rate.cost; credits += quantity * rate.credits;
-    breakdown.push({ meter, units: quantity, cost: quantity * rate.cost, credits: quantity * rate.credits, rate_id: rate.id });
+    const amount = decimal(quantity), unitPrice = decimal(rate.credits);
+    const lineCredits = { coefficient: amount.coefficient * unitPrice.coefficient, scale: amount.scale + unitPrice.scale };
+    cost += quantity * rate.cost;
+    credits = addDecimal(credits, lineCredits);
+    breakdown.push({ meter, units: quantity, cost: quantity * rate.cost, credits: decimalNumber(lineCredits), rate_id: rate.id });
   }
-  return { cost: Math.round(cost * 1e8) / 1e8, credits: aiMoney(minimum && breakdown.length ? Math.max(1, credits) : credits), breakdown };
+  const roundedCredits = ceilCredits(credits);
+  return { cost: Math.round(cost * 1e8) / 1e8, credits: minimum && breakdown.length ? Math.max(1, roundedCredits) : roundedCredits, breakdown };
 }
 
 export function addAiUnits(...items: AiUnits[]): AiUnits {

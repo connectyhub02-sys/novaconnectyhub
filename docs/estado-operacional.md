@@ -1,13 +1,17 @@
 # Estado operacional da ConnectyHub
 
-Atualização: 13/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
+## Precisão de créditos da API — 14/09/2026
+
+Correção delimitada do cálculo decimal, na base publicada `508953c`: elimina o acréscimo espúrio de um milionésimo causado por ponto flutuante, mantendo tarifas, mínimo, pacotes e arredondamento para cima de frações legítimas. 136 testes da API e lint passaram. Compilação e publicação em andamento; nenhum saldo histórico alterado. Diferença histórica de 0,000001 crédito permanece pendente, sem estorno. [Implementação e limites](correcao-precisao-creditos-2026-09-14.md).
+
+Atualização: 14/09/2026. Este é um ponto de continuidade, não monitoramento em tempo real. Revalidar antes de decisões de produção. A auditoria geral solicitada pelo titular está em andamento e ainda não autoriza declarar todos os recursos prontos para a próxima fase.
 
 
 ## API LLM — infraestrutura de 14/09/2026
 
 Pacote incremental publicado: `68ae22b`, Vercel `dpl_3jxPYR4jvxuVjLcLVuNYLQcsoq2r` Ready/Production e domínio principal conferidos às 05:51 UTC. Relay de arquivos/Live ativo por HTTPS na VPS; upload por ticket e conexão privada com a aplicação verificados sem arquivo real nem inferência paga. Documentação 1.6.0, 15 operações nativas Gemini e preços públicos respondendo. Paridade completa e homologação real de todas as modalidades continuam pendentes.
 
-Complementos posteriores de lotes (6 métodos) e File Search (9) publicados com autorização direta em b742e91, Vercel dpl_3KkcsSjxQTiiNHyLpKM6BpWEj3uj Ready/Production. O SDK oficial passou em dez chamadas offline; 2.735 testes, lint e build com TypeScript aprovados. OpenAPI publicado contém 30 operações, mas os probes detectaram 503 nas rotas de recursos antes da autenticação. Causa reproduzida: cópia do Request encapsulado pelo Next.js. Correção local passou em 24 testes e em seis probes no servidor Next.js, todos 401 esperado; republicação corretiva em andamento. O compartilhamento com a tarefa de origem continua aguardando autorização específica. [Matriz e limites](matriz-paridade-gemini-2026-09-14.md).
+Complementos de lotes (6 métodos) e File Search (9) publicados com autorização direta em b742e91 e correção 508953c. Vercel dpl_bgU48TSxbC7MFvu45XdHe92h2G5V Ready/Production, domínio principal e commit conferidos em 14/09 às 13:09 UTC. OpenAPI publicado contém 30 operações. O 503 na cópia do Request encapsulado pelo Next.js foi reproduzido e corrigido; 24 testes adicionais, lint e build passaram. Quatorze probes públicos finais passaram, incluindo proteção 401 das novas rotas e rejeição de chave sintética inválida. Antes da correção, o pacote completo passou em 2.735 testes e dez chamadas offline com SDK oficial. Não houve geração paga, indexação real, arquivo pessoal ou mudança financeira de teste. Próximo passo: testes controlados dos fluxos publicados; paridade integral e homologação de todas as modalidades continuam pendentes. O compartilhamento com a tarefa de origem continua aguardando autorização específica. [Matriz e limites](matriz-paridade-gemini-2026-09-14.md).
 
 Proteção financeira 0143 aplicada e conferida. Migrations 0144 (tickets descartáveis de upload) e 0145 (capacidade por carteira/global) publicadas às 05:06 UTC no Supabase da VPS: RPCs novas exclusivas do serviço, RLS ativo, trigger habilitado e proteção financeira preservada. Nenhum saldo/preço/pedido alterado e nenhuma geração ou cobrança real de teste. A implementação LLM permanece em desenvolvimento; esta publicação SQL não comprova paridade integral nem transporte completo em produção. [Evidências, limites e etapa de publicação](implementacao-api-llm-2026-09-14.md).
 

@@ -1,0 +1,106 @@
+{
+  "checked_at": "2026-09-14T13:09:46.886262+00:00",
+  "commit": "508953c8145ac91540feff106b339383b1d4330c",
+  "deployment": "dpl_bgU48TSxbC7MFvu45XdHe92h2G5V",
+  "probes": [
+    {
+      "path": "/docs/api/ia/gemini-openapi.json",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 200,
+      "version": "gemini-v1beta-2026-09-14",
+      "operations": 30
+    },
+    {
+      "path": "/docs/api/ia/guide.md",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 200,
+      "file_search_documented": true
+    },
+    {
+      "path": "/api/v1/ai/prices",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 200
+    },
+    {
+      "path": "/login",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 200
+    },
+    {
+      "path": "/api/v1beta/models",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/files",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/batches",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/fileSearchStores",
+      "method": "GET",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/files",
+      "method": "GET",
+      "synthetic_invalid_key": true,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/batches",
+      "method": "GET",
+      "synthetic_invalid_key": true,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/fileSearchStores",
+      "method": "GET",
+      "synthetic_invalid_key": true,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/models/flash-3.5:batchGenerateContent",
+      "method": "POST",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1beta/fileSearchStores",
+      "method": "POST",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    },
+    {
+      "path": "/api/v1/ai/files/uploads",
+      "method": "POST",
+      "synthetic_invalid_key": false,
+      "status": 401,
+      "reason": "invalid_api_key"
+    }
+  ],
+  "paid_generations": 0,
+  "customer_files_sent": 0
+}

@@ -2,6 +2,8 @@
 
 Inventário REST público, revisão 20260910. Implementação local deste pacote; publicação não implica homologação paga ou disponibilidade de todos os modelos. A meta de cobertura integral aplicável continua aberta.
 
+**Checkpoint publicado:** 30 métodos em b742e91 + correção 508953c, domínio principal conferido em 14/09 às 13:09 UTC. As referências abaixo a complementos locais descrevem sua etapa anterior; agora esses lotes e File Search estão publicados. Os demais métodos pendentes continuam pendentes. Quatorze probes públicos passaram, sem geração paga; [evidência](evidencias/gemini-publicacao-complementos-2026-09-14.json).
+
 O discovery contém 85 métodos; Interactions e os protocolos WebSocket Live/música precisam de referências complementares e não entram nesse total. Métodos legados, tuning e permissões precisam de avaliação de aplicabilidade, não devem ser silenciosamente contados como implementados.
 
 | Método oficial | HTTP | Estado neste pacote |
