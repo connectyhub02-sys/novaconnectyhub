@@ -10,9 +10,16 @@ export async function voiceCatalog(auth:VoiceAuth) {
   const state=await listWhatsappAudioVoices({client:auth.client,organizationId:auth.project.organization_id});
   const {data:clones,error}=await auth.client.from('voice_clones').select('id,provider_voice_id,name,status,origin,voice_generations(status)').eq('organization_id',auth.project.organization_id).eq('project_id',auth.project.id).neq('status','deleted').not('provider_voice_id','is',null);
   if(error) throw new VoiceError('catalog_unavailable',503,'Não foi possível conferir a propriedade das vozes.');
+  const designed:Array<{voice_id:string;name:string;kind:string;status:string;preview_url:null;language:null}>=[];
+  if(process.env.STUDIO_OPERATIONS_ENABLED==='true'){
+    const resources=await auth.client.from('studio_resources').select('provider_id,name,studio_operations!inner(voice_generations!inner(status))').eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).eq('kind','voice').eq('status','ready').eq('studio_operations.voice_generations.status','completed');
+    if(resources.error)throw new VoiceError('catalog_unavailable',503,'Não foi possível conferir as vozes desenhadas.');
+    for(const voice of resources.data??[])designed.push({voice_id:voice.provider_id,name:voice.name,kind:'designed',status:'ready',preview_url:null,language:null});
+  }
   return {project_id:auth.project.id,billing_organization_id:auth.billingOrg,configured:state.configured,voices:[
     ...state.voices.filter(v=>v.category==='premade' && ['platform','elevenlabs'].includes(v.source)).map(v=>({voice_id:v.voiceId,name:v.name,kind:'common',status:'ready',preview_url:v.previewUrl,language:v.language})),
     ...(clones??[]).filter(v=>v.origin==='verified_import'||(v.voice_generations as unknown as {status:string}|null)?.status==='completed').map(v=>({voice_id:v.provider_voice_id,name:v.name,kind:'private',status:v.status,preview_url:null,language:null})),
+    ...designed,
   ],partial:!!state.errorMessage};
 }
 export async function voiceRates(auth:VoiceAuth,model:string) {

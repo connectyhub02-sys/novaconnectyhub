@@ -400,3 +400,29 @@ Publicação da correção confirmada às 18:00 BRT: `fe81625d`, Vercel `dpl_DFt
 Implementados arquivos privados na VPS com ticket de uso único, escopo organização/projeto, revalidação de contrato/chave e reserva/liberação de armazenamento. FFmpeg mede duração por decodificação com limite de30 minutos/20 MB, sem URLs externas, sem usar duração declarada pelo cliente. Upload, download e exclusão exigem autorização; confirmações são recuperadas após reinício. Não há consumo de fornecedor ou débito de IA nesta etapa.
 
 27 testes dirigidos passaram (SQL PostgreSQL local, transporte HTTP local, isolamento, duração sintética e regressões do relay), além de TypeScript/lint. Migration0148, nova imagem com FFmpeg, volume privado incluído no backup e flag `STUDIO_ASSETS_ENABLED` ainda **não publicados/ativados**. Isso não conclui as modalidades do Estúdio; operações, liquidação, ferramentas da interface e ativação comercial continuam em desenvolvimento. Nenhum arquivo pessoal ou geração paga utilizado nos testes.
+
+## Expansão do Estúdio — base aplicada em14/09,20h BRT
+
+Migrations0148/0149 aplicadas transacionalmente após ensaio com rollback no destino.
+Quatro tabelas Studio comRLS e acesso de serviço, bucketconnectyhub-studio privado;
+12 capacidades inicialmente desabilitadas, sem alteração de tarifas existentes.
+Imagem relaystudio-20260914 comFFmpeg construída e validada como usuário node;
+publicação da aplicação e troca do processo ainda em andamento.
+
+Backup operacional passou a incluir configuração e volume privado do relay.
+Arquivo connectyhub-20260914T224327Z.tar.gz,569.500.068 bytes,
+SHA256cf302ce5aef22ad3a146fd86a773a305ba651187d609a849b8374fa25396cf0f;
+conteúdo dos arquivos internos conferido. Esta cópia ainda está na VPS.
+
+Testes sintéticos reais de nove modalidades (incluindo salvamento e download de
+dublagem) passaram; dicionários recusados por permissão específica da chave.
+Total conservadorUS$0,650437 deUS$1 autorizado. Referências e limites em
+[plano de custos do Estúdio](plano-custos-estudio-audio-2026-09-14.md).
+Transporte real testado não comprova todos os percursos comerciais painel/carteira.
+
+Validação final local: 2.902 testes em 240 arquivos passaram com dois workers,
+ESLint e build Next.js/webpack com TypeScript e 108 páginas passaram. A rodada
+anterior no paralelismo padrão teve apenas timeouts nos testes PGlite.
+Relay atualizado e `/health` confirmou Live, uploads e Studio assets; diretório
+privado do Estúdio com modo 0700 e usuário node. Flags da aplicação configuradas
+para a próxima publicação; capacidades financeiras continuam fechadas até confirmação.

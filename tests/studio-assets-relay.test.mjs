@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {mkdtemp,readFile,readdir,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -44,4 +44,21 @@ it('rejects invalid tickets before storing or inspecting content',async()=>{
 });
 it('releases the upload after invalid audio and never declares it ready',async()=>{
  const f=await fixture({measureFail:true});try{expect((await f.send()).status).toBe(422);expect(f.calls.at(-1).action).toBe('asset.fail');expect(await readdir(f.stateDir)).toEqual([]);}finally{await f.close();}
+});
+it('reconciles a crashed upload but protects local audio and pending manifests',async()=>{
+ const stateDir=await mkdtemp(join(tmpdir(),'studio-recovery-'));
+ const abandoned=randomUUID(),saved=randomUUID(),pending=randomUUID(),calls=[];
+ await writeFile(join(stateDir,`${abandoned}.audio.tmp`),'partial');
+ await writeFile(join(stateDir,`${saved}.audio`),'saved');
+ await writeFile(join(stateDir,`${pending}.json`),JSON.stringify({id:pending,status:'ready',created_at:Date.now()}));
+ const handler=createStudioAssetHandler({control:'https://control.example',secret:'private',stateDir,fetcher:async(_,request)=>{
+  const body=JSON.parse(request.body);calls.push(body);
+  return Response.json(body.action==='asset.stale'?{ids:[abandoned,saved,pending,'../unsafe']}:{status:'failed'});
+ }});
+ try{
+  await handler.flush();
+  expect(calls.filter(c=>c.action==='asset.fail_stale')).toEqual([{action:'asset.fail_stale',id:abandoned}]);
+  expect(await readdir(stateDir)).toEqual(expect.arrayContaining([`${saved}.audio`,`${pending}.json`]));
+  expect(await readdir(stateDir)).not.toContain(`${abandoned}.audio.tmp`);
+ }finally{handler.close();await rm(stateDir,{recursive:true,force:true});}
 });

@@ -7,9 +7,9 @@ import {measureStudioAudio,studioMediaLimits} from './audio-measure.mjs';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 class AssetFailure extends Error {constructor(status,code){super(code);this.status=status;this.code=code;}}
-export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,measure=measureStudioAudio,maxActive=2}) {
+export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,measure=measureStudioAudio,maxActive=2,requestTimeoutMs=180000}) {
  if(!stateDir)throw new Error('Studio requires a private persistent asset directory');
- let active=0,draining=false;
+ let active=0,draining=false,lastStaleScan=0;const activeIds=new Set();
  const ready=mkdir(stateDir,{recursive:true,mode:0o700});
  const audio=id=>join(stateDir,`${id}.audio`),manifest=id=>join(stateDir,`${id}.json`);
  const remove=path=>unlink(path).catch(error=>{if(error.code!=='ENOENT')throw error;});
@@ -40,14 +40,27 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
      }
     }
    }catch{/* Keep receipt for reconciliation; never retry generation. */}
-  }}finally{draining=false;}
+  }
+  // Reconcile uploads whose process died before a durable manifest was written.
+  // Never release capacity while any local file/receipt or active request exists.
+  if(Date.now()-lastStaleScan>=300000){
+   lastStaleScan=Date.now();
+   const stale=await call({action:'asset.stale'});
+   for(const id of Array.isArray(stale.ids)?stale.ids.slice(0,20):[]){
+    if(typeof id!=='string'||!uuid.test(id)||activeIds.has(id))continue;
+    const exists=async path=>stat(path).then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;});
+    if(await exists(manifest(id))||await exists(audio(id)))continue;
+    const result=await call({action:'asset.fail_stale',id});if(result.status==='failed')await remove(audio(id)+'.tmp');
+   }
+  }
+  }finally{draining=false;}
  };
  const timer=setInterval(()=>flush().catch(()=>{}),15000);timer.unref();
  const handler=async(req,res)=>{
   const match=req.url?.match(/^\/studio-assets\/([^/?]+)$/);if(!match)return false;
   const id=match[1],cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT, GET, DELETE, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'};
   const reply=(status,body)=>{if(!res.destroyed&&!res.writableEnded&&!res.headersSent){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',...cors});res.end(JSON.stringify(body));}};
-  let claimed=false,durable=false,slot=false,ownedFile=false,session;
+  let claimed=false,durable=false,slot=false,ownedFile=false,session,deadline;
   const purpose={PUT:'upload',GET:'download',DELETE:'delete'}[req.method];
   try{
    if(!uuid.test(id))throw new AssetFailure(404,'asset_not_found');
@@ -55,13 +68,14 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
    if(!purpose)throw new AssetFailure(405,'method_not_allowed');
    const ticket=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
    if(!ticket)throw new AssetFailure(401,'invalid_asset_ticket');
-   if(active>=maxActive)throw new AssetFailure(429,'asset_capacity');
+   if(active>=maxActive||activeIds.has(id))throw new AssetFailure(429,'asset_capacity');
    let size;
    if(purpose==='upload'){
     size=Number(req.headers['content-length']);
     if(!Number.isSafeInteger(size)||size<1||size>studioMediaLimits.bytes)throw new AssetFailure(413,'asset_size_limit');
    }
-   active++;slot=true;await ready;
+   active++;slot=true;activeIds.add(id);await ready;
+   deadline=setTimeout(()=>{req.destroy();res.destroy();},requestTimeoutMs);deadline.unref();
    if((await readdir(stateDir)).filter(n=>n.endsWith('.json')).length>=1024)throw new AssetFailure(503,'asset_recovery_capacity');
    session=await call({action:'asset.connect',id,purpose,access_key:ticket});claimed=true;
    if(session.id!==id||!Number.isSafeInteger(session.size_bytes)||session.size_bytes<1||session.size_bytes>studioMediaLimits.bytes||!/^audio\/(wav|mpeg|mp4|aac|ogg|flac|webm)$/.test(session.mime_type))throw new AssetFailure(422,'asset_metadata');
@@ -95,7 +109,7 @@ export function createStudioAssetHandler({control,secret,stateDir,fetcher=fetch,
     await call({action:'asset.fail',id}).catch(()=>{});
    }
    reply(error instanceof AssetFailure?error.status:503,{error:{code:durable?'asset_confirmation_pending':error instanceof AssetFailure?error.code:'asset_unavailable',message:durable?'Confirmação pendente; consulte o arquivo pelo ID.':'Não foi possível concluir a operação.',asset_id:uuid.test(id)?id:undefined}});
-  }finally{if(slot)active--;req.resume();}
+  }finally{clearTimeout(deadline);if(slot){active--;activeIds.delete(id);}req.resume();}
   return true;
  };
  handler.close=()=>clearInterval(timer);handler.flush=flush;return handler;

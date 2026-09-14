@@ -400,7 +400,7 @@ export function PricingPlansGrid({
       </div>
       </div>
 
-      <p className={surface === "dashboard" ? "mt-6 text-center text-xs leading-6 text-slate-600" : "mt-6 text-center text-xs leading-6 text-slate-300"}>Todos os planos também permitem usar o saldo em projetos externos pela <Link href="/docs/api#ia" className="underline underline-offset-4">API de AI ConnectyHub</Link>. API WhatsApp conforme os recursos contratados.</p>
+      <p className={surface === "dashboard" ? "mt-6 text-center text-xs leading-6 text-slate-600" : "mt-6 text-center text-xs leading-6 text-slate-300"}>Todos os planos também permitem usar o saldo em projetos externos pela <Link href="/docs/api#ia" className="underline underline-offset-4">API de AI ConnectyHub</Link>. Conheça também o <Link href="/docs/api#voz" className="underline underline-offset-4">Estúdio e a API de Voz</Link>: disponibilidade, créditos e armazenamento seguem o contrato, inclusive nas contas gratuitas ou de teste. Uso gratuito não significa geração ilimitada. API WhatsApp conforme os recursos contratados.</p>
 
       {catalogFailed && catalogPlans.length === 0 ? (
         <p className="mt-3 text-center font-mono text-[11px] text-amber-200">

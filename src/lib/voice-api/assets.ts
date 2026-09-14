@@ -65,7 +65,13 @@ export async function listStudioAssets(auth:VoiceAuth){
 export async function studioAssetCommand(client:SupabaseClient,raw:unknown){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new VoiceError('invalid_asset',422,'Comando inválido.');
  const b=raw as Record<string,unknown>,id=b.id;
+ if(b.action==='asset.stale'){
+  const {data,error}=await client.from('studio_assets').select('id').eq('status','processing').lt('updated_at',new Date(Date.now()-600000).toISOString()).order('updated_at').limit(20);
+  if(error)throw new VoiceError('service_unavailable',503,'Não foi possível conferir uploads pendentes.');
+  return {ids:(data??[]).map(a=>a.id)};
+ }
  if(typeof id!=='string'||!uuid.test(id))throw new VoiceError('invalid_asset',422,'Arquivo inválido.');
+ if(b.action==='asset.fail_stale')return publicStudioAsset(await assetRpc(client,'fail_stale_studio_asset',{p_id:id}));
  if(b.action==='asset.connect'){
   if(typeof b.access_key!=='string'||!/^[a-f0-9]{64}$/.test(b.access_key)||!['upload','download','delete'].includes(String(b.purpose)))throw new VoiceError('invalid_ticket',401,'Acesso inválido.');
   const a=await assetRpc(client,'consume_studio_asset_ticket',{p_id:id,p_hash:voiceHash(b.access_key),p_purpose:b.purpose});

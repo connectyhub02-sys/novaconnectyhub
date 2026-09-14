@@ -1,4 +1,4 @@
-# Integração com a API de IA ConnectyHub
+# Integração com a API de AI ConnectyHub
 
 Referência 1.6.0 · 14/09/2026
 
@@ -132,11 +132,11 @@ Este guia descreve o contrato público implementado. Exemplos de consumo são il
 
 ## Inteligência para seus projetos
 
-Referência da API de IA ConnectyHub: recursos, integração, mensagens, respostas e créditos em um só lugar.
+Referência da API de AI ConnectyHub: recursos, integração, mensagens, respostas e créditos em um só lugar.
 
 ### Sua primeira integração
 
-1. Entre no painel de API de IA, dê um nome ao projeto e escolha o modelo. Flash 3.5 é a opção recomendada.
+1. Entre no painel de API de AI, dê um nome ao projeto e escolha o modelo. Flash 3.5 é a opção recomendada.
 2. Copie a chave exibida e guarde-a no servidor do seu sistema.
 3. Envie messages para /chat/completions. Leia a resposta e acompanhe os créditos no painel.
 
@@ -261,12 +261,12 @@ Cada chave identifica o projeto e a conta responsável pelo consumo.
 | Campo | Valor |
 | --- | --- |
 | Base URL | https://www.connectyhub.com.br/api/v1/ai |
-| Authorization | Bearer seguido da chave da API de IA |
+| Authorization | Bearer seguido da chave da API de AI |
 | Content-Type | application/json nas solicitações com corpo |
 | model | connectyhub-auto, se sua ferramenta exigir; pode ser omitido |
 | Execução | Servidor do seu sistema, com projeto ativo, acesso da conta e créditos disponíveis |
 
-A chave WhatsApp não autentica na API de IA. Chaves do mesmo projeto podem consultar as solicitações desse projeto; chaves de outro projeto não têm acesso a elas. Revogar uma chave impede seu uso futuro.
+A chave WhatsApp não autentica na API de AI. Chaves do mesmo projeto podem consultar as solicitações desse projeto; chaves de outro projeto não têm acesso a elas. Revogar uma chave impede seu uso futuro.
 
 ### Aplicações web e móveis
 
@@ -1449,7 +1449,7 @@ Use o arquivo JSON para consultar tipos, exemplos e respostas HTTP ou importar a
 
 1. Baixe o OpenAPI JSON de IA / LLM nesta página.
 2. Importe como especificação OpenAPI 3.1 no seu cliente HTTP.
-3. Configure a base de produção e a chave da API de IA em uma variável privada.
+3. Configure a base de produção e a chave da API de AI em uma variável privada.
 4. Escolha um exemplo de messages e uma Idempotency-Key própria antes de enviar.
 
 ### Versão da referência

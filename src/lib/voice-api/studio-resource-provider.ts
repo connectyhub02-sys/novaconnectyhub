@@ -1,3 +1,4 @@
+import type {DictionaryLocator} from './studio-dictionaries';
 import 'server-only';
 import { VoiceError } from './contract';
 import { studioAudioTransportLimits } from './audio-provider';
@@ -8,7 +9,7 @@ import { studioAudioTransportLimits } from './audio-provider';
 type AliasRule = { type: 'alias'; stringToReplace: string; alias: string };
 type PhonemeRule = { type: 'phoneme'; stringToReplace: string; phoneme: string; alphabet: 'ipa' | 'cmu-arpabet' };
 export type StudioResourceRequest =
-  | { operation: 'dialogue'; turns: Array<{ text: string; voiceId: string }> }
+  | { operation: 'dialogue'; turns: Array<{ text: string; voiceId: string }>; dictionaries?: DictionaryLocator[] }
   | { operation: 'voice_design'; description: string; sampleText: string }
   | { operation: 'voice_design_save'; name: string; description: string; previewId: string }
   | { operation: 'dictionary_create'; name: string; rules: Array<AliasRule | PhonemeRule> }
@@ -41,7 +42,7 @@ export function studioResourceProviderRequest(input: StudioResourceRequest) {
       if (turns.reduce((n, turn) => n + turn.text.length, 0) > 2000 || new Set(turns.map(turn => turn.voice_id)).size > 10) {
         throw new VoiceError('dialogue_limit', 422, 'Use até 2.000 caracteres no total e 10 vozes.');
       }
-      return json('/v1/text-to-dialogue?output_format=mp3_44100_128', { inputs: turns, model_id: 'eleven_v3' }, true);
+      return json('/v1/text-to-dialogue?output_format=mp3_44100_128', { inputs: turns, model_id: 'eleven_v3',...(input.dictionaries?.length?{pronunciation_dictionary_locators:input.dictionaries}:{}) }, true);
     }
     case 'voice_design':
       // Explicit text permits an exact preflight character quote. Do not turn on

@@ -1,3 +1,4 @@
+import {resolveStudioDictionaries} from './studio-dictionaries';
 import 'server-only';
 import {voiceHash,type VoiceAuth} from './auth';
 import {parseVoiceInput,voiceIdempotency,VoiceError,voiceLimits} from './contract';
@@ -25,7 +26,7 @@ export async function voiceRpc(auth:VoiceAuth,name:string,args:Record<string,unk
 }
 export async function voiceGeneration(auth:VoiceAuth,id:string) {
   if(!/^[a-f0-9-]{36}$/i.test(id)) throw new VoiceError('not_found',404,'Solicitação não encontrada.');
-  const {data,error}=await auth.client.from('voice_generations').select('*').eq('id',id).eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).maybeSingle<Row>();
+  const {data,error}=await auth.client.from('voice_generations').select('*').eq('id',id).eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).neq('operation','studio').maybeSingle<Row>();
   if(error)throw new VoiceError('service_unavailable',503,'Não foi possível consultar a solicitação.');
   if(!data)throw new VoiceError('not_found',404,'Solicitação não encontrada.');
   return data;
@@ -42,6 +43,7 @@ async function persistAudio(auth:VoiceAuth,r:Row,bytes:Buffer) {
   return voiceRpc(auth,'finish_voice_generation',{p_id:r.id,p_status:'completed'});
 }
 export async function recoverVoice(auth:VoiceAuth,r:Row):Promise<Row> {
+  if(r.operation==='studio')throw new VoiceError('operation_route',409,'Consulte esta solicitação em /operations.');
   if(['completed','failed'].includes(r.status) || Date.now()-Date.parse(r.updated_at)<120000)return r;
   if(r.status==='reserved')return voiceRpc(auth,'finish_voice_generation',{p_id:r.id,p_status:'failed',p_error:'dispatch_expired'});
   if(r.operation==='voice_clone'){
@@ -64,9 +66,10 @@ export async function generateVoice(auth:VoiceAuth,request:Request,raw:unknown,i
   const input=parseVoiceInput(raw),idempotency=voiceIdempotency(request),hash=voiceHash(JSON.stringify({operation:includedPreview?'voice_clone_preview':'text_to_speech',...input}));
   const existing=await auth.client.from('voice_generations').select('*').eq('project_id',auth.project.id).eq('idempotency_key',idempotency).maybeSingle<Row>();
   if(existing.error)throw new VoiceError('service_unavailable',503,'Não foi possível conferir a solicitação.');
-  if(existing.data){if(existing.data.input_hash!==hash)throw new VoiceError('idempotency_conflict',409,'Esta chave já foi usada com outro conteúdo.');return publicVoiceGeneration(await recoverVoice(auth,existing.data),true);}
+  if(existing.data){if(existing.data.input_hash!==hash||existing.data.operation==='studio')throw new VoiceError('idempotency_conflict',409,'Esta chave já foi usada com outro conteúdo.');return publicVoiceGeneration(await recoverVoice(auth,existing.data),true);}
   const catalog=await voiceCatalog(auth);
   if(!catalog.voices.some(v=>v.voice_id===input.voice_id && v.status==='ready'))throw new VoiceError('voice_unavailable',404,'Voz não disponível neste projeto.');
+  const dictionaries=await resolveStudioDictionaries(auth,input.dictionary_ids??[]);
   const {rates,price}=await quoteVoice(auth,input.model_id,input.text.length);
   await assertStorageUploadAllowed({client:auth.client,organizationId:auth.project.organization_id,category:'generated_media',files:[{fileName:'voz.mp3',contentType:'audio/mpeg',sizeBytes:voiceLimits.audioBytes}]});
   const credentials=await loadElevenLabsCredentials(auth.client);
@@ -76,7 +79,7 @@ export async function generateVoice(auth:VoiceAuth,request:Request,raw:unknown,i
   try {
     await voiceRpc(auth,'start_voice_generation',{p_id:r.id});
     dispatched=true;
-    const response=await requestVoiceAudio(credentials.apiKey,input);
+    const response=await requestVoiceAudio(credentials.apiKey,input,dictionaries);
     if(!response.ok) {
       const definitive=[400,401,403,404,422,429].includes(response.status);
       await response.body?.cancel();

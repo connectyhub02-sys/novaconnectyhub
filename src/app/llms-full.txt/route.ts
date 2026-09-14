@@ -26,6 +26,8 @@ export async function GET() {
     `- AI API: ${buildCanonicalUrl("/docs/api#ia")} — Project keys, shared credits, usage charts and idempotency.`,
     `- OpenAPI JSON: ${buildCanonicalUrl("/docs/api/openapi.json")}`,
     `- AI / LLM OpenAPI JSON: ${buildCanonicalUrl("/docs/api/ia/openapi.json")}`,
+    `- Voice and Audio Studio OpenAPI: ${buildCanonicalUrl("/docs/api/voz/openapi.json")}`,
+    `- Voice and Audio Studio integration guide: ${buildCanonicalUrl("/docs/api/voz/guide.md")}`,
     "",
     "## Solutions",
     ...solutionPages.flatMap((page) => [

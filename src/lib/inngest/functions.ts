@@ -804,6 +804,12 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  inngest.createFunction({id:'connectyhub-studio-operation',name:'Operações do Estúdio de Voz e Áudio',retries:0,concurrency:{limit:8},triggers:[{event:'connectyhub/studio.operation'}]},async({event,step})=>{
+    const result=await step.run('process-studio-receipt',async()=>{const {runStudioOperation}=await import('@/lib/voice-api/studio-operations');return runStudioOperation(createServiceClient(),String(event.data.operationId??''));});
+    if(['failed','uncertain','reconciliation_pending'].includes(result.status))throw new Error(`Studio operation ${result.status}`);
+    return result;
+  }),
+  inngest.createFunction({id:'connectyhub-studio-recovery',name:'Recuperação de operações do Estúdio',retries:0,concurrency:{limit:1},triggers:[{cron:'*/5 * * * *'}]},async({step})=>step.run('reconcile-studio-receipts',async()=>{const {sweepStudioOperations}=await import('@/lib/voice-api/studio-operations');return sweepStudioOperations(createServiceClient());})),
   inngest.createFunction({id:'connectyhub-ai-triggers',name:'Agendamentos da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('execute-billed-ai-schedules',async()=>{const {processAiTriggers}=await import('@/lib/ai-api/automation');return processAiTriggers(createServiceClient());})),
   inngest.createFunction({id:'connectyhub-ai-webhooks',name:'Notificações da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('deliver-ai-results',async()=>{const {processAiWebhooks}=await import('@/lib/ai-api/automation');return processAiWebhooks(createServiceClient());})),
   inngest.createFunction({id:"connectyhub-agenda-notice",name:"ConnectyHub Agenda Notice",retries:1,concurrency:{limit:1,key:"event.data.organizationId"},triggers:[{event:"connectyhub/agenda.notice"}]},async({event,step})=>step.run("deliver-agenda-notice",async()=>{const {dispatchAgendaNotifications}=await import("@/lib/automations/agenda-notifications");return dispatchAgendaNotifications(createServiceClient(),event.data.noticeId);})),

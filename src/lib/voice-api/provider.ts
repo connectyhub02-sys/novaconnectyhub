@@ -1,3 +1,4 @@
+import type {DictionaryLocator} from './studio-dictionaries';
 import 'server-only';
 import {voiceLimits,VoiceError,type VoiceInput} from './contract';
 export async function boundedVoiceAudio(response:Response) {
@@ -8,11 +9,11 @@ export async function boundedVoiceAudio(response:Response) {
   if(!size)throw new VoiceError('provider_audio_empty',502,'O provedor retornou áudio vazio.');
   return Buffer.concat(chunks,size);
 }
-export function requestVoiceAudio(apiKey:string,input:VoiceInput) {
+export function requestVoiceAudio(apiKey:string,input:VoiceInput,dictionaries:DictionaryLocator[]=[]) {
   // No SDK retry: a network timeout can happen after the provider charges.
   return fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(input.voice_id)}?output_format=${input.output_format}`,{
     method:'POST',headers:{'xi-api-key':apiKey,'Content-Type':'application/json',Accept:'audio/mpeg'},
-    body:JSON.stringify({text:input.text,model_id:input.model_id,voice_settings:input.voice_settings}),
+    body:JSON.stringify({text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,...(dictionaries.length?{pronunciation_dictionary_locators:dictionaries}:{})}),
     signal:AbortSignal.timeout(90000),redirect:'error',cache:'no-store',
   });
 }

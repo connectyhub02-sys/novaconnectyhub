@@ -52,3 +52,31 @@ Adaptadores internos locais adicionados para diálogo v3 (2.000 caracteres totai
 Gemini possui transporte separado com vozes nativas do catálogo atual, resposta PCM limitada convertida em WAV e uso de tokens preservado. Consumo ausente fica pendente de conciliação; não vira geração gratuita. Não chama o helper WhatsApp que repete tentativas e publica em R2.18 testes isolados de contratos/transportes passaram; integração com operações, arquivos privados, tarifação e interface ainda pendente. Nenhuma geração externa ou tarifa ativada.
 
 Contratos conferidos na documentação oficial e no SDK instalado: [diálogo](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert), [desenho](https://elevenlabs.io/docs/api-reference/text-to-voice/design), [salvamento](https://elevenlabs.io/docs/api-reference/text-to-voice/create), [dicionários](https://elevenlabs.io/docs/api-reference/pronunciation-dictionaries/create-from-rules), [dublagem v1](https://elevenlabs.io/docs/api-reference/legacy/dubbing/create), [voz Gemini](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation).
+
+## Validação integrada — 14/09,20h BRT (substitui pendências técnicas anteriores)
+
+Código local agora integra arquivos, jobs, cotações, reserva/liquidação, histórico,
+resultados privados, SRT/VTT, dicionários e interface. Desenho de voz usa os caracteres
+do texto explícito de prévia; salvamento é outra operação. Não reutiliza a tarifa
+provisória zero/requisição de troca de voz. Modelos sem custo confirmado permanecem
+bloqueados; não confundir sucesso do transporte com liberação comercial.
+
+Titular autorizou atéUS$1 agregado para testes sintéticos reais, sem plano novo nem
+habilitação de excedentes. Até esta conferência: Gemini3.1 gerou WAV e informou17
+tokens de entrada/166 de saída (referênciaUS$0,003337). ElevenLabs respondeu200 para
+transcrição, isolamento, troca de voz, alinhamento, diálogo, desenho e salvamento de
+voz, dublagem e download. Voz fictícia salva no teste foi removida com200. Cinco
+audios passaram na decodificação integral FFmpeg; transcrição/alinhamento geraram
+SRT e VTT válidos. Não foram usados arquivos pessoais ou clones de clientes.
+
+ConservadoramenteUS$0,650437 contabilizados: quando falta custo individual,
+a reserva máxima permanece contada. Valores de créditos do fornecedor foram
+valorizados conservadoramente e não representam fatura. A assinatura consultada
+segueCreator, mensalUSD, com extensão desabilitada. Dicionário recebeu401 por falta
+de `pronunciation_dictionaries_write`; acesso ao painel correto foi solicitado para
+ajuste mínimo da chave existente. Nenhuma chave foi substituída ou exposta.
+
+Tarifas atuais de TTS/clonagem preservadas. Gemini3.1 usa somente a base existente
+`voice_generation_audio` entrada/saída, validada na tabela oficial; não somar tarifa
+por caractere. A confirmação da tabela efetiva ElevenLabs permanece necessária
+para as novas ativações, mesmo após sucesso dos testes de transporte.

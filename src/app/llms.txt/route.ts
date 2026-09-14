@@ -25,6 +25,8 @@ export async function GET() {
     `- API documentation and test console: ${buildCanonicalUrl("/docs/api")}`,
     `- OpenAPI schema: ${buildCanonicalUrl("/docs/api/openapi.json")}`,
     `- AI / LLM OpenAPI JSON: ${buildCanonicalUrl("/docs/api/ia/openapi.json")}`,
+    `- Voice and Audio Studio OpenAPI: ${buildCanonicalUrl("/docs/api/voz/openapi.json")}`,
+    `- Voice and Audio Studio integration guide: ${buildCanonicalUrl("/docs/api/voz/guide.md")}`,
     `- Terms: ${buildCanonicalUrl("/termos")}`,
     `- Privacy: ${buildCanonicalUrl("/privacidade")}`,
     "",

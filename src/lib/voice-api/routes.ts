@@ -5,9 +5,22 @@ import {voiceCatalog,voiceModels} from './catalog';
 import {downloadVoice,generateVoice,publicVoiceGeneration,recoverVoice,voiceGeneration} from './generations';
 import {createPrivateClone,ownedClone,publicClone,editPrivateClone,deletePrivateClone,cloneSamples,previewPrivateClone} from './clones';
 import {createStudioAsset,ownedStudioAsset,publicStudioAsset,listStudioAssets,studioAssetTicket,deleteStudioAsset,readStudioJson} from './assets';
+import {createStudioOperation,quoteStudioOperation,ownedStudioOperation,publicStudioOperation,listStudioOperations,downloadStudioResult,downloadStudioPreview,deleteStudioResult} from './studio-operations';
+import {studioCatalog,studioResources} from './studio-catalog';
 export async function voiceRoute(request:Request,path:string[],studio=false) {
   try {
     const auth=await (studio?authenticateVoiceStudio(request):authenticateVoice(request));
+    if(path.length===1&&path[0]==='capabilities'&&request.method==='GET')return voiceJson(await studioCatalog(auth));
+    if(path.length===1&&path[0]==='resources'&&request.method==='GET')return voiceJson(await studioResources(auth));
+    if(path[0]==='operations'){
+      if(path.length===2&&path[1]==='quote'&&request.method==='POST')return voiceJson(await quoteStudioOperation(auth,await readStudioJson(request)));
+      if(path.length===1&&request.method==='POST')return voiceJson(await createStudioOperation(auth,request,await readStudioJson(request)),202);
+      if(path.length===1&&request.method==='GET')return voiceJson(await listStudioOperations(auth));
+      if(path.length===2&&request.method==='GET'){const {r,s}=await ownedStudioOperation(auth,path[1]);return voiceJson(publicStudioOperation(r,s));}
+      if(path.length===3&&path[2]==='result'&&request.method==='DELETE')return voiceJson(await deleteStudioResult(auth,path[1]));
+      if(path.length===3&&path[2]==='result'&&request.method==='GET')return downloadStudioResult(auth,path[1],new URL(request.url).searchParams.get('format'));
+    }
+    if(path[0]==='resources'&&path.length===3&&path[2]==='audio'&&request.method==='GET')return downloadStudioPreview(auth,path[1]);
     if(path[0]==='assets'){
       if(path.length===1&&request.method==='POST')return voiceJson(await createStudioAsset(auth,await readStudioJson(request)),201);
       if(path.length===1&&request.method==='GET')return voiceJson(await listStudioAssets(auth));
@@ -44,7 +57,7 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
   }catch(error){return voiceFailure(error);}
 }
 async function listGenerations(auth:VoiceAuth){
-  const {data,error}=await auth.client.from('voice_generations').select('*').eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).order('created_at',{ascending:false}).limit(50);
+  const {data,error}=await auth.client.from('voice_generations').select('*').eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).neq('operation','studio').order('created_at',{ascending:false}).limit(50);
   if(error)throw new VoiceError('service_unavailable',503,'Não foi possível consultar o histórico.');
   return {project_id:auth.project.id,billing_organization_id:auth.billingOrg,generations:(data??[]).map(r=>publicVoiceGeneration(r)),limit:50};
 }

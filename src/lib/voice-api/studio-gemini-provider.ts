@@ -18,7 +18,7 @@ export function studioGeminiRequest(input: { text: string; voiceId: string; mode
     url: `https://generativelanguage.googleapis.com/v1beta/models/${input.modelId}:generateContent`,
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: input.text }] }],
-      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.voiceName } } } },
+      generationConfig: { maxOutputTokens:8192, responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.voiceName } } } },
     }),
   };
 }

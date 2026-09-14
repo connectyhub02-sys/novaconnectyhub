@@ -108,3 +108,23 @@ segredo servidor-servidor. Não há chave de fornecedor no transporte de assets.
 Testes: `studio-assets-contract`, `studio-assets-sql`, `studio-assets-relay` e
 `studio-audio-measure`. Validam infraestrutura local/simulada; não comprovam
 publicação na VPS ou recuperação do seu backup.
+
+## Arquivos privados do Estúdio
+
+`STUDIO_ASSETS_ENABLED=true` no relay e na aplicação habilita `/studio-assets/*`
+após migrations0148/0149. Configure `STUDIO_ASSET_DIR=/app/state/studio-assets` no
+mesmo volume privado persistente. A imagem inclui FFmpeg e executa como node;
+não publique outra porta. O controle deriva `/api/internal/studio/relay` da origem
+HTTPS configurada e usa o segredo existente somente entre servidores.
+
+Os tickets de upload são descartáveis. O relay limita20 MB, quatro envios globais,
+aferição de30 minutos,60 segundos de inatividade e180 segundos totais. Confirmações
+são retomadas após reinício; uploads interrompidos sem arquivo/manifesto válido
+liberam a reserva depois de10 minutos. Exclusão e leitura revalidam o projeto.
+Inclua tanto este diretório quanto a configuração do relay no backup privado.
+
+`STUDIO_OPERATIONS_ENABLED` controla o fluxo de operações na aplicação; cada
+capacidade exige modelo/tarifa exatos e evidência de custo confirmada pelo admin.
+Um arquivo enviado não autoriza geração: o job precisa de reserva de créditos,
+claim único, resultado privado persistido e liquidação. POST do fornecedor nunca
+é repetido automaticamente após resultado incerto. Dublagem consulta o mesmo job.

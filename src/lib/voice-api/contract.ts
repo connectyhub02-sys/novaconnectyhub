@@ -6,7 +6,7 @@ export type VoiceInput = ReturnType<typeof parseVoiceInput>;
 export function parseVoiceInput(raw: unknown) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new VoiceError('invalid_input',422,'Envie um objeto JSON.');
   const b = raw as Record<string,unknown>;
-  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
+  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings','dictionary_ids'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
   const text = typeof b.text === 'string' ? b.text.replace(/\s+/g,' ').trim() : '';
   if (!text || text.length>voiceLimits.characters) throw new VoiceError('text_limit',422,'Envie entre 1 e 4800 caracteres.');
   if (typeof b.voice_id!=='string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(b.voice_id)) throw new VoiceError('invalid_voice',422,'Escolha uma voz disponível no catálogo.');
@@ -21,7 +21,9 @@ export function parseVoiceInput(raw: unknown) {
       else throw new VoiceError('invalid_settings',422,'Estabilidade, similaridade e estilo: 0 a 1; speaker boost: booleano.');
     }
   }
-  return { text, voice_id:b.voice_id, model_id:model, voice_settings:settings, output_format:'mp3_44100_128' as const };
+  const dictionaryIds = b.dictionary_ids === undefined ? [] : b.dictionary_ids;
+  if(!Array.isArray(dictionaryIds)||dictionaryIds.length>3||new Set(dictionaryIds).size!==dictionaryIds.length||dictionaryIds.some(id=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))throw new VoiceError('invalid_dictionary',422,'Selecione até três dicionários do projeto.');
+  return { ...(dictionaryIds.length?{dictionary_ids:dictionaryIds as string[]}:{}),text, voice_id:b.voice_id, model_id:model, voice_settings:settings, output_format:'mp3_44100_128' as const };
 }
 export function voiceIdempotency(request: Request) {
   const key=request.headers.get('idempotency-key');

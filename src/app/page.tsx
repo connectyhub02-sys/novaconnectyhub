@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import {
   ArrowRight,
@@ -724,6 +725,27 @@ export default function Home() {
             </motion.div>
           ))}
         </div>
+      </PageSection>
+
+      <PageSection id="estudio-voz" bg="#101018">
+        <GreenPill>{"// Estúdio de Voz e Áudio AI"}</GreenPill>
+        <h2 className="section-heading mt-4">Sua voz no painel.<br className="hidden sm:block" /> Sua API nos seus projetos.</h2>
+        <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">
+          Transforme texto em áudio e use vozes privadas com autorização. Organize projetos,
+          acompanhe solicitações e confira o consumo na mesma carteira de créditos da ConnectyHub.
+        </p>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          {[
+            ["Crie no Estúdio", "Escolha a voz e o modelo disponíveis, escreva o texto e confira os créditos antes de gerar."],
+            ["Integre por API", "Use uma chave exclusiva por projeto, arquivos privados e recibos para acompanhar cada solicitação."],
+            ["Explore ferramentas de áudio", "Consulte no painel a disponibilidade de transcrição, limpeza, diálogos, dublagem e legendas. Cada modalidade tem limites e tarifa próprios."],
+          ].map(([title,description])=><article key={title} className="rounded-2xl border border-white/10 bg-white/5 p-6"><h3 className="font-semibold text-white">{title}</h3><p className="mt-3 text-sm leading-6 text-zinc-300">{description}</p></article>)}
+        </div>
+        <div className="mt-7 flex flex-wrap gap-5 text-sm font-semibold">
+          <Link href="/dashboard/voz" className="text-emerald-300 underline underline-offset-4">Abrir o Estúdio</Link>
+          <Link href="/docs/api#voz" className="text-white underline underline-offset-4">Conhecer a API de Voz</Link>
+        </div>
+        <p className="mt-5 text-xs leading-6 text-zinc-400">Disponibilidade, créditos e armazenamento seguem o contrato da conta. A documentação informa os recursos suportados; o catálogo do projeto confirma o que está liberado para uso.</p>
       </PageSection>
 
       {/* ── 7. PLANOS ────────────────────────────────── */}

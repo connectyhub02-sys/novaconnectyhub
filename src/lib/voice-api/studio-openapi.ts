@@ -1,0 +1,68 @@
+// Public contract only: safe to import in the client documentation renderer.
+const ref=(name:string)=>({$ref:`#/components/schemas/${name}`});
+const json=(schema:object)=>({'application/json':{schema}});
+const uuid={type:'string',format:'uuid'};
+const text=(min:number,max:number)=>({type:'string',minLength:min,maxLength:max});
+const dictionaries={type:'array',maxItems:3,uniqueItems:true,items:uuid};
+const id={name:'id',in:'path',required:true,schema:uuid};
+const idem={name:'Idempotency-Key',in:'header',required:true,schema:text(1,128)};
+const errors=Object.fromEntries([401,402,403,404,409,413,422,429,502,503].map(s=>[s,{description:'Consulte error.code; resultado incerto não autoriza nova geração.',content:json(ref('Error'))}]));
+const ok=(schema:object,status=200)=>({[status]:{description:'Resultado autenticado. Confira status e disponibilidade.',content:json(schema)},...errors});
+const body=(schema:object)=>({required:true,content:json(schema)});
+const object=(properties:Record<string,object>,required:string[]=Object.keys(properties))=>({type:'object',additionalProperties:false,required,properties});
+const operation=(name:string,fields:Record<string,object>,required:string[]=Object.keys(fields))=>object({operation:{const:name},model_id:{type:'string',description:'Identificador exato de GET /capabilities; omissão usa o modelo padrão da operação.'},...fields},['operation',...required]);
+const audio={asset_id:uuid};
+const language={type:'string',pattern:'^[a-z]{2,3}$'};
+const rule={oneOf:[object({type:{const:'alias'},string_to_replace:text(1,100),alias:text(1,200)}),object({type:{const:'phoneme'},string_to_replace:text(1,100),phoneme:text(1,200),alphabet:{enum:['ipa','cmu-arpabet']}})]};
+export const studioSchemas={
+ StudioInput:{oneOf:[
+  operation('transcription',{...audio,language,diarize:{type:'boolean',default:false}},['asset_id']),
+  operation('audio_isolation',audio),operation('voice_change',{...audio,voice_id:text(1,100)}),
+  operation('forced_alignment',{...audio,text:text(1,4800)}),operation('dubbing',{...audio,target_language:language}),
+  operation('gemini_tts',{voice_id:text(1,100),text:text(1,4800)}),
+  operation('dialogue',{turns:{type:'array',minItems:1,maxItems:50,description:'Soma até 2.000 caracteres e 10 vozes diferentes.',items:object({voice_id:text(1,100),text:text(1,2000)})},dictionary_ids:dictionaries},['turns']),
+  operation('voice_design',{description:text(20,1000),sample_text:text(100,1000)}),
+  operation('voice_design_save',{preview_id:uuid,name:text(2,80),description:text(20,1000)}),
+  operation('dictionary_create',{name:text(1,100),rules:{type:'array',minItems:1,maxItems:100,items:rule},parent_dictionary_id:uuid},['name','rules']),
+ ],discriminator:{propertyName:'operation'}},
+ StudioAssetInput:object({name:text(1,100),size_bytes:{type:'integer',minimum:1,maximum:20000000},mime_type:{enum:['audio/wav','audio/mpeg','audio/mp4','audio/aac','audio/ogg','audio/flac','audio/webm']}}),
+ StudioTicket:{type:'object',properties:{url:{type:'string',format:'uri'},method:{enum:['PUT','GET','DELETE']},access_key:{type:'string',description:'Segredo temporário de uso único. Envie somente no Authorization Bearer da URL retornada.'},expires_at:{type:'string',format:'date-time'}}},
+ StudioAsset:{type:'object',properties:{id:uuid,project_id:uuid,name:text(1,100),size_bytes:{type:'integer'},mime_type:{type:'string'},status:{enum:['pending','processing','ready','deleting','deleted','failed']},duration_seconds:{type:['number','null']},created_at:{type:'string',format:'date-time'}}},
+ StudioReceipt:{type:'object',properties:{id:uuid,project_id:uuid,billing_organization_id:uuid,operation:{type:'string'},model_id:{type:'string'},status:{enum:['reserved','processing','uncertain','completed','failed']},result_state:{enum:['available','deleting','deleted']},usage:{type:'object',properties:{credits:{type:'number'},reserved_credits:{type:'number'},quoted_credits:{type:'number'},units:{type:['object','null']}}},result:{type:['object','null'],properties:{path:{type:'string'},content_type:{type:'string'}}},error:{type:['object','null'],properties:{code:{type:'string'}}},created_at:{type:'string',format:'date-time'},replayed:{type:'boolean'}}},
+ StudioQuote:{type:'object',properties:{operation:{type:'string'},model_id:{type:'string'},credits:{type:'number'},units:{type:'object'},reservation_only:{type:'boolean'},duration_seconds:{type:['number','null']}}},
+ StudioResource:{type:'object',properties:{id:uuid,kind:{enum:['voice_preview','voice','dictionary','dub']},name:{type:'string'},voice_id:{type:'string',description:'Somente para voz salva; pode ser usado na geração do mesmo projeto.'},rules:{type:'array',items:rule},description:{type:'string'},created_at:{type:'string',format:'date-time'}}},
+};
+export const studioPaths={
+ '/capabilities':{get:{operationId:'studioCapabilities',summary:'Ferramentas, modelos, vozes nativas e tarifas efetivamente disponíveis',responses:ok({type:'object',properties:{capabilities:{type:'array',items:{type:'object',properties:{operation:{type:'string'},name:{type:'string'},model_id:{type:'string'},requires_audio:{type:'boolean'},available:{type:'boolean'},reason:{type:'string'},unit:{type:'string'},rates:{type:'array',items:object({unit:{type:'string'},credits_per_unit:{type:'number'},minimum_credits:{type:'number'}})}}}},gemini_voices:{type:'array',items:object({voice_id:{type:'string'},name:{type:'string'},tone:{type:'string'}})},uploads_available:{type:'boolean'},limits:{type:'object'}}})}},
+ '/assets':{post:{operationId:'createStudioAsset',summary:'Reservar armazenamento e obter ticket de upload direto',requestBody:body(ref('StudioAssetInput')),responses:ok({allOf:[ref('StudioAsset'),{type:'object',properties:{upload:ref('StudioTicket')}}]},201)},get:{operationId:'listStudioAssets',summary:'Últimos 50 arquivos do projeto',responses:ok({type:'object',properties:{assets:{type:'array',items:ref('StudioAsset')},limit:{type:'integer'}}})}},
+ '/assets/{id}':{get:{operationId:'getStudioAsset',summary:'Conferir estado e duração medida do áudio',parameters:[id],responses:ok(ref('StudioAsset'))},delete:{operationId:'deleteStudioAsset',summary:'Excluir entrada e liberar capacidade; bloqueado enquanto usada em operação pendente',parameters:[id],responses:ok(ref('StudioAsset'))}},
+ '/assets/{id}/download':{post:{operationId:'studioAssetDownloadTicket',summary:'Obter ticket de download privado de uso único',parameters:[id],responses:ok(ref('StudioTicket'))}},
+ '/operations/quote':{post:{operationId:'quoteStudioOperation',summary:'Consultar créditos sem gerar, reservar saldo ou chamar o serviço de geração',requestBody:body(ref('StudioInput')),responses:ok(ref('StudioQuote'))}},
+ '/operations':{post:{operationId:'createStudioOperation',summary:'Criar uma operação assíncrona ou recuperar o mesmo recibo',parameters:[idem,{name:'X-Max-Credits',in:'header',schema:{type:'string',pattern:'^[0-9]+(?:[.][0-9]{1,6})?$'},description:'Opcional: recusa uma nova operação se a reserva ultrapassar este teto.'}],requestBody:body(ref('StudioInput')),responses:ok(ref('StudioReceipt'),202)},get:{operationId:'listStudioOperations',summary:'Últimas 50 operações de áudio do projeto',responses:ok({type:'object',properties:{operations:{type:'array',items:ref('StudioReceipt')},limit:{type:'integer'}}})}},
+ '/operations/{id}':{get:{operationId:'getStudioOperation',summary:'Consultar recibo sem repetir a geração',parameters:[id],responses:ok(ref('StudioReceipt'))}},
+ '/operations/{id}/result':{delete:{operationId:'deleteStudioResult',summary:'Remover resultado e prévias, liberar armazenamento e preservar recibo/créditos usados',parameters:[id],responses:ok(object({id:uuid,result_state:{const:'deleted'}}))},get:{operationId:'downloadStudioResult',summary:'Baixar resultado concluído ou legendas derivadas, sem novo débito',parameters:[id,{name:'format',in:'query',schema:{enum:['srt','vtt']},description:'Somente transcrição ou alinhamento com timestamps válidos; omita para saída original.'}],responses:{200:{description:'Arquivo privado; Content-Type informa o formato.',content:Object.fromEntries(['audio/mpeg','audio/wav','application/json','text/plain','text/vtt'].map(m=>[m,{schema:{type:'string',format:'binary'}}]))},...errors}}},
+ '/resources':{get:{operationId:'listStudioResources',summary:'Até 100 prévias, vozes e dicionários concluídos do projeto',responses:ok({type:'object',properties:{resources:{type:'array',items:ref('StudioResource')},limit:{type:'integer'}}})}},
+ '/resources/{id}/audio':{get:{operationId:'downloadStudioPreview',summary:'Ouvir prévia de voz desenhada do próprio projeto',parameters:[id],responses:{200:{description:'Prévia privada já criada, sem nova geração',content:{'audio/mpeg':{schema:{type:'string',format:'binary'}}}},...errors}}},
+};
+export const studioGuide=`
+## Ferramentas e disponibilidade
+GET /capabilities é a fonte de disponibilidade por operação e modelo. Use apenas available=true e confira uploads_available para arquivos. Uma ferramenta listada como indisponível não está liberada para consumo. Catálogo, planos e documentação não substituem essa consulta. Conta ativa, permissão da API de Voz, capacidade de armazenamento e créditos continuam necessários, inclusive em planos gratuitos ou de teste.
+
+## Upload privado
+POST /assets recebe name, size_bytes e mime_type; não aceita URL de arquivo nem duração declarada. Limite de 20.000.000 bytes e 30 minutos. Use PUT na upload.url retornada com Authorization: Bearer upload.access_key, Content-Type igual ao declarado e Content-Length exato. Envie os bytes diretamente, não multipart nem JSON. O ticket expira em dois minutos e só pode ser usado uma vez. Não envie sua chave da API nesse destino e não guarde o ticket em logs. Consulte GET /assets/{id} até ready; timeout não justifica criar outro upload automaticamente. A duração é medida no servidor. POST /assets/{id}/download retorna outro ticket, válido por um minuto. DELETE /assets/{id} remove a entrada quando não há operação pendente usando-a. Armazenamento reservado conta no plano; tamanho não equivale a créditos de IA.
+
+## Operações assíncronas
+POST /operations/quote recebe o mesmo JSON da operação e informa créditos sem iniciar geração. POST /operations exige Idempotency-Key e retorna 202 com recibo. A cotação reflete a tarifa no instante da consulta; envie X-Max-Credits com o teto aceito para bloquear aumentos antes da reserva. O painel usa esse limite automaticamente. Consulte GET /operations/{id}; não repita com outra chave após timeout. completed significa resultado privado persistido e débito liquidado uma vez. uncertain preserva a reserva para conciliação e não promete repetição automática. Downloads e consultas não iniciam outra geração. DELETE /operations/{id}/result remove o resultado e suas prévias, libera armazenamento uma vez e preserva recibo e créditos já usados. A exclusão é recusada enquanto uma operação pendente utiliza a prévia. Se interrompida, repita o mesmo DELETE. Vozes salvas e dicionários continuam vinculados ao projeto. Limites da carteira e concorrência são compartilhados com TTS e clonagem existentes.
+
+## Transcrever, limpar, trocar voz e dublar
+operation=transcription usa asset_id, language opcional (código de duas ou três letras minúsculas), diarize opcional. audio_isolation usa asset_id. voice_change usa asset_id e voice_id disponível no catálogo do projeto. dubbing usa asset_id e target_language; o trabalho é consultado até concluir, sem criar outra dublagem. A cobrança por minuto usa a duração medida, arredondada para o próximo segundo e dividida por 60. Resultado depende da operação: JSON com transcrição ou áudio processado.
+
+## Alinhamento e legendas
+forced_alignment recebe asset_id e text de até 4.800 caracteres. É alinhamento de texto fornecido ao áudio. Transcrição e alinhamento podem exportar /operations/{id}/result?format=srt ou vtt quando há timestamps válidos. Essa conversão usa o resultado persistido e não gera outro débito. SRT/VTT não estão disponíveis em operações sem palavras temporizadas.
+
+## Diálogos e dicionários
+dialogue recebe turns, com text e voice_id por fala: até 50 falas, 10 vozes e 2.000 caracteres no total. dictionary_create recebe name e rules: de 1 a 100 regras alias (string_to_replace, alias) ou phoneme (string_to_replace, phoneme, alphabet ipa ou cmu-arpabet). parent_dictionary_id opcional vincula uma versão anterior própria; as regras enviadas formam uma versão completa e independente. GET /resources lista os IDs. Use dictionary_ids (até três IDs distintos, em ordem de precedência) no TTS /generations ou dialogue /operations. Recursos de outro projeto são recusados. Compatibilidade de fonemas depende do modelo e idioma. Criar um dicionário e gerar áudio são operações distintas; aplicar um dicionário não acrescenta uma segunda geração ou cobrança à mesma síntese.
+
+## Voz desenhada e voz nativa
+voice_design recebe description (20–1.000 caracteres) e sample_text (100–1.000). As prévias privadas concluídas aparecem em GET /resources; ouça /resources/{id}/audio. voice_design_save recebe preview_id próprio, name (2–80) e description. A voz salva aparece no catálogo deste projeto. Cada criação/salvamento tem sua própria cotação; não são automaticamente gratuitos. gemini_tts recebe text de até 4.800 caracteres e uma voice_id de gemini_voices em /capabilities. Clones de outro serviço não são vozes nativas compatíveis. Nessa operação, a cotação é uma reserva máxima; o débito usa tokens de entrada e saída efetivamente informados, com liberação da diferença. Ausência da medição mantém a operação em conferência, sem inventar custo zero.
+`;
