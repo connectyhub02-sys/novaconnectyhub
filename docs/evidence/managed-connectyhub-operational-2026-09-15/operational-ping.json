@@ -1,0 +1,12 @@
+{
+  "event_id": "01M2JW51NXRNX6GRCX90NHGQY7",
+  "run_id": "01M2JW51RY0Z873DM9ZEF7WN72",
+  "function_id": "98128b72-f32a-5356-aa09-55f2147a8e42",
+  "technical_status": "COMPLETED",
+  "functional_status": "online",
+  "record_ping_step_completed": true,
+  "synthetic": true,
+  "messages_sent": false,
+  "provider_generation": false,
+  "business_replay": false
+}

@@ -1,0 +1,19 @@
+{
+  "production_full_restore_today": false,
+  "browser_authenticated_inngest": true,
+  "vision_cutover": false,
+  "browser_authenticated_telemetry": true,
+  "python_gateway_tests": 3,
+  "vitest_tests": 16,
+  "portal_backup": "20260915T155319Z",
+  "persistent_diagnostic_job": true,
+  "browser_authenticated_files": true,
+  "private_off_host_copy": true,
+  "sql_isolation_checks": 6,
+  "persistent_object": true,
+  "persistent_login": true,
+  "betel_cutover": false,
+  "persistent_record": true,
+  "sha256_verified": true,
+  "date": "2026-09-15"
+}

@@ -1,0 +1,191 @@
+{
+  "time": "2026-09-15T15:59:56.214286+00:00",
+  "containers": [
+    {
+      "name": "connectyhub-managed-portal-telemetry-1",
+      "started": "2026-09-15T15:53:49.161373628Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-objects-1",
+      "started": "2026-09-15T15:53:43.270911759Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-diagnostic-1",
+      "started": "2026-09-15T15:53:49.715044975Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-facade-1",
+      "started": "2026-09-15T15:53:43.07561185Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-web-1",
+      "started": "2026-09-15T15:53:49.472133336Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-rest-1",
+      "started": "2026-09-15T15:53:48.952534894Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-auth-1",
+      "started": "2026-09-15T15:53:48.593663354Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "connectyhub-managed-portal-database-1",
+      "started": "2026-09-15T15:53:42.700720286Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "connectyhub-ai-relay-relay-1",
+      "started": "2026-09-14T23:10:04.685569247Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-auth",
+      "started": "2026-09-11T10:00:39.328851625Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "connectyhub-inngest-inngest-1",
+      "started": "2026-09-11T09:49:58.128079922Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "connectyhub-inngest-postgres-1",
+      "started": "2026-09-11T07:44:04.275424081Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "connectyhub-inngest-redis-1",
+      "started": "2026-09-11T07:44:03.920000364Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-edge-functions",
+      "started": "2026-09-11T09:47:42.388023304Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-envoy",
+      "started": "2026-09-11T07:28:33.572555534Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-studio",
+      "started": "2026-09-11T07:28:33.567772713Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-storage",
+      "started": "2026-09-11T09:47:42.797477748Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "connectyhub-proxy-caddy-1",
+      "started": "2026-09-11T07:28:33.560814471Z",
+      "restarts": 0,
+      "health": null,
+      "running": true
+    },
+    {
+      "name": "supabase-pooler",
+      "started": "2026-09-11T07:28:33.516932662Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "realtime-dev.supabase-realtime",
+      "started": "2026-09-11T09:47:42.054571414Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-meta",
+      "started": "2026-09-11T07:28:33.5685762Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-rest",
+      "started": "2026-09-11T09:47:41.71262369Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-db",
+      "started": "2026-09-11T07:28:33.57235604Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    },
+    {
+      "name": "supabase-imgproxy",
+      "started": "2026-09-11T07:28:33.531466323Z",
+      "restarts": 0,
+      "health": "healthy",
+      "running": true
+    }
+  ],
+  "units": {
+    "connectyhub-managed-portal.service": "active",
+    "connectyhub-managed-portal-telemetry.timer": "active",
+    "connectyhub-managed-portal-backup.timer": "active",
+    "connectyhub-managed-source.timer": "active",
+    "connectyhub-managed-files.service": "active"
+  },
+  "image": "sha256:9aad1d3646d597c4693bee71750cb7b43836df2135b7d6dc584502667e5134a0",
+  "backup": {
+    "backup": "20260915T155319Z",
+    "dump_restored": true,
+    "private_object_restored": true,
+    "rls_restored": true,
+    "network": "none",
+    "production_database_touched": false,
+    "connected_source_and_admin_isolation_restored": true,
+    "connected_files_restored": 3
+  }
+}

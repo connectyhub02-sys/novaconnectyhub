@@ -11,6 +11,15 @@ with tarfile.open(backup/'private-files.tar.gz') as archive:
         if member.isfile() and member.name.startswith('objects/') and member.size==len(expected):
             if archive.extractfile(member).read()==expected:found=True
 assert found,'QA object not recoverable'
+connected_files_checked=0
+if (backup/'connected-files-manifest.json').exists():
+    selected=json.loads((backup/'connected-files-manifest.json').read_text())
+    with tarfile.open(backup/'connected-files.tar.gz') as archive:
+        for f in selected['selected_files']:
+            uuid.UUID(f['id']);member=archive.getmember(f['id']+'.bin')
+            assert member.isfile() and member.size==f['bytes'] and member.size<=20_000_000
+            assert hashlib.sha256(archive.extractfile(member).read()).hexdigest()==f['sha256']
+            connected_files_checked+=1
 name='connectyhub-managed-portal-restore-'+uuid.uuid4().hex[:10]
 def run(*args,**kwargs):return subprocess.run(args,check=True,capture_output=True,**kwargs)
 container=None
@@ -34,6 +43,7 @@ try:
         restored=run('docker','exec','-i',container,'psql','-At','-U','postgres','-d','managed_portal','-v','ON_ERROR_STOP=1',input=source_query.encode()).stdout.decode().splitlines()
         assert 'client=0' in restored and 'admin=1' in restored
         evidence['connected_source_and_admin_isolation_restored']=True
+    evidence['connected_files_restored']=connected_files_checked
     (R/'backup-verification.json').write_text(json.dumps(evidence,indent=2));print(json.dumps(evidence))
 finally:
     if container:

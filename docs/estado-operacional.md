@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## Conexão operacional no portal — 15/09/2026
+
+Publicado complemento da conexão administrativa: 45 funções reais do Inngest existente, amostra de 100 execuções/24h, consulta de falhas e download autenticado dos três arquivos selecionados da ConnectyHub Interno (dois Supabase Storage e um R2). Fonte restrita a leitura, com dados minimizados, credenciais somente no host e isolamento administrativo. Corrigida a preservação do socket do leitor após reinício. Aplicação/handlers continuam na Vercel; nenhum novo motor Inngest foi instalado.
+
+69 verificações HTTP reais após backup passaram, incluindo telemetria recente, três GET/HEAD com SHA256 e recusa a cliente/visitante; seis verificações SQL de isolamento, 16 testes locais, três testes Python e build Linux/TypeScript aprovados. Diagnóstico único no Inngest retornou `online` com etapa `record-ping` concluída, sem IA, mensagens ou cobranças. Navegação autenticada conferida. Os 16 containers produtivos anteriores permaneceram ativos sem reinícios nesta entrega.
+
+Backup do portal `20260915T155319Z` restaurado sem rede com RLS e três objetos selecionados; cópia privada externa verificada. Arquivo de backup produtivo de 674.711.126 bytes também copiado fora da VPS com hash conferido, sem novo restore integral da produção nesta etapa. Exportação externa recorrente e retenção permanecem manuais. Preparação isolada da Betel pode começar; migração/cutover Betel/Vision não realizados e dependem de inventário, importação reconciliada, testes de cliente e rollback. [Evidências e limites](connectyhub-conexao-operacional-2026-09-15.md).
+
 ## ConnectyHub conectada ao portal em leitura — 15/09/2026
 
 Projeto real `fdf6122a-b883-4d41-968d-71ba1d31d48a` vinculado à organização operacional ConnectyHub Interno, verificada pelo slug técnico, plano interno, proprietário administrador e uso existente. Portal publicado com origem/data e seções de inventário global do banco, metadados de arquivos, consumo/créditos da organização interna e cadastro de agentes. Coletor fixo a cada minuto executa somente SELECTs em transação READ ONLY no banco produtivo; snapshot minimizado no banco independente do portal. Credenciais produtivas não foram colocadas no processo web. Dados de outros clientes e cadastros QA não foram associados à organização.

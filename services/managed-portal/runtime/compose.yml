@@ -86,6 +86,7 @@ services:
     pids_limit: 128
     tmpfs: ["/tmp:size=32m,uid=1000,gid=1000"]
     env_file: /opt/connectyhub-managed-portal/secrets/web.env
+    volumes: ["/run/connectyhub-managed-files:/run/connected-files:ro", "/opt/connectyhub-managed-portal/secrets/file-gateway-key:/run/secrets/file-gateway-key:ro"]
     environment:
       PORT: "3126"
       HOSTNAME: 0.0.0.0

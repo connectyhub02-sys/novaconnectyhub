@@ -7,6 +7,7 @@ export type SourceSnapshot={
  database:{name:string;bytes:string;table_count:number;tables:SourceRow[]};
  counts:Record<string,number>;wallet:SourceRow|null;consumption:SourceRow[];files:SourceRow[];
  storage_accounting:SourceRow|null;buckets:SourceRow[];resources:SourceRow[];agents:SourceRow[];
+ inngest?:{status:'ok'|'failed';collected_at?:string;attempted_at?:string;app_id?:string;app_name?:string;function_count?:number;functions?:SourceRow[];runs?:SourceRow[];failures?:SourceRow[];has_more_runs?:boolean;has_more_failures?:boolean;window_hours?:number};
 };
 export type SourceConnection={project_id:string;source_key:string;source_organization_id:string;source_name:string;collected_at:string|null;attempted_at:string|null;collection_status:'pending'|'ok'|'failed';snapshot:SourceSnapshot|null};
 export async function connectedSource(db:SupabaseClient,admin:boolean,projectId:string):Promise<SourceConnection>{

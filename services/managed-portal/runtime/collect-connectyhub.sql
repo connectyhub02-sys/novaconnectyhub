@@ -19,10 +19,12 @@ with org as (
  from public.usage_events u join org on org.id=u.organization_id
  where u.occurred_at>=now()-interval '30 days' group by u.currency,u.billing_mode,u.status
 ), files as (
- select id::text,'lead_files'::text as source,file_type as kind,mime_type,byte_size as bytes,created_at
- from public.lead_files where organization_id=(select id from org)
+ select f.id::text,'lead_files'::text as source,file_type as kind,mime_type,byte_size as bytes,created_at,
+ case when f.metadata->>'storage_bucket'='lead-archive' and exists(select 1 from storage.objects o where o.bucket_id='lead-archive' and o.name=f.object_key) then 'registered'
+ when f.public_url like 'https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/%' then 'registered' else 'unresolved' end as availability
+ from public.lead_files f where organization_id=(select id from org)
  union all
- select id::text,'studio_assets','studio',mime_type,size_bytes,created_at
+ select id::text,'studio_assets','studio',mime_type,size_bytes,created_at,'unsupported'
  from public.studio_assets where organization_id=(select id from org)
 ), resources as (
  select id::text,'IA'::text as kind,name,status from public.ai_projects where organization_id=(select id from org)

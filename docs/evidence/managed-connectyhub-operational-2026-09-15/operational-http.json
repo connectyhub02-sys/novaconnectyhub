@@ -1,0 +1,28 @@
+{
+  "checks": 69,
+  "admin_real_source": true,
+  "client_denied": true,
+  "write_routes_denied": true,
+  "source_recent": true,
+  "sections": 5,
+  "engine_functions": 45,
+  "engine_runs_sample": 100,
+  "engine_failed_sample": 0,
+  "verified_files": [
+    {
+      "id": "3e2c7459-8ab8-423e-bee9-959e7aa86201",
+      "bytes": 10714,
+      "sha256": "c5086c382fedae1ec2eed02faeb856f0633fdcfe68963596b2b1f6291dc91c10"
+    },
+    {
+      "id": "3767a59b-389c-4a6c-bc0e-bfe2a4a5b321",
+      "bytes": 10714,
+      "sha256": "c5086c382fedae1ec2eed02faeb856f0633fdcfe68963596b2b1f6291dc91c10"
+    },
+    {
+      "id": "fd24ef50-c56a-429e-b6d4-0184044afb1e",
+      "bytes": 117653,
+      "sha256": "f9adb2c1a71ad60c35689408e79f61344a3e648ced78a428e343f19a09a764a4"
+    }
+  ]
+}
