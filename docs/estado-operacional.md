@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## ConnectyHub conectada ao portal em leitura — 15/09/2026
+
+Projeto real `fdf6122a-b883-4d41-968d-71ba1d31d48a` vinculado à organização operacional ConnectyHub Interno, verificada pelo slug técnico, plano interno, proprietário administrador e uso existente. Portal publicado com origem/data e seções de inventário global do banco, metadados de arquivos, consumo/créditos da organização interna e cadastro de agentes. Coletor fixo a cada minuto executa somente SELECTs em transação READ ONLY no banco produtivo; snapshot minimizado no banco independente do portal. Credenciais produtivas não foram colocadas no processo web. Dados de outros clientes e cadastros QA não foram associados à organização.
+
+25 verificações HTTP reais e seis verificações SQL com rollback passaram, incluindo recusa a um cliente mesmo explicitamente vinculado como operador, métodos de escrita bloqueados e administrador lendo as cinco seções. Dez testes locais de autorização/sessão e build Linux/TypeScript aprovados. Navegação autenticada conferida. Backup atualizado `20260915T150528Z` restaurado sem rede com isolamento da nova fonte e cópia privada externa verificada por SHA256. Inngest continua sem integração de execuções/controle neste portal; arquivos são metadados selecionados, não inventário/download completo do R2. Custos registrados não equivalem a fatura conciliada, e créditos internal_shadow não representam débito ao cliente. [Escopo, recuperação e limites](connectyhub-projeto-conectado-2026-09-15.md).
+
 ## Portal de infraestrutura persistente — 15/09/2026
 
 Homologação publicada em `https://infraestrutura.connectyhub.com.br`, em stack própria na VPS, com login confirmado pelo titular e navegação autenticada observada. Empresas, usuários, projetos, registros JSON, arquivos privados e worker exclusivamente diagnóstico validados por 34 verificações HTTP reais. Reinício do stack preservou dados/login/arquivo/execução. Métricas reais do host visíveis somente ao administrador. Os serviços anteriores permaneceram ativos, sem reinícios nesta entrega.

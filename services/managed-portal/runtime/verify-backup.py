@@ -27,6 +27,13 @@ try:
     out=run('docker','exec','-i',container,'psql','-At','-U','postgres','-d','managed_portal','-v','ON_ERROR_STOP=1',input=query.encode()).stdout.decode().splitlines()
     assert out[0]=='1' and out[-3:-1]==['1','0'],out
     evidence={'backup':backup.name,'dump_restored':True,'private_object_restored':True,'rls_restored':True,'network':'none','production_database_touched':False}
+    has_source=run('docker','exec',container,'psql','-At','-U','postgres','-d','managed_portal','-c',"select count(*) from information_schema.tables where table_schema='public' and table_name='portal_source_connections';").stdout.strip()==b'1'
+    if has_source:
+        owner=json.loads((R/'initialized.json').read_text())['owner_id'];uuid.UUID(owner)
+        source_query=f"begin;set local role authenticated;select set_config('request.jwt.claims','{{\"sub\":\"{qa['ua']}\",\"role\":\"authenticated\"}}',true);select 'client='||count(*) from portal_source_connections;reset role;set local role authenticated;select set_config('request.jwt.claims','{{\"sub\":\"{owner}\",\"role\":\"authenticated\"}}',true);select 'admin='||count(*) from portal_source_connections where source_key='connectyhub-production' and snapshot is not null;rollback;"
+        restored=run('docker','exec','-i',container,'psql','-At','-U','postgres','-d','managed_portal','-v','ON_ERROR_STOP=1',input=source_query.encode()).stdout.decode().splitlines()
+        assert 'client=0' in restored and 'admin=1' in restored
+        evidence['connected_source_and_admin_isolation_restored']=True
     (R/'backup-verification.json').write_text(json.dumps(evidence,indent=2));print(json.dumps(evidence))
 finally:
     if container:

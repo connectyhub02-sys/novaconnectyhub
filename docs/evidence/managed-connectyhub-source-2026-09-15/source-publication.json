@@ -1,0 +1,5 @@
+{
+  "before_image": "sha256:8a87fccc90995f155bf308d3cb37f44f07346e436b328b2538f1087a9002bd32",
+  "published_image": "sha256:d41c734637057ef716c7e454cf2af42bf194be14c872c4ddca4447848a008400",
+  "production_services_restarted": false
+}

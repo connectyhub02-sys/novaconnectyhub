@@ -34,10 +34,13 @@ Essa priorização é uma avaliação técnica da revisão de 11/09, não uma de
 | IA | Adaptadores Gemini; voz também ElevenLabs | `src/lib/gemini`, `src/lib/ai-api`, `src/lib/voice` |
 | Pagamentos | Adaptadores Asaas, PagBank e Mercado Pago; verificar seleção por fluxo | `src/lib/billing`, `src/lib/sales-catalog` |
 | E-mail de autenticação | Resend SMTP configurado na migração | relatório da migração Supabase |
+| Portal de infraestrutura | Aplicação/banco próprios na VPS; primeiro vínculo administrativo em leitura à ConnectyHub existente | `services/managed-portal`, [escopo da conexão](connectyhub-projeto-conectado-2026-09-15.md) |
 
 Endereços operacionais registrados: aplicação `https://www.connectyhub.com.br`, Supabase `https://supabase.connectyhub.com.br`, Inngest `https://inngest.connectyhub.com.br`. Confirme os destinos no ambiente alvo antes de operar. Valores secretos não pertencem a este documento. Configurações reais podem combinar ambiente e credenciais criptografadas no banco; não basta ler `.env.example`.
 
 O Inngest da VPS não transfere a execução dos handlers para a VPS: os handlers continuam na Vercel. A migração atual não é uma migração da hospedagem. Supabase self-hosted não inclui toda a camada comercial/multiprojetos do Cloud. Um novo projeto independente exige planejamento de isolamento e capacidade; isso ficou para etapa posterior. n8n foi discutido como possibilidade, sem decisão de instalação.
+
+O portal `infraestrutura.connectyhub.com.br` é uma evolução separada: mantém projetos QA e uma conexão administrativa em leitura à organização ConnectyHub Interno. Não equivale a provisionar um Supabase completo por projeto. A fonte produtiva é consultada por coletor fixo, com data/escopo nos snapshots e acesso exclusivo de infraestrutura; não inferir permissão de produção pelo vínculo de uma empresa/projeto do portal. Inngest e migração Betel/Vision não estão incluídos nessa conexão.
 
 ## Mapa para investigar um pedido
 

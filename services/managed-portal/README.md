@@ -21,3 +21,7 @@ Depois use `docker build -f services/managed-portal/runtime/Dockerfile -t connec
 `backup.py` pausa o portal para exportar banco e arquivos de forma consistente. O timer roda diariamente às 05:30 UTC; a cópia externa e a retenção ainda exigem operação manual. Não apagar uma cópia local antes de verificar outra recuperável fora da VPS. A restauração de teste é independente do banco ativo.
 
 As métricas são coletadas por `telemetry.py` a cada minuto e enviadas ao receptor interno. O worker `diagnostic-fleet.mjs` processa somente diagnóstico e até 50 projetos ativos: não é o runtime Inngest. Integração real de outros sistemas e importação de bancos completos são etapas posteriores.
+
+## Primeiro projeto real
+
+ConnectyHub pode ser vinculada em leitura por `runtime/connect-production.py`, depois de aplicar `runtime/connected-source.sql` somente ao banco do portal e recarregar o schema PostgREST. O bootstrap de instalações novas inclui essa schema vazia. `install-source-collector.py` instala o coletor periódico fixo, sem endpoint público para executar SQL. Não reutilizar esse vínculo para outra empresa. Consulte [escopo, identidade e limites](../../docs/connectyhub-projeto-conectado-2026-09-15.md).

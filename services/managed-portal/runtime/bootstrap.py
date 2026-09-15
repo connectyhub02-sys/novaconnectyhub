@@ -56,6 +56,7 @@ commit;""")
         for name in ['0150_managed_projects.sql','0151_managed_objects.sql','0152_managed_inngest_bindings.sql','0153_managed_persistent_alerts.sql']:
             sql((SOURCE/'supabase/migrations'/name).read_text())
         sql((SOURCE/'services/managed-portal/runtime/portal.sql').read_text())
+        sql((SOURCE/'services/managed-portal/runtime/connected-source.sql').read_text())
         write(ROOT/'schema-applied','ok')
     compose('up','-d')
     # Credential stays inside the private container; stdout carries only the Auth UUID.

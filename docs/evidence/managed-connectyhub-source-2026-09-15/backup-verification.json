@@ -1,0 +1,9 @@
+{
+  "backup": "20260915T150528Z",
+  "dump_restored": true,
+  "private_object_restored": true,
+  "rls_restored": true,
+  "network": "none",
+  "production_database_touched": false,
+  "connected_source_and_admin_isolation_restored": true
+}
