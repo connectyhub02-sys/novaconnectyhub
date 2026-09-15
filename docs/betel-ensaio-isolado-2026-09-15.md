@@ -116,3 +116,10 @@ PostgreSQL, isolamento do broker, execução sintética, bloqueio de egresso e
 retomada após reinício. A tarefa Betel é responsável pela atualização atômica do
 seu `.env.local`, preservando alterações concorrentes; esse arquivo não é uma
 publicação Vercel nem libera os fluxos reais.
+
+Conclusão local às 18:06:19 UTC: a tarefa Betel confirmou aplicação atômica de
+24 referências/guardas, com cópia privada anterior, preservação das demais
+variáveis e das remoções feitas pelo titular. O parser `@next/env` na raiz
+coincidiu com o contrato; Auth, REST, aplicativo e broker responderam 200 usando
+as referências locais. O arquivo permanece ignorado pelo Git. Túneis SSH são
+processos locais desta sessão; reconexão é necessária se forem encerrados.
