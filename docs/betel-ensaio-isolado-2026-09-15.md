@@ -123,3 +123,21 @@ variáveis e das remoções feitas pelo titular. O parser `@next/env` na raiz
 coincidiu com o contrato; Auth, REST, aplicativo e broker responderam 200 usando
 as referências locais. O arquivo permanece ignorado pelo Git. Túneis SSH são
 processos locais desta sessão; reconexão é necessária se forem encerrados.
+
+## Reabertura: login no navegador
+
+O primeiro aceite acima cobria Auth por HTTP e páginas SSR, mas não o login pela
+interface real. O navegador revelou um preflight incompleto: o SDK Supabase
+2.108 envia `x-supabase-api-version`, ausente na lista CORS do gateway. Corrigido
+às 18:16:45 UTC, mantendo somente as origens localhost/127.0.0.1 na porta 28102.
+Preflight real com os cinco cabeçalhos passou; origem externa foi recusada.
+Auth, REST, Storage e aplicativo voltaram a responder, e o bloqueio de rede
+permaneceu aprovado. A tarefa Betel confirmou em seguida o login real no Chrome:
+formulário submetido com o viewer sintético existente, chegada a `/admin`,
+identidade QA visível e ausência do erro de conexão e do formulário de login.
+Nenhuma senha original foi usada ou redefinida. Essa verificação posterior ao
+backup acrescenta apenas atividade Auth da conta QA.
+
+Somente a unidade do ensaio foi reiniciada. Configuração Envoy atual preservada
+na VPS e fora dela em `cors-config-20260915T181810Z`, SHA256 conferido. Ao restaurar
+o backup final anterior, aplicar também esse complemento de configuração.

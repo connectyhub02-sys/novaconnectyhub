@@ -1,0 +1,8 @@
+{
+  "path": "/opt/betel-isolated-rehearsal/backups/cors-config-20260915T181810Z",
+  "file": "envoy.json",
+  "sha256": "c5dda6c5aad85bdfc31743093d9d79d7fc4212eeecd1e1bd6b529a7e56096dd0",
+  "bytes": 3780,
+  "purpose": "Apply after restoring final-20260915T175839Z configuration; fixes browser CORS header",
+  "offhost_sha256_verified": true
+}

@@ -1,0 +1,1 @@
+{"observed_at": "2026-09-15T18:16:45.025601+00:00", "added_header": "x-supabase-api-version", "allowed_origins": [{"exact": "http://127.0.0.1:28102"}, {"exact": "http://localhost:28102"}], "envoy_config_valid": true, "restarted": "isolated rehearsal unit only", "browser_login_verified": false}

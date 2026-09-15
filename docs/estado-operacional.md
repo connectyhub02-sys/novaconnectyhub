@@ -762,3 +762,11 @@ Não confundir esse marco com migração de todos os fluxos comerciais: handlers
 reais, pagamentos, WhatsApp, scraper, R2 produtivo e corte Vercel/DNS permanecem
 separados. O broker aceita apenas a fixture revisada, não um catálogo genérico
 de funções. Não cancelar o Supabase Cloud da Betel com base nesse ensaio.
+
+Reabertura às 18:16 UTC: login pela interface encontrou ausência de
+`x-supabase-api-version` no CORS. Gateway do ensaio corrigido; preflight completo,
+origem externa recusada e saúde dos serviços conferidos. Complemento privado de
+recuperação `cors-config-20260915T181810Z` copiado para fora da VPS e validado por
+hash. O aceite anterior Auth/SSR não substituía login real no navegador. A tarefa
+Betel confirmou depois o formulário real no Chrome: viewer QA chegou a `/admin`
+com sua identidade visível, sem erro de conexão. Nenhuma senha original alterada.

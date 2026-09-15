@@ -1,0 +1,20 @@
+[
+  {
+    "origin": "http://127.0.0.1:28102",
+    "status": 200,
+    "allowOrigin": "http://127.0.0.1:28102",
+    "allowHeaders": "authorization,apikey,content-type,x-client-info,prefer,range,accept-profile,content-profile,x-supabase-api-version"
+  },
+  {
+    "origin": "http://localhost:28102",
+    "status": 200,
+    "allowOrigin": "http://localhost:28102",
+    "allowHeaders": "authorization,apikey,content-type,x-client-info,prefer,range,accept-profile,content-profile,x-supabase-api-version"
+  },
+  {
+    "origin": "https://foreign.invalid",
+    "status": 403,
+    "allowOrigin": null,
+    "allowHeaders": null
+  }
+]
