@@ -540,3 +540,26 @@ nem medição do custo médio. Nenhuma nova geração programada. Evidências pr
 em `%TEMP%/connectyhub-studio-provider-tests/commercial-final-audit.json` e relatórios
 por modalidade; [tabela e limites](plano-custos-estudio-audio-2026-09-14.md).
 Registro pós-publicação mantido para o próximo pacote, evitando build apenas documental.
+
+### Fechamento comercial e descoberta do Estúdio — 14/09/2026, 22:05 BRT
+
+Complemento `d79872ca` publicado pelo deploy `dpl_GKbCh48xckHTKhAJdNwzwKBcigoT`,
+Ready/Production, com `www.connectyhub.com.br` e `connectyhub.com.br` conferidos.
+Inclui o pacote17731ed por ancestralidade e os registros da ativação anterior.
+Corrige o rótulo do download OpenAPI de Voz e completa os dados estruturados
+da home/documentação e as descrições em llms.txt/llms-full.txt.
+
+Seis páginas públicas responderam200; HTML da home confirmou seção Estúdio e
+aviso de contas gratuitas/teste sem geração ilimitada. JSON-LD publicado parseado
+com sucesso: SoftwareApplication inclui Voz e a documentação possui WebAPI de Voz.
+OpenAPI1.1.0, guia e descrições de disponibilidade conferidos; bundle da documentação
+contém o rótulo corrigido e não contém o anterior. Não é prova de indexação/ranking.
+ESLint, sete testes docs/admin e build webpack/TypeScript/108páginas passaram.
+Admin foi auditado no código publicado e testes, sem novo login administrativo.
+
+[Quadro completo e limites](auditoria-escopo-estudio-2026-09-14.md). A execução
+autorizada para as oito modalidades e apresentação comercial está concluída.
+Dicionário e Gemini2.5 continuam fechados por evidência financeira ausente;
+os caminhos para obter essa evidência estão no quadro. Nenhuma geração adicional,
+contato externo ou alteração de plano. Orçamento conservador mantidoUS$0,959893.
+Este registro posterior fica local para o próximo pacote, sem deploy documental.
