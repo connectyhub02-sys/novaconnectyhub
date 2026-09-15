@@ -1,0 +1,2 @@
+import {AuthForm} from '@portal/components/auth-form';
+export default function Page(){return <main className="portal-login"><span className="portal-badge">CONNECTYHUB · HOMOLOGAÇÃO</span><h1>Seus projetos,<br/>no mesmo lugar.</h1><p>Entre com o acesso próprio deste portal.</p><AuthForm/><p>Precisa de acesso? Solicite ao administrador da infraestrutura. As contas da plataforma principal são separadas.</p></main>;}

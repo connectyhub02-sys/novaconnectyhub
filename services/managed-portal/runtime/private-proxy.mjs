@@ -1,0 +1,3 @@
+// Internal Auth/PostgREST facade. No public listener or dynamic upstream.
+import {createServer,request} from 'node:http';
+createServer((req,res)=>{let port,path;if(req.url.startsWith('/auth/v1/')){port=9999;path=req.url.slice(8);}else if(req.url.startsWith('/rest/v1/')){port=3000;path=req.url.slice(8);}else{res.writeHead(404);res.end();return;}const upstream=request({host:'127.0.0.1',port,path,method:req.method,headers:{...req.headers,host:`127.0.0.1:${port}`}},reply=>{res.writeHead(reply.statusCode,reply.headers);reply.pipe(res);});upstream.setTimeout(15000,()=>upstream.destroy());upstream.on('error',()=>{if(!res.headersSent)res.writeHead(503);res.end();});req.on('aborted',()=>upstream.destroy());req.pipe(upstream);}).listen(8000,'127.0.0.1');

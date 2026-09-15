@@ -1,0 +1,23 @@
+{
+  "name": "connectyhub-managed-portal",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "next build --webpack",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "16.3.2",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "@supabase/ssr": "0.10.3",
+    "@supabase/supabase-js": "2.106.2",
+    "lucide-react": "1.17.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "20.19.41",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3"
+  }
+}

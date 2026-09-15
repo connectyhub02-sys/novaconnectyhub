@@ -27,7 +27,7 @@ export async function projectSnapshot(db:SupabaseClient,projectId:string):Promis
  const data=rows.map(r=>unwrap(r)??[]);return {project,records:data[0].slice(0,200),files:data[1].slice(0,200),jobs:data[2].slice(0,200),logs:data[3].slice(0,200),usage:data[4].slice(0,200),members:data[5].slice(0,200),resources:data[6].slice(0,200),objects:data[7].slice(0,200),truncated:data.some(d=>d.length>200)} as unknown as ProjectSnapshot;
 }
 export async function readBody(request:Request,max=1450000):Promise<Record<string,unknown>>{
- const origin=request.headers.get('origin');if(origin&&origin!==new URL(request.url).origin)throw new ManagedError(403,'Origem inválida.');
+ const origin=request.headers.get('origin');const expectedOrigin=process.env.MANAGED_PUBLIC_ORIGIN??new URL(request.url).origin;if(origin&&origin!==expectedOrigin)throw new ManagedError(403,'Origem inválida.');
  const reader=request.body?.getReader();if(!reader)throw new ManagedError(400,'Dados obrigatórios.');
  const chunks:Uint8Array[]=[];let bytes=0;
  try{while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>max){await reader.cancel();throw new ManagedError(413,'Arquivo ou requisição muito grande.');}chunks.push(value);}}finally{reader.releaseLock();}

@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## Portal de infraestrutura persistente — 15/09/2026
+
+Homologação publicada em `https://infraestrutura.connectyhub.com.br`, em stack própria na VPS, com login confirmado pelo titular e navegação autenticada observada. Empresas, usuários, projetos, registros JSON, arquivos privados e worker exclusivamente diagnóstico validados por 34 verificações HTTP reais. Reinício do stack preservou dados/login/arquivo/execução. Métricas reais do host visíveis somente ao administrador. Os serviços anteriores permaneceram ativos, sem reinícios nesta entrega.
+
+Backup `20260915T143301Z` restaurado em PostgreSQL isolado sem rede, com RLS e objeto verificados; cópia privada fora da VPS salva no computador do titular com SHA256 conferido. Backup diário às 02:30 BRT causa pausa breve somente do portal; retenção e cópia externa recorrente ainda manuais. Não confundir com migração dos projetos Betel/Vision nem com Supabase completo por projeto: Inngest não foi ativado neste portal. [Entrega, evidências e limites](portal-persistente-gerenciado-2026-09-15.md).
+
 ## Betel somente transporte — preparado em 14/09/2026
 
 Novo escopo autorizado mantém URLs e CRM na Betel. O modo nativo da API, selecionado por configuração de organização no servidor, exige track_id, preserva links e mídia e mantém recibos técnicos/uso sem criar leads, conversas ou links CH. A mesma separação alcança os webhooks de instâncias API, para não recriar CRM no retorno do provedor. Replays e dados antigos preservados; sem migration ou alteração de tarifas. Código e testes locais; ativação em produção ainda depende da confirmação do adaptador nativo Betel. [Contrato](betel-transporte-nativo-2026-09-14.md).
