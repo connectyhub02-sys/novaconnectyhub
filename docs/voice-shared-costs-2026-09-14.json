@@ -1,0 +1,15 @@
+{
+  "version": "voice-shared-costs-20260914-v1",
+  "source": "https://elevenlabs.io/app/subscription/api",
+  "evidence": "Tabela API autenticada da conta Creator em 14/09/2026: v2 Multilingue USD0.10/1000caracteres; Flash/Turbo USD0.05/1000. Valores de tabela, nao fatura efetiva, sem impostos/taxas.",
+  "usd_brl_assumption": 6,
+  "nominal_credit_brl": 0.01,
+  "markup": 4,
+  "prospective_only": true,
+  "rates": [
+    {"model": "eleven_multilingual_v2", "feature": "text_to_speech", "old_rate_id": "c91c53a3-99cb-49c8-bef1-2ad8ea2d56bd", "provider_cost_source_rate_id": "a86ee87b-9f7c-4ea5-8d6d-9262c1de11af", "provider_cost_brl_per_character": 0.0006, "credits_per_character": 0.24, "minimum_credits": 5},
+    {"model": "eleven_flash_v2_5", "feature": "voice_reply_whatsapp", "old_rate_id": "1c153edf-f94e-4de0-b6a9-dc72aaaf1666", "provider_cost_brl_per_character": 0.0003, "credits_per_character": 0.12, "minimum_credits": 5}
+  ],
+  "scenario_assumptions_not_actual_expenses": {"tax_revenue_percent": 6, "payment_revenue_percent": 4, "infrastructure_reserve_brl_per_1000_characters": 0.05},
+  "limits": "Custo compartilhado independe de preco/plano. Nao alterar historico, carteiras ou snapshots reservados. Creditos incluidos/bonificados e descontos reduzem receita efetiva; 75% e margem sobre receita nominal antes das demais despesas, nunca lucro liquido garantido. Nenhuma geracao paga adicional autorizada por esta tabela."
+}

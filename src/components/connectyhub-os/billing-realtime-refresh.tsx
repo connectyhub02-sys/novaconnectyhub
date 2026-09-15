@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,15 +14,13 @@ export function BillingRealtimeRefresh({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [clientUpdatedAt, setClientUpdatedAt] = useState<string | null>(null);
-  const displayUpdatedAt = clientUpdatedAt ?? updatedAt;
 
   const refresh = useCallback(() => {
-    setClientUpdatedAt(new Date().toISOString());
+    if (isPending) return;
     startTransition(() => {
       router.refresh();
     });
-  }, [router]);
+  }, [router, isPending]);
 
   useEffect(() => {
     function refreshIfVisible() {
@@ -50,7 +48,7 @@ export function BillingRealtimeRefresh({
       onClick={refresh}
     >
       <RefreshCw className={cn("h-3.5 w-3.5", isPending ? "animate-spin" : "")} />
-      Atualizado {formatRefreshTime(displayUpdatedAt)} / auto {Math.round(intervalMs / 1000)}s
+      Atualizado {formatRefreshTime(updatedAt)} / auto {Math.round(intervalMs / 1000)}s
     </button>
   );
 }

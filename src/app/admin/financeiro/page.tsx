@@ -6,13 +6,15 @@ import { getBillingCommercialCatalog } from "@/lib/billing/admin-catalog";
 import { getPlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
 import { getBillingAdminSummary } from "@/lib/billing/summary";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
+import { getOperationAudit } from "@/lib/billing/operation-audit";
 
 export const metadata: Metadata = {
   title: "Financeiro IA | ConnectyHub",
   description: "Centro de custo, creditos, consumo e margem da plataforma ConnectyHub.",
 };
 
-export default async function AdminFinanceiroPage() {
+export default async function AdminFinanceiroPage({searchParams}:{searchParams:Promise<{usageDays?:string}>}) {
   await connection();
   const workspace = await getCurrentWorkspace();
 
@@ -20,10 +22,12 @@ export default async function AdminFinanceiroPage() {
     return <AccessDenied />;
   }
 
-  const [summary, commercialCatalog, platformBillingCatalog] = await Promise.all([
+  const requestedDays=Number((await searchParams).usageDays),days=[1,7,30].includes(requestedDays)?requestedDays:1;
+  const [summary, commercialCatalog, platformBillingCatalog, operationAudit] = await Promise.all([
     getBillingAdminSummary(),
     getBillingCommercialCatalog(),
     getPlatformBillingOperationsCatalog(),
+    getOperationAudit(createServiceClient(),days),
   ]);
 
   return (
@@ -31,6 +35,7 @@ export default async function AdminFinanceiroPage() {
       summary={summary}
       commercialCatalog={commercialCatalog}
       platformBillingCatalog={platformBillingCatalog}
+      operationAudit={operationAudit}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     />
   );

@@ -19,6 +19,22 @@ function meteringHarness(overrides = {}) {
 }
 
 describe("usage billing integrity", () => {
+  it("shares supplier cost across channels while preserving commercial prices, minimums and old snapshots", async () => {
+    const source={id:'supplier',cost_center_id:'cc',feature_id:'agent',model_id:'m',active:true,unit:'character',plan_code:null,effective_from:null,provider_cost_per_unit:.0006,connecty_price_per_unit:.24,minimum_charge_credits:50};
+    const api={...source,id:'api',feature_id:'api-feature',provider_cost_per_unit:.00005,minimum_charge_credits:5,metadata:{provider_cost_source_rate_id:'supplier'}};
+    const oldSnapshot=[{id:'old',unit:'character',providerCostPerUnit:.00005,connectyPricePerUnit:.008,minimumChargeCredits:5}];
+    const db=commerceDatabase({provider_cost_centers:[{id:'cc',provider:'elevenlabs'}],provider_features:[{id:'agent',cost_center_id:'cc',feature_code:'voice_reply_whatsapp',enabled:true,billable:true},{id:'api-feature',cost_center_id:'cc',feature_code:'text_to_speech',enabled:true,billable:true}],provider_models:[{id:'m',cost_center_id:'cc',provider_model_id:'eleven_multilingual_v2'}],billing_rates:[source,api]});
+    const m=meteringHarness();
+    const rates=await m.resolveActiveBillingRates(db.client as never,{provider:'elevenlabs',featureCode:'text_to_speech',modelId:'eleven_multilingual_v2',planCode:null});
+    expect(rates[0]).toMatchObject({id:'api',providerCostSourceRateId:'supplier',providerCostPerUnit:.0006,connectyPricePerUnit:.24,minimumChargeCredits:5});
+    expect(m.calculateMeteredUsageCharge({rates,units:{characters:1000}})).toMatchObject({providerCost:.6,chargeCredits:240});
+    expect(m.calculateMeteredUsageCharge({rates,units:{characters:1}}).chargeCredits).toBe(5);
+    expect(m.calculateMeteredUsageCharge({rates:oldSnapshot,units:{characters:1000}})).toMatchObject({providerCost:.05,chargeCredits:8});
+    source.provider_cost_per_unit=.0007;
+    expect(m.resolveSharedProviderCost(api,[source]).providerCostPerUnit).toBe(.0007);
+    for(const bad of [[],[{...source,model_id:'other'}],[{...source,unit:'minute'}],[{...source,plan_code:'discount'}],[{...source,effective_to:'2020-01-01'}],[{...source,metadata:{provider_cost_source_rate_id:'nested'}}]])expect(()=>m.resolveSharedProviderCost(api,bad)).toThrow('Custo compartilhado');
+    expect(m.calculateMeteredUsageCharge({rates:[{unit:'character',providerCostPerUnit:.0003,connectyPricePerUnit:.12,minimumChargeCredits:5}],units:{characters:1000}})).toMatchObject({providerCost:.3,chargeCredits:120});
+  });
   it("respects explicitly configured zero clone creation, but rejects missing clone and zero TTS tariffs", async () => {
     for(const [feature,hasRate,allowed] of [["voice_clone",true,true],["voice_clone",false,false],["text_to_speech",true,false]] as const){
       const record=vi.fn().mockResolvedValue({id:'usage'}),debit=vi.fn();

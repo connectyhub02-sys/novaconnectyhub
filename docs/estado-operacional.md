@@ -621,3 +621,29 @@ R$0,0006 eR$0,00005/caract respectivamente. Flashv2.5 agente0,006cr/caract/min5,
 sem tarifaAPI. Uniformizar para a tarifa do agente aumentaria o preçoAPIv2 em30x;
 isso foi comunicado à origem para decisão explícita, preservando as linhas antigas.
 Não apresentar a divergência como causada pelo complemento ou como margem validada.
+
+### Custo compartilhado e Financeiro por operação — 14/09/2026
+
+O titular autorizou corrigir as duas tarifas antigas usando custo aproximado
+e multiplicador 4, preservando operações passadas. Referência Creator consultada:
+Multilingual v2 USD 0,10/mil caracteres; Flash USD 0,05/mil, com câmbio interno
+R$ 6/USD. API v2 passa de 0,008 para 0,24 cr/caráter (mínimo 5); Flash agente
+de 0,006 para 0,12 (mínimo 5). v2 agente permanece 0,24/mínimo 50.
+
+Implementada referência de custo da API v2 à tarifa de agente do mesmo modelo,
+sem copiar o mínimo comercial. A edição administrativa preserva a referência e
+impede desativar sua base enquanto usada. Duas versões novas foram preparadas
+inativas, para ativação após a publicação, mantendo custos/preços antigos intactos.
+
+O Financeiro existente recebeu consulta administrativa por operação, com
+custos históricos, ledger de débito/estorno, recibos/reservas, filtros e margem
+nominal estimada; limite explícito de 2.000 eventos. A leitura real retornou
+237 operações, 228 movimentos vinculados, nenhuma pendência e sem truncamento.
+Filtro por modelo e largura de celular conferidos na prévia local; rota temporária
+removida antes do build. Os 37 testes direcionados e ESLint passaram.
+
+Detalhamento e limites em [custos de voz/Estúdio](centro-custos-voz-estudio-2026-09-14.md).
+Margem de 75% refere-se ao crédito nominal antes das despesas; bônus e pacotes
+reduzem o valor efetivo. Não é lucro líquido nem fatura conciliada. Nenhuma
+geração paga adicional; permanece US$ 0,959893 do teto US$ 1. Este registro
+prepara a publicação; a confirmação do deploy e da ativação é posterior.

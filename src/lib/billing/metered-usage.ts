@@ -52,6 +52,7 @@ type BillingRateRow = {
   minimum_charge_credits: number | string | null;
   effective_from: string | null;
   effective_to?: string | null;
+  metadata?: JsonRecord | null;
 };
 
 type AgentRunUsageRow = {
@@ -111,6 +112,8 @@ export type MeteredUsageResult = {
 
 export type MeteredRate = {
   id?: string | null;
+  providerCostSourceRateId?: string | null;
+  costFxUsdBrl?: number;
   unit: BillingUnit | string;
   providerCostPerUnit: number;
   connectyPricePerUnit: number;
@@ -140,6 +143,8 @@ export type CalculatedMeteredUsageCharge = {
   matchedUnits: number;
   matchedRates: Array<{
     id: string | null;
+    providerCostSourceRateId?: string | null;
+    costFxUsdBrl?: number;
     unit: string;
     units: number;
     providerCostPerUnit: number;
@@ -346,6 +351,8 @@ export function calculateMeteredUsageCharge(input: {
     matchedUnits += units;
     matchedRates.push({
       id: rate.id ?? null,
+      ...(rate.providerCostSourceRateId ? { providerCostSourceRateId: rate.providerCostSourceRateId } : {}),
+      ...(rate.costFxUsdBrl ? { costFxUsdBrl: rate.costFxUsdBrl } : {}),
       unit: String(rate.unit),
       units: roundUsageUnits(units),
       providerCostPerUnit,
@@ -459,7 +466,7 @@ export async function resolveActiveBillingRates(
       .limit(1000),
     client
       .from("billing_rates")
-      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to")
+      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to, metadata")
       .eq("cost_center_id", costCenter.id)
       .eq("active", true)
       .order("id")
@@ -475,7 +482,7 @@ export async function resolveActiveBillingRates(
   const rateRows = [...(ratesResult.data ?? [])];
   while (rateRows.length > 0 && rateRows.length % 1000 === 0) {
     const page = await client.from("billing_rates")
-      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to")
+      .select("id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to, metadata")
       .eq("cost_center_id", costCenter.id).eq("active", true).order("id")
       .range(rateRows.length, rateRows.length + 999);
     if (page.error) throw new Error("Não foi possível carregar todas as tarifas de consumo.");
@@ -516,10 +523,27 @@ export async function resolveActiveBillingRates(
   return Array.from(bestByUnit.values()).map((rate) => ({
     id: rate.id,
     unit: rate.unit,
-    providerCostPerUnit: toNumber(rate.provider_cost_per_unit),
+    ...resolveSharedProviderCost(rate, rateRows as BillingRateRow[]),
+    ...(typeof rate.metadata?.cost_fx_usd_brl === 'number' && rate.metadata.cost_fx_usd_brl > 0 ? { costFxUsdBrl: rate.metadata.cost_fx_usd_brl } : {}),
     connectyPricePerUnit: toNumber(rate.connecty_price_per_unit),
     minimumChargeCredits: toNumber(rate.minimum_charge_credits),
   }));
+}
+
+/** A cost reference shares supplier cost only; prices, plans and minimums remain local. */
+export function resolveSharedProviderCost(rate: BillingRateRow, rows: BillingRateRow[]) {
+  const sourceId = rate.metadata?.provider_cost_source_rate_id;
+  if (sourceId === undefined || sourceId === null) return { providerCostPerUnit: toNumber(rate.provider_cost_per_unit) };
+  const source = rows.find(row => row.id === sourceId);
+  if (typeof sourceId !== "string" || !source || !rate.model_id || source.model_id !== rate.model_id
+    || source.unit !== rate.unit || source.plan_code || source.metadata?.provider_cost_source_rate_id
+    || (source.effective_from && Date.parse(source.effective_from) > Date.now())
+    || (source.effective_to && Date.parse(source.effective_to) <= Date.now())
+    || source.provider_cost_per_unit === null || !Number.isFinite(Number(source.provider_cost_per_unit))
+    || Number(source.provider_cost_per_unit) < 0) {
+    throw new Error("Custo compartilhado indisponível. Confira a tarifa de origem no centro de custo.");
+  }
+  return { providerCostPerUnit: Number(source.provider_cost_per_unit), providerCostSourceRateId: source.id };
 }
 
 function scoreBillingRate(

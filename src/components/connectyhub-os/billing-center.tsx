@@ -31,16 +31,20 @@ import {
   DataTable,
 } from "./panel-primitives";
 import { PlatformBillingOperations } from "./platform-billing-operations";
+import { BillingOperationAudit } from "./billing-operation-audit";
+import type { OperationAudit } from "@/lib/billing/operation-audit";
 
 export function BillingCenter({
   summary,
   commercialCatalog,
   platformBillingCatalog,
+  operationAudit,
   userLabel = "CEO_HUMAN_ADM",
 }: {
   summary: BillingAdminSummary;
   commercialCatalog: BillingCommercialCatalog;
   platformBillingCatalog: PlatformBillingOperationsCatalog;
+  operationAudit?: OperationAudit;
   userLabel?: string;
 }) {
   const marginPercent = getMarginPercent(summary.totals.providerCost, summary.totals.connectyRevenue);
@@ -83,6 +87,7 @@ export function BillingCenter({
       )}
 
       <ExecutiveCostSummary summary={summary} />
+      {operationAudit && <BillingOperationAudit data={operationAudit} />}
 
       <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 2xl:grid-cols-8">
         <BillingMetric
@@ -731,7 +736,7 @@ function SupplierTariffsPanel({
           detail={rate.modelName ? rate.featureName : rate.featureCode}
         />,
         <span key="unit" className="font-mono text-slate-300">{formatUnit(rate.unit)}</span>,
-        <span key="cost" className="font-mono text-amber-300">{formatUnitMoney(rate.providerCostPerUnit)}</span>,
+        <TariffName key="cost" title={formatUnitMoney(rate.providerCostPerUnit)} detail={rate.providerCostSourceRateId ? "base compartilhada com voz do agente" : "custo por unidade"} />,
         <span key="cost1k" className="font-mono text-slate-300">{formatScaledSupplierCost(rate.providerCostPerUnit, rate.unit, 1000)}</span>,
         <span key="cost1m" className="font-mono text-slate-300">{formatScaledSupplierCost(rate.providerCostPerUnit, rate.unit, 1000000)}</span>,
         <TariffName

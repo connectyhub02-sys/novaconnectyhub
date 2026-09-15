@@ -615,8 +615,9 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
 
                   <div className="grid gap-3 md:grid-cols-5">
                     <MoneyInput
-                      label="Custo provedor R$"
-                      value={draft?.providerCostPerUnit ?? "0"}
+                      label={rate.providerCostSourceRateId ? "Custo compartilhado R$" : "Custo provedor R$"}
+                      value={rate.providerCostSourceRateId ? String(rate.providerCostPerUnit) : draft?.providerCostPerUnit ?? "0"}
+                      readOnly={Boolean(rate.providerCostSourceRateId)}
                       onChange={(value) => updateRateDraft(rate.id, { providerCostPerUnit: value })}
                       step="0.000001"
                     />
@@ -817,11 +818,13 @@ function MoneyInput({
   value,
   onChange,
   step,
+  readOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   step: string;
+  readOnly?: boolean;
 }) {
   return (
     <FieldLabel label={label}>
@@ -830,6 +833,7 @@ function MoneyInput({
         min="0"
         step={step}
         value={value}
+        readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
         className="h-9 w-full rounded-lg px-3 font-mono text-[12px] outline-none"
         style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
@@ -1007,7 +1011,7 @@ function applyDraftToRate(rate: BillingCatalogRate, draft?: RateDraft): BillingC
 
   return {
     ...rate,
-    providerCostPerUnit: Number(draft.providerCostPerUnit),
+    providerCostPerUnit: rate.providerCostSourceRateId ? rate.providerCostPerUnit : Number(draft.providerCostPerUnit),
     connectyPricePerUnit: Number(draft.connectyPricePerUnit),
     marginMultiplier: draft.marginMultiplier ? Number(draft.marginMultiplier) : null,
     minimumChargeCredits: Number(draft.minimumChargeCredits),

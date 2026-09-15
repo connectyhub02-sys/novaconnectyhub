@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { BillingProvider, BillingUnit } from "./cost-center";
+import { resolveSharedProviderCost } from "./metered-usage";
 
 export type BillingCatalogRate = {
   id: string;
@@ -15,6 +16,7 @@ export type BillingCatalogRate = {
   planCode: string | null;
   unit: BillingUnit | string;
   providerCostPerUnit: number;
+  providerCostSourceRateId?: string | null;
   connectyPricePerUnit: number;
   marginMultiplier: number | null;
   minimumChargeCredits: number;
@@ -91,6 +93,9 @@ type RateRow = {
   margin_multiplier: number | string | null;
   minimum_charge_credits: number | string | null;
   active: boolean | null;
+  effective_from: string | null;
+  effective_to?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type OrganizationRow = {
@@ -122,7 +127,7 @@ export async function getBillingCommercialCatalog(
     supabase.from("provider_models").select("id, cost_center_id, provider_model_id, display_name, feature_code").order("display_name", { ascending: true }).limit(500),
     supabase
       .from("billing_rates")
-      .select("id, cost_center_id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, margin_multiplier, minimum_charge_credits, active")
+      .select("id, cost_center_id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, margin_multiplier, minimum_charge_credits, active, effective_from, effective_to, metadata")
       .order("created_at", { ascending: true })
       .limit(1000),
     supabase.from("organizations").select("id, name, slug, plan_code, status").order("created_at", { ascending: false }).limit(300),
@@ -183,7 +188,7 @@ export async function getBillingCommercialCatalog(
       modelName: model?.display_name ?? null,
       planCode: rate.plan_code,
       unit: rate.unit,
-      providerCostPerUnit: toNumber(rate.provider_cost_per_unit),
+      ...resolveSharedProviderCost(rate, ((ratesResult.data ?? []) as RateRow[]).filter(source => source.active && source.cost_center_id === rate.cost_center_id)),
       connectyPricePerUnit: toNumber(rate.connecty_price_per_unit),
       marginMultiplier: rate.margin_multiplier === null ? null : toNumber(rate.margin_multiplier),
       minimumChargeCredits: toNumber(rate.minimum_charge_credits),

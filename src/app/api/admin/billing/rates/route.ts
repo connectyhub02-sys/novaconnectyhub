@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
+import { resolveSharedProviderCost } from "@/lib/billing/metered-usage";
 
 export const runtime = "nodejs";
 
@@ -17,10 +18,30 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
+  const current = await auth.supabase.from("billing_rates")
+    .select("id, cost_center_id, feature_id, model_id, plan_code, unit, provider_cost_per_unit, connecty_price_per_unit, minimum_charge_credits, effective_from, effective_to, metadata")
+    .eq("id", parsed.rateId).single();
+  if (current.error) return NextResponse.json({ error: "Tarifa não encontrada." }, { status: 404 });
+  let providerCostPerUnit = parsed.providerCostPerUnit;
+  const sourceId = current.data.metadata?.provider_cost_source_rate_id;
+  if (sourceId) {
+    const source = await auth.supabase.from("billing_rates").select("*")
+      .eq("id", sourceId).eq("cost_center_id", current.data.cost_center_id).eq("active", true).maybeSingle();
+    if (source.error) return NextResponse.json({ error: "Não foi possível conferir o custo compartilhado." }, { status: 503 });
+    try { providerCostPerUnit = resolveSharedProviderCost(current.data, source.data ? [source.data] : []).providerCostPerUnit; }
+    catch { return NextResponse.json({ error: "Custo compartilhado indisponível; confira a tarifa de origem." }, { status: 409 }); }
+  }
+  if (!parsed.active) {
+    const dependents = await auth.supabase.from("billing_rates").select("id").eq("active", true)
+      .contains("metadata", { provider_cost_source_rate_id: parsed.rateId }).limit(1);
+    if (dependents.error) return NextResponse.json({ error: "Não foi possível conferir as referências de custo." }, { status: 503 });
+    if (dependents.data?.length) return NextResponse.json({ error: "Esta tarifa fornece o custo de outras operações. Reconfigure as referências antes de desativá-la." }, { status: 409 });
+  }
+
   const { data, error } = await auth.supabase
     .from("billing_rates")
     .update({
-      provider_cost_per_unit: parsed.providerCostPerUnit,
+      provider_cost_per_unit: providerCostPerUnit,
       connecty_price_per_unit: parsed.connectyPricePerUnit,
       margin_multiplier: parsed.marginMultiplier,
       minimum_charge_credits: parsed.minimumChargeCredits,
@@ -40,7 +61,8 @@ export async function PATCH(request: NextRequest) {
     target_table: "billing_rates",
     target_id: parsed.rateId,
     metadata: {
-      providerCostPerUnit: parsed.providerCostPerUnit,
+      providerCostPerUnit,
+      providerCostSourceRateId: sourceId ?? null,
       connectyPricePerUnit: parsed.connectyPricePerUnit,
       marginMultiplier: parsed.marginMultiplier,
       minimumChargeCredits: parsed.minimumChargeCredits,
