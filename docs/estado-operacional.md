@@ -590,3 +590,34 @@ não é teste de geração, quota ou qualidade. Nenhum POST ao fornecedor nesta 
 28testes dirigidos, ESLint e build webpack/TypeScript108páginas passaram.
 Ainda falta confirmar publicação do aviso, ativação e cotação no catálogo real.
 O orçamento conservador continuaUS$0,959893 deUS$1; não programar geração adicional.
+
+### Complemento ativado e provisão ajustada — 14/09/2026, 22:20 BRT
+
+`79faf148`, deploy `dpl_7dzkVNWpDkf5WNhGfCQK8uikGFPQ`, Ready/Production,
+ambos os domínios conferidos. Dicionário e Gemini2.5Flash/Pro habilitados.
+Catálogo real retornaavailable=true nas três variantes. Cotações sem geração:
+dicionário5cr; texto sintético “Teste.” GeminiFlash até196,9224 ePro até393,8448cr,
+reservas máximas de8192tokens de saída, não custo final nem débito realizado.
+Recibo anterior recuperado com a mesma chave sem nova operação. Painel real
+exibiu aviso provisório e cotação automática de5cr; botão de criação não clicado.
+Guia público200 inclui aviso; capabilities anônimo401. Nenhuma geração adicional.
+
+Refinamento explícito do titular: **provisão de custoR$0,0125/op e venda4x=R$0,05=5cr**.
+Substitui a hipótese0 acima. A linha nova de dicionário e o snapshot confirmado
+receberam essa provisão; custo efetivo do fornecedor continuaDESCONHECIDO.
+Metadata identifica `internal_budget_provision_not_measured`, versão2 da tabela,
+e evidência administrativa alerta PROVISORIA. O preço ao cliente não mudou.
+Dois testes financeiros foram repetidos e passaram após essa mudança de premissa.
+Não é lucro líquido medido. Testes reais de geração2.5 e percurso completo de criação
+de dicionário ainda não realizados; transporte de dicionário já havia respondido200.
+
+Comparação agente/Estúdio por leitura ao vivo: Gemini compartilha
+`voice_generation_audio` e o mesmo resolvedor. Gemini3.1 mantém0,0024/inputtoken,
+0,048/outputtoken e mínimo1. Variantes2.5 não tinham linhas nessa feature antes;
+foram adicionadas com mínimo5, sem substituir3.1. AgentesEleven usam
+`voice_reply_whatsapp`, API/Estúdio usam `text_to_speech`. Divergência preexistente
+multilínguev2: agente0,24cr/caract/min50, API0,008cr/caract/min5; custos cadastrados
+R$0,0006 eR$0,00005/caract respectivamente. Flashv2.5 agente0,006cr/caract/min5,
+sem tarifaAPI. Uniformizar para a tarifa do agente aumentaria o preçoAPIv2 em30x;
+isso foi comunicado à origem para decisão explícita, preservando as linhas antigas.
+Não apresentar a divergência como causada pelo complemento ou como margem validada.

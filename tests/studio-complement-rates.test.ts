@@ -8,7 +8,7 @@ it('bills a dictionary version once at the provisional rate and does not bill ze
  const item=table.rates[0],r=rates(item);
  expect(item.status).toBe('provisional');
  expect(confirmedStudioRates(r,r,'dictionary_create')).toEqual(r);
- expect(calculateMeteredUsageCharge({rates:r,units:{requests:1}})).toMatchObject({chargeCredits:5,providerCost:0});
+ expect(calculateMeteredUsageCharge({rates:r,units:{requests:1}})).toMatchObject({chargeCredits:5,providerCost:.0125});
  expect(calculateMeteredUsageCharge({rates:r,units:{requests:0}}).chargeCredits).toBe(0);
 });
 it('meters each Gemini variant separately with one minimum across input and output',()=>{

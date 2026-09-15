@@ -1,5 +1,5 @@
 {
-  "version": "studio-complement-20260914-v1",
+  "version": "studio-complement-20260914-v2",
   "usd_brl": 6,
   "credit_brl": 0.01,
   "margin_multiplier": 4,
@@ -8,10 +8,12 @@
       "operation": "dictionary_create",
       "model_id": "pronunciation-dictionary",
       "status": "provisional",
-      "provider_usd_per_unit": {"request": 0},
+      "provider_usd_per_unit": {"request": 0.0020833333333333333},
+      "provision_brl_per_request": 0.0125,
+      "provider_actual_cost": "unknown",
       "credits_per_unit": {"request": 5},
       "minimum_credits": 5,
-      "evidence": "PROVISORIA autorizada pelo titular em14/09/2026. Gerenciamento estimado sem custo incremental, nao confirmado como tarifa oficial zero. Tabela Creator/API nao lista dicionarios; API add-from-rules gerencia regras sem gerar audio; teste anterior HTTP200/delta0 apenas corroborativo. Cobrar5creditos por criacao/nova versao; leitura/replay/aplicacao sem taxa adicional. TTS permanece cobrado pela tarifa existente. Revisar ao obter fatura/condicao comercial; sem garantia de lucro liquido.",
+      "evidence": "PROVISORIA v2 autorizada pelo titular em14/09/2026: provisao internaR$0.0125/op (USD0.00208333 aR$6), venda4xR$0.05=5creditos por criacao/nova versao. CUSTO EFETIVO FORNECEDOR DESCONHECIDO; nao tarifa oficial nem custo zero comprovado. Creator/API nao lista dicionarios, HTTP200/delta0 anterior nao comprova gratuidade. Leitura/replay/aplicacao sem taxa adicional; TTS segue tarifa existente. Comparar provisao versus custo real em testes posteriores; sem garantia de lucro liquido.",
       "sources": ["https://elevenlabs.io/app/subscription/api", "https://elevenlabs.io/docs/api-reference/pronunciation-dictionaries/create-from-rules"],
       "break_even_provider_usd_before_other_costs": 0.0083333333,
       "max_provider_usd_for_4x": 0.0020833333
