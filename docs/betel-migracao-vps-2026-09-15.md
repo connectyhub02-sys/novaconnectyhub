@@ -1,5 +1,7 @@
 # Migração Betel para a VPS — 15/09/2026
 
+> Atualização posterior: novas automações e webhooks foram habilitados às 20:29 UTC. O HOLD descrito abaixo é o estado histórico desta etapa. Consulte a [ativação operacional](betel-ativacao-operacional-2026-09-15.md).
+
 ## Escopo e autorização
 
 O titular autorizou a migração definitiva e esclareceu durante a execução que

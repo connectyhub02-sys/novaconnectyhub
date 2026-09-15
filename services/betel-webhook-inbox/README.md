@@ -25,3 +25,13 @@ testa duplicação, conflito, autenticação, quota e morte do processo antes do
 insert, antes do commit e após commit antes do ACK. Fixtures sem dados pessoais.
 `install.py` recebe segredo somente via stdin, instala unidade própria pausada
 em loopback28112 e recusa instalação existente. Caddy/origem são passos separados.
+
+## Encaminhamento operacional de novos webhooks
+
+`forward_new=true` habilita o destino fixo `http://172.21.0.2:28103/api/webhooks/connectyhub`. A validação HMAC ocorre antes de qualquer encaminhamento. Identidades já presentes na caixa histórica continuam retornando seu recibo HOLD; não há replay nem dreno automático. Fixtures novas `migration.test.*` são recusadas.
+
+Novos eventos usam o ledger/idempotência do aplicativo Betel. O transporte preserva os bytes e a assinatura, recusa redirecionamentos e propaga o status JSON do handler. Falha/timeout retorna 502, sem declarar entrega concluída. A deduplicação de tentativas novas pertence ao handler; esta caixa não promete processamento exatamente uma vez. O gate temporal e a conciliação das filas devem estar publicados antes da ativação.
+
+O serviço recebe apenas a permissão de destino `172.21.0.2/32` na sua restrição de rede; não ganha acesso geral à rede dos demais projetos. Oito testes cobrem persistência/restart, conflito, capacidade, autenticação e encaminhamento de novas identidades sem liberar as históricas.
+
+Encaminhamento do handler síncrono:310s, alinhado ao app; falha continua sem ACK falso. O proxy Caddy desta rota não configura um timeout menor.

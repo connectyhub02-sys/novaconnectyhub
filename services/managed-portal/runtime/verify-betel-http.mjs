@@ -28,6 +28,7 @@ assert.equal((await admin(`/api/connected-projects/${project}`,{action:'anything
 assert.equal((await admin(`/api/managed-projects/${project}`,{action:'record.create',collection:'blocked',data:{}})).status,403);checks++;
 for(const route of ['banco','banco/tabelas','banco/arquivos','banco/consumo','automacoes']){const page=await admin(`/infraestrutura/projetos/${project}/${route}`);assert.equal(page.status,200);assert.match(await page.text(),/CONSULTA EM LEITURA/);checks++;}
 assert.equal(source.source_key,'betel-production');assert.equal(source.source_organization_id,'66cb4c5a-35f2-4c08-9982-38bd72d2b9be');assert.equal(source.migration_state,'operational');checks+=3;
+assert.equal(source.snapshot.operation.broker_live,true);assert.equal(source.snapshot.operation.automations_paused,false);assert.equal(source.snapshot.operation.webhooks_forward_new,true);checks+=3;
 assert.equal(source.snapshot.inngest.function_count,12);assert.equal(source.snapshot.inngest.app_id,'5aa137bc-fe2b-5385-8e94-138d6d054335');checks+=2;
 assert.equal((await admin(`/api/connected-projects/${project}/files/lead_files/00000000-0000-0000-0000-000000000000`)).status,404);checks++;
 console.log(JSON.stringify({checks,project,source_scope_verified:true,client_denied:true,write_routes_denied:true,betel_migration_state:source.migration_state,source_recent:true,sections:5}));

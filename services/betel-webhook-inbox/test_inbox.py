@@ -32,6 +32,28 @@ class Tests(unittest.TestCase):
         with self.assertRaises(Rejected) as error:inbox.accept(*envelope('second'))
         self.assertEqual(error.exception.status,507)
         self.assertTrue(inbox.accept(*envelope())['duplicate'])
+    def test_live_preserves_old_and_forwards_only_new(self):
+        inbox=Inbox(self.path,SECRET);old=inbox.accept(*envelope('old'));calls=[]
+        def forward(body,headers):
+            calls.append((body,headers));return 200,{'accepted':True}
+        self.assertEqual(inbox.accept(*envelope('old'),forward=forward)['receipt'],old['receipt'])
+        self.assertEqual(calls,[])
+        self.assertEqual(inbox.accept(*envelope('new'),forward=forward),(200,{'accepted':True}))
+        self.assertEqual(calls[0][0],envelope('new')[0])
+        self.assertEqual(calls[0][1]['x-connectyhub-signature'],envelope('new')[1]['x-connectyhub-signature'])
+        with closing(inbox.connect()) as db:self.assertEqual(db.execute('select count(*) from events').fetchone()[0],1)
+    def test_live_auth_conflict_and_failure_do_not_ack(self):
+        inbox=Inbox(self.path,SECRET);inbox.accept(*envelope('old'))
+        def unavailable(*args):raise Rejected(502,'handler_unavailable')
+        for body,headers,code in [(*envelope('new'),502),(*envelope('old','changed'),409),(envelope('new')[0],{},401)]:
+            with self.assertRaises(Rejected) as error:inbox.accept(body,headers,forward=unavailable)
+            self.assertEqual(error.exception.status,code)
+    def test_new_migration_fixture_never_reaches_handler(self):
+        body=json.dumps({'event':'migration.test.hold','instanceId':'fixture','webhookEventId':'new-fixture'}).encode()
+        headers={'x-connectyhub-signature':'sha256='+hmac.new(SECRET.encode(),body,hashlib.sha256).hexdigest()}
+        calls=[]
+        with self.assertRaises(Rejected) as error:Inbox(self.path,SECRET).accept(body,headers,forward=lambda *args:calls.append(args))
+        self.assertEqual(error.exception.status,403);self.assertEqual(calls,[])
     def test_kill_at_durability_boundaries(self):
         # Process death before persistence, midtransaction, and after commit before ACK.
         for point,expected in [('before_insert',0),('before_commit',0),('after_commit',1)]:

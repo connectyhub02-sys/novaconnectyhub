@@ -55,7 +55,7 @@ assinatura, o motor verifica esses cabeçalhos. Mais detalhes e limites no
 
 ## Instância de produção separada
 
-`production.mjs` e `betel-production-manifest.json` definem exatamente12 contratos
+`production.mjs` e `betel-production-manifest.json` definem exatamente 12 contratos
 revisados da Betel. A unidade28111 tem chaves e ledger próprios; não substitui o
 ensaio28110. Eventos são prefixados no motor e traduzidos somente após validar
 recibo, função interna, assinatura e propriedade do run/checkpoint. Identidade
@@ -67,6 +67,8 @@ as consultas dos handlers também precisam de elegibilidade dos registros antigo
 Limites atuais:100.000 eventos/runs no ledger,2.000 dispatches/run,120requests/min,
 32steps/128KiB e sleeps até366dias. O ledger é um arquivo privado com fsync e
 rename; não é uma solução de volume ilimitado. Monitorar tamanho e limites antes
-de ampliar uso. Os26 testes cobrem o ensaio e esse contrato, sem comprovar geração,
+de ampliar uso. Os 27 testes cobrem o ensaio e esse contrato, sem comprovar geração,
 pagamento ou envio real. Estado e restrições do corte:
 [migração Betel](../../docs/betel-migracao-vps-2026-09-15.md).
+
+Produção: callback possui 310s (app 300s); controle upstream permanece 30s. O lote de links usa `steps.step.retries.attempts=0` para não repetir o lote inteiro após falha incerta. Não remover identidade, ledger ou assinaturas. Estado atual: [ativação](../../docs/betel-ativacao-operacional-2026-09-15.md).

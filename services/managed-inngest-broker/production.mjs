@@ -11,11 +11,12 @@ const uuidPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}
 const hash=v=>createHash('sha256').update(canonical(v)).digest('hex');
 const owned=(o,k)=>Object.hasOwn(o,k)?o[k]:undefined;
 export function productionManifest(callbackUrl){
- return manifest.map(f=>({...f,triggers:f.triggers.map(t=>t.event?{event:prefix+t.event}:t),steps:{step:{id:'step',name:'step',runtime:{type:'http',url:`${callbackUrl}?fnId=${f.id}&stepId=step`}}}}));
+ return manifest.map(f=>({...f,triggers:f.triggers.map(t=>t.event?{event:prefix+t.event}:t),steps:{step:{id:'step',name:'step',runtime:{type:'http',url:`${callbackUrl}?fnId=${f.id}&stepId=step`},...(f.id==='betel-ai-link-batch-scraper'?{retries:{attempts:0}}:{})}}}));
 }
 
 // A separate, paused-by-default broker instance is required. Never reuse the rehearsal ledger.
 export class ProductionBroker extends Broker {
+ callbackTimeout(){ return 310_000; }
  validateScope(c){
   demand(c.mode==='betel-production'&&c.appId==='betel-ai',500,'invalid_production_scope');
   demand(canonical(c.functions)===canonical(productionManifest(c.callbackUrl)),500,'unreviewed_manifest');

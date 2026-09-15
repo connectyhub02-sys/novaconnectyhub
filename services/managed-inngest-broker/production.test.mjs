@@ -76,3 +76,17 @@ test('paused runtime rejects business events and registration remains separately
  const {ledger,transport,calls}=await setup(t);const paused=new ProductionBroker({...config,live:false},ledger,transport);
  await reject(sendEvent(paused),'integration_not_enabled');await reject(paused.handle({method:'POST',rawUrl:'/fn/register',headers:{authorization},body:{}}),'registration_disabled');assert.equal(calls.length,0);
 });
+
+
+test('scraper batch forbids whole-function retry and long callback budget leaves control plane short', async t=>{
+ const {broker}=await setup(t);
+ assert.deepEqual(config.functions.find(f=>f.id==='betel-ai-link-batch-scraper').steps.step.retries,{attempts:0});
+ assert.ok(config.functions.filter(f=>f.id!=='betel-ai-link-batch-scraper').every(f=>f.steps.step.retries===undefined));
+ const budgets=[];const timeout=AbortSignal.timeout;
+ AbortSignal.timeout=ms=>{budgets.push(ms);return timeout(1_000);};
+ try {
+  await sendEvent(broker);
+  const fn=manifest[0];await broker.handle(callback(fn,{name:'inngest/scheduled.timer',id:'01CRON',ts:Date.now(),data:{cron:fn.triggers[0].cron}}));
+ } finally {AbortSignal.timeout=timeout;}
+ assert.deepEqual(budgets,[30_000,310_000]);
+});

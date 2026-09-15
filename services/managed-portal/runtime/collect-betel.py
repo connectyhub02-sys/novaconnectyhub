@@ -1,5 +1,5 @@
 """Two fixed read-only sources: Betel staging catalog and its own CH usage only."""
-import importlib.util,json,pathlib
+import importlib.util,json,pathlib,sqlite3
 ROOT=pathlib.Path('/opt/connectyhub-managed-portal')
 RUNTIME=ROOT/'source/services/managed-portal/runtime'
 ORG='66cb4c5a-35f2-4c08-9982-38bd72d2b9be'
@@ -42,6 +42,19 @@ rollback;
     data={'version':1,**catalog,**financial,'files':[],'buckets':[],'agents':[],'storage_accounting':None}
     spec=importlib.util.spec_from_file_location('betel_engine',RUNTIME/'collect-betel-inngest.py');engine=importlib.util.module_from_spec(spec);spec.loader.exec_module(engine)
     data['inngest']=engine.collect()
+    private=pathlib.Path('/opt/betel-isolated-rehearsal/secrets')
+    broker=json.loads((private/'production-broker.json').read_text())
+    app=json.loads((private/'app-production-runtime.json').read_text())
+    inbox=json.loads(pathlib.Path('/opt/betel-webhook-inbox/secrets/config.json').read_text())
+    db=sqlite3.connect('file:/var/lib/betel-webhook-inbox/inbox.sqlite?mode=ro',uri=True)
+    try: held=db.execute("select count(*) from events where state='held'").fetchone()[0]
+    finally: db.close()
+    data['operation']={'broker_live':broker.get('live') is True,
+        'automations_paused':app.get('BETEL_AUTOMATIONS_PAUSED')!='0',
+        'webhooks_forward_new':inbox.get('forward_new') is True,
+        'active_from':broker.get('activeFrom',0),'historical_inbox_held':held,
+        'scraper_paused':app.get('BETEL_SCRAPER_PAUSED')=='1',
+        'analysis_delivery_paused':app.get('BETEL_ANALYSIS_DELIVERY_PAUSED')=='1'}
     encoded=json.dumps(data).replace("'","''");assert len(encoded.encode())<524288
     collector.portal(f"update portal_source_connections set snapshot='{encoded}'::jsonb,collected_at=('{encoded}'::jsonb->>'collected_at')::timestamptz,attempted_at=now(),collection_status='ok' where project_id='{PROJECT}' and source_key='betel-production';")
     print(json.dumps({'project_id':PROJECT,'migration_state':collector.portal(f"select migration_state from portal_source_connections where project_id='{PROJECT}';"),'tables':catalog['database']['table_count'],'scoped_usage_events_30d':financial['counts']['usage_events_30d'],'writes_to_source':False}))

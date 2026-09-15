@@ -1,5 +1,6 @@
-"""Betel-only, authenticated durable HOLD inbox. No forwarding or business execution."""
+"""Betel authenticated ingress: preserve historical HOLD and optionally forward new work."""
 import hashlib, hmac, json, os, pathlib, sqlite3, time, threading
+import urllib.request, urllib.error
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -33,7 +34,7 @@ class Inbox:
         db.execute('pragma busy_timeout=5000')
         return db
 
-    def accept(self, body, headers, fault=None):
+    def accept(self, body, headers, fault=None, forward=None):
         if len(body)>MAX_BODY: raise Rejected(413,'body_too_large')
         signature=headers.get('x-connectyhub-signature','')
         expected='sha256='+hmac.new(self.secret,body,hashlib.sha256).hexdigest()
@@ -61,6 +62,13 @@ class Inbox:
                 if existing[0]!=digest: raise Rejected(409,'identity_conflict')
                 db.rollback()
                 return {'receipt':receipt,'state':'held','duplicate':True}
+            if forward is not None:
+                # Old receipts stay held. New requests use the application's durable
+                # webhook ledger; never claim a successful delivery on network failure.
+                db.rollback()
+                if event.startswith('migration.test.'):
+                    raise Rejected(403,'test_event_denied')
+                return forward(body,safe_headers)
             count,size=db.execute('select count(*),coalesce(sum(length(body)),0) from events').fetchone()
             if count>=self.max_events or size+len(body)>self.max_bytes: raise Rejected(507,'capacity_reached')
             if fault: fault('before_insert')
@@ -73,6 +81,28 @@ class Inbox:
 
 def serve(config):
     inbox=Inbox(config['database'],config['secret'])
+    forward=None
+    if config.get('forward_new') is True:
+        target=config.get('handler_url')
+        if target!='http://172.21.0.2:28103/api/webhooks/connectyhub':
+            raise ValueError('Handler not approved')
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,*args,**kwargs): return None
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
+        def forward(body,headers):
+            request=urllib.request.Request(target,data=body,headers=headers,method='POST')
+            try:
+                try: response=opener.open(request,timeout=310)
+                except urllib.error.HTTPError as error: response=error
+                with response:
+                    raw=response.read(262145)
+                    if len(raw)>262144 or 300<=response.status<400:
+                        raise Rejected(502,'invalid_handler_response')
+                    try: value=json.loads(raw)
+                    except (ValueError,UnicodeError): raise Rejected(502,'invalid_handler_response')
+                    return response.status,value
+            except Rejected: raise
+            except Exception: raise Rejected(502,'handler_unavailable') from None
     class Handler(BaseHTTPRequestHandler):
         protocol_version='HTTP/1.1'
         def log_message(self,*args): pass
@@ -95,10 +125,11 @@ def serve(config):
                 if len(self.headers.get_all('x-connectyhub-signature',[]))!=1: raise Rejected(401,'invalid_signature')
                 body=self.rfile.read(length)
                 if len(body)!=length: raise Rejected(400,'incomplete_body')
-                result=inbox.accept(body,{k.lower():v for k,v in self.headers.items()})
+                result=inbox.accept(body,{k.lower():v for k,v in self.headers.items()},forward=forward)
             except Rejected as e: self.reply(e.status,{'error':e.code});return
             except Exception: self.reply(503,{'error':'persistence_unavailable'});return
-            self.reply(202,result)
+            if isinstance(result,tuple): self.reply(*result)
+            else: self.reply(202,result)
     host=config.get('host','127.0.0.1')
     if host not in ('127.0.0.1','172.18.0.1'): raise ValueError('Listener not approved')
     class BoundedServer(ThreadingHTTPServer):

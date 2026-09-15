@@ -64,11 +64,12 @@ export class Broker {
     demand(this.requests.length < 120, 429, 'rate_limit');
     this.requests.push(Date.now());
   }
-  async fixed(base, path, method, body, headers = {}) {
+  callbackTimeout() { return 30_000; }
+  async fixed(base, path, method, body, headers = {}, timeoutMs = 30_000) {
     const response = await this.send(new URL(path, base), {
       method, headers: { 'content-type': 'application/json', ...headers },
       ...(body === undefined ? {} : { body: typeof body === 'string' ? body : canonical(body) }),
-      redirect: 'manual', signal: AbortSignal.timeout(30_000),
+      redirect: 'manual', signal: AbortSignal.timeout(timeoutMs),
     });
     demand(response.status < 300 || response.status >= 400, 502, 'redirect_refused');
     demand(Number(response.headers.get('content-length') || 0) <= 262_144, 502, 'upstream_too_large');
@@ -174,7 +175,7 @@ export class Broker {
     const forwarding = { 'x-inngest-signature': sign(body, this.c.projectSigningKey), 'x-request-id': headers['x-request-id'] };
     for (const key of ['x-inngest-generation-id', 'x-inngest-req-version', 'x-inngest-job-id']) if (headers[key]) forwarding[key] = headers[key];
     const target = new URL(this.c.handlerUrl); target.search = url.search;
-    const response = await this.fixed(target.origin, target.pathname + target.search, 'POST', body, forwarding);
+    const response = await this.fixed(target.origin, target.pathname + target.search, 'POST', body, forwarding, this.callbackTimeout());
     demand(verify(response.text, this.c.projectSigningKey, response.headers.get('x-inngest-signature')), 502, 'handler_signature_required');
     if (response.status === 206) this.validateSteps(JSON.parse(response.text));
     const replyHeaders = { 'x-inngest-signature': sign(response.text, this.c.upstreamSigningKey), 'x-inngest-req-version': response.headers.get('x-inngest-req-version') ?? '1' };

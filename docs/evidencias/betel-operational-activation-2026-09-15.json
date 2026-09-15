@@ -1,0 +1,702 @@
+{
+  "operational-activation": {
+    "activated_at": "2026-09-15T20:29:45.762000+00:00",
+    "active_from_ms": 1789504185762,
+    "image": "sha256:74cbb6994a3316796989689c2e10ee39cd75ca787ede7466d86981957a701df7",
+    "source_sha256": "e853d2ee1d51dc5f2e92bc20333b944efd70e9fe18267706a990e180c658e0b3",
+    "broker_live": true,
+    "webhooks_forward_new": true,
+    "registration_closed": true,
+    "app_flags": {
+      "BETEL_AUTOMATIONS_PAUSED": "0",
+      "BETEL_ANALYSIS_DELIVERY_PAUSED": "0",
+      "BETEL_SCRAPER_PAUSED": "0",
+      "BETEL_OPERATIONAL_SINCE": "2026-09-15T19:25:50.000Z",
+      "BETEL_WHATSAPP_PROVIDER_RELEASED": "1"
+    },
+    "before_activation_backup": "/opt/betel-isolated-rehearsal/backups/activation-20260915T202945Z",
+    "cloud_callbacks_remain_blocked": true,
+    "business_test_messages_sent": false
+  },
+  "activation-ingress-qa": {
+    "observed_at": "2026-09-15T20:57:56.508098+00:00",
+    "old_held_receipt_preserved": true,
+    "new_health_forwarded": true,
+    "diagnostic_skipped_business_work": true,
+    "duplicate_blocked_by_app": true,
+    "unauthorized_status": 401,
+    "external_messages_sent": false,
+    "paid_generation": false
+  },
+  "activation-runs": {
+    "observed_at": "2026-09-15T20:47:22.074164+00:00",
+    "active_from": "2026-09-15T20:29:45.762000+00:00",
+    "runs": [
+      {
+        "id": "01M2KD5BD6KPT86C5TV2JWSJFF",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:47:00.008877Z",
+        "ended_at": "2026-09-15T20:47:00.468206Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KD5BCGSPZS5PANV6EFK8RR",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:46:59.988933Z",
+        "ended_at": "2026-09-15T20:47:00.262148Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KD3GZVWFY8FD08K8S5MC48",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:46:00.197281Z",
+        "ended_at": "2026-09-15T20:46:43.113504Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KD3GZ7JCAC5DR3JHF1XQK3",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:46:00.195692Z",
+        "ended_at": "2026-09-15T20:46:39.467964Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KD1P7GDBQQY1CXAKBQ4N9F",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:45:00.020776Z",
+        "ended_at": "2026-09-15T20:45:00.593853Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KD1P70MTNBT972BVYSBE5G",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:45:00.006061Z",
+        "ended_at": "2026-09-15T20:45:00.41683Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KD1P6TD9J5140RW5DCTBKY",
+        "function": "betel-ai-whatsapp-conversation-history-sync",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:44:59.999477Z",
+        "ended_at": "2026-09-15T20:45:04.538087Z",
+        "business_flags": {
+          "ok": false,
+          "result.ok": false,
+          "result.skipped": false
+        }
+      },
+      {
+        "id": "01M2KD1P6GGG20J6R3KT5PJFSZ",
+        "function": "betel-ai-whatsapp-group-campaigns",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:44:59.986652Z",
+        "ended_at": "2026-09-15T20:45:00.478826Z",
+        "business_flags": {
+          "ok": true,
+          "processed.failed": 0,
+          "processed.ok": true,
+          "processed.processed": 0,
+          "processed.sent": 0
+        }
+      },
+      {
+        "id": "01M2KCZVKPMCWRGHDVBCE7GXN5",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:43:59.993932Z",
+        "ended_at": "2026-09-15T20:44:00.664133Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCZVKMF8E8CGE3XKBPQ8QX",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:43:59.990965Z",
+        "ended_at": "2026-09-15T20:44:00.200362Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCY113SFQ7D8BGDWAG1FW2",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:43:00.019072Z",
+        "ended_at": "2026-09-15T20:43:00.702387Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCY10FV4BX2088ENH2PQKQ",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:42:59.987671Z",
+        "ended_at": "2026-09-15T20:43:00.197043Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCW6DVFFXA4KSC12QKF0Y9",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:42:00.003786Z",
+        "ended_at": "2026-09-15T20:42:00.258215Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCW6DNMEMJDRG1TX611RRW",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:41:59.993623Z",
+        "ended_at": "2026-09-15T20:42:00.647803Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCTBTXP7598VGRPK2ND5BZ",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:41:00.005894Z",
+        "ended_at": "2026-09-15T20:41:00.226207Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCTBTJS06TYM235JR7MBSS",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:40:59.991142Z",
+        "ended_at": "2026-09-15T20:41:00.381807Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCRH7T0583GSMR1SWFWVWG",
+        "function": "betel-ai-whatsapp-followups",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:40:00.002071Z",
+        "ended_at": "2026-09-15T20:40:01.027905Z",
+        "business_flags": {
+          "appointments.ok": true,
+          "appointments.skipped": 0,
+          "ok": true,
+          "planned.ok": true,
+          "processed.ok": true
+        }
+      },
+      {
+        "id": "01M2KCRH7J7QT4SE74J91SNRH0",
+        "function": "betel-ai-whatsapp-group-campaigns",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:39:59.989651Z",
+        "ended_at": "2026-09-15T20:40:00.440521Z",
+        "business_flags": {
+          "ok": true,
+          "processed.failed": 0,
+          "processed.ok": true,
+          "processed.processed": 0,
+          "processed.sent": 0
+        }
+      },
+      {
+        "id": "01M2KCRH7J4T6AVJKERKA9C76M",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:39:59.988142Z",
+        "ended_at": "2026-09-15T20:40:00.496841Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCRH7F0CA07Z083K3TJFDB",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:39:59.987135Z",
+        "ended_at": "2026-09-15T20:40:00.839925Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCPPMKSG11E6E32G9RJV3K",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:38:59.990922Z",
+        "ended_at": "2026-09-15T20:39:00.116574Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCPPMJKYW54RAM6KPA93QB",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:38:59.988651Z",
+        "ended_at": "2026-09-15T20:39:00.392502Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCMW1VH1G7FVRYZ5EEADHW",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:37:59.999306Z",
+        "ended_at": "2026-09-15T20:38:00.459494Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCMW1GR5JSVDJ46CWT27Y8",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:37:59.986584Z",
+        "ended_at": "2026-09-15T20:38:00.105991Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCK1EM177B2S8B2G0BDV3H",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:36:59.991981Z",
+        "ended_at": "2026-09-15T20:37:00.409091Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCK1EH2S4NCPJ3S7XG8M72",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:36:59.987548Z",
+        "ended_at": "2026-09-15T20:37:00.126292Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCH6W404C2MDW7DV8XNYKX",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:36:00.00763Z",
+        "ended_at": "2026-09-15T20:36:00.330847Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCH6VFXC97QFBBBN035NQA",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:35:59.992105Z",
+        "ended_at": "2026-09-15T20:36:00.385543Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCFCADS1K1J8RJVPN8JPY9",
+        "function": "betel-ai-whatsapp-group-campaigns",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:35:00.048776Z",
+        "ended_at": "2026-09-15T20:35:00.448925Z",
+        "business_flags": {
+          "ok": true,
+          "processed.failed": 0,
+          "processed.ok": true,
+          "processed.processed": 0,
+          "processed.sent": 0
+        }
+      },
+      {
+        "id": "01M2KCFC8M3YY7P39GR2TA97V3",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:34:59.995027Z",
+        "ended_at": "2026-09-15T20:35:00.449142Z",
+        "business_flags": {
+          "ok": true,
+          "paused": true,
+          "skipped": true
+        }
+      },
+      {
+        "id": "01M2KCFC8NF05VCR88JR0Q5048",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:34:59.99177Z",
+        "ended_at": "2026-09-15T20:35:00.483724Z",
+        "business_flags": {
+          "ok": true,
+          "result.ok": true,
+          "result.skipped": 0
+        }
+      },
+      {
+        "id": "01M2KCDHNS14FNDW4CAT1BP2PF",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:33:59.997272Z",
+        "ended_at": "2026-09-15T20:34:21.251922Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KCDHNH5SGXHRVZ9JAZ8BJN",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:33:59.988655Z",
+        "ended_at": "2026-09-15T20:34:00.201187Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KCBQ2M0JTBZNP6SRPZBMBA",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:32:59.990775Z",
+        "ended_at": "2026-09-15T20:33:00.116353Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KCBQ2H4GPWJ4AC9J0N3VEJ",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:32:59.99007Z",
+        "ended_at": "2026-09-15T20:33:28.180846Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KC9WG1PDW60XDAYJFY1WKJ",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:32:00.010983Z",
+        "ended_at": "2026-09-15T20:32:28.258605Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KC9WFKYPRJ468E5K6DYH4E",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:31:59.999605Z",
+        "ended_at": "2026-09-15T20:32:00.201216Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KC81WZZD5RHMR4P223GNHF",
+        "function": "betel-ai-whatsapp-sdr-appointments",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:31:00.00158Z",
+        "ended_at": "2026-09-15T20:31:28.356883Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KC81WNHCVBYTN466F4AJRE",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:30:59.991671Z",
+        "ended_at": "2026-09-15T20:31:00.324758Z",
+        "business_flags": {}
+      },
+      {
+        "id": "01M2KC681WJSQ2DX2W8AP55DFD",
+        "function": "betel-ai-scraper-cron",
+        "status": "COMPLETED",
+        "queued_at": "2026-09-15T20:30:00.780224Z",
+        "ended_at": "2026-09-15T20:30:01.118223Z",
+        "business_flags": {}
+      }
+    ]
+  },
+  "activation-services-resumed": {
+    "services_resumed": [
+      "betel-isolated-rehearsal-auth-1",
+      "betel-isolated-rehearsal-rest-1",
+      "betel-isolated-rehearsal-storage-1",
+      "betel-isolated-rehearsal-gateway-1"
+    ],
+    "api_requires_key": 403,
+    "database_recreated": false
+  },
+  "activation-network": [
+    {
+      "name": "CH",
+      "connected": true,
+      "expected": true
+    },
+    {
+      "name": "Meta",
+      "connected": true,
+      "expected": true
+    },
+    {
+      "name": "Google",
+      "connected": true,
+      "expected": true
+    },
+    {
+      "name": "Host SSH",
+      "connected": false,
+      "expected": false
+    },
+    {
+      "name": "Metadata",
+      "connected": false,
+      "expected": false
+    },
+    {
+      "name": "Other project",
+      "connected": false,
+      "expected": false
+    },
+    {
+      "name": "Host public",
+      "connected": false,
+      "expected": false
+    },
+    {
+      "name": "Non-web",
+      "connected": false,
+      "expected": false
+    }
+  ],
+  "broker-correction": {
+    "at": "2026-09-15T20:46:00.001635+00:00",
+    "registration_status": 200,
+    "function_count": 12,
+    "bindings_preserved": true,
+    "other_apps_preserved": true,
+    "scraper_retries": 0,
+    "callback_timeout_ms": 310000,
+    "control_timeout_ms": 30000,
+    "live": true
+  },
+  "activation-final-health": {
+    "at": "2026-09-15T20:58:00.174296+00:00",
+    "containers": [
+      {
+        "name": "betel-isolated-rehearsal-database-1",
+        "running": true,
+        "oom": false
+      },
+      {
+        "name": "betel-isolated-rehearsal-auth-1",
+        "running": true,
+        "oom": false
+      },
+      {
+        "name": "betel-isolated-rehearsal-rest-1",
+        "running": true,
+        "oom": false
+      },
+      {
+        "name": "betel-isolated-rehearsal-storage-1",
+        "running": true,
+        "oom": false
+      },
+      {
+        "name": "betel-isolated-rehearsal-gateway-1",
+        "running": true,
+        "oom": false
+      },
+      {
+        "name": "betel-isolated-rehearsal-app-production-1",
+        "running": true,
+        "oom": false
+      }
+    ],
+    "units_active": [
+      "betel-inngest-production-broker.service",
+      "betel-webhook-inbox.service",
+      "connectyhub-managed-betel-source.timer"
+    ],
+    "broker_live": true,
+    "registration_closed": true,
+    "forward_new": true,
+    "function_count": 12,
+    "scraper_retries": {
+      "attempts": 0
+    }
+  },
+  "activation-recovery": {
+    "archive": "/opt/betel-isolated-rehearsal/backups/operational-20260915T205803Z/configuration.tar.gz",
+    "bytes": 45441377,
+    "sha256": "77f60b3b9186c626b20bdc51cd95d6ae427b7c1c74c2c28df386cbd3107d088b",
+    "base_database_backup": "final-20260915T194845Z",
+    "database_snapshot_repeated": false,
+    "business_automation_live": true,
+    "offhost_verified": true
+  },
+  "activation-betel-http": {
+    "checks": 40,
+    "project": "9349f704-bdaa-41f1-957f-23f3317ba969",
+    "source_scope_verified": true,
+    "client_denied": true,
+    "write_routes_denied": true,
+    "betel_migration_state": "operational",
+    "source_recent": true,
+    "sections": 5
+  },
+  "activation-operational-http": {
+    "checks": 69,
+    "admin_real_source": true,
+    "client_denied": true,
+    "write_routes_denied": true,
+    "source_recent": true,
+    "sections": 5,
+    "engine_functions": 45,
+    "engine_runs_sample": 100,
+    "engine_failed_sample": 0,
+    "verified_files": [
+      {
+        "id": "3e2c7459-8ab8-423e-bee9-959e7aa86201",
+        "bytes": 10714,
+        "sha256": "c5086c382fedae1ec2eed02faeb856f0633fdcfe68963596b2b1f6291dc91c10"
+      },
+      {
+        "id": "3767a59b-389c-4a6c-bc0e-bfe2a4a5b321",
+        "bytes": 10714,
+        "sha256": "c5086c382fedae1ec2eed02faeb856f0633fdcfe68963596b2b1f6291dc91c10"
+      },
+      {
+        "id": "fd24ef50-c56a-429e-b6d4-0184044afb1e",
+        "bytes": 117653,
+        "sha256": "f9adb2c1a71ad60c35689408e79f61344a3e648ced78a428e343f19a09a764a4"
+      }
+    ]
+  },
+  "tests": {
+    "broker": 27,
+    "inbox_windows": 8,
+    "inbox_linux": 8,
+    "commercial_test_messages": 0,
+    "paid_test_generation": false
+  },
+  "limits": [
+    "Natural runs with empty queues are not commercial delivery proof",
+    "Legacy scraper cron is intentional no-op; imported link batches are active",
+    "Meta future integration, zero senders",
+    "External copy is private local computer; not scheduled remote backup",
+    "Base restore used existing roles; not bare-host rebuild"
+  ],
+  "history-fix-publication": {
+    "at": "2026-09-15T20:57:34.738455+00:00",
+    "image": "sha256:a3111e663c398e31e6eb971579360c393168baf29c5a33739af010118512d452",
+    "source_sha256": "0e0412d5021e2af16f0c89d46a168fd39c597b6ef06c02e35585f567ee6d6e8d",
+    "previous_image": "sha256:74cbb6994a3316796989689c2e10ee39cd75ca787ede7466d86981957a701df7",
+    "broker_cutoff_unchanged": true,
+    "app_login_status": 200,
+    "api_health_status": 200,
+    "database_recreated": false,
+    "fix": "exclude_archived_history_instances",
+    "natural_history_run_after_fix_verified": false
+  },
+  "history_fix_app_evidence": {
+    "cause": "Historico incluia3instancias arquivadas; atualEvelyn200connected mesmaAPIkey,3arquivadas404.",
+    "change": "activeInstances adiciona neq(status,archived), nenhum registro alterado",
+    "typecheckPassed": true,
+    "selectionTestPassed": true,
+    "providerAccessExpanded": false,
+    "evidence": "ativacao-instancias-status.json",
+    "currentInstanceMessageListingVerified": {
+      "httpStatus": 200,
+      "operation": "Read-only POST /messages limit1; no import/send",
+      "evidence": "ativacao-historico-leitura.json",
+      "at": "2026-09-15T20:53:49.217Z"
+    },
+    "infraBuild": "e",
+    "keepActivationCutoffs": true,
+    "resumeDependenciesGuard": true,
+    "deployedAt": "2026-09-15T20:57:34Z",
+    "image": "a3111e663c398e31e6eb971579360c393168baf29c5a33739af010118512d452",
+    "postDeployDatabaseFilterVerified": true,
+    "eligibleCurrentInstances": 1,
+    "archivedExcluded": 3,
+    "postDeployEvidence": "ativacao-pos-correcao-verificada.json"
+  },
+  "inbox_forward_timeout_seconds": 310,
+  "browser_verified": {
+    "authenticated": true,
+    "betel_automation_heading_enabled": true,
+    "new_webhooks_enabled": true,
+    "historical_held": 8
+  }
+}
