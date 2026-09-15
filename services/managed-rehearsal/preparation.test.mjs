@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm,lstat,readdir,symlink,unlink} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,writeFile,rm,lstat,readdir,symlink,unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:net';
 import {prepare,marker,removeOwnedChild,sourceManifest,rolesSql,baseSql,seedSql,ids,hash,repo} from './lib.mjs';
-import {composeEnvironment,validateConfig,command,migrations,preflight,validateOwnedContainers,validateRuntimeBounds,validDeadline} from './runner.mjs';
+import {containerIdsOutsideProject,inspectStableOwned,copyIntoEmptyDirectory,composeEnvironment,validateConfig,command,migrations,preflight,validateOwnedContainers,validateRuntimeBounds,validDeadline} from './runner.mjs';
 const require=createRequire(import.meta.url),yaml=require('yaml');
 async function fixture(fn){const parent=await mkdtemp(join(tmpdir(),'managed-rehearsal-tests-'));try{return await fn(parent);}finally{assert.ok(resolve(parent).startsWith(resolve(tmpdir())));await rm(parent,{recursive:true,force:true});}}
 test('fresh fixtures have exclusive secrets, no production endpoints, matching source hashes',()=>fixture(async parent=>{const a=await prepare(parent),b=await prepare(parent);assert.notEqual(a.id,b.id);assert.notEqual(await readFile(join(a.root,'secrets/object-key'),'utf8'),await readFile(join(b.root,'secrets/object-key'),'utf8'));assert.equal((await marker(a.root)).id,a.id);assert.deepEqual(JSON.parse(await readFile(join(a.root,'source-manifest.json'))),await sourceManifest());const env=await readFile(join(a.root,'inputs/auth.env'),'utf8');assert.ok(/@127\.0\.0\.1:5432\/managed_rehearsal/.test(env),'Fixture DSN must target isolated loopback');assert.doesNotMatch(env,/connectyhub\.com|supabase\.co/);assert.match(composeEnvironment(a),/REHEARSAL_IMAGE=/);assert.match(await rolesSql(a.root),/NOINHERIT/);}));
@@ -36,3 +36,8 @@ test('real isolated PostgreSQL: bootstrap and migrations replay, hashes and RLS 
   await sql("UPDATE rehearsal_meta.migrations SET sha256='tampered' WHERE name='0150_managed_projects.sql';");await assert.rejects(migrations(m,dc),/migration changed/);
  }finally{if(started)await command(exe('pg_ctl'),['stop','-D',data,'-m','fast'],{timeout:30000});}
 }));
+
+test('restore copies nested objects into precreated empty destination and refuses overwrite',()=>fixture(async parent=>{const source=join(parent,'source'),target=join(parent,'target');await mkdir(join(source,'project'),{recursive:true});await mkdir(target);await writeFile(join(source,'project','object.bin'),'fixture bytes');await copyIntoEmptyDirectory(source,target);assert.equal(await readFile(join(target,'project','object.bin'),'utf8'),'fixture bytes');await writeFile(join(source,'project','object.bin'),'changed');await assert.rejects(copyIntoEmptyDirectory(source,target),/must be empty/);assert.equal(await readFile(join(target,'project','object.bin'),'utf8'),'fixture bytes');}));
+test('owned inventory tolerates verified disappearance but fails persistent inspection errors',async()=>{let n=0;const lists=[['temporary'],[],[]];assert.deepEqual(await inspectStableOwned(async()=>lists[n++],async()=>{throw Error('gone')}),[]);await assert.rejects(inspectStableOwned(async()=>['stable'],async()=>{throw Error('daemon unavailable')}),/daemon unavailable/);let calls=0;await assert.rejects(inspectStableOwned(async()=>[String(calls++)],async()=>{throw Error('churn')}),/churn/);assert.equal(calls,5);});
+
+test('foreign ID selection excludes only the exact rehearsal label and retains unlabeled containers',()=>{const a='a'.repeat(64),b='b'.repeat(64),c='c'.repeat(64);assert.deepEqual(containerIdsOutsideProject(`${a}\tfixture\n${b}\t\n${c}\tfixture-other\n`,'fixture'),[b,c]);assert.throws(()=>containerIdsOutsideProject('bad\tother','fixture'),/Invalid Docker/);});

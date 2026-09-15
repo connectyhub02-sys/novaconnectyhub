@@ -29,7 +29,8 @@ export async function provisionStorage(exec,parent,{foreignMounts,dockerRoot}){
  const m={kind:'managed-rehearsal-loop-v1',id,root,image,mount,device,inode:s.ino,fileDevice:s.dev};await writeFile(join(root,'storage.json'),JSON.stringify(m,null,2),{mode:0o600,flag:'wx'});await loop(exec,m);
  assert((await readdir(mount)).length===0,'Mountpoint not empty');
  // mkfs receives only the just-created, verified loop device, never caller input.
- await exec('mkfs.ext4',['-q','-F','-E','lazy_itable_init=0,lazy_journal_init=0',device],{timeout:120000});await loop(exec,m);
+ // mke2fs otherwise discards free extents through the loop, punching holes in the preallocated file.
+ await exec('mkfs.ext4',['-q','-F','-E','nodiscard,lazy_itable_init=0,lazy_journal_init=0',device],{timeout:120000});await loop(exec,m);checkAllocation(await lstat(image));
  await exec('mount',['--types','ext4','--options','nodev,nosuid,noexec',device,mount]);
  await writeFile(join(root,'provisioned.json'),JSON.stringify({id,capacity_bytes:imageBytes}),{mode:0o600});return m;
 }

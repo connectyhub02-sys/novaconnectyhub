@@ -1,5 +1,6 @@
 # Ensaio gerenciado — revisão 3 para VPS compartilhada
 
+> Atualização de execução (15/09/2026): o ensaio Linux autorizado foi concluído com 138 checks, restauração, sentinela, watchdog e cleanup. As descrições de pendências locais abaixo preservam o estado de revisão 3 anterior à execução. Resultado atual, correções e limites: [relatório Linux](ensaio-linux-gerenciado-2026-09-15.md). Não houve publicação do portal nem migração de clientes.
 15/09/2026. **Preparação local implementada; ainda não homologada no Docker/Linux.** Substitui a [revisão 2](pacote-ensaio-linux-gerenciado-2026-09-15-rev02.md). Não houve SSH, execução na VPS, instalação, pull/build Docker, alteração de firewall/mount/container produtivo, deploy ou chamada paga. Voz 17731ed é outro pacote, já publicado.
 
 ## Decisão e substituição das guardas

@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "at": "2026-09-15T13:44:13.562634+00:00",
+  "scope": "fictional isolated Linux rehearsal on shared host; no production deployment",
+  "source_hash": "a70ec167f8a4cb4ec28c3b2cee00daefaa2c273783189ab90445fdf8e0510f37",
+  "summary": {
+    "passed": true,
+    "id": "782e9959-f7ba-48fa-a787-8c5021759ef2",
+    "finished": "2026-09-15T13:43:18.368Z",
+    "existing_containers_unchanged": true,
+    "production_mutations": 0,
+    "linux_executed": true,
+    "inngest": "excluded; automatic review block remains"
+  },
+  "preflight": {
+    "at": "2026-09-15T13:41:23.306Z",
+    "quota": {
+      "hard_bound": "dedicated filesystem capacity",
+      "capacity_bytes": 2040373248,
+      "available_bytes": 1916092416
+    },
+    "budget": {
+      "containers": 9,
+      "container_memory_bytes": 2415919104,
+      "container_cpus": 2.75,
+      "host_supervisor_reserve_MiB": 256,
+      "host_supervisor_cgroup_limit": false
+    },
+    "storage_id": "f6b9c33d-f67e-48cc-80c1-bc3bb0307f54",
+    "existing_containers": 17,
+    "maximum_CPU_percent": 47.78254649499285,
+    "baseline_seconds": 300,
+    "compose_validated": true,
+    "linux_execution_tests": false
+  },
+  "phases": {
+    "result-expired": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login admin",
+        "password login a",
+        "password login b",
+        "password login productAdmin",
+        "expired job not replayed",
+        "expired finish fenced",
+        "uncertain status persisted"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-pressure": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "pressure sidecar ready",
+        "pressure filesystem accepts small control write",
+        "bounded 1MiB tmpfs refuses 2MiB write",
+        "failed write not exposed as ready"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-revoked": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login productAdmin",
+        "password login b",
+        "password login a",
+        "password login admin",
+        "membership revocation effective",
+        "revoked worker denied"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-load": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login admin",
+        "password login a",
+        "password login b",
+        "password login productAdmin",
+        "limited REST load without errors"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-restored": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login admin",
+        "password login a",
+        "password login b",
+        "password login productAdmin",
+        "restored RLS A",
+        "restored RLS B",
+        "restored record count",
+        "restored tombstone",
+        "restored object hash and bytes",
+        "restored object hash and bytes",
+        "restored pending reservation",
+        "restored job result",
+        "restored idempotency",
+        "restored alert event",
+        "restored alert isolation"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-users": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "create fictional admin",
+        "create fictional productAdmin",
+        "create fictional a",
+        "create fictional b"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-worker": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login a",
+        "password login admin",
+        "password login productAdmin",
+        "password login b",
+        "separate worker process completed diagnostic"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    },
+    "result-exercise": {
+      "passed": true,
+      "checks": [
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "only loopback interface",
+        "no IPv4 route",
+        "TEST-NET TCP unreachable without contacting production",
+        "password login admin",
+        "password login productAdmin",
+        "password login b",
+        "password login a",
+        "A project scope",
+        "B project scope",
+        "product admin is not infrastructure admin",
+        "explicit infrastructure admin",
+        "invalid JWT denied",
+        "admin cannot read worker secret hashes",
+        "real refresh",
+        "refreshed session valid",
+        "record persisted",
+        "cross-client record invisible",
+        "cross-client write denied",
+        "database file 1MiB limit",
+        "reserve 0",
+        "client cannot finalize",
+        "sidecar put 0",
+        "same bytes retry",
+        "service finalizes once",
+        "finalization idempotent",
+        "bytes round trip",
+        "capability cannot cross project",
+        "reserve 1024",
+        "client cannot finalize",
+        "sidecar put 1024",
+        "same bytes retry",
+        "service finalizes once",
+        "finalization idempotent",
+        "bytes round trip",
+        "capability cannot cross project",
+        "reserve 1048576",
+        "client cannot finalize",
+        "sidecar put 1048576",
+        "same bytes retry",
+        "service finalizes once",
+        "finalization idempotent",
+        "bytes round trip",
+        "capability cannot cross project",
+        "catalog invisible to B",
+        "begin deletion",
+        "tombstone persisted",
+        "deletion finalized",
+        "tombstone prevents resurrection",
+        "exactly one storage debit record",
+        "pending reservation retained",
+        "foreign reservation denied",
+        "project storage quota enforced",
+        "job enqueued",
+        "enqueue idempotent",
+        "two concurrent claims yield one lease",
+        "foreign worker cannot finish",
+        "finish accepted",
+        "finish replay fenced",
+        "one job usage",
+        "unregistered worker denied",
+        "lease to expire",
+        "telemetry saved",
+        "telemetry saved",
+        "telemetry saved",
+        "telemetry replay harmless",
+        "one sustained alert",
+        "global alert hidden",
+        "telemetry authentication"
+      ],
+      "engine": "not included",
+      "paid_calls": 0,
+      "runtime": "Linux container"
+    }
+  },
+  "total_checks": 138,
+  "load": {
+    "requests": 160,
+    "duration_seconds": 30,
+    "max_concurrency": 10,
+    "errors": 0,
+    "p50_ms": 15,
+    "p95_ms": 60,
+    "scope": "fictional read-only REST, not production capacity"
+  },
+  "pressure": {
+    "capacity": 1048576
+  },
+  "backup": {
+    "sha256": "41867557850d26eecf479b8cd34fb46ae02437a1e301cb95b8bd46d538d6c236",
+    "bytes": 207318,
+    "method": "writers stopped; logical PG dump + private objects",
+    "object_files": 3
+  },
+  "runtime": {
+    "snapshots": 35,
+    "services_observed": [
+      "auth",
+      "database",
+      "executor",
+      "managed-gateway",
+      "objects",
+      "objects-pressure",
+      "rest",
+      "telemetry-gateway",
+      "worker"
+    ],
+    "bounds_checked": true,
+    "maximum_observed_running_containers": 8,
+    "maximum_observed_running_memory_limits_bytes": 2147483648,
+    "maximum_observed_running_cpu_limits": 2.5
+  },
+  "production": {
+    "containers": 16,
+    "all_configuration_identity_lifecycle_health_unchanged": true,
+    "healthchecks_healthy": 15,
+    "restarts": 0
+  },
+  "sentinel_preserved": {
+    "detected_change": false,
+    "containers": 17,
+    "production_reverted": false
+  },
+  "sentinel_changed": {
+    "detected_change": true,
+    "containers": 17,
+    "production_reverted": false
+  },
+  "sentinel_removed": {
+    "id": "b4b931da07910221d01b067074b4a1dd6b0f74e617e19ec39e7e319f28072617",
+    "removed": true
+  },
+  "watchdog": {
+    "containers_before": 1,
+    "passed": true,
+    "shortened_deadline_ms": 4000,
+    "containers_after": 0,
+    "scope": "single fictional database; real independent watchdog cleanup path"
+  },
+  "image_code_access": {
+    "uid": 1000,
+    "readable_code_files": 10
+  },
+  "linux_copy": {
+    "linux_copy_passed": true,
+    "overwrite_refused": true
+  },
+  "cleanup": {
+    "containers_remaining": 0,
+    "storage_release_pending": false,
+    "owned_mounts_remaining": 0,
+    "owned_loops_remaining": 0,
+    "fictional_images_remaining": 0,
+    "active_rehearsal_processes": 0,
+    "evidence_export_sha256_before_release": "d75e47a728b93bfe1be29111855473dc794508a8220708bc2b5626b10090354f",
+    "retained_private_directory_bytes": {
+      "runtime": 155894740,
+      "source": 120823,
+      "audit": 331869
+    },
+    "retained": "official image cache; private portable Node and archive; source and audit; small released storage markers. No prune."
+  }
+}
