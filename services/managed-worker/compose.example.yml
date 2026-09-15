@@ -1,0 +1,48 @@
+# Preparation only. One explicit enrollment per project; no service_role in worker.
+services:
+  managed-gateway:
+    build: .
+    command: [node, gateway.mjs]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      MANAGED_DATABASE_REST_URL: ${MANAGED_DATABASE_REST_URL:?Isolated private PostgREST endpoint required}
+      MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
+      MANAGED_GATEWAY_BIND: 0.0.0.0
+    secrets: [database_service_key]
+    networks: [managed_private, database_private]
+    # No published ports. Only the private worker network reaches this gateway.
+    logging:
+      options: {max-size: "5m", max-file: "2"}
+  worker:
+    build: .
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      MANAGED_GATEWAY_URL: http://managed-gateway:3080/api/managed-workers
+      MANAGED_WORKER_KEY_FILE: /run/secrets/project_worker_key
+    secrets: [project_worker_key]
+    networks: [managed_private]
+    logging:
+      options: {max-size: "5m", max-file: "2"}
+secrets:
+  database_service_key:
+    file: ${MANAGED_DATABASE_KEY_PATH:?Private isolated database service key file required}
+  project_worker_key:
+    file: ${MANAGED_WORKER_KEY_PATH:?Configure private project-scoped key file}
+networks:
+  managed_private:
+    internal: true
+  database_private:
+    external: true
+    name: ${MANAGED_DATABASE_NETWORK:?Existing isolated database network required}

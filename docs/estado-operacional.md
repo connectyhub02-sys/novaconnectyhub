@@ -672,3 +672,15 @@ O histórico mantém as estimativas antigas, inclusive custos que estavam
 subestimados; o painel não representa conciliação retroativa nem lucro líquido.
 Despesas efetivas e receita por lote de crédito continuam sem vínculo individual.
 Nenhum novo débito de teste; orçamento conservador permanece US$ 0,959893.
+
+## Portal de projetos gerenciados — piloto local de 15/09/2026
+
+Após autorização do titular, implementado em worktree isolado `codex/managed-projects`, base `9d864e13`: entrada `/infraestrutura`, hierarquia empresas/projetos, administração global explícita, migration 0150, RLS, CRUD JSON, arquivos pequenos privados, fila idempotente de diagnóstico, worker e gateway interno. A produção continua sem essas tabelas/serviços; nenhuma migration, publicação, reinício ou migração de clientes foi executada. ConnectyHub, Betel e Vision são referências fictícias na prévia.
+
+22 testes locais de autorização/SQL/quotas/recuperação e 20 verificações HTTP passaram novamente. Gateway real passou ensaio com PostgREST simulado. Restauração recuperou arquivos, fila e RLS em segunda instância PGlite; não é teste de backup externo de produção. Capturas reais de Banco, Runs e Infraestrutura estão em `docs/evidencias/managed-pilot-*.png`. Duas amostras reais da VPS foram coletadas em leitura, sem instalar coleta contínua.
+
+Build inicial passou compilação/TypeScript e encontrou requisito de Supabase no sitemap legado. Executor isolado com endpoint loopback e chaves fictícias preparado para completar validação sem segredos. Resultado final, limites e próximos passos em [relatório do piloto](piloto-projetos-gerenciados-2026-09-15.md). Não publicar artefatos de build com configuração fictícia.
+
+Pendências: autenticação/REST real de ensaio, object storage definitivo, vínculo e licença do Inngest, métricas contínuas/latência, limites sob carga e recuperação externa. O piloto não é paridade Cloud, não integra os clientes reais e não altera carteira ou tarifas. Betel continua na última fase de migração.
+
+Complemento do piloto: build isolado final terminou com sucesso (112 páginas e TypeScript), ESLint passou e Next compilado negou acesso ao recurso desligado. O relatório detalha a diferença entre status da API e página transmitida por streaming. Artefato de build fictício não publicável; nenhuma mudança produtiva.

@@ -1,0 +1,40 @@
+{
+  "measured_at": "2026-09-15T02:01:53.560175-03:00",
+  "cpu_percent": 1.005025125628145,
+  "memory_total": 25199177728,
+  "memory_available": 22360428544,
+  "disk_total": 310911414272,
+  "disk_used": 29507858432,
+  "network_rx_bytes": 7463878873,
+  "network_tx_bytes": 43706674536,
+  "services": [
+    {
+      "name": "supabase-auth",
+      "status": "healthy"
+    },
+    {
+      "name": "connectyhub-inngest-inngest-1",
+      "status": "healthy"
+    },
+    {
+      "name": "connectyhub-inngest-postgres-1",
+      "status": "healthy"
+    },
+    {
+      "name": "connectyhub-inngest-redis-1",
+      "status": "healthy"
+    },
+    {
+      "name": "supabase-studio",
+      "status": "healthy"
+    },
+    {
+      "name": "supabase-storage",
+      "status": "healthy"
+    },
+    {
+      "name": "supabase-db",
+      "status": "healthy"
+    }
+  ]
+}

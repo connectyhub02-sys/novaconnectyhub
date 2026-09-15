@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+const base='http://127.0.0.1:3026';const a='30000000-0000-4000-8000-000000000001',b='30000000-0000-4000-8000-000000000003';
+let checks=0;const check=(value,message)=>{assert.ok(value,message);checks++;};
+async function call(path,identity='connectyhub',body,headers={}){const r=await fetch(base+path,{method:body?'POST':'GET',headers:{cookie:`pilot_identity=${identity}`,...(body?{'Content-Type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});const raw=await r.text();let data;try{data=JSON.parse(raw);}catch{data=raw;}return {status:r.status,data};}
+const list=await call('/api/managed-projects');check(list.status===200&&list.data.projects.length===1&&list.data.projects[0].id===a,'project scope');
+check((await call(`/api/managed-projects/${a}`,'betel')).status===404,'cross-client snapshot');
+check((await call('/api/managed-infrastructure','produto')).status===403,'product admin cannot see host');
+check((await call('/api/managed-infrastructure','admin')).status===200,'explicit infrastructure admin');
+check((await call(`/api/managed-projects/${a}`,'connectyhub',{action:'record.create',collection:'notes',data:{text:'blocked'}},{Origin:'https://unrelated.invalid'})).status===403,'cross-origin mutation');
+check((await call(`/api/managed-projects/${a}`,'leitura',{action:'record.create',collection:'notes',data:{text:'read only'}})).status===409,'viewer write denied');
+const record=await call(`/api/managed-projects/${a}`,'connectyhub',{action:'record.create',collection:'notes',data:{text:'Fictitious API rehearsal'},organization_id:'10000000-0000-4000-8000-000000000002'});
+check(record.status===200,'record creation with server-derived organization');
+const snapshot=await call(`/api/managed-projects/${b}`,'betel');check(!snapshot.data.records.some(r=>r.id===record.data.result.id),'private record invisible in B');
+const file=await call(`/api/managed-projects/${a}`,'connectyhub',{action:'file.create',name:'pilot.txt',base64:Buffer.from('isolated-pilot').toString('base64')});check(file.status===200,'private file stored');
+check((await call(`/api/managed-projects/${a}/files/${file.data.result}`,'connectyhub')).data==='isolated-pilot','file round trip');
+check((await call(`/api/managed-projects/${a}/files/${file.data.result}`,'betel')).status>=400,'file denies B');
+const idem='smoke-'+Date.now();const job=await call(`/api/managed-projects/${a}`,'connectyhub',{action:'job.create',idempotency_key:idem});check(job.status===200,'enqueue');
+check((await call(`/api/managed-projects/${a}`,'connectyhub',{action:'job.create',idempotency_key:idem})).data.result===job.data.result,'idempotent enqueue');
+const worker=spawnSync(process.execPath,['services/managed-worker/worker.mjs'],{encoding:'utf8',env:{...process.env,MANAGED_GATEWAY_URL:base+'/api/managed-workers',MANAGED_WORKER_KEY:'mpw_LOCAL_DIAGNOSTIC_ONLY_NOT_A_REAL_CREDENTIAL',MANAGED_WORKER_ONCE:'1'},timeout:25000});
+check(worker.status===0,`worker: ${worker.stderr}`);
+const after=await call(`/api/managed-projects/${a}`);check(after.data.jobs.find(j=>j.id===job.data.result)?.status==='succeeded','durable worker completed job');check(after.data.usage.filter(u=>u.operation_id===job.data.result&&u.unit==='job').length===1,'one usage entry');
+check(!JSON.stringify(after.data).includes('lease_token'),'lease secret omitted');
+check((await call('/api/managed-workers','admin',{action:'claim'},{Authorization:'Bearer mpw_wrong_key_that_is_not_registered_1234'})).status===403,'unregistered worker denied');
+check((await call(`/api/managed-projects/${a}`,'connectyhub',{action:'file.delete',id:file.data.result})).data.result===true,'file deletion');
+check((await call(`/api/managed-projects/${a}/files/${file.data.result}`)).status===404,'deleted file unavailable');
+console.log(JSON.stringify({checks,passed:true,environment:'loopback-pilot',paid_calls:0,production_mutations:0}));

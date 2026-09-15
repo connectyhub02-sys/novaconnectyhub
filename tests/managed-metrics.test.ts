@@ -1,0 +1,4 @@
+import {describe,it,expect} from 'vitest';
+import {evaluateAlerts,networkRate,defaultAlerts,type HostSample} from '../src/lib/managed-projects/contracts';
+const sample:HostSample={measured_at:'2026-09-15T00:00:00Z',cpu_percent:90,memory_total:100,memory_available:5,disk_total:100,disk_used:90,network_rx_bytes:100,network_tx_bytes:200,services:[{name:'db',status:'unhealthy'}]};
+describe('observed telemetry',()=>{it('does not report missing data as healthy',()=>expect(evaluateAlerts(undefined,defaultAlerts)).toHaveLength(1));it('detects load, stale data and health failures',()=>expect(evaluateAlerts(sample,defaultAlerts,Date.parse(sample.measured_at)+600000)).toHaveLength(5));it('calculates a rate only for monotonic counters and positive time',()=>{expect(networkRate(sample,{...sample,measured_at:'2026-09-15T00:00:10Z',network_rx_bytes:200,network_tx_bytes:50})).toEqual({rx:10,tx:null});expect(networkRate(sample,sample)).toEqual({rx:null,tx:null});});});
