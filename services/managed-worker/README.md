@@ -23,4 +23,8 @@ O job vencido fica `uncertain`; o worker não repete operações externas por co
 
 O coletor Python lê `/proc`, filesystem e estado de contêineres explicitamente permitidos; não lê ambientes nem logs privados. Ele emite uma amostra JSON e não instala agendamento. Coleta periódica, envio privado, retenção, banco e alertas sustentados ainda precisam de ensaio.
 
+Atualização local posterior: `telemetry.mjs` executa ciclos seriais; `telemetry-gateway-main.mjs` recebe em loopback 3082, valida chave própria e campos permitidos e persiste diretamente no PostgREST privado. A coleta não depende de polling de funções Vercel. O receptor mantém sete dias de amostras, com limpeza no máximo horária após uma gravação. O ensaio `real-telemetry.mjs` confirmou três ciclos até PostgreSQL/PostgREST reais e isolamento das métricas; os valores foram fictícios. Nenhum coletor contínuo está instalado. O controlador de alertas tem histerese e cooldown testados, mas ainda não persiste seu estado nem emite notificações.
+
+`inngest-reader.mjs` consulta somente metadados do app exclusivo vinculado ao projeto; não aceita GraphQL livre. O contrato está baseado no schema oficial v1.44.0. A migration 0152 e a rota `/api/managed-projects/:id/engine` fazem parte do segundo marco local; nenhum vínculo produtivo foi criado. Consulte o bloqueio de execução do motor real e as limitações em `docs/validacao-integracoes-gerenciadas-2026-09-15.md`.
+
 Reversão do piloto: parar seus processos locais, preservar relatórios desejados e descartar apenas dados fictícios. Para produção futura será necessário backup, ensaio de migration e plano próprio de retorno; não há rollback produtivo executado ou necessário nesta etapa.

@@ -1,10 +1,13 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {managedDatabaseFixture,ids} from '../../tests/helpers/managed-database';
 export const context=new AsyncLocalStorage<{user:string}>();
 export const users={admin:ids.admin,produto:ids.productAdmin,connectyhub:ids.a,betel:ids.b,leitura:ids.viewer};
 export const pilotKey='mpw_LOCAL_DIAGNOSTIC_ONLY_NOT_A_REAL_CREDENTIAL';
 const init=managedDatabaseFixture().then(async f=>{
+ await f.db.exec(readFileSync('supabase/migrations/0151_managed_objects.sql','utf8'));
+ await f.db.exec(readFileSync('supabase/migrations/0152_managed_inngest_bindings.sql','utf8'));
  await f.db.query("update managed_projects set name='ConnectyHub',slug='connectyhub' where id=$1",[ids.pA]);
  await f.db.query("update managed_projects set name='Betel',slug='betel' where id=$1",[ids.pB]);
  const org='10000000-0000-4000-8000-000000000003';await f.db.query("insert into organizations values($1,'Cliente Vision')",[org]);

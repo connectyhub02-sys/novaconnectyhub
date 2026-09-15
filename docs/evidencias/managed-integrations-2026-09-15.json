@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-15",
+  "environment": "isolated-local-Windows",
+  "production_mutations": 0,
+  "paid_calls": 0,
+  "unit_integration_suite": {
+    "files": 10,
+    "tests": 39,
+    "passed": true
+  },
+  "pilot_http_checks": 20,
+  "object_http_checks": 13,
+  "real_auth_next_rest_telemetry_checks": 59,
+  "postgres": "17.11",
+  "postgrest": "16.3",
+  "auth": {
+    "version": "2.197.0",
+    "listener_only_windows_adaptation": true,
+    "real_password_login": true,
+    "real_refresh": true,
+    "real_ssr_cookies": true
+  },
+  "build": {
+    "passed": true,
+    "static_pages": 112,
+    "fictional_configuration_do_not_deploy": true
+  },
+  "inngest": {
+    "metadata_adapter_tests": 4,
+    "engine_execution": "blocked_by_automatic_review_twice",
+    "production_connected": false
+  },
+  "recovery": "PGlite and private objects; quiescent fictional writers"
+}

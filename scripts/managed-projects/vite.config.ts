@@ -1,5 +1,7 @@
 import {defineConfig} from 'vite';
 import {resolve} from 'node:path';
+process.env.MANAGED_OBJECT_GATEWAY_URL='http://127.0.0.1:3081/';
+process.env.MANAGED_OBJECT_SIGNING_SECRET='LOCAL_OBJECT_PILOT_FICTIONAL_SECRET_NOT_FOR_PRODUCTION';
 const root=process.cwd();const here=resolve(root,'scripts/managed-projects');
 process.env.MANAGED_TELEMETRY_TOKEN='LOCAL_PILOT_TELEMETRY_NOT_A_PRODUCTION_SECRET';
 export default defineConfig({root:here,resolve:{alias:[
@@ -26,7 +28,7 @@ export default defineConfig({root:here,resolve:{alias:[
  response=Response.json({identity,admin:session.admin,userId:session.userId,projects,companies,snapshot,path,samples,settings});
  }else{
  const parts=url.pathname.split('/').filter(Boolean);let file:string;let params:Record<string,string>={};
- if(parts[1]==='managed-projects'&&!parts[2])file='managed-projects/route.ts';else if(parts[1]==='managed-projects'&&parts[2]&&!parts[3]){file='managed-projects/[projectId]/route.ts';params={projectId:parts[2]};}else if(parts[1]==='managed-projects'&&parts[3]==='files'&&parts[4]){file='managed-projects/[projectId]/files/[fileId]/route.ts';params={projectId:parts[2],fileId:parts[4]};}else if(['managed-infrastructure','managed-workers','managed-telemetry'].includes(parts[1]))file=parts[1]+'/route.ts';else{res.statusCode=404;res.end();return;}
+ if(parts[1]==='managed-projects'&&!parts[2])file='managed-projects/route.ts';else if(parts[1]==='managed-projects'&&parts[2]&&!parts[3]){file='managed-projects/[projectId]/route.ts';params={projectId:parts[2]};}else if(parts[1]==='managed-projects'&&parts[3]==='files'&&parts[4]){file='managed-projects/[projectId]/files/[fileId]/route.ts';params={projectId:parts[2],fileId:parts[4]};}else if(parts[1]==='managed-projects'&&parts[3]==='objects'&&parts[4]){file='managed-projects/[projectId]/objects/[objectId]/route.ts';params={projectId:parts[2],objectId:parts[4]};}else if(parts[1]==='managed-projects'&&parts[3]==='engine'){file='managed-projects/[projectId]/engine/route.ts';params={projectId:parts[2]};}else if(['managed-infrastructure','managed-workers','managed-telemetry'].includes(parts[1]))file=parts[1]+'/route.ts';else{res.statusCode=404;res.end();return;}
  const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>1450000){res.statusCode=413;res.end();return;}chunks.push(chunk);}
  const headers=new Headers();for(const [key,v]of Object.entries(req.headers))if(typeof v==='string')headers.set(key,v);
  const request=new Request(url,{method:req.method,headers,...(req.method!=='GET'&&req.method!=='HEAD'?{body:Buffer.concat(chunks)}:{})});

@@ -1,6 +1,6 @@
 export type ManagedProject = {id:string; organization_id:string; name:string; slug:string; status:'draft'|'active'|'paused'; concurrency_limit:number; queue_limit:number; storage_limit_bytes:number; created_at:string};
 export type Row = Record<string, unknown>;
-export type ProjectSnapshot = {project:ManagedProject; records:Row[]; files:Row[]; jobs:Row[]; logs:Row[]; usage:Row[]; members:Row[]; resources:Row[]; truncated:boolean};
+export type ProjectSnapshot = {project:ManagedProject; records:Row[]; files:Row[]; jobs:Row[]; logs:Row[]; usage:Row[]; members:Row[]; resources:Row[]; objects?:Row[]; truncated:boolean};
 export type HostSample = {measured_at:string;cpu_percent:number|null;memory_total:number;memory_available:number;disk_total:number;disk_used:number;network_rx_bytes:number|null;network_tx_bytes:number|null;services:{name:string;status:string}[]};
 export type AlertSettings = {cpu_percent:number;memory_percent:number;disk_percent:number;stale_seconds:number};
 export const defaultAlerts:AlertSettings={cpu_percent:85,memory_percent:85,disk_percent:80,stale_seconds:300};
