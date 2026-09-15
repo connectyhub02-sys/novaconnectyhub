@@ -1,0 +1,46 @@
+{
+  "native_http_passed": true,
+  "checks": 107,
+  "phases": [
+    {
+      "phase": "users",
+      "passed": true,
+      "checks": 4
+    },
+    {
+      "phase": "exercise",
+      "passed": true,
+      "checks": 65
+    },
+    {
+      "phase": "expired",
+      "passed": true,
+      "checks": 7
+    },
+    {
+      "phase": "worker",
+      "passed": true,
+      "checks": 5
+    },
+    {
+      "phase": "load",
+      "passed": true,
+      "checks": 5
+    },
+    {
+      "phase": "revoked",
+      "passed": true,
+      "checks": 6
+    },
+    {
+      "phase": "restored",
+      "passed": true,
+      "checks": 15
+    }
+  ],
+  "linux_containers_executed": false,
+  "network_isolation_tested": false,
+  "pressure_tmpfs_tested": false,
+  "production_mutations": 0,
+  "restoration": "new PostgreSQL database and new objects directory, original preserved during verification"
+}

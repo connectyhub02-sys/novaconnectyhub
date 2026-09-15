@@ -8,3 +8,5 @@
 !services/managed-rehearsal/
 !services/managed-rehearsal/Dockerfile
 !services/managed-rehearsal/Dockerfile.dockerignore
+!services/managed-rehearsal/lib.mjs
+!services/managed-rehearsal/harness.mjs

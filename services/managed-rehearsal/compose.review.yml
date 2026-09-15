@@ -1,4 +1,4 @@
-# REVIEW ONLY. Missing private fixture/bootstrap inputs deliberately prevent startup.
+# REVIEW BEFORE EXECUTION. runner.mjs prepares fresh private inputs and bounds lifecycle.
 # No Inngest service: the runtime action remains blocked by automatic review.
 name: connectyhub-managed-rehearsal
 
@@ -21,8 +21,9 @@ x-bounds: &bounds
 
 x-node: &node
   <<: *bounds
+  image: ${REHEARSAL_IMAGE:?Unique local rehearsal image required}
   build:
-    context: ../..
+    context: ${REHEARSAL_SOURCE_ROOT:?Reviewed source directory required}
     dockerfile: services/managed-rehearsal/Dockerfile
 
 services:
@@ -50,11 +51,6 @@ services:
       - type: bind
         source: ${REHEARSAL_DATA_ROOT:?Dedicated empty quota-limited rehearsal directory required}/postgres
         target: /var/lib/postgresql/data
-        bind: {create_host_path: false}
-      - type: bind
-        source: ${REHEARSAL_BOOTSTRAP_ROOT:?Reviewed fictional role and schema bootstrap required}
-        target: /docker-entrypoint-initdb.d
-        read_only: true
         bind: {create_host_path: false}
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U postgres -d managed_rehearsal"]
@@ -99,12 +95,15 @@ services:
       PGRST_SERVER_PORT: "3000"
     depends_on:
       database: {condition: service_healthy}
+    networks:
+      isolated:
+        aliases: [kong]
 
   managed-gateway:
     <<: *node
     command: [node, worker/gateway.mjs]
     environment:
-      MANAGED_DATABASE_REST_URL: http://rest:3000/
+      MANAGED_DATABASE_REST_URL: http://kong:3000/
       MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
       MANAGED_GATEWAY_BIND: 0.0.0.0
     secrets: [database_service_key]
@@ -123,7 +122,7 @@ services:
     <<: *node
     command: [node, worker/telemetry-gateway-main.mjs]
     environment:
-      MANAGED_DATABASE_REST_URL: http://rest:3000/
+      MANAGED_DATABASE_REST_URL: http://kong:3000/
       MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
       MANAGED_TELEMETRY_KEY_FILE: /run/secrets/telemetry_key
       MANAGED_GATEWAY_BIND: 0.0.0.0
@@ -132,7 +131,7 @@ services:
 
   objects:
     <<: *node
-    command: [node, objects/main.mjs]
+    command: [node, managed-objects/main.mjs]
     mem_limit: 256m
     memswap_limit: 256m
     environment:
@@ -146,6 +145,34 @@ services:
         target: /data/objects
         bind: {create_host_path: false}
 
+  executor:
+    <<: *node
+    profiles: [tools]
+    command: [node, rehearsal/harness.mjs, health]
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.50
+    secrets: [database_service_key, project_worker_key, worker_b_key, telemetry_key, object_signing_key, fixture_accounts]
+    volumes:
+      - type: bind
+        source: ${REHEARSAL_EVIDENCE_ROOT:?Private fixture evidence directory required}
+        target: /evidence
+        bind: {create_host_path: false}
+
+  objects-pressure:
+    <<: *node
+    profiles: [pressure]
+    command: [node, managed-objects/main.mjs]
+    mem_limit: 256m
+    memswap_limit: 256m
+    environment:
+      MANAGED_OBJECT_BIND: 0.0.0.0
+      MANAGED_OBJECT_ROOT: /data/objects
+      MANAGED_OBJECT_SECRET_FILE: /run/secrets/object_signing_key
+    secrets: [object_signing_key]
+    # Disposable bounded filesystem: actual ENOSPC test without filling host disk.
+    tmpfs: ["/data/objects:size=1m,uid=1000,gid=1000,mode=0700"]
+
 secrets:
   database_password:
     file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/database-password
@@ -157,6 +184,10 @@ secrets:
     file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/telemetry-key
   object_signing_key:
     file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/object-key
+  worker_b_key:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/worker-b-key
+  fixture_accounts:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/accounts.json
 
 networks:
   isolated:
