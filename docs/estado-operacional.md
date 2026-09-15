@@ -770,3 +770,13 @@ recuperação `cors-config-20260915T181810Z` copiado para fora da VPS e validado
 hash. O aceite anterior Auth/SSR não substituía login real no navegador. A tarefa
 Betel confirmou depois o formulário real no Chrome: viewer QA chegou a `/admin`
 com sua identidade visível, sem erro de conexão. Nenhuma senha original alterada.
+
+## Betel: destino definitivo em preparação — 15/09/2026
+
+Titular autorizou a continuação definitiva por meio da tarefa coordenadora. Portal autenticado conferido; Betel cadastrada em Rascunho, reutilizando identidade da empresa já existente. Ainda sem conexão operacional/consumo no portal ou corte da origem. DNS/TLS, broker dos 12 handlers, pausa coordenada, snapshot final e reversão em preparação. [Estado e limites](betel-producao-preparacao-2026-09-15.md).
+
+## Betel: hospedagem e dados migrados, automações retidas — 15/09/2026
+
+Substitui a preparação acima. Aplicação Betel publicada na VPS em https://betel.connectyhub.com.br, Supabase próprio em https://betel-supabase.connectyhub.com.br; endereço Vercel anterior encaminha para a VPS. ConnectyHub principal continua na Vercel. Snapshot final comparou 150 tabelas de origem; destino com 154 tabelas e 217 relações sem violações. Login novo/legado, SSR e permissões passaram; quatro usuários originais preservados, contas QA removidas.
+
+Backup final 19:48:45 UTC restaurado e copiado fora da VPS com SHA conferido. Portal conectado às 19:55:30 UTC com dados reais da Betel e 12 funções registradas; 37 verificações HTTP Betel e 69 de regressão CH passaram. **Automações e webhooks permanecem retidos**, sem replay nem comprovação comercial dos 12 fluxos. Cloud preservado, callbacks antigos 503. A cópia externa é local e o restore usou roles do mesmo cluster. [Relatório e limites](betel-migracao-vps-2026-09-15.md).

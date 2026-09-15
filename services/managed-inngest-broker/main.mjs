@@ -1,10 +1,11 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { Broker, Ledger } from './broker.mjs';
+import { ProductionBroker } from './production.mjs';
 
 const config = JSON.parse(await readFile(process.env.BROKER_CONFIG, 'utf8'));
 const ledger = await Ledger.open(process.env.BROKER_LEDGER);
-const broker = new Broker(config, ledger);
+const broker = config.mode==='betel-production'?new ProductionBroker(config, ledger):new Broker(config, ledger);
 const handle = async (request, response) => {
   response.setHeader('cache-control', 'no-store');
   response.setHeader('content-type', 'application/json');
@@ -13,7 +14,7 @@ const handle = async (request, response) => {
     const chunks = []; let size = 0;
     for await (const chunk of request) {
       size += chunk.length;
-      if (size > 65_536) throw Object.assign(new Error(), { status: 413, code: 'body_too_large' });
+      if (size > (config.mode==='betel-production'?262_144:65_536)) throw Object.assign(new Error(), { status: 413, code: 'body_too_large' });
       chunks.push(chunk);
     }
     let body;

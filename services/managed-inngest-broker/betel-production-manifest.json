@@ -1,0 +1,116 @@
+[
+  {
+    "id": "betel-ai-communication-scheduler",
+    "name": "Agente WhatsApp - Comunicacao Agendada",
+    "triggers": [
+      {
+        "cron": "0 11 * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-link-batch-scraper",
+    "name": "Scraper - Lote de links importados",
+    "triggers": [
+      {
+        "event": "scraper/link_batch.requested"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-meta-whatsapp-campaigns",
+    "name": "Meta WhatsApp - Campanhas Oficiais",
+    "triggers": [
+      {
+        "event": "meta-whatsapp/campaign.process"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-scraper-cron",
+    "name": "Scraper por fontes congelado",
+    "triggers": [
+      {
+        "cron": "* * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-traffic-ai-sync",
+    "name": "Trafego IA - Sincronizacao de contas e snapshots",
+    "triggers": [
+      {
+        "event": "traffic-ai/sync.requested"
+      },
+      {
+        "cron": "0 * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-conversation-history-sync",
+    "name": "WhatsApp - Auditoria do historico",
+    "triggers": [
+      {
+        "cron": "*/15 * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-followups",
+    "name": "WhatsApp - Follow-ups Automaticos",
+    "triggers": [
+      {
+        "cron": "*/10 * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-group-campaigns",
+    "name": "WhatsApp - Campanhas em Grupos e Canais",
+    "triggers": [
+      {
+        "event": "whatsapp-group/campaign.process"
+      },
+      {
+        "cron": "*/5 * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-manual-handoff-resume",
+    "name": "WhatsApp - Retomada apos atendimento humano",
+    "triggers": [
+      {
+        "event": "whatsapp/manual-handoff.auto-resume"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-quality-review",
+    "name": "WhatsApp - Auditoria IA",
+    "triggers": [
+      {
+        "cron": "17 * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-sdr-appointments",
+    "name": "WhatsApp - Agenda SDR",
+    "triggers": [
+      {
+        "cron": "* * * * *"
+      }
+    ]
+  },
+  {
+    "id": "betel-ai-whatsapp-temp-media-cleanup",
+    "name": "WhatsApp - Limpeza de Midia Temporaria",
+    "triggers": [
+      {
+        "cron": "*/30 * * * *"
+      }
+    ]
+  }
+]

@@ -4,6 +4,7 @@ import {managedSession,ManagedError,projectSnapshot,requireInfrastructure,unwrap
 import type {HostSample,AlertSettings,Row} from '@/lib/managed-projects/contracts';
 import {connectedSource} from '@portal/lib/connected-source';
 import {ConnectedProject} from '@portal/components/connected-project';
+import {BetelProject} from '@portal/components/betel-project';
 export const dynamic='force-dynamic';
 export const metadata={title:'Infraestrutura e projetos | ConnectyHub',robots:{index:false,follow:false}};
 export default async function Page({params}:{params:Promise<{path?:string[]}>}){
@@ -13,13 +14,14 @@ export default async function Page({params}:{params:Promise<{path?:string[]}>}){
  const {db,admin,userId}=await managedSession();
  const companies=unwrap(await db.rpc('managed_companies'))??[];
  const projects=unwrap(await db.from('managed_projects').select('*').order('name').limit(200))??[];
- const connections=unwrap(await db.from('portal_source_connections').select('project_id'))??[];
- const connectedProjectIds=connections.map(c=>String(c.project_id));
+ const connections=unwrap(await db.from('portal_source_connections').select('project_id,migration_state'))??[];
+ const connectedProjectIds=connections.filter(c=>c.migration_state==='operational').map(c=>String(c.project_id));
  let snapshot;let samples:HostSample[]|undefined;let settings:AlertSettings|undefined;let alertEvents:Row[]|undefined;let alertStates:Row[]|undefined;
  if(path[0]==='projetos'&&path[1]){
-  if(connectedProjectIds.includes(path[1])){
+  if(connections.some(c=>c.project_id===path[1])){
    if(path.length>4||!['banco','automacoes'].includes(path[2]??'banco')||path[3]&&!['tabelas','arquivos','consumo'].includes(path[3]))notFound();
-   return <ConnectedProject connection={await connectedSource(db,admin,path[1])} projects={projects} path={path}/>;
+   const connection=await connectedSource(db,admin,path[1]);
+   return connection.source_key==='betel-production'?<BetelProject connection={connection} path={path}/>:<ConnectedProject connection={connection} projects={projects} path={path}/>;
   }
   if(path.length>4||!['banco','automacoes','configuracoes'].includes(path[2]??'banco'))notFound();
   const allowed=path[2]==='automacoes'?['apps','functions','runs','events']:['tabelas','arquivos','auth','logs'];if(path[3]&&!allowed.includes(path[3]))notFound();

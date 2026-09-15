@@ -9,10 +9,10 @@ export type SourceSnapshot={
  storage_accounting:SourceRow|null;buckets:SourceRow[];resources:SourceRow[];agents:SourceRow[];
  inngest?:{status:'ok'|'failed';collected_at?:string;attempted_at?:string;app_id?:string;app_name?:string;function_count?:number;functions?:SourceRow[];runs?:SourceRow[];failures?:SourceRow[];has_more_runs?:boolean;has_more_failures?:boolean;window_hours?:number};
 };
-export type SourceConnection={project_id:string;source_key:string;source_organization_id:string;source_name:string;collected_at:string|null;attempted_at:string|null;collection_status:'pending'|'ok'|'failed';snapshot:SourceSnapshot|null};
+export type SourceConnection={project_id:string;source_key:string;source_organization_id:string;source_name:string;migration_state:'preparing'|'operational';collected_at:string|null;attempted_at:string|null;collection_status:'pending'|'ok'|'failed';snapshot:SourceSnapshot|null};
 export async function connectedSource(db:SupabaseClient,admin:boolean,projectId:string):Promise<SourceConnection>{
  requireInfrastructure(admin);
- const data=unwrap(await db.from('portal_source_connections').select('project_id,source_key,source_organization_id,source_name,collected_at,attempted_at,collection_status,snapshot').eq('project_id',id(projectId)).maybeSingle());
+ const data=unwrap(await db.from('portal_source_connections').select('project_id,source_key,source_organization_id,source_name,migration_state,collected_at,attempted_at,collection_status,snapshot').eq('project_id',id(projectId)).maybeSingle());
  if(!data)throw new ManagedError(404,'Projeto conectado não encontrado.');
  return data as SourceConnection;
 }

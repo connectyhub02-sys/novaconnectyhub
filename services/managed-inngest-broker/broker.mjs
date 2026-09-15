@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, open, rename, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonical, demand, equal, exactKeys, fixture, keyHash, sign, steps, stripKey, verify } from './protocol.mjs';
@@ -20,8 +20,15 @@ export class Ledger {
     const next = this.queue.then(async () => {
       const result = action(this.value);
       await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-      await writeFile(`${this.path}.tmp`, JSON.stringify(this.value), { mode: 0o600 });
+      const pending=await open(`${this.path}.tmp`,'w',0o600);
+      try { await pending.writeFile(JSON.stringify(this.value)); await pending.sync(); }
+      finally { await pending.close(); }
       await rename(`${this.path}.tmp`, this.path);
+      // Persist the rename on Linux too, before forwarding any event to the engine.
+      if(process.platform!=='win32'){
+        const directory=await open(dirname(this.path),'r');
+        try { await directory.sync(); } finally { await directory.close(); }
+      }
       return result;
     });
     this.queue = next.catch(() => {});
@@ -37,16 +44,20 @@ export class Broker {
       demand(u.protocol === 'http:' && !u.username && !u.password && !u.hash && !u.search, 500, 'invalid_fixed_endpoint');
       demand(u.hostname === '127.0.0.1' || /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(u.hostname), 500, 'endpoint_not_private');
     }
+    this.validateScope(config);
+    demand(config.projectSigningKey !== config.upstreamSigningKey && config.projectEventKey !== config.upstreamEventKey, 500, 'shared_key_forbidden');
+    this.projectAuth = `Bearer ${keyHash(config.projectSigningKey)}`;
+    this.upstreamAuth = `Bearer ${keyHash(config.upstreamSigningKey)}`;
+  }
+  validateScope(config) {
     demand(config.appId === 'betel-ai-rehearsal' && config.eventName === 'betel/rehearsal.analysis.requested', 500, 'invalid_project_scope');
     demand(config.functionId === 'betel-ai-rehearsal-synthetic-analysis', 500, 'invalid_function_scope');
     demand(config.functions?.length === 1 && config.functions[0].id === config.functionId, 500, 'invalid_trusted_manifest');
     const fn = config.functions[0];
     demand(canonical(fn.triggers) === canonical([{ event: config.eventName }]) && fn.concurrency === 1 && fn.idempotency === 'event.data.fixtureId', 500, 'unsafe_trusted_trigger');
     demand(Object.keys(fn.steps ?? {}).join(',') === 'step' && fn.steps.step.runtime?.type === 'http' && fn.steps.step.runtime?.url === `${config.callbackUrl}?fnId=${config.functionId}&stepId=step` && fn.steps.step.retries?.attempts === 0, 500, 'unsafe_trusted_handler');
-    demand(config.projectSigningKey !== config.upstreamSigningKey && config.projectEventKey !== config.upstreamEventKey, 500, 'shared_key_forbidden');
-    this.projectAuth = `Bearer ${keyHash(config.projectSigningKey)}`;
-    this.upstreamAuth = `Bearer ${keyHash(config.upstreamSigningKey)}`;
   }
+  validateSteps(items) { steps(items); }
   limit() {
     const cutoff = Date.now() - 60_000;
     this.requests = this.requests.filter(t => t > cutoff);
@@ -157,12 +168,15 @@ export class Broker {
       value.dispatches[requestId] = { queue: body.ctx.qi_id, generation: generation === undefined ? null : Number(generation) };
       state.runs[run] = value;
     });
-    const forwarding = { 'x-inngest-signature': sign(body, this.c.projectSigningKey), 'x-request-id': requestId };
+    return this.forwardCallback(url, headers, body);
+  }
+  async forwardCallback(url, headers, body) {
+    const forwarding = { 'x-inngest-signature': sign(body, this.c.projectSigningKey), 'x-request-id': headers['x-request-id'] };
     for (const key of ['x-inngest-generation-id', 'x-inngest-req-version', 'x-inngest-job-id']) if (headers[key]) forwarding[key] = headers[key];
     const target = new URL(this.c.handlerUrl); target.search = url.search;
     const response = await this.fixed(target.origin, target.pathname + target.search, 'POST', body, forwarding);
     demand(verify(response.text, this.c.projectSigningKey, response.headers.get('x-inngest-signature')), 502, 'handler_signature_required');
-    if (response.status === 206) steps(JSON.parse(response.text));
+    if (response.status === 206) this.validateSteps(JSON.parse(response.text));
     const replyHeaders = { 'x-inngest-signature': sign(response.text, this.c.upstreamSigningKey), 'x-inngest-req-version': response.headers.get('x-inngest-req-version') ?? '1' };
     for (const key of ['x-inngest-no-retry', 'x-inngest-retry-after']) if (response.headers.get(key)) replyHeaders[key] = response.headers.get(key);
     for (const key of ['x-inngest-sdk', 'x-inngest-sdk-handled']) {
@@ -179,7 +193,7 @@ export class Broker {
     demand(body.run_id === run && body.fn_id === owned.fnId && dispatch && body.qi_id === dispatch.queue, 403, 'checkpoint_ownership_denied');
     demand((body.generation_id ?? null) === dispatch.generation, 403, 'checkpoint_generation_denied');
     demand(Number.isSafeInteger(body.ts) && Math.abs(Date.now() - body.ts) < 300_000, 400, 'checkpoint_time_denied');
-    steps(body.steps);
+    this.validateSteps(body.steps);
     return this.upstream(path, 'POST', body);
   }
 }

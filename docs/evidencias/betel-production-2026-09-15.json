@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-15",
+  "scope": "Betel hosting, data, authentication and read-only portal connection",
+  "application_url": "https://betel.connectyhub.com.br",
+  "portal_url": "https://infraestrutura.connectyhub.com.br/infraestrutura/projetos/9349f704-bdaa-41f1-957f-23f3317ba969/banco",
+  "activation": {
+    "observed_at": "2026-09-15T19:55:30.229735+00:00",
+    "portal_connected": true,
+    "automations_held": true,
+    "webhooks_held": true,
+    "backup_restore_verified": true,
+    "offhost_verified": true,
+    "permissions_unchanged": true
+  },
+  "backup": {
+    "observed_at": "20260915T194845Z",
+    "backup_path": "/opt/betel-isolated-rehearsal/backups/final-20260915T194845Z",
+    "snapshot": "00000017-00000013-1",
+    "manifest": {
+      "webhook-inbox.sqlite": {
+        "bytes": 24576,
+        "sha256": "5988c86b4d1c763504130a2fcc1946428d166b74471cde06f9f91156b870ca4b"
+      },
+      "private-config.tar.gz": {
+        "bytes": 90620890,
+        "sha256": "2b61d35c9d57c982e8f4f000a0af24dde61a219504a50e60912103c4bef8d9fe"
+      },
+      "storage.tar.gz": {
+        "bytes": 231,
+        "sha256": "44ca107efbabbce1871dadb70073ebe855734a908e856221a0739c798d6ea213"
+      },
+      "catalog.json": {
+        "bytes": 1766079,
+        "sha256": "c78e6d86c091c2616d8738d2ba9ccafff346df6923c7c59be52e83c8964a1fa7"
+      },
+      "database.dump": {
+        "bytes": 11459694,
+        "sha256": "4b4190d50efb9f06d59c8719ad1ccd3176b664fca742d449fe7243e12e3b3c26"
+      },
+      "integrity.json": {
+        "bytes": 82562,
+        "sha256": "eee708b48f9baa7829746b2b54f038c3d831e06f86f766007f71d6d94d3f773c"
+      },
+      "restored-integrity.json": {
+        "bytes": 82579,
+        "sha256": "b128e4676ecee9c9b4d91722ff3c3e81605fdb6a667cbf5b79af1c66e69a300b"
+      },
+      "roles.sql": {
+        "bytes": 5940,
+        "sha256": "b45a7cb8baa010a72301fc034baa43c8f898c120f8380b8535e96e44ca1220a2"
+      }
+    },
+    "restore_verified": true,
+    "same_cluster_roles_used": true,
+    "restored_tables": 154,
+    "foreign_keys_checked": 217,
+    "foreign_key_violations": 0,
+    "probe_removed": true,
+    "source_cutover": true,
+    "production_preparation_backup": false,
+    "automations_held": true,
+    "offhost_sha256_verified": true,
+    "production_final_backup": true
+  },
+  "portal_betel_http": {
+    "checks": 37,
+    "project": "9349f704-bdaa-41f1-957f-23f3317ba969",
+    "source_scope_verified": true,
+    "client_denied": true,
+    "write_routes_denied": true,
+    "betel_migration_state": "operational",
+    "source_recent": true,
+    "sections": 5
+  },
+  "portal_connectyhub_regression_checks": 69,
+  "broker_tests": 26,
+  "inbox_tests": 5,
+  "business_automations_held": true,
+  "webhook_dispatch_held": true,
+  "original_cloud_preserved": true,
+  "paid_generation_or_external_messages_tested": false,
+  "bare_server_restore_tested": false,
+  "external_backup_location": "Private local Windows storage, SHA verified"
+}

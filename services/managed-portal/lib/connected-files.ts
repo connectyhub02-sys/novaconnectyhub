@@ -7,7 +7,7 @@ import {connectedSource} from './connected-source';
 const limit=20_000_000;
 export async function connectedFile(db:SupabaseClient,admin:boolean,projectId:string,source:string,fileId:string,head=false){
  const connection=await connectedSource(db,admin,projectId);
- if(source!=='lead_files'||!connection.snapshot?.files.some(f=>f.id===id(fileId)&&f.source===source&&f.availability==='registered'))throw new ManagedError(404,'Arquivo não disponível nesta conexão.');
+ if(connection.source_key!=='connectyhub-production'||source!=='lead_files'||!connection.snapshot?.files.some(f=>f.id===id(fileId)&&f.source===source&&f.availability==='registered'))throw new ManagedError(404,'Arquivo não disponível nesta conexão.');
  const key=(await readFile('/run/secrets/file-gateway-key','utf8')).trim();
  const result=await new Promise<{bytes:Buffer;size:number}>((resolve,reject)=>{
   const req=httpRequest({socketPath:'/run/connected-files/gateway.sock',path:`/files/lead_files/${fileId}`,method:head?'HEAD':'GET',headers:{Authorization:`Bearer ${key}`}},res=>{

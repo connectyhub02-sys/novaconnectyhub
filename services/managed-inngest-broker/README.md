@@ -52,3 +52,21 @@ iguais. Inscrição está novamente bloqueada; o modo live admite somente fixtur
 Preservar `x-inngest-sdk` e `x-inngest-sdk-handled` na resposta do handler: além da
 assinatura, o motor verifica esses cabeçalhos. Mais detalhes e limites no
 [relatório](../../docs/betel-ensaio-isolado-2026-09-15.md).
+
+## Instância de produção separada
+
+`production.mjs` e `betel-production-manifest.json` definem exatamente12 contratos
+revisados da Betel. A unidade28111 tem chaves e ledger próprios; não substitui o
+ensaio28110. Eventos são prefixados no motor e traduzidos somente após validar
+recibo, função interna, assinatura e propriedade do run/checkpoint. Identidade
+estável do evento é obrigatória; timeout permanece incerto sem reenvio automático.
+`live=false` bloqueia execução mesmo com manifesto registrado; registro tem
+controle separado, fechado após preparação. Não liberar os12 por um cutoff global:
+as consultas dos handlers também precisam de elegibilidade dos registros antigos.
+
+Limites atuais:100.000 eventos/runs no ledger,2.000 dispatches/run,120requests/min,
+32steps/128KiB e sleeps até366dias. O ledger é um arquivo privado com fsync e
+rename; não é uma solução de volume ilimitado. Monitorar tamanho e limites antes
+de ampliar uso. Os26 testes cobrem o ensaio e esse contrato, sem comprovar geração,
+pagamento ou envio real. Estado e restrições do corte:
+[migração Betel](../../docs/betel-migracao-vps-2026-09-15.md).

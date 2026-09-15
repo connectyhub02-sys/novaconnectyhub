@@ -83,3 +83,7 @@ Antes de escrever código Next.js, siga `AGENTS.md` e os guias da versão instal
 Crie migrations novas e confira histórico/permissões/RLS no destino quando necessário. Mudança no código não aplica SQL nem publica automaticamente um processo WebSocket. Revise `services/ai-relay/README.md` ao trabalhar com Live.
 
 Atualize o estado operacional após mudanças verificadas e mantenha links para relatórios datados. Uma conversa nova deve conseguir explicar o que funciona, onde roda e quais testes faltam, sem depender de ler transcrições anteriores.
+
+## Hospedagem de clientes: Betel
+
+Desde 15/09/2026, a Betel possui aplicação e Supabase dedicados na VPS; usa o Inngest existente por broker específico e mantém carteira/organização próprias na ConnectyHub. A ConnectyHub principal continua na Vercel. O portal de infraestrutura consulta fontes reais de cada projeto em leitura; não compartilha contas administrativas nem carteiras. Automações/webhooks Betel seguem retidos até liberação específica dos fluxos, embora hospedagem, dados, login e backup tenham sido validados. Consulte o [relatório da migração](betel-migracao-vps-2026-09-15.md) antes de operar ou reativar trabalhos antigos.
