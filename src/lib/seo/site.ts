@@ -10,6 +10,8 @@ export const connectyhubSeoKeywords = [
   "agente de IA para WhatsApp",
   "automacao WhatsApp",
   "API WhatsApp",
+  "Estúdio de Voz e Áudio AI",
+  "API de voz por créditos",
   "catalogo WhatsApp",
   "clone digital WhatsApp",
   "CRM WhatsApp",

@@ -29,6 +29,12 @@ export async function GET() {
     `- Voice and Audio Studio OpenAPI: ${buildCanonicalUrl("/docs/api/voz/openapi.json")}`,
     `- Voice and Audio Studio integration guide: ${buildCanonicalUrl("/docs/api/voz/guide.md")}`,
     "",
+    "## Estúdio de Voz e Áudio AI",
+    "Create audio in the client Studio or integrate using a dedicated project key. Private voices, inputs, results and receipts remain scoped to the project.",
+    "Supported contracts include text-to-speech, transcription, isolation, voice change, alignment/subtitles, dialogue, voice design/save, dictionaries, dubbing and native speech. Documentation does not mean all are enabled.",
+    "Check authenticated GET /api/v1/voice/capabilities and use only available=true. Each tool/model depends on a confirmed rate and the account contract, credits and storage, including free/trial accounts.",
+    "Quotes do not start generation. Keep the same Idempotency-Key when recovering a request; completed means a stored private result and one settled debit. No unlimited-generation promise.",
+    "",
     "## Solutions",
     ...solutionPages.flatMap((page) => [
       `### ${page.title}`,
