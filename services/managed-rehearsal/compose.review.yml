@@ -1,0 +1,165 @@
+# REVIEW ONLY. Missing private fixture/bootstrap inputs deliberately prevent startup.
+# No Inngest service: the runtime action remains blocked by automatic review.
+name: connectyhub-managed-rehearsal
+
+x-bounds: &bounds
+  profiles: [rehearsal]
+  platform: linux/amd64
+  restart: "no"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 64
+  mem_limit: 128m
+  memswap_limit: 128m
+  cpus: 0.25
+  stop_grace_period: 25s
+  networks: [isolated]
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+
+x-node: &node
+  <<: *bounds
+  build:
+    context: ../..
+    dockerfile: services/managed-rehearsal/Dockerfile
+
+services:
+  database:
+    <<: *bounds
+    image: postgres:17.11-alpine3.23@sha256:09f3fe6ab613dc2ba3f7584dcebdf4bb7acf98366169cd1805ebf9a65eab1041
+    # Non-root startup requires empty data directory owned by this image's postgres UID/GID.
+    user: "70:70"
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.50
+    pids_limit: 128
+    shm_size: 32m
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/run/postgresql:size=8m,uid=70,gid=70,mode=0770
+    command: [postgres, -c, shared_buffers=64MB, -c, max_connections=30, -c, max_wal_size=128MB]
+    environment:
+      POSTGRES_DB: managed_rehearsal
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    secrets: [database_password]
+    volumes:
+      - type: bind
+        source: ${REHEARSAL_DATA_ROOT:?Dedicated empty quota-limited rehearsal directory required}/postgres
+        target: /var/lib/postgresql/data
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${REHEARSAL_BOOTSTRAP_ROOT:?Reviewed fictional role and schema bootstrap required}
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d managed_rehearsal"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  auth:
+    <<: *bounds
+    image: supabase/gotrue:v2.197.0@sha256:839f529492d116b4e8b7777c953a27c381d34c15a744b1bcefde5eefaa1f9f9f
+    user: "1000:1000"
+    mem_limit: 256m
+    memswap_limit: 256m
+    env_file: ${REHEARSAL_AUTH_ENV_FILE:?Private fictional Auth connection and signing configuration required}
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: "9999"
+      API_EXTERNAL_URL: http://auth:9999
+      GOTRUE_SITE_URL: http://fixture.invalid
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_LOG_LEVEL: error
+    depends_on:
+      database: {condition: service_healthy}
+
+  rest:
+    <<: *bounds
+    image: postgrest/postgrest:v16.3@sha256:63b567a462c4fd81ede0bdff0b38a150f732ad5fe4f4b01cebeb6a1aa8dbe0d6
+    user: "1000:1000"
+    env_file: ${REHEARSAL_REST_ENV_FILE:?Private fictional PostgREST login and signing configuration required}
+    environment:
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_POOL: "3"
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_SERVER_PORT: "3000"
+    depends_on:
+      database: {condition: service_healthy}
+
+  managed-gateway:
+    <<: *node
+    command: [node, worker/gateway.mjs]
+    environment:
+      MANAGED_DATABASE_REST_URL: http://rest:3000/
+      MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
+      MANAGED_GATEWAY_BIND: 0.0.0.0
+    secrets: [database_service_key]
+    depends_on: [rest]
+
+  worker:
+    <<: *node
+    command: [node, worker/worker.mjs]
+    environment:
+      MANAGED_GATEWAY_URL: http://managed-gateway:3080/api/managed-workers
+      MANAGED_WORKER_KEY_FILE: /run/secrets/project_worker_key
+    secrets: [project_worker_key]
+    depends_on: [managed-gateway]
+
+  telemetry-gateway:
+    <<: *node
+    command: [node, worker/telemetry-gateway-main.mjs]
+    environment:
+      MANAGED_DATABASE_REST_URL: http://rest:3000/
+      MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
+      MANAGED_TELEMETRY_KEY_FILE: /run/secrets/telemetry_key
+      MANAGED_GATEWAY_BIND: 0.0.0.0
+    secrets: [database_service_key, telemetry_key]
+    depends_on: [rest]
+
+  objects:
+    <<: *node
+    command: [node, objects/main.mjs]
+    mem_limit: 256m
+    memswap_limit: 256m
+    environment:
+      MANAGED_OBJECT_BIND: 0.0.0.0
+      MANAGED_OBJECT_ROOT: /data/objects
+      MANAGED_OBJECT_SECRET_FILE: /run/secrets/object_signing_key
+    secrets: [object_signing_key]
+    volumes:
+      - type: bind
+        source: ${REHEARSAL_DATA_ROOT:?Dedicated empty quota-limited rehearsal directory required}/objects
+        target: /data/objects
+        bind: {create_host_path: false}
+
+secrets:
+  database_password:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/database-password
+  database_service_key:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/service-key
+  project_worker_key:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/worker-key
+  telemetry_key:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/telemetry-key
+  object_signing_key:
+    file: ${REHEARSAL_SECRET_ROOT:?Private rehearsal-only secrets directory required}/object-key
+
+networks:
+  isolated:
+    internal: true
+# Deliberately no ports, host network, external network, privileged mode or docker.sock.
+# Lifecycle must be bounded by the future reviewed host runner; restart:no is not a timer.

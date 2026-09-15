@@ -1,0 +1,10 @@
+# Allowlist only the runtime sources; never send repository credentials/build outputs.
+**
+!services/
+!services/managed-worker/
+!services/managed-worker/*.mjs
+!services/managed-objects/
+!services/managed-objects/*.mjs
+!services/managed-rehearsal/
+!services/managed-rehearsal/Dockerfile
+!services/managed-rehearsal/Dockerfile.dockerignore
