@@ -805,3 +805,23 @@ Titular definiu Gecko → Bright Data → Apify, com os dois últimos somente na
 Substitui o estado de preparação acima: fonte `fe1c942e`, imagem `0dbbd8c9`, compilação VPS aprovada. Etapas por link, reivindicação condicional, provedores sequenciais e correções Chaves/apresentação recebidas da tarefa do app, sem migration nova. Duas provas gratuitas ativadas e conferidas no ambiente, com expiração **16/09 às22:06 UTC**; após isso os provedores secundários ficam bloqueados até revalidação. Nenhum mecanismo automático de renovação foi criado.
 
 App/Auth/REST/Storage HTTP200, 12 funções Betel e45 CH preservadas, banco/motor/broker sem reinício/alteração. Guard das dependências executado, agente atual connected/loggedIn por GET. Configuração/fonte/provas têm cópia privada fora da VPS com SHA verificado. Sem repetir o lote anterior, coleta paga ou mensagem de teste; resultados comerciais da nova versão ainda precisam de validação. [Publicação e limites](betel-pacote-coleta-publicado-2026-09-15.md).
+
+### Betel: limpeza de análises de teste concluída — 23:46 UTC
+
+Titular autorizou purga de todo o domínio de análises/testes, incluindo versões,
+sem novas cópias. App `a558db57`/imagem `b7e6d2ff` publicado; migration de prévia,
+purga transacional, exceção administrativa escopada de imutabilidade e checkpoint
+R2 aplicada. Domínio de análises, lotes, linhas, runs, assets e snapshots zerado;
+72 recibos financeiros e 863 auditorias preservados. Não houve replay de IA.
+40 fotos órfãs removidas condicionalmente após commit, 18 imagens já ausentes
+reconciliadas, cinco objetos externos preservados. Checkpoint completed, sem
+pendências; app/login/Auth HTTP200 na validação independente da tarefa Betel.
+Banco e motor não reiniciados; funções12Betel/45CH preservadas. Gecko saldo10.000
+na UI, sem coleta de teste. [Execução, evidências e limites](betel-limpeza-testes-2026-09-15.md).
+
+Portal autenticado: navegação Automações → Visão geral validada no Chrome do
+titular. A coleta estava desatualizada; execução direta e execução com as
+restrições do serviço passaram, seguida do serviço real com exit0 às23:49:53UTC.
+A aba atualizada mostrou coleta20:49:48BRT,155tabelas e231eventos no recorte Betel.
+Nenhuma configuração do coletor foi alterada; a causa das falhas anteriores
+continua não confirmada, portanto não declarar corrigida sua eventual recorrência.
