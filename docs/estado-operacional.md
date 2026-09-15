@@ -799,3 +799,9 @@ Conciliação de quatro operações IA: três completed somam 119.751120 crédit
 ### Provedores gratuitos: evidências preparadas — 22:06 UTC
 
 Titular definiu Gecko → Bright Data → Apify, com os dois últimos somente na franquia gratuita. Contas das chaves efetivas conferidas: Apify FREE, US$5 incluídos/cap, US$0,085611 usados e pausa no limite; Bright Data saldo depositado zero e 5.000 créditos gratuitos, cuja regra oficial bloqueia ao esgotar sem fundos. Ambas sem método de pagamento na UI. Provas ligadas às credenciais preparadas na VPS, válidas até 16/09 às22:06 UTC; **não ativadas no app**. Fluxo sequencial e bloqueio por prova vencida são parte do pacote Betel ainda em preparação. Nenhuma coleta paga ou mudança de plano. [Evidências e limites](betel-provedores-franquia-gratuita-2026-09-15.md).
+
+### Pacote de coleta publicado — 22:28 UTC
+
+Substitui o estado de preparação acima: fonte `fe1c942e`, imagem `0dbbd8c9`, compilação VPS aprovada. Etapas por link, reivindicação condicional, provedores sequenciais e correções Chaves/apresentação recebidas da tarefa do app, sem migration nova. Duas provas gratuitas ativadas e conferidas no ambiente, com expiração **16/09 às22:06 UTC**; após isso os provedores secundários ficam bloqueados até revalidação. Nenhum mecanismo automático de renovação foi criado.
+
+App/Auth/REST/Storage HTTP200, 12 funções Betel e45 CH preservadas, banco/motor/broker sem reinício/alteração. Guard das dependências executado, agente atual connected/loggedIn por GET. Configuração/fonte/provas têm cópia privada fora da VPS com SHA verificado. Sem repetir o lote anterior, coleta paga ou mensagem de teste; resultados comerciais da nova versão ainda precisam de validação. [Publicação e limites](betel-pacote-coleta-publicado-2026-09-15.md).
