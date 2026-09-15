@@ -1,0 +1,41 @@
+{
+  "time": "2026-09-15T16:07:57.630647+00:00",
+  "deleted_projects": {
+    "2d6a34bd-5a15-4faf-a115-1e4aa5ee252b": "QA A \u00b7 persist\u00eancia",
+    "0f27a6db-f3ae-4eb1-bcc5-a5c0584cc19e": "QA B \u00b7 isolamento"
+  },
+  "removed_rows": {
+    "managed_jobs": 1,
+    "managed_logs": 4,
+    "managed_files": 0,
+    "managed_usage": 2,
+    "managed_objects": 1,
+    "managed_records": 1,
+    "managed_workers": 2,
+    "managed_projects": 2,
+    "managed_resource_links": 0,
+    "managed_project_members": 2,
+    "managed_inngest_bindings": 0,
+    "portal_source_connections": 0
+  },
+  "remaining_project": "fdf6122a-b883-4d41-968d-71ba1d31d48a",
+  "users_organizations_preserved": true,
+  "source_bindings_untouched": true,
+  "private_recovery_folder": "/opt/connectyhub-managed-portal/qa-cleanup/20260915T160755Z",
+  "objects_quarantined": 1,
+  "backup_sha256": {
+    "portal-before.dump": {
+      "bytes": 228395,
+      "sha256": "3c0700ec951a9e096da1cb7678805d8fccfb63ff4b41977a553c8407ed4e7e4d"
+    },
+    "qa-objects.tar.gz": {
+      "bytes": 279,
+      "sha256": "6c361dce473a2c8f8b444a0632279a0508e58ab3e18a61b6600b0022dfa01754"
+    },
+    "qa-rows.json": {
+      "bytes": 4618,
+      "sha256": "6f246d1f9693f54588756384b3de7f29b03f18beb351aad624d4b69d046092d6"
+    }
+  },
+  "native_trash_available": false
+}

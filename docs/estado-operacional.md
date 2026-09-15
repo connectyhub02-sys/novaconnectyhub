@@ -1,5 +1,13 @@
 # Estado operacional da ConnectyHub
 
+## Remoção dos projetos QA do portal — 15/09/2026
+
+Por solicitação do titular, removidos somente `QA A · persistência` (`2d6a34bd-5a15-4faf-a115-1e4aa5ee252b`) e `QA B · isolamento` (`0f27a6db-f3ae-4eb1-bcc5-a5c0584cc19e`). Verificados vínculos antes da exclusão: não havia fonte produtiva, projeto API/voz vinculado nem app Inngest externo. Excluídas somente dependências desses projetos: dois vínculos de membros, dois workers diagnósticos, um registro, um job concluído, quatro logs, dois recibos de uso de teste e um metadado de objeto. O arquivo sintético de 39 bytes foi movido para quarentena privada.
+
+Portal não dispõe de lixeira nativa. Antes da transação foram preservados dump do banco independente, exportação dos registros QA e arquivo, com hashes; cópia externa privada conferida. Recuperação é administrativa por esses arquivos, não por botão no painel. Organizações, usuários, membros de organizações, perfis e o projeto ConnectyHub foram preservados. Organizações QA podem continuar aparecendo no filtro de empresas, conforme o escopo solicitado; os projetos QA não aparecem mais. A listagem autenticada do portal e o banco mostram somente ConnectyHub conectada. Passaram 70 verificações HTTP pós-limpeza, incluindo três downloads físicos, fonte recente, funções/execuções do Inngest e isolamento. Nenhuma mudança de código, build ou migração de cliente foi necessária.
+
+Os ensaios antigos `verify-persistence.mjs`, `verify.mjs` e cenários de restauração que exigem esses fixtures não devem ser executados como verificação do banco ativo após esta limpeza. Suas evidências históricas continuam válidas para o momento registrado; qualquer novo ensaio com fixtures deve ocorrer em ambiente isolado. O backup pré-limpeza e a auditoria preservam o histórico removido do painel. Evidências desta ação em `docs/evidence/managed-qa-cleanup-2026-09-15`.
+
 ## Conexão operacional no portal — 15/09/2026
 
 Publicado complemento da conexão administrativa: 45 funções reais do Inngest existente, amostra de 100 execuções/24h, consulta de falhas e download autenticado dos três arquivos selecionados da ConnectyHub Interno (dois Supabase Storage e um R2). Fonte restrita a leitura, com dados minimizados, credenciais somente no host e isolamento administrativo. Corrigida a preservação do socket do leitor após reinício. Aplicação/handlers continuam na Vercel; nenhum novo motor Inngest foi instalado.
