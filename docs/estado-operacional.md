@@ -825,3 +825,13 @@ restrições do serviço passaram, seguida do serviço real com exit0 às23:49:5
 A aba atualizada mostrou coleta20:49:48BRT,155tabelas e231eventos no recorte Betel.
 Nenhuma configuração do coletor foi alterada; a causa das falhas anteriores
 continua não confirmada, portanto não declarar corrigida sua eventual recorrência.
+
+### Portal Betel: causa da coleta identificada — 23:55 UTC
+
+A falha reapareceu no ciclo23:50. Diagnóstico seguro identificou SQLITE_CANTOPEN
+na leitura do inbox SQLite sob ProtectSystem=strict. Publicado leitor de captura
+DB/WAL estável em temporários privados, mantendo a origem e a unidade protegidas.
+Três testes passaram; serviço real exit0 às23:55:10UTC. Não houve replay, mensagem,
+reinício da aplicação ou mudança de cobrança. [Causa, correção e limites](portal-coleta-betel-sqlite-2026-09-15.md).
+O ciclo automático seguinte passou às23:56:15UTC; navegador do titular mostrou
+coleta20:56:09BRT sem aviso de desatualização.

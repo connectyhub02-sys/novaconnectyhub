@@ -1,5 +1,5 @@
 """Two fixed read-only sources: Betel staging catalog and its own CH usage only."""
-import importlib.util,json,pathlib,sqlite3
+import importlib.util,json,pathlib
 ROOT=pathlib.Path('/opt/connectyhub-managed-portal')
 RUNTIME=ROOT/'source/services/managed-portal/runtime'
 ORG='66cb4c5a-35f2-4c08-9982-38bd72d2b9be'
@@ -46,9 +46,9 @@ rollback;
     broker=json.loads((private/'production-broker.json').read_text())
     app=json.loads((private/'app-production-runtime.json').read_text())
     inbox=json.loads(pathlib.Path('/opt/betel-webhook-inbox/secrets/config.json').read_text())
-    db=sqlite3.connect('file:/var/lib/betel-webhook-inbox/inbox.sqlite?mode=ro',uri=True)
-    try: held=db.execute("select count(*) from events where state='held'").fetchone()[0]
-    finally: db.close()
+    spec=importlib.util.spec_from_file_location('inbox_count',RUNTIME/'count-inbox.py')
+    inbox_count=importlib.util.module_from_spec(spec);spec.loader.exec_module(inbox_count)
+    held=inbox_count.held_count('/var/lib/betel-webhook-inbox/inbox.sqlite')
     data['operation']={'broker_live':broker.get('live') is True,
         'automations_paused':app.get('BETEL_AUTOMATIONS_PAUSED')!='0',
         'webhooks_forward_new':inbox.get('forward_new') is True,
@@ -58,6 +58,14 @@ rollback;
     encoded=json.dumps(data).replace("'","''");assert len(encoded.encode())<524288
     collector.portal(f"update portal_source_connections set snapshot='{encoded}'::jsonb,collected_at=('{encoded}'::jsonb->>'collected_at')::timestamptz,attempted_at=now(),collection_status='ok' where project_id='{PROJECT}' and source_key='betel-production';")
     print(json.dumps({'project_id':PROJECT,'migration_state':collector.portal(f"select migration_state from portal_source_connections where project_id='{PROJECT}';"),'tables':catalog['database']['table_count'],'scoped_usage_events_30d':financial['counts']['usage_events_30d'],'writes_to_source':False}))
-except Exception:
+except Exception as error:
+    # Class and locations are sufficient for diagnosis; never log SQL, bodies,
+    # credentials or exception messages that could contain private values.
+    import traceback
+    print(json.dumps({'collection_failed':True,'error_type':type(error).__name__,
+        'sqlite_error':getattr(error,'sqlite_errorname',None),
+        'http_status':getattr(error,'code',None) if isinstance(getattr(error,'code',None),int) else None,
+        'frames':[{'file':pathlib.Path(f.filename).name,'line':f.lineno}
+            for f in traceback.extract_tb(error.__traceback__)[-6:]]}),flush=True)
     collector.portal(f"update portal_source_connections set collection_status='failed',attempted_at=now() where project_id='{PROJECT}';")
     raise RuntimeError('Betel collection failed; previous snapshot preserved') from None
