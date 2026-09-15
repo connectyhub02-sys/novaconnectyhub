@@ -29,11 +29,11 @@ export function telemetryGateway({key,persist}){
 }
 export function telemetryRestSink({root,key,request=fetch}){
  const url=new URL(root);if(url.username||url.password||url.search||url.hash||!['/','/rest/v1/'].includes(url.pathname)||(url.protocol!=='https:'&&!(url.protocol==='http:'&&['127.0.0.1','localhost','kong'].includes(url.hostname))))throw Error('private_rest_required');
- if(typeof key!=='string'||key.length<32)throw Error('service_key_required');let lastPruned=0;
+ if(typeof key!=='string'||key.length<32)throw Error('service_key_required');
  return async sample=>{
   const headers={Authorization:`Bearer ${key}`,apikey:key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
-  const result=await request(new URL('infrastructure_samples?on_conflict=measured_at',url),{method:'POST',headers,body:JSON.stringify(sample),redirect:'error',signal:AbortSignal.timeout(10000)});
+  const result=await request(new URL('rpc/managed_record_host_sample',url),{method:'POST',headers,body:JSON.stringify({p_sample:sample}),redirect:'error',signal:AbortSignal.timeout(10000)});
   if(!result.ok)throw Error('sample_not_persisted');
-  const now=Date.now();if(now-lastPruned>3600000){const cutoff=new Date(now-7*86400000).toISOString();const pruned=await request(new URL(`infrastructure_samples?measured_at=lt.${encodeURIComponent(cutoff)}`,url),{method:'DELETE',headers,redirect:'error',signal:AbortSignal.timeout(10000)});if(!pruned.ok)throw Error('retention_not_confirmed');lastPruned=now;}
+
  };
 }

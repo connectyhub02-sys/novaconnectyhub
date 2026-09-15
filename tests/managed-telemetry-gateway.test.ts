@@ -7,7 +7,7 @@ it('projects only measured fields and refuses invalid host or time',()=>{
  expect(()=>normalizeHostSample({...sample,measured_at:'2000-01-01'})).toThrow();
  expect(()=>normalizeHostSample({...sample,services:[{name:'other-client-container',status:'healthy'}]})).toThrow();
 });
-it('does not report success when retention or persistence fails',async()=>{
- let calls=0;const sink=telemetryRestSink({root:'http://127.0.0.1:18301/',key:'fictional-service-key-at-least-32-characters',request:async()=>new Response('',{status:++calls===1?201:503})});
- await expect(sink({measured_at:new Date().toISOString()})).rejects.toThrow('retention_not_confirmed');expect(calls).toBe(2);
+it('does not report success when atomic persistence fails',async()=>{
+ let calls=0;const sink=telemetryRestSink({root:'http://127.0.0.1:18301/',key:'fictional-service-key-at-least-32-characters',request:async()=>new Response('',{status:(calls++,503)})});
+ await expect(sink({measured_at:new Date().toISOString()})).rejects.toThrow('sample_not_persisted');expect(calls).toBe(1);
 });

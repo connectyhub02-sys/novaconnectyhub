@@ -36,6 +36,8 @@ export async function realNextSessions({issued,ids,anonKey,serviceKey,check}){
   const ownEngine=await fetch(`http://127.0.0.1:3027/api/managed-projects/${ids.pA}/engine`,{headers:{Cookie:cookies.get(ids.a)}});check(ownEngine.ok&&(await ownEngine.json()).configured===false,'Next engine unconfigured rather than fabricated');
   const crossEngine=await fetch(`http://127.0.0.1:3027/api/managed-projects/${ids.pA}/engine`,{headers:{Cookie:cookies.get(ids.b)}});check(crossEngine.status===404,'Next engine cross-project denied');
   const page=await fetch(`http://127.0.0.1:3027/infraestrutura/projetos/${ids.pA}/banco`,{headers:{Cookie:cookies.get(ids.a)}});const html=await page.text();check(page.ok&&html.includes('fictional-a')&&!html.includes('fictional-b'),'Next renders only own project');
+  const hostPage=await fetch('http://127.0.0.1:3027/infraestrutura/vps',{headers:{Cookie:cookies.get(ids.admin)}});const hostHtml=await hostPage.text();check(hostPage.ok&&hostHtml.includes('Alertas persistidos')&&hostHtml.includes('Aberto'),'Next admin renders persisted alert event');
+  const clientHost=await fetch('http://127.0.0.1:3027/api/managed-infrastructure',{headers:{Cookie:cookies.get(ids.b)}});check(clientHost.status===403,'Next client cannot read infrastructure');
   const denied=await fetch(`http://127.0.0.1:3027/api/managed-projects/${ids.pA}`,{headers:{Cookie:cookies.get(ids.b)}});check(denied.status===404,'Next cross-project detail denied');
   const invalid=await fetch('http://127.0.0.1:3027/api/managed-projects',{headers:{Cookie:'sb-127-auth-token=invalid'}});check(invalid.status===401,'Next invalid cookie denied');
  }finally{

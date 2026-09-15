@@ -10,14 +10,14 @@
 | Autenticação | Auth v2.197.0 cria quatro contas fictícias, login por senha, refresh e validação de usuário; Next recebe cookies via SDK SSR e valida as mesmas sessões | Binário Auth com adaptação do listener para Windows; Linux oficial e recuperação de conta ainda pendentes |
 | Arquivos | Sidecar privado, HMAC por objeto/método/tamanho/hash, catálogo 0151, quota compartilhada, confirmação idempotente, tombstones, recuperação separada e conjunta | Upload da aplicação limitado a 1 MiB; seletor do Chrome não validado; backup online/externo ainda pendente |
 | Automações | Leitor fixo de metadados Inngest, vínculo exclusivo app/projeto 0152, rota autenticada e seção no painel; recusa de resposta com escopo divergente | Motor Inngest real ainda não ensaiado; não substitui handlers nem fila produtivos |
-| Infraestrutura | Loop serial de coleta, receptor privado separado da Vercel, persistência PostgREST e retenção de sete dias; três amostras fictícias passaram no percurso real; métricas globais invisíveis a cliente | Coletor Linux não instalado; métricas contínuas reais e alertas persistidos ainda pendentes |
+| Infraestrutura | Loop serial de coleta, receptor privado separado da Vercel, persistência PostgREST e retenção de sete dias; três amostras fictícias passaram no percurso real; métricas globais invisíveis a cliente | Coletor Linux não instalado; métricas contínuas reais ainda pendentes |
 
 ## Evidências de execução
 
-- **39 testes em dez arquivos aprovados:** isolamento, sessão, métricas, recuperação, objetos, catálogo, recuperação conjunta, leitor Inngest e receptor de telemetria.
+- **41 testes em onze arquivos aprovados:** isolamento, sessão, métricas, recuperação, objetos, catálogo, recuperação conjunta, leitor Inngest e receptor de telemetria.
 - **20 verificações HTTP do piloto aprovadas**, incluindo worker separado; **13 verificações HTTP de objetos aprovadas**, até o sidecar de disco real.
 - Ensaio real Auth/PostgreSQL/PostgREST: **37 verificações aprovadas**, incluindo receptor de telemetria e isolamento de métricas.
-- Ensaio ampliado `--auth --next`: **59 verificações aprovadas**, com cookies, rotas Next, página do projeto renderizada, rota do motor sem vínculo explicitamente não configurada e telemetria real no banco.
+- Ensaio ampliado `--auth --next`: **63 verificações aprovadas**, com cookies, rotas Next, página do projeto renderizada, rota do motor sem vínculo explicitamente não configurada e telemetria real no banco.
 - TypeScript e ESLint passaram. `node scripts/managed-projects/build-isolated.mjs` concluiu compilação, TypeScript e 112 páginas estáticas. Usa catálogo vazio e configuração fictícia de build: **esse artefato não deve ser publicado**.
 
 Os testes de recuperação conjunta usam PGlite e escritores parados. Demonstram consistência de catálogo, bytes, permissões e tombstones nesse cenário; não comprovam snapshot online coordenado ou recuperação de desastre na VPS.
@@ -32,8 +32,14 @@ A avaliação da licença SSPL da versão instalada para a futura oferta gerenci
 
 ## Antes de propor implantação
 
-Restam: motor Inngest real, limites/carga, alertas sustentados persistidos, ensaio do runtime Linux e permissões de volumes, backup externo e restauração operacional. Preparar inventário de cada cliente antes de vincular apps ou migrar recursos. Betel fica por último; Vision exige inventário próprio. Não cadastrar usuários reais automaticamente.
+Restam: motor Inngest real, limites/carga, ensaio do runtime Linux e permissões de volumes, backup externo e restauração operacional. Preparar inventário de cada cliente antes de vincular apps ou migrar recursos. Betel fica por último; Vision exige inventário próprio. Não cadastrar usuários reais automaticamente.
 
 O usuário pediu aviso **antes** da implantação na VPS. Apresentar commit/pacote exato, migrations, serviços/portas/volumes, recursos esperados, testes e retorno possível. Esta etapa não é autorização de implantação.
 
 Conferência visual posterior: o painel de automações mostra explicitamente que ainda não há app exclusivo do motor vinculado. Captura em `docs/evidencias/managed-pilot-engine-pendente.png`; prévia local preservada no navegador.
+
+## Complemento: alertas persistidos
+
+Migration 0153, receptor privado, rota de telemetria e dashboard global usam o mesmo registro transacional. Três amostras altas abrem alerta; histerese registra recuperação; replay e amostras atrasadas não duplicam eventos. Intervalo sem coleta reinicia a contagem. Estado e histórico foram restaurados em banco separado. O ensaio real ampliado de 63 verificações também confirmou o evento aberto renderizado no Next e a recusa da API global para cliente. Captura: `docs/evidencias/managed-pilot-alertas-persistidos.png`, com dados fictícios.
+
+Modelos Docker/Compose foram preparados para sidecar de objetos e receptor de telemetria, com usuário sem root, limites, segredos em arquivo e portas não publicadas. Docker não foi executado: permissões do volume, digest da imagem e isolamento do runtime precisam ser ensaiados antes de qualquer instalação.

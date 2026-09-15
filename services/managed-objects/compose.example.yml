@@ -1,0 +1,28 @@
+# Isolated rehearsal template. Not executed or approved for the production network.
+services:
+  managed-objects:
+    build: .
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.25
+    environment:
+      MANAGED_OBJECT_BIND: 0.0.0.0
+      MANAGED_OBJECT_ROOT: /data/objects
+      MANAGED_OBJECT_SECRET_FILE: /run/secrets/object_signing_key
+    volumes: [managed_objects:/data/objects]
+    secrets: [object_signing_key]
+    networks: [managed_private]
+    logging:
+      options: {max-size: "5m", max-file: "2"}
+    # No published ports. Host disk capacity still needs independent monitoring.
+volumes:
+  managed_objects:
+secrets:
+  object_signing_key:
+    file: ${MANAGED_OBJECT_KEY_PATH:?Private isolated signing key file required}
+networks:
+  managed_private:
+    internal: true

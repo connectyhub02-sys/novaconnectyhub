@@ -35,7 +35,27 @@ services:
     networks: [managed_private]
     logging:
       options: {max-size: "5m", max-file: "2"}
+  telemetry-gateway:
+    build: .
+    command: [node, telemetry-gateway-main.mjs]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      MANAGED_DATABASE_REST_URL: ${MANAGED_DATABASE_REST_URL:?Isolated private PostgREST endpoint required}
+      MANAGED_DATABASE_KEY_FILE: /run/secrets/database_service_key
+      MANAGED_TELEMETRY_KEY_FILE: /run/secrets/telemetry_key
+      MANAGED_GATEWAY_BIND: 0.0.0.0
+    secrets: [database_service_key, telemetry_key]
+    networks: [managed_private, database_private]
+    logging:
+      options: {max-size: "5m", max-file: "2"}
 secrets:
+  telemetry_key:
+    file: ${MANAGED_TELEMETRY_KEY_PATH:?Private isolated collector key file required}
   database_service_key:
     file: ${MANAGED_DATABASE_KEY_PATH:?Private isolated database service key file required}
   project_worker_key:

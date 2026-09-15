@@ -4,13 +4,13 @@
   "production_mutations": 0,
   "paid_calls": 0,
   "unit_integration_suite": {
-    "files": 10,
-    "tests": 39,
+    "files": 11,
+    "tests": 41,
     "passed": true
   },
   "pilot_http_checks": 20,
   "object_http_checks": 13,
-  "real_auth_next_rest_telemetry_checks": 59,
+  "real_auth_next_rest_telemetry_checks": 63,
   "postgres": "17.11",
   "postgrest": "16.3",
   "auth": {
@@ -30,5 +30,12 @@
     "engine_execution": "blocked_by_automatic_review_twice",
     "production_connected": false
   },
-  "recovery": "PGlite and private objects; quiescent fictional writers"
+  "recovery": "PGlite and private objects; quiescent fictional writers",
+  "persistent_alerts": {
+    "sql_transaction": true,
+    "restored_state": true,
+    "real_rest_event": true,
+    "real_next_event_render": true,
+    "external_notifications": false
+  }
 }
