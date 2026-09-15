@@ -6,7 +6,7 @@ export const here=dirname(fileURLToPath(import.meta.url));
 export const repo=resolve(here,'../..');
 export const hash=b=>createHash('sha256').update(b).digest('hex');
 export const json=async p=>JSON.parse(await readFile(p,'utf8'));
-export const packageFiles=['Dockerfile','Dockerfile.dockerignore','compose.review.yml','lib.mjs','runner.mjs','harness.mjs'].map(p=>`services/managed-rehearsal/${p}`).concat(['0150_managed_projects.sql','0151_managed_objects.sql','0152_managed_inngest_bindings.sql','0153_managed_persistent_alerts.sql'].map(p=>`supabase/migrations/${p}`),['worker.mjs','gateway.mjs','telemetry-gateway.mjs','telemetry-gateway-main.mjs'].map(p=>`services/managed-worker/${p}`),['main.mjs','server.mjs','protocol.mjs','disk-store.mjs'].map(p=>`services/managed-objects/${p}`));
+export const packageFiles=['Dockerfile','Dockerfile.dockerignore','compose.review.yml','lib.mjs','runner.mjs','harness.mjs','shared-host.mjs','storage.mjs'].map(p=>`services/managed-rehearsal/${p}`).concat(['0150_managed_projects.sql','0151_managed_objects.sql','0152_managed_inngest_bindings.sql','0153_managed_persistent_alerts.sql'].map(p=>`supabase/migrations/${p}`),['worker.mjs','gateway.mjs','telemetry-gateway.mjs','telemetry-gateway-main.mjs'].map(p=>`services/managed-worker/${p}`),['main.mjs','server.mjs','protocol.mjs','disk-store.mjs'].map(p=>`services/managed-objects/${p}`));
 export async function sourceManifest(){return Object.fromEntries(await Promise.all(packageFiles.map(async p=>[p,hash(await readFile(join(repo,p)))])));}
 export function assert(value,message){if(!value)throw Error(message);}
 export const hex=()=>randomBytes(32).toString('hex');
@@ -19,7 +19,7 @@ export async function fileManifest(root,relative=''){await noSymlink(join(root,r
 export async function removeOwnedChild(root,child){await marker(root);assert(['data','restore','backup','secrets','inputs'].includes(child),'Non-disposable child');const target=resolve(root,child);assert(target.startsWith(root+sep),'Cleanup escaped root');try{await treeSafe(target);}catch(e){if(e.code==='ENOENT')return;throw e;}await rm(target,{recursive:true});}
 export async function prepare(parent){parent=await noSymlink(parent);const id=randomUUID(),root=join(parent,`managed-rehearsal-${id}`);await mkdir(root,{mode:0o700});
  const created=new Date().toISOString(),expires=Math.floor(Date.now()/1000)+86400;
- const m={kind:'connectyhub-managed-rehearsal-v1',id,root,project:`connectyhub-managed-rehearsal-${id.replaceAll('-','')}`,created,expires,source:repo};
+ const m={kind:'connectyhub-managed-rehearsal-v1',id,root,project:`connectyhub-managed-rehearsal-${id.replaceAll('-','')}`,created,expires,source:repo,sourceHash:hash(JSON.stringify(await sourceManifest()))};
  await writeFile(join(root,'manifest.json'),JSON.stringify(m,null,2),{mode:0o600,flag:'wx'});
  await writeFile(join(root,'source-manifest.json'),JSON.stringify(await sourceManifest(),null,2),{mode:0o600,flag:'wx'});
  for(const d of ['data','data/postgres','data/objects','restore','restore/postgres','restore/objects','backup','secrets','inputs','evidence'])await mkdir(join(root,d),{recursive:true,mode:0o700});
@@ -27,8 +27,8 @@ export async function prepare(parent){parent=await noSymlink(parent);const id=ra
  for(const [name,value]of Object.entries(secrets))await writeFile(join(root,'secrets',name),value+'\n',{mode:0o444,flag:'wx'});
  const accounts=Object.fromEntries(['admin','productAdmin','a','b'].map(k=>[k,{email:`${k.toLowerCase()}@managed-fixture.example`,password:hex()}]));
  await writeFile(join(root,'secrets','accounts.json'),JSON.stringify(accounts),{mode:0o444,flag:'wx'});
- await writeFile(join(root,'inputs','auth.env'),`DATABASE_URL=postgresql://supabase_auth_admin:${secrets['auth-password']}@database:5432/managed_rehearsal?sslmode=disable\nGOTRUE_JWT_SECRET=${signing}\n`,{mode:0o600,flag:'wx'});
- await writeFile(join(root,'inputs','rest.env'),`PGRST_DB_URI=postgresql://authenticator:${secrets['rest-password']}@database:5432/managed_rehearsal\nPGRST_JWT_SECRET=${signing}\n`,{mode:0o600,flag:'wx'});
+ await writeFile(join(root,'inputs','auth.env'),`DATABASE_URL=postgresql://supabase_auth_admin:${secrets['auth-password']}@127.0.0.1:5432/managed_rehearsal?sslmode=disable\nGOTRUE_JWT_SECRET=${signing}\n`,{mode:0o600,flag:'wx'});
+ await writeFile(join(root,'inputs','rest.env'),`PGRST_DB_URI=postgresql://authenticator:${secrets['rest-password']}@127.0.0.1:5432/managed_rehearsal\nPGRST_JWT_SECRET=${signing}\n`,{mode:0o600,flag:'wx'});
  if(process.platform==='linux'&&process.getuid()===0){for(const path of ['data/postgres','restore/postgres'])await chown(join(root,path),70,70);for(const path of ['data/objects','restore/objects','evidence'])await chown(join(root,path),1000,1000);}
  return m;
 }

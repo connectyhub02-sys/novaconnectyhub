@@ -2,6 +2,7 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {createConnection} from 'node:net';
+import {networkInterfaces} from 'node:os';
 import {setTimeout as pause} from 'node:timers/promises';
 import {ids,hash,assert} from './lib.mjs';
 import {signObjectCapability} from '../managed-objects/protocol.mjs';
@@ -12,7 +13,7 @@ const key=async name=>(await readFile(`${secretRoot}/${name}`,'utf8')).trim();
 const service=await key('database_service_key'),worker=await key('project_worker_key'),workerB=await key('worker_b_key'),objectKey=await key('object_signing_key'),telemetry=await key('telemetry_key');
 const accounts=JSON.parse(await readFile(`${secretRoot}/fixture_accounts`,'utf8'));
 const checks=[];function check(v,label){assert(v,label);checks.push(label);}
-async function request(url,{method='GET',token,body,raw}={}){if(local){const u=new URL(url);assert(local[u.hostname],'Unmapped native endpoint refused');url=new URL(u.pathname+u.search,local[u.hostname]);}const r=await fetch(url,{method,headers:{...(token?{Authorization:`Bearer ${token}`}:{ }),...(body?{'Content-Type':'application/json'}:{})},body:raw??(body?JSON.stringify(body):undefined),redirect:'error',signal:AbortSignal.timeout(10000)});const bytes=Buffer.from(await r.arrayBuffer());let data;try{data=JSON.parse(bytes.toString());}catch{data=undefined;}return {status:r.status,ok:r.ok,data,bytes};}
+async function request(url,{method='GET',token,body,raw}={}){const u=new URL(url);assert(['auth','kong','managed-gateway','objects','telemetry-gateway'].includes(u.hostname),'Unmapped endpoint refused');if(local){assert(local[u.hostname],'Unmapped native endpoint refused');url=new URL(u.pathname+u.search,local[u.hostname]);}else{u.hostname='127.0.0.1';url=u;}const r=await fetch(url,{method,headers:{...(token?{Authorization:`Bearer ${token}`}:{ }),...(body?{'Content-Type':'application/json'}:{})},body:raw??(body?JSON.stringify(body):undefined),redirect:'error',signal:AbortSignal.timeout(10000)});const bytes=Buffer.from(await r.arrayBuffer());let data;try{data=JSON.parse(bytes.toString());}catch{data=undefined;}return {status:r.status,ok:r.ok,data,bytes};}
 const rest=(path,token,body,method=body?'POST':'GET')=>{if(path.startsWith('managed_jobs?')&&!path.includes('select='))path+='&select=id,status';return request(`http://kong:3000/${path}`,{token,body,method});};
 const rpc=(name,token,body)=>rest(`rpc/${name}`,token,body);
 const gateway=(body,token=worker)=>request('http://managed-gateway:3080/api/managed-workers',{token,body,method:'POST'});
@@ -22,8 +23,9 @@ async function sessions(){await ready('http://auth:9999/health');return Object.f
 async function save(name,value){await writeFile(`${evidence}/${name}.json`,JSON.stringify(value,null,2),{mode:0o600});}
 const load=async name=>JSON.parse(await readFile(`${evidence}/${name}.json`,'utf8'));
 async function object(method,object,bytes,project=ids.pA,tokenOverride){const claim={method,object,project,bytes:bytes.length,sha256:hash(bytes),expires:Date.now()+30000};return request(`http://objects:3081/objects/${project}/${object}`,{method,token:tokenOverride??signObjectCapability(claim,objectKey),raw:method==='PUT'?bytes:undefined});}
-async function egress(){if(local)return;const connected=await new Promise(resolve=>{const socket=createConnection({host:'1.1.1.1',port:443});let done=false;const end=v=>{if(done)return;done=true;socket.destroy();resolve(v);};socket.setTimeout(2000,()=>end(false));socket.once('connect',()=>end(true));socket.once('error',()=>end(false));});check(!connected,'external TCP unavailable (single non-production probe)');}
+async function egress(){if(local)return;check(Object.keys(networkInterfaces()).every(n=>n==='lo'),'only loopback interface');const routes=(await readFile('/proc/net/route','utf8')).trim().split('\n');check(routes.length===1,'no IPv4 route');const connected=await new Promise(resolve=>{const socket=createConnection({host:'192.0.2.1',port:443});let done=false;const end=v=>{if(done)return;done=true;socket.destroy();resolve(v);};socket.setTimeout(2000,()=>end(false));socket.once('connect',()=>end(true));socket.once('error',()=>end(false));});check(!connected,'TEST-NET TCP unreachable without contacting production');}
 try{
+ await egress();
  if(phase==='health'){await ready('http://auth:9999/health');check(true,'official Linux Auth healthy');}
  else if(phase==='users'){
   await ready('http://auth:9999/health');const users={};
