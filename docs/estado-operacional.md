@@ -647,3 +647,28 @@ Margem de 75% refere-se ao crédito nominal antes das despesas; bônus e pacotes
 reduzem o valor efetivo. Não é lucro líquido nem fatura conciliada. Nenhuma
 geração paga adicional; permanece US$ 0,959893 do teto US$ 1. Este registro
 prepara a publicação; a confirmação do deploy e da ativação é posterior.
+
+### Publicação e ativação conferidas — 14/09/2026, 23:03 BRT
+
+`e597e610`, deploy `dpl_2Re2Xbn3MwGLn9J5jTFFmnfNCWU9`, Ready/Production,
+com aliases `www.connectyhub.com.br` e `connectyhub.com.br`. Build webpack,
+TypeScript e 108 páginas concluídos; 37 testes/8 arquivos e ESLint aprovados.
+
+Tarifas novas ativas: v2 API `f2d697f9-0bdb-49d5-94c3-75a4cae42596`,
+Flash agente `1f36a160-8ab4-4300-9fdc-72e6832ad202`. Vigência começa na ativação,
+não na preparação. Duas antigas encerradas, sem alterar seus custos/preços ou
+metadata; outras 14 tarifas Eleven conferidas sem alteração. Cotação autenticada
+de mil caracteres: v2 API 240 cr/custo estimado R$ 0,60; Flash agente 120 cr/R$ 0,30.
+Um caráter v2 respeita mínimo 5. Catálogo administrativo carregou com a referência
+compartilhada; v2 agente manteve mínimo 50. Não houve geração nessas conferências.
+
+Gemini 2.5 e dicionário continuam disponíveis. Repetição de recibo anterior
+retornou a mesma operação, sem criação adicional. Guia público respondeu 200
+em ambos os domínios; capabilities sem autenticação 401; Financeiro no navegador
+sem sessão redirecionou ao login. A UI administrativa foi validada em prévia local
+com consulta real, não com uma nova sessão administrativa em produção nesta etapa.
+
+O histórico mantém as estimativas antigas, inclusive custos que estavam
+subestimados; o painel não representa conciliação retroativa nem lucro líquido.
+Despesas efetivas e receita por lote de crédito continuam sem vínculo individual.
+Nenhum novo débito de teste; orçamento conservador permanece US$ 0,959893.

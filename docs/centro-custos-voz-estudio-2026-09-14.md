@@ -100,3 +100,15 @@ Testes direcionados cobrem custo compartilhado, preservação de snapshots,
 isolamento, carteira/idempotência e projeção financeira. A ativação comercial
 deve ser conferida após o deploy do resolvedor; não basta a presença deste documento.
 O total conservador de testes pagos anteriores permanece US$ 0,959893 do teto US$ 1.
+
+## Confirmação posterior à publicação
+
+Em 14/09 às 23:03 BRT, `e597e610` estava Ready/Production no deploy
+`dpl_2Re2Xbn3MwGLn9J5jTFFmnfNCWU9`, com ambos os aliases de produção.
+As duas tarifas foram ativadas e as antigas encerradas; outras 14 tarifas
+Eleven permaneceram intactas. Cotação real autenticada (sem geração) confirmou
+240 cr/R$ 0,60 para mil caracteres v2 e 120 cr/R$ 0,30 para Flash agente.
+Repetição de recibo anterior manteve a mesma operação. Build, TypeScript, ESLint
+e 37 testes aprovados. Acesso anônimo ao Financeiro exigiu login e capabilities
+retornou 401. Não houve nova sessão administrativa em produção para QA visual;
+essa validação foi feita localmente com o componente e a consulta reais.
