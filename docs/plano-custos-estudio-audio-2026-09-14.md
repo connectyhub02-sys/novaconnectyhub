@@ -103,3 +103,30 @@ confirmar a tabela efetiva da conta. Dicionários também precisam da permissão
 aguardamos login na conta que possui a chave, não nova aprovação genérica.
 Gemini 2.5 permanece sem tarifa habilitada. Geração TTS e clonagem anteriores
 permanecem com suas configurações preservadas.
+
+## Conta efetiva e cadastro preparado — 14/09, 21:32 BRT
+
+A conta Creator dona da chave foi conferida pelo titular no navegador. Acesso
+mínimo de escrita de dicionários aplicado; reteste200 sem custo individual informado,
+zero variação de crédito observada. Total conservadorUS$0,673893; não presumir que
+dicionários são sempre gratuitos. Essa modalidade permanece bloqueada comercialmente.
+
+Tarifas novas preparadas, com modelos ainda desabilitados até publicação/teste:
+
+| Operação | Custo referênciaUSD | CréditosCH | Mínimo |
+|---|---:|---:|---:|
+| Transcrição / alinhamento | 0,22/h | 8,8/min |5|
+| Limpeza / troca de voz | 0,12/min |288/min|5|
+| Diálogo / desenho | 0,10/1000caracteres |0,24/caractere|5|
+| Salvar desenho |0 por salvar, usa slot|0 + mínimo|5|
+| Dublagemv1 sem marca |0,50/min|1200/min|5|
+
+Fórmula autorizadaUSD×6×4/0,01; unidade por segundo arredondado para cima na duração
+já aferida. Fonte de preços: página autenticada https://elevenlabs.io/app/subscription/api,
+colunaCreator. [Alinhamento](https://elevenlabs.io/docs/overview/capabilities/forced-alignment)
+usa preçoSTT. [Desenho](https://elevenlabs.io/docs/eleven-creative/voices/voice-design)
+cobra uma vez o texto das três prévias e salvar usa slot. [Contrato daAPI](https://elevenlabs.io/docs/api-reference/text-to-voice/design)
+define padrão eleven_multilingual_ttv_v2; transporte agora o explicita.
+[Dublagem](https://elevenlabs.io/docs/api-reference/legacy/dubbing/create) sem marca
+explicitada para corresponder ao preço; não usar valor da modalidade com marca.
+Tarifas antigas deTTS, clonagem, WhatsApp eGemini foram preservadas.

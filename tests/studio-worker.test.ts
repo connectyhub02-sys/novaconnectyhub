@@ -81,6 +81,7 @@ it('fails before dispatch if credentials cannot be loaded',async()=>{
 it('does not expose another project operation by a guessed ID',async()=>{
  const f=fixture();const auth={client:f.client,project:{id:'other',organization_id:'org'}} as Parameters<typeof ownedStudioOperation>[0];
  await expect(ownedStudioOperation(auth,f.id)).rejects.toMatchObject({status:404});
+ await expect(ownedStudioOperation({...auth,project:{...auth.project,id:'project',organization_id:'other-org'}},f.id)).rejects.toMatchObject({status:404});
 });
 
 it('rotates unrecoverable work so later reservations are not starved by the first batch',async()=>{

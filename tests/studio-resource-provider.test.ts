@@ -12,6 +12,7 @@ it('keeps design previews and saving distinct, with explicit bounded preview tex
   const input = { operation: 'voice_design' as const, description: 'Uma voz suave para narrar histórias.', sampleText: 'Uma história começa com uma pergunta. '.repeat(5) };
   const body = JSON.parse(String(studioResourceProviderRequest(input).body));
   expect(body.auto_generate_text).toBe(false);
+  expect(body.model_id).toBe('eleven_multilingual_ttv_v2');
   expect(body.should_enhance).toBe(false);
   expect(() => studioResourceProviderRequest({ ...input, sampleText: 'curto' })).toThrow();
   const save = studioResourceProviderRequest({ operation: 'voice_design_save', name: 'Narrador', description: input.description, previewId: 'project_owned_preview' });
@@ -30,6 +31,7 @@ it('only uploads bounded audio for a single dubbing target without enabling edit
   const form = request.body as FormData;
   expect(form.get('target_lang')).toBe('pt');
   expect(form.get('dubbing_studio')).toBe('false');
+  expect(form.get('watermark')).toBe('false');
   expect(form.has('source_url')).toBe(false);
   expect(studioDubReadUrl('own_dub', 'pt')).toBe('https://api.elevenlabs.io/v1/dubbing/own_dub/audio/pt');
   expect(() => studioDubReadUrl('../../other')).toThrow();

@@ -48,6 +48,7 @@ export function studioResourceProviderRequest(input: StudioResourceRequest) {
       // Explicit text permits an exact preflight character quote. Do not turn on
       // automatic text/prompt enhancement with unbounded or separately priced work.
       return json('/v1/text-to-voice/design?output_format=mp3_44100_128', {
+        model_id: 'eleven_multilingual_ttv_v2',
         voice_description: text(input.description, 20, 1000), text: text(input.sampleText, 100, 1000),
         auto_generate_text: false, should_enhance: false,
       });
@@ -76,6 +77,7 @@ export function studioResourceProviderRequest(input: StudioResourceRequest) {
       form.set('target_lang', language(input.targetLanguage));
       form.set('mode', 'automatic');
       form.set('dubbing_studio', 'false');
+      form.set('watermark', 'false');
       return { url: `${providerOrigin}/v1/dubbing`, body: form as BodyInit, contentType: null, audioResult: false };
     }
     default:

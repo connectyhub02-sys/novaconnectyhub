@@ -4,6 +4,7 @@ import {listWhatsappAudioVoices} from '@/lib/elevenlabs/voices';
 import {resolveActiveBillingRates,calculateMeteredUsageCharge} from '@/lib/billing/metered-usage';
 import {VoiceError} from './contract';
 import {voiceModelName} from './model-presentation';
+const speechFeatures=['text_to_speech','voice_reply_whatsapp'];
 // A shared provider credential is never an authorization to use its private
 // catalog. Only premade voices and locally owned project clones are returned.
 export async function voiceCatalog(auth:VoiceAuth) {
@@ -23,14 +24,14 @@ export async function voiceCatalog(auth:VoiceAuth) {
   ],partial:!!state.errorMessage};
 }
 export async function voiceRates(auth:VoiceAuth,model:string) {
-  const {data:enabled,error}=await auth.client.from('provider_models').select('id,provider_cost_centers!inner(provider,enabled)').eq('provider_model_id',model).eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true).maybeSingle();
+  const {data:enabled,error}=await auth.client.from('provider_models').select('id,provider_cost_centers!inner(provider,enabled)').eq('provider_model_id',model).in('feature_code',speechFeatures).eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true).maybeSingle();
   if(error || !enabled) throw new VoiceError('model_unavailable',422,'Modelo não disponível. Consulte o catálogo.');
   const rates=await resolveActiveBillingRates(auth.client,{provider:'elevenlabs',featureCode:'text_to_speech',modelId:model,planCode:auth.planCode});
   if(!rates.some(r=>r.unit==='character' && r.connectyPricePerUnit>0)) throw new VoiceError('pricing_unavailable',503,'Tarifa de geração avulsa indisponível para este modelo.');
   return rates;
 }
 export async function voiceModels(auth:VoiceAuth) {
-  const {data,error}=await auth.client.from('provider_models').select('provider_model_id,display_name,provider_cost_centers!inner(provider,enabled)').eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true);
+  const {data,error}=await auth.client.from('provider_models').select('provider_model_id,display_name,provider_cost_centers!inner(provider,enabled)').in('feature_code',speechFeatures).eq('enabled',true).eq('provider_cost_centers.provider','elevenlabs').eq('provider_cost_centers.enabled',true);
   if(error) throw new VoiceError('models_unavailable',503,'Não foi possível consultar os modelos.');
   const models=[];
   for(const row of data??[]) {

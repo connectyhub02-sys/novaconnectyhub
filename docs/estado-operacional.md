@@ -469,3 +469,37 @@ do recurso já existe; a pendência é acesso à conta correta. Gemini 2.5 segue
 desabilitado por falta de tarifa correspondente. TTS/clonagem já existentes não
 tiveram tarifas alteradas. As demais modalidades passaram no transporte sintético,
 mas ainda não no percurso comercial completo painel/carteira.
+
+### ElevenLabs e clareza dos créditos — 14/09/2026, 21:32 BRT
+
+Conta proprietária da chave Connectyhub confirmada no painel ElevenLabs (Creator).
+A comparação privada da chave foi positiva; somente a permissão de escrita de
+Dicionários de Pronúncia foi habilitada. Reteste sintético respondeu200; sem
+variação observada de créditos nem cabeçalho individual de custo. Total conservador
+US$0,673893 deUS$1: osUS$0,02 adicionais continuam contados pelo teto.
+Não registrar a credencial aqui. Dicionário comercial continua fechado até comprovar tarifa.
+
+Tabela ElevenAPI autenticada confirmou ScribeUSD0,22/h, isolamento/trocaUSD0,12/min,
+v2/v3USD0,10/1000caracteres e dublagemv1 sem marcaUSD0,50/min. O valorUSD0,33/min
+é da opção com marca e não se aplica ao transporte atual. Alinhamento acompanha
+STT conforme documentação; desenho cobra os caracteres explícitos uma vez para
+três prévias, salvar usa slot sem outra geração. Oito tarifas novas foram preparadas
+comUSD×6×4/R$0,01 e mínimo5; modelos permanecem DESABILITADOS nesta conferência.
+As linhas financeiras preexistentes foram comparadas e preservadas integralmente.
+
+Relato do titular e print mostraram cotação393.9696 ao lado de saldo48.352.
+O valor é o limite de uma operação, não cota do fornecedor. O endpoint usa a
+organização/projeto autenticados; detalhes/listagens exigem ambos os vínculos,
+e custos administrativos exigem isPlatformAdmin. Não foi encontrado vazamento.
+O cálculo Gemini usa entrada conservadora e máximo8192tokens de saída; SQL impede
+liquidação acima da reserva. O teste anterior debitou8,2944 e zerou a reserva.
+
+Correção local elimina consulta manual e calcula o custo com debounce600ms.
+Descarta respostas antigas, bloqueia geração sem cotação e preserva o teto preciso
+no X-Max-Credits. Exibe “Custo máximo deste áudio: até394créditosConnectyHub” para
+esse caso, arredondando para cima apenas na tela. A ação vira Gerar áudio e depois
+Ver resultado/Acompanhar; recuperar recibo conhecido usaGET. Custo final tem resumo
+com duas casas e precisão original nos detalhes. Nenhum saldo/cobrança foi ajustado.
+Prévia local desktop/mobile390px sem overflow, cotação sem geração, recuperação
+sem segundoPOST e erro de tarifa com geração bloqueada conferidos.35testes dirigidos,
+ESLint, TypeScript e build webpack108páginas passaram. Publicação em andamento.
