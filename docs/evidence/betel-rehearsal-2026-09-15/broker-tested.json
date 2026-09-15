@@ -1,0 +1,13 @@
+{
+  "linux_passed": true,
+  "source_sha256": {
+    "broker.mjs": "f7e7d877fc89e1a78bbd3a2dab10ad9806bb07e5c7231910e80880da3a705c2c",
+    "protocol.mjs": "bd3e12fdb05e17f1a1a02b1073a7727d86fcc0cfc113dfa51548bf106c92a2ac",
+    "main.mjs": "dc00acf71192ec38094b918e0c67ac1059e5e897e8157c014c8ce57089905f5a",
+    "broker.test.mjs": "4f718b6687d7a608dfd67a0b9c461fca8e61a8010bd75cb080ed048cf49f0d51",
+    "http.test.mjs": "10254ab251701980f8938c06511489a2fd8224022dc9b09add66bdaed21372fc",
+    "README.md": "cfcead8786a6ff1e5fb7a99ba0b85fc9eb441e36700b5cb299cba35c711bd5ac"
+  },
+  "live": true,
+  "registration_enabled": false
+}

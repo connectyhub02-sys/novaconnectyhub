@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-09-15T18:04:29.508109+00:00",
+  "apiAuthPassed": true,
+  "postgresTunnelPassed": true,
+  "brokerIsolationPassed": true,
+  "syntheticExecutionPassed": true,
+  "appEgressBlocked": true,
+  "runtimeRestartPassed": true,
+  "backupRestorePassed": true,
+  "offhostBackupVerified": true,
+  "scope": "isolated Betel rehearsal only; no production cutover",
+  "longRunId": "01M2K3CH0SKRXC7TRH0YNXDG5A",
+  "runtimeImage": "sha256:0b425edc86dec09ed5953edd4c49f4c0c46092dfefeee944c174e1f3062666f4",
+  "evidenceDirectory": "C:\\Users\\conne\\.codex\\worktrees\\managed-projects\\ConnectyHub\\docs\\evidence\\betel-rehearsal-2026-09-15",
+  "businessFunctionsEnabled": false
+}

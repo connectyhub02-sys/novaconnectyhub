@@ -1,0 +1,43 @@
+{
+  "observed_at": "20260915T175839Z",
+  "backup_path": "/opt/betel-isolated-rehearsal/backups/final-20260915T175839Z",
+  "snapshot": "00000031-00000005-1",
+  "manifest": {
+    "private-config.tar.gz": {
+      "bytes": 45509850,
+      "sha256": "eba40a6c4a51be6c451e384c24ff2b0fb0f13db0ed0c8eb50e13b404365c107e"
+    },
+    "storage.tar.gz": {
+      "bytes": 231,
+      "sha256": "7516ed506d09e4845c872ad53edbdb62c7fb33a5422de04cf8342d4546d4b804"
+    },
+    "catalog.json": {
+      "bytes": 1766079,
+      "sha256": "3097f7e31c693133e1950cc012b236ded9338d0b6714d669e76ac3af84cbfb29"
+    },
+    "database.dump": {
+      "bytes": 11458491,
+      "sha256": "5c703b33765951bd477cd15650724b8fd241b3b591c71ea2a4e8e86891e4c935"
+    },
+    "integrity.json": {
+      "bytes": 82562,
+      "sha256": "f5c1cd431f4d476452d8eeb4faa5ca48398856a4351ccc2590c93b1a24b23426"
+    },
+    "restored-integrity.json": {
+      "bytes": 82579,
+      "sha256": "7fd1e718463a377c69ff8a7eda705dfaf682e46ad7ede87d700c6f830cb08731"
+    },
+    "roles.sql": {
+      "bytes": 5940,
+      "sha256": "b372cdd7cd4d4ffa42004eca6dd81f446855653d035d655c1cbe9c3e9840dfee"
+    }
+  },
+  "restore_verified": true,
+  "same_cluster_roles_used": true,
+  "restored_tables": 154,
+  "foreign_keys_checked": 217,
+  "foreign_key_violations": 0,
+  "probe_removed": true,
+  "source_cutover": false,
+  "offhost_sha256_verified": true
+}

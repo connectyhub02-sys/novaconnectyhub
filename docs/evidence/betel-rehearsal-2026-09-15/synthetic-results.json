@@ -1,0 +1,30 @@
+{
+  "passed": [
+    {
+      "runId": "01M2K3923VVZTB7BYN9FD0SSQT",
+      "fixtureId": "ee1c0f90-0575-435b-a5e6-702a944a3c4b",
+      "state": "completed",
+      "retryAllowed": null,
+      "providerCalls": 0
+    },
+    {
+      "runId": "01M2K3CH0SKRXC7TRH0YNXDG5A",
+      "fixtureId": "126bc487-0425-4a78-962c-c084218347fe",
+      "state": "completed",
+      "retryAllowed": null,
+      "providerCalls": 0
+    },
+    {
+      "runId": "01M2K3HB9DA5W5T8BMM34F8BRN",
+      "fixtureId": "f09607da-f8b2-4492-998d-b3c1e3f613de",
+      "state": "uncertain",
+      "retryAllowed": false,
+      "providerCalls": 0
+    }
+  ],
+  "known_initial_failures": 2,
+  "initial_failure_reason": "SDK response marker headers omitted; corrected",
+  "duplicate_same_receipt": true,
+  "long_event_run_count": 1,
+  "engine_restart": false
+}

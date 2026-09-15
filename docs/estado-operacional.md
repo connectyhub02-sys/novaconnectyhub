@@ -728,7 +728,6 @@ Revisão 3, preparação local para host compartilhado: requisito de daemon vazi
 
 [Pacote aplicável para revisão e pré-condições](pacote-ensaio-linux-gerenciado-2026-09-15.md), com revisão 2 preservada. Ainda não declarar pronto para executar na VPS: cache de imagens não preparado, capacidade/ferramentas/loop no destino não conferidos e operações Docker/Linux não homologadas. A próxima decisão é a janela/ambiente já disponível para preparar cache e validar o ensaio, sem pressupor compra de servidor nem parar produção. Nenhuma VPS, produção, Inngest, push/deploy ou cobrança foi alterada nesta etapa. Bloqueios automáticos anteriores permanecem respeitados.
 
-
 ## Ensaio Linux gerenciado em host compartilhado — 15/09/2026, concluído
 
 Após autorização expressa do titular, executado somente ensaio fictício na VPS existente, com imagens oficiais em cache, Node privado e filesystem loop/ext4 exclusivo de 2 GiB. Oitava fixture final concluiu às 10h43 BRT: **138 checks Linux aprovados**, incluindo Auth/RLS, objetos e quota, tmpfs cheio, worker diagnóstico, telemetria, revogação e restauração de banco/objetos em novos containers. Carga limitada: 160 GET/30 s, zero erros, p95 60 ms; não representa capacidade produtiva. Preflight 300 s, CPU máxima 47,8%. Limites reais de containers conferidos em 35 snapshots.
@@ -738,3 +737,28 @@ Corrigidos no pacote de ensaio: descarte de blocos pelo mkfs, prontidão do Post
 Os **16 containers produtivos permaneceram idênticos** em identidade/configuração/ciclo de vida/saúde; 15 healthchecks saudáveis, zero reinícios. Sentinela fictícia preservada e mudança deliberada detectada; removida. Watchdog real com prazo de quatro segundos encerrou um banco fictício. Cleanup conferido: zero containers/processos/mounts/loops/imagens de dados do ensaio. Evidência exportada e hash conferido antes da liberação. Permanecem apenas cache de imagens, Node privado, fonte/auditoria e pequenos marcadores, sem prune.
 
 [Relatório, falhas e limites](ensaio-linux-gerenciado-2026-09-15.md) e [evidência Linux](evidencias/managed-rehearsal-linux-2026-09-15.json). Nenhuma migration/publicação do portal em produção, integração de cliente real, envio pago ou migração Betel/Vision. Inngest real continua excluído pelo bloqueio anterior; não houve nova tentativa nem alternativa. Esse ensaio concluído não equivale a backup externo da produção ou plataforma gerenciada pronta comercialmente. Alterações mantidas na worktree `codex/managed-projects`, sem push/deploy.
+
+## Atualização posterior — portal publicado e Betel em ensaio, 15/09/2026
+
+Os registros de preparação acima são históricos. O portal foi publicado em
+`infraestrutura.connectyhub.com.br` e validado com a fonte ConnectyHub em leitura,
+arquivos selecionados e Inngest existente. Entregas e limites:
+[portal persistente](portal-persistente-gerenciado-2026-09-15.md) e
+[conexão operacional](connectyhub-conexao-operacional-2026-09-15.md).
+
+A Betel foi exportada da origem e importada em instalação exclusiva de ensaio
+na VPS. Não houve corte da produção. Auth, REST, Storage, aplicativo SSR com
+permissões corrigidas e broker restrito foram testados. Uma função sintética no
+Inngest existente concluiu espera de 360 segundos após reinício do ensaio,
+deduplicação e cenário de resultado incerto sem chamadas pagas. Nenhum novo motor
+Inngest; 45 funções anteriores da ConnectyHub preservadas.
+
+Backup final restaurado: 154 tabelas, 217 referências sem violações; cópia privada
+fora da VPS conferida por hash. Credenciais, dumps e identidades QA não estão no
+Git. O runtime bloqueia acesso à Internet e aos serviços laterais de produção.
+As contas QA são apenas do destino. [Relatório do ensaio Betel](betel-ensaio-isolado-2026-09-15.md).
+
+Não confundir esse marco com migração de todos os fluxos comerciais: handlers
+reais, pagamentos, WhatsApp, scraper, R2 produtivo e corte Vercel/DNS permanecem
+separados. O broker aceita apenas a fixture revisada, não um catálogo genérico
+de funções. Não cancelar o Supabase Cloud da Betel com base nesse ensaio.

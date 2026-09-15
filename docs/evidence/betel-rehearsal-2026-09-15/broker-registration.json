@@ -1,0 +1,1 @@
+{"negative_checks": {"noauth": 401, "foreign_run": 403, "graphql": 403, "foreign_event": 403, "foreign_register": 403}, "registration_status": 200, "registration_disabled_afterwards": true, "new_engine_installed": false, "real_business_event_sent": false}

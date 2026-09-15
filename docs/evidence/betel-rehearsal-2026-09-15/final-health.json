@@ -1,0 +1,205 @@
+{
+  "observed_at": "2026-09-15T18:00:05.909998+00:00",
+  "betel": {
+    "running": true,
+    "health": "healthy",
+    "memory_limit_bytes": 2147483648,
+    "cpu_limit_nanos": 1000000000,
+    "restart_policy": {
+      "Name": "no",
+      "MaximumRetryCount": 0
+    },
+    "ports": {},
+    "internal_network": true,
+    "network_members": 1,
+    "systemd_active": "active",
+    "mount": "ext4   rw,nosuid,nodev,noexec,relatime"
+  },
+  "memory": {
+    "MemTotal": "24608572 kB",
+    "MemAvailable": "20972044 kB"
+  },
+  "disk": "Avail\n232463327232",
+  "containers": [
+    {
+      "name": "betel-isolated-rehearsal-app-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "betel-isolated-rehearsal-gateway-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "betel-isolated-rehearsal-auth-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "betel-isolated-rehearsal-storage-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "betel-isolated-rehearsal-rest-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "betel-isolated-rehearsal-database-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-telemetry-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-objects-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-diagnostic-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-facade-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-web-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-rest-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-auth-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-managed-portal-database-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-ai-relay-relay-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-auth",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-inngest-inngest-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-inngest-postgres-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-inngest-redis-1",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-edge-functions",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-envoy",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-studio",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-storage",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "connectyhub-proxy-caddy-1",
+      "running": true,
+      "health": null,
+      "restarts": 0
+    },
+    {
+      "name": "supabase-pooler",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "realtime-dev.supabase-realtime",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-meta",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-rest",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-db",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    },
+    {
+      "name": "supabase-imgproxy",
+      "running": true,
+      "health": "healthy",
+      "restarts": 0
+    }
+  ]
+}
