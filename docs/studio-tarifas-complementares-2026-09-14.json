@@ -1,0 +1,40 @@
+{
+  "version": "studio-complement-20260914-v1",
+  "usd_brl": 6,
+  "credit_brl": 0.01,
+  "margin_multiplier": 4,
+  "rates": [
+    {
+      "operation": "dictionary_create",
+      "model_id": "pronunciation-dictionary",
+      "status": "provisional",
+      "provider_usd_per_unit": {"request": 0},
+      "credits_per_unit": {"request": 5},
+      "minimum_credits": 5,
+      "evidence": "PROVISORIA autorizada pelo titular em14/09/2026. Gerenciamento estimado sem custo incremental, nao confirmado como tarifa oficial zero. Tabela Creator/API nao lista dicionarios; API add-from-rules gerencia regras sem gerar audio; teste anterior HTTP200/delta0 apenas corroborativo. Cobrar5creditos por criacao/nova versao; leitura/replay/aplicacao sem taxa adicional. TTS permanece cobrado pela tarifa existente. Revisar ao obter fatura/condicao comercial; sem garantia de lucro liquido.",
+      "sources": ["https://elevenlabs.io/app/subscription/api", "https://elevenlabs.io/docs/api-reference/pronunciation-dictionaries/create-from-rules"],
+      "break_even_provider_usd_before_other_costs": 0.0083333333,
+      "max_provider_usd_for_4x": 0.0020833333
+    },
+    {
+      "operation": "gemini_tts",
+      "model_id": "gemini-2.5-flash-preview-tts",
+      "status": "official_reference",
+      "provider_usd_per_unit": {"input_token": 0.0000005, "output_token": 0.00001},
+      "credits_per_unit": {"input_token": 0.0012, "output_token": 0.024},
+      "minimum_credits": 5,
+      "evidence": "Google Gemini Developer API pricing conferido14/09/2026: Gemini2.5FlashPreviewTTS StandardUSD0.50/1Mtexto entrada eUSD10/1Maudio saida. Sem Batch/Live/3.1. R$6/USD,4x,creditoR$0.01,minimo5 por operacao aplicado uma vez. Custo de referencia; nao lucro liquido. Acesso de geracao real desta variante ainda nao testado.",
+      "sources": ["https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-flash-preview-tts"]
+    },
+    {
+      "operation": "gemini_tts",
+      "model_id": "gemini-2.5-pro-preview-tts",
+      "status": "official_reference",
+      "provider_usd_per_unit": {"input_token": 0.000001, "output_token": 0.00002},
+      "credits_per_unit": {"input_token": 0.0024, "output_token": 0.048},
+      "minimum_credits": 5,
+      "evidence": "Google Gemini Developer API pricing conferido14/09/2026: Gemini2.5ProPreviewTTS StandardUSD1/1Mtexto entrada eUSD20/1Maudio saida. Sem Batch/Live/3.1. R$6/USD,4x,creditoR$0.01,minimo5 por operacao aplicado uma vez. Custo de referencia; nao lucro liquido. Acesso de geracao real desta variante ainda nao testado.",
+      "sources": ["https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-pro-preview-tts"]
+    }
+  ]
+}

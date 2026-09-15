@@ -563,3 +563,30 @@ Dicionário e Gemini2.5 continuam fechados por evidência financeira ausente;
 os caminhos para obter essa evidência estão no quadro. Nenhuma geração adicional,
 contato externo ou alteração de plano. Orçamento conservador mantidoUS$0,959893.
 Este registro posterior fica local para o próximo pacote, sem deploy documental.
+
+### Tarifas complementares autorizadas — 14/09/2026, 22:15 BRT
+
+O titular substituiu a exigência de custo exato para os recursos pendentes por
+autorização explícita para previsão, implementação e teste. Cadastro isolado
+preparado conforme [tabela versionada](studio-tarifas-complementares-2026-09-14.json):
+dicionário5créditos por criação/nova versão, custo externo assumido0 e **não
+confirmado gratuito**. Consulta/replay/aplicação não recebem taxa adicional;
+TTS mantém a cobrança anterior. Metadata financeira e evidência administrativa
+identificam a hipótese; painel/guia passam a informar tarifa provisória.
+
+Receita nominalR$0,05/op cobre custo externo atéUS$0,008333 antes de infraestrutura,
+impostos e taxas; para preservar4x, custo atéUS$0,002083. Não é margem garantida.
+ContaCreator e FAQ da assinatura consultadas: uso deTTS é por caractere, dicionário
+não tem linha específica na tabela. HTTP200/delta0 anterior é apenas corroborativo.
+
+Google[preços oficiais](https://ai.google.dev/gemini-api/docs/pricing) confirma
+2.5FlashTTSStandardUSD0,50/Mtokens entrada e10/Msaída; ProUSD1/M e20/M.
+TarifasCH Flash0,0012/inputtoken+0,024/outputtoken, Pro0,0024+0,048, mínimo5
+uma vez por operação, sem alterarGemini3.1. Modelos existentes `external_ai`
+preservados: apenas novas tarifas da feature `voice_generation_audio` foram
+inseridas. GETmodels autenticado200 para ambas as variantes, comgenerateContent;
+não é teste de geração, quota ou qualidade. Nenhum POST ao fornecedor nesta rodada.
+
+28testes dirigidos, ESLint e build webpack/TypeScript108páginas passaram.
+Ainda falta confirmar publicação do aviso, ativação e cotação no catálogo real.
+O orçamento conservador continuaUS$0,959893 deUS$1; não programar geração adicional.
