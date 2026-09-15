@@ -40,6 +40,8 @@ Endereços operacionais registrados: aplicação `https://www.connectyhub.com.br
 
 O Inngest da VPS não transfere a execução dos handlers para a VPS: os handlers continuam na Vercel. A migração atual não é uma migração da hospedagem. Supabase self-hosted não inclui toda a camada comercial/multiprojetos do Cloud. Um novo projeto independente exige planejamento de isolamento e capacidade; isso ficou para etapa posterior. n8n foi discutido como possibilidade, sem decisão de instalação.
 
+A Betel tem implantação própria posterior na VPS, separada da ConnectyHub principal. O ensaio sintético `betel-ai-rehearsal` foi retirado por decisão do titular em 15/09; seu broker está desabilitado. Preservar a aplicação produtiva `betel-ai` e não recriar o ensaio por seguir documentação histórica. O estado operacional registra publicação e limites dos testes reais.
+
 O portal `infraestrutura.connectyhub.com.br` é uma evolução separada: mantém uma conexão administrativa em leitura à organização ConnectyHub Interno. Os projetos QA foram removidos em 15/09 após os ensaios, com recuperação privada preservada. Não equivale a provisionar um Supabase completo por projeto. A fonte produtiva é consultada por coletor fixo, com data/escopo nos snapshots e acesso exclusivo de infraestrutura; não inferir permissão de produção pelo vínculo de uma empresa/projeto do portal. A conexão também consulta funções/execuções do Inngest existente e permite downloads dos arquivos selecionados, mediados por leitor no host com origem e organização revalidadas. Não expõe controle do motor nem chaves produtivas ao navegador. Migração Betel/Vision permanece separada. [Contrato operacional e recuperação](connectyhub-conexao-operacional-2026-09-15.md).
 
 ## Mapa para investigar um pedido

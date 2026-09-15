@@ -90,3 +90,28 @@ test('scraper batch forbids whole-function retry and long callback budget leaves
  } finally {AbortSignal.timeout=timeout;}
  assert.deepEqual(budgets,[30_000,310_000]);
 });
+
+
+test('engine callback external ID maps to durable event and rejects changed payload',async t=>{
+ const {broker,calls}=await setup(t);await sendEvent(broker);
+ const sent=JSON.parse(calls[0].body)[0];const fn=manifest.find(f=>f.id==='betel-ai-meta-whatsapp-campaigns');
+ assert.equal((await broker.handle(callback(fn,sent))).status,200);
+ await reject(broker.handle(callback(fn,{...sent,data:{campaignId:'foreign'}})),'unsubmitted_event');
+ await reject(broker.handle(callback(fn,{...sent,id:'betel-'+'0'.repeat(64)})),'unsubmitted_event');
+ assert.equal(calls.length,2);
+});
+
+test('signed callback can race HTTP receipt only with exact durable pre-send identity and payload',async t=>{
+ let receipt,submitted;const reached=new Promise(resolve=>submitted=resolve);
+ const {broker,calls}=await setup(t,async(url,o)=>{
+  if(url.pathname.startsWith('/e/')){submitted();return new Promise(resolve=>receipt=()=>resolve(new Response('{"ids":["01BETELRECEIPT"]}')));}
+  const text='{"ok":true}';return new Response(text,{headers:{'x-inngest-signature':sign(text,key)}});
+ });
+ const pending=sendEvent(broker);await reached;
+ const sent=JSON.parse(calls[0].body)[0],fn=manifest.find(f=>f.id==='betel-ai-meta-whatsapp-campaigns');
+ try {
+  await reject(broker.handle(callback(fn,{...sent,data:{changed:true}})),'unsubmitted_event');
+  assert.equal((await broker.handle(callback(fn,sent))).status,200);
+ } finally {receipt();await pending;}
+ assert.equal(calls.length,2);
+});

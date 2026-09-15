@@ -104,9 +104,15 @@ export class ProductionBroker extends Broker {
    demand(typeof e.name==='string'&&e.name.startsWith(prefix),403,'foreign_event_denied');
    const name=e.name.slice(prefix.length);
    demand(fn.triggers.some(t=>t.event===name),403,'event_function_mismatch');
-   // The engine event's id is its receipt ID, not necessarily the client id.
-   const accepted=Object.values(this.ledger.value.events).some(v=>v.name===name&&v.state==='accepted'&&v.reply?.ids?.includes(e.id));
-   demand(accepted,403,'unsubmitted_event');
+   // The trigger receipt ULID and callback payload external ID are distinct.
+   // A signed callback may arrive before the event HTTP acknowledgement. The
+   // durable pre-send entry still proves ownership, but only with exact payload.
+   const fingerprint=hash([name,e.data,e.v??null]);
+   const submitted=Object.entries(this.ledger.value.events).some(([key,value])=>
+    value.name===name&&value.hash===fingerprint&&
+    (e.id==='betel-'+key&&['accepted','uncertain'].includes(value.state)||
+     value.state==='accepted'&&value.reply?.ids?.includes(e.id)));
+   demand(submitted,403,'unsubmitted_event');
    return {...e,name};
   };
   const event=checkEvent(body.event);const events=body.events?.map(checkEvent);
