@@ -130,3 +130,46 @@ define padrão eleven_multilingual_ttv_v2; transporte agora o explicita.
 [Dublagem](https://elevenlabs.io/docs/api-reference/legacy/dubbing/create) sem marca
 explicitada para corresponder ao preço; não usar valor da modalidade com marca.
 Tarifas antigas deTTS, clonagem, WhatsApp eGemini foram preservadas.
+
+## Ativação e carteira real — 14/09/2026, após publicação2befee97
+
+As oito tarifas preparadas acima foram ativadas após publicação do filtro de
+modelos por finalidade: modelos exclusivos de ferramentas não entram no seletor
+TTS nem herdam tarifa genérica de TTS. Comparação final com o snapshot confirmou
+que nenhuma linha ElevenLabs preexistente foi alterada.
+
+| Modalidade habilitada | Débito do teste sintético (créditosCH) | Resultado verificado |
+|---|---:|---|
+| Transcrição |5|JSON, SRT e VTT|
+| Limpeza |28,8|MP3, hash/FFmpeg e player autenticado|
+| Troca de voz |28,8|MP3 e hash/FFmpeg|
+| Alinhamento |5|JSON, SRT e VTT|
+| Diálogo com duas vozes de catálogo |7,2|MP3 e hash/FFmpeg|
+| Desenho |31,68|Três prévias privadas, hash/FFmpeg|
+| Salvar desenho |5|Voz salva confirmada por leitura no fornecedor|
+| Dublagemv1 sem marca |120|Recibo existente consultado, MP3 e hash/FFmpeg|
+
+Esses números são os débitos dos exemplos pequenos, não uma tarifa fixa universal.
+Áudio fonte sintético5,16s aferido; cobrança por duração usa6s/0,1min. Diálogo30
+caracteres e desenho132caracteres. Total231,48créditosCH. Cada recibo tem exatamente
+um evento de uso e um débito, reserva final zero e repetição com o mesmo ID sem
+novo débito. Outra identidade de projeto foi recusada. Resultados, asset e voz
+sintéticos removidos; recibos e transações preservados.
+
+Percurso verificado: helper administrativo com voiceAccess/lógica de criação real,
+evento Inngest na VPS, worker publicado na Vercel, fornecedor, storage privado e
+carteira. Consulta de resultado autenticada no painel também passou. Não declarar
+cobertura completa de todos os formulários ou endpoints públicos com chave.
+GETs anônimos de operações, resultado e painel retornaram401. Sem dados pessoais,
+mensagens a terceiros, troca de plano ou habilitação de excedentes.
+
+Total conservador agregado **US$0,959893**, saldo autorizadoUS$0,040107.
+Os oito testes novos mantêm seus tetos no ledger porque o worker não reteve
+cabeçalhos individuais de custo; o valor não representa uma fatura. Não houve
+repetição de geração para consultar dublagem nem nova geração paga após esta rodada.
+
+Pendências delimitadas: dicionários funcionaram no transporte após ajuste mínimo
+da permissão, mas continuam desabilitados até preço comercial comprovado; Gemini2.5
+Flash/Pro continuam sem tarifa. Gemini3.1, TTS e clonagem existentes preservados.
+Opção de continuidade: manter somente essas três variantes fechadas e usar as
+modalidades comprovadas, sem contratar outro plano ou gastar além do teto.

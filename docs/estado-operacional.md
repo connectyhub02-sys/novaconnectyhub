@@ -503,3 +503,40 @@ com duas casas e precisão original nos detalhes. Nenhum saldo/cobrança foi aju
 Prévia local desktop/mobile390px sem overflow, cotação sem geração, recuperação
 sem segundoPOST e erro de tarifa com geração bloqueada conferidos.35testes dirigidos,
 ESLint, TypeScript e build webpack108páginas passaram. Publicação em andamento.
+
+### Estúdio publicado e modalidades ativadas — 14/09/2026, noite
+
+Substitui as pendências de publicação/ativação acima: `2befee97ca81a2d2f8e8d38e716af372fefa3304`,
+Vercel `dpl_GyTvdz29hRAD8juJSFoeYtJsN3M8`, Ready/Production e ambos os domínios
+confirmados. O pacote17731ed está incluído. No painel real, preencher Gemini passou
+a mostrar automaticamente “até394créditosConnectyHub”; transcrição mostrou5créditos,
+sem iniciar geração nessas duas verificações. Resultado de limpeza abriu no player
+autenticado, readyState4, duração5,154853s e sem erro. Não houve outro deploy.
+
+Oito modalidades ElevenLabs agora habilitadas com a tabela conferida: transcrição,
+limpeza, troca de voz, alinhamento/legendas, diálogo, desenho, salvamento de voz
+desenhada e dublagemv1 sem marca. Gemini3.1 permanece habilitado. Dicionários e
+Gemini2.5 Flash/Pro permanecem fechados por falta de tarifa comprovada.
+
+Cada uma das oito novas modalidades passou em uma operação sintética real com
+worker publicado, resultado privado, exatamente1evento de uso/1débito, reserva0,
+repetição recuperando o mesmo recibo e acesso de outro projeto recusado. Arquivos
+de áudio e as três prévias de desenho passaram em hash/FFmpeg; transcrição e
+alinhamento também em SRT/VTT. Voz desenhada salva conferida no fornecedor.
+A criação usou helper administrativo chamando voiceAccess e a lógica real, com
+evento no Inngest da VPS e execução na Vercel. Não equivale a testar todas as
+rotas públicas com chave nem todos os formulários de ponta a ponta. Rotas públicas
+e de painel sem autenticação responderam401. Nenhuma voz real de cliente foi usada.
+
+Foram debitados231,48créditosConnectyHub no total desses oito testes, sem ajustes
+artificiais de carteira. Resultado e asset sintéticos foram excluídos de forma
+idempotente; voz de teste removida do fornecedor e marcada excluída. Recibos
+financeiros preservados. Linhas preexistentes de features/modelos/tarifas ElevenLabs
+comparadas com o snapshot e integralmente preservadas.
+
+Total conservador de toda a rodada: **US$0,959893 deUS$1**; margemUS$0,040107.
+Valores sem cabeçalho individual mantêm o teto contabilizado; não é uma fatura
+nem medição do custo médio. Nenhuma nova geração programada. Evidências privadas
+em `%TEMP%/connectyhub-studio-provider-tests/commercial-final-audit.json` e relatórios
+por modalidade; [tabela e limites](plano-custos-estudio-audio-2026-09-14.md).
+Registro pós-publicação mantido para o próximo pacote, evitando build apenas documental.
