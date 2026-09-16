@@ -17,10 +17,13 @@ function fixture() {
   }));
   const buildReply = vi.fn(async () => "A visita pode ser agendada pela pagina do imovel.");
   const recordAction = vi.fn(async () => undefined);
+  const prepare = vi.fn(async (): Promise<{ action: { id: string }; reply: string } | null> => null);
+  const issue = vi.fn(async () => undefined);
   const billingError = new Error("Saldo insuficiente para este atendimento.");
   const route = serverModuleHarness<typeof Route>("src/app/api/public/commerce-agent/message/route.ts", {
     "next/server": { NextResponse: { json: (body: unknown, init?: ResponseInit) => Response.json(body, init) } },
     "@/lib/security/public-request-guard": { validatePublicWriteRequest: validate },
+    "@/lib/commerce-agent/web-actions-server": { prepareWebAction: prepare, issueWebAction: issue },
     "@/lib/commerce-agent/server": {
       readCommerceAgentBody: (body: unknown) => body,
       readCommerceAgentMessage: (body: { message?: string } | null) => body?.message?.trim() || null,
@@ -37,10 +40,35 @@ function fixture() {
     body: JSON.stringify({ message }),
   }) as NextRequest;
 
-  return { context, validate, resolve, persist, buildReply, recordAction, billingError, route, request };
+  return { context, validate, resolve, persist, buildReply, recordAction, billingError, route, request, prepare, issue };
 }
 
 describe("storefront message persistence", () => {
+  it("keeps the existing reply available if optional action planning is unavailable", async () => {
+    const f = fixture(); f.prepare.mockRejectedValue(new Error("catalog unavailable"));
+    expect((await f.route.POST(f.request())).status).toBe(200);
+    expect(f.buildReply).toHaveBeenCalledOnce(); expect(f.issue).not.toHaveBeenCalled();
+  });
+  it("returns a deterministic action only after saving both messages and the action", async () => {
+    const f = fixture();
+    const action = { id: "action" };
+    f.prepare.mockResolvedValue({ action, reply: "Encontrei o produto." });
+    f.issue.mockImplementation(async () => { expect(f.persist).toHaveBeenCalledTimes(2); });
+    const response = await f.route.POST(f.request("Não encontro o produto."));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ action, message: { content: "Encontrei o produto." } });
+    expect(f.buildReply).not.toHaveBeenCalled();
+    expect(f.issue).toHaveBeenCalledWith(f.context, action);
+  });
+
+  it("does not expose an executable action if its mandatory log fails", async () => {
+    const f = fixture();
+    f.prepare.mockResolvedValue({ action: { id: "action" }, reply: "Encontrei o produto." });
+    f.issue.mockRejectedValue(new Error("private DB error"));
+    const response = await f.route.POST(f.request());
+    expect(response.status).toBe(503);
+    expect(await response.json()).not.toHaveProperty("action");
+  });
   it.each(["throws", "returns null"])("does not generate a billable reply if saving the lead message %s", async (failure) => {
     const f = fixture();
     if (failure === "throws") f.persist.mockRejectedValueOnce(new Error("private database details"));

@@ -14,6 +14,7 @@ import {
   type ConnectyStoreCartOpenEventDetail,
 } from "@/components/checkout/sales-catalog-product-actions";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import { useCommerceAgentCart } from "@/lib/commerce-agent/web-actions-client";
 import {
   publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
@@ -41,6 +42,7 @@ export function ProductPageCartController({
   const [customerEmail, setCustomerEmail] = useState(tracking.leadEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useCommerceAgentCart({ organizationId: tracking.organizationId, products, cart, setCart, setCartOpen, ready: cartLoaded && !busy });
 
   const readStoredCart = useCallback(() => readCartFromStorage(storageKey, products), [products, storageKey]);
 

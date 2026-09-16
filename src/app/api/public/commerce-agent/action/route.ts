@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { handleWebAction, WebActionError } from "@/lib/commerce-agent/web-actions-server";
 import {
   validatePublicWriteRequest,
   type PublicWriteGuardResult,
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
   const actionType = normalizeAllowed(readString(body.action_type) ?? readString(body.actionType), allowedActionTypes);
   const status = normalizeAllowed(readString(body.status), allowedStatuses) ?? "suggested";
 
-  if (!actionType) {
+  const isWebAction = "web_action_id" in body;
+  if (!actionType && !isWebAction) {
     return NextResponse.json({ error: "Acao invalida." }, { status: 422 });
   }
 
@@ -66,9 +68,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: context.status === 200 ? 403 : context.status });
   }
 
+  if (isWebAction) {
+    try {
+      return NextResponse.json(await handleWebAction(context, body));
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof WebActionError ? error.message : "Não foi possível registrar a ação." },
+        { status: error instanceof WebActionError ? error.status : 503 });
+    }
+  }
+
   await recordCommerceAgentAction({
     context,
-    actionType,
+    actionType: actionType!,
     status,
     requestPayload: readRecord(body.request_payload ?? body.requestPayload) ?? {},
     resultPayload: readRecord(body.result_payload ?? body.resultPayload) ?? {},

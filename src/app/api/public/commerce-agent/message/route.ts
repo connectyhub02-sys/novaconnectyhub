@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { issueWebAction, prepareWebAction } from "@/lib/commerce-agent/web-actions-server";
 import {
   validatePublicWriteRequest,
   type PublicWriteGuardResult,
@@ -59,9 +60,11 @@ export async function POST(request: NextRequest) {
   }
 
   let reply: string;
+  let assisted: Awaited<ReturnType<typeof prepareWebAction>> = null;
 
   try {
-    reply = await buildCommerceAgentReply({ context, message });
+    assisted = await prepareWebAction(context, message).catch(() => null);
+    reply = assisted?.reply ?? await buildCommerceAgentReply({ context, message });
   } catch (error) {
     const errorMessage = error instanceof Error
       ? error.message
@@ -94,7 +97,16 @@ export async function POST(request: NextRequest) {
     resultPayload: { reply },
   }).catch(() => undefined);
 
+  if (assisted) {
+    try {
+      await issueWebAction(context, assisted.action);
+    } catch {
+      return NextResponse.json({ error: "Não foi possível registrar a ação. Tente novamente." }, { status: 503 });
+    }
+  }
+
   return NextResponse.json({
+    ...(assisted ? { action: assisted.action } : {}),
     commerceSessionId: context.commerceSessionId,
     message: {
       id: savedReply.id,

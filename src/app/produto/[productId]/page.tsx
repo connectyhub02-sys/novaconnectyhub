@@ -360,7 +360,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const quickDetails = buildProductQuickDetails(item, brand, application, agendaEnabled);
 
   return (
-    <main className="storefront-public min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
+    <main data-commerce-product={item.id} data-commerce-organization={organization.id} className="storefront-public min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
       <JsonLd
         id="connectyhub-product-jsonld"
         data={buildSalesCatalogProductStructuredData({

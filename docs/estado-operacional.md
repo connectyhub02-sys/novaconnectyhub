@@ -1,5 +1,58 @@
 # Estado operacional da ConnectyHub
 
+## Agente Onipresente Ativo — entrega local, 16/09/2026
+
+O agente web passou a retornar comandos limitados para destacar/abrir produto,
+localizar seções e abrir a revisão do carrinho nas páginas próprias. A inclusão de
+item exige botão de aceite com produto/quantidade explícitos, validação no servidor
+e autorização consumida uma única vez. Observador e superfície de checkout mantêm
+o comportamento anterior; Assistente/Vendedor ativo atendem aos pedidos nas
+superfícies loja, produto e carrinho. Nenhum pedido, pagamento ou agendamento é
+criado automaticamente.
+
+Propostas, aceite/recusa e resultados usam `commerce_agent_actions` e eventos que
+o Arquivo do Lead existente lê, com organização, lead, conversa, agente, produto,
+quantidade, motivo, superfície e horário. Resultado do navegador é identificado
+como tal. Reusa os tipos SQL existentes, sem migration; validade de cinco minutos,
+isolamento da sessão/página e proteção contra execução repetida. Falha de registro
+antes da execução bloqueia a autorização. Banco e carrinho local não são atômicos;
+perda de resposta pode exigir conferência manual, sem repetição automática.
+
+Validação local: 172 testes em 11 arquivos aprovados; após o ajuste dos rótulos do
+Arquivo do Lead, os 23 testes de servidor passaram novamente. ESLint aprovado.
+Navegador com componentes reais/APIs fictícias confirmou destaque, ausência de
+inclusão antes do aceite, recusa e inclusão de duas unidades após confirmação,
+sem chamada de criação de checkout. Layout desktop/celular conferido, sem overflow.
+Prévia temporária e seu tipo gerado removidos. A primeira tentativa de build parou
+no sitemap por ausência de configuração do Supabase nesta worktree. Na finalização
+autorizada de 16/09, o build completo passou com 108 páginas usando somente as
+variáveis necessárias do checkout principal no ambiente do processo, sem arquivo
+de segredo novo ou mudança no sitemap. Compilação, TypeScript, ESLint e diff-check
+aprovados. A suíte final tem **181 testes em 12 arquivos**, incluindo PostgreSQL
+local/PGlite com o DDL e as políticas versionadas: gravação/aceite/conclusão,
+repetição, constraints, RLS e leitura pelo código real do Arquivo do Lead.
+
+Supabase de destino conferido por OpenAPI e SELECT com `limit=0`: as duas tabelas
+e todas as colunas usadas existem; service role leu com HTTP 200, sem linhas de
+clientes. Isso não equivale a testar escrita/RLS em produção: mutações e testes
+de acesso ficaram no PostgreSQL descartável. O CLI Vercel não conseguiu acessar
+as configurações do projeto vinculado; nenhuma configuração foi alterada. Embora
+`TRACKING_PUBLIC_TOKEN_SECRET` esteja ausente localmente, HTML público retornou
+HTTP 200 com token assinado para a organização em 16/09, sem executar JS ou POST
+de sessão/tracking. Não foi necessário obter/copiar esse segredo para a entrega.
+
+Revisão final restringiu modos permitidos, acrescentou negações explícitas no
+parser e conferência do comando autorizado contra o produto/quantidade exibidos
+no aceite. Diff restrito a esta frente, preparado sobre `origin/master` em
+`e597e610`. Nenhuma migration SQL, push ou deploy nesta finalização.
+
+**Não publicado.** Busca inicial usa título completo entre até 200 itens ativos;
+composição, agendamento e site externo ficam fora da inclusão assistida. Abertura
+de checkout neste recorte é revisão manual do carrinho. Falta publicar quando
+autorizado e retestar navegação/consentimento/Arquivo do Lead e continuidade
+WhatsApp com dados reais. Sem alterações em Voz/LLM, billing, gateways, agenda ou
+infraestrutura. [Contrato, auditoria, evidências e limites](agente-onipresente-ativo-2026-09-16.md).
+
 ## Betel somente transporte — preparado em 14/09/2026
 
 Novo escopo autorizado mantém URLs e CRM na Betel. O modo nativo da API, selecionado por configuração de organização no servidor, exige track_id, preserva links e mídia e mantém recibos técnicos/uso sem criar leads, conversas ou links CH. A mesma separação alcança os webhooks de instâncias API, para não recriar CRM no retorno do provedor. Replays e dados antigos preservados; sem migration ou alteração de tarifas. Código e testes locais; ativação em produção ainda depende da confirmação do adaptador nativo Betel. [Contrato](betel-transporte-nativo-2026-09-14.md).

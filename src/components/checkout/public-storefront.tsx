@@ -37,6 +37,7 @@ import {
   type SalesCatalogStorefrontFontPreset,
 } from "@/lib/sales-catalog/shared";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
+import { useCommerceAgentCart } from "@/lib/commerce-agent/web-actions-client";
 import {
   publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
@@ -174,6 +175,7 @@ export function PublicStorefront({
   const storePath = `/loja/${encodeURIComponent(storeSlug)}`;
   const shopPath = `${storePath}/produtos`;
   const cartPath = `${storePath}/carrinho`;
+  useCommerceAgentCart({ organizationId: tracking.organizationId, products, cart, setCart, setCartOpen, ready: cartLoaded && !busy });
 
   useEffect(() => {
     function applyLeadContext() {
@@ -606,7 +608,7 @@ export function PublicStorefront({
   }
 
   return (
-    <main className="storefront-public min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
+    <main data-commerce-organization={tracking.organizationId} className="storefront-public min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StoreAnnouncement branding={branding} />
       <StoreNavbar
         showCart={products.some(product => product.canCheckout)}
@@ -1293,6 +1295,7 @@ function SectionHeading({ title }: { title: string }) {
 function ProductCard({ product }: { product: PublicStorefrontProduct }) {
   return (
     <a
+      data-commerce-product={product.id}
       className="group flex min-w-0 flex-col items-start text-left"
       href={toRelativeStorefrontHref(product.productUrl)}
     >

@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, ExternalLink, Loader2, Send, X } from "lucide-react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { canRunWebActions, matchesWebActionPermit, readWebAction, type WebAction } from "@/lib/commerce-agent/web-actions";
+import { executeWebAction } from "@/lib/commerce-agent/web-actions-client";
 import { publishCommerceAgentEvent } from "@/lib/commerce-agent/client-events";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
 import {
@@ -49,6 +51,7 @@ type CommerceAgentSession = {
 };
 
 type CommerceAgentMessageResponse = {
+  action?: unknown;
   message?: CommerceAgentMessage;
   commerceSessionId?: string | null;
   error?: string;
@@ -58,6 +61,7 @@ const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d9
 const assistantBubbleDelayMs = 520;
 
 export function CommerceAgentDock() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = useMemo(() => searchParams?.toString() ?? "", [searchParams]);
@@ -77,6 +81,12 @@ export function CommerceAgentDock() {
   const lastContextualOpenerKey = useRef<string | null>(null);
   const assistantBubbleTimersRef = useRef<number[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ action: WebAction; body: Record<string, unknown>; key: string } | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const actionBusy = useRef(false);
+  const contextKey = `${pathname}?${search}:${trackingContextSignature}:${session?.agentId}:${session?.commerceSessionId}`;
+  const currentContextKey = useRef(contextKey);
+  useEffect(() => { currentContextKey.current = contextKey; }, [contextKey]);
 
   useEffect(() => {
     function syncPublicTrackingSignature() {
@@ -324,7 +334,7 @@ export function CommerceAgentDock() {
     event?.preventDefault();
     const content = (forcedMessage ?? input).trim();
 
-    if (!content || sending || !session) {
+    if (!content || sending || actionBusy.current || !session) {
       return;
     }
 
@@ -340,39 +350,47 @@ export function CommerceAgentDock() {
     setInput("");
     setOpen(true);
     setSending(true);
+    if (pendingAction?.key === contextKey) void postAssistedAction(pendingAction, { phase: "reject" }).catch(() => null);
+    setPendingAction(null);
+    setActionNotice(null);
     publishCommerceAgentEvent("agent_message_sent", {
       commerce_session_id: session.commerceSessionId,
       surface: session.surface,
     });
 
+    const requestKey = contextKey;
+    const requestBody = {
+      ...buildPublicTrackingApiBody(publicTracking),
+      product_id: session.currentProductId ?? publicTracking?.product_id ?? null,
+      catalog_item_id: session.currentProductId ?? publicTracking?.catalog_item_id ?? null,
+      visitor_cookie_id: snapshot.visitorId, session_cookie_id: snapshot.sessionId,
+      commerce_session_id: session.commerceSessionId, surface: session.surface,
+      message: content, page_path: window.location.pathname, page_url: window.location.href,
+    };
     try {
       const response = await fetch("/api/public/commerce-agent/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...buildPublicTrackingApiBody(publicTracking),
-          product_id: session.currentProductId ?? publicTracking?.product_id ?? null,
-          catalog_item_id: session.currentProductId ?? publicTracking?.catalog_item_id ?? null,
-          visitor_cookie_id: snapshot.visitorId,
-          session_cookie_id: snapshot.sessionId,
-          commerce_session_id: session.commerceSessionId,
-          surface: session.surface,
-          message: content,
-          page_path: window.location.pathname,
-          page_url: window.location.href,
-        }),
+        body: JSON.stringify(requestBody),
       });
       const payload = await response.json().catch(() => null) as CommerceAgentMessageResponse | null;
 
       if (!response.ok || !payload?.message) {
         throw new Error(payload?.error ?? "Nao foi possivel responder agora.");
       }
+      if (currentContextKey.current !== requestKey) return;
 
       setSession((current) => current ? {
         ...current,
         commerceSessionId: payload.commerceSessionId ?? current.commerceSessionId,
       } : current);
       appendAssistantMessageWithCadence(payload.message);
+      const action = readWebAction(payload.action);
+      if (action && canRunWebActions(session.mode, session.surface)) {
+        const pending = { action, body: { ...requestBody, commerce_session_id: payload.commerceSessionId ?? session.commerceSessionId }, key: requestKey };
+        if (action.kind === "request_add_to_cart_confirmation") setPendingAction(pending);
+        else if (action.kind !== "add_to_cart_after_confirmation") await runAssistedAction(pending, false);
+      }
     } catch {
       appendAssistantMessageWithCadence({
         id: createClientId("assistant"),
@@ -382,6 +400,64 @@ export function CommerceAgentDock() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function postAssistedAction(pending: NonNullable<typeof pendingAction>, fields: Record<string, unknown>) {
+    const response = await fetch("/api/public/commerce-agent/action", {
+      method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+      body: JSON.stringify({ ...pending.body, web_action_id: pending.action.id, ...fields }),
+    });
+    const payload = await response.json().catch(() => null) as { action?: unknown; error?: string } | null;
+    if (!response.ok) throw new Error(payload?.error ?? "Não foi possível registrar a ação.");
+    return payload;
+  }
+
+  async function runAssistedAction(pending: NonNullable<typeof pendingAction>, confirmed: boolean) {
+    const isCurrent = () => pending.key === currentContextKey.current
+      && pending.body.page_path === window.location.pathname
+      && getCommerceAgentTrackingSignature(readPublicTrackingContext()) === trackingContextSignature
+      && !isTrackingDisabled();
+    if (actionBusy.current || !isCurrent()) return;
+    actionBusy.current = true;
+    setPendingAction(null);
+    let permitted = false;
+    let applied = false;
+    try {
+      const payload = await postAssistedAction(pending, { phase: "execute", confirmation: confirmed ? {
+        accepted: true, actionId: pending.action.id, productId: pending.action.productId, quantity: pending.action.quantity,
+      } : undefined });
+      permitted = true;
+      if (!isCurrent()) throw new Error("A página mudou; peça a ação novamente.");
+      const action = readWebAction(payload?.action);
+      if (!action || !matchesWebActionPermit(pending.action, action, confirmed)) throw new Error("Ação não autorizada.");
+      const query = new URLSearchParams();
+      for (const key of ["organization_id", "lead_id", "conversation_id", "agent_id", "tracking_link_id", "tracking_token"]) {
+        const value = pending.body[key];
+        if (typeof value === "string" && value) query.set(key, value);
+      }
+      executeWebAction(action, { organizationId: String(pending.body.organization_id), query, navigate: path => router.push(path) });
+      applied = true;
+      await postAssistedAction(pending, { phase: "complete", outcome: "applied" });
+      if (action.kind === "add_to_cart_after_confirmation") setActionNotice(`${action.quantity} unidade(s) de ${action.productTitle} adicionada(s) ao carrinho.`);
+      else setOpen(false);
+    } catch (error) {
+      if (permitted && !applied) await postAssistedAction(pending, { phase: "complete", outcome: "failed" }).catch(() => null);
+      setActionNotice(applied ? "A ação foi executada, mas não consegui confirmar o registro do resultado. Confira o carrinho antes de repetir."
+        : error instanceof Error ? error.message : "Não consegui executar essa ação.");
+    } finally {
+      actionBusy.current = false;
+    }
+  }
+
+  async function rejectAssistedAction(pending: NonNullable<typeof pendingAction>) {
+    if (actionBusy.current) return;
+    actionBusy.current = true;
+    setPendingAction(null);
+    try {
+      await postAssistedAction(pending, { phase: "reject" });
+      setActionNotice("Tudo bem, o item não foi adicionado.");
+    } catch { setActionNotice("O item não foi adicionado. Não consegui registrar sua recusa agora."); }
+    finally { actionBusy.current = false; }
   }
 
   function appendAssistantMessageWithCadence(message: CommerceAgentMessage | undefined) {
@@ -551,6 +627,16 @@ export function CommerceAgentDock() {
                 </span>
               </div>
             ) : null}
+            {pendingAction?.key === contextKey ? (
+              <div className="rounded-lg bg-white p-3 text-sm shadow-sm">
+                <p>Adicionar {pendingAction.action.quantity} unidade(s) de <strong>{pendingAction.action.productTitle}</strong> ao carrinho?</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" className="rounded-lg bg-[#075E54] px-3 py-2 text-white" onClick={() => void runAssistedAction(pendingAction, true)}>Sim, adicionar ao carrinho</button>
+                  <button type="button" className="rounded-lg border px-3 py-2" onClick={() => void rejectAssistedAction(pendingAction)}>Agora não</button>
+                </div>
+              </div>
+            ) : null}
+            {actionNotice ? <p role="status" className="rounded-lg bg-white p-3 text-sm">{actionNotice}</p> : null}
             <div ref={messagesEndRef} />
           </div>
 
