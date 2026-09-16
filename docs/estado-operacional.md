@@ -978,3 +978,31 @@ Evidências privadas: `audit/package-o-publication.json`,
 `audit/machado14921-attempt-reconcile.json`. Detalhes do código e testes offline
 no projeto Betel: `docs/acompanhamento-lote-7a286fd7/correcao-coleta-original.md`.
 Não marcar o scraper como recuperado apenas pela publicação.
+
+### Betel: causa da recusa Apify e reversão de configuração — 16/09, 14:17 UTC
+
+Após autorização específica para um segundo diagnóstico limitado, o mesmo
+conteúdo foi submetido uma vez às 14:09:36 UTC, com captura do status/corpo.
+A API retornou HTTP 400 `invalid-input`: `input.proxyConfiguration` é obrigatório;
+a configuração `useApifyProxy:false` foi recusada antes de criar uma execução.
+Não houve navegação Chromium nem dataset. Consulta posterior confirmou zero
+runs do actor e zero jobs ativos. Portanto, esta recusa não comprova falha do
+parser nem captura do Machado. Nenhuma terceira submissão foi feita.
+
+Plano FREE, ausência de plano pago e limite dentro dos créditos foram revalidados
+antes desse diagnóstico. O uso consultado foi de US$ 0,09181485928522794 para
+US$ 0,09184817753659931; não atribuir essa pequena variação a uma execução
+inexistente. Provas continuam com vencimento 22:06:13 UTC, sem renovação.
+
+Às 14:17:31 UTC, reversão condicionada restaurou somente
+`betel_apify_website_content_actor=apify/website-content-crawler`, verificando
+imagem publicada e ausência de scraping ativo. Pacote o, banco, motor e broker
+preservados. O actor antigo também não está comprovado para Machado; a reversão
+remove a alternativa sabidamente inválida, não declara recuperação da coleta.
+
+Evidências privadas: `machado14921-diagnostic2-attempt.json`,
+`machado14921-diagnostic2-reconcile.json` e `playwright-actor-config-rollback.json`.
+Novo escopo autorizado prepara navegador isolado na VPS antes do fallback Apify,
+sem lote, IA, Gecko ou mensagens no teste mínimo. Ainda não instalado/validado
+neste registro. Leitura de capacidade às 14:12 UTC: 8 CPUs, cerca de 19,79 GiB
+disponíveis e app limitado a 1 GiB/0,75 CPU; snapshot não é garantia de capacidade.
