@@ -40,6 +40,20 @@ alteração de schema no Supabase da ConnectyHub; não houve operação em Innge
 comando remoto, rollback real ou ação destrutiva.
 [Contrato, arquivos, limites e roteiro de integração VPS](infraestrutura-cockpit-2026-09-16.md).
 
+### Desalinhamento do subdomínio — diagnóstico e correção local, 16/09/2026
+
+`infraestrutura.connectyhub.com.br/infraestrutura` continua servindo o portal
+independente de homologação em `/opt/connectyhub-managed-portal`, com sessão e
+banco próprios. Ele não é a aplicação principal e por isso não recebeu a rota
+`/admin/infrastructure`. A correção de roteamento foi preparada nos dois pontos:
+o portal legado encaminha `/infraestrutura` e suas subrotas para
+`https://www.connectyhub.com.br/admin/infrastructure`, e a aplicação principal
+aceita o mesmo caminho legado. O redirecionamento é temporário (307) para evitar
+cache permanente enquanto o acesso do VPS não estiver disponível. A conferência
+pública ainda retorna o comportamento antigo até a imagem do portal ser
+reconstruída e ativada no VPS; nenhum banco, credencial ou operação real foi
+alterado nesta correção.
+
 ## Agente Onipresente Ativo — entrega local, 16/09/2026
 
 O agente web passou a retornar comandos limitados para destacar/abrir produto,
