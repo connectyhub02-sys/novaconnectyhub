@@ -938,3 +938,43 @@ versão aprovada ou campanha/envio no recorte. A melhoria de interface não corr
 a recusa externa nem libera referências sem verificação.
 [Diagnóstico e limites](betel-referencias-centralsul-2026-09-16.md).
 Evidência de publicação: `audit/package-n-publication.json` privado.
+
+### Betel: adaptador Machado e alternativa de coleta — 16/09, 14:04 UTC
+
+Fonte `1a154df430a9b8f43e0f2ad917db7c3f496f6cc99420948dbaf0b214d5cd7afa`, imagem
+`828e2e0f147f39dde1f7f93f66f6b9e19637955dc8e0be979fa2f68bbf9d8fd7`, tag
+`betel-production:20260916-o`, publicada às 14:04:09 UTC. Build e TypeScript
+passaram; App/Auth/REST/Storage 200, 12 funções Betel e 45 CH preservadas,
+banco/motor/broker sem reinício. Imagem n preservada para reversão.
+
+Inclui adaptador Machado, preservação de campos incertos e validação de identidade
+do lote; Supera também rejeita perda de identificação no redirecionamento.
+Às 14:04:24 UTC a configuração `betel_apify_website_content_actor` foi alterada
+condicionalmente de `apify/website-content-crawler` para `apify/playwright-scraper`.
+Contrato da alternativa: Chromium, sem proxy, uma página/resultado/concorrência,
+retry zero, 1024 MB, execução 40 s, navegação 25 s, função 5 s, reinício desligado,
+limite solicitado `maxTotalChargeUsd=0.05`; TLS/CSP e robots preservados.
+
+**Coleta real ainda não validada.** A única tentativa isolada autorizada do
+Machado 14921 enviou o conteúdo de requisição do código publicado ao endpoint
+assíncrono `/runs`, com build fixo `1.0.22`, às 14:04:35 UTC. A API devolveu
+`HTTPError`; o harness externo preservou a classe, mas perdeu o status e corpo
+da resposta. Não atribuir a causa a HTTP 403, Chromium, parser ou quota sem
+evidência adicional. Não foi repetido o POST. A consulta posterior retornou
+lista vazia de runs desse actor e zero jobs ativos; não há dataset ou log de
+execução para comprovar título, ID, fotos ou documentos. A implementação do
+app preserva status/corpo de erro; a perda de diagnóstico ocorreu no harness.
+
+A verificação imediatamente anterior confirmou plano FREE, `isPaying=false`,
+mensalidade zero, limite do provedor US$ 5 dentro do crédito mensal, uso
+US$ 0,09171393390672651 e saldo indicativo US$ 4,9082860660932734. Prova gratuita
+vinculada à credencial e igual à aplicada no app, válida até 22:06:13 UTC
+(19:06 BRT), sem renovação. O uso permaneceu igual após a tentativa. Não houve
+assinatura nova, lote, análise de IA, Gecko ou envio de mensagens neste teste.
+
+Evidências privadas: `audit/package-o-publication.json`,
+`audit/playwright-actor-config-switch.json` (inclui reversão condicionada),
+`audit/machado14921-single-attempt.json` e
+`audit/machado14921-attempt-reconcile.json`. Detalhes do código e testes offline
+no projeto Betel: `docs/acompanhamento-lote-7a286fd7/correcao-coleta-original.md`.
+Não marcar o scraper como recuperado apenas pela publicação.
