@@ -835,3 +835,19 @@ Três testes passaram; serviço real exit0 às23:55:10UTC. Não houve replay, me
 reinício da aplicação ou mudança de cobrança. [Causa, correção e limites](portal-coleta-betel-sqlite-2026-09-15.md).
 O ciclo automático seguinte passou às23:56:15UTC; navegador do titular mostrou
 coleta20:56:09BRT sem aviso de desatualização.
+
+### Betel: lote de seis links e falha no teste celular — 16/09, 00:34 UTC
+
+Lote real concluiu no motor em243s: três parciais para revisão e três falhas,
+um scrape_run por linha. Seis recibos/usage_events únicos,266,8860créditos,
+R$0,667215 de custo LLM e reserva zero nessa amostra. Não equivale a seis análises
+úteis nem inclui custos de coleta. Apify marcouSUCCEEDED com0requisições/itens;
+logs mostram falha ao iniciar Firefox no actor remoto. Nenhum run novo iniciado.
+
+Teste CentralSul via domínio antigo Vercel abortou antes do handler por divergência
+Origin/forwarded-host, digest1111382093@E80. Leitura confirmou zero campanha/entrega
+no recorte e nenhum novo recibo após a tentativa. App Betel prepara correção do
+fluxo aprovar+enviar teste e da origem explícita. SQL de idempotência preparado,
+26 verificações reais passaram em banco vazio isolado já removido; ainda não
+aplicado à produção. Nenhuma publicação ou reexecução nesta auditoria.
+[Evidências e limites](betel-lote-seis-e-teste-celular-2026-09-16.md).
