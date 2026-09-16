@@ -1,5 +1,45 @@
 # Estado operacional da ConnectyHub
 
+## Cockpit de infraestrutura — MVP local, 16/09/2026
+
+Implementadas `/admin/infrastructure` e páginas por projeto, com inventário
+ConnectyHub/Betel/Vision, snapshots de Supabase/Inngest/app/worker/storage,
+catálogo/preview de migrations e auditoria. Deploy VPS integra esta entrega:
+histórico persistente, etapas em polling de cinco segundos, imagens, executor,
+container, healthcheck, logs estruturados e acompanhamento do rollback em execução.
+Betel declara publicação real em VPS/app-production com Vercel como proxy;
+push GitHub, deploy Vercel/proxy e deploy VPS são distinguidos.
+
+Migration `0150_infrastructure_cockpit.sql` aplicada no Supabase da ConnectyHub
+na VPS em 16/09/2026, com seis tabelas, três projetos iniciais e duas funções
+de telemetria/deploy validadas. Leitura requer administrador da plataforma;
+preparação de comandos exige também
+`INFRA_ADMIN_USER_IDS`, confirmação e auditoria. Execução remota de migrations,
+Inngest e rollback permanece bloqueada com motivo, inclusive para admin infra.
+Receptor de eventos usa hashes de tokens por projeto/escopo em
+`INFRA_INGEST_KEYS_JSON`, sequência/idempotência e registro transacional. Helper
+`scripts/infra-report.mjs` preparado para os publicadores; não conectado aos hosts.
+
+Validação local: 30 testes em cinco arquivos passaram, incluindo migration/RLS,
+grants, atomicidade e transições no PostgreSQL descartável PGlite, rotas de acesso,
+isolamento, confirmações e reenvio do helper para servidor fictício em localhost.
+ESLint, compilação e TypeScript aprovados. Navegador com componentes e shell reais,
+respostas fictícias: polling, confirmação bloqueada, cinco abas em 390px, desktop,
+vazio/telemetria antiga/erro, sem overflow horizontal nem erro JavaScript.
+Rota temporária de prévia removida. Build sem configuração parou no sitemap
+preexistente do catálogo; build Next/webpack completo depois aprovado com 108 páginas,
+usando backend fictício de catálogo vazio em localhost e chaves sintéticas apenas no
+processo. A fixture recebeu somente GET/HEAD; nenhum acesso ao banco real. Catálogo
+de 150 migrations conferido nos traces do servidor. Esse artefato serve para QA;
+uma publicação exige novo build com a configuração real autorizada.
+
+**Ainda pendente de publicação da aplicação e coletores reais conectados.**
+Inventário não é prova de saúde; falta publicar a aplicação, configurar admins e
+hashes, ligar publicadores/coletores e cadastrar catálogos externos. Houve
+alteração de schema no Supabase da ConnectyHub; não houve operação em Inngest,
+comando remoto, rollback real ou ação destrutiva.
+[Contrato, arquivos, limites e roteiro de integração VPS](infraestrutura-cockpit-2026-09-16.md).
+
 ## Agente Onipresente Ativo — entrega local, 16/09/2026
 
 O agente web passou a retornar comandos limitados para destacar/abrir produto,

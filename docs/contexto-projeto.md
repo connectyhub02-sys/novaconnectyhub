@@ -22,7 +22,7 @@ Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acess
 
 O código sustenta duas frentes complementares: operação de empresas dentro do painel e integração de sistemas externos via API. Ambas devem compartilhar controles consistentes de organização, acesso, créditos, registro de consumo e entrega. Evitar tratar catálogo de recursos como entrega comercial pronta. Antes da próxima fase de produção, priorizar os percursos essenciais de cadastro/acesso, conexão do agente, resposta, agendamento, entrega e débito correto, com recuperação de falhas.
 
-Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. Painel multiprojetos e serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
+Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. O cockpit multiprojetos recebeu um MVP local de infraestrutura em 16/09, ainda sem publicação ou coletores reais; serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
 
 | Componente | Destino registrado | Fontes principais |
 |---|---|---|
@@ -51,6 +51,9 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 | Documentação pública IA | `src/lib/ai-api/openapi.ts`, documentação/esquemas/guias, `/docs/api#ia` | [guia público](guia-integracao-api-llm.md); use fonte geradora ao editar |
 | Catálogo e checkout | `src/lib/sales-catalog`, rotas sales-catalog/checkout e adaptadores | testes `sales-catalog-*`, `whatsapp-*checkout*`, pagamentos |
 | Infraestrutura e retorno | configurações privadas da VPS e ambiente de implantação | [Supabase](migracao-supabase-vps-2026-09-11.md), [Inngest](migracao-inngest-vps-2026-09-11.md) |
+| Cockpit de infraestrutura por empresa/projeto | `src/app/admin/infrastructure`, `src/lib/infrastructure`, migration `0150`, receptor `api/infrastructure/[project]/events` | [MVP local, permissões, telemetria e integração dos deploys VPS](infraestrutura-cockpit-2026-09-16.md) |
+
+O MVP local do cockpit acompanha deploys VPS por eventos autenticados e polling de cinco segundos, além de snapshots de Supabase/Inngest/app/worker/storage e catálogo de migrations. Não substitui os scripts de publicação nem comprova saúde sem coletor conectado. Betel declara app na VPS (`app-production`) e Vercel como proxy; push GitHub, deploy Vercel e deploy VPS são fatos distintos. Leitura é administrativa; preparação de ações exige admin infra explícito e auditoria. Adaptadores de execução remota permanecem bloqueados nesta primeira versão. Schema, publicação e conexão dos coletores reais continuam pendentes de autorização/configuração.
 
 ## Regras de negócio a preservar
 
