@@ -86,3 +86,94 @@ Evidências privadas em `/opt/betel-isolated-rehearsal/audit/`:
 `batch-six-links-readonly.json`, `batch-six-reconciliation-final.json`,
 `batch-six-apify-existing-logs.json`, `centralsul-server-action-readonly.json` e
 `market-test-submission-sql-test.json`. Não versionar payloads ou credenciais.
+
+## Respostas da IA e comparação de rede — 00:45–00:51 UTC
+
+Foram lidas as respostas persistidas dos seis pedidos, não apenas seus recibos.
+Todos terminaram com `STOP`, JSON válido e error_code nulo. O tempo entre criação
+e liquidação foi de 4,0 a 15,1 segundos; não representa latência pura do modelo.
+Nenhuma resposta mostrou MAX_TOKENS, bloqueio de conteúdo ou texto interrompido.
+
+| Linha/fonte | Request ID da ConnectyHub | Tempo (s) | Confiança bruta da IA | Conteúdo e limite observado |
+|---|---|---:|---:|---|
+| 1 — Zuk 231208 | `165f5b7d-cd2d-415d-9656-3d33c40a6368` | 15,09 | 0,80 | Dados de localização, área e lance; faltam avaliação e quartos |
+| 2 — Supera 98538/212309 | `c4ce9825-3edd-4aae-98c0-712fbe1bf0ff` | 5,89 | 0,05 | 17 campos ausentes; redirecionamento para leilão 99696 |
+| 3 — CentralSul 243487 | `8d084520-1fc6-4c56-9159-75447342d7b0` | 11,09 | 0,85 | Dados de localização, área, lance e avaliação; revisão final ainda exige quartos |
+| 4 — Machado 15337 | `cf3e0ef3-21b6-4dfc-8b4d-2da63d0ed5fe` | 5,03 | 0 | 17 campos ausentes; resposta explica bloqueio, sem dados do imóvel |
+| 5 — Machado 14915 | `cda59382-f910-40a6-bf59-4cce4dd891be` | 4,91 | 0 | 17 campos ausentes; resposta explica bloqueio, sem dados do imóvel |
+| 6 — Machado 14921 | `22cdf87c-54dd-46a7-ac6a-6f89c2752a80` | 4,00 | 0,10 | 17 campos ausentes; resposta explica bloqueio, sem dados do imóvel |
+
+A atribuição por linha usa uma única operação dentro de cada janela sequencial
+do scrape_run, corroborada pelos resultados persistidos das primeiras três linhas.
+O recibo financeiro não possui FK para a linha; não apresentar isso como vínculo
+criptográfico ou correlação por payload completo. A confiança bruta acima é diferente
+da confiança combinada pelo adaptador/pesquisa de mercado na Betel.
+
+O perfil do lote permitia 60.000 caracteres de texto e 35s por fetch. Os pedidos
+contabilizaram 645–5.562 tokens de entrada. Não há evidência de rejeição por limite
+na API; também não foi reconstruído o prompt completo para provar cobertura de
+todo o HTML original. A expressão `usable` no recibo local verifica término/texto,
+não utilidade imobiliária: isso explica por que JSONs sem dados receberam esse rótulo.
+
+GET direto no namespace de rede do app, com os cabeçalhos existentes do coletor,
+confirmou às 00:45:36:
+
+- Zuk: 200, 285.832 caracteres, 614ms.
+- Supera: 302 para outro leilão (99696), depois 200, 59.524 caracteres, 201ms.
+- CentralSul: 200, 332.788 caracteres, 994ms.
+- Machado 15337/14915/14921: 403 em 185/40/94ms, servidor Cloudflare,
+  `cf-mitigated: challenge` e título `Just a moment...`.
+
+A tarefa coordenadora confirmou os três Machado abertos normalmente no Chrome
+local, com descrições, fotos e PDFs, sem login/CAPTCHA. Assim, **as fontes estão
+acessíveis no navegador local**, enquanto o coletor recebe uma resposta de bloqueio.
+Não declarar que os imóveis/páginas não existem.
+
+A política efetiva permite saída pública TCP80/443 e continua negando destinos
+privados, host e metadata. App e banco tinham zero reinícios e OOMKilled=false,
+com início anterior ao lote. A resposta HTTP403 demonstra chegada à origem;
+não é um bloqueio de egress nem falha DNS/TLS nesse teste. Não há comparação de
+requisições equivalentes antes da migração para atribuir causalidade à mudança
+de IP/hospedagem. Nenhuma regra de rede foi relaxada.
+
+Configuração dos três runs Apify lida via GET: build `u8gClHFAIyDHCQq0J`,
+playwright:adaptive, 512MB, timeout do actor40s versus timeout por página60s,
+concorrência máxima200, três retries, uma reinicialização por run. Picos de memória
+399–494MB; EPERM/SIGKILL não prova isoladamente OOM. A documentação oficial expõe
+[controles de concorrência, timeout e retries](https://apify.com/apify/website-content-crawler/input-schema)
+e explica a relação entre [memória e recursos](https://docs.apify.com/actors/running/usage-and-resources).
+A tarefa Betel prepara parâmetros específicos para uma página; nenhuma mudança
+de runtime do actor ou nova execução foi testada nesta auditoria. Não retirar
+sandbox, ignorar HTTPS/robots ou comprar proxy por inferência.
+
+Evidências adicionais: `batch-six-llm-response-audit.json`,
+`batch-six-link-response-timeline.json`, `batch-six-app-direct-http.json` e
+`apify-existing-runtime-config.json`, no diretório privado de auditoria.
+
+## Pacote 1 publicado — 00:49 UTC
+
+Substitui o estado preparado da migration acima. Fonte
+`dece33dfccfc80b13a4759e43bcffe6b2b35560800d79e1067c73e93dafb2965`, imagem
+`e0e28e3daf4e0f47385ff7c487fcfe1a16ba3cc054216d9b482ab50379a0f537`, tag
+`betel-production:20260916-i`. Imagem anterior b7e6d2ff preservada.
+
+Pacote da tarefa Betel: fluxo aprovar+enviar teste, tratamento de resultado no modal,
+origem legada explícita e guard antes da IA quando não há fonte útil ou há troca de
+identidade no redirecionamento Supera. Não inclui ainda reparo validado da coleta
+Machado/Apify nem todo o ajuste de visibilidade das falhas.
+
+Compilação VPS passou. SQL aplicada às 00:49:11 após motor sem execução ativa;
+tabela vazia, RLS e grants conferidos. App publicado às 00:49:29, com App/Auth/REST/
+Storage200, guard de dependências sem serviços retomados, 12 funções Betel e45 CH
+inalteradas. Banco, motor e broker preservados. Provas de franquia continuam válidas
+até 16/09 às22:06 UTC, sem renovação automática.
+
+Às00:50:44, duas requisições sem cookies e com ID de ação comprovadamente ausente
+no manifest verificaram a proteção de origem: legado autorizado chegou ao404 de
+ação inexistente, domínio externo recebeu500/E80. O E80 desse horário é o teste
+negativo esperado, não nova falha de cliente. Nenhum handler de negócio foi executado.
+Não houve envio real, nova IA ou replay do lote. A validação de aprovação/envio
+real ainda depende do teste do titular.
+
+Evidências: `market-test-submission-applied.json`, `package-i-publication.json`,
+`package-i-origin-check.json`. Os logs completos de build permanecem privados.

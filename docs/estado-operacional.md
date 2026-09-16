@@ -851,3 +851,20 @@ fluxo aprovar+enviar teste e da origem explícita. SQL de idempotência preparad
 26 verificações reais passaram em banco vazio isolado já removido; ainda não
 aplicado à produção. Nenhuma publicação ou reexecução nesta auditoria.
 [Evidências e limites](betel-lote-seis-e-teste-celular-2026-09-16.md).
+
+### Betel: pacote de aprovação e teste publicado — 16/09, 00:49 UTC
+
+Fonte dece33df/imagem e0e28e3d publicada; migration de idempotência f5f3f9fb aplicada.
+Fluxo combinado aprovar+enviar teste, origem legada explícita e validação da fonte
+antes de consumir IA. Build e health App/Auth/REST/Storage passaram, 12Betel/45CH
+preservadas, banco/motor/broker sem reinício. Checagem de origem com ação inexistente
+passou para o legado e recusou domínio externo. Não houve envio ou replay real.
+
+Auditoria aprofundada das6respostas: JSONválido/STOP em todas, sem truncamento,
+mas apenas duas com dados substanciais; Supera redirecionou para outro leilão e
+Machado recebeu challengeCloudflare. Os3Machado abrem noChrome local, conforme
+tarefa coordenadora. GETdoapp reproduziu403cf-mitigated=challenge; saída80/443
+está liberada, sem evidência de bloqueio egress. Não atribuir causa à migração sem
+comparação anterior. Reparação do actor/visibilidade segue com a tarefa Betel;
+parâmetros futuros não equivalem a coleta real validada.
+[Publicação, trilha por link e limites](betel-lote-seis-e-teste-celular-2026-09-16.md).
