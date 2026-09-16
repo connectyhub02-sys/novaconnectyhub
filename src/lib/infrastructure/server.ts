@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { type Migration } from "./model";
+import { type Migration, type MigrationExecution, type MigrationRisk } from "./model";
 import { InvalidInput, identifier } from "./validation";
 
 export function response(data: unknown, status = 200) { return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
@@ -55,14 +55,35 @@ export async function migrationCatalog(project: string): Promise<Migration[]> {
   if (project !== "connectyhub") {
     const { data, error } = await createServiceClient().from("infra_migrations").select("version,name,sql,checksum").eq("project_id", project).order("version").limit(2000);
     if (error) throw new Error("CATALOG_UNAVAILABLE");
-    return data ?? [];
+    return (data ?? []).map(m => ({ ...m, risk: migrationRisk(m.sql) }));
   }
   const directory = join(process.cwd(), "supabase", "migrations");
   const files = (await readdir(directory)).filter(f => /^\d+_[a-zA-Z0-9_-]+\.sql$/.test(f)).sort();
   return Promise.all(files.map(async name => {
     const sql = (await readFile(join(directory, name), "utf8")).replace(/\r\n/g, "\n");
-    return { version: name.split("_")[0], name, sql, checksum: createHash("sha256").update(sql).digest("hex") };
+    return { version: name.split("_")[0], name, sql, checksum: createHash("sha256").update(sql).digest("hex"), risk: migrationRisk(sql) };
   }));
+}
+export function migrationRisk(sql: string): MigrationRisk {
+  const normalized = sql.replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").toLowerCase();
+  const reasons: string[] = [];
+  if (/\b(drop|truncate)\b/.test(normalized)) reasons.push("Remove ou esvazia estruturas/dados");
+  if (/\b(delete|update)\b/.test(normalized) && !/\bwhere\b/.test(normalized)) reasons.push("Altera linhas sem filtro WHERE");
+  if (/\balter\s+table\b/.test(normalized)) reasons.push("Altera o contrato de uma tabela");
+  if (/\bcreate\s+index\b/.test(normalized) && /\bconcurrently\b/.test(normalized)) reasons.push("CREATE INDEX CONCURRENTLY exige execução fora de transação");
+  const transactional = !/\b(create\s+index\s+concurrently|vacuum|reindex\s+concurrently)\b/.test(normalized);
+  return { level: reasons.some(r => /Remove|Altera linhas/.test(r)) ? "destructive" : reasons.length ? "review" : "low", transactional, reasons };
+}
+export function migrationExecution(project: string): MigrationExecution {
+  let configured: unknown;
+  try { configured = JSON.parse(process.env.INFRA_PROJECT_DATABASE_URLS_JSON ?? "{}"); } catch { configured = null; }
+  const hasProjectUrl = !!configured && typeof configured === "object" && !Array.isArray(configured) && typeof (configured as Record<string, unknown>)[project] === "string" && Boolean((configured as Record<string, unknown>)[project]);
+  const missing = [
+    process.env.INFRA_MIGRATION_EXECUTION_ENABLED === "true" ? "" : "INFRA_MIGRATION_EXECUTION_ENABLED=true",
+    hasProjectUrl ? "" : `INFRA_PROJECT_DATABASE_URLS_JSON.${project}`,
+    process.env.INFRA_MIGRATION_EXECUTOR === "vps-sql" ? "" : "INFRA_MIGRATION_EXECUTOR=vps-sql",
+  ].filter(Boolean);
+  return { status: missing.length ? "blocked" : "ready", missing, project };
 }
 export function failure(error: unknown) {
   return error instanceof InvalidInput ? response({ error: error.message }, 400) : response({ error: "Infraestrutura indisponível. Confira a migration 0150, o acesso e a configuração no servidor." }, 503);

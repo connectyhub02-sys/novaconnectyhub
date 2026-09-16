@@ -25,7 +25,11 @@ export type Snapshot = {
   inngest: { functions: { id: string; status: "active" | "paused" | "unknown" }[]; events: { id: string; status: "completed" | "failed" | "running" | "queued"; retries: number }[]; failures: number | null; retries: number | null; queued: number | null; delaySeconds: number | null; workers: number | null };
 };
 export type Telemetry = { received_at: string; observed_at: string; executor: string; payload: Snapshot };
-export type Migration = { version: string; name: string; sql: string; checksum: string };
+export type MigrationRiskLevel = "low" | "review" | "destructive";
+export type MigrationRisk = { level: MigrationRiskLevel; transactional: boolean; reasons: string[] };
+export const migrationRiskLabels: Record<MigrationRiskLevel, string> = { low: "Risco baixo", review: "Revisão necessária", destructive: "Destrutiva · confirmação extra" };
+export type Migration = { version: string; name: string; sql: string; checksum: string; risk: MigrationRisk };
+export type MigrationExecution = { status: "ready" | "blocked"; missing: string[]; project: string };
 export type Audit = { id: string; actor: string; action: string; target: string | null; result: string; reason: string; created_at: string; before_state: unknown; after_state: unknown };
 export type Overview = { projects: Project[]; telemetry: (Telemetry & { project_id: string })[]; canOperate: boolean };
 export type Detail = { project: Project; telemetry: Telemetry | null; deployments: Deployment[]; events: DeployEvent[]; selectedDeployId: string | null; audit: Audit[]; canOperate: boolean; truncated: boolean };

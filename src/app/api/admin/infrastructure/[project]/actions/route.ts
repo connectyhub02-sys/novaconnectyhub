@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { access, audit, failure, getProject, migrationCatalog, response } from "@/lib/infrastructure/server";
+import { access, audit, failure, getProject, migrationCatalog, migrationExecution, response } from "@/lib/infrastructure/server";
 import { actions, blockedReason } from "@/lib/infrastructure/model";
 import { choice, identifier, keys, object, readBody } from "@/lib/infrastructure/validation";
 export async function POST(request: Request, context: { params: Promise<{ project: string }> }) {
@@ -35,6 +35,11 @@ export async function POST(request: Request, context: { params: Promise<{ projec
       if (!migration || body.checksum !== migration.checksum) {
         await audit(actor, project, action, "denied", "migration_not_versioned_or_changed", target);
         return response({ error: "Migration inexistente ou checksum alterado. Reabra o preview." }, 409);
+      }
+      const execution = migrationExecution(project);
+      if (execution.status === "blocked") {
+        await audit(actor, project, action, "blocked", "migration_execution_not_configured", target);
+        return response({ error: "Migration preparada, mas a execução está bloqueada por configuração.", execution, risk: migration.risk }, 501);
       }
     }
     await audit(actor, project, action, "blocked", "execution_adapter_unavailable", target);

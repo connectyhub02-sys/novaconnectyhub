@@ -1,6 +1,8 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { parseDeploy, parseSnapshot, readBody } from "@/lib/infrastructure/validation";
 import { projectHealth, type Telemetry } from "@/lib/infrastructure/model";
+import { migrationExecution, migrationRisk } from "@/lib/infrastructure/server";
 const event = { kind: "deploy", deployId: "a30a3a19-b65d-4a44-a92c-57c05c56f7ba", sequence: 1, stage: "queued", origin: "vps", app: "app-production", currentImage: "betel:v1", newImage: "betel:v2", container: "running", health: "unknown", code: "started" };
 export const snapshot = () => ({ kind: "telemetry", observedAt: new Date().toISOString(), payload: { services: { app: "healthy", api: "healthy", auth: "healthy", rest: "healthy", storage: "healthy", database: "healthy", inngest: "healthy", worker: "healthy" }, version: "v1", image: "betel:v1", container: "running", rollbackAvailable: null, appliedMigrations: null, tables: [], inngest: { functions: [], events: [], failures: null, retries: null, queued: null, delaySeconds: null, workers: null } } });
 it("accepts only structured deploy progress and rejects logs/secret-like metadata", () => {
@@ -31,4 +33,15 @@ it("never marks absent or stale observations as healthy", () => {
 it("limits actual request bytes even with no Content-Length", async () => {
   await expect(readBody(new Request("http://localhost", { method: "POST", body: JSON.stringify(event) }))).resolves.toEqual(event);
   await expect(readBody(new Request("http://localhost", { method: "POST", body: "x".repeat(65537) }))).rejects.toThrow("64 KiB");
+});
+it("previews migration risk without accepting free SQL or secrets", () => {
+  expect(migrationRisk("create table public.safe(id uuid primary key)")).toMatchObject({ level: "low", transactional: true, reasons: [] });
+  expect(migrationRisk("alter table x add column y text; drop table z")).toMatchObject({ level: "destructive", transactional: true });
+  expect(migrationRisk("create index concurrently idx on x(y)")).toMatchObject({ level: "review", transactional: false });
+});
+it("reports every server-only setting missing before a migration can run", () => {
+  vi.stubEnv("INFRA_MIGRATION_EXECUTION_ENABLED", "false");
+  vi.stubEnv("INFRA_PROJECT_DATABASE_URLS_JSON", "{}");
+  vi.stubEnv("INFRA_MIGRATION_EXECUTOR", "");
+  expect(migrationExecution("betel")).toEqual({ status: "blocked", project: "betel", missing: ["INFRA_MIGRATION_EXECUTION_ENABLED=true", "INFRA_PROJECT_DATABASE_URLS_JSON.betel", "INFRA_MIGRATION_EXECUTOR=vps-sql"] });
 });
