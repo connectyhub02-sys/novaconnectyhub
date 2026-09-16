@@ -910,3 +910,31 @@ A lista vazia já existia antes de m: leitura do banco encontrou limpeza
 `365809eb-5d6d-4813-84ea-ff2961552ef2` concluída às 12:39:09 UTC, com zero lotes,
 linhas e imóveis. O campo de solicitante consultado não permitiu atribuir pessoa.
 Não confundir esse registro anterior com a publicação da prévia automática.
+
+### Betel: motivo por referência na aprovação de teste — 16/09, 13:32 UTC
+
+Pacote fonte `0591c3061bdb2ecd86d49691ad261543d171ed05f6d2134d1e1871f624d4b425`,
+imagem `19de7c8e3fd83fedb5e723bfffc34456695aa11adc6f1c532a8d4ee45ebe9f94`, tag
+`betel-production:20260916-n`, publicado às 13:32:11 UTC. A falha de verificação
+das referências agora retorna as URLs e os motivos ao painel; a prévia avisa
+que ainda não comprova acessibilidade. Verificador e trava antes da aprovação
+preservados. Delta contra m limitado a dois arquivos de aplicação e dois testes.
+
+Build e TypeScript passaram; App/Auth/REST/Storage 200. Atividade zero verificada
+antes da troca, guard de dependências sem retomadas, 12 funções Betel e 45 CH
+preservadas; banco/motor/broker sem reinício. Imagem m mantida para reversão.
+Provas de franquia continuam vencendo às 22:06:13 UTC. Sem SQL, replay, chamada
+paga ou envio de WhatsApp nesta publicação. QA visual autenticada confirmada pela
+tarefa Betel no Chrome legado: preparação de teste com aviso novo, número vazio
+e confirmação desabilitada; após fechar, análise continuava em revisão. O erro
+por URL não foi provocado em produção; sua renderização passou nos testes do
+componente real com ação simulada. Evidência no projeto Betel:
+`docs/acompanhamento-lote-7a286fd7/reference-diagnostics-publication-qa.json`.
+
+No lote `7a286fd7`, as três referências CentralSul selecionadas retornaram
+HTTP 403 ao verificador isolado na VPS, embora a tarefa Betel tenha confirmado
+abertura no Chrome. A análise continuava em revisão e não havia confirmação,
+versão aprovada ou campanha/envio no recorte. A melhoria de interface não corrige
+a recusa externa nem libera referências sem verificação.
+[Diagnóstico e limites](betel-referencias-centralsul-2026-09-16.md).
+Evidência de publicação: `audit/package-n-publication.json` privado.
