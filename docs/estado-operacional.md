@@ -54,6 +54,13 @@ pública ainda retorna o comportamento antigo até a imagem do portal ser
 reconstruída e ativada no VPS; nenhum banco, credencial ou operação real foi
 alterado nesta correção.
 
+Após autorização do titular, o código do app principal foi enviado à `master` em
+`71d73f5098bdd44aeea5f78275377e491066009d`. A produção respondeu `/infraestrutura`
+com `307` para `/admin/infrastructure`, `/admin/infrastructure` com `307` para
+login e a API oficial com `401` sem sessão; isso confirma a implantação da rota e
+do cockpit no domínio principal. O subdomínio continua no portal independente até
+o patch `eb635248` ser ativado no serviço do VPS.
+
 ## Agente Onipresente Ativo — entrega local, 16/09/2026
 
 O agente web passou a retornar comandos limitados para destacar/abrir produto,
