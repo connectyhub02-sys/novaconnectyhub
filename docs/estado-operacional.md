@@ -886,3 +886,27 @@ atualização condicionada e auditoria, sem nova geração ou envio. Não houve 
 replay ou teste WhatsApp nesta publicação. Provas de franquia vencem 16/09 às
 22:06:13 UTC, sem renovação automática.
 [Evidências dos pacotes e da correção de data](betel-lote-seis-e-teste-celular-2026-09-16.md).
+
+### Betel: prévia de limpeza automática — 16/09, 13:03 UTC
+
+Pacote UX fonte `18bffd1ffcbad56bbc3f68ea230197f13037cb86407436050823b3b0f8341085`,
+imagem `16fb6a22da7a527682a6d89a408aff6ceca92f3c1be84ff78ae1de242cd8ad92`, tag
+`betel-production:20260916-m`, publicado às 13:03:58 UTC. O resumo da limpeza
+carrega ao abrir o scraper para admin/owner; mantém frase de confirmação, hash
+da prévia, proteção contra processamento ativo e invalidação de respostas tardias.
+Não inclui alteração de coletor, provedor ou grounding. Comparação contra l:
+somente componente, permissão na página e teste de UI. Sem SQL nova.
+
+Build e tipos passaram; App/Auth/REST/Storage 200. Guard de dependências sem
+retomadas, 12 funções Betel e 45 CH preservadas; banco/motor/broker sem reinício.
+Imagem l preservada. Provas de franquia continuam com vencimento 22:06:13 UTC.
+QA autenticada confirmada pela tarefa Betel no Chrome legado: resumo automático
+0/0/0/0, botão Ver prévia ausente, confirmação vazia e Limpar testes desabilitado.
+Só navegação/reload; nenhuma limpeza ou novo lote foi disparado nesta publicação.
+Evidências: `audit/package-m-publication.json` privado e
+`docs/acompanhamento-lote-ca36074a/cleanup-auto-preview-qa.json` no projeto Betel.
+
+A lista vazia já existia antes de m: leitura do banco encontrou limpeza
+`365809eb-5d6d-4813-84ea-ff2961552ef2` concluída às 12:39:09 UTC, com zero lotes,
+linhas e imóveis. O campo de solicitante consultado não permitiu atribuir pessoa.
+Não confundir esse registro anterior com a publicação da prévia automática.
