@@ -868,3 +868,21 @@ está liberada, sem evidência de bloqueio egress. Não atribuir causa à migra�
 comparação anterior. Reparação do actor/visibilidade segue com a tarefa Betel;
 parâmetros futuros não equivalem a coleta real validada.
 [Publicação, trilha por link e limites](betel-lote-seis-e-teste-celular-2026-09-16.md).
+
+### Betel: resultados completos e datas reais — 16/09, 01:14 UTC
+
+Pacote 2 publicado às 01:00 UTC: seis resultados visíveis, incluindo falhas sem
+imóvel; tarefa Betel confirmou QA 6/6. Apify de páginas ajustado para 1024 MB,
+concorrência 1 e tentativas limitadas; coleta real após o ajuste ainda não testada.
+
+Pacote 3 final b70d7af7, imagem 12e34830, tag 20260916-l publicado às 01:14:30 UTC.
+Parser de data ISO, remoção de valores de demonstração em dados reais e métricas
+por status de validação corrigidos. Build e health App/Auth/REST/Storage passaram;
+12 Betel/45 CH preservadas, banco/motor/broker sem reinício. Tarefa Betel confirmou
+QA Chrome versão l: 6/6 resultados, 0 prontos / 2 em revisão / 1 bloqueado, Supera
+sem data/UF de demonstração e CentralSul 21/09 verificada.
+CentralSul corrigida para 21/09 a partir do snapshot original, com ensaio rollback,
+atualização condicionada e auditoria, sem nova geração ou envio. Não houve limpeza,
+replay ou teste WhatsApp nesta publicação. Provas de franquia vencem 16/09 às
+22:06:13 UTC, sem renovação automática.
+[Evidências dos pacotes e da correção de data](betel-lote-seis-e-teste-celular-2026-09-16.md).

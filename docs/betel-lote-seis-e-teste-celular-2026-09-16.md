@@ -177,3 +177,55 @@ real ainda depende do teste do titular.
 
 Evidências: `market-test-submission-applied.json`, `package-i-publication.json`,
 `package-i-origin-check.json`. Os logs completos de build permanecem privados.
+
+## Pacotes 2 e 3 publicados — 01:00 e 01:14 UTC
+
+Pacote 2: fonte `fa94d95b5b9ad3c75d31a0f7a1aee9867981bb1d3f7dbd17c1c67fa167afa5b4`,
+imagem `207423e11ad5367cc0e66629ca0399811b7e32fc18c3e9962a8f395c93c783be`, tag j.
+O painel passa a mostrar os seis resultados do lote, inclusive três falhas sem
+imóvel, motivos e etapas. A tarefa Betel confirmou a navegação 6/6 publicada.
+O coletor Apify de páginas foi configurado para 1024 MB, concorrência 1,
+request timeout 25 s, actor 40 s, cliente 45 s, sem retries nem rotações de sessão.
+Isso corrige os parâmetros encontrados na auditoria; ainda não comprova que
+uma nova execução conseguirá coletar Machado. Nenhum actor foi executado para QA.
+
+Pacote 3 final: fonte `b70d7af7adfb61e8882315aa176ec4c7a0ad9dd276f14908f3cb655e7e22b422`,
+imagem `12e348308afa9107bced88fa2befd02a567d5811d71bc9122b5a2ec60b5e5616`, tag
+`betel-production:20260916-l`, publicado em 16/09 às 01:14:30 UTC. O build k
+intermediário terminou, mas não foi publicado porque a tarefa Betel entregou
+um último ajuste antes da troca em produção.
+
+O pacote final aceita datas ISO com separador T/t e deixa campos ausentes de
+registros reais neutros, sem completá-los com dados de demonstração. Classificação,
+filtros e métricas usam o status de validação; os três imóveis existentes devem
+resultar em duas revisões, um bloqueado e nenhum pronto. Testes de parser,
+normalização e classificação, TypeScript e lint foram confirmados pela tarefa
+Betel. Build final na VPS e health App/Auth/REST/Storage 200 passaram. As 12 funções
+Betel e 45 ConnectyHub, banco, motor e broker foram preservados. A tarefa Betel
+confirmou a QA autenticada no Chrome da versão l: 6/6 resultados (duas revisões,
+um insuficiente, três falhas), métricas 0 prontos / 2 em revisão / 1 bloqueado e
+fila coerente. Supera exibe dados insuficientes, localização e data não informadas,
+sem SC nem 27/06 de demonstração. A data CentralSul 21/09 foi confirmada no banco
+pela atualização condicionada; a tarefa Betel também informou tê-la verificado.
+
+## Data CentralSul corrigida a partir da fonte preservada
+
+Às 01:09:58 UTC, uma atualização condicionada alterou somente `auction_date`
+de NULL para `2026-09-21` e `updated_at` da oportunidade
+`a3c351db-0cda-4faf-b6dd-1e858d93b186`. Um registro de auditoria identifica a correção
+`centralsul-date-source-cas-20260916`. O ensaio com ROLLBACK passou e confirmou
+que data, timestamp e contagem de auditoria voltaram ao original antes do COMMIT.
+
+Guardas conferiram timestamp original, código, snapshot de fonte
+`3e4f7555-e317-4b8e-b944-57ed69ee7472` e seu hash, análise em revisão, ausência de
+versão aprovada/campanha e de submissão em processamento ou incerta. Os campos
+`siteAdapter.extraction.auctionDate` e `geminiExtraction.extraction.auctionDate`
+já continham `2026-09-21t17:45`. A resposta original da IA também continha a data
+correta; o parser e o fallback de demonstração explicam a exibição indevida.
+Não houve nova IA, alteração de snapshots/versões ou envio de mensagem.
+
+Evidências privadas: `package-j-publication.json`, `package-l-publication.json`,
+`centralsul-date-correction.json`. Imagem j preservada para rollback.
+As provas de franquia dos coletores continuam válidas somente até
+16/09 às 22:06:13 UTC. Não foram renovadas. Limpeza e novo lote serão feitos
+pelo titular; esta publicação e a QA não os executaram.
