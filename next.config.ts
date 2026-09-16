@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
     return [
       { source: "/docs/ia", destination: "/docs/api#ia", permanent: true },
       {
+        source: "/infraestrutura",
+        destination: "/admin/infrastructure",
+        permanent: false,
+      },
+      {
         source: "/infraestrutura/:path*",
         destination: "/admin/infrastructure",
         permanent: false,
