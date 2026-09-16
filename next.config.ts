@@ -5,7 +5,14 @@ const nextConfig: NextConfig = {
     "/api/admin/infrastructure/**": ["./supabase/migrations/*.sql"],
   },
   async redirects() {
-    return [{ source: "/docs/ia", destination: "/docs/api#ia", permanent: true }];
+    return [
+      { source: "/docs/ia", destination: "/docs/api#ia", permanent: true },
+      {
+        source: "/infraestrutura/:path*",
+        destination: "/admin/infrastructure",
+        permanent: false,
+      },
+    ];
   },
   images: {
     remotePatterns: [
