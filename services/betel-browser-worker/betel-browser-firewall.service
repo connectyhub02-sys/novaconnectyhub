@@ -1,0 +1,13 @@
+[Unit]
+Description=Isolated Betel browser network policy
+After=docker.service
+Requires=docker.service
+Before=betel-browser-worker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/betel-isolated-rehearsal/browser-worker/firewall.py
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

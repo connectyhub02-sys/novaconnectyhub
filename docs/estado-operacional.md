@@ -1006,3 +1006,29 @@ Novo escopo autorizado prepara navegador isolado na VPS antes do fallback Apify,
 sem lote, IA, Gecko ou mensagens no teste mínimo. Ainda não instalado/validado
 neste registro. Leitura de capacidade às 14:12 UTC: 8 CPUs, cerca de 19,79 GiB
 disponíveis e app limitado a 1 GiB/0,75 CPU; snapshot não é garantia de capacidade.
+
+### Betel: navegador próprio publicado — 16/09, 14:38 UTC
+
+Fonte `9a9ac303`, app `22be7332` e worker `74fd0f34`, tag p, publicados após
+build Linux/TypeScript e testes offline do responsável. Coletor separado,
+nonroot/sandbox, 1 CPU/1 GiB/concorrência 1, rede privada sem porta publicada,
+sem credenciais DB/LLM. Acesso autenticado app→worker confirmado; URLs privadas,
+metadados e acessos iniciados ao banco/host negados. App/Auth/REST/Storage/health
+200; 12 Betel/45 ConnectyHub preservadas, banco/motor/broker sem reinício.
+
+**Machado ainda bloqueado:** único teste real 14921 recebeu HTTP403/challenge,
+sem texto útil; 2,905 s, 2,73 CPU-s e pico de 193,59 MiB. Não valida fotos/documentos
+nem recuperação do scraper. Sem nova coleta, lote, IA, Gecko, Apify ou envio de
+mensagem nesse teste. Fonte inválida continua recusada antes da análise.
+Fallback Apify anterior preservado; provas FREE até 22:06:13 UTC sem renovação.
+[Publicação, isolamento, evidências e limites](betel-navegador-isolado-2026-09-16.md).
+
+### Portal: navegação autenticada conferida — 16/09, 14:21 UTC
+
+Titular confirmou login. Após expiração da leitura da aba original, uma aba
+adicional na mesma sessão abriu sem novo login. Conferidos os dois projetos,
+visão ConnectyHub com snapshot 11:21 BRT/201 tabelas, página de automações com
+45 funções e execuções recentes, e visão Betel com 156 tabelas/projetos API ativos.
+Somente consulta; sem criação/execução/download. Aba adicional fechada e aba
+original do titular preservada. Esta navegação não é nova auditoria de acesso
+por cliente nem validação de todas as automações.
