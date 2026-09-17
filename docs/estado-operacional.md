@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Pagamentos publicados pela master — 17/09/2026, 20:13 BRT
+
+Push na master de `connectyhub02-sys/novaconnectyhub` concluído no commit
+`a366a966a727a4a122a9810eaa0d450884d14b78`. Deploy automático GitHub/Vercel
+`CbKEQomUL71xMyLUnmQVyGk7DKKu`, no projeto existente Nova Connectyhub /
+novaconnectyhub, concluído com sucesso. Health HTTP 200 confirmou o SHA servido.
+Nenhum deploy manual, novo projeto ou alteração de DNS.
+
+Migrations 0153/0154 aplicadas após backup e ensaio (evidências abaixo). Webhook
+Asaas atualizado às 20:13:45: nove eventos Pix adicionados aos 34 existentes;
+todos os anteriores e demais campos preservados/verificados. Minha Conta abriu
+o novo diálogo de troca em produção, manteve o cartão/vencimento e o bloqueio
+explicado para troca a Pix. Inspeção em sessão administrativa assistida, formulário
+vazio e fechado sem envio. Rotas Pix/cartão e Inngest retornaram 401 sem autenticação.
+
+Nenhuma operação financeira real. Listagem Asaas às 20:14:50: HTTP 200, zero
+autorizações. **Flag Pix não habilitada**: falta comprovar elegibilidade da conta
+Asaas para criação como recebedor; a tela de autorizações do pagador não comprova
+isso. Após confirmação, configurar `ASAAS_PIX_AUTOMATIC_ENABLED=true` no projeto
+existente e publicar pela pipeline GitHub. Teste real depende de autorização
+específica do titular. [Relatório e roteiro](metodos-pagamento-pix-automatico-2026-09-17.md).
+
 ## Regra permanente de publicação — confirmada pelo titular em 17/09/2026
 
 Releases da ConnectyHub vão para `connectyhub02-sys/novaconnectyhub`, branch
@@ -9,7 +31,7 @@ Vercel novo nem alterar DNS. Branch paralela serve para trabalho, não como dest
 final de produção. A falta de acesso da CLI à Vercel não impede por si só o caminho
 GitHub autorizado; verificar permissão de push e o resultado da pipeline correta.
 
-Integração do pacote em andamento sobre `origin/master` em `1ebea38d`. O banco foi
+Integração do pacote realizada sobre `origin/master` em `1ebea38d`. O banco foi
 relido às 20:06 BRT pelo Studio HTTPS da ConnectyHub: migrations 0150/0151 de
 infraestrutura e 0152 de cartões já aplicadas, um cartão ativo e nenhuma tabela
 nova deste pacote. Por isso os SQLs de troca auditada e Pix foram renumerados para
@@ -30,7 +52,7 @@ de execução das RPCs conferidas, sem operação financeira real. SQL 0153 SHA-
 Integração validada: 116 testes em dez arquivos mais um cenário novo de
 compatibilidade com a seleção de padrão 0152 (117 distintos nesta rodada),
 ESLint, TypeScript e build Next/webpack aprovados. Push/deploy e atualização do
-webhook ainda serão conferidos; flag Pix não habilitada. Elegibilidade Asaas para
+webhook conferidos na entrada acima; flag Pix não habilitada. Elegibilidade Asaas para
 criação segue sem comprovação, portanto não inferir ativação a partir de GET 200.
 
 ## Publicação do pacote de pagamentos — bloqueada em 17/09/2026, 20:00 BRT

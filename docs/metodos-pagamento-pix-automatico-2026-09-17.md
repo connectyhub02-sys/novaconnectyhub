@@ -1,4 +1,4 @@
-# Métodos de pagamento — pacote local de 17/09/2026
+# Métodos de pagamento — publicação de 17/09/2026
 
 ## Estado
 
@@ -16,17 +16,39 @@ Migrations 0153/0154 aplicadas às 20:10 BRT, com backup privado direcionado,
 histórico/auditoria e verificação de RLS/grants. Fingerprint dos contratos
 inalterado (`a2b020a9d628b75537f6a03440b235a9`), um cartão ativo antes/depois.
 117 cenários distintos verificados após integrar a master, ESLint, TypeScript e
-build aprovados. Aguardar confirmação do SHA servido após push e atualizar webhook
-somente com o novo handler disponível. Flag permanece sem habilitação nesta etapa.
+build aprovados. **Publicado** via push na `master`: commit
+`a366a966a727a4a122a9810eaa0d450884d14b78`. GitHub/Vercel confirmou sucesso e o
+health público retornou HTTP 200 com esse SHA. Deploy no projeto existente:
+[CbKEQomUL71xMyLUnmQVyGk7DKKu](https://vercel.com/nova-connectyhub-s-projects/novaconnectyhub/CbKEQomUL71xMyLUnmQVyGk7DKKu).
 
-Implementados localmente: troca segura de cartão e Pix Automático Asaas na
+Às 20:13:45 BRT, o webhook existente recebeu os nove eventos Pix: passou de 34
+para 43 eventos, preservando todos os anteriores, URL, token, fila e demais
+configurações. Conferência por GET após PUT somente do campo events. Nenhum
+mandato, cobrança, tokenização ou troca real de cartão executados. GET de
+autorizações às 20:14:50 BRT: HTTP 200, total zero.
+
+Minha Conta validada no navegador de produção em acesso administrativo assistido:
+cartão padrão existente, vencimento 14/10 preservado, novo diálogo carregado com
+bandeiras/campos/consentimento e bloqueio explícito da troca para Pix. Formulário
+fechado vazio, sem submissão. Rotas Pix/alteração de método e Inngest recusaram
+requisições sem sessão/assinatura (401). Isso não substitui teste com sessão do
+titular nem pagamento real. Checkout inicial foi validado com APIs simuladas;
+nenhuma contratação real foi criada para demonstrá-lo em produção.
+
+**Ativação Pix ainda pendente:** `ASAAS_PIX_AUTOMATIC_ENABLED=true` não foi
+configurada. Conta aberta no Asaas mostra funções para autorizar pagamentos como
+pagador; isso não comprova a habilitação para criar autorizações como recebedor.
+Confirmar essa elegibilidade no Asaas antes da flag e do teste real autorizado.
+
+Código publicado: troca segura de cartão e Pix Automático Asaas na
 primeira contratação de plano recorrente com preço fixo. A troca de cartão para
 Pix Automático em plano já ativo permanece explicitamente bloqueada no painel e
 no servidor: a Jornada 3 pública exige pagamento inicial. Não foi implementado
 atalho com cobrança simbólica, antecipação de vencimento ou Pix comum disfarçado.
 
-Nada deste pacote foi publicado. Nenhuma autorização, mandato, cobrança ou troca
-real de cliente foi criada. Consulta de publicação em 17/09, aproximadamente
+## Histórico anterior à publicação
+
+Até 20:00 BRT o pacote permanecia local. Consulta de publicação em 17/09, aproximadamente
 19:34 BRT: `vercel whoami` retorna `pilgerlandingpage`; consulta autenticada ao
 projeto `prj_SVsJoIWfofx7KRpRL7bDJsL5Q8W3`, equipe `team_F30ubMSe0tNWndpvkO9dSCDA`,
 retorna **404 — Project not found**. O código está neste worktree isolado; não
@@ -122,11 +144,11 @@ webhook, sem nova chave secreta Pix. Nunca configurar chave de produção num en
 
 GET real em 17/09 às 19:10:33 BRT encontrou webhook ativo, autenticado e sem fila
 interrompida em `/api/webhooks/asaas/platform-billing`. Ele não possui eventos
-`PIX_AUTOMATIC_*`. O código de registro foi ampliado para os cinco eventos de
-autorização e quatro de instrução. A configuração externa **não foi modificada**:
-o novo handler não está publicado devido ao bloqueio Vercel. Atualizar os eventos
-depois de disponibilizar o handler, preservando todos os eventos PAYMENT e
-SUBSCRIPTION existentes; manter token, URL, conta e ambiente corretos.
+`PIX_AUTOMATIC_*` naquele momento. Após publicação do handler, às 20:13:45 BRT,
+a configuração externa foi atualizada com cinco eventos de autorização e quatro
+de instrução. Os 34 eventos anteriores, incluindo PAYMENT e SUBSCRIPTION, e as
+demais configurações foram preservados e conferidos por GET. Contrato oficial:
+[atualização parcial do webhook](https://docs.asaas.com/reference/atualizar-webhook-existente).
 
 ## Verificação
 
