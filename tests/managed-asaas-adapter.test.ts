@@ -12,6 +12,12 @@ const payment={id:"pay_fixture",customer:"cus_fixture",value:100,status:"PENDING
 const input={accessToken:"fixture-secret",paymentId:payment.id,customerId:payment.customer,reference:payment.externalReference,amount:100,token:"fixture-vault-token"};
 
 describe("Asaas application-managed recurrence",()=>{
+  it("tokenizes a replacement for the same customer without creating a charge or agreement",async()=>{
+    const t=adapter([{body:{creditCardToken:"new-token",creditCardBrand:"VISA"}}]);
+    const result=await t.api.tokenizeAsaasBillingCard({...input,card:{number:"4111111111111111",holderName:"Fixture",expiryMonth:"12",expiryYear:"2032",ccv:"123"},holder:{name:"Fixture",email:"fixture@example.com",cpfCnpj:"12345678901",phone:"11999999999",postalCode:"01001000",addressNumber:"1"},remoteIp:"203.0.113.1"});
+    expect(result).toEqual({customerId:"cus_fixture",token:"new-token",brand:"VISA"});
+    expect(t.fetch).toHaveBeenCalledTimes(1);const call=t.fetch.mock.calls[0] as unknown as [string,{body:string}];expect(call[0]).toMatch(/\/creditCard\/tokenizeCreditCard$/);expect(JSON.parse(call[1].body)).toMatchObject({customer:"cus_fixture",remoteIp:"203.0.113.1"});
+  });
   it("creates a single bill without attaching a card or an external subscription",async()=>{
     const t=adapter([{body:payment}]);await t.api.createManagedAsaasInvoice({...input,dueDate:"2026-09-10"});
     const call=t.fetch.mock.calls[0] as unknown as [string,{body:string}];expect(call[0]).toMatch(/\/payments$/);

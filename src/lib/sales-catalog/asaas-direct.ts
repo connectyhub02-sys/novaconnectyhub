@@ -172,13 +172,13 @@ export async function convertAsaasBillingPaymentToPix(input:AsaasDirectConnectio
 }
 
 /** The token stays exclusively inside the billing credential vault. */
-export async function tokenizeAsaasBillingCard(input: AsaasDirectConnection & {card: CheckoutCard; holder: CheckoutCardHolder; remoteIp: string}) {
-  const matches = await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
-  const customer = Array.isArray(matches.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", {...input.holder, notificationDisabled: true});
+export async function tokenizeAsaasBillingCard(input: AsaasDirectConnection & {card: CheckoutCard; holder: CheckoutCardHolder; remoteIp: string; customerId?: string}) {
+  const matches = input.customerId ? null : await request(input, `/customers?cpfCnpj=${encodeURIComponent(input.holder.cpfCnpj)}&limit=1`);
+  const customer = input.customerId ? {id:input.customerId} : Array.isArray(matches?.data) && matches.data[0]?.id ? matches.data[0] : await request(input, "/customers", "POST", {...input.holder, notificationDisabled: true});
   if (typeof customer.id !== "string") throw new AsaasDirectError(true, false);
   const result = await request(input, "/creditCard/tokenizeCreditCard", "POST", {customer: customer.id, creditCard: input.card, creditCardHolderInfo: input.holder, remoteIp: input.remoteIp});
   if (typeof result.creditCardToken !== "string" || !result.creditCardToken) throw new AsaasDirectError(true, false);
-  return {customerId: customer.id, token: result.creditCardToken};
+  return {customerId: customer.id, token: result.creditCardToken, brand: typeof result.creditCardBrand === "string" && /^[A-Za-z0-9 _-]{1,32}$/.test(result.creditCardBrand) ? result.creditCardBrand : null};
 }
 
 /** No external subscription and no card on creation: the application owns the schedule. */

@@ -12,7 +12,8 @@ it("shows actionable setup requirements without secrets or false readiness for a
   expect(result.missing.join(" ")).toContain("INFRA_JOB_ADAPTERS_JSON.betel");
   expect(result.sql.missing.join(" ")).toContain("INFRA_ADMIN_USER_IDS");
   expect(result.sql.missing).toContain("INFRA_PROJECT_DATABASE_URLS_JSON.betel");
-  expect(result.missing.join(" ")).toContain("infra_projects.organization_id");
+  expect(result.missing.join(" ")).not.toContain("infra_projects.organization_id");
+  expect(projectConfiguration({...project,client_access_enabled:true},[check],false).missing.join(" ")).toContain("infra_projects.organization_id");
 });
 it("distinguishes partial health configuration from SQL and reporter capability", () => {
   vi.stubEnv("INFRA_INGEST_KEYS_JSON", JSON.stringify([{ project: "vision", actor: "publisher", sha256: "f".repeat(64), scopes: ["deploy", "telemetry"] }]));

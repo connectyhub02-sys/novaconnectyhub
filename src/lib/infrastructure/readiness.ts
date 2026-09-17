@@ -17,7 +17,7 @@ export function projectConfiguration(project: Project, checks: HealthCheck[], ca
     if (!project[field] || project[field] === "A confirmar") missing.push(`infra_projects.${field}: cadastrar o destino de ${project.id}`);
   }
   if (!project.topology || project.topology === "unknown") missing.push("infra_projects.topology: definir Vercel, VPS ou proxy");
-  if (!project.organization_id) missing.push("infra_projects.organization_id: vincular organização antes de disponibilizar acesso cliente");
+  if (project.client_access_enabled && !project.organization_id) missing.push("infra_projects.organization_id: vincular organização antes de disponibilizar acesso cliente");
   missing.push(...sql.missing);
   if (!jobsConfigured(project.id)) missing.push(jobsRequirement(project.id));
   if (!reporter.telemetry) missing.push(`INFRA_INGEST_KEYS_JSON: credencial de ${project.id} com escopo telemetry para jobs, tabelas e processos do host`);

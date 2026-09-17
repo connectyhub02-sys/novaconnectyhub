@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Activity, ArrowLeft, ArrowUpRight, Database, GitBranch, LockKeyhole, Server } from "lucide-react";
 import { DialogFrame } from "@/components/ui/dialog-frame";
-import { actionLabels, blockedReason, configurationLabels, eventLabels, healthLabels, jobActions, migrationRiskLabels, originLabels, projectHealth, stageLabels, stages, stale, type Detail, type Health, type InfraAction, type JobAction, type Migration, type MigrationExecution, type Overview, type ProjectConfiguration, type Telemetry } from "@/lib/infrastructure/model";
+import { actionLabels, blockedReason, eventLabels, healthLabels, jobActions, migrationRiskLabels, originLabels, projectHealth, stageLabels, stages, stale, type Detail, type Health, type InfraAction, type JobAction, type Migration, type MigrationExecution, type Overview, type ProjectConfiguration, type Telemetry } from "@/lib/infrastructure/model";
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 const button = "min-h-11 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
@@ -18,7 +18,14 @@ function Section({ title, children }: { title: string; children: ReactNode }) { 
 function Fact({ name, children }: { name: string; children: ReactNode }) { return <div className="min-w-0"><dt className="text-xs text-slate-500">{name}</dt><dd className="mt-1 break-all text-sm font-medium">{children}</dd></div>; }
 function Configuration({ config }: { config: ProjectConfiguration | undefined }) {
   if (!config) return null;
-  return <div className={`min-w-0 rounded-xl p-4 text-sm ${config.status === "ready" ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}><strong>{configurationLabels[config.status]}</strong><p className="mt-1 text-xs">{config.checked}/{config.total} serviços com configuração de leitura aceita. SQL: {config.sql.status === "ready" ? "configurado; exige confirmação" : "bloqueado"}. Configuração não comprova saúde.</p>{config.missing.length > 0 && <details className="mt-3"><summary className="cursor-pointer font-semibold">Ver {config.missing.length} requisitos pendentes</summary><ul className="mt-3 list-disc space-y-2 break-words pl-4 text-xs leading-5">{config.missing.map(item => <li key={item}>{item}</li>)}</ul></details>}</div>;
+  const operation = config.missing.filter(item => /^INFRA_(MIGRATION_|PROJECT_DATABASE_|ADMIN_USER_|JOB_ADAPTERS)/.test(item));
+  const observation = config.missing.filter(item => !operation.includes(item));
+  return <div className="min-w-0 rounded-xl bg-slate-50 p-4 text-sm text-slate-800">
+    <strong>{config.checked ? "Conexões de leitura configuradas" : "Leitura aguardando configuração"}</strong>
+    <p className="mt-1 text-xs">{config.checked}/{config.total} serviços com configuração aceita. A saúde de cada conexão aparece abaixo. SQL: {config.sql.status === "ready" ? "configurado; exige confirmação" : "bloqueado até cadastrar conexão TLS e habilitar o executor"}.</p>
+    {operation.length>0?<details className="mt-3 rounded-lg bg-amber-50 p-3 text-amber-950"><summary className="cursor-pointer font-semibold">SQL e jobs · {operation.length} configurações obrigatórias para executar</summary><p className="mt-2 text-xs">A leitura dos serviços já conectados continua funcionando. SQL fica bloqueado até cadastrar DSN/role TLS e habilitar o executor. Jobs ficam bloqueados até instalar e cadastrar o adaptador HTTPS com credencial do projeto.</p><ul className="mt-3 list-disc space-y-2 break-words pl-4 text-xs leading-5">{operation.map(item=><li key={item}>{item}</li>)}</ul></details>:null}
+    {observation.length>0?<details className="mt-3"><summary className="cursor-pointer font-semibold">Observabilidade e inventário · {observation.length} complementos</summary><p className="mt-2 text-xs">Coletores, publicadores e cadastros complementares. Não impedem a leitura já conectada e não habilitam comandos de SQL/jobs.</p><ul className="mt-3 list-disc space-y-2 break-words pl-4 text-xs leading-5">{observation.map(item=><li key={item}>{item}</li>)}</ul></details>:null}
+  </div>;
 }
 function Freshness({ telemetry }: { telemetry: Telemetry | null | undefined }) {
   return <p className={`text-xs ${stale(telemetry) ? "text-amber-800" : "text-slate-500"}`}>{!telemetry ? "Sem observação recente. Abra o projeto para conferir a configuração necessária por serviço." : `${stale(telemetry) ? "Telemetria desatualizada · " : "Observação · "}${date(telemetry.observed_at)} · ${telemetry.executor}`}</p>;

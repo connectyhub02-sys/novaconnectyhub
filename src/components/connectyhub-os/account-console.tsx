@@ -1,4 +1,5 @@
 "use client";
+import { BillingPaymentMethods } from "./billing-payment-methods";
 import { CreditExplainer } from "./credit-explainer";
 import { NotificationSenderSettings } from "./notification-sender-settings";
 
@@ -412,6 +413,8 @@ export function AccountConsole() {
         <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} />
         <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
       </div>
+
+      <BillingPaymentMethods subscriptions={account.subscriptions} />
 
       <NotificationSenderSettings />
 
