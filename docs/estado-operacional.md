@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Publicação do pacote de pagamentos — bloqueada em 17/09/2026, 20:00 BRT
+
+Titular autorizou migrations 0150/0151, configuração do webhook e publicação em
+lote, com parada expressa se persistisse o acesso Vercel incorreto. Revalidação:
+`vercel whoami` retorna `pilgerlandingpage`; a consulta autenticada ao projeto
+`prj_SVsJoIWfofx7KRpRL7bDJsL5Q8W3`, equipe `team_F30ubMSe0tNWndpvkO9dSCDA`,
+retorna `404 — Project not found`. `vercel teams list` lista somente
+`pilger-landing-pages-projects` (Guilherme Pilger AI), sem a equipe esperada.
+
+Interrompido antes das mutações, conforme essa condição: nenhuma migration aplicada
+nesta tentativa, nenhum webhook alterado, nenhum deploy e nenhuma flag habilitada.
+Nenhuma operação financeira real. O schema e o webhook não foram relidos nesta
+rodada; seu último estado observado consta abaixo e no relatório do pacote.
+
+Pacote funcional preservado no commit `93788513`, branch
+`codex/metodos-pagamento-pix-automatico`. Retomada: autenticar a CLI com acesso ao
+projeto/equipe acima, ou operador já autorizado publicar o mesmo pacote nesse
+projeto. Não criar projeto alternativo nem alterar DNS. Após liberar acesso,
+conferir histórico remoto/migrations, backup, aplicar 0150/0151, publicar handlers
+com criação Pix desabilitada, acrescentar os nove eventos ao webhook existente e
+conferir conta antes da flag. Validar health, checkout e Minha Conta; o teste com
+mandato/pagamento real permanece sujeito à autorização específica do titular.
+
 ## Pacote cartão + Pix Automático — implementação local, 17/09/2026
 
 Após nova instrução do titular para continuar, o checkout inicial recebeu Pix

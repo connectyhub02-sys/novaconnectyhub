@@ -15,6 +15,13 @@ projeto `prj_SVsJoIWfofx7KRpRL7bDJsL5Q8W3`, equipe `team_F30ubMSe0tNWndpvkO9dSCD
 retorna **404 — Project not found**. O código está neste worktree isolado; não
 usar o checkout principal com alterações de outros trabalhos como pacote de deploy.
 
+Nova tentativa autorizada de publicação às 20:00 BRT confirmou o mesmo 404 e a
+mesma identidade CLI. `vercel teams list` mostra somente
+`pilger-landing-pages-projects` (Guilherme Pilger AI). Conforme ordem expressa de
+parar se esse acesso continuasse bloqueado, nenhuma migration, mudança de webhook,
+flag ou implantação foi executada nesta tentativa. Pacote funcional: commit
+`93788513`, branch `codex/metodos-pagamento-pix-automatico`.
+
 ## Comportamento implementado
 
 - Checkout apresenta Cartão, Pix comum manual e Pix Automático. A terceira opção
