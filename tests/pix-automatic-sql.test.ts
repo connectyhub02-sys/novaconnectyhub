@@ -15,7 +15,7 @@ beforeAll(async()=>{
  create table sales_catalog_card_attempts(id uuid primary key,state text,effects_completed_state text,effects_claimed_at timestamptz);
  create table intelligence_events(scope text,organization_id uuid,source_type text,source_id uuid,event_type text,title text,summary text,visibility text,tags text[],payload jsonb);`);
  await db.exec(readFileSync("supabase/migrations/0078_ecosystem_native_billing.sql","utf8"));
- await db.exec(readFileSync("supabase/migrations/0151_pix_automatic.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0154_pix_automatic.sql","utf8"));
 },30000);
 afterAll(async()=>{await db?.close();});
 beforeEach(async()=>{

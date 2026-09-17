@@ -8,7 +8,7 @@ import { managedRenewalConsentVersion } from "./managed-renewal-policy";
 export async function savePendingAsaasCard(client: SupabaseClient, input: AsaasDirectConnection & {organizationId: string; subscriptionId: string; attemptId: string; card: CheckoutCard; holder: CheckoutCardHolder; remoteIp: string}) {
   try {
     const credential = await tokenizeAsaasBillingCard(input);
-    const saved = await client.from("billing_asaas_card_vault").insert({organization_id: input.organizationId, subscription_id: input.subscriptionId, activation_attempt_id: input.attemptId, customer_id: credential.customerId, token_encrypted: encryptCredentialValue(credential.token), consent_version: managedRenewalConsentVersion});
+    const saved = await client.from("billing_asaas_card_vault").insert({organization_id: input.organizationId, subscription_id: input.subscriptionId, activation_attempt_id: input.attemptId, customer_id: credential.customerId, token_encrypted: encryptCredentialValue(credential.token), consent_version: managedRenewalConsentVersion, brand: credential.brand, last_digits: input.card.number.slice(-4), exp_month: input.card.expiryMonth, exp_year: input.card.expiryYear});
     if (saved.error) throw new Error("Não foi possível registrar a autorização de renovação.");
     return credential.customerId;
   } catch (error) {

@@ -1,6 +1,5 @@
 -- Card replacement is credential maintenance, never a payment attempt.
-alter table public.billing_asaas_card_vault alter column activation_attempt_id drop not null;
-alter table public.billing_asaas_card_vault add column last_four text check (last_four ~ '^[0-9]{4}$');
+-- Extends 0152: reuse the existing selectable cards and last_digits columns.
 
 create table public.billing_card_replacements (
   id uuid primary key,
@@ -79,8 +78,8 @@ begin
   if blocked is null and (p_token_encrypted is null or length(p_token_encrypted)<20 or p_last_four is null or p_last_four !~ '^[0-9]{4}$') then blocked:='invalid_input'; end if;
   if blocked is null then
     update public.billing_asaas_card_vault set status='inactive' where id=v.id;
-    insert into public.billing_asaas_card_vault(organization_id,subscription_id,customer_id,token_encrypted,consent_version,status,last_four)
-      values(p_org,p_subscription,v.customer_id,p_token_encrypted,v.consent_version,'active',p_last_four) returning id into new_id;
+    insert into public.billing_asaas_card_vault(organization_id,subscription_id,customer_id,token_encrypted,consent_version,status,last_digits,selectable)
+      values(p_org,p_subscription,v.customer_id,p_token_encrypted,v.consent_version,'active',p_last_four,true) returning id into new_id;
     -- Preserve enabled state, amounts, caps and authorization. No top-up is dispatched.
     update public.credit_topup_policies set card_method_id=new_id,updated_at=now() where organization_id=p_org and card_method_id=v.id;
   end if;

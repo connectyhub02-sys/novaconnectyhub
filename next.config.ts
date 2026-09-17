@@ -1,8 +1,23 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/api/admin/infrastructure/**": ["./supabase/migrations/*.sql"],
+  },
   async redirects() {
-    return [{ source: "/docs/ia", destination: "/docs/api#ia", permanent: true }];
+    return [
+      { source: "/docs/ia", destination: "/docs/api#ia", permanent: true },
+      {
+        source: "/infraestrutura",
+        destination: "/admin/infrastructure",
+        permanent: false,
+      },
+      {
+        source: "/infraestrutura/:path*",
+        destination: "/admin/infrastructure",
+        permanent: false,
+      },
+    ];
   },
   images: {
     remotePatterns: [

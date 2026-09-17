@@ -43,7 +43,7 @@ export async function readCardReplacement(client: SupabaseClient, scope: Scope, 
   if (check.error) throw new CardReplacementError("internal_error");
   // Never expose a foreign subscription or operation, even for platform admins.
   if (["forbidden", "not_found"].includes(check.data)) throw new CardReplacementError(check.data);
-  const card = await client.from("billing_asaas_card_vault").select("last_four,consent_at")
+  const card = await client.from("billing_asaas_card_vault").select("last_digits,consent_at")
     .eq("organization_id", scope.organizationId).eq("subscription_id", scope.subscriptionId).eq("status", "active").maybeSingle();
   if (card.error) throw new CardReplacementError("internal_error");
   let operation: { state: string; result_code: string | null } | null = null;
@@ -56,7 +56,7 @@ export async function readCardReplacement(client: SupabaseClient, scope: Scope, 
   return {
     eligible: check.data === null,
     reason: check.data ? new CardReplacementError(check.data).message : null,
-    lastFour: card.data?.last_four ?? null,
+    lastFour: card.data?.last_digits ?? null,
     changedAt: card.data?.consent_at ?? null,
     operation,
   };

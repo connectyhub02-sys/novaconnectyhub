@@ -22,7 +22,7 @@ Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acess
 
 O código sustenta duas frentes complementares: operação de empresas dentro do painel e integração de sistemas externos via API. Ambas devem compartilhar controles consistentes de organização, acesso, créditos, registro de consumo e entrega. Evitar tratar catálogo de recursos como entrega comercial pronta. Antes da próxima fase de produção, priorizar os percursos essenciais de cadastro/acesso, conexão do agente, resposta, agendamento, entrega e débito correto, com recuperação de falhas.
 
-Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. Painel multiprojetos e serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
+Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. O cockpit multiprojetos recebeu um MVP em 16/09 e uma camada posterior de coleta e SQL protegido, cujo estado verificado fica no documento operacional; serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
 
 | Componente | Destino registrado | Fontes principais |
 |---|---|---|
@@ -51,6 +51,9 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 | Documentação pública IA | `src/lib/ai-api/openapi.ts`, documentação/esquemas/guias, `/docs/api#ia` | [guia público](guia-integracao-api-llm.md); use fonte geradora ao editar |
 | Catálogo e checkout | `src/lib/sales-catalog`, rotas sales-catalog/checkout e adaptadores | testes `sales-catalog-*`, `whatsapp-*checkout*`, pagamentos |
 | Infraestrutura e retorno | configurações privadas da VPS e ambiente de implantação | [Supabase](migracao-supabase-vps-2026-09-11.md), [Inngest](migracao-inngest-vps-2026-09-11.md) |
+| Cockpit de infraestrutura por empresa/projeto | `src/app/admin/infrastructure`, `src/lib/infrastructure`, migration `0150`, receptor `api/infrastructure/[project]/events` | [MVP local, permissões, telemetria e integração dos deploys VPS](infraestrutura-cockpit-2026-09-16.md) |
+
+O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infrastructure`. A camada operacional de 16/09 acrescenta coleta HTTP no servidor, preparação imutável de SQL e executor PostgreSQL transacional condicionado à configuração por projeto. Inventário inclui ConnectyHub, Betel, Vision e Hora Space. Deploys VPS continuam por eventos autenticados e polling; não substituem os scripts de publicação. Betel declara app na VPS (`app-production`) e Vercel como proxy; push GitHub, deploy Vercel e deploy VPS são fatos distintos. Leitura exige admin da plataforma; preparação/execução de SQL também exigem admin infra explícito. O vínculo `organization_id` e `client_access_enabled=false` preparam o modelo futuro, sem abrir acesso a clientes. [Estado, requisitos e limites da operação](infraestrutura-operacional-2026-09-16.md).
 
 ## Regras de negócio a preservar
 
@@ -66,6 +69,17 @@ O Inngest da VPS não transfere a execução dos handlers para a VPS: os handler
 - Exceção explícita de 14/09: a API WhatsApp da Betel usa transporte independente configurado no servidor; links, cliques e CRM ficam na Betel, preservando recibos técnicos, idempotência e uso na CH. Não aplicar essa exceção a outras organizações ou instâncias internas. [Contrato e ativação](betel-transporte-nativo-2026-09-14.md).
 
 ## Trabalho e evidência
+
+### Publicação da ConnectyHub
+
+O destino de releases é o repositório GitHub `connectyhub02-sys/novaconnectyhub`,
+branch `master`. A Vercel existente publica pela pipeline conectada ao push nessa
+branch. Conferir o remote e integrar sobre a master atual, preservando o histórico
+e alterações já publicadas. Branches de trabalho não são o destino final de produção.
+Não publicar manualmente em outro projeto Vercel, não usar Pilger Landing Page,
+não criar projeto Vercel novo e não alterar DNS para contornar acesso. Conferir
+migrations, backup, webhook e flags na ordem segura de cada release e acompanhar
+o deploy gerado pelo GitHub no projeto existente.
 
 ### Qualidade de atendimento dos agentes
 

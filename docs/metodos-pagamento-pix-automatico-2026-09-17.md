@@ -2,6 +2,23 @@
 
 ## Estado
 
+**Direção de release corrigida pelo titular:** publicar pelo push em
+`connectyhub02-sys/novaconnectyhub`, branch `master`, acionando a Vercel existente.
+Os registros de bloqueio da CLI abaixo são históricos; não justificam mudar de
+projeto nem impedem por si só a pipeline GitHub. Na integração com a master atual,
+0150/0151 já pertencem à infraestrutura e 0152 ao gerenciamento de cartões.
+Migrations deste pacote renumeradas para **0153/0154**. Troca usa `last_digits` e
+`selectable` do cofre existente, com formulário validado no bloco Métodos de
+pagamento e preservação da ação Tornar padrão. Ensaio transacional com rollback
+no banco real passou, sem alteração dos contratos/cartão ativo.
+
+Migrations 0153/0154 aplicadas às 20:10 BRT, com backup privado direcionado,
+histórico/auditoria e verificação de RLS/grants. Fingerprint dos contratos
+inalterado (`a2b020a9d628b75537f6a03440b235a9`), um cartão ativo antes/depois.
+117 cenários distintos verificados após integrar a master, ESLint, TypeScript e
+build aprovados. Aguardar confirmação do SHA servido após push e atualizar webhook
+somente com o novo handler disponível. Flag permanece sem habilitação nesta etapa.
+
 Implementados localmente: troca segura de cartão e Pix Automático Asaas na
 primeira contratação de plano recorrente com preço fixo. A troca de cartão para
 Pix Automático em plano já ativo permanece explicitamente bloqueada no painel e
@@ -75,7 +92,7 @@ flag ou implantação foi executada nesta tentativa. Pacote funcional: commit
    sem verificar se o mandato existe. Operação interrompida antes de persistir o
    cliente também não dispara POST a partir de um GET.
 4. Troca de Pix Automático já existente para outro mandato/cartão não foi liberada
-   por este pacote. Cartão existente continua com a troca implementada na 0150;
+   por este pacote. Cartão existente continua com a troca implementada na 0153;
    o painel não cancela mandato externo por consequência de um formulário de cartão.
 5. Validação realizada com mocks contratuais e PostgreSQL local. Não houve teste
    financeiro em sandbox nem em produção. GET de autorizações com HTTP 200 não
@@ -84,8 +101,8 @@ flag ou implantação foi executada nesta tentativa. Pacote funcional: commit
 
 ## Arquivos e implantação
 
-- `0150_subscription_card_replacement.sql`: cofre e auditoria de troca de cartão.
-- `0151_pix_automatic.sql`: `billing_pix_authorizations`, `billing_pix_events`,
+- `0153_subscription_card_replacement.sql`: cofre e auditoria de troca de cartão.
+- `0154_pix_automatic.sql`: `billing_pix_authorizations`, `billing_pix_events`,
   `billing_pix_payments`, claims, estados e vínculo de pagamentos/ciclos, RLS e grants.
 - `src/lib/billing/asaas-pix-automatic-api.ts`: adaptador HTTP com erros sanitizados.
 - `src/lib/billing/pix-automatic.ts`: consentimento, criação, conciliação e webhook.
@@ -129,12 +146,12 @@ Nenhum erro JavaScript observado. Prévia temporária removida ao concluir a ins
 
 ## Publicação em lote e teste autorizado
 
-1. Recuperar acesso à equipe/projeto Vercel ConnectyHub. Alternativa segura é
-   entregar o pacote local para um operador com esse acesso publicar no mesmo
-   projeto; não criar outro site/conta ou trocar DNS para contornar o bloqueio.
-2. Conferir o histórico remoto e nomes 0150/0151 contra alterações paralelas,
+1. Conferir o remote `connectyhub02-sys/novaconnectyhub` e integrar o pacote sobre
+   `origin/master`, preservando o histórico. Fazer push para `master`; a pipeline
+   GitHub aciona a Vercel existente. Não criar projeto nem alterar DNS.
+2. Conferir o histórico remoto e nomes 0153/0154 contra alterações paralelas,
    obter backup privado e aplicar ambas as migrations no banco ConnectyHub.
-3. Publicar cartão + Pix Automático + handler + job juntos, inicialmente com
+3. Após as migrations, enviar cartão + Pix Automático + handler + job juntos, com
    criação Pix em produção desabilitada. Validar sessão, rotas e registro Inngest.
 4. Atualizar o webhook existente com os nove eventos Pix, preservando demais
    eventos/configuração. Conferir elegibilidade com Asaas. Ativar a flag apenas

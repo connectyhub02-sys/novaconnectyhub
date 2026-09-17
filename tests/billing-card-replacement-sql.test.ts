@@ -21,10 +21,12 @@ beforeAll(async () => {
     create table commercial_agreements(platform_subscription_id uuid,cancel_at_period_end boolean default false,state text default 'active');
     create table credit_topup_policies(organization_id uuid primary key,card_method_id uuid,enabled boolean default true,agreed_amount_brl numeric default 30,monthly_cap_brl numeric default 90,authorized_by uuid,updated_at timestamptz);
     create table billing_payments(id uuid primary key,amount numeric); create table billing_invoices(id uuid primary key,amount numeric); create table billing_cycles(id uuid primary key,credits numeric);
+    create table platform_customer_journey(user_id uuid,event_key text unique,event_type text,source_id uuid,payload jsonb);
   `);
   // Execute the existing vault DDL with its real constraints and RLS.
   await db.exec(readFileSync("supabase/migrations/0093_managed_asaas_renewals.sql", "utf8").split("alter table public.billing_card_attempts")[0]);
-  await db.exec(readFileSync("supabase/migrations/0150_subscription_card_replacement.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0152_billing_payment_method_management.sql", "utf8"));
+  await db.exec(readFileSync("supabase/migrations/0153_subscription_card_replacement.sql", "utf8"));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -48,6 +50,16 @@ async function finish(id: string, failure: string | null = null, user = actor) {
 const active = async () => (await db.query<{ id: string; customer_id: string; status: string }>("select id,customer_id,status from billing_asaas_card_vault where status='active'")).rows;
 
 describe("atomic subscription card replacement", () => {
+  it("shares selectable cards with the existing 0152 management flow", async () => {
+    await db.query("update billing_asaas_card_vault set selectable=true where id=$1", [card]);
+    const request = await begin();
+    expect((await finish(request.id)).state).toBe("succeeded");
+    const current = (await db.query<{id:string;selectable:boolean;last_digits:string}>("select id,selectable,last_digits from billing_asaas_card_vault where status='active'")).rows[0];
+    expect(current).toMatchObject({selectable:true,last_digits:"1111"});
+    const end = (await db.query<{end:string}>("select current_period_end::text as end from organization_subscriptions where id=$1", [sub])).rows[0].end;
+    await db.query("select set_billing_default_card($1,$2,$3,$4,$5,$6,'connectyhub-card-default-v1',$7,null)", [org,actor,sub,randomUUID(),current.id,end,card]);
+    expect((await active())[0].id).toBe(card);
+  });
   it("makes the real renewal worker select the newly persisted active token only in its future window", async () => {
     await db.query("update billing_asaas_card_vault set token_encrypted=$1 where id=$2", [encrypted + "-old", card]);
     const vault = serverModuleHarness<typeof import("../src/lib/billing/asaas-card-vault")>("src/lib/billing/asaas-card-vault.ts", {

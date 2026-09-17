@@ -1,5 +1,38 @@
 # Estado operacional da ConnectyHub
 
+## Regra permanente de publicação — confirmada pelo titular em 17/09/2026
+
+Releases da ConnectyHub vão para `connectyhub02-sys/novaconnectyhub`, branch
+`master`. O push aciona a Vercel existente conectada a essa branch. Não usar
+Pilger Landing Page, não publicar manualmente em outro projeto, não criar projeto
+Vercel novo nem alterar DNS. Branch paralela serve para trabalho, não como destino
+final de produção. A falta de acesso da CLI à Vercel não impede por si só o caminho
+GitHub autorizado; verificar permissão de push e o resultado da pipeline correta.
+
+Integração do pacote em andamento sobre `origin/master` em `1ebea38d`. O banco foi
+relido às 20:06 BRT pelo Studio HTTPS da ConnectyHub: migrations 0150/0151 de
+infraestrutura e 0152 de cartões já aplicadas, um cartão ativo e nenhuma tabela
+nova deste pacote. Por isso os SQLs de troca auditada e Pix foram renumerados para
+0153/0154, preservando as migrations existentes. O formulário de troca integra o
+bloco Métodos de pagamento já publicado e usa o mesmo cofre/seleção de padrão.
+
+Às 20:10 BRT, migrations **0153 e 0154 aplicadas** em transação pelo Studio HTTPS
+da ConnectyHub, com histórico, auditoria e recarga do schema PostgREST. Antes,
+backup privado dos registros afetados, três funções e histórico (535.081 bytes;
+SHA-256 `2ec4e891838c34e7cf7a596e08f29d195e6cc459109547da27a31745818b9ba0`),
+verificado por releitura, e ensaio com rollback. Snapshot direcionado, não backup
+integral do servidor. Contratos antes/depois mantiveram fingerprint
+`a2b020a9d628b75537f6a03440b235a9`; um cartão ativo permaneceu. RLS e restrições
+de execução das RPCs conferidas, sem operação financeira real. SQL 0153 SHA-256
+`1f19ba425f42bd5aec2f0077d8af97c1a61529b2095218e1115ffdd6f9b2527e`; SQL 0154
+`2a32d1beb614d00e98ef13695f4160377f6a1403b3b1067b0d671c67964b5af3`.
+
+Integração validada: 116 testes em dez arquivos mais um cenário novo de
+compatibilidade com a seleção de padrão 0152 (117 distintos nesta rodada),
+ESLint, TypeScript e build Next/webpack aprovados. Push/deploy e atualização do
+webhook ainda serão conferidos; flag Pix não habilitada. Elegibilidade Asaas para
+criação segue sem comprovação, portanto não inferir ativação a partir de GET 200.
+
 ## Publicação do pacote de pagamentos — bloqueada em 17/09/2026, 20:00 BRT
 
 Titular autorizou migrations 0150/0151, configuração do webhook e publicação em
@@ -138,6 +171,224 @@ sessão só lista outra equipe; consulta do projeto `novaconnectyhub` na equipe
 configurada retorna 404. Precisa autenticar a Vercel na equipe ConnectyHub para
 retomar. Nenhum backup novo, SQL de alteração, commit, push ou deploy executado
 nesta tentativa; ambiente publicado ainda não habilitado para a troca.
+## Métodos de pagamento em Minha Conta — 16/09/2026
+
+Implementado bloco visível em /dashboard/minha-conta, logo abaixo dos cards da conta:
+cartões cadastrados, Padrão, Adicionar novo, Alterar cartão da próxima renovação e
+Tornar padrão. Consentimento explícito e informação de que salvar não cobra agora.
+A API aceita apenas titular/admin da organização autenticada, exige origem própria,
+limita payload/tentativas e nunca recebe organização autorizadora do navegador.
+
+Asaas: tokenização sem cobrança, reutilizando o customer do cartão ativo. Token AES-GCM
+no cofre; PAN/CVV não persistidos, não auditados nem retornados. Bandeira/final/validade
+somente para novos cadastros; o cartão legado permanece identificado como cadastrado
+quando não possui metadados parciais. Acordos externos/compra avulsa/contrato não vigente
+retornam bloqueio específico, sem criar checkout duplicado. Asaas 401/403 informa que
+é preciso habilitar tokenização na conta da plataforma e mantém o cartão atual.
+
+Migration 0152 aplicada em transação no banco da ConnectyHub, com histórico e infra_audit.
+SHA-256 LF: 2e2621079525a4849f372d18d817daa18032ebc0664f5391678c641c44885df8.
+Troca e recibo/auditoria atômicos, locks de organização/assinatura, revisão do cartão
+padrão e período, idempotência por requestId. Pagamento em processamento/incerto bloqueia
+a troca. Recarga já vinculada ao cartão anterior acompanha o novo padrão, preservando
+enabled, consentimento e limites; não ativa recarga nova. Nenhuma fatura/job é criada.
+
+Verificação de produção antes/depois da migration: fingerprint de status/plano/ciclo/
+vencimento de todas as assinaturas permaneceu a2b020a9d628b75537f6a03440b235a9;
+um cartão continuou ativo; authenticated sem EXECUTE na RPC. Leitura real pelo novo
+código: Betel com um cartão padrão, elegibilidade sem bloqueio, vencimento 14/10/2026
+preservado e nenhum campo token/customer_id/criptografia retornado. Não houve alteração
+no banco Betel, tokenização real, cobrança real ou troca do cartão do titular.
+
+73 testes em nove arquivos passaram; incluem SQL PostgreSQL descartável, rollback de
+auditoria, isolamento, consentimento, replay, falha de tokenização e método da recarga.
+ESLint, TypeScript e build webpack (108 páginas) passaram. Publicação será confirmada
+pelo SHA servido e pela interface; homologação com novo cartão pertence ao titular.
+
+Cockpit: cadastro Supabase/Storage Betel corrigido e auditado a partir dos destinos
+verificados. UI separa quatro configurações obrigatórias SQL/jobs de complementos de
+observabilidade/inventário (CH: três; Betel: sete). Vínculo organization_id não é erro
+operacional enquanto client_access_enabled=false. Leituras CH 6/8 e Betel 5/8 seguem
+saudáveis; não significa executor SQL/jobs ativo. Nenhum conector inseguro habilitado.
+
+
+## Ativação do cofre do cockpit — 16/09/2026, 22h BRT
+
+Cadastradas e verificadas no banco de produção, com criptografia AES-GCM e auditoria,
+as configurações de plataforma INFRA_ADMIN_USER_IDS (administrador da plataforma
+já existente) e INFRA_HEALTH_PROJECTS_JSON (chave pública própria da Betel).
+O cockpit passa a consultar o cofre quando não há variável explícita no ambiente.
+Somente registros platform, organization_id nulo, integração infrastructure são
+aceitos. Erro de leitura/descriptografia bloqueia a autorização; grants não têm cache.
+Configuração editável em Admin OS > Manutenção > Infraestrutura / Admin OS.
+Não cadastrar estes campos em escopo de cliente. Variável de ambiente não vazia
+prevalece, inclusive um JSON vazio; removê-la se a fonte desejada for o cofre.
+
+Verificação real, somente leitura: código local leu o cofre de produção e confirmou
+Auth/REST/Storage/banco HTTP 200 nos dois projetos; histórico CH contém 0151.
+Betel usa scraper_targets com select=*&limit=0, sem retornar dados de negócio.
+Não foi necessária chave service_role da Betel; a chave pública bastou aos probes.
+Os registros do cofre e seus eventos foram relidos após a gravação. Sem SQL,
+migration, alteração de cliente, job, cobrança ou emissão de mensagem de teste.
+
+Ainda bloqueados: histórico Betel (schema supabase_migrations não exposto via REST,
+HTTP 406; não há RPC de histórico); execução SQL nos dois projetos (DSN/role TLS,
+INFRA_MIGRATION_EXECUTION_ENABLED e INFRA_MIGRATION_EXECUTOR); Inngest CH
+(autenticação HTTP do proxy); Inngest Betel (origem conhecida somente loopback no
+host); ações jobs (adaptador HTTPS por projeto não instalado); endpoints de worker,
+publicadores VPS e métricas de armazenamento. DSN Betel de cloud antigo e DSN local
+sem TLS foram descartados como alvos. Nenhum bloqueio foi contornado com conexão
+insegura. Supabase Storage saudável não comprova R2 nem inventário/bytes de buckets.
+
+65 testes direcionados, TypeScript, ESLint e build webpack (108 páginas) aprovados;
+verificação real adicional passou. Publicação confirmada: master 15dd3977de73287604ed6a8e4f0a6c15c5e9b983; /api/health
+200 com o mesmo SHA. Às 22:14–22:15 BRT, UI autenticada mostrou Admin infra,
+CH com seis leituras saudáveis e Betel com app/Auth/REST/Storage/banco saudáveis.
+
+
+## Complemento por fases — ConnectyHub e Betel, 16/09/2026
+
+Prioridade mantida em ConnectyHub e Betel no cockpit oficial. Inventário agora
+separa saúde e configuração (pronta/incompleta/bloqueada), lista requisitos
+por projeto e deixa de chamar leitura sem endpoint de monitoramento ativo.
+Betel ganha probe público do login VPS (HTTP 200 observado) e Auth Supabase
+(HTTP 403 sem credencial observado), sem herdar chaves da CH. Configuração
+JSON inválida e falta de chave/endpoint são diagnosticadas explicitamente.
+
+SQL existente preservado: preparação imutável, confirmação/hash, auditoria,
+TLS, transação e histórico. Complemento bloqueia comandos destrutivos por
+padrão antes de executar. Cliente HTTPS de jobs implementado com leitura,
+capacidades por projeto, confirmação, revisão de estado/alvo, recibo e auditoria;
+sem adaptador no host, aponta INFRA_JOB_ADAPTERS_JSON.<projeto>.url/.token.
+Timeout não é sucesso e não dispara retry. Credenciais de evento Inngest não
+viram acesso administrativo automaticamente.
+
+Não requer migration nova nem mudança de permissões. Camada cliente segue
+fechada. Execução SQL real, jobs de produção, métricas R2 e ligação dos
+publicadores VPS continuam dependentes da configuração descrita no
+[diagnóstico e contrato por fases](cockpit-fases-2026-09-16.md). Nenhuma ação
+de banco de cliente, pausa/replay de job, mensagem ou cobrança para validar.
+
+59 testes direcionados em oito arquivos, TypeScript, ESLint e build webpack
+com 108 páginas aprovados. Publicação do complemento em andamento. A entrega anterior já estava
+publicada em 6a9cb977, Vercel E478TDcbkqNCN6ZAMdq3XfoFp58g Ready/Production,
+conferida novamente no navegador às 21:36 BRT.
+
+
+Publicação confirmada em **16/09/2026 às 21:42:17 BRT**: commit
+`8fc412de99fc77ee57e138de135f1eb44d5fe076` na master, Vercel
+[6k1Vd7UCEfaUaNJWpXHcqWbytTdt](https://vercel.com/nova-connectyhub-s-projects/novaconnectyhub/6k1Vd7UCEfaUaNJWpXHcqWbytTdt)
+**Ready / Latest / Production**, vinculada ao domínio principal. Health público
+200 com SHA correto; inventário sem sessão 401; alias legado 307 para a rota oficial.
+
+Navegador autenticado conferido entre 21:42 e 21:44 BRT: quatro projetos,
+estado de configuração e requisitos expandíveis; CH com seis serviços HTTP
+saudáveis, Inngest 401 com variável exata e worker sem endpoint. Catálogo
+filtrado mostrou 0151 aplicada (histórico do banco), auditoria mostrou
+schema_install. Betel mostrou app saudável, Auth 403 com supabaseKey indicada,
+REST/Storage/banco/jobs com bloqueios específicos e histórico SQL bloqueado
+por DSN TLS ausente. Formulário de preparação abriu com botão bloqueado pela
+allowlist ausente. Jobs CH/Betel indicaram INFRA_JOB_ADAPTERS_JSON por projeto.
+Layout desktop e polling observados. Não foi criada migration, escrita de
+cliente, pausa/replay ou alteração de credenciais em produção.
+
+Ativação ainda pendente: admin infra designado; DSNs/roles TLS de migrations
+por projeto; chave própria do Supabase Betel no coletor; autenticação do health
+Inngest CH; adaptadores jobs no host e suas URLs/tokens; ligação dos publicadores
+VPS. Métricas de buckets/bytes/R2 e portal legado permanecem fora da ativação.
+Código de comandos e testes não comprovam execução de SQL/jobs de produção.
+Evidência pós-publicação mantida local para evitar novo deploy só documental.
+
+## Cockpit operacional — camada real, 16/09/2026
+
+Implementados coleta HTTP por projeto no servidor, diagnóstico de configuração,
+preparação imutável de SQL, executor PostgreSQL transacional com confirmação/hash,
+auditoria e proteção contra reaplicação. Rota oficial: **Admin OS > Sistema >
+Infraestrutura**. Hora Space acrescentada; vínculo de organização preparado e
+acesso cliente desligado. Migration 0151 aplicada e verificada no Supabase da CH:
+quatro projetos, RPCs restritas ao serviço, nenhum cliente habilitado. Sem SQL
+operacional em banco de cliente durante a publicação.
+
+Publicado em `8b0d19434c77b7d4673abb839d0845dbb567fd78`, Vercel
+`dpl_3HvEPJMW4w4HKpptUed4qbhaepFL` **Ready / Production** às 21:14:36 BRT.
+`/api/health` retornou 200 e o SHA publicado; API administrativa retornou 401 sem
+sessão e `/infraestrutura` retornou 307 para a rota oficial. Browser autenticado
+conferido: quatro projetos, seis serviços CH saudáveis (app/API/Auth/REST/banco/
+Supabase Storage), Inngest 401 com diagnóstico, worker sem endpoint, catálogo
+aplicado até 0151 e auditoria `schema_install`. Polling atualizou as observações.
+45 testes direcionados, complementos finais, TypeScript, lint e build aprovados.
+
+Bloqueios vistos em produção: usuário da sessão fora de `INFRA_ADMIN_USER_IDS`,
+ausência de `INFRA_MIGRATION_EXECUTION_ENABLED=true`, de DSN PostgreSQL TLS em
+`INFRA_PROJECT_DATABASE_URLS_JSON.connectyhub` e de `INFRA_MIGRATION_EXECUTOR=vps-sql`.
+Inngest exige `INFRA_HEALTH_PROJECTS_JSON.connectyhub.inngestAuthorization`;
+workers e projetos externos precisam de endpoints/credenciais próprios. R2,
+telemetria de deploy VPS e redirecionamento do portal legado no subdomínio seguem
+sem ativação nesta entrega. Execução remota real do cockpit não foi homologada;
+validação transacional ficou em PostgreSQL descartável. Nenhuma operação de SQL
+em cliente, cobrança, WhatsApp ou alteração de credenciais durante a publicação.
+[Implementação, configuração, riscos e evidência](infraestrutura-operacional-2026-09-16.md).
+
+## Histórico: cockpit de infraestrutura — MVP local, 16/09/2026
+
+Implementadas `/admin/infrastructure` e páginas por projeto, com inventário
+ConnectyHub/Betel/Vision, snapshots de Supabase/Inngest/app/worker/storage,
+catálogo/preview de migrations e auditoria. Deploy VPS integra esta entrega:
+histórico persistente, etapas em polling de cinco segundos, imagens, executor,
+container, healthcheck, logs estruturados e acompanhamento do rollback em execução.
+Betel declara publicação real em VPS/app-production com Vercel como proxy;
+push GitHub, deploy Vercel/proxy e deploy VPS são distinguidos.
+
+Migration `0150_infrastructure_cockpit.sql` aplicada no Supabase da ConnectyHub
+na VPS em 16/09/2026, com seis tabelas, três projetos iniciais e duas funções
+de telemetria/deploy validadas. Leitura requer administrador da plataforma;
+preparação de comandos exige também
+`INFRA_ADMIN_USER_IDS`, confirmação e auditoria. Execução remota de migrations,
+Inngest e rollback permanece bloqueada com motivo, inclusive para admin infra.
+Receptor de eventos usa hashes de tokens por projeto/escopo em
+`INFRA_INGEST_KEYS_JSON`, sequência/idempotência e registro transacional. Helper
+`scripts/infra-report.mjs` preparado para os publicadores; não conectado aos hosts.
+
+Validação local: 30 testes em cinco arquivos passaram, incluindo migration/RLS,
+grants, atomicidade e transições no PostgreSQL descartável PGlite, rotas de acesso,
+isolamento, confirmações e reenvio do helper para servidor fictício em localhost.
+ESLint, compilação e TypeScript aprovados. Navegador com componentes e shell reais,
+respostas fictícias: polling, confirmação bloqueada, cinco abas em 390px, desktop,
+vazio/telemetria antiga/erro, sem overflow horizontal nem erro JavaScript.
+Rota temporária de prévia removida. Build sem configuração parou no sitemap
+preexistente do catálogo; build Next/webpack completo depois aprovado com 108 páginas,
+usando backend fictício de catálogo vazio em localhost e chaves sintéticas apenas no
+processo. A fixture recebeu somente GET/HEAD; nenhum acesso ao banco real. Catálogo
+de 150 migrations conferido nos traces do servidor. Esse artefato serve para QA;
+uma publicação exige novo build com a configuração real autorizada.
+
+**Ainda pendente de publicação da aplicação e coletores reais conectados.**
+Inventário não é prova de saúde; falta publicar a aplicação, configurar admins e
+hashes, ligar publicadores/coletores e cadastrar catálogos externos. Houve
+alteração de schema no Supabase da ConnectyHub; não houve operação em Inngest,
+comando remoto, rollback real ou ação destrutiva.
+[Contrato, arquivos, limites e roteiro de integração VPS](infraestrutura-cockpit-2026-09-16.md).
+
+### Desalinhamento do subdomínio — diagnóstico e correção local, 16/09/2026
+
+`infraestrutura.connectyhub.com.br/infraestrutura` continua servindo o portal
+independente de homologação em `/opt/connectyhub-managed-portal`, com sessão e
+banco próprios. Ele não é a aplicação principal e por isso não recebeu a rota
+`/admin/infrastructure`. A correção de roteamento foi preparada nos dois pontos:
+o portal legado encaminha `/infraestrutura` e suas subrotas para
+`https://www.connectyhub.com.br/admin/infrastructure`, e a aplicação principal
+aceita o mesmo caminho legado. O redirecionamento é temporário (307) para evitar
+cache permanente enquanto o acesso do VPS não estiver disponível. A conferência
+pública ainda retorna o comportamento antigo até a imagem do portal ser
+reconstruída e ativada no VPS; nenhum banco, credencial ou operação real foi
+alterado nesta correção.
+
+Após autorização do titular, o código do app principal foi enviado à `master` em
+`71d73f5098bdd44aeea5f78275377e491066009d`. A produção respondeu `/infraestrutura`
+com `307` para `/admin/infrastructure`, `/admin/infrastructure` com `307` para
+login e a API oficial com `401` sem sessão; isso confirma a implantação da rota e
+do cockpit no domínio principal. O subdomínio continua no portal independente até
+o patch `eb635248` ser ativado no serviço do VPS.
 
 ## Agente Onipresente Ativo — entrega local, 16/09/2026
 

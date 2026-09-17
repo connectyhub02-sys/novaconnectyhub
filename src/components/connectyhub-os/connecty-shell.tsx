@@ -224,6 +224,7 @@ const adminSections: NavSection[] = [
   {
     label: "Sistema",
     items: [
+      { label: "Infraestrutura", href: "/admin/infrastructure", icon: GitBranch, tone: "blue" },
       { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench, tone: "rose" },
       { label: "Auditoria",     href: "/admin/auditoria",    icon: FileCode2, tone: "slate" },
       { label: "Financeiro",    href: "/admin/financeiro",   icon: CircleDollarSign, tone: "amber" },
