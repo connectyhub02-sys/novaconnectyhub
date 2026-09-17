@@ -12,8 +12,9 @@ a data de abertura do CNPJ tampouco foi retornada. Não declarar pagamento valid
 
 Após instrução do titular para ativar o checkout inicial e investigar a conta,
 `ASAAS_PIX_AUTOMATIC_ENABLED=true` foi salva como Config somente em Production
-no projeto Vercel existente. A UI confirmou sucesso; aguarda o próximo deploy
-GitHub/master para entrar em vigor. Handler real, schema 0153/0154 e nove eventos
+no projeto Vercel existente. A UI confirmou sucesso; deploy GitHub/master
+`16ca0e4b5125608d9dab1cfd14d3c226f56301c5` concluído, status Vercel success e health
+200 com o mesmo SHA. Handler real, schema 0153/0154 e nove eventos
 Pix já estão publicados/configurados. Criação continua sujeita à validação Asaas
 e consentimento do titular; nenhum mandato, cobrança ou tokenização foi executado.
 Troca para Pix em assinatura ativa continua indisponível porque a Jornada 3
@@ -24,8 +25,13 @@ com ações fixas no rodapé. QA local no componente real: 1366×768 e 1280×720
 rolagem interna, inclusive 1280×720 com erros (altura 668 px); 390×844 sem overflow
 horizontal, campos/consentimento alcançáveis e rodapé visível. Máscaras e erros
 conferidos com dados fictícios e API local simulada. Rota temporária removida;
-ESLint, TypeScript e build de produção Next/webpack aprovados. Publicação e
-inspeção em produção ainda pendentes nesta entrada.
+ESLint, TypeScript e build de produção Next/webpack (108 páginas) aprovados.
+Inspeção em produção aprovada: desktop 1280×720 com diálogo 1024×608 sem rolagem
+interna; celular 390×844 em tela cheia, sem overflow horizontal e rodapé em 844 px.
+Formulário aberto vazio e fechado sem envio em sessão administrativa assistida;
+vencimento 14/10 preservado. Conta observada tem plano ativo, portanto não houve
+teste de primeira contratação em produção. Disponibilização configurada não
+equivale a mandato aceito ou pagamento liquidado pelo Asaas.
 
 ## Pagamentos publicados pela master — 17/09/2026, 20:13 BRT
 

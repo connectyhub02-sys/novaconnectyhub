@@ -44,12 +44,17 @@ O evento de atualização de elegibilidade é documentado para operações de su
 Não houve criação de mandato para testar a conta.
 
 `ASAAS_PIX_AUTOMATIC_ENABLED=true` foi configurada somente em Production no
-projeto Vercel correto, com sucesso confirmado pela interface. Aguarda publicação
-pela master para surtir efeito. Habilita a opção do checkout inicial elegível;
+projeto Vercel correto, com sucesso confirmado pela interface. Publicada pela
+master no commit `16ca0e4b5125608d9dab1cfd14d3c226f56301c5`; Vercel success e health
+200 com o SHA conferidos. Habilita a opção do checkout inicial elegível;
 o provedor pode recusar a criação e o teste financeiro real segue pendente.
 Não altera a indisponibilidade de troca em assinatura ativa. Modal de cartão
 agora usa duas colunas no desktop e tela cheia no celular, com rodapé acessível.
 QA local em 1366×768, 1280×720 (também com erros) e 390×844 aprovado, sem envio real.
+Produção inspecionada em 1280×720: diálogo 1024×608, sem rolagem interna; em
+390×844: tela cheia sem overflow horizontal, ações fixas acessíveis. Fechado vazio,
+sem envio. Conta disponível tem plano ativo; primeira contratação Pix permanece
+sem teste financeiro real. ESLint, TypeScript e build (108 páginas) aprovados.
 
 Código publicado: troca segura de cartão e Pix Automático Asaas na
 primeira contratação de plano recorrente com preço fixo. A troca de cartão para
