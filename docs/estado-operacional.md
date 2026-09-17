@@ -1,5 +1,32 @@
 # Estado operacional da ConnectyHub
 
+## Modal responsivo e habilitação do checkout Pix — 17/09/2026
+
+Nova verificação Asaas às 20:38 BRT: conta `JURIDICA`/`LIMITED`, situação geral,
+comercial e documentação `APPROVED`; cadastro comercial não expirado (03/09/2027).
+`bankAccountInfo=PENDING` permanece como pendência observada, sem prova de bloqueio
+específico para Pix. GET de autorizações retorna 200 e zero registros. Essas
+leituras e a aceitação dos nove eventos no webhook não comprovam a elegibilidade
+específica como recebedor. Não foi encontrada consulta pública que a retorne;
+a data de abertura do CNPJ tampouco foi retornada. Não declarar pagamento validado.
+
+Após instrução do titular para ativar o checkout inicial e investigar a conta,
+`ASAAS_PIX_AUTOMATIC_ENABLED=true` foi salva como Config somente em Production
+no projeto Vercel existente. A UI confirmou sucesso; aguarda o próximo deploy
+GitHub/master para entrar em vigor. Handler real, schema 0153/0154 e nove eventos
+Pix já estão publicados/configurados. Criação continua sujeita à validação Asaas
+e consentimento do titular; nenhum mandato, cobrança ou tokenização foi executado.
+Troca para Pix em assinatura ativa continua indisponível porque a Jornada 3
+exige primeiro pagamento, incompatível com a troca sem cobrança solicitada.
+
+Modal de cartão ajustado para duas colunas no desktop e tela cheia no celular,
+com ações fixas no rodapé. QA local no componente real: 1366×768 e 1280×720 sem
+rolagem interna, inclusive 1280×720 com erros (altura 668 px); 390×844 sem overflow
+horizontal, campos/consentimento alcançáveis e rodapé visível. Máscaras e erros
+conferidos com dados fictícios e API local simulada. Rota temporária removida;
+ESLint, TypeScript e build de produção Next/webpack aprovados. Publicação e
+inspeção em produção ainda pendentes nesta entrada.
+
 ## Pagamentos publicados pela master — 17/09/2026, 20:13 BRT
 
 Push na master de `connectyhub02-sys/novaconnectyhub` concluído no commit

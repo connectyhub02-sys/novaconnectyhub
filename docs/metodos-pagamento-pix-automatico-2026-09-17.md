@@ -35,10 +35,21 @@ requisições sem sessão/assinatura (401). Isso não substitui teste com sessã
 titular nem pagamento real. Checkout inicial foi validado com APIs simuladas;
 nenhuma contratação real foi criada para demonstrá-lo em produção.
 
-**Ativação Pix ainda pendente:** `ASAAS_PIX_AUTOMATIC_ENABLED=true` não foi
-configurada. Conta aberta no Asaas mostra funções para autorizar pagamentos como
-pagador; isso não comprova a habilitação para criar autorizações como recebedor.
-Confirmar essa elegibilidade no Asaas antes da flag e do teste real autorizado.
+**Atualização posterior:** a pedido do titular, a conta foi consultada diretamente
+na API de produção às 20:38 BRT: PJ, aprovação geral/comercial/documental e
+cadastro válido até 03/09/2027. Dados bancários retornam `PENDING`; a API não
+retornou a idade do CNPJ nem elegibilidade específica de Pix como recebedor.
+O aceite dos nove eventos e GET de autorizações 200 não provam essa elegibilidade.
+O evento de atualização de elegibilidade é documentado para operações de subcontas.
+Não houve criação de mandato para testar a conta.
+
+`ASAAS_PIX_AUTOMATIC_ENABLED=true` foi configurada somente em Production no
+projeto Vercel correto, com sucesso confirmado pela interface. Aguarda publicação
+pela master para surtir efeito. Habilita a opção do checkout inicial elegível;
+o provedor pode recusar a criação e o teste financeiro real segue pendente.
+Não altera a indisponibilidade de troca em assinatura ativa. Modal de cartão
+agora usa duas colunas no desktop e tela cheia no celular, com rodapé acessível.
+QA local em 1366×768, 1280×720 (também com erros) e 390×844 aprovado, sem envio real.
 
 Código publicado: troca segura de cartão e Pix Automático Asaas na
 primeira contratação de plano recorrente com preço fixo. A troca de cartão para
