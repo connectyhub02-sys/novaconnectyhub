@@ -146,4 +146,77 @@ cobrem sessão/permissão/origem/confirmacão; adaptador de jobs cobre escopo,
 revisão, auditoria, recibo, timeout e ausência de retry. Nenhuma migration de
 cliente, pausa, replay, mensagem ou cobrança real usada para testar.
 
-Publicação e conferência em produção serão registradas após validação.
+Publicação confirmada em **16/09/2026 às 21:42:17 BRT**: commit
+`8fc412de99fc77ee57e138de135f1eb44d5fe076` na master, Vercel
+[6k1Vd7UCEfaUaNJWpXHcqWbytTdt](https://vercel.com/nova-connectyhub-s-projects/novaconnectyhub/6k1Vd7UCEfaUaNJWpXHcqWbytTdt)
+**Ready / Latest / Production**, vinculada ao domínio principal. Health público
+200 com SHA correto; inventário sem sessão 401; alias legado 307 para a rota oficial.
+
+Navegador autenticado conferido entre 21:42 e 21:44 BRT: quatro projetos,
+estado de configuração e requisitos expandíveis; CH com seis serviços HTTP
+saudáveis, Inngest 401 com variável exata e worker sem endpoint. Catálogo
+filtrado mostrou 0151 aplicada (histórico do banco), auditoria mostrou
+schema_install. Betel mostrou app saudável, Auth 403 com supabaseKey indicada,
+REST/Storage/banco/jobs com bloqueios específicos e histórico SQL bloqueado
+por DSN TLS ausente. Formulário de preparação abriu com botão bloqueado pela
+allowlist ausente. Jobs CH/Betel indicaram INFRA_JOB_ADAPTERS_JSON por projeto.
+Layout desktop e polling observados. Não foi criada migration, escrita de
+cliente, pausa/replay ou alteração de credenciais em produção.
+
+Ativação ainda pendente: admin infra designado; DSNs/roles TLS de migrations
+por projeto; chave própria do Supabase Betel no coletor; autenticação do health
+Inngest CH; adaptadores jobs no host e suas URLs/tokens; ligação dos publicadores
+VPS. Métricas de buckets/bytes/R2 e portal legado permanecem fora da ativação.
+Código de comandos e testes não comprovam execução de SQL/jobs de produção.
+Evidência pós-publicação mantida local para evitar novo deploy só documental.
+
+## Ativação do cofre do cockpit — 16/09/2026, 22h BRT
+
+Cadastradas e verificadas no banco de produção, com criptografia AES-GCM e auditoria,
+as configurações de plataforma INFRA_ADMIN_USER_IDS (administrador da plataforma
+já existente) e INFRA_HEALTH_PROJECTS_JSON (chave pública própria da Betel).
+O cockpit passa a consultar o cofre quando não há variável explícita no ambiente.
+Somente registros platform, organization_id nulo, integração infrastructure são
+aceitos. Erro de leitura/descriptografia bloqueia a autorização; grants não têm cache.
+Configuração editável em Admin OS > Manutenção > Infraestrutura / Admin OS.
+Não cadastrar estes campos em escopo de cliente. Variável de ambiente não vazia
+prevalece, inclusive um JSON vazio; removê-la se a fonte desejada for o cofre.
+
+Verificação real, somente leitura: código local leu o cofre de produção e confirmou
+Auth/REST/Storage/banco HTTP 200 nos dois projetos; histórico CH contém 0151.
+Betel usa scraper_targets com select=*&limit=0, sem retornar dados de negócio.
+Não foi necessária chave service_role da Betel; a chave pública bastou aos probes.
+Os registros do cofre e seus eventos foram relidos após a gravação. Sem SQL,
+migration, alteração de cliente, job, cobrança ou emissão de mensagem de teste.
+
+Ainda bloqueados: histórico Betel (schema supabase_migrations não exposto via REST,
+HTTP 406; não há RPC de histórico); execução SQL nos dois projetos (DSN/role TLS,
+INFRA_MIGRATION_EXECUTION_ENABLED e INFRA_MIGRATION_EXECUTOR); Inngest CH
+(autenticação HTTP do proxy); Inngest Betel (origem conhecida somente loopback no
+host); ações jobs (adaptador HTTPS por projeto não instalado); endpoints de worker,
+publicadores VPS e métricas de armazenamento. DSN Betel de cloud antigo e DSN local
+sem TLS foram descartados como alvos. Nenhum bloqueio foi contornado com conexão
+insegura. Supabase Storage saudável não comprova R2 nem inventário/bytes de buckets.
+
+65 testes direcionados, TypeScript, ESLint e build webpack (108 páginas) aprovados;
+verificação real adicional passou. Publicação desta ativação será registrada após confirmar a versão servida.
+
+### Contrato futuro de autoatendimento por organização
+
+Acesso cliente continua desligado. Uma futura API deve resolver projeto pelo vínculo
+da organização autenticada e validar ownership em cada leitura/comando, jamais confiar
+no ID enviado pelo navegador. Roles de banco e credenciais devem ser próprias por
+projeto, limitadas ao schema autorizado, com limites de tempo, volume e concorrência.
+
+SQL cliente deve partir de templates versionados com parâmetros tipados: preview,
+análise de risco, hash imutável, aprovação administrativa quando exigida, confirmação
+explícita, execução transacional e recibo auditado. SQL livre e comandos destrutivos
+não devem ser liberados pelo simples acionamento da flag. Aprovação vincula projeto,
+autor, versão e hash; mudanças invalidam a aprovação.
+
+Jobs cliente devem usar catálogo de ações/formulários tipados, sandbox e quotas;
+reenvio exige alvo/revisão/recibo idempotente e reconciliação quando resultado incerto.
+Não expor chaves, payloads de outras organizações, comandos shell ou endpoint arbitrário.
+Antes da liberação: testes de duas organizações reais, autorização negativa, revogação,
+corridas, limites, auditoria e consentimento de execução. Esta entrega documenta o
+contrato; não cria portal cliente nem declara operação multi-tenant homologada.

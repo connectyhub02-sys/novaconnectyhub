@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/infrastructure/credentials", () => ({ infrastructureCredential: async (name: string) => process.env[name] }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({ rpc: async () => ({ error: true }) }) }));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 it("collects HTTP health, caches it, bounds requests and does not follow redirects", async () => {
@@ -27,6 +28,22 @@ it("never sends Supabase credentials to custom health endpoints", async () => {
   const { collectHealth } = await import("@/lib/infrastructure/collector"); await collectHealth("betel");
   expect(fetch.mock.calls.find(call => String(call[0]).includes("storage.example"))?.[1]).toMatchObject({ headers: {} });
 });
+it("checks a project database without retrieving rows using only its own key", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response("[]")); vi.stubGlobal("fetch", fetch);
+  vi.stubEnv("SUPABASE_SECRET_KEY", "CH_SECRET");
+  vi.stubEnv("INFRA_HEALTH_PROJECTS_JSON", JSON.stringify({ betel: { supabaseUrl: "https://db.example", supabaseKey: "BETEL_KEY", supabaseProbeTable: "scraper_targets" } }));
+  const { collectHealth } = await import("@/lib/infrastructure/collector");
+  expect((await collectHealth("betel")).checks.find(c => c.service === "database")?.health).toBe("healthy");
+  expect(fetch.mock.calls.find(call => String(call[0]).includes("scraper_targets"))).toEqual([new URL("https://db.example/rest/v1/scraper_targets?select=*&limit=0"), expect.objectContaining({ headers: { apikey: "BETEL_KEY", Authorization: "Bearer BETEL_KEY" } })]);
+  expect(JSON.stringify(fetch.mock.calls)).not.toContain("CH_SECRET");
+});
+it("rejects a database probe table containing query parameters", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response("ok")); vi.stubGlobal("fetch", fetch);
+  vi.stubEnv("INFRA_HEALTH_PROJECTS_JSON", JSON.stringify({ betel: { supabaseKey: "BETEL_KEY", supabaseProbeTable: "scraper_targets?limit=10" } }));
+  const { collectHealth } = await import("@/lib/infrastructure/collector");
+  expect((await collectHealth("betel")).checks.find(c => c.service === "database")?.configuration).toBe("missing");
+  expect(fetch.mock.calls.some(call => String(call[0]).includes("scraper_targets"))).toBe(false);
+});
 it("names missing per-project Supabase configuration instead of generic unknown health", async () => {
   vi.stubEnv("INFRA_HEALTH_PROJECTS_JSON", JSON.stringify({ betel: { supabaseUrl: "https://db.example" } }));
   vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
@@ -34,7 +51,7 @@ it("names missing per-project Supabase configuration instead of generic unknown 
   const result = await collectHealth("betel");
   expect(result.checks.find(c => c.service === "rest")).toMatchObject({ configuration: "missing", missing: ["INFRA_HEALTH_PROJECTS_JSON.betel.supabaseKey"] });
   expect(result.checks.find(c => c.service === "auth")).toMatchObject({ configuration: "ready", health: "healthy" });
-  expect(result.checks.find(c => c.service === "database")?.missing).toEqual(["INFRA_HEALTH_PROJECTS_JSON.betel.database"]);
+  expect(result.checks.find(c => c.service === "database")?.missing).toEqual(["INFRA_HEALTH_PROJECTS_JSON.betel.supabaseProbeTable", "INFRA_HEALTH_PROJECTS_JSON.betel.supabaseKey"]);
 });
 it.each(["null", "[]", "invalid", '{"betel":{"supabaseUrl":5}}'])("reports malformed configuration without calling a guessed endpoint: %s", async config => {
   vi.stubEnv("INFRA_HEALTH_PROJECTS_JSON", config);

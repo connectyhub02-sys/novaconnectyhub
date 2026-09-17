@@ -9,14 +9,15 @@ import { type Migration, type MigrationExecution, type MigrationRisk } from "./m
 import { InvalidInput, identifier } from "./validation";
 import { projectDatabaseUrl } from "./database";
 import { executionPolicy, statements } from "./sql-policy";
+import { infrastructureCredential } from "./credentials";
 
 export function response(data: unknown, status = 200) { return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
 export async function audit(actor: string, project: string | null, action: string, result: string, reason: string, target: string | null = null, metadata?: Record<string, unknown>) {
   const { error } = await createServiceClient().from("infra_audit").insert({ actor, project_id: project, action, result, reason, target, ...(metadata ? { after_state: metadata } : {}) });
   if (error) throw new Error("AUDIT_UNAVAILABLE");
 }
-export function isInfraAdmin(userId: string, platformAdmin: boolean) {
-  return platformAdmin && (process.env.INFRA_ADMIN_USER_IDS ?? "").split(",").map(v => v.trim()).filter(Boolean).includes(userId);
+export function isInfraAdmin(userId: string, platformAdmin: boolean, allowlist = process.env.INFRA_ADMIN_USER_IDS) {
+  return platformAdmin && (allowlist ?? "").split(",").map(v => v.trim()).filter(Boolean).includes(userId);
 }
 export async function access(mutation = false) {
   const supabase = await createClient();
@@ -30,7 +31,7 @@ export async function access(mutation = false) {
     if (mutation) await audit(user.id, null, "operational_attempt", "denied", "platform_admin_required");
     return response({ error: "Apenas administradores da plataforma." }, 403);
   }
-  return { userId: user.id, canOperate: isInfraAdmin(user.id, true) };
+  return { userId: user.id, canOperate: isInfraAdmin(user.id, true, await infrastructureCredential("INFRA_ADMIN_USER_IDS")) };
 }
 // Per-project/per-purpose hashes only, never sent to the browser or written to audit.
 export function ingestionIdentity(request: Request, project: string): { actor: string; scopes: string[] } | null {
@@ -91,5 +92,6 @@ export function migrationExecution(project: string): MigrationExecution {
   return { status: missing.length ? "blocked" : "ready", missing, project };
 }
 export function failure(error: unknown) {
+  if (error instanceof Error && error.message === "INFRA_VAULT_UNAVAILABLE") return response({ error: "Cofre de infraestrutura indisponível. Conferir CREDENTIAL_ENCRYPTION_KEY e credenciais de plataforma em Admin OS > Manutenção > Infraestrutura. Nenhuma operação liberada." }, 503);
   return error instanceof InvalidInput ? response({ error: error.message }, 400) : response({ error: "Infraestrutura indisponível. Confira as migrations 0150/0151, o acesso e a configuração no servidor." }, 503);
 }

@@ -62,7 +62,7 @@ export function InfrastructureInventory() {
         <Configuration config={data.configuration?.[project.id]} /><Freshness telemetry={telemetry} /><Link className="flex min-h-11 items-center justify-between rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white" href={`/admin/infrastructure/${project.id}`}>Abrir operação <ArrowUpRight size={17} /></Link>
       </article>;
     })}</div>}
-    <p className="text-xs leading-6 text-slate-500">Saúde coletada no servidor a cada 30 s enquanto o painel está aberto. Cada projeto tem configuração e permissões próprias; execução SQL depende dos requisitos mostrados na aba Migrations.</p>
+    <p className="text-xs leading-6 text-slate-500">Saúde coletada no servidor a cada 30 s enquanto o painel está aberto. Cada projeto tem configuração e permissões próprias; execução SQL depende dos requisitos mostrados na aba Migrations. <Link className="font-semibold text-blue-700 underline" href="/admin/maintenance">Configurar administradores e coletores no cofre de Infraestrutura</Link>.</p>
   </main>;
 }
 
@@ -121,6 +121,7 @@ export function InfrastructureProject({ projectId }: { projectId: string }) {
     {!data && !error && <p role="status">Carregando operação…</p>}
     {data && <>
       <Configuration config={data.configuration} />
+      <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline" href="/admin/maintenance">Configurar administradores e coletores no cofre de Infraestrutura</Link>
       <p className="text-xs leading-6 text-slate-500">Controle interno do Admin OS. Organização: {data.project.organization_id ?? "vínculo ainda não cadastrado"}. A camada cliente permanece indisponível nesta entrega; comandos exigem administrador da plataforma e allowlist infra.</p>
       {data.permissionReason && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{data.permissionReason}</p>}
       <Section title="Verificação ao vivo dos serviços"><p className="text-xs text-slate-500">Coleta no servidor a cada 30 s com o painel aberto. Storage verifica a API Supabase; R2, deploy/container e execução de workers requerem observação específica do host.</p><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{data.live?.checks.map(check => <div key={check.service} className="min-w-0 rounded-xl bg-slate-50 p-3"><p className="mb-2 text-sm font-semibold">{check.service}</p><Badge health={error || Date.parse(updated ?? "") - Date.parse(check.checkedAt) > 120000 ? "unknown" : check.health} /><p className="mt-2 break-words text-xs leading-5 text-slate-600">{check.reason.replace("<projeto>", projectId)}</p><p className="mt-2 text-xs text-slate-400">{date(check.checkedAt)}</p></div>)}</div></Section>

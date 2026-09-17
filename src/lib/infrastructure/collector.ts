@@ -1,16 +1,17 @@
 import "server-only";
 import type { Health, HealthCheck, Snapshot, Telemetry } from "./model";
 import { createServiceClient } from "@/lib/supabase/service";
+import { infrastructureCredential } from "./credentials";
 
 type Service = keyof Snapshot["services"];
 export type Check = HealthCheck & { service: Service };
-type Config = Partial<Record<Service, string>> & { supabaseUrl?: string; supabaseKey?: string; inngestAuthorization?: string };
+type Config = Partial<Record<Service, string>> & { supabaseUrl?: string; supabaseKey?: string; inngestAuthorization?: string; supabaseProbeTable?: string };
 type Observation = { checks: Check[]; telemetry: Telemetry | null };
 const cache = new Map<string, { expires: number; pending: Promise<Observation> }>();
 
-function configuration(project: string): Config {
+async function configuration(project: string): Promise<Config> {
   let projects: Record<string, Config> = {};
-  projects = JSON.parse(process.env.INFRA_HEALTH_PROJECTS_JSON ?? "{}");
+  projects = JSON.parse(await infrastructureCredential("INFRA_HEALTH_PROJECTS_JSON") ?? "{}");
   if (!projects || typeof projects !== "object" || Array.isArray(projects)) throw new Error("INVALID_CONFIG");
   const own = projects && Object.hasOwn(projects, project) ? projects[project] : {};
   if (!own || typeof own !== "object" || Array.isArray(own) || Object.values(own).some(v => typeof v !== "string")) throw new Error("INVALID_CONFIG");
@@ -50,11 +51,12 @@ async function probe(service: Service, url: string | undefined, required: string
 
 async function collect(project: string): Promise<Observation> {
   let config: Config;
-  try { config = configuration(project); } catch {
-    return { telemetry: null, checks: (["app", "api", "auth", "rest", "storage", "database", "inngest", "worker"] as Service[]).map(service => ({ service, health: "unknown", configuration: "invalid", missing: [`INFRA_HEALTH_PROJECTS_JSON.${project}: corrigir JSON/objeto e valores de texto`], reason: "Coleta bloqueada: configuração JSON inválida; nenhum endpoint foi consultado.", checkedAt: new Date().toISOString() })) };
+  try { config = await configuration(project); } catch {
+    return { telemetry: null, checks: (["app", "api", "auth", "rest", "storage", "database", "inngest", "worker"] as Service[]).map(service => ({ service, health: "unknown", configuration: "invalid", missing: [`INFRA_HEALTH_PROJECTS_JSON.${project}: conferir JSON e acesso ao cofre em Admin OS > Manutenção > Infraestrutura (ou ambiente do servidor)`], reason: "Coleta bloqueada: configuração JSON inválida ou cofre indisponível; nenhum endpoint foi consultado.", checkedAt: new Date().toISOString() })) };
   }
   const base = config.supabaseUrl?.replace(/\/$/, "");
   const headers: Record<string, string> = config.supabaseKey ? { apikey: config.supabaseKey, Authorization: `Bearer ${config.supabaseKey}` } : {};
+  const table = config.supabaseProbeTable && /^[a-z][a-z0-9_]{0,62}$/.test(config.supabaseProbeTable) ? config.supabaseProbeTable : project === "connectyhub" ? "infra_projects" : null;
   const setting = (key: string) => `INFRA_HEALTH_PROJECTS_JSON.${project}.${key}`;
   const required = (service: Service, usesKey = true) => {
     if (config[service]) return [setting(service)];
@@ -66,7 +68,7 @@ async function collect(project: string): Promise<Observation> {
     probe("auth", config.auth || (base ? `${base}/auth/v1/health` : undefined), required("auth", false), config.auth ? {} : headers, setting("supabaseKey")),
     probe("rest", config.rest || (base && config.supabaseKey ? `${base}/rest/v1/` : undefined), required("rest"), config.rest ? {} : headers, project === "connectyhub" ? "SUPABASE_SECRET_KEY" : setting("supabaseKey")),
     probe("storage", config.storage || (base && config.supabaseKey ? `${base}/storage/v1/bucket` : undefined), required("storage"), config.storage ? {} : headers, project === "connectyhub" ? "SUPABASE_SECRET_KEY" : setting("supabaseKey")),
-    probe("database", config.database || (project === "connectyhub" && base && config.supabaseKey ? `${base}/rest/v1/infra_projects?select=id&limit=0` : undefined), project === "connectyhub" ? required("database") : [setting("database")], config.database ? {} : headers),
+    probe("database", config.database || (table && base && config.supabaseKey ? `${base}/rest/v1/${table}?select=*&limit=0` : undefined), project === "connectyhub" ? required("database") : [setting("supabaseProbeTable"), ...(!base || !config.supabaseKey ? required("database") : [])], config.database ? {} : headers),
     probe("api", config.api, [setting("api")]),
   ]);
   let database: { applied: string[]; tables: Snapshot["tables"] } | null = null;

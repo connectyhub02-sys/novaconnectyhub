@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ user: "admin-user" as string | null, admin: true, auditFails: false, audit: vi.fn(), rpc: vi.fn(), eq: vi.fn(), execute: vi.fn(), catalog: [] as unknown[] }));
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/infrastructure/credentials", () => ({ infrastructureCredential: async (name: string) => process.env[name] }));
 vi.mock("@/lib/infrastructure/executor", () => ({ executeMigration: (...args: unknown[]) => mock.execute(...args) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: mock.user ? { id: mock.user } : null } }) }, from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { is_platform_admin: mock.admin } }) }) }) }) }) }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({

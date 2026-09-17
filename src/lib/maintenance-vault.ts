@@ -76,6 +76,19 @@ type StoredCredentialMap = Map<string, MaintenanceStoredCredential>;
 
 export const maintenanceIntegrations: IntegrationDefinition[] = [
   {
+    id: "infrastructure",
+    name: "Infraestrutura / Admin OS",
+    sector: "Operação interna",
+    owner: "Administrador da plataforma",
+    description: "Cofre do cockpit por projeto. Ambiente explícito prevalece. Não habilita SQL ou jobs automaticamente; clientes não recebem acesso.",
+    tone: "cyan",
+    modules: ["Infraestrutura", "Supabase", "Migrations"],
+    fields: [
+      { label: "Administradores de infraestrutura", env: "INFRA_ADMIN_USER_IDS", kind: "secret", requirement: "required", help: "UUIDs separados por vírgula de usuários que já são administradores da plataforma. Autoriza preparar SQL; execução ainda exige conexão e confirmação." },
+      { label: "Coletores por projeto (JSON)", env: "INFRA_HEALTH_PROJECTS_JSON", kind: "secret", requirement: "required", multiline: true, help: "Objeto por ID de projeto: supabaseUrl, supabaseKey própria, supabaseProbeTable (consulta sem linhas), app, inngest e inngestAuthorization. Valores ficam criptografados. Não incluir DSNs antigos nem chaves de outro projeto." },
+    ],
+  },
+  {
     id: "uazapi",
     name: "Uazapi / WhatsApp Gateway",
     sector: "Conexao da plataforma",
