@@ -65,3 +65,11 @@ it("requires a per-project TLS URL with no SSL overrides or fallback to another 
   expect(projectDatabaseUrl("connectyhub")).toBeNull();
   vi.unstubAllEnvs();
 });
+it("blocks destructive SQL before opening a transaction, even after an operator reviewed it", async () => {
+  const query = vi.fn();
+  for (const sql of ["drop table public.operation_test", "truncate public.operation_test", "delete from public.operation_test where id=1", "update public.operation_test set id=2 where id=1", "alter table public.operation_test drop column id", "alter table public.operation_test disable row level security"]) {
+    expect(executionPolicy(sql).join(" ")).toContain("bloqueado por padrão");
+    await expect(applyTransaction({ query }, "betel", "admin", migration("9999", sql), randomUUID())).rejects.toThrow("SQL_POLICY");
+  }
+  expect(query).not.toHaveBeenCalled();
+});

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { access, audit, failure, getProject, migrationCatalog, migrationExecution, response } from "@/lib/infrastructure/server";
-import { actions, blockedReason } from "@/lib/infrastructure/model";
+import { actions, blockedReason, jobActions, type JobAction } from "@/lib/infrastructure/model";
+import { executeJobAction } from "@/lib/infrastructure/jobs";
 import { choice, identifier, keys, object, readBody } from "@/lib/infrastructure/validation";
 import { executeMigration } from "@/lib/infrastructure/executor";
 import { executionPolicy } from "@/lib/infrastructure/sql-policy";
@@ -22,7 +23,7 @@ export async function POST(request: Request, context: { params: Promise<{ projec
       return response({ error: "Origem não autorizada." }, 403);
     }
     const body = object(await readBody(request));
-    keys(body, ["action", "target", "confirmation", "checksum", "riskAccepted"]);
+    keys(body, ["action", "target", "confirmation", "checksum", "riskAccepted", "revision"]);
     const action = choice(body.action, actions);
     if (!auth.canOperate) {
       await audit(actor, project, action, "denied", "infra_admin_required");
@@ -55,6 +56,10 @@ export async function POST(request: Request, context: { params: Promise<{ projec
       }
       const result = await executeMigration(project, actor, migration);
       return response(result, result.status === "error" ? 409 : 200);
+    }
+    if (jobActions.includes(action as JobAction)) {
+      const result = await executeJobAction(project, actor, action as JobAction, target, body.revision);
+      return response(result, result.status === "blocked" ? 501 : result.status === "unknown" || result.status === "rejected" ? 409 : 200);
     }
     await audit(actor, project, action, "blocked", "execution_adapter_unavailable", target);
     return response({ error: blockedReason }, 501);

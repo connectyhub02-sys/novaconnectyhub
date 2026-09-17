@@ -1,18 +1,23 @@
 import "server-only";
-import type { Health, Snapshot, Telemetry } from "./model";
+import type { Health, HealthCheck, Snapshot, Telemetry } from "./model";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type Service = keyof Snapshot["services"];
-export type Check = { service: Service; health: Health; reason: string; checkedAt: string };
+export type Check = HealthCheck & { service: Service };
 type Config = Partial<Record<Service, string>> & { supabaseUrl?: string; supabaseKey?: string; inngestAuthorization?: string };
 type Observation = { checks: Check[]; telemetry: Telemetry | null };
 const cache = new Map<string, { expires: number; pending: Promise<Observation> }>();
 
 function configuration(project: string): Config {
   let projects: Record<string, Config> = {};
-  try { projects = JSON.parse(process.env.INFRA_HEALTH_PROJECTS_JSON ?? "{}"); } catch { /* Report missing project settings below. */ }
+  projects = JSON.parse(process.env.INFRA_HEALTH_PROJECTS_JSON ?? "{}");
+  if (!projects || typeof projects !== "object" || Array.isArray(projects)) throw new Error("INVALID_CONFIG");
   const own = projects && Object.hasOwn(projects, project) ? projects[project] : {};
-  if (project !== "connectyhub") return own ?? {};
+  if (!own || typeof own !== "object" || Array.isArray(own) || Object.values(own).some(v => typeof v !== "string")) throw new Error("INVALID_CONFIG");
+  // Public Betel origins verified against its VPS migration records. No key is
+  // inherited from ConnectyHub, and HTTP liveness is not job/database evidence.
+  if (project === "betel") return { app: "https://betel.connectyhub.com.br/login", supabaseUrl: "https://betel-supabase.connectyhub.com.br", ...own };
+  if (project !== "connectyhub") return own;
   return {
     app: `${(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.connectyhub.com.br").replace(/\/$/, "")}/api/health`,
     api: `${(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.connectyhub.com.br").replace(/\/$/, "")}/api/health`,
@@ -23,33 +28,46 @@ function configuration(project: string): Config {
   };
 }
 
-async function probe(service: Service, url: string | undefined, headers: Record<string, string> = {}): Promise<Check> {
+async function probe(service: Service, url: string | undefined, required: string[], headers: Record<string, string> = {}, authSetting?: string): Promise<Check> {
   let health: Health = "unknown";
-  let reason = `Configurar INFRA_HEALTH_PROJECTS_JSON.<projeto>.${service} com endpoint de saúde dedicado.`;
+  let configuration: Check["configuration"] = "missing";
+  let missing = required;
+  let reason = `Bloqueado por configuração ausente: ${required.join("; ")}.`;
   if (url) {
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.hash) throw new Error("CONFIG");
+      configuration = "ready"; missing = [];
       const r = await fetch(parsed, { headers, redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(4000) });
       await r.body?.cancel();
       health = r.ok ? "healthy" : [401, 403].includes(r.status) ? "warning" : "error";
-      reason = r.ok ? "Endpoint respondeu HTTP 2xx; não comprova execução de jobs nem resultado de negócio." : [401, 403].includes(r.status) ? `HTTP ${r.status}: serviço exige autenticação; saúde interna não verificada.${service === "inngest" ? " Configurar INFRA_HEALTH_PROJECTS_JSON.<projeto>.inngestAuthorization no servidor." : " Conferir credencial do coletor."}` : `Endpoint respondeu HTTP ${r.status}; conferir serviço no host.`;
-    } catch { health = "error"; reason = "Falha de conexão, timeout de 4 s ou URL HTTPS inválida. Conferir configuração e serviço."; }
+      if ([401, 403].includes(r.status)) { configuration = "unauthorized"; missing = [authSetting ?? required[0]]; }
+      reason = r.ok ? "Endpoint respondeu HTTP 2xx; não comprova execução de jobs nem resultado de negócio." : [401, 403].includes(r.status) ? `HTTP ${r.status}: autenticação pendente. Conferir ${missing.join("; ")} no servidor.` : `Endpoint respondeu HTTP ${r.status}; conferir serviço no host.`;
+    } catch { health = "error"; if (configuration !== "ready") { configuration = "invalid"; reason = `URL HTTPS inválida. Corrigir ${required.join("; ")}.`; } else reason = "Falha de conexão ou timeout de 4 s. Conferir rede e serviço no host."; }
   }
-  return { service, health, reason, checkedAt: new Date().toISOString() };
+  return { service, health, reason, checkedAt: new Date().toISOString(), configuration, missing };
 }
 
 async function collect(project: string): Promise<Observation> {
-  const config = configuration(project);
+  let config: Config;
+  try { config = configuration(project); } catch {
+    return { telemetry: null, checks: (["app", "api", "auth", "rest", "storage", "database", "inngest", "worker"] as Service[]).map(service => ({ service, health: "unknown", configuration: "invalid", missing: [`INFRA_HEALTH_PROJECTS_JSON.${project}: corrigir JSON/objeto e valores de texto`], reason: "Coleta bloqueada: configuração JSON inválida; nenhum endpoint foi consultado.", checkedAt: new Date().toISOString() })) };
+  }
   const base = config.supabaseUrl?.replace(/\/$/, "");
   const headers: Record<string, string> = config.supabaseKey ? { apikey: config.supabaseKey, Authorization: `Bearer ${config.supabaseKey}` } : {};
+  const setting = (key: string) => `INFRA_HEALTH_PROJECTS_JSON.${project}.${key}`;
+  const required = (service: Service, usesKey = true) => {
+    if (config[service]) return [setting(service)];
+    const names = [!base ? project === "connectyhub" ? "NEXT_PUBLIC_SUPABASE_URL" : setting("supabaseUrl") : "", usesKey && !config.supabaseKey ? project === "connectyhub" ? "SUPABASE_SECRET_KEY" : setting("supabaseKey") : ""].filter(Boolean);
+    return names.length ? names : [setting(service)];
+  };
   const checks = await Promise.all([
-    probe("app", config.app), probe("inngest", config.inngest, config.inngestAuthorization ? { Authorization: config.inngestAuthorization } : {}), probe("worker", config.worker),
-    probe("auth", config.auth || (base ? `${base}/auth/v1/health` : undefined), config.auth ? {} : headers),
-    probe("rest", config.rest || (base && config.supabaseKey ? `${base}/rest/v1/` : undefined), config.rest ? {} : headers),
-    probe("storage", config.storage || (base && config.supabaseKey ? `${base}/storage/v1/bucket` : undefined), config.storage ? {} : headers),
-    probe("database", config.database || (project === "connectyhub" && base && config.supabaseKey ? `${base}/rest/v1/infra_projects?select=id&limit=0` : undefined), config.database ? {} : headers),
-    probe("api", config.api),
+    probe("app", config.app, [setting("app")]), probe("inngest", config.inngest, [setting("inngest")], config.inngestAuthorization ? { Authorization: config.inngestAuthorization } : {}, setting("inngestAuthorization")), probe("worker", config.worker, [setting("worker")]),
+    probe("auth", config.auth || (base ? `${base}/auth/v1/health` : undefined), required("auth", false), config.auth ? {} : headers, setting("supabaseKey")),
+    probe("rest", config.rest || (base && config.supabaseKey ? `${base}/rest/v1/` : undefined), required("rest"), config.rest ? {} : headers, project === "connectyhub" ? "SUPABASE_SECRET_KEY" : setting("supabaseKey")),
+    probe("storage", config.storage || (base && config.supabaseKey ? `${base}/storage/v1/bucket` : undefined), required("storage"), config.storage ? {} : headers, project === "connectyhub" ? "SUPABASE_SECRET_KEY" : setting("supabaseKey")),
+    probe("database", config.database || (project === "connectyhub" && base && config.supabaseKey ? `${base}/rest/v1/infra_projects?select=id&limit=0` : undefined), project === "connectyhub" ? required("database") : [setting("database")], config.database ? {} : headers),
+    probe("api", config.api, [setting("api")]),
   ]);
   let database: { applied: string[]; tables: Snapshot["tables"] } | null = null;
   if (project === "connectyhub") {

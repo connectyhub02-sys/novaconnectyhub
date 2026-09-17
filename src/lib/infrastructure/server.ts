@@ -8,7 +8,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { type Migration, type MigrationExecution, type MigrationRisk } from "./model";
 import { InvalidInput, identifier } from "./validation";
 import { projectDatabaseUrl } from "./database";
-import { executionPolicy } from "./sql-policy";
+import { executionPolicy, statements } from "./sql-policy";
 
 export function response(data: unknown, status = 200) { return NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } }); }
 export async function audit(actor: string, project: string | null, action: string, result: string, reason: string, target: string | null = null, metadata?: Record<string, unknown>) {
@@ -70,7 +70,11 @@ export function migrationRisk(sql: string): MigrationRisk {
   const normalized = sql.replace(/--[^\n]*/g, " ").replace(/\/\*[\s\S]*?\*\//g, " ").toLowerCase();
   const reasons: string[] = [];
   if (/\b(drop|truncate)\b/.test(normalized)) reasons.push("Remove ou esvazia estruturas/dados");
-  if (/\b(delete|update)\b/.test(normalized) && !/\bwhere\b/.test(normalized)) reasons.push("Altera linhas sem filtro WHERE");
+  let parts: string[];
+  try { parts = statements(sql); } catch { parts = [normalized]; }
+  if (parts.some(s => /^(delete|update)\b/i.test(s))) reasons.push("Altera linhas existentes; execução bloqueada por padrão");
+  if (parts.some(s => /^insert\s+into\b/i.test(s))) reasons.push("Insere dados no projeto selecionado (DML)");
+  if (/\b(row\s+level\s+security|policy)\b/.test(normalized)) reasons.push("Altera isolamento ou políticas RLS");
   if (/\balter\s+table\b/.test(normalized)) reasons.push("Altera o contrato de uma tabela");
   if (/\b(grant|revoke)\b|\bcreate\s+(or\s+replace\s+)?(function|trigger|policy)\b/.test(normalized)) reasons.push("Altera permissões ou comportamento executado pelo banco");
   if (/\bcreate\s+index\b/.test(normalized) && /\bconcurrently\b/.test(normalized)) reasons.push("CREATE INDEX CONCURRENTLY exige execução fora de transação");
@@ -87,5 +91,5 @@ export function migrationExecution(project: string): MigrationExecution {
   return { status: missing.length ? "blocked" : "ready", missing, project };
 }
 export function failure(error: unknown) {
-  return error instanceof InvalidInput ? response({ error: error.message }, 400) : response({ error: "Infraestrutura indisponível. Confira a migration 0150, o acesso e a configuração no servidor." }, 503);
+  return error instanceof InvalidInput ? response({ error: error.message }, 400) : response({ error: "Infraestrutura indisponível. Confira as migrations 0150/0151, o acesso e a configuração no servidor." }, 503);
 }

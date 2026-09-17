@@ -1,5 +1,34 @@
 # Estado operacional da ConnectyHub
 
+## Complemento por fases — ConnectyHub e Betel, 16/09/2026
+
+Prioridade mantida em ConnectyHub e Betel no cockpit oficial. Inventário agora
+separa saúde e configuração (pronta/incompleta/bloqueada), lista requisitos
+por projeto e deixa de chamar leitura sem endpoint de monitoramento ativo.
+Betel ganha probe público do login VPS (HTTP 200 observado) e Auth Supabase
+(HTTP 403 sem credencial observado), sem herdar chaves da CH. Configuração
+JSON inválida e falta de chave/endpoint são diagnosticadas explicitamente.
+
+SQL existente preservado: preparação imutável, confirmação/hash, auditoria,
+TLS, transação e histórico. Complemento bloqueia comandos destrutivos por
+padrão antes de executar. Cliente HTTPS de jobs implementado com leitura,
+capacidades por projeto, confirmação, revisão de estado/alvo, recibo e auditoria;
+sem adaptador no host, aponta INFRA_JOB_ADAPTERS_JSON.<projeto>.url/.token.
+Timeout não é sucesso e não dispara retry. Credenciais de evento Inngest não
+viram acesso administrativo automaticamente.
+
+Não requer migration nova nem mudança de permissões. Camada cliente segue
+fechada. Execução SQL real, jobs de produção, métricas R2 e ligação dos
+publicadores VPS continuam dependentes da configuração descrita no
+[diagnóstico e contrato por fases](cockpit-fases-2026-09-16.md). Nenhuma ação
+de banco de cliente, pausa/replay de job, mensagem ou cobrança para validar.
+
+59 testes direcionados em oito arquivos, TypeScript, ESLint e build webpack
+com 108 páginas aprovados. Publicação do complemento em andamento. A entrega anterior já estava
+publicada em 6a9cb977, Vercel E478TDcbkqNCN6ZAMdq3XfoFp58g Ready/Production,
+conferida novamente no navegador às 21:36 BRT.
+
+
 ## Cockpit operacional — camada real, 16/09/2026
 
 Implementados coleta HTTP por projeto no servidor, diagnóstico de configuração,

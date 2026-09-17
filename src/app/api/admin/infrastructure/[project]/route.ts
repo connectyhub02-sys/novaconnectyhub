@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { access, failure, getProject, response } from "@/lib/infrastructure/server";
 import { uuid } from "@/lib/infrastructure/validation";
 import { collectHealth } from "@/lib/infrastructure/collector";
+import { projectConfiguration } from "@/lib/infrastructure/readiness";
+import { collectJobs } from "@/lib/infrastructure/jobs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request, context: { params: Promise<{ project: string }> }) {
   try {
@@ -30,7 +32,7 @@ export async function GET(request: Request, context: { params: Promise<{ project
       if (result.error) throw new Error("READ_FAILED");
       events = (result.data ?? []).reverse();
     }
-    const live = await collectHealth(id);
-    return response({ project, telemetry: telemetry.data, live, deployments: deployments.data?.slice(0, 50), events, selectedDeployId, audit: audit.data, canOperate: auth.canOperate, permissionReason: auth.canOperate ? null : "Seu usuário precisa estar em INFRA_ADMIN_USER_IDS para preparar/executar SQL. Leitura e coleta de saúde estão ativas.", truncated: (deployments.data?.length ?? 0) > 50 });
+    const [live, jobs] = await Promise.all([collectHealth(id), collectJobs(id)]);
+    return response({ project, configuration: projectConfiguration(project, live.checks, auth.canOperate), jobs, telemetry: telemetry.data, live, deployments: deployments.data?.slice(0, 50), events, selectedDeployId, audit: audit.data, canOperate: auth.canOperate, permissionReason: auth.canOperate ? null : "Seu usuário precisa estar em INFRA_ADMIN_USER_IDS para preparar/executar SQL e operar jobs. A leitura administrativa está permitida; confira a configuração de cada coletor.", truncated: (deployments.data?.length ?? 0) > 50 });
   } catch (e) { return failure(e); }
 }

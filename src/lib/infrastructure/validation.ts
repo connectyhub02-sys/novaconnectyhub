@@ -63,7 +63,7 @@ export function parseSnapshot(value: unknown): { observedAt: string; payload: Sn
 }
 
 // Bound the actual stream too: Content-Length is not trustworthy.
-export async function readBody(request: Request): Promise<unknown> {
+export async function readBody(request: Request | Response): Promise<unknown> {
   const reader = request.body?.getReader();
   if (!reader) throw new InvalidInput("Corpo obrigatório.");
   let size = 0;

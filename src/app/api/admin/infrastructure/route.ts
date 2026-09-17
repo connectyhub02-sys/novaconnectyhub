@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { access, failure, response } from "@/lib/infrastructure/server";
 import { collectHealth } from "@/lib/infrastructure/collector";
 import { stale } from "@/lib/infrastructure/model";
+import { projectConfiguration } from "@/lib/infrastructure/readiness";
 export const dynamic = "force-dynamic";
 export async function GET() {
   try {
@@ -17,8 +18,8 @@ export async function GET() {
     const observations = await Promise.all((projects.data ?? []).map(async project => {
       const stored = telemetry.data?.find(t => t.project_id === project.id);
       const live = await collectHealth(project.id);
-      return stored && !stale(stored) ? stored : live.telemetry ? { ...live.telemetry, project_id: project.id } : stored;
+      return { id: project.id, configuration: projectConfiguration(project, live.checks, auth.canOperate), telemetry: stored && !stale(stored) ? stored : live.telemetry ? { ...live.telemetry, project_id: project.id } : stored };
     }));
-    return response({ projects: projects.data, telemetry: observations.filter(Boolean), canOperate: auth.canOperate, permissionReason: auth.canOperate ? null : "Operações SQL exigem seu UUID em INFRA_ADMIN_USER_IDS, além de administrador da plataforma." });
+    return response({ projects: projects.data, configuration: Object.fromEntries(observations.map(o => [o.id, o.configuration])), telemetry: observations.map(o => o.telemetry).filter(Boolean), canOperate: auth.canOperate, permissionReason: auth.canOperate ? null : "Operações SQL exigem seu UUID em INFRA_ADMIN_USER_IDS, além de administrador da plataforma." });
   } catch (e) { return failure(e); }
 }

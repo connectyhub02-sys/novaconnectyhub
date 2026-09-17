@@ -33,6 +33,7 @@ export function executionPolicy(sql: string): string[] {
     const parts = statements(sql);
     const reasons: string[] = [];
     if (!parts.length || Buffer.byteLength(sql) > 60000) reasons.push("SQL vazio ou maior que 60 KB.");
+    if (parts.some(s => /^(drop|truncate|delete|update)\b/i.test(s) || /^alter\s+table\b[\s\S]*\b(drop|disable|type)\b/i.test(s))) reasons.push("SQL destrutivo ou alteração de dados existentes bloqueado por padrão (DROP/TRUNCATE/DELETE/UPDATE/ALTER destrutivo). Exige procedimento revisado no host com autorização específica e backup.");
     if (parts.some(s => !/^(create\s+(or\s+replace\s+)?(table|index|unique\s+index|function|trigger|type|view|policy|schema)|alter\s+(table|type)|drop\s+(table|index|function|trigger|type|view|policy)|insert\s+into|update\s|delete\s+from|grant\s|revoke\s|comment\s+on)\b/i.test(s))) reasons.push("Comando exige execução revisada no host (controle de transação, sessão, DO, CALL e comandos administrativos não são aceitos).");
     if (/\b(concurrently|infra_control|supabase_migrations|infra_migration_runs|infra_migrations|infra_audit|infra_projects)\b/i.test(sql)) reasons.push("SQL não transacional ou altera estruturas protegidas do executor. Aplicar pelo procedimento do host.");
     return reasons;
