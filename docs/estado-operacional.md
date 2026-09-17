@@ -10,14 +10,27 @@ acesso cliente desligado. Migration 0151 aplicada e verificada no Supabase da CH
 quatro projetos, RPCs restritas ao serviço, nenhum cliente habilitado. Sem SQL
 operacional em banco de cliente durante a publicação.
 
-App/login, Auth, REST e Supabase Storage responderam 200; Inngest health respondeu
-401 e requer autenticação própria do coletor. Execução de migrations exige UUID
-em `INFRA_ADMIN_USER_IDS` e conexão PostgreSQL TLS por projeto, além de flag/executor
-explicitamente habilitados. Publicação da aplicação e conferência visual em curso;
-não confundir schema aplicado com aplicação publicada.
+Publicado em `8b0d19434c77b7d4673abb839d0845dbb567fd78`, Vercel
+`dpl_3HvEPJMW4w4HKpptUed4qbhaepFL` **Ready / Production** às 21:14:36 BRT.
+`/api/health` retornou 200 e o SHA publicado; API administrativa retornou 401 sem
+sessão e `/infraestrutura` retornou 307 para a rota oficial. Browser autenticado
+conferido: quatro projetos, seis serviços CH saudáveis (app/API/Auth/REST/banco/
+Supabase Storage), Inngest 401 com diagnóstico, worker sem endpoint, catálogo
+aplicado até 0151 e auditoria `schema_install`. Polling atualizou as observações.
+45 testes direcionados, complementos finais, TypeScript, lint e build aprovados.
+
+Bloqueios vistos em produção: usuário da sessão fora de `INFRA_ADMIN_USER_IDS`,
+ausência de `INFRA_MIGRATION_EXECUTION_ENABLED=true`, de DSN PostgreSQL TLS em
+`INFRA_PROJECT_DATABASE_URLS_JSON.connectyhub` e de `INFRA_MIGRATION_EXECUTOR=vps-sql`.
+Inngest exige `INFRA_HEALTH_PROJECTS_JSON.connectyhub.inngestAuthorization`;
+workers e projetos externos precisam de endpoints/credenciais próprios. R2,
+telemetria de deploy VPS e redirecionamento do portal legado no subdomínio seguem
+sem ativação nesta entrega. Execução remota real do cockpit não foi homologada;
+validação transacional ficou em PostgreSQL descartável. Nenhuma operação de SQL
+em cliente, cobrança, WhatsApp ou alteração de credenciais durante a publicação.
 [Implementação, configuração, riscos e evidência](infraestrutura-operacional-2026-09-16.md).
 
-## Cockpit de infraestrutura — MVP local, 16/09/2026
+## Histórico: cockpit de infraestrutura — MVP local, 16/09/2026
 
 Implementadas `/admin/infrastructure` e páginas por projeto, com inventário
 ConnectyHub/Betel/Vision, snapshots de Supabase/Inngest/app/worker/storage,

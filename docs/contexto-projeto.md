@@ -22,7 +22,7 @@ Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acess
 
 O código sustenta duas frentes complementares: operação de empresas dentro do painel e integração de sistemas externos via API. Ambas devem compartilhar controles consistentes de organização, acesso, créditos, registro de consumo e entrega. Evitar tratar catálogo de recursos como entrega comercial pronta. Antes da próxima fase de produção, priorizar os percursos essenciais de cadastro/acesso, conexão do agente, resposta, agendamento, entrega e débito correto, com recuperação de falhas.
 
-Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. O cockpit multiprojetos recebeu um MVP local de infraestrutura em 16/09, ainda sem publicação ou coletores reais; serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
+Essa priorização é uma avaliação técnica da revisão de 11/09, não uma decisão de remover módulos nem de substituir o escopo solicitado pelo titular. O cockpit multiprojetos recebeu um MVP em 16/09 e uma camada posterior de coleta e SQL protegido, cujo estado verificado fica no documento operacional; serviços adicionais continuam possibilidades futuras. Não há previsão comprovada de receita, número de clientes suportados ou margem garantida sem validação de carga e custos reais.
 
 | Componente | Destino registrado | Fontes principais |
 |---|---|---|

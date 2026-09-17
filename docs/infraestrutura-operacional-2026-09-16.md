@@ -91,9 +91,29 @@ Complementos finais de histórico/risco passaram em 20 testes; ESLint e TypeScri
 aprovados. Build Next/webpack completo com 108 páginas e catálogo SQL no trace,
 usando somente variáveis necessárias do checkout principal no processo, sem novo
 arquivo de segredo. Consulta real via service_role: 105 versões no histórico até
-0151 e RLS ativo nas quatro tabelas consultadas. Comprovação de Vercel/navegador
-será registrada ao concluir a publicação. Testes locais não comprovam execução
-remota em bancos de clientes; essa operação não foi disparada.
+0151 e RLS ativo nas quatro tabelas consultadas. Testes locais não comprovam
+execução remota em bancos de clientes; essa operação não foi disparada.
+
+Aplicação publicada em `8b0d19434c77b7d4673abb839d0845dbb567fd78`;
+[Vercel dpl_3HvEPJMW4w4HKpptUed4qbhaepFL](https://vercel.com/nova-connectyhub-s-projects/novaconnectyhub/3HvEPJMW4w4HKpptUed4qbhaepFL)
+Ready / Latest / Production, domínio principal vinculado, às 21:14:36 BRT.
+Probes posteriores: `/api/health` 200 com o SHA correto, inventário administrativo
+401 sem sessão, alias `/infraestrutura` 307 para `/admin/infrastructure`.
+
+Navegador autenticado em produção: menu Sistema, inventário dos quatro projetos,
+detalhe CH com app/API/Auth/REST/banco/Supabase Storage saudáveis, Inngest 401
+explicitamente identificado como autenticação pendente, worker sem configuração,
+versão de aplicação correta, polling atualizando horários, catálogo mostrando
+0151 aplicada e aba de auditoria mostrando `schema_install`. Layout desktop
+conferido visualmente. Navegação nova foi usada após o documento anterior permanecer
+aberto no navegador. Não foi executado SQL ou criado rascunho de teste em produção.
+
+A própria UI confirmou falta da allowlist infra do usuário, das três configurações
+do executor e da autenticação do coletor Inngest. Próximo passo operacional: cadastrar
+o admin infra designado, provisionar DSNs TLS de migrations com escopo por projeto,
+configurar os coletores ausentes e homologar uma migration autorizada pelo fluxo
+do cockpit. Não houve concessão automática de privilégios ou cópia da senha do
+Studio para a Vercel. A ativação do portal legado requer seu publicador na VPS.
 
 Referência do driver: [transações node-postgres](https://node-postgres.com/features/transactions)
 e [timeouts/TLS do Client](https://node-postgres.com/apis/client).
