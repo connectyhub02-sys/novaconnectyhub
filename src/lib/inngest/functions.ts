@@ -75,6 +75,7 @@ import { retryLeadResetAssets } from "@/lib/leads/reset";
 import { recoverPaymentReviewNotifications } from "@/lib/sales-catalog/payment-reviews";
 import { sendResolvedPaymentReviewNotices } from "@/lib/sales-catalog/payment-review-resolution";
 import { reconcilePendingNativeBilling } from "@/lib/billing/native-card-checkout";
+import { reconcilePendingPixAutomatic } from "@/lib/billing/pix-automatic";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
 import {
@@ -769,6 +770,7 @@ export const connectyhubTransparentCheckoutReconciliation = inngest.createFuncti
     reviews: await step.run("recover-payment-review-notifications", () => recoverPaymentReviewNotifications(createServiceClient())),
     reviewResults: await step.run("deliver-payment-review-results", () => sendResolvedPaymentReviewNotices(createServiceClient())),
     platform: await step.run("reconcile-panel-payments", () => reconcilePendingNativeBilling(createServiceClient())),
+    pixAutomatic: await step.run("reconcile-pix-authorizations", () => reconcilePendingPixAutomatic(createServiceClient())),
   }),
 );
 

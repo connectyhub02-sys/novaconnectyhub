@@ -181,6 +181,17 @@ export async function tokenizeAsaasBillingCard(input: AsaasDirectConnection & {c
   return {customerId: customer.id, token: result.creditCardToken};
 }
 
+/** Replacement tokens must remain bound to the existing billing customer, even
+ * when the new card belongs to a different holder. This endpoint never charges. */
+export async function tokenizeAsaasReplacementCard(input: AsaasDirectConnection & {customerId: string; card: CheckoutCard; holder: CheckoutCardHolder; remoteIp: string}) {
+  const result = await request(input, "/creditCard/tokenizeCreditCard", "POST", {
+    customer: input.customerId, creditCard: input.card,
+    creditCardHolderInfo: input.holder, remoteIp: input.remoteIp,
+  });
+  if (typeof result.creditCardToken !== "string" || !result.creditCardToken.trim()) throw new AsaasDirectError(true, false);
+  return result.creditCardToken;
+}
+
 /** No external subscription and no card on creation: the application owns the schedule. */
 export async function createManagedAsaasInvoice(input: AsaasDirectConnection & {customerId: string; amount: number; dueDate: string; reference: string; description?: string}) {
   const payment = safePayment(await request(input, "/payments", "POST", {customer: input.customerId, billingType: "CREDIT_CARD", value: input.amount, dueDate: input.dueDate, externalReference: input.reference, description: input.description ?? "Renovação ConnectyHub"}));

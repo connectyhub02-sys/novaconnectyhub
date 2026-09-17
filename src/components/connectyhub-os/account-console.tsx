@@ -1,6 +1,7 @@
 "use client";
 import { CreditExplainer } from "./credit-explainer";
 import { NotificationSenderSettings } from "./notification-sender-settings";
+import { BillingCardReplacement } from "./billing-card-replacement";
 
 import {
   useCallback,
@@ -1204,7 +1205,7 @@ function BillingWorkspace({
           <PaymentsTab payments={account.payments} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="subscriptions">
-          <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} />
+          <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} canManage={["owner", "admin"].includes(account.organization.role)} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="credits">
           <CreditsTab
@@ -1342,11 +1343,15 @@ function PaymentActions({ align = "right", payment }: { align?: "left" | "right"
 function SubscriptionsTab({
   plansHref,
   subscriptions,
+  canManage,
 }: {
   plansHref: string;
   subscriptions: AccountData["subscriptions"];
+  canManage: boolean;
 }) {
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(subscriptions);
+  const [editing, setEditing] = useState<AccountData["subscriptions"][number] | null>(null);
+  const changeCard = (subscription: AccountData["subscriptions"][number]) => canManage && subscription.status === "active" ? <button type="button" onClick={() => setEditing(subscription)} className="mt-2 block min-h-11 text-sm font-semibold text-blue-700 underline">Alterar método de pagamento</button> : null;
 
   if (!subscriptions.length) {
     return <EmptyState text="Nenhuma assinatura registrada nesta conta." />;
@@ -1354,6 +1359,7 @@ function SubscriptionsTab({
 
   return (
     <div className="space-y-4">
+      {editing ? <BillingCardReplacement key={editing.id} subscriptionId={editing.id} planName={editing.planName} onClose={() => setEditing(null)} /> : null}
       <div className="hidden overflow-x-auto overflow-y-hidden sm:block">
         <table className="w-full min-w-[820px] border-separate border-spacing-0 text-left">
           <thead>
@@ -1383,6 +1389,7 @@ function SubscriptionsTab({
                   <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
                     {subscription.checkoutHref ? "Finalizar pagamento" : "Gerenciar"}
                   </ActionLink>
+                  {changeCard(subscription)}
                 </td>
               </tr>
             ))}
@@ -1408,6 +1415,7 @@ function SubscriptionsTab({
               <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
                 {subscription.checkoutHref ? "Finalizar pagamento" : "Gerenciar"}
               </ActionLink>
+              {changeCard(subscription)}
             </div>
           </article>
         ))}

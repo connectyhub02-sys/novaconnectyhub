@@ -1,5 +1,121 @@
 # Estado operacional da ConnectyHub
 
+## Pacote cartão + Pix Automático — implementação local, 17/09/2026
+
+Após nova instrução do titular para continuar, o checkout inicial recebeu Pix
+Automático funcional em código, com consentimento, QR integrado Asaas, mandato
+persistido, confirmação remota ACTIVE + pagamento, auditoria, webhook idempotente
+e conciliação Inngest. Renovações usam modo SUBSCRIPTION do Asaas, sem duplicar
+worker de cartão. Migration 0151 nova, ainda não aplicada. Troca em plano ativo
+continua bloqueada com causa documentada (primeiro pagamento obrigatório);
+cartão implementado anteriormente permanece no mesmo pacote.
+
+Criação em produção depende de `ASAAS_PIX_AUTOMATIC_ENABLED=true` após conferir
+schema/handler/eventos/conta. Webhook local preparado para nove eventos Pix;
+configuração real ainda sem esses eventos. Nenhum mandato/cobrança real criado.
+Validados 210 cenários distintos, ESLint, TypeScript, build de produção e navegador.
+Pacote na branch `codex/metodos-pagamento-pix-automatico`; detalhes e limites no
+[relatório do pacote](metodos-pagamento-pix-automatico-2026-09-17.md).
+
+Publicação autorizada, mas **bloqueada em 17/09**: CLI autenticada como
+`pilgerlandingpage`, projeto Vercel ConnectyHub na equipe configurada retorna 404.
+Sem deploy isolado do cartão, sem migrations aplicadas, sem alteração externa de
+webhook. Alternativa segura: operador com acesso à equipe publicar o mesmo pacote
+no projeto correto. Não contornar acesso criando outro projeto/DNS.
+
+## Pacote de métodos de pagamento — bloqueio Asaas confirmado, 17/09/2026 19:10 BRT
+
+Registro histórico, superado pela implementação local descrita acima. A ausência
+dos eventos Pix no webhook externo permanece pendente; a parada de implementação
+descrita nesta seção foi revogada pela instrução posterior do titular.
+
+Titular determinou não publicar cartão isoladamente; autorizou publicação do pacote
+completo após implementação/validação, com parada se faltar dependência Asaas.
+Consulta autenticada **somente GET** `/v3/webhooks` em produção às 19:10:33 BRT
+confirmou um webhook ConnectyHub em `/api/webhooks/asaas/platform-billing`, ativo,
+fila não interrompida e `hasAuthToken=true`. Eventos PAYMENT estão cadastrados,
+mas a lista contém **zero eventos PIX_AUTOMATIC_***. Nenhum webhook foi alterado.
+Isso comprova ausência de cobertura de confirmação/encerramento de autorização;
+não é prova de inelegibilidade da conta para criar Pix Automático.
+
+Parada conforme instrução atual. Integração funcional Pix Automático permanece
+pendente; não foi criada migration de mandatos, nenhum plano foi migrado e nenhum
+deploy realizado. Cartão e bloqueios visuais/API continuam apenas locais, com os
+100 testes e build já verificados. Primeira contratação pode usar Jornada 3 e
+`paymentCreationMode=SUBSCRIPTION`; precisa de implementação e webhook habilitado.
+Troca sem pagamento inicial está bloqueada pelo contrato público documentado do
+Asaas (`immediateQrCode` obrigatório). Não gerar cobrança simbólica/antecipada.
+
+Próximo passo: resolver com Asaas uma jornada sem pagamento inicial para troca;
+completar armazenamento, conciliação ACTIVE+pagamento, eventos e testes locais;
+configurar os eventos no webhook existente quando liberado esse passo; só então
+publicar conjuntamente migrations/app e executar teste manual especificamente
+autorizado. Acesso Vercel continua um bloqueio histórico de 16/09, não revalidado
+nesta rodada. [Evidência, contrato e plano](troca-cartao-assinatura-2026-09-16.md).
+
+## Métodos de pagamento e Pix Automático — auditoria local, 17/09/2026
+
+Troca de cartão recebeu máscaras numéricas, bandeira detectada, bandeiras aceitas,
+validação por campo e no servidor (validade, CVV por bandeira, CPF/CNPJ com dígitos
+verificadores, telefone e CEP). Teste com migration real em PostgreSQL e worker real
+de renovação confirma seleção do novo token ativo na janela futura; provedor
+simulado. Plano, ciclo, valor e vencimento preservados; falhas mantêm cartão anterior.
+100 testes em oito arquivos, TypeScript, ESLint e navegador desktop/celular passaram.
+Build Next/webpack de produção concluído com TypeScript e 108 páginas.
+
+Pix comum está identificado como pagamento manual. Pix Automático aparece
+desabilitado com motivo no checkout Asaas de plano e em Minha Conta. API rejeita
+essa modalidade sem criar autorização/cobrança ou converter silenciosamente em
+Pix comum. **Integração Pix Automático completa não implementada**: persistência
+de mandato, confirmação ACTIVE/primeiro pagamento, webhook idempotente e agenda
+própria de instruções ainda pendentes. Não ativar assinatura recorrente apenas
+por emissão/leitura de QR Code.
+
+Consulta autenticada somente GET em produção, 17/09 às 18:39 BRT, a
+`/pix/automatic/authorizations?limit=1`: HTTP 200, zero autorizações. Comprova acesso
+à listagem, não elegibilidade de criação. API pública Asaas documenta Jornada 3
+com primeiro pagamento obrigatório. Não foi comprovado fluxo de autorização sem
+pagamento inicial para troca de método de plano ativo. Não foram criados mandato,
+webhook, cobrança ou alteração financeira real.
+
+Nenhuma publicação desta entrega. Última verificação de infraestrutura em 16/09:
+migration 0150 ausente e CLI Vercel sem acesso ao projeto/equipe configurados.
+O bloqueio não foi revalidado nesta rodada; não afirmar estado atual externo com
+base apenas neste registro. [Evidências e pendências](troca-cartao-assinatura-2026-09-16.md).
+
+## Troca global de cartão da assinatura — entrega local, 16/09/2026
+
+Minha conta → Assinaturas recebe Alterar método de pagamento para owner/admin.
+O fluxo tokeniza sem cobrar e substitui atomicamente o cartão ativo de renovações
+Asaas gerenciadas pela ConnectyHub, preservando contrato/ciclo/valores e referências
+das recargas já autorizadas. Registra executor, organização, assinatura, horário e
+resultado sem PAN/CVV/token. Bloqueia acesso cruzado, plano inativo, ausência de
+renovação automática, integrações legadas e pagamentos em conferência.
+
+84 testes dirigidos (incluindo 20 SQL), TypeScript e ESLint aprovados. Prévia local
+desktop/celular conferida com API simulada, incluindo erro, sucesso e limpeza dos
+campos. Build Next/webpack com TypeScript e 108 páginas aprovado. Migration nova
+`0150_subscription_card_replacement.sql` ainda não aplicada. Sem cobrança real,
+tokenização real, push, deploy ou alteração de produção.
+
+Leitura somente às 17:17 BRT: Betel Leiloes tem plano Asaas active/recurring,
+sem acordo externo, um cartão ativo e nenhuma tentativa em andamento; período
+até 14/10/2026, 10:33 BRT. Credencial Asaas cadastrada no banco. Estado compatível,
+mas aceitação do novo cartão e habilitação atual de tokenização não comprovadas.
+Pronto para homologação isolada; validação real depende de migration/publicação
+e troca manual pelo titular, sem recriar contrato nem cobrar para testar.
+[Implementação, limites e roteiro Betel](troca-cartao-assinatura-2026-09-16.md).
+
+Publicação autorizada pelo titular em 16/09, mas interrompida antes de qualquer
+mutação por bloqueio de acesso à Vercel. SSH confirmou `vmi3571281`, container
+`supabase-db`, diretório `/opt/connectyhub/supabase`: alvo é ConnectyHub, separado
+dos containers Betel presentes na mesma VPS. Histórico até 0149; migration 0150,
+tabela/RPCs novos e coluna `last_four` ausentes. A CLI Vercel autenticada nesta
+sessão só lista outra equipe; consulta do projeto `novaconnectyhub` na equipe
+configurada retorna 404. Precisa autenticar a Vercel na equipe ConnectyHub para
+retomar. Nenhum backup novo, SQL de alteração, commit, push ou deploy executado
+nesta tentativa; ambiente publicado ainda não habilitado para a troca.
+
 ## Agente Onipresente Ativo — entrega local, 16/09/2026
 
 O agente web passou a retornar comandos limitados para destacar/abrir produto,

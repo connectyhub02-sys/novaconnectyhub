@@ -1,6 +1,7 @@
 import { billingLocalDate } from "./commercial-terms";
 
 export const managedRenewalConsentVersion = "connectyhub-advance-3-2-1-v1";
+export const replacementConsentVersion = "connectyhub-card-replacement-v1";
 export const managedRenewalConsent = "Autorizo as renovações do plano no cartão, com até uma tentativa por dia nos três dias anteriores ao vencimento. O pagamento antecipado preserva o período contratado. Sem confirmação até o vencimento, os serviços do plano serão suspensos.";
 
 export function managedRenewalDay(periodEnd: string | Date | null, now = new Date()) {

@@ -275,6 +275,7 @@ async function recoverNativeBillingPix(client: SupabaseClient) {
   if (error) throw new Error("Conferência Pix indisponível.");
   let recovered = 0;
   for (const row of data ?? []) {
+    if (row.payload?.pix_automatic_authorization_id) continue;
     try {
       const config = await loadAsaasPlatformBillingConfig({ client });
       const recurringOrigin = row.payload?.native_recurring_attempt_id;

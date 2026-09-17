@@ -13,6 +13,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { CheckoutError, processTransparentWebhook } from "@/lib/sales-catalog/transparent-checkout";
 import { sanitizePaymentAuditPayload } from "@/lib/security/payment-audit";
 import { processNativeBillingWebhook } from "@/lib/billing/native-card-checkout";
+import { processPixAutomaticWebhook } from "@/lib/billing/pix-automatic";
+import { PixAutomaticError } from "@/lib/billing/asaas-pix-automatic-api";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,12 +38,14 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get("x-request-id");
   const signatureHeader = request.headers.get("asaas-access-token");
   try {
+    const automaticPix = await processPixAutomaticWebhook(client, payload, signatureHeader);
+    if (automaticPix) return NextResponse.json(automaticPix);
     const nativeBilling = await processNativeBillingWebhook(client, payload, signatureHeader);
     if (nativeBilling) return NextResponse.json(nativeBilling);
     const transparent = await processTransparentWebhook(client, payload, signatureHeader);
     if (transparent) return NextResponse.json(transparent);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "payment_reconciliation_pending" }, { status: error instanceof CheckoutError ? error.status : 503 });
+    return NextResponse.json({ error: error instanceof CheckoutError || error instanceof PixAutomaticError ? error.message : "payment_reconciliation_pending" }, { status: error instanceof CheckoutError || error instanceof PixAutomaticError ? error.status : 503 });
   }
   const webhookToken = await loadAsaasPlatformBillingWebhookToken({ client }).catch(() => null);
   const signature = verifyAsaasWebhookToken({

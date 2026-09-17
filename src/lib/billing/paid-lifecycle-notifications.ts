@@ -374,6 +374,14 @@ async function ensureLifecycleRenewalCheckout(
   }
 
   if (context.subscription.billing_provider === "asaas" && context.subscription.provider_subscription_id?.startsWith("sub_")) {
+    if (context.subscription.metadata?.pix_automatic_authorization_id) {
+      const { loadPixMandate, reconcilePixMandate } = await import("./pix-automatic");
+      const mandate = await loadPixMandate(client,context.subscription.organization_id,context.subscription.id);
+      if (mandate) await reconcilePixMandate(client,mandate);
+      const linked = await loadBillingCheckoutIntent(client,{organizationId:context.subscription.organization_id,subscriptionId:context.subscription.id});
+      if (!linked || linked.checkoutKind !== "renewal" || !isBillingCheckoutPayable(linked)) return null;
+      return {invoiceId:linked.invoice.id,paymentId:linked.payment.id,checkoutPath:buildDashboardBillingCheckoutPath(context.subscription.id),checkoutUrl:buildDashboardBillingCheckoutUrl(context.subscription.id),checkoutKind:"renewal",targetPlanCode:linked.targetPlanCode,reused:true};
+    }
     const { ensureAsaasRecurringInvoice } = await import("./native-card-checkout");
     if (!context.periodEnd || !await ensureAsaasRecurringInvoice(client,context.subscription.id,context.subscription.provider_subscription_id,context.periodEnd.toISOString())) return null;
     const linked=await loadBillingCheckoutIntent(client,{organizationId:context.subscription.organization_id,subscriptionId:context.subscription.id});

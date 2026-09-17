@@ -17,6 +17,7 @@ import {
   type RejectedPaymentCopy,
 } from "@/components/checkout/mercado-pago-card-brick";
 import { BillingAsaasCardForm } from "./billing-asaas-card-form";
+import { BillingPixAutomaticCheckout, type PixAutomaticSnapshot } from "./billing-pix-automatic-checkout";
 import { PagBankCardForm } from "@/components/checkout/pagbank-card-form";
 import {
   type BillingCheckoutBump,
@@ -57,7 +58,7 @@ type BillingPlanCheckoutProps = {
   initialPixTicketUrl: string | null;
 };
 
-type PaymentMethod = "pix" | "card";
+type PaymentMethod = "pix" | "card" | "pix_automatic";
 
 type PixState = {
   qrCode: string | null;
@@ -150,6 +151,9 @@ export function BillingPlanCheckout({
   const cardEnabled = billingProvider === "asaas" || (billingProvider === "mercado_pago" && Boolean(cardPublicKey));
   const providerLabel = billingProvider === "asaas" ? "Asaas" : billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
   const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardEnabled ? "card" : "pix");
+  const [pixAutomatic, setPixAutomatic] = useState<PixAutomaticSnapshot | null>(null);
+  const [pixAutomaticError, setPixAutomaticError] = useState("");
+  const pixAutomaticLocked = Boolean(pixAutomatic?.authorization && !pixAutomatic.authorization.canRetry);
   const [pix, setPix] = useState<PixState>({
     qrCode: initialPixQrCode,
     qrCodeBase64: initialPixQrCodeBase64,
@@ -185,6 +189,22 @@ export function BillingPlanCheckout({
     [selectedBumpCodes],
   );
   const activeNotice = notice ?? paymentStatusNotice;
+
+  const updatePixAutomatic = useCallback((next: PixAutomaticSnapshot) => {
+    setPixAutomatic(next);
+    if (next.authorization && !next.authorization.canRetry) setMethod("pix_automatic");
+    if (next.authorization?.active) router.refresh();
+  }, [router]);
+  useEffect(() => {
+    if (billingProvider !== "asaas" || purchaseKind !== "plan" || cartSyncing) return;
+    let disposed = false;
+    void fetch(`/api/dashboard/billing/checkout/${subscriptionId}/pix-automatic`, { cache: "no-store" }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Pix Automático indisponível.");
+      if (!disposed) { updatePixAutomatic(data); setPixAutomaticError(""); }
+    }).catch(error => { if (!disposed) setPixAutomaticError(error.message); });
+    return () => { disposed = true; };
+  }, [billingProvider, purchaseKind, subscriptionId, cartSyncing, totalAmount, updatePixAutomatic]);
 
   const queueCheckoutRefresh = useCallback(() => {
     if (approvalRefreshQueuedRef.current) return;
@@ -653,21 +673,26 @@ export function BillingPlanCheckout({
             <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-100 p-1">
               <PaymentMethodButton
                 active={method === "card"}
-                disabled={!cardEnabled}
+                disabled={!cardEnabled || pixAutomaticLocked}
                 icon={<CreditCard className="h-4 w-4" />}
-                label="Cartao"
+                label="Cartão"
                 onClick={() => setMethod("card")}
               />
               <PaymentMethodButton
                 active={method === "pix"}
-                disabled={false}
+                disabled={pixAutomaticLocked}
                 icon={<QrCode className="h-4 w-4" />}
-                label="Pix"
+                label="Pix comum"
                 onClick={() => setMethod("pix")}
               />
+              {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<QrCode className="h-4 w-4" />} label="Pix Automático" onClick={() => setMethod("pix_automatic")} /> : null}
             </div>
 
-            {method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
+            {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization ? <p className="mt-3 text-sm text-slate-300">{pixAutomaticError || pixAutomatic?.reason || "Conferindo disponibilidade do Pix Automático…"}</p> : null}
+            {method === "card" && billingProvider === "asaas" ? <p className="mt-3 text-sm text-slate-300">Cartão: pagamento inicial e, com sua autorização, tokenização para renovações automáticas.</p> : null}
+            {method === "pix" ? <p className="mt-3 text-sm text-slate-300">Pix comum: pague manualmente pelo QR Code ou copia e cola. Esta opção não autoriza débitos recorrentes.</p> : null}
+
+            {method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
               <MercadoPagoCardBrick
                 key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
                 publicKey={cardPublicKey}
