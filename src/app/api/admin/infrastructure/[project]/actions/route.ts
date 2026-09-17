@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { access, audit, failure, getProject, migrationCatalog, migrationExecution, response } from "@/lib/infrastructure/server";
 import { actions, blockedReason } from "@/lib/infrastructure/model";
 import { choice, identifier, keys, object, readBody } from "@/lib/infrastructure/validation";
+import { executeMigration } from "@/lib/infrastructure/executor";
+import { executionPolicy } from "@/lib/infrastructure/sql-policy";
+export const maxDuration = 60;
 export async function POST(request: Request, context: { params: Promise<{ project: string }> }) {
   let actor: string | null = null;
   let projectId: string | null = null;
@@ -19,7 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ projec
       return response({ error: "Origem não autorizada." }, 403);
     }
     const body = object(await readBody(request));
-    keys(body, ["action", "target", "confirmation", "checksum"]);
+    keys(body, ["action", "target", "confirmation", "checksum", "riskAccepted"]);
     const action = choice(body.action, actions);
     if (!auth.canOperate) {
       await audit(actor, project, action, "denied", "infra_admin_required");
@@ -36,11 +39,22 @@ export async function POST(request: Request, context: { params: Promise<{ projec
         await audit(actor, project, action, "denied", "migration_not_versioned_or_changed", target);
         return response({ error: "Migration inexistente ou checksum alterado. Reabra o preview." }, 409);
       }
+      if (body.riskAccepted !== migration.checksum) {
+        await audit(actor, project, action, "denied", "sql_review_required", target);
+        return response({ error: "Confirme a revisão do SQL e dos riscos para este hash." }, 409);
+      }
+      const blockers = executionPolicy(migration.sql);
+      if (blockers.length) {
+        await audit(actor, project, action, "blocked", "sql_requires_host_review", target, { checksum: migration.checksum });
+        return response({ error: blockers.join(" ") }, 422);
+      }
       const execution = migrationExecution(project);
       if (execution.status === "blocked") {
-        await audit(actor, project, action, "blocked", "migration_execution_not_configured", target);
+        await audit(actor, project, action, "blocked", "migration_execution_not_configured", target, { version: migration.version, checksum: migration.checksum });
         return response({ error: "Migration preparada, mas a execução está bloqueada por configuração.", execution, risk: migration.risk }, 501);
       }
+      const result = await executeMigration(project, actor, migration);
+      return response(result, result.status === "error" ? 409 : 200);
     }
     await audit(actor, project, action, "blocked", "execution_adapter_unavailable", target);
     return response({ error: blockedReason }, 501);

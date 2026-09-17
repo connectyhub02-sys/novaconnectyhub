@@ -1,5 +1,22 @@
 # Estado operacional da ConnectyHub
 
+## Cockpit operacional — camada real, 16/09/2026
+
+Implementados coleta HTTP por projeto no servidor, diagnóstico de configuração,
+preparação imutável de SQL, executor PostgreSQL transacional com confirmação/hash,
+auditoria e proteção contra reaplicação. Rota oficial: **Admin OS > Sistema >
+Infraestrutura**. Hora Space acrescentada; vínculo de organização preparado e
+acesso cliente desligado. Migration 0151 aplicada e verificada no Supabase da CH:
+quatro projetos, RPCs restritas ao serviço, nenhum cliente habilitado. Sem SQL
+operacional em banco de cliente durante a publicação.
+
+App/login, Auth, REST e Supabase Storage responderam 200; Inngest health respondeu
+401 e requer autenticação própria do coletor. Execução de migrations exige UUID
+em `INFRA_ADMIN_USER_IDS` e conexão PostgreSQL TLS por projeto, além de flag/executor
+explicitamente habilitados. Publicação da aplicação e conferência visual em curso;
+não confundir schema aplicado com aplicação publicada.
+[Implementação, configuração, riscos e evidência](infraestrutura-operacional-2026-09-16.md).
+
 ## Cockpit de infraestrutura — MVP local, 16/09/2026
 
 Implementadas `/admin/infrastructure` e páginas por projeto, com inventário

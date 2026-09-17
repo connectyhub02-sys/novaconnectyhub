@@ -10,7 +10,7 @@ export const originLabels: Record<DeployOrigin, string> = { vercel: "Deploy Verc
 export const actions = ["migration_apply", "inngest_pause", "inngest_resume", "inngest_retry", "inngest_resend", "app_rollback"] as const;
 export type InfraAction = typeof actions[number];
 export const actionLabels: Record<InfraAction, string> = { migration_apply: "Aplicar migration", inngest_pause: "Pausar função", inngest_resume: "Retomar função", inngest_retry: "Reprocessar job", inngest_resend: "Reenviar evento", app_rollback: "Rollback do app" };
-export const blockedReason = "Somente leitura: adaptador de execução e credenciais com escopo ainda não habilitados. Nenhuma operação será executada.";
+export const blockedReason = "Esta operação de Inngest/rollback requer adaptador específico e credenciais com escopo. Ela ainda não está habilitada; a tentativa será auditada sem executar comandos.";
 export type Project = { id: string; name: string; company: string; environment: string; topology: DeployOrigin | "unknown"; app: string; supabase: string; inngest: string; worker: string; storage: string };
 export type Deployment = { id: string; project_id: string; app: string; origin: DeployOrigin; stage: Stage; current_image: string; new_image: string; executor: string; container: string; health: Health; sequence: number; started_at: string; finished_at: string | null; updated_at: string };
 export type DeployEvent = { sequence: number; stage: Stage; code: string; created_at: string; executor: string };
@@ -28,11 +28,12 @@ export type Telemetry = { received_at: string; observed_at: string; executor: st
 export type MigrationRiskLevel = "low" | "review" | "destructive";
 export type MigrationRisk = { level: MigrationRiskLevel; transactional: boolean; reasons: string[] };
 export const migrationRiskLabels: Record<MigrationRiskLevel, string> = { low: "Risco baixo", review: "Revisão necessária", destructive: "Destrutiva · confirmação extra" };
-export type Migration = { version: string; name: string; sql: string; checksum: string; risk: MigrationRisk };
+export type Migration = { version: string; name: string; sql: string; checksum: string; risk: MigrationRisk; blockers?: string[] };
 export type MigrationExecution = { status: "ready" | "blocked"; missing: string[]; project: string };
 export type Audit = { id: string; actor: string; action: string; target: string | null; result: string; reason: string; created_at: string; before_state: unknown; after_state: unknown };
-export type Overview = { projects: Project[]; telemetry: (Telemetry & { project_id: string })[]; canOperate: boolean };
-export type Detail = { project: Project; telemetry: Telemetry | null; deployments: Deployment[]; events: DeployEvent[]; selectedDeployId: string | null; audit: Audit[]; canOperate: boolean; truncated: boolean };
+export type HealthCheck = { service: string; health: Health; reason: string; checkedAt: string };
+export type Overview = { projects: Project[]; telemetry: (Telemetry & { project_id: string })[]; canOperate: boolean; permissionReason?: string };
+export type Detail = { project: Project; telemetry: Telemetry | null; live?: { checks: HealthCheck[]; telemetry: Telemetry | null }; deployments: Deployment[]; events: DeployEvent[]; selectedDeployId: string | null; audit: Audit[]; canOperate: boolean; truncated: boolean; permissionReason?: string };
 
 export function stale(telemetry: Telemetry | null | undefined, now = Date.now()) {
   return !telemetry || now - Date.parse(telemetry.observed_at) > 120_000;
