@@ -1,5 +1,37 @@
 # Estado operacional da ConnectyHub
 
+## Modal de agentes, status e upload — complemento de 18/09/2026
+
+Após o pacote `851707e2`, cadastro e edição passaram a abrir um modal no editor
+compartilhado do cliente/acesso assistido e dos agentes internos. O cadastro salva
+empresa/setor/nome/função antes de liberar a conexão na mesma janela. QR Code,
+código por telefone, diagnóstico, status, reset, remoção e migração permanecem
+no componente de conexão, agora dentro de Editar. A aba Conexão mostra somente
+identidade, número, estado e preferências para leitura.
+
+Qualificação usa quatro sanfonas compactas, empilhadas, com altura/largura iguais
+às do Prompt e fechadas ao entrar. Cartões substituem estados internos do cadastro
+por Online/Offline/Conectando da instância do próprio agente e organização;
+consulta indisponível não é apresentada como Online. A lista consulta o estado
+persistido a cada 15 segundos sem substituir rascunhos; a atualização depende
+dos registros de conexão/webhooks e não constitui monitoramento externo contínuo.
+
+Arquivos do negócio têm área clicável e de arrastar/soltar, seleção dentro da
+área, indicação de envio, validação de formato/tamanho e erros locais. Mantido
+o contrato existente: um arquivo por envio, até 12 MB e mesmos formatos aceitos
+no servidor. Upload e edição de identidade preservam o rascunho do Prompt.
+
+Evidências: 228 testes direcionados em cinco arquivos e ESLint aprovados.
+Playwright com HTTP sintético confirmou cadastro inicial, edição com erro/retry,
+ações vinculadas ao agente correto, QR em janela sobreposta, Escape, layout
+em 1920/390 px, sanfonas, alteração do status de outro agente, upload por arrastar
+e seletor, validação/erro/recuperação e preservação de rascunho. Variantes cliente
+e interna sem erros JavaScript. Rotas temporárias de ensaio removidas.
+Build `next build --webpack`, TypeScript e geração de 108 páginas aprovados.
+Pacote preparado sobre `851707e2` para o envio autorizado à master. Nenhum agente,
+conexão, arquivo ou provedor real foi alterado pelos testes; implantação e
+pareamento/envio/extração reais ainda não foram conferidos nesta rodada.
+
 ## Auditoria dos controles de agentes — pacote para master em 18/09/2026
 
 Auditados os caminhos de Conexão, Prompt, Qualificação e Comportamento no editor

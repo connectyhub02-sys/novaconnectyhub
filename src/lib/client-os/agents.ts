@@ -43,6 +43,7 @@ export type ClientAgent = {
   name: string;
   avatarUrl: string | null;
   avatarAlt: string | null;
+  whatsappStatus: string | null;
   personaName: string;
   roleTitle: string;
   description: string | null;
@@ -148,17 +149,17 @@ export async function getClientAgentsWorkspace(
   const companyById = new Map(companies.map((company) => [company.id, company]));
   const agents = ((data ?? []) as AgentRow[]).map((agent) => mapAgent(agent, companyById));
 
-  if (agents.some((agent) => !agent.avatarUrl)) {
-    const { data: instances } = await client.from("whatsapp_instances")
-      .select("organization_id, metadata")
+  if (agents.length) {
+    const { data: instances, error: instancesError } = await client.from("whatsapp_instances")
+      .select("organization_id, status, metadata")
       .in("organization_id", companyIds)
       .neq("status", "archived")
       .order("updated_at", { ascending: false });
     for (const agent of agents) {
-      if (agent.avatarUrl) continue;
       const instance = instances?.find((row) => row.organization_id === agent.companyId
         && row.metadata?.agent_id === agent.id);
-      agent.avatarUrl = readWhatsappInstanceProfileImageUrl(instance?.metadata);
+      agent.whatsappStatus = instancesError ? null : instance?.status ?? "draft";
+      agent.avatarUrl ??= readWhatsappInstanceProfileImageUrl(instance?.metadata);
     }
   }
 
@@ -721,6 +722,7 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     name: agent.name,
     avatarUrl: agent.avatar_url ?? null,
     avatarAlt: agent.avatar_alt ?? null,
+    whatsappStatus: null as string | null,
     personaName: agent.persona_name ?? agent.name,
     roleTitle: agent.role_title,
     description: agent.description,

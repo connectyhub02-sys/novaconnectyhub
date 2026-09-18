@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ActivitySelect } from "./activity-select";
 import { applyActivityCloneProfile, applyActivityQualification, applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -225,6 +225,7 @@ type ClientWhatsappAgent = {
   name: string;
   avatarUrl: string | null;
   avatarAlt: string | null;
+  whatsappStatus: string | null;
   personaName: string;
   roleTitle: string;
   description: string | null;
@@ -597,6 +598,9 @@ export function WhatsAppConsole({
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
+  const [editingClientAgentId, setEditingClientAgentId] = useState<string | null>(null);
+  const [newAgentCompanyId, setNewAgentCompanyId] = useState("");
+  const [agentRoleTitle, setAgentRoleTitle] = useState(agentPromptTemplates[0].roleTitle);
   const [agentName, setAgentName] = useState("Assistente");
   const [agentSectorName, setAgentSectorName] = useState(agentPromptTemplates[0].sectorName);
   const [agentResponsibles, setAgentResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
@@ -609,6 +613,7 @@ export function WhatsAppConsole({
   const [internalSectorName, setInternalSectorName] = useState("");
   const [internalSectorDescription, setInternalSectorDescription] = useState("");
   const [internalAgentName, setInternalAgentName] = useState("");
+  const [internalAgentRoleTitle, setInternalAgentRoleTitle] = useState(variant.agentRoleTitle);
   const [creatingInternalAgent, setCreatingInternalAgent] = useState(false);
   const [showInternalAgentEdit, setShowInternalAgentEdit] = useState(false);
   const [editingInternalAgent, setEditingInternalAgent] = useState(false);
@@ -662,7 +667,8 @@ export function WhatsAppConsole({
     const nextAgent = nextAgents.find((agent) => agent.id === nextAgentId);
     const nextCompanyId = nextState.selectedCompanyId ?? nextAgent?.companyId ?? nextState.agent?.companyId ?? nextState.companies[0]?.id ?? "";
 
-    setState(nextState);
+    setState({ ...nextState, agents: nextAgents.map(agent => agent.id === nextAgentId
+      ? { ...agent, whatsappStatus: nextState.instance?.status ?? "draft" } : agent) });
     setSelectedCompanyId(nextCompanyId);
     setSelectedAgentId(nextAgentId);
     if (nextState.defaultResponsible) {
@@ -844,6 +850,26 @@ export function WhatsAppConsole({
     };
   }, [applyWhatsappState, isConnected, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
 
+  useEffect(() => {
+    if (canManageInternalAgents || !selectedAgentId || loading || running || updatingClientAgentId || creatingAgent) return;
+    let cancelled = false;
+    let pending = false;
+    async function refreshAgentIndicators() {
+      if (document.hidden || pending) return;
+      pending = true;
+      try {
+        const snapshot = await fetchWhatsappState(variant, selectedAgentId);
+        if (!cancelled) setState(current => current ? { ...current, agents: current.agents?.map(agent => ({
+          ...agent, whatsappStatus: snapshot.agents?.find(item => item.id === agent.id)?.whatsappStatus ?? null,
+        })) } : current);
+      } catch {
+        if (!cancelled) setState(current => current ? { ...current, agents: current.agents?.map(agent => ({ ...agent, whatsappStatus: null })) } : current);
+      } finally { pending = false; }
+    }
+    const interval = setInterval(refreshAgentIndicators, 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [canManageInternalAgents, creatingAgent, loading, running, selectedAgentId, updatingClientAgentId, variant]);
+
   const selectedAgentNameNormalized = normalizeEditableAgentName(state?.agent?.name ?? "");
   const selectedActivity = agentPromptTemplates.find((item) => item.id === promptTemplateDraft.templateId) ?? agentPromptTemplates[0];
   const promptTemplateForSave: AgentPromptBuilderConfig = selectedActivity.kind === "professional"
@@ -940,6 +966,7 @@ export function WhatsAppConsole({
 
     setAgentTemplateId(template.id);
     setAgentSectorName(template.sectorName);
+    setAgentRoleTitle(template.roleTitle);
   }
 
   function updatePromptTemplateDraft(patch: Partial<AgentPromptBuilderConfig>) {
@@ -1227,8 +1254,8 @@ export function WhatsAppConsole({
   }
 
   async function uploadKnowledgeFile(file: File | null) {
-    if (!file || !selectedCompanyId) {
-      return;
+    if (!file || !selectedCompanyId || knowledgeUploading) {
+      return "Selecione um agente e aguarde o envio atual antes de anexar outro arquivo.";
     }
 
     const formData = new FormData();
@@ -1251,15 +1278,18 @@ export function WhatsAppConsole({
       const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setNotice({ tone: "success", message: "Arquivo adicionado a inteligencia do agente." });
+      return null;
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao anexar arquivo." });
+      const message = error instanceof Error ? error.message : "Erro ao anexar arquivo.";
+      setNotice({ tone: "error", message });
+      return message;
     } finally {
       setKnowledgeUploading(false);
     }
   }
 
   async function createWhatsappAgent() {
-    if (!selectedCompanyId) {
+    if (!newAgentCompanyId) {
       setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o agente.` });
       return;
     }
@@ -1278,10 +1308,10 @@ export function WhatsAppConsole({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create_agent",
-          [variant.entityIdKey]: selectedCompanyId,
+          [variant.entityIdKey]: newAgentCompanyId,
           name: agentName.trim() || "Agente WhatsApp",
           sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
-          roleTitle: template.roleTitle || variant.agentRoleTitle,
+          roleTitle: agentRoleTitle.trim() || template.roleTitle || variant.agentRoleTitle,
           responsibleHumans: responsiblePayload,
           responsibleHumanName: firstResponsible.name,
           responsibleHumanPhone: firstResponsible.phone,
@@ -1290,7 +1320,7 @@ export function WhatsAppConsole({
       });
       const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
 
-      if (!response.ok) {
+      if (!response.ok || !data?.agent?.id) {
         throw new Error(data?.error ?? "Nao foi possivel criar o agente.");
       }
 
@@ -1298,9 +1328,15 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setAgentName("Assistente");
       setAgentSectorName(agentPromptTemplates[0].sectorName);
+      setAgentRoleTitle(agentPromptTemplates[0].roleTitle);
       setAgentResponsibles([createResponsibleHumanDraft(nextState.defaultResponsible)]);
       setAgentTemplateId(defaultAgentPromptTemplateId);
       setShowAgentForm(false);
+      setEditingClientAgentId(data.agent.id);
+      setQrCode(null);
+      setPairCode(null);
+      setConnectPhone("");
+      setConnectMode("qr");
       setActiveTab("connection");
       setNotice({ tone: "success", message: "Agente criado com o perfil da atividade pronto. Conecte o WhatsApp para começar a receber mensagens." });
     } catch (error) {
@@ -1391,7 +1427,7 @@ export function WhatsAppConsole({
       }
 
       const nextState = await fetchWhatsappState(variant, data.agent.id);
-      applyWhatsappState(nextState);
+      applyWhatsappState(nextState, { preserveDrafts: settingsChanged && agentId === selectedAgentId });
       setNotice({ tone: "success", message: "Agente atualizado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao editar agente." });
@@ -1456,15 +1492,14 @@ export function WhatsAppConsole({
   }
 
   async function switchWhatsappAgent(nextAgentId: string) {
-    if (running || !nextAgentId || nextAgentId === selectedAgentId) {
-      return;
-    }
+    if (running || knowledgeUploading || !nextAgentId) return false;
+    if (nextAgentId === selectedAgentId) return true;
 
     if (settingsChanged) {
       const confirmed = window.confirm("Existem alteracoes nao salvas neste agente. Abrir outro agente mesmo assim?");
 
       if (!confirmed) {
-        return;
+        return false;
       }
     }
 
@@ -1479,15 +1514,17 @@ export function WhatsAppConsole({
       setQrCode(null);
       setPairCode(null);
       setShowInternalAgentEdit(false);
+      return true;
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Nao foi possivel abrir este agente." });
+      return false;
     } finally {
       setRunning(null);
     }
   }
 
   async function switchWhatsappEntity(nextEntityId: string) {
-    if (running || !nextEntityId || nextEntityId === selectedCompanyId) {
+    if (running || knowledgeUploading || !nextEntityId || nextEntityId === selectedCompanyId) {
       return;
     }
 
@@ -1538,7 +1575,7 @@ export function WhatsAppConsole({
           sectorName,
           description: internalSectorDescription,
           name,
-          roleTitle: variant.agentRoleTitle,
+          roleTitle: internalAgentRoleTitle.trim() || variant.agentRoleTitle,
         }),
       });
       const data = (await response.json().catch(() => null)) as ActionResponse | null;
@@ -1552,6 +1589,9 @@ export function WhatsAppConsole({
       setInternalSectorDescription("");
       setInternalAgentName("");
       setShowInternalAgentForm(false);
+      openInternalAgentEdit(data.state.agent);
+      setConnectPhone("");
+      setConnectMode("qr");
       setQrCode(null);
       setPairCode(null);
       setNotice(data.notice ?? { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." });
@@ -1562,17 +1602,17 @@ export function WhatsAppConsole({
     }
   }
 
-  function openInternalAgentEdit() {
-    if (!state?.agent) {
+  function openInternalAgentEdit(agent: WhatsappState["agent"] = state?.agent ?? null) {
+    if (!agent) {
       setNotice({ tone: "warning", message: "Escolha um agente interno antes de editar." });
       return;
     }
 
-    setInternalEditName(state.agent.name);
-    setInternalEditPersonaName(state.agent.name);
-    setInternalEditRoleTitle(state.agent.roleTitle ?? variant.agentRoleTitle);
-    setInternalEditDescription(state.agent.description ?? "");
-    setInternalEditAutomationRoles(normalizeAgentAutomationRoles(state.agent.automationRoles));
+    setInternalEditName(agent.name);
+    setInternalEditPersonaName(agent.name);
+    setInternalEditRoleTitle(agent.roleTitle ?? variant.agentRoleTitle);
+    setInternalEditDescription(agent.description ?? "");
+    setInternalEditAutomationRoles(normalizeAgentAutomationRoles(agent.automationRoles));
     setShowInternalAgentEdit(true);
   }
 
@@ -1612,8 +1652,7 @@ export function WhatsAppConsole({
         throw new Error(data?.error ?? "Nao foi possivel atualizar o agente interno.");
       }
 
-      applyWhatsappState(data.state);
-      setShowInternalAgentEdit(false);
+      applyWhatsappState(data.state, { preserveDrafts: settingsChanged });
       setNotice(data.notice ?? { tone: "success", message: "Agente interno atualizado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar agente interno." });
@@ -1671,6 +1710,51 @@ export function WhatsAppConsole({
     }
   }
 
+  function startNewClientAgent() {
+    if (running || knowledgeUploading || creatingAgent || updatingClientAgentId) return;
+    if (settingsChanged && !window.confirm("Existem alterações não salvas. Continuar com o cadastro de outro agente?")) return;
+    setNewAgentCompanyId(selectedCompanyId || companies[0]?.id || "");
+    setEditingClientAgentId(null);
+    setNotice(null);
+    setShowAgentForm(true);
+  }
+
+  async function openClientAgentEdit(agent: ClientWhatsappAgent) {
+    if (knowledgeUploading || creatingAgent || updatingClientAgentId || deletingAgentId) return;
+    if (!await switchWhatsappAgent(agent.id)) return;
+    setShowAgentForm(false);
+    setEditingClientAgentId(agent.id);
+    setNotice(null);
+  }
+
+  const connectionEditor = state?.agent ? (
+<CompactConnectionCard
+                instance={state?.instance ?? null}
+                qrCode={qrCode}
+                pairCode={pairCode}
+                connectMode={connectMode}
+                connectPhone={connectPhone}
+                running={running || (updatingClientAgentId || editingInternalAgent ? "save_agent" : null)}
+                migrationCopying={migrationCopying}
+                onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
+                onCopyMigrationCredential={copyMigrationCredential}
+                onConnectModeChange={(mode) => {
+                  setConnectMode(mode);
+                  setQrCode(null);
+                  setPairCode(null);
+                }}
+                onConnectPhoneChange={setConnectPhone}
+                onDisconnect={() => {
+                  const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA instancia sera excluida do painel e da Uazapi para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
+                  if (confirmed) void runAction("disconnect");
+                }}
+                onRefresh={() => runAction("refresh_status")}
+                onReset={() => runAction("reset_connection", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
+                enabled={variant.connectionEnabled && Boolean(state?.capability.canConnect)}
+                disabledReason={state?.capability.message ?? variant.connectionDisabledReason}
+              />
+  ) : null;
+
   return (
     <>
       <SectionHeader
@@ -1684,8 +1768,8 @@ export function WhatsAppConsole({
         <div className="my-4 rounded-xl border bg-white p-4" aria-label="Configuração inicial em três passos">
           <ol className="grid gap-3 sm:grid-cols-3">
             <li className="text-sm"><span className="font-semibold">1. Seu negócio</span><p className="mt-1 text-xs text-slate-500">{selectedCompany?.name || "Cadastre seu nome profissional ou comercial."}</p></li>
-            <li><button className="text-left text-sm" onClick={() => state?.agent ? setActiveTab("prompt") : setShowAgentForm(true)}><span className="font-semibold">2. Sua atividade</span><span className="mt-1 block text-xs text-slate-500">{state?.agent ? agentPromptTemplates.find((item) => item.id === state.agent?.promptTemplateConfig?.templateId)?.label || "Revisar atividade" : "Escolha e receba o atendimento pronto."}</span></button></li>
-            <li><button className="text-left text-sm" disabled={!state?.agent} onClick={() => setActiveTab("connection")}><span className="font-semibold">3. Conectar WhatsApp</span><span className="mt-1 block text-xs text-slate-500">{isConnected ? "WhatsApp conectado" : "Leia o QR Code para conectar."}</span></button></li>
+            <li><button className="text-left text-sm" onClick={() => state?.agent ? setActiveTab("prompt") : startNewClientAgent()}><span className="font-semibold">2. Sua atividade</span><span className="mt-1 block text-xs text-slate-500">{state?.agent ? agentPromptTemplates.find((item) => item.id === state.agent?.promptTemplateConfig?.templateId)?.label || "Revisar atividade" : "Escolha e receba o atendimento pronto."}</span></button></li>
+            <li><button className="text-left text-sm" disabled={!state?.agent} onClick={() => { const agent = agents.find(item => item.id === selectedAgentId); if (agent) void openClientAgentEdit(agent); }}><span className="font-semibold">3. Conectar WhatsApp</span><span className="mt-1 block text-xs text-slate-500">{isConnected ? "WhatsApp conectado" : "Leia o QR Code para conectar."}</span></button></li>
           </ol>
           {state?.agent && isConnected ? <p className="mt-3 border-t pt-3 text-xs text-slate-600">{settingsChanged ? "Há alterações para salvar antes de usar no atendimento." : state.behavior.agentEnabled ? "Configuração salva e WhatsApp conectado. Envie uma mensagem de teste para conferir o atendimento. Você pode adicionar produtos e informações aos poucos." : "O agente está pausado. Ative o atendimento na aba Comportamento quando quiser retomar."}</p> : null}
         </div>
@@ -1697,104 +1781,22 @@ export function WhatsAppConsole({
         />
       ) : null}
 
-      {loading ? (
-        <LoadingState />
-      ) : companies.length === 0 && !canManageInternalAgents ? (
+      {loading ? <LoadingState /> : companies.length === 0 && !canManageInternalAgents ? (
         <CompanyRequiredState variant={variant} />
-      ) : companies.length === 0 && canManageInternalAgents ? (
-        <InternalAgentsManager
-          agent={state?.agent ?? null}
-          agentName={internalAgentName}
-          archiving={archivingInternalAgent}
-          companies={companies}
-          creating={creatingInternalAgent}
-          editing={editingInternalAgent}
-          editAutomationRoles={internalEditAutomationRoles}
-          editDescription={internalEditDescription}
-          editName={internalEditName}
-          editPersonaName={internalEditPersonaName}
-          editRoleTitle={internalEditRoleTitle}
-          instance={state?.instance ?? null}
-          sectorDescription={internalSectorDescription}
-          sectorName={internalSectorName}
-          selectedCompany={selectedCompany}
-          selectedCompanyId={selectedCompanyId}
-          showEdit={showInternalAgentEdit}
-          showForm
-          onAgentNameChange={setInternalAgentName}
-          onArchive={archiveInternalWhatsappAgent}
-          onCancel={() => setShowInternalAgentForm(false)}
-          onCreate={createInternalWhatsappAgent}
-          onEditAutomationRoleChange={updateInternalAgentAutomationRole}
-          onEditCancel={() => setShowInternalAgentEdit(false)}
-          onEditDescriptionChange={setInternalEditDescription}
-          onEditNameChange={setInternalEditName}
-          onEditPersonaNameChange={setInternalEditPersonaName}
-          onEditRoleTitleChange={setInternalEditRoleTitle}
-          onEditSave={saveInternalAgentProfile}
-          onEditStart={openInternalAgentEdit}
-          onSectorDescriptionChange={setInternalSectorDescription}
-          onSectorNameChange={setInternalSectorName}
-          onSelectCompany={switchWhatsappEntity}
-          onStart={() => setShowInternalAgentForm(true)}
-          variant={variant}
-        />
-      ) : !state?.agent && !canManageInternalAgents ? (
-        <ClientAgentsManager
-          agentName={agentName}
-          agentTemplateId={agentTemplateId}
-          agents={agents}
-          companies={companies}
-          creating={creatingAgent}
-          deletingAgentId={deletingAgentId}
-          sectorName={agentSectorName}
-          responsibleHumans={agentResponsibles}
-          selectedAgentId={selectedAgentId}
-          selectedCompanyId={selectedCompanyId}
-          showForm={showAgentForm}
-          testingAgentId={testingResponsibleAgentId}
-          updatingAgentId={updatingClientAgentId}
-          onAgentNameChange={setAgentName}
-          onAgentTemplateChange={updateNewAgentTemplate}
-          onCancel={() => setShowAgentForm(false)}
-          onClone={cloneWhatsappAgent}
-          onCreate={createWhatsappAgent}
-          onDelete={deleteWhatsappAgent}
-          onSectorNameChange={setAgentSectorName}
-          onResponsibleHumansChange={setAgentResponsibles}
-          onSelectAgent={switchWhatsappAgent}
-          onSelectCompany={setSelectedCompanyId}
-          onStart={() => setShowAgentForm(true)}
-          onTestResponsibles={testWhatsappAgentResponsibles}
-          onUpdate={updateWhatsappAgent}
-          variant={variant}
-        />
-      ) : !state?.agent ? (
-        <AgentCreationGate
-          agentName={agentName}
-          agentTemplateId={agentTemplateId}
-          companies={companies}
-          creating={creatingAgent}
-          selectedCompany={selectedCompany}
-          selectedCompanyId={selectedCompanyId}
-          showForm={showAgentForm}
-          responsibleHumans={agentResponsibles}
-          onAgentNameChange={setAgentName}
-          onAgentTemplateChange={updateNewAgentTemplate}
-          onCancel={() => setShowAgentForm(false)}
-          onCreate={createWhatsappAgent}
-          onSectorNameChange={setAgentSectorName}
-          onResponsibleHumansChange={setAgentResponsibles}
-          onSelectCompany={setSelectedCompanyId}
-          onStart={() => setShowAgentForm(true)}
-          sectorName={agentSectorName}
-          variant={variant}
-        />
       ) : (
       <>
         {!canManageInternalAgents ? (
           <ClientAgentsManager
             agentName={agentName}
+            agentRoleTitle={agentRoleTitle}
+            newCompanyId={newAgentCompanyId || selectedCompanyId}
+            editingAgentId={editingClientAgentId}
+            connection={connectionEditor}
+            notice={notice}
+            busy={Boolean(running || knowledgeUploading || updatingClientAgentId || testingResponsibleAgentId)}
+            onAgentRoleTitleChange={setAgentRoleTitle}
+            onEdit={openClientAgentEdit}
+            onEditClose={() => setEditingClientAgentId(null)}
             agentTemplateId={agentTemplateId}
             agents={agents}
             companies={companies}
@@ -1816,8 +1818,8 @@ export function WhatsAppConsole({
             onSectorNameChange={setAgentSectorName}
             onResponsibleHumansChange={setAgentResponsibles}
             onSelectAgent={switchWhatsappAgent}
-            onSelectCompany={setSelectedCompanyId}
-            onStart={() => setShowAgentForm(true)}
+            onSelectCompany={setNewAgentCompanyId}
+            onStart={startNewClientAgent}
             onTestResponsibles={testWhatsappAgentResponsibles}
             onUpdate={updateWhatsappAgent}
             variant={variant}
@@ -1826,8 +1828,13 @@ export function WhatsAppConsole({
 
         {canManageInternalAgents ? (
           <InternalAgentsManager
-            agent={state.agent}
+            agent={state?.agent ?? null}
             agentName={internalAgentName}
+            agentRoleTitle={internalAgentRoleTitle}
+            onAgentRoleTitleChange={setInternalAgentRoleTitle}
+            connection={connectionEditor}
+            notice={notice}
+            busy={Boolean(running || editingInternalAgent || knowledgeUploading)}
             archiving={archivingInternalAgent}
             companies={companies}
             creating={creatingInternalAgent}
@@ -1837,7 +1844,7 @@ export function WhatsAppConsole({
             editName={internalEditName}
             editPersonaName={internalEditPersonaName}
             editRoleTitle={internalEditRoleTitle}
-            instance={state.instance}
+            instance={state?.instance ?? null}
             sectorDescription={internalSectorDescription}
             sectorName={internalSectorName}
             selectedCompany={selectedCompany}
@@ -1855,15 +1862,20 @@ export function WhatsAppConsole({
             onEditPersonaNameChange={setInternalEditPersonaName}
             onEditRoleTitleChange={setInternalEditRoleTitle}
             onEditSave={saveInternalAgentProfile}
-            onEditStart={openInternalAgentEdit}
+            onEditStart={() => openInternalAgentEdit()}
             onSectorDescriptionChange={setInternalSectorDescription}
             onSectorNameChange={setInternalSectorName}
             onSelectCompany={switchWhatsappEntity}
-            onStart={() => setShowInternalAgentForm(true)}
+            onStart={() => {
+              if (running || knowledgeUploading || creatingInternalAgent || editingInternalAgent) return;
+              if (settingsChanged && !window.confirm("Existem alterações não salvas. Continuar com o cadastro de outro agente?")) return;
+              setShowInternalAgentEdit(false); setNotice(null); setShowInternalAgentForm(true);
+            }}
             variant={variant}
           />
         ) : null}
 
+        {state?.agent ? <>
         <WhatsappConsoleCommandBar
           agent={state.agent}
           behavior={behaviorDraft}
@@ -1891,7 +1903,7 @@ export function WhatsAppConsole({
             eyebrow="numero / agente / status"
             action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
           >
-            <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-3 sm:gap-4">
               <div className="grid content-start gap-4">
                 <AgentIdentityCard
                   agent={state.agent}
@@ -1901,39 +1913,15 @@ export function WhatsAppConsole({
                   company={selectedCompany}
                   entityLabel={variant.entityPromptLabel}
                 />
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <InfoTile label="WhatsApp" value={getStatusMeta(state.instance?.status ?? "draft").label} />
+                  <InfoTile label="Número" value={formatPhone(state.instance?.phoneNumber)} />
                   <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
                   <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
                   <InfoTile label="Alteracoes" value={settingsChanged ? "Pendentes" : "Salvo"} />
                 </div>
               </div>
-              <BehaviorSection title="Conexão WhatsApp" description="Conecte o número e consulte o status do WhatsApp deste agente.">
-              <CompactConnectionCard
-                instance={state.instance}
-                qrCode={qrCode}
-                pairCode={pairCode}
-                connectMode={connectMode}
-                connectPhone={connectPhone}
-                running={running}
-                migrationCopying={migrationCopying}
-                onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
-                onCopyMigrationCredential={copyMigrationCredential}
-                onConnectModeChange={(mode) => {
-                  setConnectMode(mode);
-                  setQrCode(null);
-                  setPairCode(null);
-                }}
-                onConnectPhoneChange={setConnectPhone}
-                onDisconnect={() => {
-                  const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA instancia sera excluida do painel e da Uazapi para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
-                  if (confirmed) void runAction("disconnect");
-                }}
-                onRefresh={() => runAction("refresh_status")}
-                onReset={() => runAction("reset_connection", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
-                enabled={variant.connectionEnabled && state.capability.canConnect}
-                disabledReason={state.capability.message ?? variant.connectionDisabledReason}
-              />
-              </BehaviorSection>
+
             </div>
           </Panel>
         ) : null}
@@ -2035,7 +2023,7 @@ export function WhatsAppConsole({
           eyebrow="crm / perguntas / score"
           action={<NeonBadge tone={qualificationChanged ? "amber" : "green"}>{qualificationChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
-          <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid content-start gap-4">
             <LeadQualificationEditor
               config={qualificationDraft}
               entityLabel={variant.entityPromptLabel}
@@ -2045,7 +2033,7 @@ export function WhatsAppConsole({
               onRemoveQuestion={removeQualificationQuestion}
             />
             <LeadQualificationSummary config={qualificationDraft} changed={qualificationChanged} />
-            <div className="flex flex-wrap gap-2 2xl:col-start-2">
+            <div className="flex flex-wrap gap-2">
               <SecondaryAction
                 icon={RefreshCcw}
                 label="Restaurar salvo"
@@ -2315,6 +2303,7 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
+        </> : null}
       </>
       )}
     </>
@@ -2947,8 +2936,24 @@ function SummaryPill({
   );
 }
 
+function getAgentConnectionIndicator(status: string | null | undefined) {
+  if (status === "connected") return { label: "Online", className: "bg-emerald-500/10 text-emerald-700" };
+  if (status === "qr_pending") return { label: "Conectando", className: "bg-amber-500/10 text-amber-700" };
+  if (!status) return { label: "Indisponível", className: "bg-slate-100 text-slate-500" };
+  return { label: "Offline", className: "bg-rose-500/10 text-rose-700" };
+}
+
 function ClientAgentsManager({
   agentName,
+  agentRoleTitle,
+  newCompanyId,
+  editingAgentId,
+  connection,
+  notice,
+  busy,
+  onAgentRoleTitleChange,
+  onEdit,
+  onEditClose,
   agentTemplateId,
   agents,
   companies,
@@ -2977,6 +2982,15 @@ function ClientAgentsManager({
   variant,
 }: {
   agentName: string;
+  agentRoleTitle: string;
+  newCompanyId: string;
+  editingAgentId: string | null;
+  connection: ReactNode;
+  notice: Notice | null;
+  busy: boolean;
+  onAgentRoleTitleChange: (value: string) => void;
+  onEdit: (agent: ClientWhatsappAgent) => Promise<void>;
+  onEditClose: () => void;
   agentTemplateId: AgentPromptTemplateId;
   agents: ClientWhatsappAgent[];
   companies: ClientCompany[];
@@ -3015,17 +3029,11 @@ function ClientAgentsManager({
   const [cloneCompanyId, setCloneCompanyId] = useState(selectedCompanyId);
   const [cloneName, setCloneName] = useState("");
   const [cloneSectorName, setCloneSectorName] = useState("");
-  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
-  const [editCompanyId, setEditCompanyId] = useState(selectedCompanyId);
-  const [editName, setEditName] = useState("");
-  const [editRoleTitle, setEditRoleTitle] = useState("");
-  const [editSectorName, setEditSectorName] = useState("");
-  const [editPrompt, setEditPrompt] = useState("");
-  const [editResponsibles, setEditResponsibles] = useState<ResponsibleHumanDraft[]>(() => [createResponsibleHumanDraft()]);
   const cloneSource = agents.find((agent) => agent.id === cloneSourceId) ?? null;
   const editingAgent = agents.find((agent) => agent.id === editingAgentId) ?? null;
   const createFormComplete = Boolean(
-    selectedCompanyId
+    newCompanyId
+      && agentRoleTitle.trim()
       && agentName.trim()
       && sectorName.trim()
       && isResponsibleHumansDraftComplete(responsibleHumans),
@@ -3036,7 +3044,7 @@ function ClientAgentsManager({
     setCloneCompanyId(agent.companyId);
     setCloneName(`Copia de ${agent.name}`);
     setCloneSectorName(agent.sectorName);
-    setEditingAgentId(null);
+    onEditClose();
   }
 
   async function submitClone() {
@@ -3050,31 +3058,6 @@ function ClientAgentsManager({
     setCloneSourceId(null);
   }
 
-  function openEdit(agent: ClientWhatsappAgent) {
-    setEditingAgentId(agent.id);
-    setEditCompanyId(agent.companyId);
-    setEditName(agent.name);
-    setEditRoleTitle(agent.roleTitle);
-    setEditSectorName(agent.sectorName);
-    setEditPrompt(agent.prompt);
-    setEditResponsibles(toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : agent.responsibleHuman ? [agent.responsibleHuman] : []));
-    setCloneSourceId(null);
-  }
-
-  async function submitEdit() {
-    if (!editingAgent) return;
-
-    await onUpdate(editingAgent.id, {
-      companyId: editCompanyId || editingAgent.companyId,
-      name: editName || editingAgent.name,
-      sectorName: editSectorName || editingAgent.sectorName,
-      roleTitle: editRoleTitle || editingAgent.roleTitle,
-      prompt: editPrompt || editingAgent.prompt,
-      responsibleHumans: editResponsibles,
-    });
-    setEditingAgentId(null);
-  }
-
   return (
     <Panel
       title="Agentes WhatsApp"
@@ -3086,6 +3069,7 @@ function ClientAgentsManager({
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,290px),1fr))] items-start gap-2">
           {agents.length > 0 ? agents.map((agent) => {
             const active = agent.id === selectedAgentId;
+            const connectionIndicator = getAgentConnectionIndicator(agent.whatsappStatus);
             const deleting = deletingAgentId === agent.id;
             const testing = testingAgentId === agent.id;
             const updating = updatingAgentId === agent.id;
@@ -3105,7 +3089,7 @@ function ClientAgentsManager({
                     aria-label={`Selecionar agente ${agent.name}`}
                     title={`${agent.name} · ${summarizeResponsibleHumans(agent.responsibleHumans, agent.responsibleHuman)}`}
                     aria-pressed={active}
-                    disabled={creating || deleting || updating}
+                    disabled={busy || creating || deleting || updating}
                     onClick={() => onSelectAgent(agent.id)}
                     className="absolute inset-0 rounded-xl outline-none hover:bg-blue-500/5 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed"
                   />
@@ -3122,8 +3106,8 @@ function ClientAgentsManager({
                         {agent.companyName} / {agent.sectorName}
                       </p>
                     </div>
-                    <span className={cn("shrink-0 rounded-md px-1.5 py-1 font-mono text-[9px] uppercase", active ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
-                      {active ? "selecionado" : agent.status}
+                    <span aria-label={`WhatsApp ${connectionIndicator.label}`} className={cn("inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[9px] uppercase", connectionIndicator.className)}>
+                      <span className="size-1.5 rounded-full bg-current" />{connectionIndicator.label}
                     </span>
                   </div>
                   <div className="relative mt-1.5 grid grid-cols-4 gap-1">
@@ -3131,15 +3115,15 @@ function ClientAgentsManager({
                       compact
                       icon={PenLine}
                       label="Editar"
-                      disabled={creating || deleting || updating}
+                      disabled={busy || creating || deleting || updating}
                       loading={updating}
-                      onClick={() => openEdit(agent)}
+                      onClick={() => onEdit(agent)}
                     />
                     <SecondaryAction
                       compact
                       icon={UserRound}
                       label="Testar"
-                      disabled={creating || deleting || testing}
+                      disabled={busy || creating || deleting || testing}
                       loading={testing}
                       onClick={() => onTestResponsibles(agent)}
                     />
@@ -3147,7 +3131,7 @@ function ClientAgentsManager({
                       compact
                       icon={Copy}
                       label="Clonar"
-                      disabled={creating || deleting || updating}
+                      disabled={busy || creating || deleting || updating}
                       onClick={() => openClone(agent)}
                     />
                     <SecondaryAction
@@ -3155,33 +3139,13 @@ function ClientAgentsManager({
                       icon={Trash2}
                       label="Excluir"
                       loading={deleting}
-                      disabled={creating || updating}
+                      disabled={busy || creating || updating}
                       tone="danger"
                       onClick={() => onDelete(agent)}
                     />
                   </div>
                 </div>
-                {editingAgentId === agent.id && editingAgent ? (
-                  <ClientAgentInlineEditor
-                    agent={editingAgent}
-                    companies={companies}
-                    companyId={editCompanyId}
-                    disabled={creating || updating}
-                    name={editName}
-                    responsibleHumans={editResponsibles}
-                    roleTitle={editRoleTitle}
-                    sectorName={editSectorName}
-                    testing={testing}
-                    onCancel={() => setEditingAgentId(null)}
-                    onCompanyChange={setEditCompanyId}
-                    onNameChange={setEditName}
-                    onResponsibleHumansChange={setEditResponsibles}
-                    onRoleTitleChange={setEditRoleTitle}
-                    onSave={submitEdit}
-                    onSectorNameChange={setEditSectorName}
-                    onTest={() => onTestResponsibles(editingAgent, editResponsibles)}
-                  />
-                ) : null}
+
               </div>
             );
           }) : (
@@ -3194,20 +3158,22 @@ function ClientAgentsManager({
         <ActionButton
           icon={Plus}
           label={showForm ? "Formulario aberto" : "Novo agente"}
-          disabled={showForm || creating}
+          disabled={busy || showForm || creating}
           tone="ai"
           onClick={onStart}
         />
       </div>
 
       {showForm ? (
-        <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <AgentSetupDialog title="Novo agente" busy={creating || busy} notice={notice} onClose={onCancel}>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <fieldset disabled={busy || creating || busy} className="min-w-0 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
               <select
                 className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                value={selectedCompanyId}
+                value={newCompanyId}
                 onChange={(event) => onSelectCompany(event.target.value)}
               >
                 {companies.map((company) => (
@@ -3240,6 +3206,10 @@ function ClientAgentsManager({
               />
             </label>
           </div>
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Função</span>
+            <input className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none" value={agentRoleTitle} onChange={(event) => onAgentRoleTitleChange(event.target.value)} />
+          </label>
           <div className="mt-3">
             <AgentResponsiblesEditor
               drafts={responsibleHumans}
@@ -3249,9 +3219,18 @@ function ClientAgentsManager({
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
-            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Salvar e conectar WhatsApp" disabled={busy || creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
           </div>
+        </fieldset>
+        <PendingAgentConnection />
         </div>
+        </AgentSetupDialog>
+      ) : null}
+
+      {editingAgent && editingAgent.id === selectedAgentId ? (
+        <ClientAgentSetupModal key={editingAgent.id} agent={editingAgent} companies={companies}
+          busy={busy || creating} testing={testingAgentId === editingAgent.id} notice={notice}
+          connection={connection} onClose={onEditClose} onSave={onUpdate} onTest={onTestResponsibles} />
       ) : null}
 
       {cloneSource ? (
@@ -3300,7 +3279,7 @@ function ClientAgentsManager({
             <ActionButton
               icon={Copy}
               label="Clonar agente"
-              disabled={creating || !cloneName.trim() || !cloneCompanyId}
+              disabled={busy || creating || !cloneName.trim() || !cloneCompanyId}
               loading={creating}
               tone="ai"
               onClick={submitClone}
@@ -3312,8 +3291,65 @@ function ClientAgentsManager({
   );
 }
 
+function AgentSetupDialog({ title, busy, notice, onClose, children }: {
+  title: string; busy: boolean; notice: Notice | null; onClose: () => void; children: ReactNode;
+}) {
+  const titleId = useId();
+  const close = () => { if (!busy) onClose(); };
+  return <DialogFrame aria-labelledby={titleId} onClose={close}
+    className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
+    onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
+    <div className="w-full max-w-5xl rounded-2xl border p-4 shadow-2xl sm:p-6"
+      style={{ background: "var(--ch-surface, #fff)", borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div><h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+          <p className="mt-1 text-xs text-slate-500">Dados do agente e conexão com o WhatsApp.</p></div>
+        <button type="button" aria-label="Fechar configuração do agente" disabled={busy} onClick={close}
+          className="grid size-9 shrink-0 place-items-center rounded-lg border disabled:opacity-50"><X className="size-4" /></button>
+      </div>
+      {notice ? <div className="mb-4" role="status"><NoticeBar notice={notice} /></div> : null}
+      {children}
+    </div>
+  </DialogFrame>;
+}
+
+function PendingAgentConnection() {
+  return <div className="rounded-xl border border-dashed p-5 text-center" style={{ borderColor: "var(--ch-border)" }}>
+    <QrCode className="mx-auto mb-3 size-8 text-slate-400" />
+    <p className="text-sm font-semibold">Conectar WhatsApp</p>
+    <p className="mt-2 text-xs leading-5 text-slate-500">Preencha os dados e salve o agente. O QR Code e todas as opções de conexão serão liberados aqui, sem sair desta janela.</p>
+  </div>;
+}
+
+function ClientAgentSetupModal({ agent, companies, busy, testing, notice, connection, onClose, onSave, onTest }: {
+  agent: ClientWhatsappAgent; companies: ClientCompany[]; busy: boolean; testing: boolean;
+  notice: Notice | null; connection: ReactNode; onClose: () => void;
+  onSave: (id: string, input: { companyId: string; name: string; sectorName: string; roleTitle: string; prompt: string; responsibleHumans: ResponsibleHumanDraft[] }) => Promise<void>;
+  onTest: (agent: ClientWhatsappAgent, drafts?: ResponsibleHumanDraft[]) => Promise<void>;
+}) {
+  const [companyId, setCompanyId] = useState(agent.companyId);
+  const [name, setName] = useState(agent.name);
+  const [sectorName, setSectorName] = useState(agent.sectorName);
+  const [roleTitle, setRoleTitle] = useState(agent.roleTitle);
+  const [responsibles, setResponsibles] = useState(() => toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : agent.responsibleHuman ? [agent.responsibleHuman] : []));
+  const changedCompany = companyId !== agent.companyId;
+  return <AgentSetupDialog title="Editar agente" busy={busy || testing} notice={notice} onClose={onClose}>
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <ClientAgentInlineEditor companies={companies} companyId={companyId} name={name}
+        sectorName={sectorName} roleTitle={roleTitle} responsibleHumans={responsibles} disabled={busy} testing={testing}
+        onCompanyChange={setCompanyId} onNameChange={setName} onSectorNameChange={setSectorName} onRoleTitleChange={setRoleTitle}
+        onResponsibleHumansChange={setResponsibles} onCancel={onClose}
+        onSave={() => onSave(agent.id, { companyId, name, sectorName, roleTitle, prompt: agent.prompt, responsibleHumans: responsibles })}
+        onTest={() => onTest(agent, responsibles)} />
+      <div className="min-w-0">
+        {changedCompany ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Salve a alteração da empresa antes de gerenciar a conexão.</p> : null}
+        <fieldset disabled={changedCompany || busy || testing} className="min-w-0 disabled:opacity-60">{connection}</fieldset>
+      </div>
+    </div>
+  </AgentSetupDialog>;
+}
+
 function ClientAgentInlineEditor({
-  agent,
   companies,
   companyId,
   disabled,
@@ -3331,7 +3367,6 @@ function ClientAgentInlineEditor({
   onSectorNameChange,
   onTest,
 }: {
-  agent: ClientWhatsappAgent;
   companies: ClientCompany[];
   companyId: string;
   disabled: boolean;
@@ -3362,13 +3397,6 @@ function ClientAgentInlineEditor({
       className="rounded-xl border p-3"
       style={{ background: "rgba(var(--ch-accent-rgb),0.06)", borderColor: "rgba(var(--ch-accent-rgb),0.24)" }}
     >
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Editar agente</p>
-          <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
-        </div>
-        <SecondaryAction icon={X} label="Fechar" disabled={disabled} onClick={onCancel} />
-      </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block">
           <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa</span>
@@ -3441,6 +3469,11 @@ function ClientAgentInlineEditor({
 function InternalAgentsManager({
   agent,
   agentName,
+  agentRoleTitle,
+  onAgentRoleTitleChange,
+  connection,
+  notice,
+  busy,
   archiving,
   companies,
   creating,
@@ -3477,6 +3510,11 @@ function InternalAgentsManager({
 }: {
   agent: WhatsappState["agent"];
   agentName: string;
+  agentRoleTitle: string;
+  onAgentRoleTitleChange: (value: string) => void;
+  connection: ReactNode;
+  notice: Notice | null;
+  busy: boolean;
   archiving: boolean;
   companies: ClientCompany[];
   creating: boolean;
@@ -3511,13 +3549,8 @@ function InternalAgentsManager({
   onStart: () => void;
   variant: WhatsappConsoleVariant;
 }) {
-  const connectionLabel = instance?.status === "connected"
-    ? "Conectado"
-    : instance?.status === "qr_pending"
-      ? "QR pendente"
-      : instance?.status
-        ? instance.status
-        : "Sem conexao";
+  const connectionIndicator = getAgentConnectionIndicator(instance?.status ?? "draft");
+  const connectionLabel = connectionIndicator.label;
   const currentAutomationRoles = normalizeAgentAutomationRoles(agent?.automationRoles);
   const activeAutomationLabels = [
     currentAutomationRoles.signup_whatsapp_verification ? "Validacao cadastro" : null,
@@ -3538,7 +3571,7 @@ function InternalAgentsManager({
             <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Agente / setor ativo</span>
             <select
               className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-              disabled={companies.length === 0}
+              disabled={busy || companies.length === 0}
               value={selectedCompanyId}
               onChange={(event) => onSelectCompany(event.target.value)}
             >
@@ -3562,7 +3595,7 @@ function InternalAgentsManager({
         <ActionButton
           icon={Plus}
           label={showForm ? "Formulario aberto" : "Novo agente"}
-          disabled={showForm}
+          disabled={showForm || busy || creating || editing}
           onClick={onStart}
         />
       </div>
@@ -3577,8 +3610,9 @@ function InternalAgentsManager({
               <h3 className="break-words text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 {agent.name}
               </h3>
-              <NeonBadge tone={instance?.status === "connected" ? "green" : "amber"}>{connectionLabel}</NeonBadge>
-              {agent.status ? <NeonBadge tone="cyan">{agent.status}</NeonBadge> : null}
+              <span aria-label={`WhatsApp ${connectionLabel}`} className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs", connectionIndicator.className)}>
+                <span className="size-1.5 rounded-full bg-current" />{connectionLabel}
+              </span>
               {activeAutomationLabels.map((label) => (
                 <NeonBadge key={label} tone="violet">{label}</NeonBadge>
               ))}
@@ -3590,7 +3624,7 @@ function InternalAgentsManager({
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            <SecondaryAction icon={PenLine} label="Editar agente" disabled={editing || archiving} onClick={onEditStart} />
+            <SecondaryAction icon={PenLine} label="Editar agente" disabled={busy || editing || archiving} onClick={onEditStart} />
             <SecondaryAction
               icon={Trash2}
               label="Arquivar"
@@ -3605,11 +3639,10 @@ function InternalAgentsManager({
       ) : null}
 
       {showEdit && agent ? (
-        <div
-          className="mt-4 rounded-xl p-4"
-          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-        >
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <AgentSetupDialog title="Editar agente interno" busy={busy || editing} notice={notice} onClose={onEditCancel}>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <fieldset disabled={busy || editing} className="min-w-0">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome interno</span>
               <input
@@ -3673,15 +3706,17 @@ function InternalAgentsManager({
             <SecondaryAction icon={X} label="Cancelar" disabled={editing} onClick={onEditCancel} />
             <ActionButton icon={ShieldCheck} label="Salvar edicao" disabled={editing || !editName.trim()} loading={editing} onClick={onEditSave} />
           </div>
+        </fieldset>
+        {connection}
         </div>
+        </AgentSetupDialog>
       ) : null}
 
       {showForm ? (
-        <div
-          className="mt-4 rounded-xl p-4"
-          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-        >
-          <div className="grid gap-3 md:grid-cols-3">
+        <AgentSetupDialog title="Novo agente interno" busy={creating || busy} notice={notice} onClose={onCancel}>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <fieldset disabled={creating || busy} className="min-w-0">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor interno</span>
               <input
@@ -3711,13 +3746,20 @@ function InternalAgentsManager({
             </label>
           </div>
 
+          <label className="mt-3 block">
+            <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Função</span>
+            <input className="h-11 w-full rounded-lg border px-3 text-[13px]" value={agentRoleTitle} onChange={(event) => onAgentRoleTitleChange(event.target.value)} />
+          </label>
           <div className="mt-4 flex flex-wrap gap-2">
             {companies.length > 0 ? (
               <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
             ) : null}
-            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Salvar e conectar WhatsApp" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
           </div>
+        </fieldset>
+        <PendingAgentConnection />
         </div>
+        </AgentSetupDialog>
       ) : null}
     </Panel>
   );
@@ -3750,163 +3792,6 @@ function AutomationRoleToggle({
         <span className="mt-1 block text-[11px] leading-5 text-slate-500">{description}</span>
       </span>
     </label>
-  );
-}
-
-function AgentCreationGate({
-  agentName,
-  agentTemplateId,
-  companies,
-  creating,
-  responsibleHumans,
-  sectorName,
-  selectedCompany,
-  selectedCompanyId,
-  showForm,
-  onAgentNameChange,
-  onAgentTemplateChange,
-  onCancel,
-  onCreate,
-  onResponsibleHumansChange,
-  onSectorNameChange,
-  onSelectCompany,
-  onStart,
-  variant,
-}: {
-  agentName: string;
-  agentTemplateId: AgentPromptTemplateId;
-  companies: ClientCompany[];
-  creating: boolean;
-  responsibleHumans: ResponsibleHumanDraft[];
-  sectorName: string;
-  selectedCompany: ClientCompany | null;
-  selectedCompanyId: string;
-  showForm: boolean;
-  onAgentNameChange: (value: string) => void;
-  onAgentTemplateChange: (value: string) => void;
-  onCancel: () => void;
-  onCreate: () => void;
-  onResponsibleHumansChange: (drafts: ResponsibleHumanDraft[]) => void;
-  onSectorNameChange: (value: string) => void;
-  onSelectCompany: (value: string) => void;
-  onStart: () => void;
-  variant: WhatsappConsoleVariant;
-}) {
-  const formComplete = Boolean(
-    selectedCompanyId
-      && agentName.trim()
-      && sectorName.trim()
-      && isResponsibleHumansDraftComplete(responsibleHumans),
-  );
-
-  return (
-    <Panel
-      title="Criar agente WhatsApp"
-      eyebrow={variant.agentGateEyebrow}
-      action={<NeonBadge tone="violet">novo clone</NeonBadge>}
-    >
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.7fr)]">
-        <div
-          className="rounded-xl p-4 sm:p-5"
-          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-        >
-          <div className="flex items-start gap-3">
-            <div
-              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl"
-              style={{ background: "rgba(var(--ch-ai-rgb),0.10)", color: "var(--ch-ai)" }}
-            >
-              <Bot className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>{variant.agentGateTitle}</h2>
-              <p className="mt-2 text-[13px] leading-6 text-slate-500">
-                {variant.agentGateDescription}
-              </p>
-            </div>
-          </div>
-
-          {selectedCompany ? (
-            <div className="mt-5 max-w-md">
-              <InfoTile label={variant.agentGateSelectedLabel} value={selectedCompany.name} />
-            </div>
-          ) : null}
-
-          {!showForm ? (
-            <div className="mt-5">
-              <ActionButton icon={Plus} label="Criar agente" tone="ai" onClick={onStart} />
-            </div>
-          ) : null}
-        </div>
-
-        {showForm ? (
-          <div
-            className="rounded-xl p-4 sm:p-5"
-            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-          >
-            <div className="grid gap-3">
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
-                <select
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  value={selectedCompanyId}
-                  onChange={(event) => onSelectCompany(event.target.value)}
-                >
-                  {companies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {company.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Profissão ou atividade</span>
-                <ActivitySelect value={agentTemplateId} onChange={onAgentTemplateChange} />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Nome do agente</span>
-                <input
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  placeholder="Ex: Agente comercial"
-                  value={agentName}
-                  onChange={(event) => onAgentNameChange(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Setor</span>
-                <input
-                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
-                  placeholder="Ex: Vendas, Suporte, Financeiro"
-                  value={sectorName}
-                  onChange={(event) => onSectorNameChange(event.target.value)}
-                />
-              </label>
-              <AgentResponsiblesEditor
-                drafts={responsibleHumans}
-                disabled={creating}
-                onChange={onResponsibleHumansChange}
-              />
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <SecondaryAction icon={RefreshCcw} label="Cancelar" disabled={creating} onClick={onCancel} />
-              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !formComplete} loading={creating} tone="ai" onClick={onCreate} />
-            </div>
-          </div>
-        ) : (
-          <div
-            className="grid min-h-[180px] place-items-center rounded-xl p-4 text-center sm:min-h-[220px] sm:p-5"
-            style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
-          >
-            <div className="max-w-xs">
-              <Building2 className="mx-auto h-7 w-7" style={{ color: "var(--ch-whatsapp-deep)" }} />
-              <p className="mt-3 text-[13px] leading-6 text-slate-500">
-                {variant.agentGateSideDescription}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </Panel>
   );
 }
 
@@ -4512,58 +4397,62 @@ function CloneMemoryPanel({
   );
 }
 
-function KnowledgeFilesPanel({
-  files,
-  knowledgeUploading,
-  onUploadFile,
-}: {
+function KnowledgeFilesPanel({ files, knowledgeUploading, onUploadFile }: {
   files: KnowledgeFile[];
   knowledgeUploading: boolean;
-  onUploadFile: (file: File | null) => void;
+  onUploadFile: (file: File | null) => Promise<string | null>;
 }) {
-  return (
-    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
-          Arquivos do seu negócio
-          <InfoHint text="Anexe materiais para complementar o atendimento. Você pode usar somente arquivos ou adicionar observações no texto acima." />
-        </p>
-        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100">
-          {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-          {knowledgeUploading ? "Enviando arquivo" : "Anexar arquivo"}
-          <input
-            accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,application/pdf,text/plain,text/markdown,text/csv,application/json"
-            className="hidden"
-            type="file"
-            disabled={knowledgeUploading}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0] ?? null;
-              event.currentTarget.value = "";
-              onUploadFile(file);
-            }}
-          />
-        </label>
-      </div>
-      <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
-        {files.length > 0 ? (
-          files.map((file) => (
-            <div key={file.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-              <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                {file.title}
-              </p>
-              <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                {formatBytes(file.size)} / {formatDate(file.createdAt)}
-              </p>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-            Nenhum arquivo anexado.
-          </div>
-        )}
-      </div>
+  const inputRef = useRef<HTMLInputElement>(null);
+  const uploadLock = useRef(false);
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  async function submitFiles(selected: File[]) {
+    if (knowledgeUploading || uploadLock.current || !selected.length) return;
+    if (selected.length !== 1) { setUploadError("Envie um arquivo por vez."); return; }
+    const file = selected[0];
+    if (!/\.(txt|md|csv|json|pdf|doc|docx)$/i.test(file.name)) { setUploadError("Use TXT, Markdown, CSV, JSON, PDF, DOC ou DOCX."); return; }
+    if (!file.size || file.size > 12 * 1024 * 1024) { setUploadError("Envie um arquivo não vazio de até 12 MB."); return; }
+    uploadLock.current = true;
+    setFileName(file.name);
+    setUploadError(null);
+    try { setUploadError(await onUploadFile(file)); }
+    catch { setUploadError("Não foi possível enviar o arquivo. Tente novamente."); }
+    finally { uploadLock.current = false; setFileName(""); }
+  }
+  return <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+    <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
+      Arquivos do seu negócio
+      <InfoHint text="Anexe materiais para complementar o atendimento. Você pode usar somente arquivos ou adicionar observações no texto acima." />
+    </p>
+    <div className={cn("mt-3 rounded-xl border-2 border-dashed transition", dragging ? "border-indigo-500 bg-indigo-50" : "border-slate-200")}
+      aria-label="Área de upload de arquivos"
+      onDragEnter={(event) => { event.preventDefault(); if (!knowledgeUploading) { dragDepth.current++; setDragging(true); } }}
+      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = knowledgeUploading ? "none" : "copy"; }}
+      onDragLeave={(event) => { event.preventDefault(); if (--dragDepth.current <= 0) { dragDepth.current = 0; setDragging(false); } }}
+      onDrop={(event) => { event.preventDefault(); dragDepth.current = 0; setDragging(false); void submitFiles(Array.from(event.dataTransfer.files)); }}>
+      <input ref={inputRef} type="file" className="hidden" aria-label="Arquivo do negócio"
+        accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" disabled={knowledgeUploading}
+        onChange={(event) => { const selected = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void submitFiles(selected); }} />
+      <button type="button" disabled={knowledgeUploading} aria-busy={knowledgeUploading}
+        onClick={() => inputRef.current?.click()} className="flex min-h-36 w-full flex-col items-center justify-center gap-2 rounded-xl px-4 py-5 text-center disabled:cursor-wait">
+        {knowledgeUploading ? <Loader2 className="size-6 animate-spin text-indigo-600" /> : <FileText className="size-6 text-indigo-500" />}
+        <span className="text-sm font-semibold">{knowledgeUploading ? "Enviando arquivo…" : dragging ? "Solte o arquivo aqui" : "Arraste e solte seu arquivo aqui"}</span>
+        {knowledgeUploading ? <span className="max-w-full truncate text-xs text-slate-500">{fileName}</span> : <>
+          <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700">Selecionar arquivo</span>
+          <span className="text-[11px] text-slate-500">TXT, Markdown, CSV, JSON, PDF, DOC ou DOCX · Até 12 MB · Um arquivo por vez</span>
+        </>}
+      </button>
     </div>
-  );
+    {uploadError ? <p role="alert" className="mt-2 text-xs text-rose-700">{uploadError}</p> : null}
+    {files.length ? <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
+      {files.map(file => <div key={file.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+        <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{file.title}</p>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-slate-500">{formatBytes(file.size)} / {formatDate(file.createdAt)}</p>
+      </div>)}
+    </div> : null}
+  </div>;
 }
 
 function NoAgentState() {
@@ -4608,7 +4497,7 @@ function BehaviorSection({
 }) {
   return (
     <details
-      className="rounded-xl border [&[open]>summary>.section-closed]:hidden [&[open]>summary>.section-open]:inline"
+      className="self-start rounded-xl border [&[open]>summary>.section-closed]:hidden [&[open]>summary>.section-open]:inline"
       open={open}
       onToggle={onOpenChange ? (event) => onOpenChange(event.currentTarget.open) : undefined}
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
@@ -5415,7 +5304,7 @@ function LeadQualificationEditor({
   const normalized = config;
 
   return (
-    <div className="grid gap-3">
+    <div className="grid content-start gap-4">
       <BehaviorSection
         title="Playbook comercial"
         description={`As perguntas seguem a atividade escolhida e podem ser editadas para o atendimento deste ${entityLabel.toLowerCase()}.`}
@@ -5580,7 +5469,7 @@ function LeadQualificationEditor({
         </div>
       </BehaviorSection>
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid content-start gap-4">
         <LeadQualificationListEditor
           label="Sinais de baixa qualificacao"
           description="Use uma linha por sinal que reduz prioridade do lead."
@@ -5630,13 +5519,13 @@ function LeadQualificationSummary({ config, changed }: { config: LeadQualificati
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Resumo</p>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <PromptCheck label={playbookActive ? "Qualificacao ativa" : normalized.enabled ? "Qualificacao sem perguntas" : "Qualificacao pausada"} active={playbookActive} />
         <PromptCheck label={`${normalized.questions.length} perguntas configuradas`} active={normalized.questions.length >= 4} />
         <PromptCheck label={`${required} obrigatorias`} active={required >= 2} />
         <PromptCheck label={`${totalWeight} pontos totais`} active={totalWeight >= normalized.qualifyThreshold} />
       </div>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <InfoTile label="Produto" value={normalized.productName || "Produto do cliente"} />
         <InfoTile label="Qualificado" value={`${normalized.qualifyThreshold}+ pontos`} />
         <InfoTile label="VIP" value={`${normalized.vipThreshold}+ pontos`} />
@@ -6105,31 +5994,28 @@ function CompactConnectionCard({
       </div>
 
       {qrModalOpen && visibleQrCode && !connectionAttemptFinished && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+        <DialogFrame onClose={() => setQrModalOpen(false)} aria-label="QR Code ampliado"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
           onClick={() => setQrModalOpen(false)}
-          onKeyDown={(e) => e.key === "Escape" && setQrModalOpen(false)}
-          role="button"
-          tabIndex={0}
         >
           <div
-            className="relative rounded-2xl bg-white p-6 shadow-2xl"
+            className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
-            role="dialog"
           >
             <button
+              aria-label="Fechar QR Code"
               className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
               onClick={() => setQrModalOpen(false)}
               type="button"
             >
               <X className="h-4 w-4" />
             </button>
-            <p className="mb-3 text-center text-sm font-semibold text-slate-700">
+            <p className="mb-3 px-6 text-center text-sm font-semibold text-slate-700">
               Escaneie o QR Code pelo WhatsApp
             </p>
             <Image
               alt="QR Code ampliado"
-              className="rounded-lg"
+              className="h-auto w-full rounded-lg"
               height={400}
               src={visibleQrCode}
               unoptimized
@@ -6139,18 +6025,14 @@ function CompactConnectionCard({
               Abra o WhatsApp &gt; Dispositivos conectados &gt; Conectar dispositivo
             </p>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {passkeyModalOpen && passkeyBlockedAttempt && (
-        <div
+        <DialogFrame onClose={() => setPasskeyModalOpen(false)} aria-label="Aviso de conexão"
           aria-labelledby="passkey-blocked-title"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
           onClick={() => setPasskeyModalOpen(false)}
-          onKeyDown={(event) => event.key === "Escape" && setPasskeyModalOpen(false)}
-          role="dialog"
-          tabIndex={0}
         >
           <div
             className="relative w-full max-w-md rounded-2xl border p-5 text-left shadow-2xl"
@@ -6214,18 +6096,14 @@ function CompactConnectionCard({
               </button>
             </div>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {migrationModalOpen && passkeyBlockedAttempt && (
-        <div
+        <DialogFrame onClose={() => setMigrationModalOpen(false)} aria-label="Migração assistida"
           aria-labelledby="passkey-migration-title"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
           onClick={() => setMigrationModalOpen(false)}
-          onKeyDown={(event) => event.key === "Escape" && setMigrationModalOpen(false)}
-          role="dialog"
-          tabIndex={0}
         >
           <div
             className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border p-5 text-left shadow-2xl"
@@ -6314,7 +6192,7 @@ function CompactConnectionCard({
               </button>
             </div>
           </div>
-        </div>
+        </DialogFrame>
       )}
     </div>
   );

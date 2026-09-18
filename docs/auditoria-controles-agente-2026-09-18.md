@@ -135,3 +135,30 @@ a conferência de cartões/nome em 1440/390/320 px. Envio para master autorizado
 Integração para GitHub sobre `ac187574`: os 22 commits remotos existentes foram
 preservados. Os 222 testes direcionados de agentes e o build webpack completo
 com TypeScript e 108 páginas estáticas passaram na base integrada.
+
+## Complemento: organização da tela e upload
+
+Cadastro e edição agora compartilham um modal com a conexão completa do agente.
+A criação precisa persistir o cadastro antes de parear o WhatsApp; o modal segue
+aberto com a conexão disponível. Ações de QR/código/status/reset/remover continuam
+nos mesmos endpoints e vinculadas ao agente/setor selecionado. Salvar identidade
+preserva rascunhos de Prompt e preferências. A aba Conexão fica informativa.
+
+Os quatro grupos da Qualificação ficam em linhas de altura natural, iguais às
+do Prompt; `self-start` impede que o grid estique sanfonas fechadas. O resumo fica
+abaixo. Cartões mostram estado de WhatsApp por vínculo agente/organização,
+independente de `needs_review` no cadastro e da presença de avatar próprio.
+Erro de consulta resulta em Indisponível. A atualização periódica modifica
+apenas os indicadores, sem substituir os campos em edição.
+
+A área de arquivos aceita soltar um arquivo ou clicar para selecionar, mostra
+progresso de envio, rejeita arquivos vazios/formato inválido/acima de 12 MB e
+permite repetir após falha. A lista permanece visível após o envio.
+
+`tests/agent-card-photos.test.ts` também verifica estado mais recente, isolamento
+entre organizações e falha de banco com avatar próprio. 228 testes direcionados
+em cinco arquivos aprovados. Ensaio local `tmp/agent-modal-audit.cjs` e relatórios
+JSON/PNGs verificam cliente, interno e primeiro cadastro, ações de conexão,
+layout desktop/celular, sanfonas, upload e preservação do rascunho, usando somente
+HTTP sintético. Rotas de ensaio removidas antes do build. Isso não comprova
+pareamento ou extração de arquivos por serviços externos em produção.
