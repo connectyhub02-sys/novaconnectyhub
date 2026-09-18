@@ -265,6 +265,8 @@ export type ClientLeadRecord = {
     ipAddress: string | null;
     lastClick: string | null;
     deliveryAddress: string | null;
+    billingAddress?: string | null;
+    billingDocumentPreview?: string | null;
     deliveryCep: string | null;
     customerDocument: string | null;
   };
@@ -1239,6 +1241,13 @@ function mapLeadRecord(input: {
   const deliveryAddress = readString(metadata.delivery_address)
     ?? readString(metadata.destination_address)
     ?? readString(metadata.address);
+  const billingAddressData = readRecord(metadata.billing_address);
+  const billingAddress = billingAddressData ? [
+    [readString(billingAddressData.street), readString(billingAddressData.number)].filter(Boolean).join(", "),
+    readString(billingAddressData.complement), readString(billingAddressData.neighborhood),
+    [readString(billingAddressData.city), readString(billingAddressData.state)].filter(Boolean).join("/"),
+    readString(billingAddressData.postalCode) ? `CEP ${readString(billingAddressData.postalCode)}` : null,
+  ].filter(Boolean).join(" · ") : null;
   const deliveryCep = readString(metadata.delivery_cep)
     ?? readString(metadata.destination_cep)
     ?? readString(metadata.cep);
@@ -1297,6 +1306,8 @@ function mapLeadRecord(input: {
       origin: source,
       ...technicalTracking,
       deliveryAddress,
+      billingAddress,
+      billingDocumentPreview: readString(metadata.document_preview),
       deliveryCep,
       customerDocument,
     },

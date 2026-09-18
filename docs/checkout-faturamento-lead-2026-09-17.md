@@ -56,3 +56,7 @@ catálogo da pizzaria nem declara que todos esses percursos foram auditados.
 - Migration 0155 aplicada às 22:36 BRT após backup/ensaio; RLS/grants verificados,
   contagens financeiras/relacionamento preservadas. Build webpack/TypeScript,
   ESLint e 66 testes aprovados. Confirmar deploy no estado operacional.
+- Release funcional `1e06d286` confirmado em produção às 22:39, health e QA
+  desktop/mobile de leitura. Complemento 0156 aplicado às 22:41 distingue
+  endereço de faturamento de endereço de entrega na ficha do lead, preservando
+  fatos anteriores. Testes SQL, lint e novo build aprovados.

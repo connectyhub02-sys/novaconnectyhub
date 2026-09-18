@@ -4394,6 +4394,8 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
     { label: "IP", value: lead.technical.ipAddress ?? "Nao identificado", icon: Activity },
     { label: "Ultimo clique", value: formatDateTime(lead.technical.lastClick), icon: Clock },
     { label: "Endereco entrega", value: lead.technical.deliveryAddress ?? "Nao informado", icon: MapPin },
+    ...(lead.technical.billingAddress ? [{ label: "Endereço de faturamento", value: lead.technical.billingAddress, icon: MapPin }] : []),
+    ...(lead.technical.billingDocumentPreview ? [{ label: "Documento de faturamento", value: lead.technical.billingDocumentPreview, icon: Activity }] : []),
     { label: "CEP entrega", value: lead.technical.deliveryCep ?? "Nao informado", icon: MapPin },
     { label: "CPF/CNPJ", value: lead.technical.customerDocument ?? "Nao informado", icon: Activity },
   ];
@@ -4411,7 +4413,7 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
                 <Icon className="h-3.5 w-3.5 text-blue-600" />
                 {row.label}
               </span>
-              <span className="max-w-[170px] truncate text-right text-[11px] font-semibold text-slate-950">{redactInternalProviderNames(row.value)}</span>
+              <span className={cn("max-w-[170px] text-right text-[11px] font-semibold text-slate-950", row.label === "Endereço de faturamento" ? "break-words" : "truncate")}>{redactInternalProviderNames(row.value)}</span>
             </div>
           );
         })}

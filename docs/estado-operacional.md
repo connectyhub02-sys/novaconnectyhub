@@ -43,6 +43,18 @@ preservados. Build webpack/TypeScript/108 páginas e ESLint aprovados. Nenhum
 endereço real foi salvo nem worker de avisos forçado. Publicação via master
 autorizada pelo titular; confirmação do deploy fica no registro posterior.
 
+**Publicação confirmada às 22:39 BRT:** `1e06d28652a4567c0349108bae5ba93bdb170eb2`,
+Vercel success no projeto oficial, health ok com esse SHA. Checkout real conferido
+em aba separada: cards novos, endereço completo vazio, pagamento amplo/resumo
+compacto; desktop 1280 e celular 390 sem overflow. Nenhum endereço, método ou
+pagamento submetido na inspeção. A elegibilidade específica do checkout aberto
+permanece restrita a primeira contratação fixa, sem alterar a conta recebedora.
+
+Complemento 0156 aplicado às 22:41 após backup/ensaio: endereço de faturamento
+fica em campo próprio no arquivo comercial, separado de entrega; nenhum fato
+existente alterado pela migration. Ficha mostra o endereço completo e documento
+mascarado. Testes SQL, lint e novo build aprovados; código segue pela mesma master.
+
 ## Pix real pendente e separação de métodos — 17/09/2026
 
 Após o titular mostrar QR gerado no checkout existente, auditoria estritamente

@@ -27,6 +27,7 @@ beforeAll(async()=>{
  const journey=readFileSync('supabase/migrations/0085_platform_customer_journey.sql','utf8');
  await db.exec(journey.slice(journey.indexOf('create or replace function public.archive_platform_customer_journey'),journey.indexOf('revoke all on function public.archive_platform_customer_journey')));
  await db.exec(readFileSync('supabase/migrations/0155_organization_billing_address.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/0156_billing_address_semantics.sql','utf8'));
  await db.query('insert into auth.users values($1)',[buyer]);
  await db.query('insert into organizations values($1,$2),($3,$2),($4,$2)',[org,buyer,otherOrg,platform]);
  await db.query("insert into profiles(id,phone_normalized,phone_verified_at) values($1,'5511999999999',now())",[buyer]);
