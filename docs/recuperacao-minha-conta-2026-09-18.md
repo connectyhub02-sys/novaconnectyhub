@@ -44,5 +44,8 @@ de UUID omitia três caracteres e um hífen do quarto grupo, rejeitando IDs
 válidos como 404 antes de consultar o banco. Correção preserva a autorização e
 filtros por organização nas três consultas. Quatro testes da página renderizada
 cobrem IDs reais em active/past_due, entrada malformada e fatura ausente de outra
-organização. Os nove testes de recuperação também passaram. Publicação desse
-complemento será confirmada pelo SHA e pela abertura da fatura real do Andre.
+organização. Os nove testes de recuperação também passaram. Complemento publicado
+em `a71d5c413e2789bd6291253409cac3324dda576d`: Vercel success e health `ok`
+com o SHA exato. A fatura real do Andre abriu com título, organização e seção de
+pagamentos, sem 404. Nenhuma ação financeira foi executada. Build webpack,
+TypeScript e ESLint passaram; prévia temporária e servidor local encerrados.

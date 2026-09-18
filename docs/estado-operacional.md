@@ -29,12 +29,17 @@ comprovar a habilitação de recebedor. [Evidências e limites](plano-vencido-ca
 
 ## Minha Conta para planos vencidos — 18/09/2026
 
-Correção do menu, proxy e bloqueio visual preparada para publicação: Minha Conta
+Correção do menu, proxy e bloqueio visual publicada: Minha Conta
 e faturas passam a integrar a recuperação; APIs de conta, segurança e faturamento
 mantêm autenticação e escopo. Métodos listam contratos `past_due`. Caso Andre
 confirmado por leitura: owner não admin, Scale vencido e acesso pago negado.
 Nove testes de ativo/vencido, ESLint e build passaram. Publicado `6b02d2e7`,
 Vercel success e health com SHA exato, conferidos às 10:20 BRT.
+Complemento `a71d5c41` corrige a validação UUID que fazia faturas válidas retornarem
+404; quatro testes adicionais, lint e build passaram. Vercel success e health
+`ok` com SHA exato. Sessão real do Andre confirmou Minha Conta pelo menu restrito,
+redirecionamento de agentes para regularização e abertura da fatura com pagamentos.
+Nenhuma cobrança ou liberação de recurso pago foi executada nessa conferência.
 [Causa, alcance e evidências](recuperacao-minha-conta-2026-09-18.md).
 
 ## Verificação Asaas e simplificação do faturamento — 18/09/2026
