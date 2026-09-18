@@ -1,5 +1,26 @@
 # Estado operacional da ConnectyHub
 
+## Resumo único e entrada em Prompt — 18/09/2026
+
+Aba Conexão e painel Conexão e identidade removidos do editor compartilhado.
+Cliente/admin iniciam em Prompt; referências antigas à aba Conexão também abrem
+Prompt. Conectar WhatsApp continua em Criar/Editar agente. O resumo duplicado
+dentro do Prompt foi removido.
+
+Barra única contém agente, empresa/setor, WhatsApp, número, conversa, rapport,
+plano, produtos, conhecimento, atuação e alterações, ao lado de Salvar tudo.
+Cartões menores em uma linha; textos completos disponíveis no título. Desktop
+distribui a largura, telas menores permitem rolar os indicadores horizontalmente
+com Salvar tudo visível. Estado pendente informa as áreas modificadas.
+
+Prévia local com dados sintéticos: 11 cartões na mesma altura, sem rolagem da
+barra na largura de conteúdo desktop de aproximadamente 1.400px; em viewport
+390px, sem transbordamento da página. Prompt selecionado inicialmente nas duas
+variantes. Modal Editar mantém status, reset e remoção da conexão. Nenhuma
+conexão ou configuração real alterada durante esta conferência. ESLint, 73 testes
+direcionados e compilação de produção com webpack aprovados. Publicação em
+acompanhamento.
+
 ## Respostas prontas nos agentes existentes — complemento de 18/09/2026
 
 Titular autorizou completar perguntas antigas de todos os painéis com respostas

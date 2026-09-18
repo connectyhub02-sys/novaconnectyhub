@@ -573,7 +573,7 @@ export const adminWhatsappConsoleVariant = {
 } satisfies WhatsappConsoleVariant;
 
 export function WhatsAppConsole({
-  initialTab = "connection",
+  initialTab = "prompt",
   variant = clientWhatsappConsoleVariant,
 }: {
   initialTab?: WhatsappConsoleTab;
@@ -626,14 +626,14 @@ export function WhatsAppConsole({
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab === "files" ? "prompt" : initialTab);
+  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab === "files" || initialTab === "connection" ? "prompt" : initialTab);
   const visibleWhatsappTabs = useMemo(
     () => whatsappConsoleTabs.filter((tab) => !variant.hiddenTabs?.includes(tab.id)),
     [variant.hiddenTabs],
   );
   const activeWhatsappTab = visibleWhatsappTabs.some((tab) => tab.id === activeTab)
     ? activeTab
-    : visibleWhatsappTabs[0]?.id ?? "connection";
+    : visibleWhatsappTabs[0]?.id ?? "prompt";
   const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
@@ -905,7 +905,7 @@ export function WhatsAppConsole({
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
   const needsCompany = !loading && companies.length === 0;
   const needsAgent = !loading && companies.length > 0 && !state?.agent;
-  const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "Agentes" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
+  const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "Agentes" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Prompt, qualificação e comportamento";
   const headerDescription = loading || needsCompany
     ? variant.headerDescriptions.missingEntity
     : needsAgent
@@ -1340,7 +1340,7 @@ export function WhatsAppConsole({
       setPairCode(null);
       setConnectPhone("");
       setConnectMode("qr");
-      setActiveTab("connection");
+      setActiveTab("prompt");
       setNotice({ tone: "success", message: "Agente criado com o perfil da atividade pronto. Conecte o WhatsApp para começar a receber mensagens." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar agente." });
@@ -1881,6 +1881,9 @@ export function WhatsAppConsole({
         {state?.agent ? <>
         <WhatsappConsoleCommandBar
           agent={state.agent}
+          productCount={state.salesCatalog.length}
+          knowledgeFileCount={state.knowledge.files.length}
+          activityKind={selectedActivity.kind}
           behavior={behaviorDraft}
           company={selectedCompany}
           entityLabel={variant.entityPromptLabel}
@@ -1900,35 +1903,6 @@ export function WhatsAppConsole({
 
         <WhatsappConsoleTabs activeTab={activeWhatsappTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
-        {activeWhatsappTab === "connection" ? (
-          <Panel
-            title="Conexao e identidade"
-            eyebrow="numero / agente / status"
-            action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
-          >
-            <div className="grid gap-3 sm:gap-4">
-              <div className="grid content-start gap-4">
-                <AgentIdentityCard
-                  agent={state.agent}
-                  productCount={state.salesCatalog.length}
-                  knowledgeFileCount={state.knowledge.files.length}
-                  activityKind={selectedActivity.kind}
-                  company={selectedCompany}
-                  entityLabel={variant.entityPromptLabel}
-                />
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                  <InfoTile label="WhatsApp" value={getStatusMeta(state.instance?.status ?? "draft").label} />
-                  <InfoTile label="Número" value={formatPhone(state.instance?.phoneNumber)} />
-                  <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
-                  <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
-                  <InfoTile label="Alteracoes" value={settingsChanged ? "Pendentes" : "Salvo"} />
-                </div>
-              </div>
-
-            </div>
-          </Panel>
-        ) : null}
-
         {activeWhatsappTab === "prompt" ? (
         <Panel
           title="Prompt do agente"
@@ -1938,14 +1912,7 @@ export function WhatsAppConsole({
           {state?.agent ? (
             <div className="grid gap-4">
               <div className="grid gap-4">
-                <AgentIdentityCard
-                  productCount={state.salesCatalog.length}
-                  knowledgeFileCount={state.knowledge.files.length}
-                  activityKind={selectedActivity.kind}
-                  agent={state.agent}
-                  company={selectedCompany}
-                  entityLabel={variant.entityPromptLabel}
-                />
+
 
                 <GuidedPromptBuilder
                   config={promptTemplateDraft}
@@ -2721,7 +2688,6 @@ const whatsappConsoleTabs: Array<{
   icon: LucideIcon;
   comingSoon?: boolean;
 }> = [
-  { id: "connection", label: "Conexao", description: "Numero e status", icon: Smartphone },
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
@@ -2730,6 +2696,9 @@ const whatsappConsoleTabs: Array<{
 
 function WhatsappConsoleCommandBar({
   agent,
+  productCount,
+  knowledgeFileCount,
+  activityKind,
   behavior,
   company,
   entityLabel,
@@ -2747,6 +2716,9 @@ function WhatsappConsoleCommandBar({
   onSave,
 }: {
   agent: NonNullable<WhatsappState["agent"]>;
+  productCount: number;
+  knowledgeFileCount: number;
+  activityKind: "professional" | "company" | "general";
   behavior: WhatsappBehaviorConfig;
   company: ClientCompany | null;
   entityLabel: string;
@@ -2776,27 +2748,38 @@ function WhatsappConsoleCommandBar({
   const changeLabel = promptTooLong
     ? "Prompt longo"
     : changedAreas.length > 0
-      ? changedAreas.join(", ")
+      ? `Pendentes: ${changedAreas.join(", ")}`
       : "Salvo";
 
   return (
     <div
-      className="sticky top-[68px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
+      aria-label="Resumo do agente"
+      className="sticky top-[68px] z-20 mb-3 min-w-0 rounded-xl border p-2 backdrop-blur sm:top-3 sm:mb-4"
       style={{
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.12), rgba(var(--ch-accent-2-rgb),0.055) 42%, rgba(255,255,255,0.94) 100%), rgba(255,255,255,0.86)",
         borderColor: "rgba(var(--ch-accent-rgb),0.22)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.82), 0 14px 34px rgba(var(--ch-accent-rgb),0.10)",
       }}
     >
-      <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <div className="min-w-0 flex-1 overflow-x-auto" tabIndex={0} role="region" aria-label="Informações do agente">
+        <div className="grid min-w-[1000px] xl:min-w-0 grid-cols-[1.15fr_1.45fr_.8fr_1.1fr_.8fr_.7fr_.9fr_.65fr_.9fr_1.1fr_1.1fr] gap-1">
           <SummaryPill label="Agente" value={displayAgentName} />
           <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
           <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
+          <SummaryPill label="Número" value={formatPhone(instance?.phoneNumber)} />
           <SummaryPill label="Conversa" value={formatResponseMode(behavior.responseMode)} />
-          <SummaryPill label="Alteracoes" value={changeLabel} tone={settingsChanged ? "amber" : "green"} />
+          <SummaryPill label="Rapport" value={formatRapportMode(behavior.adaptiveRapportMode)} />
+          <SummaryPill label="Plano" value={company ? `${company.planCode} / ${company.status}` : "Não informado"} />
+          <SummaryPill label="Produtos" value={productCount.toLocaleString("pt-BR")} />
+          <SummaryPill label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
+          <SummaryPill label="Atuação" value={activityKind === "professional" ? "Profissional individual" : activityKind === "company" ? "Empresa" : "Atendimento geral"} />
+          <SummaryPill label="Alterações" value={changeLabel} tone={settingsChanged ? "amber" : "green"} />
         </div>
+        </div>
+        <div className="shrink-0">
         <ActionButton
+          compact
           icon={Wand2}
           label="Salvar tudo"
           description="Salva as alteracoes feitas nas abas do WhatsApp."
@@ -2804,6 +2787,7 @@ function WhatsappConsoleCommandBar({
           loading={saving}
           onClick={onSave}
         />
+        </div>
       </div>
     </div>
   );
@@ -2921,15 +2905,16 @@ function SummaryPill({
 
   return (
     <div
-      className="min-w-[150px] rounded-lg border px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] sm:min-w-0"
+      className="min-w-0 rounded-md border px-1.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]"
+      title={`${label}: ${value}`}
       style={{
         background: toneStyle.background,
         borderColor: toneStyle.borderColor,
       }}
     >
-      <p className="truncate font-mono text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="truncate font-mono text-[9px] uppercase leading-3 text-slate-500">{label}</p>
       <p
-        className="mt-1 truncate text-[12px] font-semibold leading-4"
+        className="mt-1 truncate text-[10px] font-semibold leading-3"
         style={{ color: toneStyle.color }}
         title={value}
       >
@@ -3795,38 +3780,6 @@ function AutomationRoleToggle({
         <span className="mt-1 block text-[11px] leading-5 text-slate-500">{description}</span>
       </span>
     </label>
-  );
-}
-
-function AgentIdentityCard({
-  agent,
-  company,
-  productCount,
-  knowledgeFileCount,
-  activityKind,
-  entityLabel = "Empresa",
-}: {
-  agent: NonNullable<WhatsappState["agent"]>;
-  company: ClientCompany | null;
-  productCount: number;
-  knowledgeFileCount: number;
-  activityKind: "professional" | "company" | "general";
-  entityLabel?: string;
-}) {
-  const companyStatus = company ? `${company.planCode} / ${company.status}` : "Plano nao informado";
-
-  return (
-    <div
-      className="grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-3 xl:grid-cols-[1.2fr_1.4fr_1fr_1fr_1fr_1.2fr]"
-      style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border-strong)" }}
-    >
-      <InfoTile label="Agente" value={agent.name} />
-      <InfoTile label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
-      <div title={`Última edição: ${formatDate(agent.updatedAt)}`}><InfoTile label="Plano" value={companyStatus} /></div>
-      <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
-      <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
-      <InfoTile label="Atuação" value={activityKind === "professional" ? "Profissional individual" : activityKind === "company" ? "Empresa" : "Atendimento geral"} />
-    </div>
   );
 }
 
@@ -6336,6 +6289,7 @@ function ActionButton({
   description,
   loading,
   disabled,
+  compact = false,
   tone = "default",
   onClick,
 }: {
@@ -6344,6 +6298,7 @@ function ActionButton({
   description?: string;
   loading?: boolean;
   disabled?: boolean;
+  compact?: boolean;
   tone?: "default" | "whatsapp" | "ai";
   onClick: () => void;
 }) {
@@ -6368,7 +6323,7 @@ function ActionButton({
       disabled={disabled || loading}
       onClick={onClick}
       data-connecty-contrast="dark"
-      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+      className={cn("connecty-dark-action inline-flex min-h-10 items-center justify-center rounded-lg font-mono font-bold uppercase text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70", compact ? "gap-1 px-2 text-[10px]" : "w-full gap-2 px-4 text-[11px] tracking-wide sm:w-auto")}
       style={actionTheme}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}

@@ -45,7 +45,7 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
       userLabel={profile.email ?? undefined}
       workspaceName={organization.name ?? profile.companyName ?? "Workspace"}
     >
-      <WhatsAppConsole initialTab="connection" />
+      <WhatsAppConsole initialTab="prompt" />
     </ConnectyShell>
   );
 }

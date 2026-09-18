@@ -3,7 +3,7 @@
 import { adminWhatsappConsoleVariant, WhatsAppConsole } from "./whatsapp-console";
 
 export function AdminWhatsappAgentsConsole({
-  initialTab = "connection",
+  initialTab = "prompt",
 }: {
   initialTab?: Parameters<typeof WhatsAppConsole>[0]["initialTab"];
 }) {
