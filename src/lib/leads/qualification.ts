@@ -9,6 +9,13 @@ export type LeadQualificationQuestion = {
   crmField: string;
   weight: number;
   required: boolean;
+  options?: LeadQualificationOption[];
+};
+
+export type LeadQualificationOption = { id: string; label: string; points: number; disqualifies: boolean };
+export type LeadQualificationAnswer = {
+  questionId: string; optionId: string; answer: string; question: string;
+  optionLabel: string; points: number; disqualifies: boolean;
 };
 
 export type LeadQualificationConfig = {
@@ -38,6 +45,12 @@ export type LeadQualificationAnalysis = {
   summary: string;
   nextBestQuestion: string | null;
   nextBestAction: string;
+  answers?: LeadQualificationAnswer[];
+  rawScore?: number;
+  maxScore?: number;
+  disqualified?: boolean;
+  disqualificationReasons?: string[];
+  configFingerprint?: string;
 };
 
 export const leadQualificationConfigKey = "lead_qualification_config";
@@ -53,6 +66,7 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
     crmField: "purpose",
     weight: 30,
     required: true,
+    options: qualificationOptions([["Necessidade definida e relacionada ao negócio", 30], ["Precisa de ajuda para definir a necessidade", 10], ["Demanda não relacionada ao negócio", 0]]),
   },
   {
     id: "context",
@@ -61,6 +75,7 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
     crmField: "volume_or_context",
     weight: 25,
     required: true,
+    options: qualificationOptions([["Já conhece e sabe o que procura", 25], ["Quer orientação para escolher", 15], ["Ainda não sabe o que procura", 5]]),
   },
   {
     id: "urgency",
@@ -69,6 +84,7 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
     crmField: "timeframe",
     weight: 25,
     required: true,
+    options: qualificationOptions([["Hoje ou nos próximos dias", 25], ["Tem uma data futura definida", 15], ["Apenas pesquisando, sem prazo", 5]]),
   },
   {
     id: "objection",
@@ -77,6 +93,7 @@ export const defaultLeadQualificationQuestions: LeadQualificationQuestion[] = [
     crmField: "objections",
     weight: 20,
     required: false,
+    options: qualificationOptions([["Sem dúvidas e quer prosseguir", 20], ["Precisa esclarecer dúvidas antes de decidir", 10], ["Não quer prosseguir", 0]]),
   },
 ];
 
@@ -134,10 +151,33 @@ export function isLeadQualificationConfigEqual(left: LeadQualificationConfig, ri
 }
 
 export function markLeadQualificationConfigConfigured(config: unknown, configuredAt = new Date().toISOString()) {
+  const normalized = normalizeLeadQualificationConfig(config);
+  const error = getLeadQualificationAnswerValidationError(normalized);
+  if (error) throw new Error(error);
   return {
-    ...normalizeLeadQualificationConfig(config),
+    ...normalized,
     configuredAt,
   };
+}
+
+export function getLeadQualificationAnswerValidationError(config: LeadQualificationConfig): string | null {
+  const questionIds = new Set<string>();
+  const fieldIds = new Set<string>();
+  for (const [index, question] of config.questions.entries()) {
+    if (questionIds.has(question.id) || fieldIds.has(question.crmField)) return "Qualificação: há perguntas duplicadas. Exclua a duplicata e adicione uma nova pergunta.";
+    questionIds.add(question.id); fieldIds.add(question.crmField);
+    if (!question.options) continue; // Legacy authored questions remain editable and unscored until configured.
+    if (question.options.length < 1 || question.options.length > 12) return `Qualificação: adicione de 1 a 12 respostas à pergunta ${index + 1}, ou exclua a pergunta.`;
+    const ids = new Set<string>(), labels = new Set<string>();
+    for (const option of question.options) {
+      const label = normalizeEvidence(option.label);
+      if (!label || option.label.trim().length > 240) return `Qualificação: preencha cada resposta da pergunta ${index + 1} com até 240 caracteres.`;
+      if (!option.id || ids.has(option.id) || labels.has(label)) return `Qualificação: as respostas da pergunta ${index + 1} precisam ser diferentes.`;
+      if (!Number.isInteger(option.points) || option.points < 0 || option.points > 100) return `Qualificação: use pontos inteiros de 0 a 100 na pergunta ${index + 1}.`;
+      ids.add(option.id); labels.add(label);
+    }
+  }
+  return null;
 }
 
 export function isLeadQualificationPlaybookActive(config: LeadQualificationConfig) {
@@ -158,28 +198,72 @@ export function getLeadStatusFromScore(score: number, config: LeadQualificationC
   return score >= config.qualifyThreshold ? "qualified" : score >= 20 ? "active" : "new";
 }
 
-export function normalizeLeadQualificationAnalysis(value: unknown, config: LeadQualificationConfig): LeadQualificationAnalysis {
+export function normalizeLeadQualificationAnalysis(value: unknown, config: LeadQualificationConfig, evidenceTexts?: string[]): LeadQualificationAnalysis {
   const record = isRecord(value) ? value : {};
-  const answeredQuestionIds = normalizeIdList(record.answeredQuestionIds ?? record.answered_question_ids);
-  const missingQuestionIds = normalizeIdList(record.missingQuestionIds ?? record.missing_question_ids);
-  const fields = normalizeFields(record.fields);
-  const scoreFromAnswerIds = calculateScoreFromAnswers(config, answeredQuestionIds);
-  const score = clampNumber(record.score, 0, 100, scoreFromAnswerIds);
-  const temperature = normalizeTemperature(record.temperature, getLeadTemperature(score, config));
-  const status = normalizeStatus(record.status, getLeadStatusFromScore(score, config));
+  const normalized = normalizeLeadQualificationConfig(config);
+  const candidates = normalized.enabled && Array.isArray(record.answers) ? record.answers.filter(isRecord) : [];
+  const answers: LeadQualificationAnswer[] = [];
+  for (const question of normalized.questions) {
+    const matches = candidates.filter(answer => answer.questionId === question.id);
+    // Duplicated or contradictory classifications require clarification, never extra points.
+    if (matches.length !== 1) continue;
+    const candidate = matches[0];
+    const option = question.options?.find(item => item.id === candidate.optionId);
+    const answer = readText(candidate.answer, "", 500);
+    if (!option || !answer) continue;
+    if (evidenceTexts && !evidenceTexts.some(text => normalizeEvidence(text).includes(normalizeEvidence(answer)))) continue;
+    answers.push({ questionId: question.id, optionId: option.id, answer, question: question.question,
+      optionLabel: option.label, points: option.disqualifies ? 0 : option.points, disqualifies: option.disqualifies });
+  }
+  const answeredQuestionIds = answers.map(answer => answer.questionId);
+  const missingQuestionIds = getMissingQuestionIds(normalized, answeredQuestionIds);
+  const rawScore = answers.reduce((sum, answer) => sum + answer.points, 0);
+  const maxScore = getLeadQualificationMaxScore(normalized);
+  const disqualificationReasons = answers.filter(answer => answer.disqualifies).map(answer => `${answer.question}: ${answer.optionLabel}`);
+  const disqualified = disqualificationReasons.length > 0;
+  const score = !normalized.enabled || disqualified || !maxScore ? 0 : clampScore(100 * rawScore / maxScore);
+  const pending = normalized.questions.some(question => question.required && missingQuestionIds.includes(question.id)) || normalized.questions.some(question => !question.options?.length);
+  const temperature = disqualified || !normalized.enabled ? "cold" : pending && score >= normalized.qualifyThreshold ? "warm" : getLeadTemperature(score, normalized);
+  const status = disqualified ? "lost" : pending && score >= normalized.qualifyThreshold ? "active" : getLeadStatusFromScore(score, normalized);
+  const allowedFields = new Set(normalized.questions.map(question => question.crmField));
+  const fields = Object.fromEntries(Object.entries(normalizeFields(record.fields)).filter(([key]) => allowedFields.has(key)));
+  for (const answer of answers) fields[normalized.questions.find(question => question.id === answer.questionId)!.crmField] = answer.answer;
 
   return {
     score,
     temperature,
     status,
     answeredQuestionIds,
-    missingQuestionIds: missingQuestionIds.length ? missingQuestionIds : getMissingQuestionIds(config, answeredQuestionIds),
+    missingQuestionIds,
+    answers, rawScore, maxScore, disqualified, disqualificationReasons,
+    configFingerprint: getLeadQualificationFingerprint(normalized),
     fields,
     summary: readText(record.summary, "Lead em qualificacao.", maxTextLength),
-    nextBestQuestion: readNullableText(record.nextBestQuestion ?? record.next_best_question, 300),
-    nextBestAction: readText(record.nextBestAction ?? record.next_best_action, "Continuar qualificando com uma pergunta objetiva.", 300),
+    nextBestQuestion: disqualified ? null : normalized.questions.find(question => missingQuestionIds.includes(question.id))?.question ?? null,
+    nextBestAction: disqualified ? "Lead desqualificado por uma resposta configurada. Encaminhar ao responsável sem avançar a proposta comercial."
+      : pending ? "Continuar o atendimento e esclarecer a próxima resposta pendente, sem presumir a opção."
+      : score >= normalized.qualifyThreshold ? "Lead qualificado; confirmar o próximo passo com o cliente."
+      : "Respostas registradas; continuar orientando conforme o interesse e a pontuação do lead.",
   };
 }
+
+export function qualificationOptions(values: Array<[string, number, boolean?]>): LeadQualificationOption[] {
+  return values.map(([label, points, disqualifies], index) => ({ id: `option_${index + 1}`, label, points, disqualifies: disqualifies === true }));
+}
+
+export function getLeadQualificationMaxScore(config: LeadQualificationConfig) {
+  return config.questions.reduce((sum, question) => sum + Math.max(0, ...(question.options ?? []).filter(option => !option.disqualifies).map(option => option.points)), 0);
+}
+
+export function getLeadQualificationFingerprint(config: LeadQualificationConfig) {
+  config = normalizeLeadQualificationConfig(config);
+  const text = JSON.stringify([config.enabled, config.qualifyThreshold, config.vipThreshold, config.questions]);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  return `answers-v2-${(hash >>> 0).toString(16)}`;
+}
+
+function normalizeEvidence(text: string) { return text.trim().replace(/\s+/g, " ").toLowerCase(); }
 
 export function buildLeadQualificationInstruction(config: LeadQualificationConfig) {
   const normalized = normalizeLeadQualificationConfig(config);
@@ -201,12 +285,12 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
       ? "- Faca apenas uma pergunta de qualificacao por mensagem. Nao transforme a conversa em formulario."
       : "- Pode combinar perguntas quando o lead pedir objetividade, mas mantenha a conversa natural.",
     "- Se o lead ignorar uma pergunta de qualificacao, nao repita imediatamente. Responda o assunto atual e retome depois somente se ficar natural.",
-    "- Se o lead demonstrar intencao clara de comprar, nao bloqueie a venda por qualificacao. Colete apenas os dados necessarios para pedido, entrega e pagamento.",
+    "- Se o lead demonstrar intencao clara de comprar, nao bloqueie a venda por qualificacao incompleta. Respeite sempre as respostas desqualificadoras e os requisitos do atendimento; pontuação não autoriza venda nem substitui verificação documental.",
     "- Primeiro entenda a dor e o contexto; depois fale de proposta, demonstracao ou preco.",
     "- Quando uma informacao for respondida, use-a no raciocinio e evite perguntar a mesma coisa de novo.",
     "- Perguntas do playbook ativo:",
     ...normalized.questions.map((question, index) => {
-      return `${index + 1}. [${question.id}] ${question.question} | campo CRM: ${question.crmField} | peso: ${question.weight} | obrigatoria: ${question.required ? "sim" : "nao"}`;
+      return `${index + 1}. [${question.id}] ${question.question} | campo CRM: ${question.crmField} | obrigatoria: ${question.required ? "sim" : "nao"}\n${describeOptions(question)}`;
     }),
   ];
 
@@ -242,18 +326,14 @@ export function buildLeadQualificationAnalysisPrompt(input: {
     `Limite qualificado: ${config.qualifyThreshold}`,
     `Limite VIP: ${config.vipThreshold}`,
     "",
-    "Perguntas e pesos:",
+    "Perguntas, respostas possíveis e pontos (uma opção por pergunta):",
     ...config.questions.map((question) => {
-      return `- id=${question.id}; campo=${question.crmField}; peso=${question.weight}; obrigatoria=${question.required ? "sim" : "nao"}; pergunta=${question.question}`;
+      return `- id=${question.id}; campo=${question.crmField}; obrigatoria=${question.required ? "sim" : "nao"}; pergunta=${question.question}\n${describeOptions(question)}`;
     }),
     "",
     "JSON esperado:",
     JSON.stringify({
-      score: 0,
-      temperature: "cold",
-      status: "active",
-      answeredQuestionIds: ["main_need"],
-      missingQuestionIds: ["urgency"],
+      answers: [{ questionId: config.questions[0]?.id ?? "id_da_pergunta", optionId: config.questions[0]?.options?.[0]?.id ?? "id_da_opcao", answer: "trecho literal da resposta do lead" }],
       fields: {
         purpose: "texto curto",
         volume_or_context: "texto curto",
@@ -269,9 +349,12 @@ export function buildLeadQualificationAnalysisPrompt(input: {
     "- Use apenas informacoes presentes na conversa/metadados.",
     ...config.disqualifiers.map(item => `- Sinal de baixa qualificação configurado: ${item}. Considere somente se estiver comprovado na conversa.`),
     ...config.handoffRules.map(item => `- Regra configurada para o próximo passo: ${item}.`),
-    "- Marque uma pergunta como respondida quando a conversa trouxer resposta suficiente para aquele campo.",
+    "- Retorne answers com uma opção existente por pergunta, somente quando a resposta do lead corresponder claramente ao significado da opção. Inclua em answer um trecho literal do que o lead disse; nunca use a fala do agente como resposta do lead.",
+    "- Resposta ambígua, contraditória ou fora das opções fica pendente: não inclua essa pergunta em answers. Não trate falta de resposta como não. Se o lead corrigiu uma resposta, use a correção mais recente.",
+    "- Não calcule score, temperatura ou status. O servidor calcula a soma das opções, normaliza pelo máximo para 0–100 e aplica desqualificação antes dos limites. Uma resposta com zero pontos continua sendo respondida.",
+    `- Configuração atual: ${getLeadQualificationFingerprint(config)}. Respostas anteriores só podem ser reutilizadas se lead_qualification.config_fingerprint for igual a este valor; inclua-as em answers com o trecho original. Correções mais recentes prevalecem.`,
     "- Nao invente necessidade, contexto, prazo, objecao, orcamento ou autoridade.",
-    "- Se faltar contexto, reduza o score e informe a proxima pergunta.",
+    "- Se faltar contexto, deixe a resposta pendente e peça esclarecimento. Pontuação não é uma avaliação de saúde nem uma autorização de compra.",
     "",
     "Metadados atuais do lead:",
     JSON.stringify(input.leadMetadata ?? {}),
@@ -316,6 +399,10 @@ function normalizeQuestion(value: unknown, index: number): LeadQualificationQues
       || id,
     weight: clampNumber(record.weight, 0, 40, 10),
     required: readBoolean(record.required, index < 2),
+    ...(Array.isArray(record.options) ? { options: record.options.filter(isRecord).slice(0, 12).map((option, optionIndex) => ({
+      id: readText(option.id, `option_${optionIndex + 1}`, 80), label: readText(option.label, "", 240),
+      points: clampNumber(option.points, 0, 100, 0), disqualifies: option.disqualifies === true,
+    })) } : {}),
   };
 }
 
@@ -332,12 +419,6 @@ function normalizeTextList(value: unknown, fallback: string[]) {
   return items;
 }
 
-function normalizeIdList(value: unknown) {
-  return Array.isArray(value)
-    ? value.map((item) => readText(item, "", 80)).filter(Boolean)
-    : [];
-}
-
 function normalizeFields(value: unknown) {
   if (!isRecord(value)) {
     return {};
@@ -352,12 +433,12 @@ function normalizeFields(value: unknown) {
 
 function getMissingQuestionIds(config: LeadQualificationConfig, answeredQuestionIds: string[]) {
   const answered = new Set(answeredQuestionIds);
-  return config.questions.filter((question) => question.required && !answered.has(question.id)).map((question) => question.id);
+  return config.questions.filter((question) => !answered.has(question.id)).map((question) => question.id);
 }
 
-function calculateScoreFromAnswers(config: LeadQualificationConfig, answeredQuestionIds: string[]) {
-  const answered = new Set(answeredQuestionIds);
-  return clampScore(config.questions.reduce((total, question) => total + (answered.has(question.id) ? question.weight : 0), 0));
+function describeOptions(question: LeadQualificationQuestion) {
+  return question.options?.length ? question.options.map(option => `  opção=${option.id}; resposta=${option.label}; ${option.disqualifies ? "DESQUALIFICA: interrompa o avanço comercial e encaminhe ao responsável" : `pontos=${option.points}`}`).join("\n")
+    : "  Sem respostas pontuadas configuradas. Registre o contexto, mas não atribua pontos.";
 }
 
 function isPersistedUnconfiguredQualificationConfig(record: Record<string, unknown>, config: LeadQualificationConfig) {
@@ -396,17 +477,7 @@ function cloneLeadQualificationConfig(config: LeadQualificationConfig): LeadQual
 }
 
 function cloneLeadQualificationQuestions(questions: LeadQualificationQuestion[]) {
-  return questions.map((question) => ({ ...question }));
-}
-
-function normalizeTemperature(value: unknown, fallback: LeadTemperature): LeadTemperature {
-  return value === "vip" || value === "hot" || value === "warm" || value === "cold" ? value : fallback;
-}
-
-function normalizeStatus(value: unknown, fallback: LeadQualificationStatus): LeadQualificationStatus {
-  return value === "new" || value === "active" || value === "qualified" || value === "won" || value === "lost" || value === "archived"
-    ? value
-    : fallback;
+  return questions.map((question) => ({ ...question, ...(question.options ? { options: question.options.map(option => ({ ...option })) } : {}) }));
 }
 
 function clampScore(value: number) {

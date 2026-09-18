@@ -57,6 +57,16 @@ O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infra
 
 ## Regras de negócio a preservar
 
+- Qualificação usa perguntas com respostas configuráveis e pontos por resposta.
+  A IA identifica a opção e cita a fala do lead; o servidor calcula soma e nota
+  normalizada de 0 a 100, sem pontuar apenas porque um campo CRM foi preenchido.
+  Resposta com zero pontos é respondida; resposta ambígua fica pendente.
+  Desqualificação explícita prevalece e perguntas obrigatórias pendentes impedem
+  qualificado/VIP. Os 32 perfis têm quatro perguntas e três respostas iniciais,
+  editáveis, com identificadores CRM automáticos e estáveis. Personalizações
+  existentes são preservadas; perguntas antigas sem opções precisam ser
+  configuradas para pontuar. Pontuação não substitui requisitos do atendimento.
+
 - O arquivo do lead pertence ao dono do relacionamento: contratante da ConnectyHub
   pertence ao CRM comercial da plataforma; consumidor de uma organização cliente
   pertence ao CRM dessa organização. Checkout deve enriquecer esse arquivo com

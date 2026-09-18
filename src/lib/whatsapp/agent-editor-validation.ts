@@ -1,4 +1,4 @@
-import type { LeadQualificationConfig } from "../leads/qualification";
+import { getLeadQualificationAnswerValidationError, type LeadQualificationConfig } from "../leads/qualification";
 import type { WhatsappBehaviorConfig, WhatsappCloneProfile } from "./agent-behavior";
 import type { AgentPromptBuilderConfig } from "./agent-prompt-templates";
 
@@ -20,6 +20,8 @@ export function getAgentEditorValidationError(input: {
     if (input.cloneProfile[key].trim().length > cloneLimits[key]) return `Personalidade: o campo ${cloneFieldLabels[key]} aceita até ${cloneLimits[key]} caracteres. Reduza o texto para salvar sem cortes.`;
   }
   const qualification = input.qualification;
+  const answerError = getLeadQualificationAnswerValidationError(qualification);
+  if (answerError) return answerError;
   if (qualification.productName.trim().length > 120 || qualification.commercialObjective.trim().length > 600) return "Qualificação: use até 120 caracteres na oferta e 600 no objetivo comercial.";
   if (!qualification.commercialObjective.trim()) return "Qualificação: preencha o objetivo comercial.";
   if (qualification.vipThreshold < qualification.qualifyThreshold) return "Qualificação: o limite VIP deve ser igual ou maior que o limite de qualificado.";

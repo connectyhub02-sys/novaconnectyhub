@@ -1,5 +1,5 @@
 import { defaultLeadQualificationConfig, normalizeLeadQualificationConfig, type LeadQualificationConfig } from "../leads/qualification";
-import { activityPresetVersion } from "./activity-presets";
+import { activityAnswerOptions } from "../leads/activity-answer-options";
 import { activityClosing, activityExample, activityRepresentation } from "./activity-profile";
 import { createActivityPromptConfig, getAgentActivityPreset, getAgentPromptTemplate, type AgentPromptBuilderConfig } from "./agent-prompt-templates";
 import { defaultWhatsappBehaviorConfig, normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, normalizeWhatsappCloneProfile, type WhatsappBehaviorConfig, type WhatsappCloneProfile } from "./agent-behavior";
@@ -25,18 +25,21 @@ export function createActivityCloneProfile(templateId: unknown, agentName: strin
 export function createActivityQualification(templateId: unknown): LeadQualificationConfig {
   const template = getAgentPromptTemplate(templateId);
   const preset = getAgentActivityPreset(template.id);
-  const points = Math.floor(80 / preset.questions.length);
+  const questions = preset.questions.slice(0, 3);
+  const points = Math.floor(80 / questions.length);
   return {
     ...defaultLeadQualificationConfig,
-    activityTemplateId: template.id, activityVersion: activityPresetVersion, customized: false,
+    activityTemplateId: template.id, activityVersion: 2, customized: false,
     commercialObjective: preset.objective,
-    maxQuestionsPerConversation: preset.questions.length + 1,
+    maxQuestionsPerConversation: 4,
     questions: [
-      ...preset.questions.map(([id, label, question], index) => ({
+      ...questions.map(([id, label, question], index) => ({
         id, label, question, crmField: id,
-        weight: points + (index === 0 ? 80 - points * preset.questions.length : 0), required: index < 2,
+        weight: points + (index === 0 ? 80 - points * questions.length : 0), required: index < 2,
+        options: activityAnswerOptions(template.id, id, label, points + (index === 0 ? 80 - points * questions.length : 0)),
       })),
-      { id: "objection", label: "Dúvidas e objeções", question: "Ficou alguma dúvida sobre o próximo passo?", crmField: "objections", weight: 20, required: false },
+      { id: "objection", label: "Dúvidas e objeções", question: "Ficou alguma dúvida sobre o próximo passo?", crmField: "objections", weight: 20, required: false,
+        options: activityAnswerOptions(template.id, "objection", "Dúvidas e objeções", 20) },
     ],
     disqualifiers: [], handoffRules: [preset.handoff],
   };
@@ -98,12 +101,18 @@ export function applyActivityQualification(templateId: unknown, value?: unknown)
       questions: previous.questions.map(question => question.id === "objection" && defaultObjection
         ? { ...question, required: defaultObjection.required } : question),
     };
-    return JSON.stringify(comparable) === JSON.stringify(normalizeLeadQualificationConfig(defaults));
+    const target = normalizeLeadQualificationConfig(defaults);
+    // Upgrade only recognized old presets; keep authored questions, limits and pauses intact.
+    if (previous.questions.every(question => question.options === undefined)) {
+      target.questions = target.questions.map(question => { const copy = { ...question }; delete copy.options; return copy; });
+      if (comparable.activityTemplateId) comparable.activityVersion = target.activityVersion;
+    }
+    return JSON.stringify(comparable) === JSON.stringify(target);
   };
   const isUnchangedGlobal = !previous.activityTemplateId
     && matchesDefaults(defaultLeadQualificationConfig);
   const isUnchangedActivity = previous.activityTemplateId && !previous.customized
-    && matchesDefaults(createActivityQualification(previous.activityTemplateId));
+    && (matchesDefaults(createActivityQualification(previous.activityTemplateId)) || matchesDefaults(legacyActivityQualification(previous.activityTemplateId)));
   if (value && !isUnchangedGlobal && !isUnchangedActivity) return previous;
   const next = createActivityQualification(templateId);
   const previousObjection = previous.questions.find(question => question.id === "objection");
@@ -112,6 +121,16 @@ export function applyActivityQualification(templateId: unknown, value?: unknown)
       ? { ...question, required: previousObjection.required } : question);
   }
   return next;
+}
+
+function legacyActivityQualification(templateId: string): LeadQualificationConfig {
+  const current = createActivityQualification(templateId);
+  const preset = getAgentActivityPreset(templateId);
+  const points = Math.floor(80 / preset.questions.length);
+  return { ...current, activityVersion: 1, maxQuestionsPerConversation: preset.questions.length + 1,
+    questions: [...preset.questions.map(([id, label, question], index) => ({ id, label, question, crmField: id,
+      weight: points + (index === 0 ? 80 - points * preset.questions.length : 0), required: index < 2 })),
+    { id: "objection", label: "Dúvidas e objeções", question: "Ficou alguma dúvida sobre o próximo passo?", crmField: "objections", weight: 20, required: false }] };
 }
 
 /** Shared by the editor and server. Existing explicit customizations survive a profile change. */

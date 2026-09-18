@@ -31,12 +31,12 @@ describe("activity-specific agent setup", () => {
     const saved = markLeadQualificationConfigConfigured(defaultLeadQualificationConfig, "2026-09-11T12:00:00Z");
     const updated = applyActivityQualification(id, saved);
     expect(updated.activityTemplateId).toBe(id);
-    expect(updated.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets[id].questions.map(([, , question]) => question));
+    expect(updated.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets[id].questions.slice(0, 3).map(([, , question]) => question));
     const instructions = buildLeadQualificationInstruction(updated).join("\n");
     const analysisPrompt = buildLeadQualificationAnalysisPrompt({ config: updated, organizationName: "Negócio", leadName: null, conversationText: "Conversa de teste", leadMetadata: null });
     for (const question of updated.questions) {
       expect(instructions).toContain(question.question);
-      expect(analysisPrompt).toContain(`campo=${question.crmField}; peso=${question.weight}`);
+      expect(analysisPrompt).toContain(`campo=${question.crmField}; obrigatoria=`);
     }
     expect(instructions).toContain(activityPresets[id].handoff);
     expect(saved).toEqual(markLeadQualificationConfigConfigured(defaultLeadQualificationConfig, "2026-09-11T12:00:00Z"));
@@ -53,7 +53,7 @@ describe("activity-specific agent setup", () => {
     });
     const broker = applyActivityQualification("corretor_imoveis", saved);
     expect(broker.activityTemplateId).toBe("corretor_imoveis");
-    expect(broker.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets.corretor_imoveis.questions.map(([, , question]) => question));
+    expect(broker.questions.slice(0, -1).map(question => question.question)).toEqual(activityPresets.corretor_imoveis.questions.slice(0, 3).map(([, , question]) => question));
     expect(broker.questions.find(question => question.id === "objection")?.required).toBe(true);
     const lawyer = applyActivityQualification("advogado", markLeadQualificationConfigConfigured(broker));
     expect(lawyer.activityTemplateId).toBe("advogado");
@@ -83,7 +83,7 @@ describe("activity-specific agent setup", () => {
     expect(setup.cloneProfile.vocabulary).toBe(preset.vocabulary);
     expect(normalizeWhatsappCloneProfile(JSON.parse(JSON.stringify(setup.cloneProfile)))).toEqual(setup.cloneProfile);
     expect(normalizeLeadQualificationConfig(JSON.parse(JSON.stringify(setup.qualification)), { persisted: true })).toEqual(setup.qualification);
-    expect(setup.qualification.questions.map((question) => question.question)).toEqual([...preset.questions.map(([, , question]) => question), "Ficou alguma dúvida sobre o próximo passo?"]);
+    expect(setup.qualification.questions.map((question) => question.question)).toEqual([...preset.questions.slice(0, 3).map(([, , question]) => question), "Ficou alguma dúvida sobre o próximo passo?"]);
     expect(setup.qualification.questions.reduce((total, question) => total + question.weight, 0)).toBe(100);
     expect(setup.qualification.questions.find((question) => question.id === "objection")?.required).toBe(false);
     expect(setup.config.fulfillmentRules).toBe(preset.fulfillment);

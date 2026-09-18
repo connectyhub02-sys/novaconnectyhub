@@ -9,7 +9,7 @@ import { optOutLeadContact } from "@/lib/automations/lead-contact-preferences";
 import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
 import { assertAgentAttendanceAllowed, ResponsibleAttendanceBlocked } from "./responsible-attendance";
-import { resolveWhatsappBehavior } from "./activity-setup";
+import { applyActivityQualification, resolveWhatsappBehavior } from "./activity-setup";
 import { conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -57,8 +57,7 @@ import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/
 import {
   buildLeadQualificationAnalysisPrompt,
   buildLeadQualificationInstruction,
-  getLeadStatusFromScore,
-  getLeadTemperature,
+  getLeadQualificationFingerprint,
   isLeadQualificationPlaybookActive,
   leadQualificationConfigKey,
   normalizeLeadQualificationAnalysis,
@@ -1413,7 +1412,8 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     crossAgentContext,
     commerceStoreContext,
     behavior,
-    qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true }),
+    qualification: applyActivityQualification(normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]).templateId,
+      normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true })),
     providerChatId: asString(metadata?.providerChatId),
     providerMessageId: asString(metadata?.providerMessageId),
     messageType: asString(metadata?.messageType) ?? "text",
@@ -5546,7 +5546,7 @@ async function analyzeAndPersistLeadQualification(
       generationConfig: {
         temperature: 0.1,
         topP: 0.8,
-        maxOutputTokens: 1100,
+        maxOutputTokens: 2400,
         responseMimeType: "application/json",
       },
       safetySettings: geminiSafetySettings,
@@ -5582,8 +5582,16 @@ async function analyzeAndPersistLeadQualification(
     },
   }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "lead_analysis", error instanceof Error ? error.message : "Falha ao medir analise de lead."));
 
+  const previousQualification = readRecord(readRecord(context.lead.metadata)?.lead_qualification);
+  const previousAnswers = previousQualification?.config_fingerprint === getLeadQualificationFingerprint(context.qualification)
+    && Array.isArray(previousQualification?.answers) ? previousQualification.answers : [];
+  const evidence = [
+    ...context.messages.filter(message => message.direction === "inbound").map(message => stripInternalWhatsappContext(buildMessageText(message))),
+    ...previousAnswers.map(answer => asString(readRecord(answer)?.answer)).filter((answer): answer is string => Boolean(answer)),
+  ];
   const analysis = enrichLeadQualificationAnalysisWithRuntimeSignals(
-    normalizeLeadQualificationAnalysis(parseJsonObject(outputText), context.qualification),
+    normalizeLeadQualificationAnalysis(parseJsonObject(outputText), context.qualification,
+      evidence),
     context,
   );
   await persistLeadQualification(client, context, analysis);
@@ -5600,40 +5608,8 @@ function enrichLeadQualificationAnalysisWithRuntimeSignals(
     ...extractRuntimeQualificationFields(context, config, analysis.fields),
     ...analysis.fields,
   };
-  const answeredQuestionIds = new Set(analysis.answeredQuestionIds);
-
-  for (const question of config.questions) {
-    if (fields[question.crmField]) {
-      answeredQuestionIds.add(question.id);
-    }
-  }
-
-  const answered = Array.from(answeredQuestionIds);
-  const missing = config.questions
-    .filter((question) => question.required && !answeredQuestionIds.has(question.id))
-    .map((question) => question.id);
-  const inferredScore = config.questions.reduce((total, question) => (
-    total + (answeredQuestionIds.has(question.id) ? question.weight : 0)
-  ), 0);
-  const score = Math.max(analysis.score, Math.max(0, Math.min(100, Math.round(inferredScore))));
-  const summary = analysis.summary && analysis.summary !== "Lead em qualificacao."
-    ? analysis.summary
-    : buildRuntimeQualificationSummary(fields);
-
-  return {
-    ...analysis,
-    score,
-    temperature: getLeadTemperature(score, config),
-    status: getLeadStatusFromScore(score, config),
-    answeredQuestionIds: answered,
-    missingQuestionIds: missing,
-    fields,
-    summary,
-    nextBestQuestion: analysis.nextBestQuestion ?? resolveRuntimeQualificationNextQuestion(config, answeredQuestionIds),
-    nextBestAction: analysis.nextBestAction && analysis.nextBestAction !== "Continuar qualificando com uma pergunta objetiva."
-      ? analysis.nextBestAction
-      : resolveRuntimeQualificationNextAction(fields, missing.length),
-  };
+  // CRM enrichment may capture addresses/documents, but cannot award qualification points.
+  return { ...analysis, fields };
 }
 
 function extractRuntimeQualificationFields(
@@ -5703,33 +5679,6 @@ function findRuntimeQualificationSignal(texts: string[], pattern: RegExp) {
   return null;
 }
 
-function buildRuntimeQualificationSummary(fields: Record<string, string>) {
-  const parts = [
-    fields.purpose ? `Interesse: ${fields.purpose}` : null,
-    fields.volume_or_context ? `Contexto: ${fields.volume_or_context}` : null,
-    fields.timeframe ? `Prazo: ${fields.timeframe}` : null,
-    fields.objections ? `Objeção: ${fields.objections}` : null,
-  ].filter(Boolean);
-
-  return parts.length ? parts.join(" | ") : "Lead em qualificação.";
-}
-
-function resolveRuntimeQualificationNextQuestion(config: LeadQualificationConfig, answeredQuestionIds: Set<string>) {
-  return config.questions.find((question) => question.required && !answeredQuestionIds.has(question.id))?.question ?? null;
-}
-
-function resolveRuntimeQualificationNextAction(fields: Record<string, string>, missingCount: number) {
-  if (fields.customer_email && fields.customer_document && fields.delivery_address) {
-    return "Dados principais do lead e do pedido capturados; conduzir o próximo passo comercial sem repetir perguntas.";
-  }
-
-  if (missingCount === 0) {
-    return "Lead qualificado; conduzir para o próximo passo comercial com atendimento consultivo.";
-  }
-
-  return "Continuar atendendo normalmente e capturar a próxima informação de qualificação quando ficar natural.";
-}
-
 async function persistLeadQualification(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -5762,6 +5711,12 @@ async function persistLeadQualification(
           next_best_question: analysis.nextBestQuestion,
           next_best_action: analysis.nextBestAction,
           summary: analysis.summary,
+          answers: analysis.answers ?? [],
+          raw_score: analysis.rawScore ?? 0,
+          max_score: analysis.maxScore ?? 0,
+          disqualified: analysis.disqualified === true,
+          disqualification_reasons: analysis.disqualificationReasons ?? [],
+          config_fingerprint: analysis.configFingerprint,
           updated_at: now,
           source: "whatsapp_qualification_agent",
         },

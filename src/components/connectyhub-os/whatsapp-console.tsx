@@ -97,6 +97,8 @@ import { activityPresetVersion } from "@/lib/whatsapp/activity-presets";
 import { getAgentEditorValidationError } from "@/lib/whatsapp/agent-editor-validation";
 import {
   defaultLeadQualificationConfig,
+  getLeadQualificationMaxScore,
+  qualificationOptions,
   isLeadQualificationConfigEqual,
   isLeadQualificationPlaybookActive,
   normalizeLeadQualificationConfig,
@@ -1092,6 +1094,7 @@ export function WhatsAppConsole({
             crmField: `campo_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`,
             weight: 10,
             required: false,
+            options: qualificationOptions([["Sim", 10], ["Talvez / precisa esclarecer", 5], ["Não", 0]]),
           },
         ],
       }),
@@ -2037,14 +2040,14 @@ export function WhatsAppConsole({
               <SecondaryAction
                 icon={RefreshCcw}
                 label="Restaurar salvo"
-                description="Desfaz alteracoes ainda nao salvas nas perguntas e pesos de qualificacao."
+                description="Desfaz alterações ainda não salvas nas perguntas, respostas e pontuações."
                 disabled={!state || !settingsChanged}
                 onClick={() => state && applyWhatsappState(state)}
               />
               <ActionButton
                 icon={Wand2}
                 label="Salvar qualificacao"
-                description="Grava as perguntas, pesos e limites que o agente usa para qualificar o lead no CRM."
+                description="Grava as perguntas, respostas, pontuações e limites usados para qualificar o lead no CRM."
                 disabled={!state?.capability.schemaReady || !settingsChanged}
                 loading={running === "save_settings"}
                 tone="ai"
@@ -5363,7 +5366,7 @@ function LeadQualificationEditor({
               className="rounded-lg border px-3 py-2"
               style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}
             >
-              <div className="grid gap-2 xl:grid-cols-[170px_minmax(320px,1fr)_106px_118px_34px] xl:items-end">
+              <div className="grid gap-2 xl:grid-cols-[170px_minmax(0,1fr)_118px_34px] xl:items-end">
                 <label className="block">
                   <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-blue-700">Pergunta {index + 1} · Rotulo</span>
                   <input
@@ -5380,41 +5383,6 @@ function LeadQualificationEditor({
                     onChange={(event) => onQuestionChange(question.id, { question: event.target.value })}
                   />
                 </label>
-                <div className="block">
-                  <span className="mb-1 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-slate-500">
-                    Peso
-                    <InfoHint text="Pontos somados quando o campo for respondido." />
-                  </span>
-                  <div className="grid h-9 grid-cols-[26px_1fr_26px] overflow-hidden rounded-md border" style={{ borderColor: "var(--ch-border)" }}>
-                    <button
-                      type="button"
-                      className="grid place-items-center border-r text-slate-600 transition hover:bg-blue-50"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      onClick={() => onQuestionChange(question.id, { weight: Math.max(0, question.weight - 1) })}
-                      aria-label={`Diminuir peso da pergunta ${index + 1}`}
-                    >
-                      -
-                    </button>
-                    <DraftNumberInput
-                      value={question.weight}
-                      onChange={(weight) => onQuestionChange(question.id, { weight })}
-                      aria-label={`Peso da pergunta ${index + 1}`}
-                      className="min-w-0 bg-transparent px-1 text-center font-mono text-[12px] outline-none"
-                      type="number"
-                      min={0}
-                      max={40}
-                    />
-                    <button
-                      type="button"
-                      className="grid place-items-center border-l text-slate-600 transition hover:bg-blue-50"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      onClick={() => onQuestionChange(question.id, { weight: Math.min(40, question.weight + 1) })}
-                      aria-label={`Aumentar peso da pergunta ${index + 1}`}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
                 <button
                   type="button"
                   className={cn(
@@ -5442,18 +5410,7 @@ function LeadQualificationEditor({
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="mt-2">
-              <BehaviorSection title="Campo interno" description="Identificador único usado para registrar esta resposta no CRM.">
-                <label className="mt-2 block max-w-sm">
-                  <span className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Campo CRM interno</span>
-                  <input
-                    className="h-8 w-full rounded-md border px-2.5 font-mono text-[11px] outline-none"
-                    value={question.crmField}
-                    onChange={(event) => onQuestionChange(question.id, { crmField: event.target.value })}
-                  />
-                </label>
-              </BehaviorSection>
-              </div>
+              <QualificationAnswersEditor question={question} index={index} onChange={onQuestionChange} />
             </div>
           ))}
 
@@ -5487,6 +5444,39 @@ function LeadQualificationEditor({
   );
 }
 
+function QualificationAnswersEditor({ question, index, onChange }: {
+  question: LeadQualificationQuestion; index: number;
+  onChange: (id: string, value: Partial<LeadQualificationQuestion>) => void;
+}) {
+  const options = question.options ?? [];
+  const update = (id: string, patch: Partial<NonNullable<LeadQualificationQuestion["options"]>[number]>) =>
+    onChange(question.id, { options: options.map(option => option.id === id ? { ...option, ...patch } : option) });
+  return <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: "var(--ch-border)" }}>
+    <p className="text-xs text-slate-500">Respostas possíveis e pontuação. Uma opção por pergunta; resposta não esclarecida fica pendente.</p>
+    {!options.length ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Adicione respostas para pontuar esta pergunta. O identificador é gerado automaticamente.</p> : null}
+    {options.map((option, answerIndex) => <div key={option.id} className="grid items-end gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_90px_140px_36px]" style={{ borderColor: "var(--ch-border)" }}>
+      <label className="min-w-0 text-xs">Resposta {answerIndex + 1}
+        <input aria-label={`Resposta ${answerIndex + 1} da pergunta ${index + 1}`} className="mt-1 h-9 w-full rounded-md border px-2" value={option.label}
+          onChange={event => update(option.id, { label: event.target.value })} placeholder="Ex.: Sim, já utilizei" />
+      </label>
+      <label className="text-xs">Pontos
+        <DraftNumberInput aria-label={`Pontos da resposta ${answerIndex + 1} da pergunta ${index + 1}`} className="mt-1 h-9 w-full rounded-md border px-2"
+          type="number" min={0} max={100} disabled={option.disqualifies} value={option.points} onChange={points => update(option.id, { points })} />
+      </label>
+      <label className="flex h-9 items-center gap-2 text-xs"><input type="checkbox" checked={option.disqualifies}
+        aria-label={`Desqualifica na resposta ${answerIndex + 1} da pergunta ${index + 1}`}
+        onChange={event => update(option.id, { disqualifies: event.target.checked })} />Desqualifica</label>
+      <button type="button" aria-label={`Excluir resposta ${answerIndex + 1} da pergunta ${index + 1}`} className="grid h-9 place-items-center rounded-md border border-rose-200 text-rose-700"
+        onClick={() => onChange(question.id, { options: options.filter(item => item.id !== option.id) })}><X className="size-4" /></button>
+    </div>)}
+    <button type="button" disabled={options.length >= 12} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-blue-200 px-3 text-xs text-blue-700 disabled:opacity-50"
+      aria-label={`Adicionar resposta à pergunta ${index + 1}`}
+      onClick={() => onChange(question.id, { options: [...options, { id: `answer_${crypto.randomUUID().replaceAll("-", "")}`, label: "", points: 0, disqualifies: false }] })}>
+      <Plus className="size-3.5" />Adicionar resposta
+    </button>
+  </div>;
+}
+
 function LeadQualificationListEditor({
   label,
   description,
@@ -5513,7 +5503,7 @@ function LeadQualificationListEditor({
 function LeadQualificationSummary({ config, changed }: { config: LeadQualificationConfig; changed: boolean }) {
   const normalized = normalizeLeadQualificationConfig(config);
   const playbookActive = isLeadQualificationPlaybookActive(normalized);
-  const totalWeight = normalized.questions.reduce((total, question) => total + question.weight, 0);
+  const totalWeight = getLeadQualificationMaxScore(normalized);
   const required = normalized.questions.filter((question) => question.required).length;
 
   return (
@@ -5523,7 +5513,7 @@ function LeadQualificationSummary({ config, changed }: { config: LeadQualificati
         <PromptCheck label={playbookActive ? "Qualificacao ativa" : normalized.enabled ? "Qualificacao sem perguntas" : "Qualificacao pausada"} active={playbookActive} />
         <PromptCheck label={`${normalized.questions.length} perguntas configuradas`} active={normalized.questions.length >= 4} />
         <PromptCheck label={`${required} obrigatorias`} active={required >= 2} />
-        <PromptCheck label={`${totalWeight} pontos totais`} active={totalWeight >= normalized.qualifyThreshold} />
+        <PromptCheck label={`Máximo ${totalWeight} pontos · escala 0–100`} active={totalWeight > 0} />
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <InfoTile label="Produto" value={normalized.productName || "Produto do cliente"} />

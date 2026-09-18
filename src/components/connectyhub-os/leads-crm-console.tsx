@@ -4347,6 +4347,18 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
         </div>
       ) : null}
 
+      {lead.qualification.scoring ? <div className="mt-3 rounded-xl border border-slate-200 p-3">
+        <p className="text-sm font-semibold">Pontuação por resposta: {lead.qualification.scoring.rawScore} de {lead.qualification.scoring.maxScore} pontos</p>
+        <p className="mt-1 text-xs text-slate-500">A nota do lead é convertida para a escala de 0 a 100. Respostas obrigatórias pendentes impedem a classificação como qualificado ou VIP.</p>
+        {lead.qualification.scoring.disqualified ? <div className="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+          <strong>Desqualificado pelos critérios configurados</strong>
+          {lead.qualification.scoring.reasons.map(reason => <p key={reason} className="mt-1 text-xs">{reason}</p>)}
+        </div> : null}
+        <div className="mt-3 space-y-2">{lead.qualification.scoring.answers.map((answer, index) => <div key={index} className="rounded-lg bg-slate-50 p-3 text-xs">
+          <p className="font-semibold">{answer.question}</p><p className="mt-1">Resposta: {answer.answer}</p>
+          <p className="mt-1 text-slate-500">{answer.optionLabel} · {answer.disqualifies ? "Desqualifica" : `${answer.points} pontos`}</p>
+        </div>)}</div>
+      </div> : null}
       <div className="mt-3 grid gap-2 md:grid-cols-3">
         <InfoMini label="Respondidas" value={String(lead.qualification.answeredQuestionIds.length)} />
         <InfoMini label="Pendentes" value={String(lead.qualification.missingQuestionIds.length)} />

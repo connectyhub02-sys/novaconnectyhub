@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
+import { applyActivityQualification, applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -1434,7 +1434,8 @@ function buildState(
           cloneProfile: getCloneProfileConfig(agent),
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),
-          qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true }),
+          qualification: applyActivityQualification(normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]).templateId,
+            normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey], { persisted: true })),
           channelConfig: getAgentChannelConfig(agent),
           automationRoles: readAutomationRoles(agent.metadata),
           responsibleHuman: readAgentResponsibleHuman(agent.metadata),

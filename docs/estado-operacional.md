@@ -1,5 +1,50 @@
 # Estado operacional da ConnectyHub
 
+## Qualificação por respostas — 18/09/2026
+
+Editor compartilhado cliente/admin permite adicionar, editar e excluir perguntas
+e respostas com pontos individuais e opção desqualificadora. Identificadores CRM
+gerados automaticamente, sem campo técnico editável. Os 32 perfis de atividade
+têm quatro perguntas com três respostas cada; padrões antigos reconhecidos são
+atualizados na leitura. Configurações autorais e pausas são preservadas.
+
+Runtime usa opções e evidência literal do lead, calcula pontos no servidor e
+registra o detalhamento no CRM. Contexto enriquecido não aumenta pontuação.
+Máximo convertido para escala 0–100; desqualificação prevalece; obrigatórias
+pendentes impedem qualificado/VIP. Histórico só muda na próxima análise.
+
+Navegador local com API simulada validou cliente/admin, desktop/celular,
+edição vazia/espaços, adicionar/excluir, pontuação/desqualificação,
+salvar/recarregar e estabilidade dos identificadores. Nenhuma conversa real
+ou chamada paga foi feita. A tabela específica de oito perguntas solicitada
+pelo titular está preparada, com máximo 110 convertido para 100; sua aplicação
+aos dois agentes autorizados depende da confirmação da publicação.
+
+Detalhes e limites em [qualificação por respostas](qualificacao-respostas-2026-09-18.md).
+
+## Modal publicado após recuperação da Vercel — 18/09/2026
+
+Commit `4f700d20f9532d0063e1c024591aa684b2053e22` confirmado na master remota
+e em `https://www.connectyhub.com.br/api/health` às 18h32 BRT, com status `ok`.
+Modal real da Luna conferido no domínio de produção: formulário superior em toda
+a largura, conexão abaixo em três colunas e diagnóstico recolhido; todos os
+controles visíveis sem rolagem no viewport desktop observado. Nenhum dado salvo
+ou conexão alterada nessa conferência.
+
+O deploy `EGJXbTRURnuoyVi9kdenuLck5U5n` concluiu o build em 1m56s às 18h27 BRT.
+Inicialmente ficou Staged, com atribuição de domínios ignorada. Promoção manual
+aceita às 18h28; o domínio levou alguns minutos para passar de `9eef2976` a
+`4f700d2`. A tentativa inicial `2gwKaa4orH4vnkfH4RNLGoEDuRGY` ficou cerca de
+22 minutos em Initializing antes de ser cancelada. O disparo automático atrasado
+`FhAMyEF28WTnJUXeYXkqR1WyjSZT` também foi cancelado. Uma republicação cacheada
+`3s9enMe7Kg56GjcRs4mHwKvSqHdj` foi solicitada enquanto a promoção não aparecia
+no domínio, e cancelada assim que a versão correta foi confirmada em produção.
+
+Incidente do provedor "Elevated Errors Triggering Deployments", de 17h32 a
+18h22 BRT: https://www.vercel-status.com/incidents/bwkmw4hmrgmk. Correção anunciada
+às 18h13. A espera ocorreu antes da compilação, sem erro de build do projeto.
+Registro local posterior à publicação, sem gerar outro deploy apenas documental.
+
 ## Modal de agente em duas faixas — 18/09/2026
 
 Formulário ocupa toda a largura superior; conexão WhatsApp fica abaixo, com

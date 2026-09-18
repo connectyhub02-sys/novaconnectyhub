@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { isClientBillingRecoveryPage } from "../src/lib/billing/recovery-paths";
 
 const shellSource = readFileSync("src/components/connectyhub-os/connecty-shell.tsx", "utf8");
 const globalCssSource = readFileSync("src/app/globals.css", "utf8");
@@ -70,8 +71,9 @@ describe("Connecty shell responsive layout", () => {
     expect(shellSource).toContain("const isBillingRecoveryPage = isClientBillingRecoveryPage(active);");
     expect(shellSource).toContain("!isAttendancePage && !isBillingRecoveryPage ? <BillingStatusBanner");
     expect(shellSource).toContain("!accountCompletionGateActive && !isBillingRecoveryPage ? (");
-    expect(shellSource).toContain('pathname === "/dashboard/planos"');
-    expect(shellSource).toContain('pathname.startsWith("/dashboard/planos/")');
+    expect(isClientBillingRecoveryPage("/dashboard/planos")).toBe(true);
+    expect(isClientBillingRecoveryPage("/dashboard/planos/checkout")).toBe(true);
+    expect(isClientBillingRecoveryPage("/dashboard/planos-outro")).toBe(false);
     expect(shellSource).not.toContain('active !== "/dashboard/planos"');
   });
 

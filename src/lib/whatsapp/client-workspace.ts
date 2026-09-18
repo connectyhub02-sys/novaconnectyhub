@@ -1,6 +1,6 @@
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
-import { applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "./activity-setup";
+import { applyActivityQualification, applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "./activity-setup";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -2659,7 +2659,8 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
-  return normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey], { persisted: true });
+  return applyActivityQualification(normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]).templateId,
+    normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey], { persisted: true }));
 }
 
 function getAgentChannelConfig(agent: AgentRow | null) {

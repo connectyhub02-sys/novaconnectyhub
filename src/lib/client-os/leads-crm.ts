@@ -249,6 +249,10 @@ export type ClientLeadRecord = {
     nextBestAction: string | null;
     answeredQuestionIds: string[];
     missingQuestionIds: string[];
+    scoring?: {
+      rawScore: number; maxScore: number; disqualified: boolean; reasons: string[];
+      answers: Array<{ question: string; answer: string; optionLabel: string; points: number; disqualifies: boolean }>;
+    };
     updatedAt: string | null;
     fields: Array<{
       key: string;
@@ -1234,6 +1238,16 @@ function mapLeadRecord(input: {
     nextBestAction: readString(leadQualification.next_best_action),
     answeredQuestionIds: readStringList(leadQualification.answered_question_ids),
     missingQuestionIds: readStringList(leadQualification.missing_question_ids),
+    scoring: readString(leadQualification.config_fingerprint) ? {
+      rawScore: Number(leadQualification.raw_score) || 0, maxScore: Number(leadQualification.max_score) || 0,
+      disqualified: leadQualification.disqualified === true,
+      reasons: readStringList(leadQualification.disqualification_reasons),
+      answers: (Array.isArray(leadQualification.answers) ? leadQualification.answers : []).flatMap(value => {
+        const answer = readRecord(value);
+        return answer && readString(answer.question) ? [{ question: readString(answer.question)!, answer: readString(answer.answer) ?? "",
+          optionLabel: readString(answer.optionLabel) ?? "", points: Number(answer.points) || 0, disqualifies: answer.disqualifies === true }] : [];
+      }),
+    } : undefined,
     updatedAt: readString(leadQualification.updated_at) ?? readString(metadata.last_qualification_updated_at),
     fields: mapQualificationFields(qualificationMetadata),
   };
