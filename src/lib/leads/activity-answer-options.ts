@@ -22,6 +22,7 @@ const choices: Record<string, Choice[]> = {
   objection: [["Sem dúvidas e quer prosseguir", 1], ["Tem dúvidas ou condições a esclarecer", .5], ["Não quer prosseguir neste momento", 0]],
   size: [["Tamanho ou numeração definidos", 1], ["Quer ajuda para escolher o tamanho", .5], ["Apenas pesquisando, sem preferência", .2]],
   preference: [["Modelo, marca ou preferência definidos", 1], ["Quer comparar opções", .6], ["Sem preferência, apenas pesquisando", .2]],
+  priority: [["Já defini o que é indispensável", 1], ["Tenho algumas preferências e quero comparar opções", .6], ["Ainda preciso de orientação para definir minhas prioridades", .3]],
   product: [["Produto ou categoria definidos", 1], ["Precisa de orientação para identificar o produto", .5], ["Produto fora da oferta conhecida do negócio", 0]],
   service: [["Serviço pretendido definido", 1], ["Precisa de avaliação para definir o serviço", .7], ["Somente informações gerais", .2]],
 };

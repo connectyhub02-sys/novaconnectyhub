@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LeadQualificationConfig } from "@/lib/leads/qualification";
 import { leadQualificationConfigKey } from "@/lib/leads/qualification";
+import { onboardingAnswerOptions } from "../leads/qualification-answer-defaults";
 import type { WhatsappBehaviorConfig, WhatsappCloneProfile } from "./agent-behavior";
 import { outboundLanguageQualityPromptLines } from "./outbound-language";
 
@@ -160,7 +161,7 @@ export const elianeLeadQualificationConfig: LeadQualificationConfig = {
       weight: 10,
       required: true,
     },
-  ],
+  ].map(question => ({ ...question, options: onboardingAnswerOptions(question.id, question.weight) })),
   disqualifiers: [
     "Lead quer apenas testar curiosidade e nao tem produto, publico, urgencia ou interesse em demonstracao.",
     "Lead quer usar a plataforma para spam, enganar pessoas, coletar dados indevidos ou burlar politicas.",

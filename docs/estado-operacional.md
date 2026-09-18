@@ -1,5 +1,34 @@
 # Estado operacional da ConnectyHub
 
+## Respostas prontas nos agentes existentes — complemento de 18/09/2026
+
+Titular autorizou completar perguntas antigas de todos os painéis com respostas
+e notas iniciais, além dos 32 modelos de profissão/empresa já preenchidos.
+Inventário no Supabase de produção: 40 registros de agentes; 12 agentes de
+atendimento não arquivados em oito organizações, incluindo o interno da plataforma.
+Dez receberam 135 alternativas em 45 perguntas às 19h25 BRT; os dois agentes com
+rubricas completas foram preservados. Perguntas autorais reconhecidas mantêm
+texto, identificadores, obrigatoriedade e limites; roteiros de cinco e oito
+perguntas não foram reduzidos. Cadastros sem atividade usam atendimento geral;
+não foi inferida profissão a partir do nome da empresa.
+
+Backup privado antes da escrita, atualização condicionada por `updated_at` e
+releitura comprovaram todas as dez gravações. Nenhuma mensagem enviada, conexão
+alterada ou lead reprocessado. Agentes de tarefas internas sem qualificação,
+controladores globais e registros arquivados não foram convertidos em atendimento.
+
+Código complementa perguntas legadas reconhecidas na leitura compartilhada e
+preenche o seed do agente comercial interno. Listas existentes (inclusive vazias
+por edição explícita) não são substituídas. Cobertura dos 32 perfis verifica também
+perguntas extras dos modelos antigos, notas, preservação e idempotência.
+Reauditoria após gravação: 12/12 agentes completos, zero perguntas sem opções
+nesse conjunto; nova execução não propõe alterações. Passaram 256 testes
+direcionados, ESLint e build webpack/TypeScript. A sessão assistida de cliente
+recusou corretamente a rota administrativa; a configuração interna foi conferida
+por releitura autorizada do banco, sem contornar o controle de acesso. Publicação
+do complemento de código será conferida no health após o push; os dados já são
+compatíveis com o runtime por respostas publicado anteriormente.
+
 ## Qualificação por respostas — 18/09/2026
 
 Editor compartilhado cliente/admin permite adicionar, editar e excluir perguntas

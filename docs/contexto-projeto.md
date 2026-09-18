@@ -64,8 +64,11 @@ O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infra
   Desqualificação explícita prevalece e perguntas obrigatórias pendentes impedem
   qualificado/VIP. Os 32 perfis têm quatro perguntas e três respostas iniciais,
   editáveis, com identificadores CRM automáticos e estáveis. Personalizações
-  existentes são preservadas; perguntas antigas sem opções precisam ser
-  configuradas para pontuar. Pontuação não substitui requisitos do atendimento.
+  existentes são preservadas. Perguntas antigas reconhecidas recebem respostas
+  iniciais revisadas, incluindo roteiros internos; perguntas desconhecidas não
+  recebem critérios presumidos. Alternativas já editadas e listas explicitamente
+  removidas não são repostas automaticamente. Pontuação não substitui requisitos
+  do atendimento.
 
 - O arquivo do lead pertence ao dono do relacionamento: contratante da ConnectyHub
   pertence ao CRM comercial da plataforma; consumidor de uma organização cliente

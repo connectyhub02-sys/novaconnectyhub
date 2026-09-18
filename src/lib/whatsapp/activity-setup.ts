@@ -1,5 +1,6 @@
 import { defaultLeadQualificationConfig, normalizeLeadQualificationConfig, type LeadQualificationConfig } from "../leads/qualification";
 import { activityAnswerOptions } from "../leads/activity-answer-options";
+import { fillMissingQualificationAnswers } from "../leads/qualification-answer-defaults";
 import { activityClosing, activityExample, activityRepresentation } from "./activity-profile";
 import { createActivityPromptConfig, getAgentActivityPreset, getAgentPromptTemplate, type AgentPromptBuilderConfig } from "./agent-prompt-templates";
 import { defaultWhatsappBehaviorConfig, normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, normalizeWhatsappCloneProfile, type WhatsappBehaviorConfig, type WhatsappCloneProfile } from "./agent-behavior";
@@ -113,7 +114,7 @@ export function applyActivityQualification(templateId: unknown, value?: unknown)
     && matchesDefaults(defaultLeadQualificationConfig);
   const isUnchangedActivity = previous.activityTemplateId && !previous.customized
     && (matchesDefaults(createActivityQualification(previous.activityTemplateId)) || matchesDefaults(legacyActivityQualification(previous.activityTemplateId)));
-  if (value && !isUnchangedGlobal && !isUnchangedActivity) return previous;
+  if (value && !isUnchangedGlobal && !isUnchangedActivity) return fillMissingQualificationAnswers(previous, getAgentPromptTemplate(templateId).id);
   const next = createActivityQualification(templateId);
   const previousObjection = previous.questions.find(question => question.id === "objection");
   if (value && previousObjection) {
