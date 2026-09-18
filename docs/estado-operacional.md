@@ -10,7 +10,10 @@ da submissão descartada na última troca. 106 testes e lint passaram; backup e
 ensaio da migration 0157 concluídos com registros financeiros inalterados.
 Migration 0157 aplicada às 10:32 BRT. Dados do checkout anterior da Betel foram
 recuperados como sugestão privada para revisão; endereço não confirmado e hashes
-financeiros preservados. Build final passou. Publicação pendente nesta etapa.
+financeiros preservados. Build final passou. Publicado `85efbba8` pela master;
+Vercel success e health com SHA exato. Conferência real da Betel mostrou dados
+recuperados para revisão e dois cartões, com apenas um padrão. Endereço continua
+não confirmado; nenhuma cobrança ou alteração de cartão real foi executada.
 [Comportamento, evidências e pendência de Pagar agora](faturamento-cartoes-2026-09-18.md).
 
 ## Reverificação da habilitação Pix no Asaas — 18/09/2026, 01:09 BRT

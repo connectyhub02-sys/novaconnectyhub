@@ -54,7 +54,13 @@ version 0157 e as duas colunas novas conferidas. Recuperação da Betel ensaiada
 com rollback e aplicada em transação: sugestão `checkout_recovery`, quatro campos
 de contato e CEP/número, endereço ainda não confirmado. Hashes financeiros
 permaneceram iguais. Build webpack/TypeScript/108 páginas e ESLint passaram.
-A confirmação da publicação será registrada após o deploy.
+Publicado `85efbba85e23a2d80e921ee2c1935bbc635a2876` pela master oficial,
+Vercel success no projeto existente e health `ok` com SHA exato. Na sessão real
+da Betel, a Minha Conta exibiu a origem histórica, sugestão de titular,
+CEP/número e endereço completado pela consulta de CEP; UF selecionada.
+E-mail recuperado confirmado no banco privado. Dois cartões visíveis, um padrão
+sem ação de seleção e o anterior com ação. Nenhum salvamento/consentimento real
+foi enviado na verificação; o endereço permanece aguardando revisão do titular.
 
 ## Pagar agora — diagnóstico, ainda não implementado
 
