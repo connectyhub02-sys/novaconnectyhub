@@ -1,4 +1,46 @@
 # Estado operacional da ConnectyHub
+
+## Auditoria dos controles de agentes — pacote para master em 18/09/2026
+
+Auditados os caminhos de Conexão, Prompt, Qualificação e Comportamento no editor
+compartilhado de clientes/acesso assistido e agentes internos. Relatório com matriz
+de efeito funcional: [auditoria-controles-agente-2026-09-18.md](auditoria-controles-agente-2026-09-18.md).
+
+Corrigidas a remoção de espaços/quebras de linha ao digitar e a restauração de
+regras opcionais apagadas; rascunhos numéricos e listas; validação de limites,
+perguntas e campos CRM; perda de edições durante salvamento lento; aplicação do
+perfil em agentes legados. Sanfonas padronizadas e fechadas ao montar a aba,
+inclusive Estilo de conversa, playbook/perguntas CRM, baixa qualificação e próximo
+passo. Selecionar voz altera somente a voz, preservando Espelho, rapport e divisão
+de mensagens. O runtime respeita a janela da IA mesmo com presença sempre online;
+rapport e regras de qualificação receberam instruções explícitas nos prompts.
+Figurinhas com URLs externas 404 foram substituídas por cinco arquivos próprios.
+
+Cartões de seleção compactados para 88 px de altura no ensaio local, com Editar,
+Testar, Clonar e Excluir na mesma linha. Seleção pelo cartão/Enter/Espaço, sem botão
+Abrir. Foto do cadastro com fallback para WhatsApp do mesmo agente/organização,
+ou iniciais. Conexão e Prompt mostram o nome cadastrado somente para leitura;
+a alteração permanece no formulário Editar e atualiza o contexto após salvar.
+
+Evidências: suíte completa com 3.166 testes em 263 arquivos aprovada antes dos
+últimos ajustes de cartões/nome; após esses ajustes, 195 testes direcionados em
+três arquivos aprovados, incluindo isolamento das fotos. TypeScript e ESLint sem
+erros. Navegador local com HTTP sintético confirmou edição/limpeza, sanfonas,
+independência voz/modo/rapport, falha e concorrência de salvamento nos painéis
+cliente e interno; cartões e nome também validados em 1440, 390 e 320 px.
+Nenhum erro de JavaScript nos ensaios. Build de produção `next build --webpack`
+aprovado, com 108 páginas estáticas; o primeiro ensaio apontou apenas referências
+geradas em cache às rotas temporárias, removidas antes da execução final aprovada.
+
+Integração sobre a master remota `ac187574`, preservando os 22 commits mais
+recentes de cobrança/conta. Os 222 testes direcionados de agentes passaram na
+base integrada; build webpack/TypeScript e geração de 108 páginas aprovados. Envio para a master autorizado pelo titular em 18/09/2026. Sem migration ou
+alteração direta de agentes reais; implantação em produção ainda não conferida. Os testes
+substituem provedores externos e não comprovam envio/recepção, clonagem, extração
+de arquivos ou uso pago. Pendente revisar precedência de follow-up quando uma
+política de Automações substitui controles do editor interno, além de publicar e
+validar as integrações em produção. Não certificar todos os recursos como operacionais.
+
 ## Faturamento reutilizável e identificação dos cartões — 18/09/2026
 
 Pacote preparado com sugestões privadas de titular, confirmação explícita de

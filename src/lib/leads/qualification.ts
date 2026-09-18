@@ -267,6 +267,8 @@ export function buildLeadQualificationAnalysisPrompt(input: {
     "",
     "Regras:",
     "- Use apenas informacoes presentes na conversa/metadados.",
+    ...config.disqualifiers.map(item => `- Sinal de baixa qualificação configurado: ${item}. Considere somente se estiver comprovado na conversa.`),
+    ...config.handoffRules.map(item => `- Regra configurada para o próximo passo: ${item}.`),
     "- Marque uma pergunta como respondida quando a conversa trouxer resposta suficiente para aquele campo.",
     "- Nao invente necessidade, contexto, prazo, objecao, orcamento ou autoridade.",
     "- Se faltar contexto, reduza o score e informe a proxima pergunta.",

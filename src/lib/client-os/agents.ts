@@ -26,6 +26,7 @@ import {
 } from "@/lib/whatsapp/agent-prompt-templates";
 import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
+import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
@@ -40,6 +41,8 @@ export type ClientAgent = {
   sectorName: string;
   agentCode: string;
   name: string;
+  avatarUrl: string | null;
+  avatarAlt: string | null;
   personaName: string;
   roleTitle: string;
   description: string | null;
@@ -60,6 +63,8 @@ type AgentRow = {
   sector_name: string;
   agent_code: string;
   name: string;
+  avatar_url: string | null;
+  avatar_alt: string | null;
   persona_name: string | null;
   role_title: string;
   description: string | null;
@@ -72,8 +77,6 @@ type AgentRow = {
 };
 
 type AgentFullRow = AgentRow & {
-  avatar_url: string | null;
-  avatar_alt: string | null;
   profile_bio: string | null;
   llm_provider: string;
   model_id: string | null;
@@ -104,8 +107,8 @@ type AgentWhatsappInstanceRow = {
 const maxAgentNameLength = 80;
 const maxSectorNameLength = 80;
 const maxPromptLength = 8000;
-const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at, metadata";
-const agentFullSelectColumns = `${agentListSelectColumns}, avatar_url, avatar_alt, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits`;
+const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, avatar_url, avatar_alt, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at, metadata";
+const agentFullSelectColumns = `${agentListSelectColumns}, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits`;
 
 export async function getClientAgentsWorkspace(
   input: string | {
@@ -144,6 +147,20 @@ export async function getClientAgentsWorkspace(
 
   const companyById = new Map(companies.map((company) => [company.id, company]));
   const agents = ((data ?? []) as AgentRow[]).map((agent) => mapAgent(agent, companyById));
+
+  if (agents.some((agent) => !agent.avatarUrl)) {
+    const { data: instances } = await client.from("whatsapp_instances")
+      .select("organization_id, metadata")
+      .in("organization_id", companyIds)
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false });
+    for (const agent of agents) {
+      if (agent.avatarUrl) continue;
+      const instance = instances?.find((row) => row.organization_id === agent.companyId
+        && row.metadata?.agent_id === agent.id);
+      agent.avatarUrl = readWhatsappInstanceProfileImageUrl(instance?.metadata);
+    }
+  }
 
   return { companies, agents };
 }
@@ -702,6 +719,8 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     sectorName: agent.sector_name,
     agentCode: agent.agent_code,
     name: agent.name,
+    avatarUrl: agent.avatar_url ?? null,
+    avatarAlt: agent.avatar_alt ?? null,
     personaName: agent.persona_name ?? agent.name,
     roleTitle: agent.role_title,
     description: agent.description,

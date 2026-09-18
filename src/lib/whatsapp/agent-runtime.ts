@@ -17805,26 +17805,11 @@ async function sendContextualSticker(
 }
 
 const stickerMap: Record<string, string[]> = {
-  greeting: [
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/hi.webp",
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/wave.webp",
-  ],
-  thanks: [
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/heart.webp",
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/thanks.webp",
-  ],
-  ok: [
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/thumbsup.webp",
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/ok.webp",
-  ],
-  laugh: [
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/laugh.webp",
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/lol.webp",
-  ],
-  thinking: [
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/think.webp",
-    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/hmm.webp",
-  ],
+  greeting: ["/whatsapp-stickers/greeting.webp"],
+  thanks: ["/whatsapp-stickers/thanks.webp"],
+  ok: ["/whatsapp-stickers/ok.webp"],
+  laugh: ["/whatsapp-stickers/laugh.webp"],
+  thinking: ["/whatsapp-stickers/thinking.webp"],
 };
 
 function pickContextualStickerUrl(text: string): string | null {
@@ -17838,7 +17823,7 @@ function pickContextualStickerUrl(text: string): string | null {
   else return null;
 
   const urls = stickerMap[category];
-  return urls[Math.floor(Math.random() * urls.length)];
+  return new URL(urls[Math.floor(Math.random() * urls.length)], process.env.NEXT_PUBLIC_APP_URL || "https://www.connectyhub.com.br").toString();
 }
 
 function randomBetween(min: number, max: number) {
@@ -18299,7 +18284,7 @@ async function persistMediaAnalysisFailure(
 }
 
 function isWithinSchedule(behavior: WhatsappBehaviorConfig) {
-  if (!behavior.aiScheduleEnabled || isAlwaysPresenceMode(behavior)) {
+  if (!behavior.aiScheduleEnabled) {
     return true;
   }
 

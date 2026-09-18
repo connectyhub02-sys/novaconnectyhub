@@ -49,14 +49,14 @@ export function normalizeAgentPromptBuilderConfig(value: unknown, fallback?: Par
   return {
     ...(normalizeProfessionalIdentity(record?.professionalIdentity ?? fallback?.professionalIdentity) ? { professionalIdentity: normalizeProfessionalIdentity(record?.professionalIdentity ?? fallback?.professionalIdentity) } : {}),
     templateId: template.id,
-    tone: limitText(readString(record?.tone) ?? fallback?.tone ?? preset.tone),
-    objective: limitText(readString(record?.objective) ?? fallback?.objective ?? preset.objective),
-    audience: limitText(readString(record?.audience) ?? fallback?.audience ?? preset.audience),
-    salesRules: limitText(readString(record?.salesRules ?? record?.sales_rules) ?? fallback?.salesRules ?? preset.playbook.join("\n")),
-    fulfillmentRules: limitText(readString(record?.fulfillmentRules ?? record?.fulfillment_rules) ?? fallback?.fulfillmentRules ?? preset.fulfillment),
-    humanHandoffRules: limitText(readString(record?.humanHandoffRules ?? record?.human_handoff_rules) ?? fallback?.humanHandoffRules ?? preset.handoff),
-    neverRules: limitText(readString(record?.neverRules ?? record?.never_rules) ?? fallback?.neverRules ?? preset.care),
-    companyComplement: limitText(readString(record?.companyComplement ?? record?.company_complement) ?? fallback?.companyComplement ?? ""),
+    tone: limitText(readFieldString(record?.tone) ?? fallback?.tone ?? preset.tone),
+    objective: limitText(readFieldString(record?.objective) ?? fallback?.objective ?? preset.objective),
+    audience: limitText(readFieldString(record?.audience) ?? fallback?.audience ?? preset.audience),
+    salesRules: limitText(readFieldString(record?.salesRules ?? record?.sales_rules) ?? fallback?.salesRules ?? preset.playbook.join("\n")),
+    fulfillmentRules: limitText(readFieldString(record?.fulfillmentRules ?? record?.fulfillment_rules) ?? fallback?.fulfillmentRules ?? preset.fulfillment),
+    humanHandoffRules: limitText(readFieldString(record?.humanHandoffRules ?? record?.human_handoff_rules) ?? fallback?.humanHandoffRules ?? preset.handoff),
+    neverRules: limitText(readFieldString(record?.neverRules ?? record?.never_rules) ?? fallback?.neverRules ?? preset.care),
+    companyComplement: limitText(readFieldString(record?.companyComplement ?? record?.company_complement) ?? fallback?.companyComplement ?? ""),
     mode: (record?.mode ?? fallback?.mode) === "automatic" ? "automatic" : "manual",
     profileVersion: typeof record?.profileVersion === "number" ? record.profileVersion : fallback?.profileVersion ?? 0,
     updatedAt: readString(record?.updatedAt ?? record?.updated_at) ?? fallback?.updatedAt ?? null,
@@ -126,5 +126,6 @@ function toPromptBullets(value: string | string[]) {
 function readRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
+function readFieldString(value: unknown) { return typeof value === "string" ? value : undefined; }
 function readString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function limitText(value: string) { return value.trim().replace(/\r\n/g, "\n").slice(0, maxFieldLength); }

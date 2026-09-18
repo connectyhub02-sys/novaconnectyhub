@@ -23,6 +23,11 @@ export function conversationStyleInstructions(behavior: WhatsappBehaviorConfig) 
     "PREFERÊNCIAS EFETIVAS DE CONVERSA (prevalecem sobre sugestões de estilo do perfil):",
     behavior.textEmojis === false ? "- Não use emojis no texto das respostas." : "- Emojis no texto são opcionais; use com moderação e conforme o contexto.",
     `- Estilo: ${behavior.conversationStyle === "discreet" ? "discreto, sem intimidade ou celebrações" : behavior.conversationStyle === "warm" ? "acolhedor e leve quando houver abertura" : "equilibrado e consultivo"}.`,
+    behavior.adaptiveRapportMode === "off"
+      ? "- Rapport desligado: mantenha o tom configurado, sem imitar o estilo de escrita do lead."
+      : behavior.adaptiveRapportMode === "strong"
+        ? "- Rapport forte: adapte vocabulário, formalidade e extensão à conversa do lead, mantendo clareza, limites profissionais e ortografia correta."
+        : "- Rapport suave: acompanhe discretamente a formalidade e o ritmo do lead, preservando o tom configurado.",
     "- Reações e figurinhas são enviadas pelo sistema conforme as preferências; não prometa enviá-las.",
     behavior.responseMode === "text" ? "- O modo escolhido é texto; não prometa áudio." : "- Áudio depende da voz disponível e do modo de resposta; o perfil orienta apenas o tom.",
   ];
