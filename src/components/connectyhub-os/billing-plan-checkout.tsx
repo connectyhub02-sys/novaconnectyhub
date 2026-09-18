@@ -560,7 +560,7 @@ export function BillingPlanCheckout({
                 </button>)}
               </div>
               <p role="status" className="mt-2 text-xs leading-5">{cartSyncing ? "Atualizando o total…" : pixAutomaticLocked || providerPaymentId ? "Esta autorização ou cobrança mantém os adicionais escolhidos." : "O total é atualizado ao adicionar. A compra só acontece ao confirmar o pagamento."}</p>
-            </section> : renewal && canPay ? <div className="ch-checkout-extras mt-3 flex items-center gap-3 rounded-xl border p-3"><Sparkles className="h-5 w-5 shrink-0" /><div className="min-w-0 flex-1"><p className="text-sm font-semibold">Precisa de mais créditos?</p><p className="mt-0.5 text-xs leading-5">Regularize o plano e depois adicione uma recarga separada.</p></div><a href="/dashboard/creditos" className="shrink-0 text-xs font-semibold underline underline-offset-4">Ver recargas</a></div> : null}
+            </section> : null}
 
             {billingProvider === "asaas" && !pixAutomaticLocked && !providerPaymentId ? <BillingAddressEditor subscriptionId={subscriptionId} onReadyChange={setBillingAddressReady} /> : null}
             {billingProvider === "asaas" && billingAddressReady && !pixAutomaticLocked && !providerPaymentId ? <h3 className="mt-4 flex items-center gap-2 text-sm font-semibold text-slate-900"><span className="ch-checkout-step">3</span>Confirme o pagamento</h3> : null}

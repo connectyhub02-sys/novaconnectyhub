@@ -1,4 +1,37 @@
 # Estado operacional da ConnectyHub
+## Verificação Asaas e simplificação do faturamento — 18/09/2026
+
+Leitura em produção às 00:20 BRT confirmou conta Asaas PJ e aprovação geral,
+comercial e documental. A autorização aceita em 17/09 às 21:49, com webhook
+CREATED, comprova capacidade real de criação de Pix Automático; GET atual mantém
+CANCELLED, conforme cancelamento anterior autorizado, sem pagamentos/créditos.
+Não foi criado outro QR. Isso não comprova ativação bancária/recorrência nem
+elegibilidade futura. Renovação permanece bloqueada pela regra da ConnectyHub.
+
+Auditoria e recomendação prioritária de encerramento/reativação sem exclusão de
+organização, saldo e histórico, com matriz dos bloqueios Pix, no
+[plano de cancelamento e Pix](plano-vencido-cancelamento-pix-2026-09-17.md).
+Não existe UI/serviço transacional pronto para cancelar plano ativo/vencido.
+Nenhuma mudança de status ou cancelamento real foi executado nesta rodada.
+
+Interface: removido “Precisa de mais créditos?” da renovação, preservando os
+adicionais reais na contratação inicial. Removido o card redundante de Pix
+Automático da página principal de Métodos de pagamento; motivo preservado no
+modal de troca. Sem CTA novo de suporte/migração/cancelamento nessa seção,
+conforme direção final do titular. Substitui a orientação anterior de recargas
+separadas dentro do checkout de renovação.
+
+CEP: sem botão permanente de busca. Consulta automática após oito dígitos,
+estados acessíveis junto ao campo e “Tentar novamente” apenas em falha.
+Enter/blur antecipam a consulta; guardas evitam duplicação com o debounce.
+Campos editados manualmente e respostas de CEP antigo continuam protegidos.
+QA local em 1280×900 e 390×844: renovação sem oferta de créditos; contratação
+inicial mantém adicionais; métodos sem card Pix redundante; modal de troca com
+motivo preservado. CEP automático, Enter/blur sem duplicação, erro/repetição,
+não encontrado, preservação de rua editada e salvamento simulado conferidos.
+Sem overflow horizontal ou POST financeiro. ESLint e 32 testes existentes
+passaram. Build webpack/TypeScript concluído; publicação ainda não confirmada.
+
 ## Endereço obrigatório aberto, CEP automático e regra de vencimento — 17/09/2026
 
 Ajuste solicitado após o redesign: endereço ainda não confirmado começa aberto,

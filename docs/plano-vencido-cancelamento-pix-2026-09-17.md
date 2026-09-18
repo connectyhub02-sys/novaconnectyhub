@@ -169,3 +169,109 @@ liberando créditos uma só vez; migração sem reaplicar desconto inicial; hist
 pagamento antigo preservado e eventos do lead na organização comercial correta.
 Liberar atrás de flag após esses testes e revisão da regra de fatura substituída.
 Teste financeiro real em organização do titular exige autorização própria.
+
+## Complemento de produto e auditoria — 18/09/2026
+
+### Conta recebedora verificada
+
+Leitura direta em produção às 00:20 BRT: `/myAccount/commercialInfo/` e
+`/myAccount/status` responderam 200. Conta Pessoa Jurídica, cadastro comercial,
+documentação e aprovação geral `APPROVED`; `bankAccountInfo=PENDING` permanece.
+Esse último campo isolado não comprova impedimento para Pix Automático.
+
+A evidência específica é uma autorização aceita em 17/09 às 21:49 BRT, com
+evento remoto `PIX_AUTOMATIC_RECURRING_AUTHORIZATION_CREATED` processado.
+GET atual recuperou essa mesma autorização, agora `CANCELLED` após o cancelamento
+autorizado às 22:06. Nenhum pagamento vinculado, nenhuma ativação ou crédito.
+Isso comprova capacidade real de criação naquela data, não valida o ciclo completo
+de pagamento/recorrência nem garante elegibilidade futura. Não foi criada outra
+autorização para testar a conta. Não há um campo específico de elegibilidade nas
+duas respostas cadastrais consultadas.
+
+A [FAQ oficial do Asaas](https://docs.asaas.com/docs/faq-2) distingue aprovação
+cadastral e elegibilidade Pix, que pode mudar. A
+[referência de criação](https://docs.asaas.com/reference/criar-uma-autorizacao-pix-automatico)
+distingue autorização criada de `ACTIVE`: primeiro pagamento e consentimento
+do pagador ainda são necessários. O webhook de elegibilidade é documentado para
+subcontas; o handler atual não mantém um estado global de elegibilidade da conta.
+Portanto, não apresentar `enabled=true` do checkout como consulta dessa condição
+ao Asaas: esse campo combina configuração local e elegibilidade do contrato.
+
+### Cancelar contrato preservando a conta
+
+O modelo já distingue `organization_subscriptions` e `organizations`.
+`canceled`/`canceled_at` existem no contrato; cancelar não exige apagar organização,
+usuários, leads, arquivos, configurações, pagamentos ou histórico. A função de
+acesso considera contratos cancelados, preservando o período pago até o fim e
+sem carência extra. Para um contrato vencido, o acesso pago já fica bloqueado.
+O sweep mantém a organização e fecha o ciclo; não apaga dados nem zera carteira.
+
+Recomendação mínima: manter a organização existente, encerrar somente o contrato
+antigo por `payment_method_migration`, com origem/destino e auditoria, e criar um
+contrato `pending`/checkout `initial` para a mesma organização após as guardas
+financeiras. Não usar `paused` administrativo como atalho: esse status bloqueia
+acesso por outro motivo e não realiza conciliação financeira.
+
+Saldo remanescente e ledger devem ser preservados, inclusive na carteira
+responsável quando compartilhada. Cancelamento não é estorno. Não renovar saldo
+incluído, recreditar bônus ou reaplicar desconto de primeira compra na migração.
+Créditos utilizáveis dependem do acesso e das regras de validade já contratadas;
+qualquer nova política de expiração/estorno requer decisão explícita. Recargas
+automáticas e renovações antigas precisam de tratamento expresso antes da
+confirmação: interromper as vinculadas ao contrato, sem desligar permissões de
+outras organizações da carteira compartilhada.
+
+### Lacuna atual e UX recomendada
+
+Auditoria de `account-console.tsx`, `billing-payment-methods.tsx` e rotas de
+faturamento: não há cancelamento autônomo do plano ConnectyHub em Minha Conta.
+`cancelPendingSubscription` só substitui tentativas `pending`/`incomplete` em
+`plan-intent`; não serve para encerrar `active`/`past_due`. Há cancelamento no
+checkout da loja (`StoreSubscription`, `owner_type=store`) e cancelamentos
+associados a estornos/provedores; não são um serviço genérico reutilizável do
+plano da plataforma.
+
+Feature prioritária, ainda **não implementada**: área própria de gerenciamento do
+plano, fora da lista principal de métodos. Para ativo, “Encerrar assinatura”,
+com data de fim de acesso e cobrança/renovação futura explicitadas. Para vencido,
+“Reativar com Pix Automático”, com prévia e confirmação forte já descritas acima.
+Confirmar o encerramento do contrato, nunca exclusão da conta. Sem débito em
+processamento/estado ambíguo; fatura aberta precisa ser substituída ou quitada
+conforme política aprovada, sem supor perdão de dívida.
+
+Avisos antigos devem ser cancelados/substituídos com trilha, evitando cobrança de
+fatura substituída; novas notificações pertencem ao contrato novo. Registrar intenção,
+confirmação, encerramento, substituição e ativação no lead comercial da plataforma,
+não nos leads operacionais do cliente. Aplicar o escopo e a idempotência previstos
+na seção anterior. Não há endpoint transacional pronto, portanto nenhum botão
+que execute esse encerramento foi acrescentado.
+
+Direção final do titular: retirar o card redundante de Pix Automático da página
+principal de métodos; manter a comparação e motivo no modal de troca. Não incluir
+CTA de suporte/cancelamento/migração nessa seção nesta rodada. Essa decisão
+substitui a sugestão intermediária de acrescentar links de atendimento.
+
+### Disponibilidade: regra real e apresentação recomendada
+
+| Situação | Regra atual | UX/alternativa |
+|---|---|---|
+| Plano Asaas `initial`, `pending`/`incomplete`, recorrente com valor positivo fixo, sem campanha/assinatura externa impeditiva | Elegível se credenciais, webhook e flag de produção estão configurados; Asaas valida ao criar | Mostrar selecionável no checkout; exigir endereço e consentimento para gerar |
+| `renewal`, inclusive `past_due` | Bloqueado na API/RPC, mesmo com conta Asaas habilitada | Desabilitado com motivo; cartão/Pix comum regularizam o ciclo |
+| `plan_change` ou contratação inicial já encerrada | Bloqueado | Motivo específico e métodos aceitos; não editar status para contornar |
+| Assinatura externa existente ou troca de método de contrato ativo | Não há adesão por troca direta | Mostrar motivo dentro do fluxo de troca; jornada guiada é backlog |
+| Pagamento único, valor recorrente zero ou campanha com preços por período | Não suportado | Ocultar em compra avulsa; em plano, motivo e cartão/Pix comum |
+| Credenciais/webhook ausentes, flag desligada ou consulta indisponível | Checkout indisponível/erro de consulta | Desabilitado com motivo; erro de consulta não prova inelegibilidade da conta |
+| Pagamento com referência externa, Pix em criação ou cartão `processing`/`unknown`/`pending`/`approved` | RPC impede novo Pix (`PIX_BUSY`) | Conferir pagamento existente; não gerar outro nem migrar |
+| Mandato `preparing`/`dispatching`/`unknown`/`CREATED`/`ACTIVE` | Reutiliza/concilia a operação existente; trava métodos/adicionais | Mostrar estado/QR existente quando aplicável; sem segunda autorização |
+| Mandato `CANCELLED`/`EXPIRED` | UI mantém encerrado e não oferece recriação automática | Informar encerramento e necessidade de conferência; não confundir com bloqueio global da conta |
+| Mandato `failed`/`REFUSED` | Pode oferecer nova solicitação após falha definitiva | Novo consentimento/solicitação explícita; demais guardas continuam valendo |
+| Valor/revisão mudou, data inválida ou cinco autorizações em uma hora | Guardas `PIX_CHANGED`/`PIX_RATE_LIMIT` | Atualizar contexto ou aguardar; não repetir POST automaticamente |
+
+Termos congelados não são um impedimento adicional universal: na renovação,
+o bloqueio vem de `checkout_kind=renewal`; na contratação inicial, uma cobrança
+ou mandato congela os adicionais para preservar o pagamento existente. Endereço
+e consentimento faltantes bloqueiam a confirmação, não a escolha do método.
+
+Fontes: `pix-automatic-availability.ts`, `pix-automatic.ts`, migration `0154`,
+`billing-plan-checkout.tsx`, `billing-pix-automatic-checkout.tsx`,
+`billing-card-replacement.tsx`, migration `0083`, `plan-intent/route.ts`.

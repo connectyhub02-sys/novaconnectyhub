@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CreditCard, LockKeyhole, Plus } from "lucide-react";
 import { cardManagementConsent, cardManagementConsentVersion } from "@/lib/billing/card-management-policy";
 import { BillingCardReplacement } from "./billing-card-replacement";
-import { PixAutomaticUnavailable } from "./pix-automatic-unavailable";
+
 type Card = {id:string;status:string;brand:string|null;last_digits:string|null;exp_month:string|null;exp_year:string|null};
 type Data = {subscriptionId:string;periodEnd:string|null;nextBillingAt:string|null;blocker:string|null;cards:Card[]};
 type Subscription = {id:string;planName:string;status:string};
@@ -52,7 +52,6 @@ export function BillingPaymentMethods({subscriptions}:{subscriptions:Subscriptio
       {data.nextBillingAt?<p className="mt-3 text-xs text-slate-500">Vencimento mantido: {new Date(data.nextBillingAt).toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo"})}. As tentativas de renovação podem começar três dias antes.</p>:null}
       {data.cards.some(c=>c.status==="active")&&!data.blocker?<button disabled={busy} className="mt-3 min-h-11 text-sm font-semibold text-blue-700 underline" onClick={()=>{setChoice("add");setError("");setMessage("");}}>Alterar cartão da próxima renovação</button>:null}
     </>:null}
-    {subscription?<PixAutomaticUnavailable context="replacement" />:null}
     {choice==="add"&&data&&!data.blocker&&data.cards.some(c=>c.status==="active")&&subscription?<BillingCardReplacement key={subscription.id} subscriptionId={subscription.id} planName={subscription.planName} onClose={()=>{setChoice(null);void load().catch(e=>setError(e.message));}}/>:null}
     {choice&&data&&!data.blocker&&!(choice==="add"&&data.cards.some(c=>c.status==="active"))?<form ref={formRef} onSubmit={submit} data-sensitive="payment" className="mt-5 max-w-2xl space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <h3 className="font-semibold text-slate-950">{choice==="add"?"Adicionar novo cartão e tornar padrão":"Confirmar cartão padrão"}</h3>

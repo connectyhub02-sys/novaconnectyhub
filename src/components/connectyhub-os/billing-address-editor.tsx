@@ -12,10 +12,13 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [message, setMessage] = useState("");
   const prefix = useId();
   const lookupVersion = useRef(0);
   const lastAutoCep = useRef("");
+  const pendingCep = useRef("");
   const manualAddressFields = useRef(new Set<keyof BillingAddress>());
   const ready = !loading && Boolean(saved) && !editing;
   useEffect(() => { onReadyChange?.(ready); }, [ready, onReadyChange]);
@@ -32,16 +35,18 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
     return () => { disposed = true; };
   }, []);
 
-  const lookup = useCallback(async () => {
+  const lookup = useCallback(async (retry = false) => {
     const cep = address.postalCode.replace(/\D/g, "");
-    if (!/^\d{8}$/.test(cep)) { setMessage("Informe um CEP com 8 dígitos."); return; }
+    if (!/^\d{8}$/.test(cep)) { setLookupMessage("Informe um CEP com 8 dígitos."); return; }
+    if (pendingCep.current === cep || (!retry && lastAutoCep.current === cep)) return;
     lastAutoCep.current = cep;
+    pendingCep.current = cep;
     const version = ++lookupVersion.current;
-    setLookingUp(true); setMessage("Buscando endereço pelo CEP…");
+    setLookingUp(true); setLookupFailed(false); setLookupMessage("Buscando endereço pelo CEP…");
     try {
       const response = await fetch(`/api/dashboard/billing/address/postal-code?cep=${cep}`);
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(data.error ?? "Não foi possível buscar o CEP. Preencha o endereço manualmente.");
       if (version !== lookupVersion.current) return;
       setAddress(current => {
         if (current.postalCode.replace(/\D/g, "") !== cep) return current;
@@ -51,9 +56,9 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
         }
         return next;
       });
-      setMessage("Confira o endereço encontrado e complete o número.");
-    } catch (error) { if (version === lookupVersion.current) setMessage(error instanceof Error ? error.message : "Preencha o endereço manualmente."); }
-    finally { if (version === lookupVersion.current) setLookingUp(false); }
+      setLookupMessage("Endereço encontrado. Confira os dados e complete o número.");
+    } catch (error) { if (version === lookupVersion.current) { setLookupFailed(true); setLookupMessage(error instanceof Error ? error.message : "Preencha o endereço manualmente."); } }
+    finally { if (version === lookupVersion.current) { pendingCep.current = ""; setLookingUp(false); } }
   }, [address.postalCode]);
   useEffect(() => {
     const cep = address.postalCode.replace(/\D/g, "");
@@ -81,7 +86,7 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
   }
   function update(key: keyof BillingAddress, value: string) {
     // Invalidate older CEPs; protect individual edits while a lookup is pending.
-    if (key === "postalCode") { lookupVersion.current++; setLookingUp(false); lastAutoCep.current = ""; manualAddressFields.current.clear(); }
+    if (key === "postalCode") { lookupVersion.current++; pendingCep.current = ""; setLookingUp(false); setLookupMessage(""); setLookupFailed(false); lastAutoCep.current = ""; manualAddressFields.current.clear(); }
     else manualAddressFields.current.add(key);
     setAddress(current => ({ ...current, [key]: value })); setMessage("");
   }
@@ -98,7 +103,12 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
     <div id={`${prefix}-fields`} hidden={!expanded}>
     {loading ? <p role="status" className="mt-3 text-sm text-slate-500">Carregando endereço…</p> : editing ? <>
       <fieldset disabled={saving} className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="col-span-2 sm:col-span-3"><label htmlFor={`${prefix}-postalCode`} className="block text-xs font-medium text-slate-700">CEP</label><div className="flex gap-2"><input id={`${prefix}-postalCode`} value={address.postalCode} onChange={event => { const digits = event.target.value.replace(/\D/g, "").slice(0,8); update("postalCode", digits.length > 5 ? `${digits.slice(0,5)}-${digits.slice(5)}` : digits); }} autoComplete="billing postal-code" inputMode="numeric" placeholder="00000-000" maxLength={9} className={`${fieldClass} min-w-0 max-w-48`} /><button type="button" onClick={() => void lookup()} disabled={lookingUp} className="mt-1 min-h-11 shrink-0 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700">{lookingUp ? "Buscando…" : "Buscar CEP"}</button></div></div>
+        <div className="col-span-2 sm:col-span-3">
+          <label htmlFor={`${prefix}-postalCode`} className="block text-xs font-medium text-slate-700">CEP</label>
+          <input id={`${prefix}-postalCode`} value={address.postalCode} onChange={event => { const digits = event.target.value.replace(/\D/g, "").slice(0,8); update("postalCode", digits.length > 5 ? `${digits.slice(0,5)}-${digits.slice(5)}` : digits); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void lookup(lookupFailed); } }} onBlur={() => { if (/^\d{8}$/.test(address.postalCode.replace(/\D/g, ""))) void lookup(); }} aria-describedby={`${prefix}-cep-status`} autoComplete="billing postal-code" inputMode="numeric" placeholder="00000-000" maxLength={9} className={`${fieldClass} min-w-0 max-w-48`} />
+          <p id={`${prefix}-cep-status`} role="status" className="mt-1 text-xs leading-5 text-slate-500">{lookupMessage || "O endereço é buscado automaticamente ao completar o CEP."}</p>
+          {lookupFailed ? <button type="button" onClick={() => void lookup(true)} disabled={lookingUp} className="min-h-11 text-xs font-semibold text-blue-700 underline underline-offset-4">Tentar novamente</button> : null}
+        </div>
         {input("street", "Rua / logradouro", { autoComplete: "billing address-line1", maxLength: 160, wide: true })}
         {input("number", "Número", { maxLength: 6 })}
         {input("complement", "Complemento", { autoComplete: "billing address-line2", optional: true, maxLength: 120 })}
