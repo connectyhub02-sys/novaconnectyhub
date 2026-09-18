@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import * as cardInput from "../src/lib/sales-catalog/card-input";
+import * as cardBrand from "../src/lib/sales-catalog/card-brand";
 import * as replacementInput from "../src/lib/billing/replacement-card-input";
 import * as pixAvailability from "../src/lib/billing/pix-automatic-availability";
 import * as policy from "../src/lib/billing/managed-renewal-policy";
@@ -21,7 +22,7 @@ function harness(options: { blocked?: string; replay?: string; providerStatus?: 
   const encryptCredentialValue = vi.fn(() => encrypted);
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
     if (name === "begin_billing_card_replacement") return { error: options.failBegin ? {} : null, data: { claimed: !options.blocked && !options.replay, state: options.blocked ? "failed" : options.replay ?? "processing", result_code: options.blocked, customer_id: "cus_existing" } };
-    if (name === "finish_billing_card_replacement") return { error: options.failFinish ? {} : null, data: { state: args.p_failure ? "failed" : "succeeded", result_code: args.p_failure ?? "replaced" } };
+    if (name === "finish_billing_card_replacement_profile") return { error: options.failFinish ? {} : null, data: { state: args.p_failure ? "failed" : "succeeded", result_code: args.p_failure ?? "replaced" } };
     throw new Error(`Unexpected RPC ${name}`);
   });
   const api = serverModuleHarness<typeof import("../src/lib/billing/card-replacement")>("src/lib/billing/card-replacement.ts", {
@@ -32,6 +33,7 @@ function harness(options: { blocked?: string; replay?: string; providerStatus?: 
     "./managed-renewal-policy": policy,
     "./replacement-card-input": replacementInput,
     "./pix-automatic-availability": pixAvailability,
+    "@/lib/sales-catalog/card-brand": cardBrand,
   });
   const client = { rpc } as unknown as Parameters<typeof api.replaceSubscriptionCard>[0];
   return { api, fetch, rpc, client, encrypted, encryptCredentialValue };
@@ -53,9 +55,9 @@ describe("card replacement service and provider boundary", () => {
     expect(h.fetch.mock.calls[0][0]).toBe("https://api-sandbox.asaas.com/v3/creditCard/tokenizeCreditCard");
     const sent = JSON.parse((h.fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
     expect(sent).toEqual({ customer: "cus_existing", creditCard: card, creditCardHolderInfo: holder, remoteIp: "203.0.113.1" });
-    expect(h.rpc.mock.calls[1][1]).toMatchObject({ p_token_encrypted: h.encrypted, p_last_four: "1111", p_failure: null });
+    expect(h.rpc.mock.calls[1][1]).toMatchObject({ p_token_encrypted: h.encrypted, p_last_four: "1111", p_failure: null, p_card_metadata: { brand: "visa", exp_month: "12", exp_year: "2035" }, p_holder: holder });
     for (const text of [JSON.stringify(h.rpc.mock.calls), JSON.stringify(result)]) {
-      expect(text).not.toContain(card.number); expect(text).not.toContain("sensitive-provider-token"); expect(text).not.toContain("ccv"); expect(text).not.toContain(holder.cpfCnpj);
+      expect(text).not.toContain(card.number); expect(text).not.toContain("sensitive-provider-token"); expect(text).not.toContain("ccv"); expect(text).not.toContain("creditCardToken");
     }
   });
   it.each(["forbidden", "not_found", "inactive_plan", "automatic_renewal_required", "unsupported_provider", "billing_busy"])("never contacts the gateway for %s", async blocked => {

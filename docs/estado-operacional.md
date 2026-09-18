@@ -1,12 +1,38 @@
 # Estado operacional da ConnectyHub
+## Faturamento reutilizável e identificação dos cartões — 18/09/2026
+
+Pacote preparado com sugestões privadas de titular, confirmação explícita de
+faturamento, proteção contra edição antiga, atualização imediata de cartões,
+bandeira/final/validade e manutenção de cartões de contrato vencido sem reativação.
+Betel auditada: dois cartões preservados e faturamento vazio; checkout anterior
+contém dados seguros recuperáveis como sugestão, diferentes de uma recuperação
+da submissão descartada na última troca. 106 testes e lint passaram; backup e
+ensaio da migration 0157 concluídos com registros financeiros inalterados.
+Migration 0157 aplicada às 10:32 BRT. Dados do checkout anterior da Betel foram
+recuperados como sugestão privada para revisão; endereço não confirmado e hashes
+financeiros preservados. Build final passou. Publicação pendente nesta etapa.
+[Comportamento, evidências e pendência de Pagar agora](faturamento-cartoes-2026-09-18.md).
+
+## Reverificação da habilitação Pix no Asaas — 18/09/2026, 01:09 BRT
+
+Consultas diretas, somente leitura, mantêm conta PJ e aprovação comercial,
+documental e geral. A autorização criada em 17/09 às 21:49 e seu webhook
+CREATED comprovam capacidade de criação nessa ocasião; GET atual retorna
+CANCELLED pelo cancelamento anterior, sem pagamentos vinculados no provedor.
+Não foi obtido um campo explícito de elegibilidade atual e o ciclo financeiro
+completo continua não validado. Nenhuma nova autorização/cobrança foi criada.
+O menu Pix Automático do painel consultado trata do papel de pagador, sem
+comprovar a habilitação de recebedor. [Evidências e limites](plano-vencido-cancelamento-pix-2026-09-17.md).
+
 ## Minha Conta para planos vencidos — 18/09/2026
 
 Correção do menu, proxy e bloqueio visual preparada para publicação: Minha Conta
 e faturas passam a integrar a recuperação; APIs de conta, segurança e faturamento
 mantêm autenticação e escopo. Métodos listam contratos `past_due`. Caso Andre
 confirmado por leitura: owner não admin, Scale vencido e acesso pago negado.
-Nove testes de ativo/vencido e ESLint passaram; publicação ainda pendente nesta
-etapa. [Causa, alcance e evidências](recuperacao-minha-conta-2026-09-18.md).
+Nove testes de ativo/vencido, ESLint e build passaram. Publicado `6b02d2e7`,
+Vercel success e health com SHA exato, conferidos às 10:20 BRT.
+[Causa, alcance e evidências](recuperacao-minha-conta-2026-09-18.md).
 
 ## Verificação Asaas e simplificação do faturamento — 18/09/2026
 

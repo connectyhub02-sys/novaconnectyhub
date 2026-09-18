@@ -14,9 +14,9 @@ afterEach(()=>vi.unstubAllEnvs());
 it("tokenizes without a charge and passes only encrypted token and masked metadata to the atomic RPC",async()=>{
  await changeBillingCard(client as never,"org","owner",body,"203.0.113.1");
  expect(mock.tokenize).toHaveBeenCalledWith(expect.objectContaining({customerId:"cus_fixture",remoteIp:"203.0.113.1"}));
- expect(mock.rpc).toHaveBeenCalledTimes(1);const [name,args]=mock.rpc.mock.calls[0];expect(name).toBe("set_billing_default_card");
- expect(args.p_card).toMatchObject({last_digits:"1111",brand:"VISA",exp_year:"2032"});expect(decryptCredentialValue(args.p_card.token_encrypted)).toBe("fixture-token");
- expect(JSON.stringify(args)).not.toMatch(/4111111111111111|fixture-secret|fixture-token|ccv|postalCode/);
+ expect(mock.rpc).toHaveBeenCalledTimes(1);const [name,args]=mock.rpc.mock.calls[0];expect(name).toBe("set_billing_default_card_profile");
+ expect(args.p_holder).toEqual(body.holder);expect(args.p_card).toMatchObject({last_digits:"1111",brand:"VISA",exp_year:"2032"});expect(decryptCredentialValue(args.p_card.token_encrypted)).toBe("fixture-token");
+ expect(JSON.stringify(args)).not.toMatch(/4111111111111111|fixture-secret|fixture-token|ccv/);
 });
 it("never changes the old card after tokenization fails and gives an actionable permission blocker",async()=>{
  mock.tokenize.mockRejectedValue(new AsaasDirectError(true,false,{httpStatus:403} as never));

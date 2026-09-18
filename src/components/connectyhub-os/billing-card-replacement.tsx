@@ -18,7 +18,7 @@ const fieldHints: Record<ReplacementCardField, string> = {
   postalCode: "Informe os 8 dígitos do CEP.", addressNumber: "Informe o número (até 6 dígitos).",
 };
 
-export function BillingCardReplacement({ subscriptionId, planName, onClose }: { subscriptionId: string; planName: string; onClose: () => void }) {
+export function BillingCardReplacement({ subscriptionId, planName, onClose, onSaved }: { subscriptionId: string; planName: string; onClose: () => void; onSaved?: () => void }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +30,8 @@ export function BillingCardReplacement({ subscriptionId, planName, onClose }: { 
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const locked = useRef(false);
+  const notified = useRef(false);
+  const [holderDefaults, setHolderDefaults] = useState<Record<string,string>>({});
   const endpoint = `/api/dashboard/billing/subscriptions/${subscriptionId}/payment-method`;
   const load = useCallback(async () => {
     const response = await fetch(`${endpoint}${requestId.current ? `?requestId=${requestId.current}` : ""}`, { cache: "no-store" });
@@ -46,6 +48,19 @@ export function BillingCardReplacement({ subscriptionId, planName, onClose }: { 
     return next;
   }, [endpoint]);
   useEffect(() => { void load().catch(error => setMessage(error.message)); }, [load]);
+  useEffect(() => {
+    let disposed = false;
+    void fetch("/api/dashboard/billing/address", { cache: "no-store" }).then(async response => {
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!disposed) setHolderDefaults({ ...data.contact, postalCode: data.address?.postalCode ?? "", addressNumber: data.address?.number ?? "" });
+    }).catch(() => {});
+    return () => { disposed = true; };
+  }, []);
+  useEffect(() => {
+    if (!done || notified.current) return;
+    notified.current = true; onSaved?.(); window.dispatchEvent(new Event("connectyhub:billing-refresh"));
+  }, [done, onSaved]);
 
   function fieldBehavior(name: ReplacementCardField) {
     const check = (input: HTMLInputElement) => {
@@ -151,11 +166,12 @@ export function BillingCardReplacement({ subscriptionId, planName, onClose }: { 
             </section>
             <section aria-labelledby={`${fieldPrefix}-holder-title`} className="space-y-3 md:border-l md:border-slate-100 md:pl-6">
             <h3 id={`${fieldPrefix}-holder-title`} className="text-sm font-semibold">Dados do titular</h3>
+            <p className="text-xs leading-5 text-slate-500">Esses dados ficarão disponíveis para revisão em Dados de faturamento, sem substituir automaticamente informações já confirmadas.</p>
             <div className="grid grid-cols-2 gap-3">{([
               ["name", "Nome completo", "text", "name"], ["email", "E-mail", "email", "email"],
               ["cpfCnpj", "CPF/CNPJ", "text", "off"], ["phone", "Telefone", "tel", "tel-national"],
               ["postalCode", "CEP", "text", "postal-code"], ["addressNumber", "Número do endereço", "text", "off"],
-            ] as const).map(([name, label, type, autoComplete]) => <label key={name} className="text-xs font-semibold">{label}<input className={field} name={name} type={type} inputMode={["cpfCnpj", "phone", "postalCode", "addressNumber"].includes(name) ? "numeric" : name === "email" ? "email" : "text"} autoComplete={autoComplete} maxLength={name === "email" ? 254 : 120} required {...fieldBehavior(name)} />{fieldError(name)}</label>)}</div>
+            ] as const).map(([name, label, type, autoComplete]) => <label key={name} className="text-xs font-semibold">{label}<input className={field} name={name} defaultValue={holderDefaults[name] ?? ""} type={type} inputMode={["cpfCnpj", "phone", "postalCode", "addressNumber"].includes(name) ? "numeric" : name === "email" ? "email" : "text"} autoComplete={autoComplete} maxLength={name === "email" ? 254 : 120} required {...fieldBehavior(name)} />{fieldError(name)}</label>)}</div>
             </section>
             </div>
             <label className="mt-5 flex items-start gap-2 text-xs leading-5 text-slate-600"><input name="consent" type="checkbox" required className="mt-1 size-4 shrink-0" />Autorizo substituir o cartão das próximas renovações e das recargas automáticas que já autorizei. As condições, limites e datas permanecem iguais.</label>

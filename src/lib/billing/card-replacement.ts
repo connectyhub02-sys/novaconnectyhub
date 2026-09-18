@@ -7,13 +7,14 @@ import { record } from "@/lib/sales-catalog/card-input";
 import { replacementConsentVersion } from "./managed-renewal-policy";
 import { parseReplacementCardDetails } from "./replacement-card-input";
 import { pixAutomaticAvailability } from "./pix-automatic-availability";
+import { detectCheckoutCardBrand } from "@/lib/sales-catalog/card-brand";
 
 export const isReplacementId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const messages: Record<string, string> = {
   forbidden: "Somente o titular ou administrador desta organização pode trocar o cartão.",
   not_found: "Assinatura não encontrada nesta organização.",
-  inactive_plan: "É necessário um plano ativo dentro do período contratado.",
+  inactive_plan: "É necessário um plano ativo ou vencido para gerenciar seu cartão.",
   automatic_renewal_required: "Esta assinatura não tem renovação automática por cartão ativa. Solicite a configuração da renovação à equipe.",
   unsupported_provider: "Esta assinatura usa uma integração anterior. A troca precisa ser tratada pela equipe no gateway, preservando o contrato.",
   billing_busy: "Há um pagamento ou recarga em conferência. Aguarde a conclusão antes de trocar o cartão.",
@@ -81,6 +82,8 @@ export async function replaceSubscriptionCard(client: SupabaseClient, scope: Sco
   let tokenEncrypted: string | null = null;
   let lastFour: string | null = null;
   let failure: string | null = null;
+  let cardMetadata: Record<string, string | null> | null = null;
+  let billingHolder: Record<string, string> | null = null;
   try {
     if (body.method === "pix_automatic") throw new CardReplacementError("pix_automatic_unavailable");
     let card, holder;
@@ -96,15 +99,19 @@ export async function replaceSubscriptionCard(client: SupabaseClient, scope: Sco
     const token = await tokenizeAsaasReplacementCard({ ...config, customerId: claim.customer_id, card, holder, remoteIp });
     tokenEncrypted = encryptCredentialValue(token);
     lastFour = card.number.slice(-4);
+    cardMetadata = { brand: detectCheckoutCardBrand(card.number), exp_month: card.expiryMonth, exp_year: card.expiryYear };
+    billingHolder = { ...holder };
   } catch (error) {
     failure = error instanceof CardReplacementError ? error.code
       : error instanceof AsaasDirectError ? error.diagnostic?.category === "validation" || error.declined ? "tokenization_rejected"
         : error.diagnostic?.category === "integration" ? "gateway_configuration" : "gateway_unavailable"
       : "internal_error";
   }
-  // Only ciphertext and the last four digits cross the persistence boundary.
-  const finished = await client.rpc("finish_billing_card_replacement", {
+  // Card persistence receives ciphertext and display metadata only. Holder data
+  // is a private, reviewable billing suggestion in the same transaction.
+  const finished = await client.rpc("finish_billing_card_replacement_profile", {
     ...args, p_token_encrypted: tokenEncrypted, p_last_four: lastFour, p_failure: failure,
+    p_card_metadata: cardMetadata, p_holder: billingHolder,
   });
   // A database transport failure may follow a commit. Keep the durable result for
   // GET/replay reconciliation; never overwrite a possible success with failure.

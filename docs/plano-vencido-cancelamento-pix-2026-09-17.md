@@ -174,6 +174,17 @@ Teste financeiro real em organização do titular exige autorização própria.
 
 ### Conta recebedora verificada
 
+Reverificação solicitada pelo titular em 18/09 às 01:09 BRT: os dois GETs
+cadastrais mantêm PJ, aprovação comercial/documental/geral e cadastro não
+expirado; `bankAccountInfo=PENDING`. Consulta direta da autorização existente
+mantém `CANCELLED`, com o evento remoto de criação de 17/09 às 21:49 preservado
+e zero pagamentos vinculados no Asaas. Assim, a capacidade real de criar foi
+comprovada naquela operação, mas não foi obtido um indicador explícito de
+elegibilidade atual. Nenhuma nova autorização, cobrança ou alteração foi feita.
+A seção Pix Automático do painel autenticado consultada é voltada a autorizar
+pagamentos como pagador; sua disponibilidade não comprova habilitação como
+recebedor. Permanece pendente validar primeiro pagamento e recorrência.
+
 Leitura direta em produção às 00:20 BRT: `/myAccount/commercialInfo/` e
 `/myAccount/status` responderam 200. Conta Pessoa Jurídica, cadastro comercial,
 documentação e aprovação geral `APPROVED`; `bankAccountInfo=PENDING` permanece.

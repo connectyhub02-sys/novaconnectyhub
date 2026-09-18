@@ -58,8 +58,8 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
   if (body.amount !== snapshot.amount || body.revision !== snapshot.revision || Number(snapshot.intent.payment.amount_brl) !== snapshot.amount) throw new CheckoutError("O carrinho mudou. Confira o total antes de pagar.", 409);
   const address = await requireBillingAddress(client, organizationId);
   const card = parseCheckoutCard(body.card); const holder = parseCheckoutCardHolder({ ...record(body.holder), postalCode: address.postalCode, addressNumber: address.number });
-  const contactSaved = await client.rpc("save_organization_billing_address", { p_org: organizationId, p_actor: null, p_subscription: subscriptionId, p_address: address,
-    p_contact: { name: holder.name, email: holder.email, phone: holder.phone, documentPreview: `***${holder.cpfCnpj.slice(-4)}` } });
+  const contactSaved = await client.rpc("capture_billing_holder", { p_org: organizationId, p_actor: null, p_subscription: subscriptionId,
+    p_request: body.attemptId, p_source: "checkout", p_holder: holder });
   if (contactSaved.error) throw new CheckoutError("Não foi possível confirmar os dados de faturamento.", 503);
   const config = await loadAsaasPlatformBillingConfig({ client });
   if (!config.accessToken || !config.webhookSecret) throw new CheckoutError("O recebimento da ConnectyHub precisa ser configurado.", 503);
@@ -271,8 +271,9 @@ async function reconcileManagedBillingPix(client: SupabaseClient, paymentId: str
   await processPlatformBillingAsaasWebhook(client,{dataId:payment.id!,eventType:"payment",action:"managed_pix_reconciled",providerEventId:null,requestId:paymentId,payload:{payment:{...payment,externalReference:canonical}}},{...payment,externalReference:canonical});
 }
 
-export function billingHolder(intent: BillingCheckoutIntent, defaults: Partial<CheckoutCardHolder>) {
-  return { name: defaults.name ?? "", email: defaults.email ?? "", cpfCnpj: defaults.cpfCnpj ?? "", phone: defaults.phone ?? "", postalCode: defaults.postalCode ?? "", addressNumber: defaults.addressNumber ?? "", ...record(intent.subscription.metadata?.billing_card_holder) };
+export function billingHolder(intent: BillingCheckoutIntent, defaults: Partial<CheckoutCardHolder>, confirmed?: Partial<CheckoutCardHolder>) {
+  const values = { ...defaults, ...record(intent.subscription.metadata?.billing_card_holder), ...confirmed };
+  return { name: values.name ?? "", email: values.email ?? "", cpfCnpj: values.cpfCnpj ?? "", phone: values.phone ?? "", postalCode: values.postalCode ?? "", addressNumber: values.addressNumber ?? "" };
 }
 
 async function recoverNativeBillingPix(client: SupabaseClient) {

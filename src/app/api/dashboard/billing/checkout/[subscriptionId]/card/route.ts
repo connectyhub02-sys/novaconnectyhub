@@ -1,4 +1,4 @@
-import { loadBillingAddress } from "@/lib/billing/billing-address-store";
+import { loadBillingProfile } from "@/lib/billing/billing-address-store";
 import {campaignPriceNotice,type CampaignPricing} from "@/lib/commerce/campaigns";
 import { CheckoutError } from "@/lib/sales-catalog/transparent-checkout";
 import { billingHolder, loadNativeBillingSnapshot, payNativeBillingCard, reconcileNativeBillingAttempt } from "@/lib/billing/native-card-checkout";
@@ -724,6 +724,7 @@ function toNumber(value: number | string | null | undefined) {
 export async function GET(_request: NextRequest, context: { params: Promise<{ subscriptionId: string }> }) {
   const workspace = await getCurrentWorkspace({ allowRestricted: true });
   if (!workspace?.organization) return NextResponse.json({ error: "Sessão obrigatória." }, { status: 401 });
+  if (!["owner", "admin"].includes(workspace.organization.role)) return NextResponse.json({ error: "Somente responsáveis pela conta podem acessar os dados de faturamento." }, { status: 403 });
   const client = createServiceClient();
   try {
     const { subscriptionId } = await context.params;
@@ -733,9 +734,10 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ su
       snapshot = await loadNativeBillingSnapshot(client, workspace.organization.id, subscriptionId);
     }
     const document = await loadAccountDocument({ userId: workspace.user.id, client });
-    const billingAddress = await loadBillingAddress(client, workspace.organization.id);
+    const billingProfile = await loadBillingProfile(client, workspace.organization.id);
+    const confirmedHolder = billingProfile.address ? { ...billingProfile.contact, postalCode: billingProfile.address.postalCode, addressNumber: billingProfile.address.number } : undefined;
     return NextResponse.json({ campaignNotice: snapshot.intent.payment.payload?.campaign_pricing ? campaignPriceNotice(snapshot.intent.payment.payload.campaign_pricing as CampaignPricing) : null, amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision,
-      holder: billingHolder(snapshot.intent, { postalCode: billingAddress?.postalCode, addressNumber: billingAddress?.number, name: workspace.profile.fullName ?? workspace.organization.name, email: snapshot.intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" }),
+      holder: billingHolder(snapshot.intent, { name: workspace.profile.fullName ?? workspace.organization.name, email: snapshot.intent.subscription.payer_email ?? workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" }, confirmedHolder),
       attempt: snapshot.attempt ? { id: snapshot.attempt.id, state: snapshot.attempt.state } : null, paid: snapshot.intent.payment.status === "approved",
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return NextResponse.json({ error: error instanceof CheckoutError ? error.message : "Não foi possível conferir o pagamento." }, { status: error instanceof CheckoutError ? error.status : 503 }); }

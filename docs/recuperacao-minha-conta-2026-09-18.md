@@ -28,3 +28,10 @@ ESLint passou. Evidência de build e publicação será acrescentada após confi
 Não houve cobrança, QR, tentativa de pagamento, cancelamento ou migração SQL.
 A persistência dos dados do titular e demais melhorias de cartão constituem um
 pacote separado, ainda não incluído neste hotfix de navegação.
+
+Publicado: `6b02d2e74d93b8adada135ed1569c3cd04e93119`, master oficial,
+Vercel success no projeto existente, health `ok` com SHA exato conferido em
+18/09 às 10:20 BRT. Build webpack/TypeScript/108 páginas passou. Caso vencido
+foi verificado por leitura do estado real e por testes/preview com permissões
+simuladas; não houve login como Andre nesta rodada. A sessão real ativa da Betel
+foi consultada em leitura e mostrou Minha Conta, métodos, segurança e faturas.

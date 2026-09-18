@@ -49,6 +49,11 @@ function setup(oneTime=false, discounted=false) {
  return {mod,pay,adapter,rpc,client,intent,saveCard,fulfill,requireAddress};
 }
 describe('panel native card orchestration',()=>{
+ it('reuses confirmed billing fields over old holder metadata and only returns holder fields',()=>{
+  const s=setup();
+  const intent={...s.intent,subscription:{...s.intent.subscription,metadata:{billing_card_holder:{name:'Old Holder',postalCode:'22222222',ccv:'NEVER_RETURN'}}}};
+  expect(s.mod.billingHolder(intent as never,{name:'Account Owner',email:'owner@example.test'},{name:'Confirmed Billing',postalCode:'01001000',addressNumber:'42'})).toEqual({name:'Confirmed Billing',email:'owner@example.test',postalCode:'01001000',addressNumber:'42',phone:'',cpfCnpj:''});
+ });
  it('requires a complete saved billing address before any card dispatch',async()=>{
   const s=setup();s.requireAddress.mockRejectedValueOnce(new CheckoutError('Salve o endereço de faturamento.',422));
   await expect(s.pay()).rejects.toMatchObject({status:422});expect(s.rpc).not.toHaveBeenCalled();expect(s.saveCard).not.toHaveBeenCalled();expect(s.adapter.createAsaasDirectCardPayment).not.toHaveBeenCalled();

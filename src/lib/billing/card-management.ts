@@ -10,7 +10,7 @@ export class CardManagementError extends Error { constructor(message: string, pu
 export type ManagedSubscription = { id: string; status: string; billing_provider: string; provider_subscription_id: string | null; current_period_end: string | null; next_billing_at: string | null; plan_code: string; metadata: Record<string, unknown> | null };
 const safeCardColumns = "id,status,brand,last_digits,exp_month,exp_year,created_at";
 export function cardBlocker(s: ManagedSubscription) {
-  if (s.status !== "active" || !s.current_period_end || Date.parse(s.current_period_end) <= Date.now()) return "É preciso uma assinatura ativa com período vigente. Confira a assinatura em Minha Conta antes de cadastrar o cartão.";
+  if (!["active", "past_due"].includes(s.status) || !s.current_period_end) return "É preciso uma assinatura ativa ou vencida. Confira a assinatura em Minha Conta antes de cadastrar o cartão.";
   if (s.billing_provider !== "asaas" || s.provider_subscription_id) return "Esta assinatura usa um acordo externo. Solicite ao suporte a atualização no provedor atual, preservando o vencimento; não refaça o checkout do ciclo já pago.";
   if (record(s.metadata?.commercial_terms).billing_cycle === "one_time") return "Esta compra é avulsa e não possui renovação automática.";
   return null;
@@ -40,6 +40,7 @@ export async function changeBillingCard(client: SupabaseClient, org: string, act
   if(current.error) throw new CardManagementError("Não foi possível conferir o cartão atual.",503);
   if((current.data?.id??null)!==body.expectedDefault || Date.parse(body.expectedEnd)!==Date.parse(subscription.current_period_end!)) throw new CardManagementError("A assinatura ou o cartão padrão mudou. Atualize a página e confirme novamente.");
   let cardData: Record<string,unknown> | null=null; let method: string | null=null;
+  let billingHolder: Record<string,string> | null=null;
   if(body.action==="default") {
     if(typeof body.methodId!=="string" || !uuid.test(body.methodId)) throw new CardManagementError("Selecione um cartão cadastrado.",400);
     method=body.methodId;
@@ -51,12 +52,13 @@ export async function changeBillingCard(client: SupabaseClient, org: string, act
       const config=await loadAsaasPlatformBillingConfig({client});
       const token=await tokenizeAsaasBillingCard({...config,card,holder,remoteIp,customerId:current.data?.customer_id});
       cardData={customer_id:token.customerId,token_encrypted:encryptCredentialValue(token.token),brand:token.brand,last_digits:card.number.slice(-4),exp_month:card.expiryMonth,exp_year:card.expiryYear};
+      billingHolder={...holder};
     } catch(error) {
       if(error instanceof AsaasDirectError && [401,403].includes(error.diagnostic?.httpStatus ?? 0)) throw new CardManagementError("O Asaas não autorizou a tokenização sem cobrança. Solicite ao suporte ConnectyHub a habilitação de tokenização na conta Asaas. Seu cartão atual foi mantido; não refaça o pagamento do ciclo.",422);
       throw new CardManagementError("Não foi possível tokenizar e salvar o novo cartão. O cartão atual foi mantido e nenhuma cobrança foi solicitada. Confira os dados ou contate o suporte.",422);
     }
   } else throw new CardManagementError("Ação inválida.",400);
-  const result=await client.rpc("set_billing_default_card",{p_org:org,p_actor:actor,p_subscription:body.subscriptionId,p_request:body.requestId,p_expected_default:body.expectedDefault,p_expected_end:body.expectedEnd,p_consent:body.consentVersion,p_method:method,p_card:cardData});
+  const result=await client.rpc("set_billing_default_card_profile",{p_org:org,p_actor:actor,p_subscription:body.subscriptionId,p_request:body.requestId,p_expected_default:body.expectedDefault,p_expected_end:body.expectedEnd,p_consent:body.consentVersion,p_method:method,p_card:cardData,p_holder:billingHolder});
   if(result.error){
     const code=result.error.message;
     if(code.includes("CARD_PAYMENT_BUSY")) throw new CardManagementError("Há um pagamento em processamento ou conferência. Aguarde a conclusão antes de trocar o cartão; nenhuma nova cobrança foi solicitada.");
