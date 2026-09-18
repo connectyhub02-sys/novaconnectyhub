@@ -1,5 +1,34 @@
 # Estado operacional da ConnectyHub
 
+## Pix: painel Asaas e distinção entre contratação/troca — 17/09/2026, 21:22 BRT
+
+Nova leitura API confirmou aprovação PJ geral/comercial/documental, cadastro
+válido, `bankAccountInfo=PENDING`, zero autorizações e webhook autenticado com os
+nove eventos Pix. Health serve `4888aba97b5a0809ddbb289d102a4add5982128d` nesta
+consulta. Flag de produção segue ligada conforme configuração registrada abaixo.
+
+Painel Asaas inspecionado: área Pix Automático oferece autorização de débitos,
+pagamentos agendados e histórico do **pagador**, sem status de elegibilidade
+recebedora ou etapa de ativação do recebimento. Minha Conta mostra as aprovações;
+chave de produção Habilitada (sem revelar segredo); webhook ConnectyHub - Billing
+Ativado e zero eventos penalizados. Isso não comprova permissão para criar mandato.
+
+Elegibilidade explícita como recebedor continua pendente. O caminho oficial para
+liberação é gerente de contas via WhatsApp **0800 009 0037**, conforme
+[canais Asaas](https://docs.asaas.com/docs/entre-em-contato), ou chat da conta para
+encaminhamento. Solicitar status ELIGIBLE/INELIGIBLE e motivos, situação/idade do
+CNPJ, restrições Pix e efeito de `bankAccountInfo=PENDING` para
+`/v3/pix/automatic/authorizations`, Jornada 3, `paymentCreationMode=SUBSCRIPTION`.
+Nenhuma mensagem externa ou operação financeira enviada.
+
+Ajuste textual desta rodada distingue novas contratações elegíveis da troca de
+plano ativo, cuja jornada sem cobrança segue dependente de confirmação Asaas.
+Checkout inicial mantém flag/critérios reais e informa validação pelo provedor
+antes do consentimento/criação. Layout desktop sem rolagem interna preservado.
+ESLint e seis testes de disponibilidade aprovados. O fluxo deste ajuste textual
+é publicação pela master/GitHub/Vercel existente; não exige migration ou mudança
+de configuração. O SHA efetivamente servido deve ser conferido no health.
+
 ## Modal responsivo e habilitação do checkout Pix — 17/09/2026
 
 Nova verificação Asaas às 20:38 BRT: conta `JURIDICA`/`LIMITED`, situação geral,

@@ -7,7 +7,7 @@ export function pixAutomaticAvailability(context: PixAutomaticContext) {
     enabled: false as const,
     code: "pix_automatic_unavailable" as const,
     reason: context === "replacement"
-      ? "O Asaas exige um primeiro pagamento para autorizar Pix Automático. A troca sem cobrança agora não está disponível. Mantenha o cartão atual; a equipe precisa confirmar uma jornada compatível antes de fazer a mudança."
+      ? "Disponível para novas contratações elegíveis. Para trocar uma assinatura ativa, o Asaas exige autorização com primeiro pagamento. A troca sem cobrança depende da confirmação de uma jornada compatível pelo Asaas. Seu cartão atual continua válido."
       : "Pix Automático ainda não está disponível neste checkout. Use cartão ou Pix comum, que exige pagamento manual em cada vencimento.",
   };
 }

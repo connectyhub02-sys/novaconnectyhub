@@ -54,6 +54,7 @@ export function BillingPixAutomaticCheckout({ subscriptionId, initial, onChange,
       <button type="button" disabled={busy} onClick={() => void refresh().catch(error => setMessage(error.message))} className="ml-2 min-h-11 text-sm text-blue-700 underline">Conferir confirmação</button>
     </> : snapshot.enabled ? <>
       {authorization?.canRetry ? <p role="status" className="text-sm text-amber-800">A autorização anterior não foi concluída. Você pode iniciar uma nova solicitação.</p> : null}
+      <p className="text-xs text-slate-600">A disponibilidade será validada pelo Asaas ao gerar a autorização desta nova contratação.</p>
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} className="mt-1" />Autorizo o primeiro pagamento e as renovações recorrentes nos valores acima. Confirmarei essa autorização no meu banco. Tentativas no dia seguem as regras do banco; não autorizo retentativas em dias posteriores.</label>
       <button type="button" disabled={!accepted || busy || cartSyncing} onClick={() => { if (authorization?.canRetry) requestId.current = null; void create(); }} className="min-h-11 w-full rounded-lg bg-blue-700 px-3 font-semibold text-white disabled:opacity-50">{busy ? "Preparando autorização…" : "Gerar Pix Automático"}</button>
     </> : <p role="status" className="text-sm">{snapshot.reason}</p>}
