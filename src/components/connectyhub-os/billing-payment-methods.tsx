@@ -14,7 +14,7 @@ async function fetchCards(id:string):Promise<Data>{
   const data=await response.json();if(!response.ok)throw Error(data.error??'Não foi possível carregar seus cartões.');return data;
 }
 export function BillingPaymentMethods({subscriptions}:{subscriptions:Subscription[]}){
-  const active=subscriptions.filter(s=>s.status==="active");
+  const active=subscriptions.filter(s=>s.status==="active"||s.status==="past_due");
   const [selected,setSelected]=useState("");const subscription=active.find(s=>s.id===selected)??active[0];
   const [data,setData]=useState<Data|null>(null),[error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[choice,setChoice]=useState<string|null>(null);
   const subscriptionId=subscription?.id;

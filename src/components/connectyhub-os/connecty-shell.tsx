@@ -1,5 +1,6 @@
 "use client";
 import { DialogFrame } from "@/components/ui/dialog-frame";
+import { isClientBillingRecoveryPage } from "@/lib/billing/recovery-paths";
 
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -234,6 +235,7 @@ const adminSections: NavSection[] = [
 ];
 
 const restrictedClientSections: NavSection[] = [{ label: "Sua conta", items: [
+  { label: "Minha Conta", href: "/dashboard/minha-conta", icon: CreditCard, tone: "blue" },
   { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
   { label: "Pagamento do plano", href: "/dashboard/planos", icon: Coins, tone: "amber" },
 ]}];
@@ -1110,6 +1112,7 @@ function ConnectyShellRoot({
             {/* Avatar */}
             <DropdownMenu>
               <DropdownMenuTrigger
+                aria-label="Abrir menu da conta"
                 className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold outline-none"
                 style={{
                   background: `rgba(var(--ch-accent-rgb),0.15)`,
@@ -2794,8 +2797,4 @@ function resolveActiveItem(sections: NavSection[], active: string) {
     .flatMap((s) => s.items)
     .filter((item) => isActive(item.href, active))
     .sort((left, right) => right.href.length - left.href.length)[0];
-}
-
-function isClientBillingRecoveryPage(pathname: string) {
-  return pathname === "/dashboard/planos" || pathname.startsWith("/dashboard/planos/") || pathname === "/dashboard/meus-produtos" || pathname.startsWith("/dashboard/meus-produtos/");
 }

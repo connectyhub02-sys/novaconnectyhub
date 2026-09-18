@@ -1,4 +1,13 @@
 # Estado operacional da ConnectyHub
+## Minha Conta para planos vencidos — 18/09/2026
+
+Correção do menu, proxy e bloqueio visual preparada para publicação: Minha Conta
+e faturas passam a integrar a recuperação; APIs de conta, segurança e faturamento
+mantêm autenticação e escopo. Métodos listam contratos `past_due`. Caso Andre
+confirmado por leitura: owner não admin, Scale vencido e acesso pago negado.
+Nove testes de ativo/vencido e ESLint passaram; publicação ainda pendente nesta
+etapa. [Causa, alcance e evidências](recuperacao-minha-conta-2026-09-18.md).
+
 ## Verificação Asaas e simplificação do faturamento — 18/09/2026
 
 Leitura em produção às 00:20 BRT confirmou conta Asaas PJ e aprovação geral,

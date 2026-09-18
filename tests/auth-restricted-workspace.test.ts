@@ -42,6 +42,14 @@ function fixture({ allowed = false, admin = false, authenticated = true } = {}) 
 }
 
 describe("authentication for overdue customers", () => {
+  it.each([false, true])("allows account, invoices and security with paid access=%s", async allowed => {
+    const f = fixture({ allowed });
+    for (const path of ["/dashboard/minha-conta", "/dashboard/minha-conta/faturas/fixture", "/api/dashboard/account", "/api/dashboard/account/security", "/api/dashboard/billing/payment-methods", "/api/dashboard/billing/address"]) {
+      expect((await f.proxy.updateSession(new NextRequest(origin + path))).status).toBe(200);
+    }
+    expect(recovery.isClientBillingRecoveryPage("/dashboard/minha-conta")).toBe(true);
+    for (const path of ["/dashboard/minha-conta-maliciosa", "/dashboard/agentes", "/dashboard/automacoes", "/dashboard/catalogo", "/dashboard/api"]) expect(recovery.isClientBillingRecoveryPage(path)).toBe(false);
+  });
   it("completes admin access and sends the customer to payment recovery without an HTTP 500", async () => {
     const f = fixture();
     const entry = await f.continuation.GET(new NextRequest(`${origin}/auth/continue`));
@@ -74,13 +82,16 @@ describe("authentication for overdue customers", () => {
 
   it("keeps paid features and operational API calls blocked after authentication", async () => {
     const f = fixture();
-    for (const path of ["/dashboard/agentes", "/dashboard/automacoes", "/dashboard/integracoes"]) {
+    for (const path of ["/dashboard/agentes", "/dashboard/automacoes", "/dashboard/integracoes", "/dashboard/api", "/dashboard/catalogo"]) {
       const response = await f.proxy.updateSession(new NextRequest(origin + path));
       expect(response.headers.get("location")).toBe(`${origin}/dashboard/planos?regularizar=1`);
     }
-    const api = await f.proxy.updateSession(new NextRequest(`${origin}/api/dashboard/agents`));
-    expect(api.status).toBe(402);
-    expect(await api.json()).toMatchObject({ code: "billing_access_required" });
+    for (const path of ["/api/dashboard/agents", "/api/dashboard/automations", "/api/dashboard/integrations"]) {
+      const api = await f.proxy.updateSession(new NextRequest(origin + path));
+      expect(api.status).toBe(402);
+      expect(await api.json()).toMatchObject({ code: "billing_access_required" });
+      expect((await fixture({ allowed: true }).proxy.updateSession(new NextRequest(origin + path))).status).toBe(200);
+    }
     for (const path of ["/api/dashboard/billing/status", "/api/dashboard/meus-produtos"]) {
       expect((await f.proxy.updateSession(new NextRequest(origin + path))).status).toBe(200);
     }
