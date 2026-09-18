@@ -25,9 +25,10 @@ Reauditoria após gravação: 12/12 agentes completos, zero perguntas sem opçõ
 nesse conjunto; nova execução não propõe alterações. Passaram 256 testes
 direcionados, ESLint e build webpack/TypeScript. A sessão assistida de cliente
 recusou corretamente a rota administrativa; a configuração interna foi conferida
-por releitura autorizada do banco, sem contornar o controle de acesso. Publicação
-do complemento de código será conferida no health após o push; os dados já são
-compatíveis com o runtime por respostas publicado anteriormente.
+por releitura autorizada do banco, sem contornar o controle de acesso.
+Commit funcional `f2a66bf5e85d59bcb7596b6ca65cff8379392ccc` confirmado na
+master e no health público com status `ok` às 19h28 BRT. Deploy da pipeline:
+`7BpNDAqH8vVLzbmD7xyZeA8cfEEK`. Dados e complemento de código publicados.
 
 ## Qualificação por respostas — 18/09/2026
 
