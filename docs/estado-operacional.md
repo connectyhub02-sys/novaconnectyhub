@@ -21,6 +21,12 @@ propõe organização exclusiva do titular e plano Start R$ 97 inicial/mensal, s
 adicionais. Organização não criada e teste financeiro não autorizado/executado.
 O checkout de cliente usado para leitura não é alvo de teste financeiro.
 
+Texto do checkout inicial esclarece, antes de gerar e também no estado CREATED,
+que QR ou Pix Copia e Cola devem ser usados no app do banco para confirmar o
+primeiro pagamento e a autorização recorrente. Não promete abrir/redirecionar ao
+app bancário. Próximos ciclos dependem da autorização ativa. A checagem desse
+texto não gera QR nem mandato real.
+
 ## Pix: painel Asaas e distinção entre contratação/troca — 17/09/2026, 21:22 BRT
 
 Nova leitura API confirmou aprovação PJ geral/comercial/documental, cadastro
