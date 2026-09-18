@@ -24,6 +24,11 @@ retirar cobranças, mas faltam transação, idempotência e conciliação entre 
 [Regra verificada, mensagens e escopo da jornada guiada](plano-vencido-cancelamento-pix-2026-09-17.md).
 Nenhum contrato, cobrança, QR, mandato ou política de vencimento foi alterado.
 
+**Publicação confirmada às 23:26 BRT:** `6044c2da41c9187aa13749e944666aa4b29de316`,
+Vercel success no projeto oficial e health ok com o SHA exato. Endereço aberto e
+CEP automático publicados pela master. QA de interação foi local com dados
+simulados; nenhuma informação real de faturamento foi submetida nesta rodada.
+
 
 ## Checkout compacto e motivo da restrição Pix — 17/09/2026, 23:05 BRT
 
