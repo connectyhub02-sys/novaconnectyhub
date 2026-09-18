@@ -154,6 +154,7 @@ export function BillingPlanCheckout({
   const [pixAutomatic, setPixAutomatic] = useState<PixAutomaticSnapshot | null>(null);
   const [pixAutomaticError, setPixAutomaticError] = useState("");
   const pixAutomaticLocked = Boolean(pixAutomatic?.authorization && !pixAutomatic.authorization.canRetry);
+  const automaticPlanMethods = purchaseKind === "plan" && billingProvider === "asaas" && renewalPlanAmountBrl !== null && renewalPlanAmountBrl > 0;
   const [pix, setPix] = useState<PixState>({
     qrCode: initialPixQrCode,
     qrCodeBase64: initialPixQrCodeBase64,
@@ -670,7 +671,8 @@ export function BillingPlanCheckout({
 
         {canPay ? (
           <>
-            <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-100 p-1">
+            {automaticPlanMethods ? <div className="mt-5"><h3 className="text-sm font-semibold text-slate-900">Pagamento automático</h3><p className="mt-1 text-xs leading-5 text-slate-600">Recomendado para manter seu plano ativo sem precisar pagar manualmente a cada vencimento.</p></div> : null}
+            <div className={cn("grid grid-cols-2 gap-2 rounded-lg border border-slate-300 bg-slate-100 p-1", automaticPlanMethods ? "mt-3" : "mt-5")}>
               <PaymentMethodButton
                 active={method === "card"}
                 disabled={!cardEnabled || pixAutomaticLocked}
@@ -678,19 +680,25 @@ export function BillingPlanCheckout({
                 label="Cartão"
                 onClick={() => setMethod("card")}
               />
-              <PaymentMethodButton
+              {!automaticPlanMethods ? <PaymentMethodButton
                 active={method === "pix"}
                 disabled={pixAutomaticLocked}
                 icon={<QrCode className="h-4 w-4" />}
                 label="Pix comum"
                 onClick={() => setMethod("pix")}
-              />
+              /> : null}
               {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<QrCode className="h-4 w-4" />} label="Pix Automático" onClick={() => setMethod("pix_automatic")} /> : null}
             </div>
 
+            {automaticPlanMethods ? <section aria-label="Pagamento manual" className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h3 className="text-sm font-semibold text-slate-900">Pagamento manual</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-600">Pix manual paga apenas este ciclo. Não renova automaticamente. Com os avisos da conta ativados, enviaremos lembretes antes do vencimento.</p>
+              <div className="mt-2"><PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-4 w-4" />} label="Pix comum (manual)" onClick={() => setMethod("pix")} /></div>
+            </section> : null}
+
             {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization ? <p className="mt-3 text-sm text-slate-300">{pixAutomaticError || pixAutomatic?.reason || "Conferindo disponibilidade do Pix Automático…"}</p> : null}
             {method === "card" && billingProvider === "asaas" ? <p className="mt-3 text-sm text-slate-300">Cartão: pagamento inicial e, com sua autorização, tokenização para renovações automáticas.</p> : null}
-            {method === "pix" ? <p className="mt-3 text-sm text-slate-300">Pix comum: pague manualmente pelo QR Code ou copia e cola. Esta opção não autoriza débitos recorrentes.</p> : null}
+            {method === "pix" ? <p className="mt-3 text-sm text-slate-600">{automaticPlanMethods ? "Pix comum: pague manualmente pelo QR Code ou copia e cola. Este pagamento não ativa renovação automática; cada próximo ciclo precisa de um novo pagamento." : "Pix comum: pague manualmente pelo QR Code ou copia e cola. Esta opção não autoriza débitos recorrentes."}</p> : null}
 
             {method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
               <MercadoPagoCardBrick

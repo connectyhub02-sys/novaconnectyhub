@@ -1,5 +1,40 @@
 # Estado operacional da ConnectyHub
 
+## Pix real pendente e separação de métodos — 17/09/2026
+
+Após o titular mostrar QR gerado no checkout existente, auditoria estritamente
+de leitura confirmou **uma autorização real de produção CREATED**, criada às
+21:49 BRT: primeiro pagamento R$ 694, recorrência MONTHLY R$ 497 com startDate
+17/10/2026, modo SUBSCRIPTION e sem data final. QR com expiração retornada pelo
+Asaas `2026-09-17 22:49:06`. Webhook AUTHORIZATION_CREATED recebido e processado
+às 21:49:10–11. Às 21:51, assinatura local pending, zero créditos liberados, efeitos
+iniciais não concluídos; Asaas sem pagamentos para o cliente e sem assinatura
+recorrente externa ainda. Uma autorização viva, sem duplicidade observada.
+Nenhum ID, QR ou dado bancário incluído neste registro. A criação ocorreu após a
+inspeção sem consentimento anterior; esta auditoria não criou, cancelou ou estornou.
+Pagar e autorizar esse QR é operação real, não teste simulado. Estado sujeito a
+mudança pelo titular/webhooks; reler antes de decidir encerramento. Não regenerar.
+
+Pix comum preservado: cria cobrança pontual, ativa/renova o período do contrato
+interno quando pago, mas não cria autorização Pix Automático nem débito mensal
+autorizado. A régua lê current_period_end/next_billing_at, prepara/reutiliza
+checkout renewal e solicita pagamento pelo painel. Worker Inngest está conectado
+a processPaidBillingLifecycleNotifications a cada cinco minutos; nenhuma execução
+foi forçada nesta auditoria. Configuração real lida às 21:52: avisos WhatsApp
+ligados, início três dias antes, lembretes diários. Desde 01/09 há 12 registros
+paid_plan_renewal_reminder sent com método pix, além de um due_today e três expired.
+Status sent no banco não comprova entrega final no WhatsApp. Preferências de
+opt-out e desativação global são respeitadas; a UI não promete envio incondicional.
+
+Checkout recorrente Asaas agora separa **Pagamento automático** (Cartão e Pix
+Automático) de **Pagamento manual** (Pix comum), com aviso de pagamento somente
+deste ciclo e ausência de renovação automática. Não altera POST, valores, estados,
+consentimentos, agendamento ou régua. QA local do componente real com APIs
+simuladas: desktop 1280×900 e celular 390×844 sem overflow horizontal; opção
+manual independente, fallback disponível quando Pix Automático está indisponível,
+e ambos Cartão/Pix comum bloqueados quando existe autorização Pix em andamento.
+Rota temporária removida antes da publicação pela master/GitHub/Vercel.
+
 ## Pix confirmado no checkout e oferta no painel Asaas — 17/09/2026, 21:34 BRT
 
 Nova evidência supera a dúvida do menu Pix do pagador: no formulário Asaas
