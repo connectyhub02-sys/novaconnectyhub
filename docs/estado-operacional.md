@@ -30,7 +30,12 @@ inicial mantém adicionais; métodos sem card Pix redundante; modal de troca com
 motivo preservado. CEP automático, Enter/blur sem duplicação, erro/repetição,
 não encontrado, preservação de rua editada e salvamento simulado conferidos.
 Sem overflow horizontal ou POST financeiro. ESLint e 32 testes existentes
-passaram. Build webpack/TypeScript concluído; publicação ainda não confirmada.
+passaram. Build webpack/TypeScript concluído.
+
+**Publicado e confirmado às 00:36 BRT:**
+`a9cdb73036b2ab3d8f6130cfdfb7edb45940098b`, master oficial, Vercel success no
+projeto existente e health `ok` com o SHA exato. A inspeção visual/de interação
+foi local com APIs simuladas; nenhum dado real de faturamento foi submetido.
 
 ## Endereço obrigatório aberto, CEP automático e regra de vencimento — 17/09/2026
 
