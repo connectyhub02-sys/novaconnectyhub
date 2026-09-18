@@ -18,8 +18,13 @@ barra na largura de conteúdo desktop de aproximadamente 1.400px; em viewport
 390px, sem transbordamento da página. Prompt selecionado inicialmente nas duas
 variantes. Modal Editar mantém status, reset e remoção da conexão. Nenhuma
 conexão ou configuração real alterada durante esta conferência. ESLint, 73 testes
-direcionados e compilação de produção com webpack aprovados. Publicação em
-acompanhamento.
+direcionados e compilação de produção com webpack aprovados.
+
+Publicado na master no commit `23c32d74`. Vercel Production concluída e
+`/api/health` retornando `ok` nessa versão em 18/09/2026 às 20:37 BRT. Conferência
+visual em produção no painel de Renata Macedo confirmou os 11 indicadores e
+Salvar tudo na mesma linha, Prompt inicialmente ativo e ausência da antiga aba
+Conexão. Nenhum botão de salvar ou operação de conexão foi acionado.
 
 ## Respostas prontas nos agentes existentes — complemento de 18/09/2026
 
