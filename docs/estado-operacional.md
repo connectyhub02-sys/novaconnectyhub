@@ -16,9 +16,17 @@ pendentes impedem qualificado/VIP. Histórico só muda na próxima análise.
 Navegador local com API simulada validou cliente/admin, desktop/celular,
 edição vazia/espaços, adicionar/excluir, pontuação/desqualificação,
 salvar/recarregar e estabilidade dos identificadores. Nenhuma conversa real
-ou chamada paga foi feita. A tabela específica de oito perguntas solicitada
-pelo titular está preparada, com máximo 110 convertido para 100; sua aplicação
-aos dois agentes autorizados depende da confirmação da publicação.
+ou chamada paga foi feita. Build webpack, TypeScript e ESLint aprovados.
+
+Publicação `0de6475864a90826acafdf0380cfbb0e488782ad` confirmada na master e no
+health público em 18/09 às 19h10 BRT. Vercel `EjsqsMzsoXtYMqiVMpZt3gnsiyiK`
+ficou Ready após 1m04s. Rubrica de oito perguntas aplicada aos dois agentes
+explicitamente autorizados, com backup local privado, atualização condicionada
+à versão anterior e releitura dos registros: ambos com oito perguntas, 31
+alternativas, máximo 110 convertido para 100. Demais metadados preservados.
+Painel real conferido após recarga: tabela e pontos persistidos, desqualificador
+marcado, sem campo técnico. Acesso administrativo ao painel do cliente não
+constitui teste de permissões com sessão própria do cliente.
 
 Detalhes e limites em [qualificação por respostas](qualificacao-respostas-2026-09-18.md).
 

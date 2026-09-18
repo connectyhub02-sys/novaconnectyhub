@@ -34,7 +34,10 @@ autorais antigas sem opções continuam editáveis e sem pontos até serem confi
 A rubrica particular autorizada pelo titular possui oito perguntas e máximo de
 110 pontos, normalizado para 100. Sua resposta desqualificadora impede o avanço
 comercial. Pontos ou declarações do lead não comprovam documentos nem autorizam
-fornecimento. A aplicação em dados reais será registrada após publicação.
+fornecimento. Aplicada aos dois agentes autorizados em 18/09 às 19h10 BRT,
+após o health confirmar a versão nova. Backup privado local, controle de versão
+por `updated_at` e releitura confirmaram ambas as gravações e a preservação
+dos demais metadados. Nenhum cadastro de lead foi reescrito nesta aplicação.
 
 ## Verificação e limites
 
@@ -52,3 +55,9 @@ e build de produção webpack passaram; 108 páginas estáticas geradas.
 O entendimento semântico de conversas reais pelo fornecedor não foi medido neste
 trabalho. O cálculo é determinístico; a escolha da alternativa continua dependendo
 da interpretação da IA e deve ficar pendente quando não houver correspondência clara.
+
+Release funcional: `0de6475864a90826acafdf0380cfbb0e488782ad`, Vercel
+`EjsqsMzsoXtYMqiVMpZt3gnsiyiK`, Ready em 1m04s. Painel real conferido após
+recarga em sessão administrativa: oito perguntas salvas, alternativas/notas
+corretas, sanfonas inicialmente fechadas, desqualificador marcado e campo técnico
+ausente. Esse percurso não valida o acesso com uma sessão própria do cliente.
