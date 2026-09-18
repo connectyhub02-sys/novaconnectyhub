@@ -130,18 +130,10 @@ export default async function DashboardBillingCheckoutPage({
           </Link>
         </section>
       ) : (
-        <section className="space-y-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-300">
-                Billing / checkout
-              </div>
-              <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
-                Finalize sua compra.
-              </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                Confira sua compra, escolha os adicionais e pague no checkout ConnectyHub.
-              </p>
+              <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Finalize sua compra</h1>
             </div>
             <Link
               href="/dashboard/planos"

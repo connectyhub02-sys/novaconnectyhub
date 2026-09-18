@@ -4558,3 +4558,23 @@ html {
 [data-connecty-mode] .text-cyan-200\/75:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
 [data-connecty-mode] .text-cyan-200\/80:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *),
 [data-connecty-mode] .text-cyan-300\/70:not([data-connecty-contrast="dark"]):not([data-connecty-contrast="dark"] *):not(.connecty-dark-action):not(.connecty-dark-action *) { color: var(--ch-accent, #1d4ed8) !important; }
+
+/* Checkout has its own colored surfaces; inherited dashboard utility overrides
+   must not erase selected states or the compact order summary. */
+.ch-checkout-step { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 8px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 800; }
+.ch-checkout-plan-banner { background: linear-gradient(115deg, #1d4ed8, #4338ca); color: white; }
+.ch-checkout-total { color: #1d4ed8; }
+.ch-checkout-extras { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
+.ch-checkout-bump { background: white; border-color: #a7f3d0; color: #064e3b; transition: border-color .15s, background .15s; }
+.ch-checkout-bump:not(:disabled):hover { border-color: #059669; }
+.ch-checkout-bump[aria-pressed="true"] { background: #d1fae5; border-color: #047857; box-shadow: inset 0 0 0 1px #047857; }
+.ch-checkout-bump-check { border-color: #6ee7b7; color: #047857; }
+.ch-checkout-bump:disabled { opacity: .7; }
+.ch-compact-checkout .ch-checkout-method { min-height: 76px; }
+.ch-compact-checkout .ch-checkout-method-icon { color: #2563eb; background: #eff6ff; }
+.ch-compact-checkout .ch-checkout-method[aria-pressed="true"] { background: #eff6ff; border-color: #2563eb; }
+.ch-compact-checkout .ch-checkout-method[aria-pressed="true"] .ch-checkout-method-icon { background: #2563eb; color: white; }
+.ch-checkout-method-badge { color: #1d4ed8; }
+.ch-compact-checkout .ch-checkout-method:disabled { opacity: 1; background: #f8fafc; border-style: dashed; color: #64748b; box-shadow: none; }
+.ch-compact-checkout .ch-checkout-method:disabled .ch-checkout-method-badge { color: #64748b; }
+.ch-compact-checkout .ch-checkout-method:disabled .ch-checkout-method-icon { background: #e2e8f0; color: #64748b; }

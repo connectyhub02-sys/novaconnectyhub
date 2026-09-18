@@ -7,6 +7,7 @@ import { billingLocalDate, billingPeriodEnd, readCommercialTerms } from "./comme
 import { processPlatformBillingAsaasWebhook } from "./platform-billing-webhook";
 import { createPixAuthorization, cancelPixAuthorization, findPixAuthorization, getPixAuthorization, getPixPayment, listPixPayments, pixCustomer, pixRequest, PixAutomaticError, type PixAuthorization, type PixPayment } from "./asaas-pix-automatic-api";
 import { validateReplacementCardField } from "./replacement-card-input";
+import { pixAutomaticCheckoutRestriction } from "./pix-automatic-availability";
 
 export const pixAutomaticConsentVersion = "connectyhub-pix-automatic-v1";
 type Config = Awaited<ReturnType<typeof loadAsaasPlatformBillingConfig>>;
@@ -33,8 +34,8 @@ export async function pixCheckoutSnapshot(client: SupabaseClient, organizationId
   const config = await loadAsaasPlatformBillingConfig({ client });
   let mandate = await loadPixMandate(client, organizationId, subscriptionId);
   if (reconcile && mandate && !["failed", "REFUSED"].includes(mandate.state)) mandate = await reconcilePixMandate(client, mandate, config);
-  const eligible = snapshot.intent.checkoutKind === "initial" && ["pending", "incomplete"].includes(snapshot.intent.subscription.status) && snapshot.terms.billingCycle === "recurring" && snapshot.recurringAmount > 0 && !snapshot.intent.subscription.provider_subscription_id && !snapshot.intent.payment.payload?.campaign_pricing;
-  return { enabled: enabled(config) && eligible, reason: !enabled(config) ? new PixAutomaticError("unavailable").message : !eligible ? "Pix Automático está disponível para a primeira contratação de planos recorrentes com preço fixo. Planos já ativos e campanhas com preços por período precisam de outra forma de pagamento." : null, amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision, consentVersion: pixAutomaticConsentVersion, authorization: publicMandate(mandate) };
+  const restriction = pixAutomaticCheckoutRestriction({ checkoutKind: snapshot.intent.checkoutKind, subscriptionStatus: snapshot.intent.subscription.status, billingCycle: snapshot.terms.billingCycle, recurringAmount: snapshot.recurringAmount, providerSubscription: Boolean(snapshot.intent.subscription.provider_subscription_id), campaignPricing: Boolean(snapshot.intent.payment.payload?.campaign_pricing) });
+  return { enabled: enabled(config) && !restriction, reason: !enabled(config) ? new PixAutomaticError("unavailable").message : restriction, amount: snapshot.amount, recurringAmount: snapshot.recurringAmount, recurrenceLabel: snapshot.recurrenceLabel, revision: snapshot.revision, consentVersion: pixAutomaticConsentVersion, authorization: publicMandate(mandate) };
 }
 export async function beginPixCheckout(client: SupabaseClient, scope: { organizationId: string; subscriptionId: string; actorId: string }, body: Record<string, unknown>, holder: { name: string; email: string; cpfCnpj: string; phone: string }) {
   if (!idPattern.test(text(body.requestId)) || body.acceptRecurring !== true || body.consentVersion !== pixAutomaticConsentVersion) throw new PixAutomaticError("invalid_input", 422);

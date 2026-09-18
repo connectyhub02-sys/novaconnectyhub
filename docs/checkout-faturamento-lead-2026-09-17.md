@@ -42,6 +42,19 @@ catálogo da pizzaria nem declara que todos esses percursos foram auditados.
 
 ## Validação e limites
 
+Complemento compacto às 23:05: causa do Pix cinza confirmada por SELECT como
+renovação de assinatura vencida, sem mandato/cobrança externa vinculados. O QR
+cancelado pertence a outro checkout. Motivo específico fica visível; não foi
+liberada adesão Pix na renovação. Os três métodos foram selecionados na prévia
+de contratação inicial em desktop/mobile, sem POST financeiro.
+
+Adicionais reais foram trazidos para antes do endereço; seleção/total aguardam
+resposta do servidor, com exclusão mútua entre atualizações. Renovação segue com
+termos fixos na RPC e atalho para compra separada de recargas. Unificar renovação
+e avulso no mesmo pagamento é backlog financeiro, não uma opção de CSS. Endereço
+e detalhes do plano recolhidos reduzem rolagem. Catálogo e preços verificados estão
+no estado operacional. 61 testes dirigidos, lint e QA local aprovados.
+
 - QA local: desktop 1280×900, celular 390×844, sem overflow horizontal.
 - Endereço incompleto rejeitado, campos por CEP preenchidos com resposta simulada;
   salvar recolhe a seção e libera o formulário escolhido.

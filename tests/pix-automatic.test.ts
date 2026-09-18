@@ -4,6 +4,7 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 import * as cardInput from "../src/lib/sales-catalog/card-input";
 import * as validation from "../src/lib/billing/replacement-card-input";
 import * as terms from "../src/lib/billing/commercial-terms";
+import * as availability from "../src/lib/billing/pix-automatic-availability";
 import type { PixMandate } from "../src/lib/billing/pix-automatic";
 
 const config={accessToken:"fixture-secret",mode:"sandbox",webhookSecret:"fixture-hook"};
@@ -56,16 +57,18 @@ function service(options:{timeout?:boolean;active?:boolean;paid?:boolean;wrongCu
  const snapshot={amount:130,recurringAmount:110,revision:0,recurrenceLabel:"Mensal",terms:{billingCycle:"recurring",billingInterval:"month"},intent:{checkoutKind:"initial",payment:{id:mandate.payment_id,payload:{}},subscription:{status:"pending",provider_subscription_id:null}}};
  const api=serverModuleHarness<typeof import("../src/lib/billing/pix-automatic")>("src/lib/billing/pix-automatic.ts",{
   "@/lib/sales-catalog/card-input":cardInput,"@/lib/sales-catalog/asaas":{loadAsaasPlatformBillingConfig:async()=>({...config,mode:options.mode??"sandbox"}),verifyAsaasWebhookToken:({header}:{header:string})=>({ok:header==="fixture-hook"})},
-  "./native-card-checkout":{loadNativeBillingSnapshot:async()=>snapshot},"./commercial-terms":terms,"./replacement-card-input":validation,"./platform-billing-webhook":{processPlatformBillingAsaasWebhook:effects},
+  "./native-card-checkout":{loadNativeBillingSnapshot:async()=>snapshot},"./commercial-terms":terms,"./replacement-card-input":validation,"./platform-billing-webhook":{processPlatformBillingAsaasWebhook:effects},"./pix-automatic-availability":availability,
   "./asaas-pix-automatic-api":{...provider,pixCustomer:async()=>"cus_test",createPixAuthorization:create,cancelPixAuthorization:cancel,getPixAuthorization:get,findPixAuthorization:find,listPixPayments:async()=>options.timeout?[]:[payment],getPixPayment:async()=>payment},
  });
  const db=client as unknown as Parameters<typeof api.beginPixCheckout>[0];
  const scope={organizationId:mandate.organization_id,subscriptionId:mandate.subscription_id,actorId:mandate.actor_id};
  const body={requestId:id,amount:130,recurringAmount:110,revision:0,acceptRecurring:true,consentVersion:api.pixAutomaticConsentVersion};
  const holder={name:"Pessoa Teste",email:"test@example.test",cpfCnpj:"12345678909",phone:"11999999999"};
- return{api,db,scope,body,holder,mandate,rpc,create,effects,get,find,cancel};
+ return{api,db,scope,body,holder,mandate,rpc,create,effects,get,find,cancel,snapshot};
 }
 describe("Pix Automatic reconciliation",()=>{
+ it("allows an eligible initial checkout without address/consent and without dispatching",async()=>{const h=service();expect(await h.api.pixCheckoutSnapshot(h.db,h.scope.organizationId,h.scope.subscriptionId)).toMatchObject({enabled:true,reason:null});expect(h.create).not.toHaveBeenCalled();expect(h.rpc).not.toHaveBeenCalled();});
+ it("explains why an unpaid renewal cannot start a mandate without blaming a cancelled QR",async()=>{const h=service();h.snapshot.intent.checkoutKind="renewal";h.snapshot.intent.subscription.status="past_due";expect(await h.api.pixCheckoutSnapshot(h.db,h.scope.organizationId,h.scope.subscriptionId)).toMatchObject({enabled:false,reason:expect.stringContaining("renova um plano existente")});expect(h.create).not.toHaveBeenCalled();expect(h.rpc).not.toHaveBeenCalled();});
  it.each([[false,false],[true,false],[false,true]])("does not activate with active=%s and paid=%s",async(active,paid)=>{const h=service({active,paid});await h.api.reconcilePixMandate(h.db,h.mandate);expect(h.effects).not.toHaveBeenCalled();expect(h.rpc).not.toHaveBeenCalledWith("bind_billing_pix_payment",expect.anything());});
  it("requires fresh ACTIVE and a verified paid transaction before invoking existing idempotent activation",async()=>{const h=service({active:true,paid:true});await h.api.reconcilePixMandate(h.db,h.mandate);expect(h.get).toHaveBeenCalledOnce();expect(h.effects).toHaveBeenCalledOnce();expect(h.mandate.initial_effects_completed).toBe(true);});
  it("rejects a payment belonging to another customer",async()=>{const h=service({active:true,paid:true,wrongCustomer:true});await expect(h.api.reconcilePixMandate(h.db,h.mandate)).rejects.toMatchObject({code:"mismatch"});expect(h.effects).not.toHaveBeenCalled();});

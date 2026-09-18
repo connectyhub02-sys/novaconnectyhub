@@ -1,5 +1,41 @@
 # Estado operacional da ConnectyHub
 
+## Checkout compacto e motivo da restrição Pix — 17/09/2026, 23:05 BRT
+
+SELECT direcionado confirmou que o checkout mostrado no feedback é **renewal**,
+assinatura **past_due**, pagamento **pending**, sem cobrança externa, assinatura
+externa ou mandato Pix vinculado. Não está preso ao QR cancelado de outro checkout.
+A restrição é financeira existente: API/RPC de Pix Automático aceitam apenas
+contratação inicial; aprovação da conta recebedora não torna toda renovação elegível.
+
+Redesign compacto: cards de métodos em uma linha, badges Automático/Manual,
+seleção azul, resumo colorido, adicionais verdes antes do endereço. Endereço fica
+recolhido até preencher/editar; salvar e continuar não cobra. Detalhes do plano
+permanecem recolhidos. API agora retorna motivo específico para renovação, troca,
+assinatura existente, contratação encerrada, compra avulsa ou campanha variável,
+preservando o predicado de elegibilidade. Nas contratações elegíveis, escolha do
+método independe de endereço/consentimento; esses continuam exigidos para pagar.
+
+Catálogo real ativo/selecionado: Resposta Rápida 5.000 cr/R$47, Venda Mais
+12.000 cr/R$97, Alta Performance 30.000 cr/R$197, Escala Total 75.000 cr/R$397.
+UI usa os produtos carregados do catálogo, sem novos produtos nem preços fixados.
+Total/seleção só mudam após confirmação do carrinho; falha preserva seleção anterior,
+e cliques concorrentes/pagamento em andamento bloqueiam edição de adicionais.
+
+Renovação mantém valor congelado pela RPC `BILLING_RENEWAL_TERMS_FIXED`; oferece
+recargas separadas, com orientação para regularizar primeiro. Pendência explícita:
+renovação + créditos avulsos no mesmo pagamento exige regra transacional com itens,
+ledger, recibo, idempotência e auditoria separados, preservando preço dos próximos
+ciclos. Não há suporte seguro existente liberado por esta alteração.
+
+QA local do componente real com APIs simuladas em 1280×900 e 390×844: seleção
+dos três métodos, endereço/CEP/salvar, consentimento Pix, total R$497→R$544 com
+pacote R$47 e falha de carrinho preservando total. Renovação mostra motivo correto;
+CANCELLED continua sem novo QR. Sem overflow horizontal, zero POST financeiro
+na simulação. 61 testes dirigidos e ESLint aprovados. Nenhuma alteração financeira,
+migration, endereço real, novo QR, mandato ou cobrança. Build webpack/TypeScript/108 páginas concluído às 23:07 BRT; publicação pela master a confirmar.
+
+
 ## Checkout, faturamento e lead comercial — 17/09/2026
 
 Cancelamento explicitamente autorizado pelo titular, concluído às **22:06 BRT**:

@@ -4,8 +4,25 @@ import { describe, expect, it, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import * as cardInput from "../src/lib/sales-catalog/card-input";
 import * as guard from "../src/lib/security/public-request-guard";
-import { pixAutomaticAvailability } from "../src/lib/billing/pix-automatic-availability";
+import { pixAutomaticAvailability, pixAutomaticCheckoutRestriction } from "../src/lib/billing/pix-automatic-availability";
 const adapter = serverModuleHarness<typeof import("../src/lib/billing/asaas-pix-automatic-api")>("src/lib/billing/asaas-pix-automatic-api.ts", { "@/lib/sales-catalog/card-input":cardInput });
+describe("Pix checkout eligibility explanations", () => {
+ const eligible = { checkoutKind:"initial", subscriptionStatus:"pending", billingCycle:"recurring", recurringAmount:497, providerSubscription:false, campaignPricing:false };
+ it.each([
+  [{checkoutKind:"renewal", subscriptionStatus:"past_due"}, "renova um plano existente"],
+  [{checkoutKind:"plan_change"}, "troca de plano"],
+  [{providerSubscription:true}, "assinatura automática vinculada"],
+  [{subscriptionStatus:"active"}, "já foi encerrada"],
+  [{billingCycle:"one_time"}, "pagamento único"],
+  [{recurringAmount:0}, "pagamento único"],
+  [{campaignPricing:true}, "preços por período"],
+ ])("preserves restriction and gives the specific cause: %o", (patch, reason) => {
+  expect(pixAutomaticCheckoutRestriction({...eligible,...patch})).toContain(reason);
+ });
+ it.each(["pending", "incomplete"])("keeps %s initial contracts eligible", subscriptionStatus => {
+  expect(pixAutomaticCheckoutRestriction({...eligible,subscriptionStatus})).toBeNull();
+ });
+});
 describe("Pix Automatic authenticated checkout route", () => {
  const subscriptionId=randomUUID(),organizationId=randomUUID(),actor=randomUUID();
  function route(role="owner"){

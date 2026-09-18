@@ -166,6 +166,7 @@ export function BillingPlanCheckout({
   const [cardCheckoutLoading, setCardCheckoutLoading] = useState(false);
   const [statusChecking, setStatusChecking] = useState(false);
   const [cartSyncing, setCartSyncing] = useState(false);
+  const cartSyncLock = useRef(false);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
   const [feedbackModal, setFeedbackModal] = useState<PaymentFeedbackModalState | null>(null);
@@ -409,15 +410,11 @@ export function BillingPlanCheckout({
   }
 
   function toggleBump(code: BillingCheckoutBumpCode) {
-    if (cardCheckoutLoading) return;
+    if (cardCheckoutLoading || cartSyncLock.current || pixAutomaticLocked || pixLoading || providerPaymentId || !canPay || renewal) return;
     const next = selectedBumpCodes.includes(code)
       ? selectedBumpCodes.filter((item) => item !== code)
       : [...selectedBumpCodes, code];
 
-    setSelectedBumpCodes(next);
-    setPix({ qrCode: null, qrCodeBase64: null, ticketUrl: null });
-    setProviderPaymentId(null);
-    setCardStatusPolling(false);
     setNotice(null);
     void syncCartSelection(next);
   }
@@ -425,6 +422,7 @@ export function BillingPlanCheckout({
   async function syncCartSelection(nextSelectedBumpCodes: BillingCheckoutBumpCode[]) {
     if (!canPay) return;
 
+    cartSyncLock.current = true;
     setCartSyncing(true);
 
     try {
@@ -433,23 +431,28 @@ export function BillingPlanCheckout({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ selectedBumpCodes: nextSelectedBumpCodes }),
       });
-      const data = await response.json().catch(() => null) as { error?: string } | null;
+      const data = await response.json().catch(() => null) as { error?: string; selectedBumpCodes?: string[] } | null;
 
       if (!response.ok) {
         throw new Error(data?.error ?? "Nao foi possivel salvar o carrinho.");
       }
+      setSelectedBumpCodes(data?.selectedBumpCodes ?? nextSelectedBumpCodes);
+      setPix({ qrCode: null, qrCodeBase64: null, ticketUrl: null });
+      setProviderPaymentId(null);
+      setCardStatusPolling(false);
     } catch (error) {
       setNotice({
         tone: "error",
         message: error instanceof Error ? error.message : "Nao foi possivel salvar o carrinho.",
       });
     } finally {
+      cartSyncLock.current = false;
       setCartSyncing(false);
     }
   }
 
   async function generatePix() {
-    if (!canPay || cardCheckoutLoading) return;
+    if (!canPay || cardCheckoutLoading || cartSyncLock.current) return;
 
     setPixLoading(true);
     setNotice(null);
@@ -535,33 +538,32 @@ export function BillingPlanCheckout({
 
   return (
     <>
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section aria-label="Pagamento" className="order-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7 lg:order-1">
-        <h2 className="text-xl font-bold text-slate-900">Como você prefere pagar?</h2>
-        <p className="mt-1 text-sm text-slate-500">Escolha a forma de pagamento para continuar.</p>
+    <div className="ch-compact-checkout grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <section aria-label="Pagamento" className="order-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:order-1">
+        <div className="flex items-center gap-2"><span className="ch-checkout-step">1</span><h2 className="text-lg font-bold text-slate-900">Escolha como pagar</h2></div>
         {canPay ? (
           <>
-            <div className="mt-6 space-y-5" role="group" aria-label="Forma de pagamento">
-              <div>
-                {automaticPlanMethods ? <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pagamento automático</h3> : null}
-                <div className={cn("grid gap-3", automaticPlanMethods ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
-                  <PaymentMethodButton active={method === "card"} disabled={!cardEnabled || pixAutomaticLocked} icon={<CreditCard className="h-5 w-5" />} label="Cartão" description={automaticPlanMethods ? "Renova a cada vencimento" : "Pague com cartão de crédito"} onClick={() => chooseMethod("card")} />
-                  {!automaticPlanMethods ? <PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-5 w-5" />} label="Pix comum" description="Pagamento único" onClick={() => chooseMethod("pix")} /> : null}
-                  {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<RefreshCw className="h-5 w-5" />} label="Pix Automático" description="Autorize as renovações no banco" onClick={() => chooseMethod("pix_automatic")} /> : null}
-                </div>
-              </div>
-              {automaticPlanMethods ? <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pagamento manual</h3>
-                <PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-5 w-5" />} label="Pix comum" description="Paga só este ciclo, sem renovação automática" onClick={() => chooseMethod("pix")} />
-              </div> : null}
+            <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Forma de pagamento">
+              <PaymentMethodButton active={method === "card"} disabled={!cardEnabled || pixAutomaticLocked} icon={<CreditCard className="h-5 w-5" />} label="Cartão" badge={automaticPlanMethods ? "Automático" : "Crédito"} description={automaticPlanMethods ? "Renova a cada vencimento" : "Pague com cartão de crédito"} onClick={() => chooseMethod("card")} />
+              {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<RefreshCw className="h-5 w-5" />} label="Pix Automático" badge={pixAutomatic?.authorization ? "Autorização" : pixAutomatic?.enabled ? "Automático" : pixAutomatic || pixAutomaticError ? "Indisponível" : "Conferindo"} description={pixAutomatic?.enabled || pixAutomatic?.authorization ? "Autorize no app do banco" : renewal ? "Não disponível nesta renovação" : pixAutomaticError ? "Não foi possível consultar" : pixAutomatic?.reason ? "Confira a condição abaixo" : "Conferindo disponibilidade…"} onClick={() => chooseMethod("pix_automatic")} /> : null}
+              <PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-5 w-5" />} label="Pix comum" badge="Manual" description={automaticPlanMethods ? "Paga apenas este ciclo" : "Pagamento único"} onClick={() => chooseMethod("pix")} />
             </div>
+            {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization && (pixAutomatic?.reason || pixAutomaticError) ? <p role="status" className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">{pixAutomaticError || pixAutomatic?.reason}</p> : null}
+            {method === "pix" ? <p className="mt-2 text-xs leading-5 text-slate-500">Sem renovação automática.{automaticPlanMethods ? " Lembretes conforme os avisos da conta." : " Pague no app do seu banco."}</p> : null}
 
-            {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization ? <p className="mt-3 text-sm text-slate-300">{pixAutomaticError || pixAutomatic?.reason || "Conferindo disponibilidade do Pix Automático…"}</p> : null}
-            {method === "card" && billingProvider === "asaas" ? <p className="mt-3 text-sm text-slate-300">Preencha os dados do cartão. Você confirma os valores antes de pagar.</p> : null}
-            {method === "pix" ? <p className="mt-3 text-sm text-slate-600">{automaticPlanMethods ? "Enviaremos lembretes antes do vencimento, se os avisos da conta estiverem ativados." : "Pague por QR Code ou Pix Copia e Cola, sem débitos recorrentes."}</p> : null}
+            {availableBumps.length > 0 && !renewal ? <section aria-label="Adicione mais créditos" className="ch-checkout-extras mt-4 rounded-xl border p-3">
+              <div className="flex items-center justify-between gap-2"><h3 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4" />Adicione mais créditos</h3><span className="text-xs">Opcional</span></div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {availableBumps.map(bump => <button key={bump.code} type="button" aria-pressed={selectedBumpCodes.includes(bump.code)} disabled={!canPay || cardCheckoutLoading || cartSyncing || pixAutomaticLocked || pixLoading || Boolean(providerPaymentId)} onClick={() => toggleBump(bump.code)} className="ch-checkout-bump flex min-h-20 items-center gap-2 rounded-lg border p-3 text-left">
+                  <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{bump.title}</span><span className="mt-1 block text-sm font-bold">{bump.creditAmount ? "+" + formatCredits(bump.creditAmount) + " créditos" : bump.badge}</span><span className="mt-1 block text-xs">{formatMoney(bump.priceBrl)} · {bump.recurrence === "one_time" ? "pagamento único" : billingBumpLabel(bump.recurrence)}</span></span>
+                  <span aria-hidden="true" className="ch-checkout-bump-check flex h-5 w-5 shrink-0 items-center justify-center rounded border">{selectedBumpCodes.includes(bump.code) ? <CheckCircle2 className="h-4 w-4" /> : "+"}</span>
+                </button>)}
+              </div>
+              <p role="status" className="mt-2 text-xs leading-5">{cartSyncing ? "Atualizando o total…" : pixAutomaticLocked || providerPaymentId ? "Esta autorização ou cobrança mantém os adicionais escolhidos." : "O total é atualizado ao adicionar. A compra só acontece ao confirmar o pagamento."}</p>
+            </section> : renewal && canPay ? <div className="ch-checkout-extras mt-3 flex items-center gap-3 rounded-xl border p-3"><Sparkles className="h-5 w-5 shrink-0" /><div className="min-w-0 flex-1"><p className="text-sm font-semibold">Precisa de mais créditos?</p><p className="mt-0.5 text-xs leading-5">Regularize o plano e depois adicione uma recarga separada.</p></div><a href="/dashboard/creditos" className="shrink-0 text-xs font-semibold underline underline-offset-4">Ver recargas</a></div> : null}
 
             {billingProvider === "asaas" && !pixAutomaticLocked && !providerPaymentId ? <BillingAddressEditor subscriptionId={subscriptionId} onReadyChange={setBillingAddressReady} /> : null}
-            {billingProvider === "asaas" && !billingAddressReady && !pixAutomaticLocked && !providerPaymentId ? <p className="mt-4 text-xs text-slate-500">Salve o endereço de faturamento para continuar com o pagamento.</p> : method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
+            {billingProvider === "asaas" && !billingAddressReady && !pixAutomaticLocked && !providerPaymentId ? <p className="mt-2 text-xs text-slate-500">Preencha o endereço para liberar a confirmação do pagamento.</p> : method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
               <MercadoPagoCardBrick
                 key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
                 publicKey={cardPublicKey}
@@ -600,7 +602,7 @@ export function BillingPlanCheckout({
                 pix={pix}
                 copied={copied}
                 checking={statusChecking}
-                loading={pixLoading}
+                loading={pixLoading || cartSyncing}
                 onCopy={copyPixCode}
                 onGenerate={generatePix}
                 onRefresh={() => void checkPaymentStatus({ manual: true })}
@@ -619,128 +621,38 @@ export function BillingPlanCheckout({
           <div className={cn(
             "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
             activeNotice.tone === "success"
-              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
+              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-800"
               : activeNotice.tone === "warning"
-                ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
-                : "border-rose-300/40 bg-rose-400/12 text-rose-100",
+                ? "border-amber-300/40 bg-amber-400/12 text-amber-800"
+                : "border-rose-300/40 bg-rose-50 text-rose-800",
           )}>
             {activeNotice.message}
           </div>
         ) : null}
 
       </section>
-      <aside aria-label="Resumo do pedido" className="order-1 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:order-2 lg:sticky lg:top-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo do pedido</p>
-        <div className="mt-4 flex items-start justify-between gap-3">
-          <div><h2 className="text-xl font-bold text-slate-900">{planName}</h2><p className="mt-1 text-sm text-slate-500">{commercialLabel ?? planCode}</p></div>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{checkoutPresentation.title}</span>
+      <aside aria-label="Resumo do pedido" className="order-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:order-2 lg:sticky lg:top-4">
+        <div data-connecty-contrast="dark" className="ch-checkout-plan-banner flex items-center justify-between gap-3 px-4 py-3">
+          <div><p className="text-xs opacity-80">{renewal ? "Renovação do plano" : "Seu pedido"}</p><h2 className="mt-0.5 text-xl font-bold">{planName}</h2></div><span className="rounded-full border border-white/30 px-2 py-1 text-xs">{commercialLabel ?? planCode}</span>
         </div>
-        <div className="mt-4 space-y-3">
-          <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
-          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto nesta compra"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
-          {selectedBumps.map((bump) => (
-            <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
-          ))}
-        </div>
-        <div className="mt-5 border-t border-slate-700 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-white">Total hoje</span>
-            <strong className="text-2xl font-black text-emerald-300">{formatMoney(totalAmount)}</strong>
+        <div className="p-4">
+          <div className="space-y-1">
+            <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
+            {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? "Desconto (" + firstPurchaseDiscountPercent + "%)" : "Desconto nesta compra"} value={"− " + formatMoney(planListAmountBrl - planAmountBrl)} /> : null}
+            {selectedBumps.map(bump => <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />)}
           </div>
-          {selectedBumps.length > 0 ? <p className="mt-2 text-xs leading-5 text-slate-500">Adicionais avulsos são cobrados só hoje.</p> : null}
-          {renewalPlanAmountBrl !== null ? <p className="mt-2 text-sm leading-5 text-slate-300">Renovação {commercialLabel?.toLowerCase()}: {formatMoney(renewalPlanAmountBrl + selectedBumps.filter(bump => bump.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0))}.{firstPurchaseDiscountPercent > 0 ? " O desconto de primeira compra termina após esta cobrança." : ""}</p> : null}
+          <div className="mt-2 border-t border-slate-200 pt-3">
+            <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-900">Total hoje</span><strong aria-live="polite" className="ch-checkout-total text-2xl font-extrabold">{formatMoney(totalAmount)}</strong></div>
+            {renewalPlanAmountBrl !== null ? <p className="mt-1 text-xs leading-5 text-slate-500">Próximos ciclos: {formatMoney(renewalPlanAmountBrl + selectedBumps.filter(bump => bump.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0))}{commercialLabel ? " · " + commercialLabel.toLowerCase() : ""}.{firstPurchaseDiscountPercent > 0 ? " Sem o desconto inicial." : ""}</p> : null}
+            {selectedBumps.some(bump => bump.recurrence === "one_time") ? <p className="mt-1 text-xs leading-5 text-slate-500">Adicionais avulsos são cobrados só hoje.</p> : null}
+          </div>
+          <details className="mt-3 border-t border-slate-200 pt-2 text-xs text-slate-600">
+            <summary className="cursor-pointer py-1 font-medium">O que está incluído</summary>
+            <p className="mt-2 leading-5">{formatCredits(includedCredits)} créditos{storageLimitBytes > 0 ? " · " + formatStorageBytes(storageLimitBytes) + " de armazenamento" : ""}. {purchaseKind === "product" ? "Não altera seu plano." : "Válidos no período contratado."}</p>
+            {storageLimitBytes > 0 ? <CheckoutStorageSummary storageLimitBytes={storageLimitBytes} storageFileLimit={storageFileLimit} storageImageMaxBytes={storageImageMaxBytes} storageVideoMaxBytes={storageVideoMaxBytes} storageFileMaxBytes={storageFileMaxBytes} /> : null}
+          </details>
         </div>
-
-
-        <details className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
-          <summary className="cursor-pointer font-medium">O que está incluído</summary>
-          <p className="mt-3 text-sm">{formatCredits(includedCredits)} créditos inclusos. {purchaseKind === "product" ? "Esta compra não altera a assinatura do plano." : "Válidos durante o período contratado."}</p>
-          {storageLimitBytes > 0 ? <CheckoutStorageSummary storageLimitBytes={storageLimitBytes} storageFileLimit={storageFileLimit} storageImageMaxBytes={storageImageMaxBytes} storageVideoMaxBytes={storageVideoMaxBytes} storageFileMaxBytes={storageFileMaxBytes} /> : null}
-        </details>
       </aside>
-      <div className="order-3 min-w-0 lg:col-span-2">
-        {availableBumps.length > 0 ? (
-        <div className="relative overflow-hidden rounded-[8px] border border-emerald-400/35 bg-slate-950/72 p-5 shadow-[0_0_34px_rgba(16,185,129,0.11)]">
-          <div className="pointer-events-none absolute inset-2 rounded-[8px] border border-dashed border-emerald-300/20" />
-          <div className="relative flex items-center justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-300">
-                  Aumento de carrinho
-                </div>
-                <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-emerald-100">
-                  Oferta extra no checkout
-                </span>
-              </div>
-              <h3 className="mt-2 text-lg font-bold text-white">Aumente seu saldo de creditos</h3>
-              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">
-                Compre mais creditos agora e mantenha seu agente online por mais tempo, sem pausar atendimentos quando o volume crescer.
-              </p>
-            </div>
-            <Sparkles className="h-5 w-5 text-emerald-300" />
-          </div>
-
-          <div className="relative mt-4 flex items-center gap-3">
-            <span className="h-px flex-1 bg-gradient-to-r from-emerald-300/50 via-cyan-300/20 to-transparent" />
-            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100/80">1 clique para adicionar</span>
-            {cartSyncing ? (
-              <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100/80">salvando</span>
-            ) : null}
-          </div>
-
-          <div className="relative mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {availableBumps.map((bump) => {
-              const selected = selectedBumpCodes.includes(bump.code);
-
-              return (
-                <button
-                  key={bump.code}
-                  type="button"
-                  disabled={!canPay || cardCheckoutLoading || renewal}
-                  onClick={() => toggleBump(bump.code)}
-                  className={cn(
-                    "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
-                    selected
-                      ? "border-emerald-300/80 bg-emerald-400/12 shadow-lg shadow-emerald-950/30"
-                      : "border-slate-700 bg-slate-100 hover:border-emerald-300/45 hover:bg-slate-900",
-                    !canPay ? "cursor-not-allowed opacity-60" : "",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="flex flex-wrap gap-1.5">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300">
-                        {bump.badge}
-                      </span>
-                      {bump.highlightLabel ? (
-                        <span className="rounded-full border border-amber-300/35 bg-amber-300/15 px-2 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-amber-100">
-                          {bump.highlightLabel}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className={cn(
-                      "h-4 w-4 shrink-0 rounded border",
-                      selected ? "border-emerald-200 bg-emerald-300" : "border-slate-500 bg-slate-950",
-                    )} />
-                  </div>
-                  {bump.media ? (
-                    <OrderBumpMediaPreview bump={bump} />
-                  ) : null}
-                  <p className="mt-3 line-clamp-2 min-h-10 text-sm font-bold leading-5 text-white">{bump.title}</p>
-                  <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">{bump.description}</p>
-                  <p className="mt-auto pt-3 font-mono text-sm font-black text-cyan-100">
-                    {formatMoney(bump.priceBrl)}
-                    <span className="ml-1 text-[11px] font-semibold text-slate-500">
-                      {billingBumpLabel(bump.recurrence)}
-                    </span>
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        ) : null}
-
-      </div>
     </div>
     {feedbackModal ? (
       <CheckoutPaymentFeedbackModal
@@ -1096,40 +1008,12 @@ function FeedbackFact({
   );
 }
 
-function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
-  const media = bump.media;
-  if (!media) return null;
-
-  return (
-    <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90">
-      {media.kind === "video" ? (
-        <video
-          aria-label={bump.title}
-          className="h-full w-full object-cover"
-          muted
-          playsInline
-          preload="metadata"
-          src={media.storageUrl}
-        />
-      ) : (
-        <Image
-          alt={bump.title}
-          className="object-cover"
-          fill
-          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, (max-width: 1535px) 33vw, 260px"
-          src={media.storageUrl}
-          unoptimized
-        />
-      )}
-    </div>
-  );
-}
-
 function PaymentMethodButton({
   active,
   disabled,
   icon,
   label,
+  badge,
   description,
   onClick,
 }: {
@@ -1137,6 +1021,7 @@ function PaymentMethodButton({
   disabled: boolean;
   icon: ReactNode;
   label: string;
+  badge: string;
   description: string;
   onClick: () => void;
 }) {
@@ -1146,11 +1031,11 @@ function PaymentMethodButton({
       disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
-      className="ch-checkout-method flex min-h-20 w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors"
+      className="ch-checkout-method flex w-full flex-col items-start gap-2 rounded-xl border p-2.5 text-left transition-colors sm:p-3"
     >
-      <span aria-hidden="true" className="ch-checkout-method-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">{icon}</span>
-      <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="ch-checkout-method-description mt-1 block text-xs leading-5">{description}</span></span>
-      <span aria-hidden="true" className="ch-checkout-method-indicator flex h-5 w-5 shrink-0 items-center justify-center rounded-full border">{active ? <span className="h-2 w-2 rounded-full bg-current" /> : null}</span>
+      <span aria-hidden="true" className="ch-checkout-method-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">{icon}</span>
+      <span className="min-w-0 flex-1"><span className="ch-checkout-method-badge mb-1 block text-[10px] font-bold uppercase tracking-wide">{badge}</span><span className="block text-sm font-semibold">{label}</span><span className="ch-checkout-method-description mt-1 hidden text-xs leading-4 sm:block">{description}</span></span>
+      <span aria-hidden="true" className="ch-checkout-method-indicator hidden h-5 w-5 shrink-0 items-center justify-center rounded-full border">{active ? <span className="h-2 w-2 rounded-full bg-current" /> : null}</span>
     </button>
   );
 }
@@ -1158,8 +1043,8 @@ function PaymentMethodButton({
 function CartRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 py-1">
-      <span className="text-xs font-semibold text-slate-300">{label}</span>
-      <span className="font-mono text-xs font-bold text-cyan-100">{value}</span>
+      <span className="text-xs text-slate-600">{label}</span>
+      <span className="shrink-0 text-xs font-semibold text-slate-900">{value}</span>
     </div>
   );
 }
