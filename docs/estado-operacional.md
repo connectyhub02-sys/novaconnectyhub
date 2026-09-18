@@ -33,7 +33,13 @@ dos três métodos, endereço/CEP/salvar, consentimento Pix, total R$497→R$544
 pacote R$47 e falha de carrinho preservando total. Renovação mostra motivo correto;
 CANCELLED continua sem novo QR. Sem overflow horizontal, zero POST financeiro
 na simulação. 61 testes dirigidos e ESLint aprovados. Nenhuma alteração financeira,
-migration, endereço real, novo QR, mandato ou cobrança. Build webpack/TypeScript/108 páginas concluído às 23:07 BRT; publicação pela master a confirmar.
+migration, endereço real, novo QR, mandato ou cobrança. Build webpack/TypeScript/108 páginas concluído às 23:07 BRT.
+
+**Publicado às 23:09 BRT:** `2e147555ae6f44504e70b3af8d795cd1fe6f8e86`, master
+oficial, Vercel success no projeto existente e health ok com o SHA exato. A aba
+separada para QA publicada redirecionou ao Admin OS: acesso assistido ao cliente
+não estava ativo. Sessão do titular preservada; não alegar inspeção visual real
+desse release. QA visual/interação acima foi local, com APIs simuladas.
 
 
 ## Checkout, faturamento e lead comercial — 17/09/2026
