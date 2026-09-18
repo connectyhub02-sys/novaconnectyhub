@@ -1,5 +1,6 @@
 import { billingBumpInterval } from "./plan-checkout-catalog";
 import "server-only";
+import { requireBillingAddress } from "./billing-address-store";
 import { compactPlatformBillingReference, expandPlatformBillingReference } from "./payment-reference";
 import { savePendingAsaasCard } from "./asaas-card-vault";
 import { managedRenewalConsentVersion } from "./managed-renewal-policy";
@@ -55,7 +56,11 @@ export async function payNativeBillingCard(client: SupabaseClient, organizationI
   if (snapshot.recurringAmount > 0 && (body.acceptRecurring !== true || body.recurringConsentVersion !== managedRenewalConsentVersion)) throw new CheckoutError("Confirme as condições de renovação.", 422);
   if (!isIP(remoteIp) || typeof body.attemptId !== "string" || !uuid.test(body.attemptId)) throw new CheckoutError("Atualize a página antes de pagar.", 400);
   if (body.amount !== snapshot.amount || body.revision !== snapshot.revision || Number(snapshot.intent.payment.amount_brl) !== snapshot.amount) throw new CheckoutError("O carrinho mudou. Confira o total antes de pagar.", 409);
-  const card = parseCheckoutCard(body.card); const holder = parseCheckoutCardHolder(body.holder);
+  const address = await requireBillingAddress(client, organizationId);
+  const card = parseCheckoutCard(body.card); const holder = parseCheckoutCardHolder({ ...record(body.holder), postalCode: address.postalCode, addressNumber: address.number });
+  const contactSaved = await client.rpc("save_organization_billing_address", { p_org: organizationId, p_actor: null, p_subscription: subscriptionId, p_address: address,
+    p_contact: { name: holder.name, email: holder.email, phone: holder.phone, documentPreview: `***${holder.cpfCnpj.slice(-4)}` } });
+  if (contactSaved.error) throw new CheckoutError("Não foi possível confirmar os dados de faturamento.", 503);
   const config = await loadAsaasPlatformBillingConfig({ client });
   if (!config.accessToken || !config.webhookSecret) throw new CheckoutError("O recebimento da ConnectyHub precisa ser configurado.", 503);
   // Never replace an already-running recurring agreement as a side effect of a retry.
@@ -267,7 +272,7 @@ async function reconcileManagedBillingPix(client: SupabaseClient, paymentId: str
 }
 
 export function billingHolder(intent: BillingCheckoutIntent, defaults: Partial<CheckoutCardHolder>) {
-  return { name: defaults.name ?? "", email: defaults.email ?? "", cpfCnpj: defaults.cpfCnpj ?? "", phone: defaults.phone ?? "", postalCode: "", addressNumber: "", ...record(intent.subscription.metadata?.billing_card_holder) };
+  return { name: defaults.name ?? "", email: defaults.email ?? "", cpfCnpj: defaults.cpfCnpj ?? "", phone: defaults.phone ?? "", postalCode: defaults.postalCode ?? "", addressNumber: defaults.addressNumber ?? "", ...record(intent.subscription.metadata?.billing_card_holder) };
 }
 
 async function recoverNativeBillingPix(client: SupabaseClient) {

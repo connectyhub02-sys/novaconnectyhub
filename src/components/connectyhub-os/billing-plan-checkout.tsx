@@ -5,6 +5,7 @@ import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
 import { billingCheckoutPresentation } from "@/lib/billing/checkout-presentation";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import Image from "next/image";
+import { BillingAddressEditor } from "./billing-address-editor";
 import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -152,6 +153,7 @@ export function BillingPlanCheckout({
   const providerLabel = billingProvider === "asaas" ? "Asaas" : billingProvider === "pagbank" ? "PagBank" : "Mercado Pago";
   const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardEnabled ? "card" : "pix");
   const [pixAutomatic, setPixAutomatic] = useState<PixAutomaticSnapshot | null>(null);
+  const [billingAddressReady, setBillingAddressReady] = useState(false);
   const [pixAutomaticError, setPixAutomaticError] = useState("");
   const pixAutomaticLocked = Boolean(pixAutomatic?.authorization && !pixAutomatic.authorization.canRetry);
   const automaticPlanMethods = purchaseKind === "plan" && billingProvider === "asaas" && renewalPlanAmountBrl !== null && renewalPlanAmountBrl > 0;
@@ -401,6 +403,11 @@ export function BillingPlanCheckout({
     void checkPaymentStatus();
   }, [checkPaymentStatus]);
 
+  function chooseMethod(next: PaymentMethod) {
+    setMethod(next);
+    void fetch(`/api/dashboard/billing/checkout/${subscriptionId}/context`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method: next }) }).catch(() => null);
+  }
+
   function toggleBump(code: BillingCheckoutBumpCode) {
     if (cardCheckoutLoading) return;
     const next = selectedBumpCodes.includes(code)
@@ -528,43 +535,130 @@ export function BillingPlanCheckout({
 
   return (
     <>
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-      <section className="space-y-4">
-        <div className="rounded-[8px] border border-cyan-400/25 bg-slate-950/72 p-5 shadow-xl shadow-black/20">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200">
-                Checkout ConnectyHub
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <section aria-label="Pagamento" className="order-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7 lg:order-1">
+        <h2 className="text-xl font-bold text-slate-900">Como você prefere pagar?</h2>
+        <p className="mt-1 text-sm text-slate-500">Escolha a forma de pagamento para continuar.</p>
+        {canPay ? (
+          <>
+            <div className="mt-6 space-y-5" role="group" aria-label="Forma de pagamento">
+              <div>
+                {automaticPlanMethods ? <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pagamento automático</h3> : null}
+                <div className={cn("grid gap-3", automaticPlanMethods ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+                  <PaymentMethodButton active={method === "card"} disabled={!cardEnabled || pixAutomaticLocked} icon={<CreditCard className="h-5 w-5" />} label="Cartão" description={automaticPlanMethods ? "Renova a cada vencimento" : "Pague com cartão de crédito"} onClick={() => chooseMethod("card")} />
+                  {!automaticPlanMethods ? <PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-5 w-5" />} label="Pix comum" description="Pagamento único" onClick={() => chooseMethod("pix")} /> : null}
+                  {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<RefreshCw className="h-5 w-5" />} label="Pix Automático" description="Autorize as renovações no banco" onClick={() => chooseMethod("pix_automatic")} /> : null}
+                </div>
               </div>
-              <h2 className="mt-2 text-2xl font-black text-white">{planName}</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                {commercialLabel ?? `Oferta ${planCode}`} · {formatCredits(includedCredits)} créditos inclusos. {purchaseKind === "product" ? "Esta compra não altera a assinatura do plano." : "O uso dos recursos segue o período contratado."}
-              </p>
-              {storageLimitBytes > 0 ? (
-                <CheckoutStorageSummary
-                  storageLimitBytes={storageLimitBytes}
-                  storageFileLimit={storageFileLimit}
-                  storageImageMaxBytes={storageImageMaxBytes}
-                  storageVideoMaxBytes={storageVideoMaxBytes}
-                  storageFileMaxBytes={storageFileMaxBytes}
-                />
-              ) : null}
+              {automaticPlanMethods ? <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pagamento manual</h3>
+                <PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-5 w-5" />} label="Pix comum" description="Paga só este ciclo, sem renovação automática" onClick={() => chooseMethod("pix")} />
+              </div> : null}
             </div>
-            <span className={cn(
-              "rounded-full border px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wide",
-              checkoutConfirmed
-                ? "border-emerald-300/35 bg-emerald-400/10 text-emerald-100"
-                : paymentRejected
-                ? "border-rose-300/35 bg-rose-400/10 text-rose-100"
-                : canPay
-                ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-200"
-                : "border-cyan-300/30 bg-cyan-400/10 text-cyan-100",
-            )}>
-              {checkoutPresentation.title}
-            </span>
+
+            {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization ? <p className="mt-3 text-sm text-slate-300">{pixAutomaticError || pixAutomatic?.reason || "Conferindo disponibilidade do Pix Automático…"}</p> : null}
+            {method === "card" && billingProvider === "asaas" ? <p className="mt-3 text-sm text-slate-300">Preencha os dados do cartão. Você confirma os valores antes de pagar.</p> : null}
+            {method === "pix" ? <p className="mt-3 text-sm text-slate-600">{automaticPlanMethods ? "Enviaremos lembretes antes do vencimento, se os avisos da conta estiverem ativados." : "Pague por QR Code ou Pix Copia e Cola, sem débitos recorrentes."}</p> : null}
+
+            {billingProvider === "asaas" && !pixAutomaticLocked && !providerPaymentId ? <BillingAddressEditor subscriptionId={subscriptionId} onReadyChange={setBillingAddressReady} /> : null}
+            {billingProvider === "asaas" && !billingAddressReady && !pixAutomaticLocked && !providerPaymentId ? <p className="mt-4 text-xs text-slate-500">Salve o endereço de faturamento para continuar com o pagamento.</p> : method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
+              <MercadoPagoCardBrick
+                key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
+                publicKey={cardPublicKey}
+                sessionId={subscriptionId}
+                amount={totalAmount}
+                payerEmail={payerEmail}
+                submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
+                extraPayload={cardExtraPayload}
+                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
+                pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
+                rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
+                showRejectionModal={false}
+                onPaymentStatusChange={handleCardPaymentStatusChange}
+                onAlternativePaymentRequest={switchToPixAndGenerate}
+                onThreeDSComplete={handleCardThreeDSComplete}
+              />
+            ) : method === "card" && billingProvider === "pagbank" && cardEnabled ? (
+              <PagBankCardForm
+                key={`${subscriptionId}-pagbank-${totalAmount}-${selectedBumpCodes.join(".")}`}
+                sessionId={subscriptionId}
+                amount={totalAmount}
+                payerEmail={payerEmail}
+                payerPhone={payerPhone}
+                submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
+                extraPayload={cardExtraPayload}
+                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
+                pendingMessage="Pagamento enviado ao PagBank. Assim que confirmar, os creditos serao liberados."
+                rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
+                onPaymentStatusChange={handleCardPaymentStatusChange}
+                onAlternativePaymentRequest={switchToPixAndGenerate}
+              />
+            ) : method === "card" && billingProvider === "asaas" && cardEnabled ? (
+              <BillingAsaasCardForm subscriptionId={subscriptionId} cartSyncing={cartSyncing} onBusyChange={setCardCheckoutLoading} onStatusChange={handleCardPaymentStatusChange} />
+            ) : (
+              <PixPanel
+                pix={pix}
+                copied={copied}
+                checking={statusChecking}
+                loading={pixLoading}
+                onCopy={copyPixCode}
+                onGenerate={generatePix}
+                onRefresh={() => void checkPaymentStatus({ manual: true })}
+              />
+            )}
+          </>
+        ) : (
+          <div role="status" className={cn("mt-5 rounded-xl border p-4", checkoutPresentation.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : checkoutPresentation.tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-700")}>
+            <p className="font-semibold">{checkoutPresentation.title}</p>
+            <p className="mt-2 text-sm leading-6">{checkoutPresentation.description}</p>
+            {!checkoutConfirmed && currentPaymentStatus !== "in_process" ? <a href="/dashboard/planos" className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 font-semibold text-white">Ver planos</a> : null}
           </div>
+        )}
+
+        {activeNotice && (canPay || notice) ? (
+          <div className={cn(
+            "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
+            activeNotice.tone === "success"
+              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
+              : activeNotice.tone === "warning"
+                ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
+                : "border-rose-300/40 bg-rose-400/12 text-rose-100",
+          )}>
+            {activeNotice.message}
+          </div>
+        ) : null}
+
+      </section>
+      <aside aria-label="Resumo do pedido" className="order-1 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:order-2 lg:sticky lg:top-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo do pedido</p>
+        <div className="mt-4 flex items-start justify-between gap-3">
+          <div><h2 className="text-xl font-bold text-slate-900">{planName}</h2><p className="mt-1 text-sm text-slate-500">{commercialLabel ?? planCode}</p></div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{checkoutPresentation.title}</span>
+        </div>
+        <div className="mt-4 space-y-3">
+          <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
+          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto nesta compra"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
+          {selectedBumps.map((bump) => (
+            <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
+          ))}
+        </div>
+        <div className="mt-5 border-t border-slate-700 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-white">Total hoje</span>
+            <strong className="text-2xl font-black text-emerald-300">{formatMoney(totalAmount)}</strong>
+          </div>
+          {selectedBumps.length > 0 ? <p className="mt-2 text-xs leading-5 text-slate-500">Adicionais avulsos são cobrados só hoje.</p> : null}
+          {renewalPlanAmountBrl !== null ? <p className="mt-2 text-sm leading-5 text-slate-300">Renovação {commercialLabel?.toLowerCase()}: {formatMoney(renewalPlanAmountBrl + selectedBumps.filter(bump => bump.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0))}.{firstPurchaseDiscountPercent > 0 ? " O desconto de primeira compra termina após esta cobrança." : ""}</p> : null}
         </div>
 
+
+        <details className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
+          <summary className="cursor-pointer font-medium">O que está incluído</summary>
+          <p className="mt-3 text-sm">{formatCredits(includedCredits)} créditos inclusos. {purchaseKind === "product" ? "Esta compra não altera a assinatura do plano." : "Válidos durante o período contratado."}</p>
+          {storageLimitBytes > 0 ? <CheckoutStorageSummary storageLimitBytes={storageLimitBytes} storageFileLimit={storageFileLimit} storageImageMaxBytes={storageImageMaxBytes} storageVideoMaxBytes={storageVideoMaxBytes} storageFileMaxBytes={storageFileMaxBytes} /> : null}
+        </details>
+      </aside>
+      <div className="order-3 min-w-0 lg:col-span-2">
         {availableBumps.length > 0 ? (
         <div className="relative overflow-hidden rounded-[8px] border border-emerald-400/35 bg-slate-950/72 p-5 shadow-[0_0_34px_rgba(16,185,129,0.11)]">
           <div className="pointer-events-none absolute inset-2 rounded-[8px] border border-dashed border-emerald-300/20" />
@@ -645,128 +739,8 @@ export function BillingPlanCheckout({
           </div>
         </div>
         ) : null}
-      </section>
 
-      <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200">
-          Carrinho
-        </div>
-        <div className="mt-4 space-y-3">
-          <CartRow label={planName} value={formatMoney(planListAmountBrl)} />
-          {planListAmountBrl > planAmountBrl ? <CartRow label={firstPurchaseDiscountPercent > 0 ? `Primeira compra (${firstPurchaseDiscountPercent}%)` : "Desconto nesta compra"} value={`− ${formatMoney(planListAmountBrl - planAmountBrl)}`} /> : null}
-          {selectedBumps.map((bump) => (
-            <CartRow key={bump.code} label={bump.title} value={formatMoney(bump.priceBrl)} />
-          ))}
-        </div>
-        <div className="mt-5 border-t border-slate-700 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-white">Total hoje</span>
-            <strong className="text-2xl font-black text-emerald-300">{formatMoney(totalAmount)}</strong>
-          </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Adicionais recorrentes seguem o período informado na oferta. Os avulsos são cobrados uma única vez.
-          </p>
-          {renewalPlanAmountBrl !== null ? <p className="mt-2 text-sm leading-5 text-slate-300">Renovação {commercialLabel?.toLowerCase()}: {formatMoney(renewalPlanAmountBrl + selectedBumps.filter(bump => bump.recurrence !== "one_time").reduce((sum, bump) => sum + bump.priceBrl, 0))}.{firstPurchaseDiscountPercent > 0 ? " O desconto de primeira compra termina após esta cobrança." : ""}</p> : null}
-        </div>
-
-        {canPay ? (
-          <>
-            {automaticPlanMethods ? <div className="mt-5"><h3 className="text-sm font-semibold text-slate-900">Pagamento automático</h3><p className="mt-1 text-xs leading-5 text-slate-600">Recomendado para manter seu plano ativo sem precisar pagar manualmente a cada vencimento.</p></div> : null}
-            <div className={cn("grid grid-cols-2 gap-2 rounded-lg border border-slate-300 bg-slate-100 p-1", automaticPlanMethods ? "mt-3" : "mt-5")}>
-              <PaymentMethodButton
-                active={method === "card"}
-                disabled={!cardEnabled || pixAutomaticLocked}
-                icon={<CreditCard className="h-4 w-4" />}
-                label="Cartão"
-                onClick={() => setMethod("card")}
-              />
-              {!automaticPlanMethods ? <PaymentMethodButton
-                active={method === "pix"}
-                disabled={pixAutomaticLocked}
-                icon={<QrCode className="h-4 w-4" />}
-                label="Pix comum"
-                onClick={() => setMethod("pix")}
-              /> : null}
-              {purchaseKind === "plan" && billingProvider === "asaas" ? <PaymentMethodButton active={method === "pix_automatic"} disabled={!pixAutomatic?.enabled && !pixAutomatic?.authorization} icon={<QrCode className="h-4 w-4" />} label="Pix Automático" onClick={() => setMethod("pix_automatic")} /> : null}
-            </div>
-
-            {automaticPlanMethods ? <section aria-label="Pagamento manual" className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">Pagamento manual</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-600">Pix manual paga apenas este ciclo. Não renova automaticamente. Com os avisos da conta ativados, enviaremos lembretes antes do vencimento.</p>
-              <div className="mt-2"><PaymentMethodButton active={method === "pix"} disabled={pixAutomaticLocked} icon={<QrCode className="h-4 w-4" />} label="Pix comum (manual)" onClick={() => setMethod("pix")} /></div>
-            </section> : null}
-
-            {purchaseKind === "plan" && billingProvider === "asaas" && !pixAutomatic?.enabled && !pixAutomatic?.authorization ? <p className="mt-3 text-sm text-slate-300">{pixAutomaticError || pixAutomatic?.reason || "Conferindo disponibilidade do Pix Automático…"}</p> : null}
-            {method === "card" && billingProvider === "asaas" ? <p className="mt-3 text-sm text-slate-300">Cartão: pagamento inicial e, com sua autorização, tokenização para renovações automáticas.</p> : null}
-            {method === "pix" ? <p className="mt-3 text-sm text-slate-600">{automaticPlanMethods ? "Pix comum: pague manualmente pelo QR Code ou copia e cola. Este pagamento não ativa renovação automática; cada próximo ciclo precisa de um novo pagamento." : "Pix comum: pague manualmente pelo QR Code ou copia e cola. Esta opção não autoriza débitos recorrentes."}</p> : null}
-
-            {method === "pix_automatic" && pixAutomatic ? <BillingPixAutomaticCheckout key={`${subscriptionId}-${totalAmount}-${pixAutomatic.revision}`} subscriptionId={subscriptionId} initial={pixAutomatic} onChange={updatePixAutomatic} cartSyncing={cartSyncing} /> : method === "card" && billingProvider === "mercado_pago" && cardEnabled && cardPublicKey ? (
-              <MercadoPagoCardBrick
-                key={`${subscriptionId}-${totalAmount}-${selectedBumpCodes.join(".")}`}
-                publicKey={cardPublicKey}
-                sessionId={subscriptionId}
-                amount={totalAmount}
-                payerEmail={payerEmail}
-                submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
-                extraPayload={cardExtraPayload}
-                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
-                pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
-                rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
-                showRejectionModal={false}
-                onPaymentStatusChange={handleCardPaymentStatusChange}
-                onAlternativePaymentRequest={switchToPixAndGenerate}
-                onThreeDSComplete={handleCardThreeDSComplete}
-              />
-            ) : method === "card" && billingProvider === "pagbank" && cardEnabled ? (
-              <PagBankCardForm
-                key={`${subscriptionId}-pagbank-${totalAmount}-${selectedBumpCodes.join(".")}`}
-                sessionId={subscriptionId}
-                amount={totalAmount}
-                payerEmail={payerEmail}
-                payerPhone={payerPhone}
-                submitPath={`/api/dashboard/billing/checkout/${subscriptionId}/card`}
-                extraPayload={cardExtraPayload}
-                successMessage="Pagamento aprovado. Sua compra está sendo liberada."
-                pendingMessage="Pagamento enviado ao PagBank. Assim que confirmar, os creditos serao liberados."
-                rejectedMessage="Pagamento recusado pelo PagBank. Nenhuma cobranca foi concluida. Confira os dados do cartao ou use Pix."
-                onPaymentStatusChange={handleCardPaymentStatusChange}
-                onAlternativePaymentRequest={switchToPixAndGenerate}
-              />
-            ) : method === "card" && billingProvider === "asaas" && cardEnabled ? (
-              <BillingAsaasCardForm subscriptionId={subscriptionId} cartSyncing={cartSyncing} onBusyChange={setCardCheckoutLoading} onStatusChange={handleCardPaymentStatusChange} />
-            ) : (
-              <PixPanel
-                pix={pix}
-                copied={copied}
-                checking={statusChecking}
-                loading={pixLoading}
-                onCopy={copyPixCode}
-                onGenerate={generatePix}
-                onRefresh={() => void checkPaymentStatus({ manual: true })}
-              />
-            )}
-          </>
-        ) : (
-          <div role="status" className={cn("mt-5 rounded-xl border p-4", checkoutPresentation.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : checkoutPresentation.tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-slate-200 bg-slate-50 text-slate-700")}>
-            <p className="font-semibold">{checkoutPresentation.title}</p>
-            <p className="mt-2 text-sm leading-6">{checkoutPresentation.description}</p>
-            {!checkoutConfirmed && currentPaymentStatus !== "in_process" ? <a href="/dashboard/planos" className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-4 font-semibold text-white">Ver planos</a> : null}
-          </div>
-        )}
-
-        {activeNotice && (canPay || notice) ? (
-          <div className={cn(
-            "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
-            activeNotice.tone === "success"
-              ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
-              : activeNotice.tone === "warning"
-                ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
-                : "border-rose-300/40 bg-rose-400/12 text-rose-100",
-          )}>
-            {activeNotice.message}
-          </div>
-        ) : null}
-      </aside>
+      </div>
     </div>
     {feedbackModal ? (
       <CheckoutPaymentFeedbackModal
@@ -1156,12 +1130,14 @@ function PaymentMethodButton({
   disabled,
   icon,
   label,
+  description,
   onClick,
 }: {
   active: boolean;
   disabled: boolean;
   icon: ReactNode;
   label: string;
+  description: string;
   onClick: () => void;
 }) {
   return (
@@ -1170,17 +1146,18 @@ function PaymentMethodButton({
       disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
-      className="ch-payment-method inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition-colors"
+      className="ch-checkout-method flex min-h-20 w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors"
     >
-      {icon}
-      {label}
+      <span aria-hidden="true" className="ch-checkout-method-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">{icon}</span>
+      <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="ch-checkout-method-description mt-1 block text-xs leading-5">{description}</span></span>
+      <span aria-hidden="true" className="ch-checkout-method-indicator flex h-5 w-5 shrink-0 items-center justify-center rounded-full border">{active ? <span className="h-2 w-2 rounded-full bg-current" /> : null}</span>
     </button>
   );
 }
 
 function CartRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[8px] border border-slate-700/70 bg-slate-100 px-3 py-3">
+    <div className="flex items-start justify-between gap-4 py-1">
       <span className="text-xs font-semibold text-slate-300">{label}</span>
       <span className="font-mono text-xs font-bold text-cyan-100">{value}</span>
     </div>

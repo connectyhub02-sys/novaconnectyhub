@@ -1,4 +1,5 @@
 "use client";
+import { BillingAddressEditor } from "./billing-address-editor";
 import { BillingPaymentMethods } from "./billing-payment-methods";
 import { CreditExplainer } from "./credit-explainer";
 import { NotificationSenderSettings } from "./notification-sender-settings";
@@ -1181,6 +1182,7 @@ function BillingWorkspace({
         <p className="text-sm text-slate-600">Acompanhe seus pagamentos, assinaturas, créditos e ciclos de uso.</p>
       </div>
 
+      {["owner", "admin"].includes(account.organization.role) ? <BillingAddressEditor /> : null}
       <Tabs className="mt-5 gap-4" value={activeTab} onValueChange={(value) => onTabChange(value as BillingTab)}>
         <div className="overflow-x-auto overflow-y-hidden pb-1">
           <TabsList className="w-max min-w-full justify-start gap-0 border-b border-slate-200 bg-transparent p-0" variant="line">

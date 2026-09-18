@@ -1,5 +1,48 @@
 # Estado operacional da ConnectyHub
 
+## Checkout, faturamento e lead comercial — 17/09/2026
+
+Cancelamento explicitamente autorizado pelo titular, concluído às **22:06 BRT**:
+a única autorização do QR mostrado foi revalidada CREATED, sem pagamentos nem
+instruções futuras. Um DELETE Asaas retornou 200; GET confirmou CANCELLED. RPC
+oficial sincronizou CANCELLED e limpou o QR local. Zero pagamentos/instruções
+após, assinatura pending, zero créditos e nenhuma ativação. Audit log
+`billing.pix_automatic.cancelled_by_explicit_owner_request` persistido. Sem novo
+QR, cartão, estorno ou exclusão de histórico. A trava do checkout encerrado foi
+preservada; cancelamento não autoriza gerar outra cobrança.
+
+Redesign preparado: pagamento ocupa a coluna ampla e resumo fica compacto à
+direita; no celular o resumo precede a escolha. Cards separados para Cartão,
+Pix Automático e Pix comum; descrição curta e detalhes recolhíveis. Conteúdo
+somente do método selecionado. Endereço completo em etapa própria, com busca
+por CEP e preenchimento manual, salvo para Minha Conta > Faturamento. Cadastro
+inicial universal continua sem endereço obrigatório. CEP/número usados no
+cartão vêm do endereço validado; preços, consentimentos e conciliação mantidos.
+
+O dono do relacionamento define o CRM: contratação da plataforma enriquece o
+lead comercial da **ConnectyHub**, usando `platform_customer_journey` e o vínculo
+existente por telefone verificado, não `lead_id` de uma organização contratante.
+Eventos de endereço/método entram na jornada; pagamentos e assinatura já usam
+essa trilha. Arquivo recebe dados selecionados, documento mascarado e histórico;
+fatos anteriores não são sobrescritos. Sem vínculo/telefone verificado, mantém
+fila e nota operacional. Nenhuma associação por nome ou e-mail aproximado.
+
+Migration 0155 aditiva preparada com tabela privada de faturamento, RLS e acesso
+apenas por rotas autenticadas owner/admin; backup privado verificado das funções
+afetadas, 1.328 leads, 231 eventos e sete vínculos. Ensaio transacional com rollback
+aprovado. Aplicação/publicação ainda devem ser confirmadas abaixo. QA local
+1280×900 e 390×844, busca CEP/salvar simulados, estado indisponível e cancelado;
+66 testes dirigidos aprovados, incluindo execução da rotina real de arquivamento
+em PostgreSQL local, conflitos e isolamento. Não é pagamento real validado.
+
+[Decisões e limites desta rodada](checkout-faturamento-lead-2026-09-17.md).
+
+**Aplicação confirmada às 22:36 BRT:** migration 0155 registrada, RLS e grants
+conferidos; 13 assinaturas, 17 pagamentos, 1.328 leads e 231 eventos da jornada
+preservados. Build webpack/TypeScript/108 páginas e ESLint aprovados. Nenhum
+endereço real foi salvo nem worker de avisos forçado. Publicação via master
+autorizada pelo titular; confirmação do deploy fica no registro posterior.
+
 ## Pix real pendente e separação de métodos — 17/09/2026
 
 Após o titular mostrar QR gerado no checkout existente, auditoria estritamente

@@ -1,4 +1,5 @@
 import { convertAsaasBillingPaymentToPix } from "@/lib/sales-catalog/asaas-direct";
+import { requireBillingAddress } from "@/lib/billing/billing-address-store";
 import { processNativeBillingWebhook } from "@/lib/billing/native-card-checkout";
 import { releaseFailedBillingPixClaim } from "@/lib/billing/pix-creation";
 import { NextResponse, type NextRequest } from "next/server";
@@ -115,6 +116,7 @@ export async function POST(
     if (billingProvider === "asaas" && existingPix && intent.payment.provider_payment_id && ["pending", "in_process"].includes(intent.payment.status) && !intent.payment.payload?.native_card_attempt_id) {
       return NextResponse.json({ ok: true, status: "pending", providerPaymentId: intent.payment.provider_payment_id, pixQrCode: existingPix, pixQrCodeBase64: intent.payment.payload?.pix_qr_code_base64 ?? null });
     }
+    if (billingProvider === "asaas") await requireBillingAddress(client, workspace.organization.id);
     const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
     const checkoutItems = [
       {

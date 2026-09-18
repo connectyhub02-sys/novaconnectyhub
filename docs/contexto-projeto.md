@@ -57,6 +57,15 @@ O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infra
 
 ## Regras de negócio a preservar
 
+- O arquivo do lead pertence ao dono do relacionamento: contratante da ConnectyHub
+  pertence ao CRM comercial da plataforma; consumidor de uma organização cliente
+  pertence ao CRM dessa organização. Checkout deve enriquecer esse arquivo com
+  eventos, itens, valores, datas e fatos úteis, preservando conflitos e origem,
+  sem PAN/CVV/tokens ou segredos Pix. Na plataforma, usar a jornada/identidade por
+  telefone verificado; não vincular pelo `lead_id` operacional do contratante.
+  Endereço completo é contextual ao faturamento/entrega, sem obrigação universal
+  no cadastro inicial. [Aplicação e limites](checkout-faturamento-lead-2026-09-17.md).
+
 - Reset de lead: exclusivo da equipe administradora da plataforma ConnectyHub durante sessão assistida verificável no painel de um cliente. Owner/admin da própria organização, administrador sem esse contexto e flags locais não autorizam. Expiração/encerramento revogam a capacidade. Preservar exclusão integral e proteções do reset. [Regra e validação de 14/09](reset-acesso-assistido-2026-09-14.md).
 
 - Agentes WhatsApp: o padrão inicial de comportamento segue o painel definido pelo titular (espelho, sempre online, rapport suave, citação inteligente, emojis/figurinhas, mídia proativa, conversa leve, memória do clone e qualidade). Voz própria é escolhida pelo cliente. As preferências editáveis devem ser preservadas ao pausar/salvar/reativar; configurações armazenadas e bloqueios efetivos de execução são separados. Estado de publicação e limites da recuperação de configurações antigas ficam no estado operacional.

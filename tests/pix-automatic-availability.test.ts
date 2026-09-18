@@ -13,8 +13,8 @@ describe("Pix Automatic authenticated checkout route", () => {
   const begin=vi.fn(async()=>({id:randomUUID(),state:"CREATED",active:false}));
   const api=serverModuleHarness<typeof import("../src/app/api/dashboard/billing/checkout/[subscriptionId]/pix-automatic/route")>("src/app/api/dashboard/billing/checkout/[subscriptionId]/pix-automatic/route.ts",{
    "next/server":{NextResponse},"@/lib/supabase/profile":{getCurrentWorkspace:async()=>role==="anonymous"?null:{user:{id:actor},organization:{id:organizationId,name:"Teste",role},profile:{fullName:"Pessoa Teste",email:"test@example.test",phone:"11999999999"}}},
-   "@/lib/supabase/service":{createServiceClient:()=>({})},"@/lib/billing/pix-automatic":{pixCheckoutSnapshot:snapshot,beginPixCheckout:begin},"@/lib/billing/asaas-pix-automatic-api":adapter,
-   "@/lib/account/signup-completion":{assertAccountComplete:async()=>{},loadAccountDocument:async()=>({number:"12345678909"})},"@/lib/security/public-request-guard":guard,"@/lib/sales-catalog/card-input":cardInput,
+   "@/lib/supabase/service":{createServiceClient:()=>({})},"@/lib/billing/pix-automatic":{pixCheckoutSnapshot:snapshot,beginPixCheckout:begin,loadPixMandate:async()=>null},"@/lib/billing/asaas-pix-automatic-api":adapter,
+   "@/lib/billing/billing-address-store":{requireBillingAddress:async()=>({})},"@/lib/sales-catalog/transparent-checkout":{CheckoutError:class extends Error{}},"@/lib/account/signup-completion":{assertAccountComplete:async()=>{},loadAccountDocument:async()=>({number:"12345678909"})},"@/lib/security/public-request-guard":guard,"@/lib/sales-catalog/card-input":cardInput,
   });return{api,snapshot,begin};
  }
  const context={params:Promise.resolve({subscriptionId})};

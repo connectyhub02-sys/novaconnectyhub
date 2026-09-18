@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
-import { beginPixCheckout, pixCheckoutSnapshot } from "@/lib/billing/pix-automatic";
+import { beginPixCheckout, loadPixMandate, pixCheckoutSnapshot } from "@/lib/billing/pix-automatic";
+import { requireBillingAddress } from "@/lib/billing/billing-address-store";
+import { CheckoutError } from "@/lib/sales-catalog/transparent-checkout";
 import { PixAutomaticError } from "@/lib/billing/asaas-pix-automatic-api";
 import { assertAccountComplete, loadAccountDocument } from "@/lib/account/signup-completion";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
@@ -21,6 +23,7 @@ async function scope(context: Context) {
   return { workspace: { ...workspace, organization: workspace.organization }, subscriptionId };
 }
 function failure(error: unknown) {
+  if (error instanceof CheckoutError) return json({ error: error.message }, error.status);
   const safe = error instanceof PixAutomaticError ? error : new PixAutomaticError("unavailable", 503);
   return json({ error: safe.message, code: safe.code }, safe.status);
 }
@@ -42,6 +45,8 @@ export async function POST(request: NextRequest, context: Context) {
     try { body = record(JSON.parse(raw)); } catch { throw new PixAutomaticError("invalid_input", 422); }
     const client = createServiceClient();
     await assertAccountComplete({ userId: workspace.user.id, client });
+    const existing = await loadPixMandate(client, workspace.organization.id, subscriptionId);
+    if (!existing || ["failed", "REFUSED"].includes(existing.state)) await requireBillingAddress(client, workspace.organization.id);
     const document = await loadAccountDocument({ userId: workspace.user.id, client });
     const authorization = await beginPixCheckout(client, { organizationId: workspace.organization.id, subscriptionId, actorId: workspace.user.id }, body, { name: workspace.profile.fullName ?? workspace.organization.name, email: workspace.profile.email ?? workspace.user.email ?? "", phone: workspace.profile.phone ?? "", cpfCnpj: document?.number ?? "" });
     return json({ ok: true, authorization });
