@@ -1,5 +1,26 @@
 # Estado operacional da ConnectyHub
 
+## Pix confirmado no checkout e oferta no painel Asaas — 17/09/2026, 21:34 BRT
+
+Nova evidência supera a dúvida do menu Pix do pagador: no formulário Asaas
+**Criar cobrança → Assinatura → Boleto Bancário / Pix**, apareceu “Seu cliente
+pode autorizar o Pix Automático para os próximos pagamentos.” Conforme critério
+informado pelo atendimento ao titular, a conta oferece o recurso. Não é botão
+separado, mas descrição da opção Boleto/Pix. Valor/data/cliente em branco;
+formulário fechado sem avançar. Criação pela API e pagamento seguem não testados.
+
+Checkout inicial real já existente inspecionado em produção, com acesso
+administrativo assistido: Pix Automático habilitado e selecionável, consentimento
+desmarcado e Gerar Pix Automático desabilitado. Nenhum QR, mandato ou cobrança
+criado. Commit funcional `68a4356f63dad0f53fedeb8b891b0fe7303f6ff8`, Vercel success
+e health 200 com esse SHA. Textos distinguem novas contratações da troca ativa;
+flag ligada, nove eventos webhook e layout responsivo preservados.
+
+[Roteiro do teste controlado](pix-automatico-teste-controlado-2026-09-17.md):
+propõe organização exclusiva do titular e plano Start R$ 97 inicial/mensal, sem
+adicionais. Organização não criada e teste financeiro não autorizado/executado.
+O checkout de cliente usado para leitura não é alvo de teste financeiro.
+
 ## Pix: painel Asaas e distinção entre contratação/troca — 17/09/2026, 21:22 BRT
 
 Nova leitura API confirmou aprovação PJ geral/comercial/documental, cadastro
