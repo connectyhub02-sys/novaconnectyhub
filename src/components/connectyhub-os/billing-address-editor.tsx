@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, MapPin } from "lucide-react";
 import { brazilStates, emptyBillingAddress, parseBillingAddress, type BillingAddress } from "@/lib/billing/billing-address";
 
@@ -8,13 +8,15 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
   const [address, setAddress] = useState<BillingAddress>(emptyBillingAddress);
   const [saved, setSaved] = useState<BillingAddress | null>(null);
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState(!subscriptionId);
+  const [expanded, setExpanded] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [message, setMessage] = useState("");
   const prefix = useId();
   const lookupVersion = useRef(0);
+  const lastAutoCep = useRef("");
+  const manualAddressFields = useRef(new Set<keyof BillingAddress>());
   const ready = !loading && Boolean(saved) && !editing;
   useEffect(() => { onReadyChange?.(ready); }, [ready, onReadyChange]);
   useEffect(() => {
@@ -24,26 +26,44 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
       if (!response.ok) throw new Error(data.error ?? "Não foi possível carregar o endereço.");
       if (disposed) return;
       const initial = data.address ? parseBillingAddress(data.address) : null;
-      setSaved(initial); setAddress(initial ?? emptyBillingAddress); setEditing(!initial);
-    }).catch(error => { if (!disposed) setMessage(error.message); }).finally(() => { if (!disposed) setLoading(false); });
+      lastAutoCep.current = initial?.postalCode.replace(/\D/g, "") ?? "";
+      setSaved(initial); setAddress(initial ?? emptyBillingAddress); setEditing(!initial); setExpanded(!initial);
+    }).catch(error => { if (!disposed) { setMessage(error.message); setEditing(true); setExpanded(true); } }).finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; };
   }, []);
 
-  async function lookup() {
+  const lookup = useCallback(async () => {
     const cep = address.postalCode.replace(/\D/g, "");
     if (!/^\d{8}$/.test(cep)) { setMessage("Informe um CEP com 8 dígitos."); return; }
+    lastAutoCep.current = cep;
     const version = ++lookupVersion.current;
-    setLookingUp(true); setMessage("");
+    setLookingUp(true); setMessage("Buscando endereço pelo CEP…");
     try {
       const response = await fetch(`/api/dashboard/billing/address/postal-code?cep=${cep}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       if (version !== lookupVersion.current) return;
-      setAddress(current => current.postalCode.replace(/\D/g, "") === cep ? { ...current, street: data.street || current.street, neighborhood: data.neighborhood || current.neighborhood, city: data.city || current.city, state: data.state || current.state } : current);
+      setAddress(current => {
+        if (current.postalCode.replace(/\D/g, "") !== cep) return current;
+        const next = { ...current };
+        for (const key of ["street", "neighborhood", "city", "state"] as const) {
+          if (!manualAddressFields.current.has(key) && data[key]) next[key] = data[key];
+        }
+        return next;
+      });
       setMessage("Confira o endereço encontrado e complete o número.");
     } catch (error) { if (version === lookupVersion.current) setMessage(error instanceof Error ? error.message : "Preencha o endereço manualmente."); }
     finally { if (version === lookupVersion.current) setLookingUp(false); }
-  }
+  }, [address.postalCode]);
+  useEffect(() => {
+    const cep = address.postalCode.replace(/\D/g, "");
+    if (loading || !editing || !/^\d{8}$/.test(cep) || lastAutoCep.current === cep) return;
+    const timer = window.setTimeout(() => {
+      if (lastAutoCep.current !== cep) void lookup();
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [address.postalCode, editing, loading, lookup]);
+  useEffect(() => () => { lookupVersion.current++; }, []);
   async function save() {
     if (saving) return;
     let next;
@@ -60,8 +80,9 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
     finally { setSaving(false); }
   }
   function update(key: keyof BillingAddress, value: string) {
-    // A late CEP response must never overwrite a newer manual edit.
-    lookupVersion.current++; setLookingUp(false);
+    // Invalidate older CEPs; protect individual edits while a lookup is pending.
+    if (key === "postalCode") { lookupVersion.current++; setLookingUp(false); lastAutoCep.current = ""; manualAddressFields.current.clear(); }
+    else manualAddressFields.current.add(key);
     setAddress(current => ({ ...current, [key]: value })); setMessage("");
   }
   const input = (key: keyof BillingAddress, label: string, options: { autoComplete?: string; maxLength?: number; wide?: boolean; optional?: boolean } = {}) => <label className={`block text-xs font-medium text-slate-700 ${options.wide ? "col-span-2" : ""}`} htmlFor={`${prefix}-${key}`}>
@@ -71,7 +92,7 @@ export function BillingAddressEditor({ onReadyChange, subscriptionId }: { onRead
   return <section aria-label="Endereço de faturamento" className="mt-4 border-t border-slate-200 pt-3">
     <div className="flex items-center justify-between gap-3">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">{subscriptionId ? <span className="ch-checkout-step">2</span> : <MapPin className="h-4 w-4" />}Endereço de faturamento</h3>
-      <button type="button" aria-expanded={expanded} aria-controls={`${prefix}-fields`} onClick={() => { setExpanded(!expanded); if (saved && !expanded) setEditing(true); }} className="flex min-h-11 shrink-0 items-center gap-1 px-1 text-xs font-semibold text-blue-700">{expanded ? "Recolher" : saved ? "Editar" : "Preencher"}<ChevronDown aria-hidden="true" className={`h-4 w-4 ${expanded ? "rotate-180" : ""}`} /></button>
+      {saved && !editing ? <button type="button" aria-expanded={expanded} aria-controls={`${prefix}-fields`} onClick={() => { setExpanded(true); setEditing(true); }} className="flex min-h-11 shrink-0 items-center gap-1 px-1 text-xs font-semibold text-blue-700">Editar<ChevronDown aria-hidden="true" className="h-4 w-4" /></button> : !loading && subscriptionId ? <span className="text-xs font-medium text-slate-500">Obrigatório</span> : null}
     </div>
     {!expanded && !loading ? <p className="mt-1 text-xs leading-5 text-slate-500">{saved && editing ? "Há alterações não salvas. Abra para continuar." : saved ? <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />{saved.street}, {saved.number} · {saved.city}/{saved.state}</span> : "Informe uma vez e reutilize nas próximas compras."}</p> : null}
     <div id={`${prefix}-fields`} hidden={!expanded}>

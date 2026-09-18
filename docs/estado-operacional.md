@@ -1,4 +1,29 @@
 # Estado operacional da ConnectyHub
+## Endereço obrigatório aberto, CEP automático e regra de vencimento — 17/09/2026
+
+Ajuste solicitado após o redesign: endereço ainda não confirmado começa aberto,
+sem opção de recolher a etapa obrigatória. Endereço válido salvo aparece como
+resumo editável. Erro ao carregar permite preenchimento manual, com aviso visível.
+Salvar endereço e continuar libera a etapa explícita “Confirme o pagamento”;
+não submete pagamento. Essa regra substitui o recolhimento inicial descrito abaixo.
+
+CEP com oito dígitos dispara busca automática após 400 ms. Uma consulta automática
+por CEP, botão manual preservado, estados de busca/erro, campos editáveis. CEP
+antigo e componente desmontado invalidam resposta; campos alterados manualmente
+não são sobrescritos, sem impedir o preenchimento dos demais campos.
+Build webpack/TypeScript/108 páginas, ESLint e 12 testes de endereço/rotas aprovados.
+QA local desktop/mobile: vazio aberto, salvo compacto, erro aberto, máscara,
+busca automática, não encontrado, alternativa manual, preservação da rua digitada,
+salvar e mostrar confirmação. Sem overflow e zero POST financeiro na prévia.
+
+Auditoria somente de leitura: contrato recorrente vencido permanece `past_due`,
+sem prazo automático de cancelamento. Política real sem carência/suspensão extra;
+sweep a cada cinco minutos. Esperar não converte renewal em initial/Pix Automático.
+Não há RPC pronta para migração completa de contrato vencido; há peças para
+retirar cobranças, mas faltam transação, idempotência e conciliação entre contratos.
+[Regra verificada, mensagens e escopo da jornada guiada](plano-vencido-cancelamento-pix-2026-09-17.md).
+Nenhum contrato, cobrança, QR, mandato ou política de vencimento foi alterado.
+
 
 ## Checkout compacto e motivo da restrição Pix — 17/09/2026, 23:05 BRT
 
