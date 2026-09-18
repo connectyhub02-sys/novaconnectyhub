@@ -1,5 +1,21 @@
 # Estado operacional da ConnectyHub
 
+## Modal de agente em duas faixas — 18/09/2026
+
+Formulário ocupa toda a largura superior; conexão WhatsApp fica abaixo, com
+foto/QR, informações e ações em três colunas no desktop. Empresa, nome, setor e
+função ficam na mesma linha. Diagnóstico detalhado inicia recolhido; Status,
+Reset e Remover compartilham uma linha. Cadastro e edição internos usam a mesma
+organização superior/inferior, preservando os handlers e vínculos existentes.
+
+Conferência local no Chrome com respostas sintéticas: editor cliente sem
+rolagem em 1366×768 nos modos QR e código, também conferido em 1063×946; em
+390×844, campos e ações sem transbordamento horizontal. Editor interno também
+conferido. Em telas pequenas ou ao expandir informações/adicionar responsáveis,
+a rolagem continua disponível para não cortar conteúdo. ESLint e build webpack
+com TypeScript e 108 páginas aprovados. Rota temporária e referências geradas
+do ensaio removidas antes do build final. Nenhuma conexão real alterada.
+
 ## Modal de agentes, status e upload — complemento de 18/09/2026
 
 Após o pacote `851707e2`, cadastro e edição passaram a abrir um modal no editor

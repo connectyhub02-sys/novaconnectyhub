@@ -3166,7 +3166,7 @@ function ClientAgentsManager({
 
       {showForm ? (
         <AgentSetupDialog title="Novo agente" busy={creating || busy} notice={notice} onClose={onCancel}>
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
         <fieldset disabled={busy || creating || busy} className="min-w-0 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -3299,9 +3299,9 @@ function AgentSetupDialog({ title, busy, notice, onClose, children }: {
   return <DialogFrame aria-labelledby={titleId} onClose={close}
     className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
     onClick={(event) => { if (event.target === event.currentTarget) close(); }}>
-    <div className="w-full max-w-5xl rounded-2xl border p-4 shadow-2xl sm:p-6"
+    <div className="w-full max-w-5xl rounded-2xl border p-4 shadow-2xl sm:p-5"
       style={{ background: "var(--ch-surface, #fff)", borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div><h2 id={titleId} className="text-lg font-semibold">{title}</h2>
           <p className="mt-1 text-xs text-slate-500">Dados do agente e conexão com o WhatsApp.</p></div>
         <button type="button" aria-label="Fechar configuração do agente" disabled={busy} onClick={close}
@@ -3314,10 +3314,10 @@ function AgentSetupDialog({ title, busy, notice, onClose, children }: {
 }
 
 function PendingAgentConnection() {
-  return <div className="rounded-xl border border-dashed p-5 text-center" style={{ borderColor: "var(--ch-border)" }}>
-    <QrCode className="mx-auto mb-3 size-8 text-slate-400" />
-    <p className="text-sm font-semibold">Conectar WhatsApp</p>
-    <p className="mt-2 text-xs leading-5 text-slate-500">Preencha os dados e salve o agente. O QR Code e todas as opções de conexão serão liberados aqui, sem sair desta janela.</p>
+  return <div className="flex items-center gap-4 rounded-xl border border-dashed p-4" style={{ borderColor: "var(--ch-border)" }}>
+    <QrCode className="size-8 shrink-0 text-slate-400" />
+    <div><p className="text-sm font-semibold">Conectar WhatsApp</p>
+    <p className="mt-1 text-xs leading-5 text-slate-500">Preencha os dados e salve o agente. O QR Code e todas as opções de conexão serão liberados aqui, sem sair desta janela.</p></div>
   </div>;
 }
 
@@ -3334,7 +3334,7 @@ function ClientAgentSetupModal({ agent, companies, busy, testing, notice, connec
   const [responsibles, setResponsibles] = useState(() => toResponsibleHumanDrafts(agent.responsibleHumans?.length ? agent.responsibleHumans : agent.responsibleHuman ? [agent.responsibleHuman] : []));
   const changedCompany = companyId !== agent.companyId;
   return <AgentSetupDialog title="Editar agente" busy={busy || testing} notice={notice} onClose={onClose}>
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="space-y-4">
       <ClientAgentInlineEditor companies={companies} companyId={companyId} name={name}
         sectorName={sectorName} roleTitle={roleTitle} responsibleHumans={responsibles} disabled={busy} testing={testing}
         onCompanyChange={setCompanyId} onNameChange={setName} onSectorNameChange={setSectorName} onRoleTitleChange={setRoleTitle}
@@ -3397,7 +3397,7 @@ function ClientAgentInlineEditor({
       className="rounded-xl border p-3"
       style={{ background: "rgba(var(--ch-accent-rgb),0.06)", borderColor: "rgba(var(--ch-accent-rgb),0.24)" }}
     >
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-widest text-slate-500">Empresa</span>
           <select
@@ -3640,7 +3640,7 @@ function InternalAgentsManager({
 
       {showEdit && agent ? (
         <AgentSetupDialog title="Editar agente interno" busy={busy || editing} notice={notice} onClose={onEditCancel}>
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
         <fieldset disabled={busy || editing} className="min-w-0">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -5738,7 +5738,7 @@ function CompactConnectionCard({
         : visibleQrCode
           ? "Escaneie o QR Code pelo WhatsApp para concluir."
           : phoneModeSelected
-            ? "Informe o telefone com DDI e gere o codigo. O codigo aparecera aqui para ser digitado no WhatsApp do cliente."
+            ? "No celular: WhatsApp > Aparelhos conectados > Conectar aparelho > Conectar com numero de telefone."
             : meta.description;
   const qrModeActiveStyle = {
     background: "rgba(var(--ch-whatsapp-rgb),0.12)",
@@ -5819,8 +5819,9 @@ function CompactConnectionCard({
         </div>
       </div>
 
+      <div className="mt-3 grid items-start gap-4 md:grid-cols-[160px_minmax(0,1fr)] lg:grid-cols-[180px_minmax(0,1fr)_300px]">
       <div
-        className="mt-4 grid min-h-[170px] place-items-center rounded-xl p-3 text-center"
+        className="grid min-h-[160px] place-items-center rounded-xl p-3 text-center md:self-stretch"
         style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
       >
         {!enabled ? (
@@ -5886,21 +5887,27 @@ function CompactConnectionCard({
         )}
       </div>
 
-      <div className="mt-3 grid gap-2">
+      <div className="min-w-0">
+      <div className="grid gap-2 sm:grid-cols-2">
         <StatusInfoTile connected={status === "connected"} />
         <InfoTile label="Numero" value={formatPhone(instance?.phoneNumber)} />
-        <InfoTile label="Leitura" value={formatDate(instance?.lastSyncedAt)} />
+        <div className="sm:col-span-2"><InfoTile label="Leitura" value={formatDate(instance?.lastSyncedAt)} /></div>
       </div>
 
-      <p className="mt-3 text-[12px] leading-5 text-slate-500">
+      <p className="mt-2 text-[12px] leading-5 text-slate-500">
         {connectionHelperText}
       </p>
 
       {latestConnectionAttempt ? (
-        <ConnectionDiagnosticsPanel attempt={latestConnectionAttempt} />
+        <details className="mt-2 rounded-lg border px-3" style={{ borderColor: "var(--ch-border)" }}>
+          <summary className="cursor-pointer py-2 text-xs font-medium text-slate-500">Diagnóstico da conexão</summary>
+          <div className="pb-3"><ConnectionDiagnosticsPanel attempt={latestConnectionAttempt} /></div>
+        </details>
       ) : null}
+      </div>
 
-      <div className="mt-4 grid gap-2">
+      <div className="min-w-0 space-y-3 md:col-span-2 lg:col-span-1">
+      <div className="grid gap-2">
         <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
           <button
             className={cn(
@@ -5947,14 +5954,11 @@ function CompactConnectionCard({
                 value={connectPhone}
               />
             </label>
-            <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
-              Gere o codigo aqui. No celular do cliente: WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho &gt; Conectar com numero de telefone.
-            </div>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-4 grid gap-2">
+      <div className="grid gap-2">
         <ActionButton
           icon={connectionActionIcon}
           label={connectionActionLabel}
@@ -5964,10 +5968,11 @@ function CompactConnectionCard({
           tone="whatsapp"
           onClick={onConnect}
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2 [&>button]:min-h-9">
           <SecondaryAction
             icon={RefreshCcw}
             label="Status"
+            compact
             description="Consulta a Uazapi e atualiza conexao, numero, leitura e foto do WhatsApp."
             disabled={!enabled || Boolean(running) || !instance}
             loading={running === "refresh_status"}
@@ -5976,6 +5981,7 @@ function CompactConnectionCard({
           <SecondaryAction
             icon={Repeat}
             label="Reset"
+            compact
             description="Limpa a sessao travada e gera um novo QR ou codigo sem apagar agente, prompt, arquivos ou comportamento."
             disabled={resetActionDisabled}
             loading={running === "reset_connection"}
@@ -5984,6 +5990,7 @@ function CompactConnectionCard({
           <SecondaryAction
             icon={Power}
             label="Remover"
+            compact
             description="Exclui a instancia do painel e da Uazapi para permitir uma nova conexao sem duplicar cobranca."
             disabled={!enabled || Boolean(running) || !instance}
             loading={running === "disconnect"}
@@ -5991,6 +5998,8 @@ function CompactConnectionCard({
             onClick={onDisconnect}
           />
         </div>
+      </div>
+      </div>
       </div>
 
       {qrModalOpen && visibleQrCode && !connectionAttemptFinished && (
