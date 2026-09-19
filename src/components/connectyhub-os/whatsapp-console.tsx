@@ -5416,9 +5416,12 @@ function QualificationAnswersEditor({ question, index, onChange }: {
         <DraftNumberInput aria-label={`Pontos da resposta ${answerIndex + 1} da pergunta ${index + 1}`} className="mt-1 h-9 w-full rounded-md border px-2"
           type="number" min={0} max={100} disabled={option.disqualifies} value={option.points} onChange={points => update(option.id, { points })} />
       </label>
-      <label className="flex h-9 items-center gap-2 text-xs"><input type="checkbox" checked={option.disqualifies}
-        aria-label={`Desqualifica na resposta ${answerIndex + 1} da pergunta ${index + 1}`}
-        onChange={event => update(option.id, { disqualifies: event.target.checked })} />Desqualifica</label>
+      <div className="flex h-9 items-center gap-1.5">
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={option.disqualifies}
+          aria-label={`Desqualifica na resposta ${answerIndex + 1} da pergunta ${index + 1}`}
+          onChange={event => update(option.id, { disqualifies: event.target.checked })} />Desqualifica</label>
+        <InfoHint text="Marque somente se esta resposta deve desqualificar o lead, independentemente dos pontos das outras respostas. Para indicar apenas menor interesse, deixe desmarcado e atribua menos pontos. Exemplo: ‘Apenas pesquisando’ pode receber menos pontos sem eliminar o lead." />
+      </div>
       <button type="button" aria-label={`Excluir resposta ${answerIndex + 1} da pergunta ${index + 1}`} className="grid h-9 place-items-center rounded-md border border-rose-200 text-rose-700"
         onClick={() => onChange(question.id, { options: options.filter(item => item.id !== option.id) })}><X className="size-4" /></button>
     </div>)}

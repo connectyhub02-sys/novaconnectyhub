@@ -1,5 +1,16 @@
 # Estado operacional da ConnectyHub
 
+## Ajuda para respostas desqualificadoras — 18/09/2026
+
+Editor compartilhado cliente/admin recebeu ícone de ajuda ao lado de cada
+opção Desqualifica. O balão explica que a resposta desqualifica independentemente
+dos demais pontos e diferencia isso de apenas atribuir menos pontos, com exemplo
+de alguém que está pesquisando. Reutiliza o balão de ajuda do painel, acessível
+por mouse e foco de teclado, fora do label do checkbox para não mudar a seleção.
+Sem alteração das regras de pontuação ou dos dados dos agentes.
+ESLint, diff e compilação de produção webpack/TypeScript aprovados. Publicação
+em acompanhamento.
+
 ## Resumo único e entrada em Prompt — 18/09/2026
 
 Aba Conexão e painel Conexão e identidade removidos do editor compartilhado.
