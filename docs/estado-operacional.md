@@ -8,8 +8,10 @@ dos demais pontos e diferencia isso de apenas atribuir menos pontos, com exemplo
 de alguém que está pesquisando. Reutiliza o balão de ajuda do painel, acessível
 por mouse e foco de teclado, fora do label do checkbox para não mudar a seleção.
 Sem alteração das regras de pontuação ou dos dados dos agentes.
-ESLint, diff e compilação de produção webpack/TypeScript aprovados. Publicação
-em acompanhamento.
+ESLint, diff e compilação de produção webpack/TypeScript aprovados. Commit
+`419fc8cf` publicado na master e confirmado pelo health público em 18/09/2026
+às 21:47 BRT. Balão aberto por teclado e conferido visualmente em produção na
+primeira resposta do painel de Renata Macedo, mantendo a opção desmarcada.
 
 ## Resumo único e entrada em Prompt — 18/09/2026
 
