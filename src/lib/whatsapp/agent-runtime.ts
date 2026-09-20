@@ -53,6 +53,14 @@ import {
 } from "@/lib/billing/metered-usage";
 import { mediaAnalysisFeatureCode, meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import {
+  evaluateComplianceInteraction,
+  isItemRestrictedByCompliance,
+  loadActiveProductComplianceRules,
+  resolveComplianceCountryCode,
+  resolveContextComplianceRules,
+  type ProductComplianceRule,
+} from "@/lib/compliance/product-compliance";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
   buildLeadQualificationAnalysisPrompt,
@@ -1338,6 +1346,9 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
         }),
       ]);
 
+  const contextCountry = resolveComplianceCountryCode(instance.phone_number);
+  const complianceRules = await loadActiveProductComplianceRules(client, contextCountry).catch(() => []);
+
   if (isPlatformWhatsapp && leadId) {
     const financial = await loadPlatformCustomerContext(client, leadId).catch(() => "O financeiro está temporariamente indisponível. Não confirme recebimento, não afirme recusa nem reenvie nova cobrança incerta. Oriente a consultar o painel ou solicite conferência humana.");
     knowledge.unshift({ id: "platform-financial-live", title: "CONTA DO CLIENTE — CONSULTA FINANCEIRA ATUAL", content: financial,
@@ -1404,6 +1415,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge,
     linkButtons,
     companyLocations,
+    complianceRules,
     salesCatalog: salesCatalog.map(item => ({ ...item, salesDestination: effectiveRuntimeDestination(item, agent) })),
     salesCatalogSettings,
     salesCatalogShippingSettings,
@@ -5977,28 +5989,40 @@ function effectiveRuntimeDestination(item: RuntimeSalesCatalogItem, agent?: Pick
   if (item.actionVersion || item.salesDestination !== "connectyhub_checkout") return item.salesDestination;
   return activityDefaultDestination(normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]).templateId);
 }
-function isRestrictedMedicalCatalogItem(item: RuntimeSalesCatalogItem) {
-  return /\b(?:anabolizante|anabolizantes|testosterona|testo|drostanolona|masteron|oxandrolona|trembolona|nandrolona|metenolona|primobolan|stanozolol|durateston)\b/.test(normalizeSearch(item.title));
+function isRestrictedComplianceCatalogItem(item: RuntimeSalesCatalogItem, rules: ProductComplianceRule[]) {
+  if (!rules.length) return false;
+  return isItemRestrictedByCompliance(item.title, rules);
 }
 
-function restrictedMedicalCommerceReply(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, response: string) {
-  if (!context.salesCatalog.some(isRestrictedMedicalCatalogItem)) return null;
+function restrictedMedicalCommerceReply(context: { messages: ConversationMessageRow[]; salesCatalog: RuntimeSalesCatalogItem[]; complianceRules?: ProductComplianceRule[] }, response: string) {
+  const complianceRules = resolveContextComplianceRules(context);
+  const activeRules = complianceRules.filter(r => r.is_enabled);
+  if (!activeRules.length) return null;
+
   const latest = findLatestInbound(context.messages);
   const current = latest?.text_content ?? "";
   const requested = resolveCurrentCatalogReference(context.salesCatalog, current, context.messages).items;
   const mentioned = selectSalesCatalogItemsFromText(context.salesCatalog, response);
   const recent = buildRecentOutboundMessageBlocks(context.messages, latest).slice(0, 1)
     .flatMap(block => selectSalesCatalogItemsFromText(context.salesCatalog, block.text));
-  const healthRecommendation = /\b(?:recomenda|indica|preferencia|ganhar massa|massa seca|secar|injetavel|ciclo|kit)\b/.test(normalizeSearch(current));
   const continuation = hasSalesCatalogCheckoutConfirmationIntent(current) || hasSalesCatalogOrderIntent(current)
     || Boolean(detectSalesCatalogPreferredPaymentMethod(current));
-  if (requested.some(isRestrictedMedicalCatalogItem) || mentioned.some(isRestrictedMedicalCatalogItem)
-    || (healthRecommendation && !requested.length) || (continuation && !requested.length && recent.some(isRestrictedMedicalCatalogItem))) {
-    return "Não posso recomendar combinações de anabolizantes para objetivos físicos nem organizar a compra desses medicamentos por aqui. Para avaliar indicação e tratamento, procure um profissional de saúde habilitado. Não vou gerar pedido ou pagamento para esses medicamentos.";
+
+  const evaluation = evaluateComplianceInteraction({
+    currentText: current,
+    requestedItemTitles: requested.map(i => i.title),
+    mentionedItemTitles: mentioned.map(i => i.title),
+    recentOutboundItemTitles: recent.map(i => i.title),
+    activeRules,
+    hasCheckoutIntent: continuation,
+  });
+
+  if (evaluation.shouldBlock) {
+    return evaluation.blockedMessage || "Não posso recomendar combinações desses produtos para objetivos físicos nem organizar a compra desses itens por aqui. Para avaliar indicação e tratamento, procure um profissional habilitado. Não vou gerar pedido ou pagamento para esses itens.";
   }
   return null;
 }
-function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; salesCatalog: RuntimeSalesCatalogItem[]; messages: ConversationMessageRow[] }, text?: string) {
+function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; salesCatalog: RuntimeSalesCatalogItem[]; messages: ConversationMessageRow[]; complianceRules?: ProductComplianceRule[] }, text?: string) {
   const inbound = findLatestInbound(context.messages);
   const current = text ?? inbound?.text_content ?? "";
   if (isCommerceBudgetStatement(current)) return false;
@@ -6008,8 +6032,9 @@ function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; sal
     selected = recent.flatMap(block => selectSalesCatalogItemsFromText(context.salesCatalog, block.text));
     if (/\b(?:agend|hor.rio|visita|avalia|reuni.o|test.drive)/i.test(recent[0]?.text ?? "") && !/\b(?:pedido|pagamento|comprar)\b/i.test(current)) return false;
   }
-  if (selected.length) return selected.every(item => !isRestrictedMedicalCatalogItem(item) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
-  return resolveRuntimeCommerceJourney(context.agent) === "checkout" && (!context.salesCatalog.length || context.salesCatalog.some(item => !isRestrictedMedicalCatalogItem(item) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout"));
+  const rules = resolveContextComplianceRules(context).filter(r => r.is_enabled);
+  if (selected.length) return selected.every(item => !isRestrictedComplianceCatalogItem(item, rules) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
+  return resolveRuntimeCommerceJourney(context.agent) === "checkout" && (!context.salesCatalog.length || context.salesCatalog.some(item => !isRestrictedComplianceCatalogItem(item, rules) && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout"));
 }
 
 function resolveRuntimeCommerceJourney(agent?: Pick<AgentRow, "metadata">) {

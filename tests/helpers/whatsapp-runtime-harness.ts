@@ -2,6 +2,7 @@ import * as foodComposition from "@/lib/sales-catalog/food-composition";
 import * as foodConversation from "@/lib/sales-catalog/food-conversation";
 import * as operationHours from "@/lib/sales-catalog/operation-hours";
 import * as activityProfile from "@/lib/whatsapp/activity-profile";
+import * as productCompliance from "@/lib/compliance/product-compliance";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
@@ -78,6 +79,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   const money = { exports: {} };
   runInNewContext(currency, { module: money, exports: money.exports, require: () => ({}), process, URL });
   const imports: Record<string, unknown> = {
+    "@/lib/compliance/product-compliance": productCompliance,
     "@/lib/sales-catalog/food-composition": foodComposition,
     "@/lib/sales-catalog/food-conversation": foodConversation,
     "@/lib/whatsapp/outbound-delivery": { fetchWhatsappOutbound: (url: unknown, init: unknown) => {

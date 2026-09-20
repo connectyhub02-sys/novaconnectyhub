@@ -210,6 +210,7 @@ const adminSections: NavSection[] = [
       { label: "Reuniões de projetos", href: "/admin/reunioes", icon: CalendarDays, tone: "emerald" },
       { label: "Campanhas comerciais", href: "/admin/campanhas-comerciais", icon: Coins, tone: "emerald" },
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
+      { label: "Compliance Produtos", href: "/admin/compliance-produtos", icon: ShieldCheck, tone: "rose" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
       { label: "Integracoes",       href: "/admin/clientes/integracoes", icon: PlugZap, tone: "teal" },
     ],
