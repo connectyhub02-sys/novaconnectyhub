@@ -24,7 +24,7 @@ const elevenLabsEnvNames = [
   "ELEVENLABS_OUTPUT_FORMAT",
 ];
 
-const fallbackVoiceId = "JBFqnCBsd6RMkjVDRZzb";
+export const fallbackVoiceId = "JBFqnCBsd6RMkjVDRZzb";
 const fallbackModelId = "eleven_multilingual_v2";
 const fallbackOutputFormat = "mp3_44100_128";
 const allowedOutputFormats = new Set<ElevenLabsCredentials["outputFormat"]>([

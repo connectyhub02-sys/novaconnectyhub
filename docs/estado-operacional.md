@@ -1,5 +1,40 @@
 # Estado operacional da ConnectyHub
 
+## Reset global dos clones de voz — aplicado em 20/09/2026
+
+Reset solicitado após trocar a conta ElevenLabs: sete registros ativos de clone
+de quatro organizações arquivados e um vínculo da API de Voz retirado de uso.
+Três configurações de agentes e cinco de instâncias tiveram seleção de clone
+limpa e passaram a texto até nova voz ser cadastrada/escolhida. Histórico,
+consumo, carteiras e demais configurações preservados. Backup privado, ensaio
+com rollback e confirmação transacional de zero clones ativos. Nenhuma exclusão
+no fornecedor, geração de áudio ou ajuste financeiro.
+
+A revisão de isolamento identificou exceções para clones sem proprietário e
+clone padrão global. Migration 0160 aplicada e registrada, mantendo contrato e
+administração existentes. Ensaio real com dois usuários da mesma organização e
+clones sintéticos confirmou isolamento de leitura/escrita; rollback integral.
+25 testes dirigidos, ESLint e build webpack/TypeScript com 109 páginas passaram.
+Reforço da lista do painel em publicação pela master.
+[Reset, cobertura e limites](reset-isolamento-clones-2026-09-20.md).
+
+## Cofre Supabase alinhado à VPS — 20/09/2026
+
+Por solicitação do titular, os três registros globais de Supabase no cofre foram
+alinhados à VPS da ConnectyHub: URL, chave pública e chave de serviço. Antes da
+troca, o destino próprio foi conferido, a chave de serviço passou na consulta
+administrativa e a pública foi aceita pelo endpoint de configurações do Auth.
+Atualização transacional condicionada aos hashes anteriores, com três eventos
+administrativos de auditoria sem segredos. Releitura/decriptação confirmou os
+três valores e hashes persistidos; IDs e demais metadados foram preservados.
+
+As duas chaves de Inngest do cofre foram comparadas com o container em execução
+na VPS e correspondem após normalizar o prefixo de ambiente da assinatura usado
+pelo SDK. Permaneceram intactas. Nenhuma variável da aplicação, credencial no
+servidor, conexão, usuário ou job foi alterado; nenhum evento foi disparado.
+Esta correção é de dados do cofre e não exige deploy. Registro documental local
+para o próximo pacote; não disparar publicação apenas por esta anotação.
+
 ## Troca de credenciais globais — corrigida em produção, 20/09/2026
 
 Migration 0159 aplicada e registrada na VPS. A regra de contrato de clientes

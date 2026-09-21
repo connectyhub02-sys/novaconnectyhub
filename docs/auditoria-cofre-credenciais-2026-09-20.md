@@ -93,3 +93,19 @@ As novas chaves pessoais do titular não foram recebidas nem substituídas nesta
 rodada. Atualizar o painel, inserir a nova chave e salvar deve agora ultrapassar
 o bloqueio de RLS. A validade/permissões/quota da nova conta só ficam comprovadas
 após o teste correspondente com a chave nova.
+
+## Complemento: Supabase e Inngest conferidos e cofre alinhado
+
+Em seguida, o titular pediu a conferência com a VPS e autorizou a correção do
+Supabase no painel. Os três valores antigos do cofre foram substituídos pelos
+valores atuais da VPS da ConnectyHub após validação da URL e autenticação real
+da chave pública e da chave de serviço. A escrita foi transacional, com controle
+de concorrência pelos hashes anteriores, auditoria sem segredos e confirmação
+dos três valores criptografados após a gravação.
+
+As duas chaves de Inngest já correspondem às do container em execução na VPS
+(a assinatura tem prefixo de ambiente do SDK no cofre; normalizado, o conteúdo
+é igual). Não foram alteradas. Nenhuma configuração de ambiente, banco de destino
+ou serviço foi migrado nesta etapa; somente a cópia do Supabase no cofre mudou.
+Não houve geração, cobrança nem evento de teste Inngest. Sem necessidade de
+deploy ou código novo. Anotação mantida local para o próximo pacote.

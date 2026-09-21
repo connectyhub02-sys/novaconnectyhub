@@ -5,7 +5,7 @@ import { ElevenLabsClient, type ElevenLabs } from "@elevenlabs/elevenlabs-js";
 import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { geminiTtsVoices } from "@/lib/gemini/tts";
 import { createServiceClient } from "@/lib/supabase/service";
-import { loadElevenLabsCredentials } from "./credentials";
+import { fallbackVoiceId, loadElevenLabsCredentials } from "./credentials";
 
 export type WhatsappAudioVoiceSource = "platform" | "customer" | "elevenlabs" | "library" | "gemini";
 
@@ -75,7 +75,7 @@ export async function listWhatsappAudioVoices(input: {
   const elevenCredentials = "errorMessage" in credentials ? null : credentials;
   const geminiCredentialsErrorMessage = "errorMessage" in geminiCredentials ? geminiCredentials.errorMessage : null;
   const geminiVoiceConfigured = !("errorMessage" in geminiCredentials);
-  const [remoteVoices, customerVoices, previewIndex] = await Promise.all([
+  const [remoteVoices, customerVoices] = await Promise.all([
     !elevenCredentials
       ? Promise.resolve({
           voices: [] as ElevenLabs.Voice[],
@@ -84,14 +84,19 @@ export async function listWhatsappAudioVoices(input: {
         })
       : withTimeout(listRemoteVoices(elevenCredentials.apiKey), remoteVoiceTimeoutMs, remoteVoiceTimeoutFallback),
     elevenCredentials ? listCustomerVoices(client, input.organizationId, input.ownerUserId) : Promise.resolve([] as CustomerVoiceRow[]),
-    elevenCredentials ? listClonedVoicePreviews(client, input.organizationId, input.ownerUserId) : Promise.resolve(new Map<string, string>()),
   ]);
   const voices = new Map<string, WhatsappAudioVoiceOption>();
   const visibleCustomerVoiceIds = new Set<string>();
+  const previewIndex = new Map<string, string>();
   for (const voice of customerVoices) {
     const voiceId = voice.provider_voice_id?.trim();
     if (voiceId) visibleCustomerVoiceIds.add(voiceId);
+    const preview = typeof voice.metadata?.preview_url === "string" ? normalizeUrl(voice.metadata.preview_url) : null;
+    if (voiceId && preview) previewIndex.set(voiceId, preview);
   }
+  const privateRemoteVoiceIds = new Set(remoteVoices.voices
+    .filter((voice) => isPrivateRemoteVoice(voice, { visibleCustomerVoiceIds }))
+    .map((voice) => voice.voiceId));
 
   if (elevenCredentials) {
     for (const voice of remoteVoices.voices) {
@@ -99,10 +104,7 @@ export async function listWhatsappAudioVoices(input: {
         continue;
       }
 
-      if (isPrivateRemoteVoice(voice, {
-        defaultVoiceId: elevenCredentials.defaultVoiceId,
-        visibleCustomerVoiceIds,
-      })) {
+      if (privateRemoteVoiceIds.has(voice.voiceId)) {
         continue;
       }
 
@@ -124,7 +126,7 @@ export async function listWhatsappAudioVoices(input: {
     }
 
     for (const voice of remoteVoices.libraryVoices) {
-      if (!voice.voiceId || voices.has(voice.voiceId)) {
+      if (!voice.voiceId || voices.has(voice.voiceId) || privateRemoteVoiceIds.has(voice.voiceId)) {
         continue;
       }
 
@@ -192,7 +194,10 @@ export async function listWhatsappAudioVoices(input: {
     });
   }
 
-  if (elevenCredentials && !voices.has(elevenCredentials.defaultVoiceId)) {
+  // Only the built-in public voice may be synthesized as a fallback when the
+  // provider catalog is unavailable. A configured private ID is not permission.
+  if (elevenCredentials?.defaultVoiceId === fallbackVoiceId && !voices.has(fallbackVoiceId)
+    && !privateRemoteVoiceIds.has(fallbackVoiceId)) {
     voices.set(elevenCredentials.defaultVoiceId, {
       voiceId: elevenCredentials.defaultVoiceId,
       name: "Voz padrao ConnectyHub",
@@ -211,9 +216,10 @@ export async function listWhatsappAudioVoices(input: {
   }
 
   const fallbackGeminiVoice = geminiVoiceConfigured ? geminiTtsVoices[0]?.voiceId ?? null : null;
-  const defaultVoiceId = elevenCredentials ? elevenCredentials.defaultVoiceId : fallbackGeminiVoice;
-  const defaultModelId = elevenCredentials
-    ? elevenCredentials.defaultModelId
+  const hasVisibleElevenDefault = Boolean(elevenCredentials && voices.has(elevenCredentials.defaultVoiceId));
+  const defaultVoiceId = hasVisibleElevenDefault ? elevenCredentials!.defaultVoiceId : fallbackGeminiVoice;
+  const defaultModelId = hasVisibleElevenDefault
+    ? elevenCredentials!.defaultModelId
     : "errorMessage" in geminiCredentials ? null : geminiCredentials.ttsModel;
 
   return {
@@ -302,33 +308,6 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
   }
 }
 
-async function listClonedVoicePreviews(client: SupabaseClient, organizationId: string, ownerUserId?: string | null) {
-  let query = client
-    .from("customer_voices")
-    .select("provider_voice_id, metadata")
-    .eq("organization_id", organizationId)
-    .eq("provider", "elevenlabs")
-    .not("provider_voice_id", "is", null)
-    .not("metadata", "is", null);
-  if (ownerUserId) {
-    query = query.or(`owner_user_id.is.null,owner_user_id.eq.${ownerUserId}`);
-  }
-  const { data } = await query;
-
-  const index = new Map<string, string>();
-
-  for (const row of (data ?? []) as { provider_voice_id: string | null; metadata: Record<string, unknown> | null }[]) {
-    const voiceId = row.provider_voice_id?.trim();
-    const preview = typeof row.metadata?.preview_url === "string" ? normalizeUrl(row.metadata.preview_url) : null;
-
-    if (voiceId && preview) {
-      index.set(voiceId, preview);
-    }
-  }
-
-  return index;
-}
-
 async function listCustomerVoices(client: SupabaseClient, organizationId: string, ownerUserId?: string | null) {
   let query = client
     .from("customer_voices")
@@ -337,7 +316,7 @@ async function listCustomerVoices(client: SupabaseClient, organizationId: string
     .eq("provider", "elevenlabs")
     .not("provider_voice_id", "is", null);
   if (ownerUserId) {
-    query = query.or(`owner_user_id.is.null,owner_user_id.eq.${ownerUserId}`);
+    query = query.eq("owner_user_id", ownerUserId);
   }
   const { data, error } = await query
     .order("default_for_agents", { ascending: false })
@@ -358,13 +337,12 @@ async function listCustomerVoices(client: SupabaseClient, organizationId: string
 function isPrivateRemoteVoice(
   voice: ElevenLabs.Voice,
   input: {
-    defaultVoiceId: string;
     visibleCustomerVoiceIds: Set<string>;
   },
 ) {
   const voiceId = voice.voiceId?.trim();
 
-  if (!voiceId || voiceId === input.defaultVoiceId || input.visibleCustomerVoiceIds.has(voiceId)) {
+  if (!voiceId || input.visibleCustomerVoiceIds.has(voiceId)) {
     return false;
   }
 
@@ -372,7 +350,9 @@ function isPrivateRemoteVoice(
   const source = readLabel(voice.labels, "source")?.toLowerCase() ?? "";
   const consent = readLabel(voice.labels, "consent")?.toLowerCase() ?? "";
 
-  return category.includes("clon") || source === "connectyhub" || consent === "accepted";
+  // Account voices are private unless the provider identifies a premade voice.
+  // Public library voices are handled separately, never by private default ID.
+  return category !== "premade" || source === "connectyhub" || consent === "accepted";
 }
 
 function sortVoices(left: WhatsappAudioVoiceOption, right: WhatsappAudioVoiceOption) {
