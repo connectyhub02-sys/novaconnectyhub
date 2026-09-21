@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Troca de credenciais globais — corrigida em produção, 20/09/2026
+
+Migration 0159 aplicada e registrada na VPS. A regra de contrato de clientes
+bloqueava o cofre global porque `organization_id` é nulo; a política agora permite
+CRUD global a administradores da plataforma e preserva contratos, associação e
+isolamento para credenciais de organizações. Ensaio real com rollback validou
+leitura/atualização das 66 globais e inserção/exclusão sintéticas. Aplicação
+definitiva preservou os 70 registros completos e suas datas. Pós-aplicação:
+administrador enxerga 66 globais; cliente comum, zero. Sem deploy de aplicação.
+
+Catálogo auditado: 97 campos, 16 integrações, nenhuma credencial global cadastrada
+fora do catálogo. Gemini/ElevenLabs carregam a chave nova do cofre na leitura
+seguinte. Supabase/Inngest dependem do ambiente; Infraestrutura, Push, parte de
+Meta e carregadores PagBank/Mercado Pago têm precedência de ambiente em caminhos
+descritos no [relatório completo](auditoria-cofre-credenciais-2026-09-20.md).
+Salvar no cofre não comprova troca efetiva nesses caminhos. Prioridades existentes
+preservadas para não ativar valores antigos inadvertidamente.
+
+53 testes, ESLint dos testes novos e build webpack/TypeScript com 109 páginas
+aprovados. Rotas administrativas sem sessão retornaram 401. Novas chaves do
+titular ainda não inseridas/testadas nesta tarefa; nenhuma geração paga, cobrança
+ou credencial substituída. Reteste autenticado no painel fica com o titular.
+
 ## Ajuda para respostas desqualificadoras — 18/09/2026
 
 Editor compartilhado cliente/admin recebeu ícone de ajuda ao lado de cada
