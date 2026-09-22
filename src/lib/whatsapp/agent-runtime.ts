@@ -1046,9 +1046,14 @@ async function processWhatsappAgentRunWithScope(input: {
       try {
         const { queueAgendaHandoff } = await import("@/lib/automations/agenda-handoff");
         await queueAgendaHandoff(client, { organizationId: organization.id, leadId: lead.id, conversationId: context.conversationId, agentId: agent.id, runId: run.id, instanceId: context.instance.id, reason: agendaTurn.handoffReason, requestText: userText });
-        agendaTurn.reply = "Não consegui concluir a reserva. Registrei o pedido para o responsável verificar a agenda e seguir com você. Seu horário ainda não está confirmado.";
+        // Let the LLM compose a natural, empathetic response instead of a robotic
+        // system message.  The agendaContext guides the model; enforceAgendaResponse
+        // still blocks any false booking confirmation via result.fallback.
+        agendaTurn.context += " O pedido de agendamento foi encaminhado para o responsável humano verificar a disponibilidade. Avise o lead naturalmente que o horário foi repassado ao responsável para confirmação. Não afirme que o horário está confirmado nem que a reserva foi feita. Não use tom de sistema ou frases como 'não consegui concluir'.";
+        agendaTurn.reply = undefined;
       } catch {
-        agendaTurn.reply = "Não consegui concluir a reserva nem registrar o encaminhamento. Seu horário ainda não está confirmado. Fale diretamente com o responsável para combinar o atendimento.";
+        agendaTurn.context += " Não foi possível encaminhar o pedido ao responsável. Oriente o lead a entrar em contato diretamente para combinar o horário. Não afirme que o horário está confirmado.";
+        agendaTurn.reply = undefined;
       }
     }
     const cachedAiResponse = readCachedRunResponse(context.run.metadata);

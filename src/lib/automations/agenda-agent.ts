@@ -386,7 +386,12 @@ export async function processAgendaTurn(
       }
     }
   }
-  if (!result.booked && decision.intent !== "none") result.reply ??= result.fallback;
+  // Specific transactional handlers (slot offers, name requests, booking
+  // confirmations) already set result.reply when needed. For generic agenda
+  // intents where no concrete action was taken, let the LLM compose a natural
+  // response using the agendaContext injected into the prompt.
+  // The anti-hallucination guard (enforceAgendaResponse) still uses
+  // result.fallback to block false confirmations and vague promises.
   const stored = await client
     .from("customer_agenda_turns")
     .upsert(
