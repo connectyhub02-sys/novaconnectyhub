@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GeminiCredentials } from "@/lib/gemini/credentials";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { getAgenda, availableAppointments, agendaErrorMessage } from "./agenda";
+import { resolveAgendaResourceId } from "./agenda-activation";
 
 export type AgendaTurnResult = {
   disabled?: boolean;
@@ -111,7 +112,9 @@ export async function processAgendaTurn(
   }
   const relevant = agendaRequest(input.userText, input.messages) || (agenda.bookings.some(b => b.status === "booked") && /\b(cancelar|desmarcar|confirmar)\b/i.test(input.userText) && !/\b(pedido|pagamento|compra)\b/i.test(input.userText));
   if (relevant && input.catalogAmbiguous) return { context: "Item ambíguo: esclareça antes de reservar.", booked: false, fallback: "Qual dos imóveis ou atendimentos você quer visitar?", reply: "Qual dos imóveis ou atendimentos você quer visitar?" };
-  const targetResource = input.catalogResourceId || (input.catalogAppointment ? agenda.settings.default_resource_id : null);
+  const targetResource = input.catalogAppointment
+    ? resolveAgendaResourceId(input.catalogResourceId, agenda.settings.default_resource_id, agenda.resources)
+    : input.catalogResourceId || null;
   if (relevant && input.catalogAppointment && !targetResource) return unavailableAgendaTurn("O item não tem agenda vinculada e a empresa não definiu um calendário padrão");
   if (targetResource) agenda.resources = agenda.resources.filter(resource => resource.id === targetResource);
   if (relevant && !agenda.resources.some(r => r.enabled && r.weekly_hours.length)) return unavailableAgendaTurn("A agenda não tem atendimento e horários configurados");

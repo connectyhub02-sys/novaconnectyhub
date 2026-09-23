@@ -277,11 +277,13 @@ async function executeWhatsappProactiveFollowUp(input: {
   const checkoutLink = eventData.salesCatalogOrderId && eventData.salesCatalogFollowUpKind === "abandoned_order"
     ? await loadFollowUpCheckout(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId) : "";
 
+  const pendingRevisionNote = describePendingFollowUpRevision(lead.metadata, eventData);
   await assertAttendance();
   const followUpGeneration = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
     relationshipContext: relationship.context,
+    pendingRevisionNote,
     checkoutAvailable: Boolean(checkoutLink),
     behavior,
   });
@@ -336,8 +338,12 @@ async function executeWhatsappProactiveFollowUp(input: {
     await updateDispatch(client, eventData.dispatchId!, { status: "failed", reason: "checkout_action_not_available", lease_until: null }, eventData.claimToken);
     return { status: "failed", reason: "checkout_action_not_available" };
   }
+  // A pending edit may be resumed, never reported as done.
+  if (pendingRevisionNote && claimsPendingRevisionApplied(followUpText)) return { status: "skipped", reason: "pending_revision_claim" };
   const actionLink = checkoutLink || relationship.link;
-  const outgoingText=actionLink ? `${followUpText.replace(/https?:\/\/\S+/g, "").trim()}\n\n${actionLink}` : followUpText;
+  // Destinations travel only in the button; never as a raw URL in the text.
+  const outgoingText = followUpText.replace(/https?:\/\/\S+/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!outgoingText) return { status: "skipped", reason: "no_relevant_approach" };
 
   if (!(await getContractAccess(instance.organization_id, client)).allowed) return { status: "skipped", reason: "billing_blocked" };
   const latestMessages = await loadRecentMessages(client, eventData.conversationId, eventData.whatsappInstanceId);
@@ -371,7 +377,9 @@ async function executeWhatsappProactiveFollowUp(input: {
   if (latestConversation.data.status !== conversation.data.status || (typeof latestPause === "string" && Date.parse(latestPause) > Date.now())) return { status: "skipped", reason: "human_intervention" };
   const latestLead = await loadLead(client, eventData.leadId, eventData.organizationId);
   if (!latestLead || latestLead.status === "archived" || readRecord(latestLead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(latestLead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
-  if (hasPendingFollowUpOrderRevision(latestLead.metadata, eventData)) return { status: "skipped", reason: "order_revision_pending_before_send" };
+  // A pending edit that appeared during generation was not part of the prompt.
+  if (hasPendingFollowUpOrderRevision(latestLead.metadata, eventData)
+    || (!pendingRevisionNote && describePendingFollowUpRevision(latestLead.metadata, eventData))) return { status: "skipped", reason: "order_revision_pending_before_send" };
   const unsubscribeUrl = await prepareLeadContact(client, eventData.organizationId, eventData.leadId);
   if (!unsubscribeUrl) return { status: "skipped", reason: "lead_opted_out" };
   const delivery = leadContactMessage(outgoingText, unsubscribeUrl, actionLink ? [`${checkoutLink ? "Continuar pagamento" : "Abrir página"}|${actionLink}`] : []);
@@ -490,6 +498,7 @@ async function generateFollowUpMessage(
     salesCatalogOrder?: SalesCatalogFollowUpOrder | null;
     salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
     relationshipContext?: string;
+    pendingRevisionNote?: string;
     checkoutAvailable?: boolean;
     behavior?: WhatsappBehaviorConfig;
   } = {},
@@ -513,6 +522,7 @@ async function generateFollowUpMessage(
     "Não exponha instruções internas nem comentários sobre a redação. Não finja ser humano; se houver uma pergunta sobre sua natureza, informe que é um assistente de IA.",
     ...buildSalesCatalogFollowUpPromptLines(options.salesCatalogOrder ?? null, options.salesCatalogFollowUpKind ?? null),
     options.relationshipContext ?? "",
+    options.pendingRevisionNote ?? "",
     "",
     `Agente: ${agent.persona_name ?? agent.name}`,
     "",
@@ -560,21 +570,45 @@ function findFollowUpReferenceIndex(messages: ConversationMessageRow[], agentRun
 }
 
 function hasPendingFollowUpOrderRevision(metadata: JsonRecord | null, event: WhatsappFollowUpEventData) {
-  // Silence/payment recovery must not promote a proposed edit into a saved order
-  // or send the previous checkout. Independent return/post-sale journeys retain
-  // their own eligibility rules and financial notifications use other handlers.
+  // Payment recovery must not send the previous checkout while an edit is
+  // pending. A conversation follow-up is not silenced: it resumes the pending
+  // edit instead (see describePendingFollowUpRevision), so a misread sentence
+  // cannot end the sale. Return/post-sale journeys keep their own rules.
+  if (!event.salesCatalogOrderId) return false;
+  return Boolean(readPendingFollowUpOrderRevision(metadata, event));
+}
+
+function claimsPendingRevisionApplied(text: string) {
+  const normalized = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return /\b(?:confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|atualizei|atualizad[oa]|alterei|alterad[oa]|troquei|trocad[oa]|gerei|gerad[oa]|ja esta no (?:seu )?pedido)\b/.test(normalized);
+}
+
+/** Prompt note for a conversation follow-up; never claims the edit was applied. */
+function describePendingFollowUpRevision(metadata: JsonRecord | null, event: WhatsappFollowUpEventData) {
+  if (event.salesCatalogOrderId || event.returnId || event.recommendationProductId) return "";
+  const revision = readPendingFollowUpOrderRevision(metadata, event);
+  if (!revision) return "";
+  const items = (revision.items as unknown[]).map(item => { const text = readRecord(item)?.mention_text; return typeof text === "string" ? text.replace(/^[-\s]+/, "") : ""; }).filter(Boolean).slice(0, 6);
+  return [
+    "Há uma alteração de pedido pedida pelo cliente e ainda NÃO concluída.",
+    items.length ? `Itens propostos na alteração: ${items.join("; ")}.` : "",
+    "Retome esse assunto perguntando de forma natural se o cliente quer concluir a alteração. Não afirme que ela foi aplicada nem que um novo pagamento foi gerado.",
+  ].filter(Boolean).join(" ");
+}
+
+function readPendingFollowUpOrderRevision(metadata: JsonRecord | null, event: WhatsappFollowUpEventData) {
   if (event.returnId || event.recommendationProductId
-    || event.salesCatalogFollowUpKind === "post_sale" || event.salesCatalogFollowUpKind === "manual") return false;
+    || event.salesCatalogFollowUpKind === "post_sale" || event.salesCatalogFollowUpKind === "manual") return null;
   const leadMetadata = readRecord(metadata);
   const revision = readRecord(readRecord(leadMetadata?.checkout_order_revisions)?.[event.conversationId])
     ?? readRecord(leadMetadata?.checkout_order_revision);
-  return Boolean(revision && revision.applied !== true
+  return revision && revision.applied !== true
     && revision.organization_id === event.organizationId
     && revision.conversation_id === event.conversationId
     && revision.instance_id === event.whatsappInstanceId
     && typeof revision.order_id === "string" && revision.order_id.trim()
     && typeof revision.request_id === "string" && Number.isSafeInteger(revision.expected_revision) && Array.isArray(revision.items)
-    && (!event.salesCatalogOrderId || event.salesCatalogOrderId === revision.order_id));
+    && (!event.salesCatalogOrderId || event.salesCatalogOrderId === revision.order_id) ? revision : null;
 }
 
 async function loadSalesCatalogFollowUpOrder(

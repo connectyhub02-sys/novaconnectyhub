@@ -196,6 +196,7 @@ function pendingRevision(patch: Record<string, unknown> = {}) {
     source_message_id: "earlier-request", items: [{ id: "shirt", quantity: 1, mention_text: "Camiseta azul" }],
     pending_intent: { kind: "add", productText: "outro produto", quantity: 1 }, ...patch };
 }
+const recovery = { salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order" as const };
 function setRevision(f: ReturnType<typeof fixture>, patch: Record<string, unknown> = {}) {
   f.db.tables.leads[0].metadata = { checkout_order_revision: pendingRevision(patch) };
 }
@@ -206,17 +207,25 @@ describe("proactive contact respects an unfinished cart revision", () => {
     setRevision(f);
     f.db.tables.conversation_messages[0].text_content = "Vou incluir a Camiseta vermelha. Qual versão você quer?";
     f.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ action: "send", message: "Já confirmei a inclusão da Camiseta vermelha. Podemos fechar?" }) }] } }] }), { status: 200 }));
-    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
-    expect(f.fetch).not.toHaveBeenCalled();
-    expect(f.metering).not.toHaveBeenCalled();
+    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "pending_revision_claim" });
+    expect(f.fetch).toHaveBeenCalledTimes(1);
     expect(f.prepareContact).not.toHaveBeenCalled();
     expect(f.db.tables.conversation_messages).toHaveLength(1);
   });
 
-  it("records the skipped dispatch and clears its lease through the scheduled job processor", async () => {
+  it("resumes an unfinished edit in a conversation follow-up instead of silencing the sale", async () => {
     const f = fixture();
     setRevision(f);
-    expect(await f.process()).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
+    expect(await f.execute()).toMatchObject({ status: "sent" });
+    const prompt = String((f.fetch.mock.calls[0] as unknown[])[1] && ((f.fetch.mock.calls[0] as unknown[])[1] as RequestInit).body);
+    expect(prompt).toContain("NÃO concluída");
+    expect(prompt).toContain("Camiseta azul");
+  });
+
+  it("records the skipped recovery dispatch and clears its lease through the scheduled job processor", async () => {
+    const f = fixture();
+    setRevision(f);
+    expect(await f.process(recovery)).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
     expect(f.patches).toEqual([expect.objectContaining({ status: "skipped", reason: "order_revision_pending", lease_until: null })]);
     expect(f.fetch).not.toHaveBeenCalled();
   });
@@ -233,7 +242,7 @@ describe("proactive contact respects an unfinished cart revision", () => {
   it("keeps a ready but unaccepted proposal distinct from a persisted revision", async () => {
     const f = fixture();
     setRevision(f, { pending_intent: null, ready: true, preview_text: "Confira 1 Camiseta azul e 1 Boné. Confirma a alteração?", total: "80,00" });
-    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
+    expect(await f.execute(recovery)).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
     expect(f.fetch).not.toHaveBeenCalled();
   });
 
@@ -284,7 +293,7 @@ describe("follow-up selects the revision belonging to this conversation", () => 
       },
       checkout_order_revision: pendingRevision({ conversation_id: "other-conversation", instance_id: "other-instance", applied: true }),
     };
-    expect(await f.process()).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
+    expect(await f.process(recovery)).toMatchObject({ status: "skipped", reason: "order_revision_pending" });
     expect(f.patches).toEqual([expect.objectContaining({ status: "skipped", reason: "order_revision_pending", lease_until: null })]);
     expect(f.fetch).not.toHaveBeenCalled();
   });

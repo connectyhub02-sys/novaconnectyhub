@@ -10,7 +10,7 @@ import {loadLeadCommercialContext} from "@/lib/commerce/lead-context";
 import "server-only";
 import { assertAgentAttendanceAllowed, ResponsibleAttendanceBlocked } from "./responsible-attendance";
 import { applyActivityQualification, resolveWhatsappBehavior } from "./activity-setup";
-import { conversationEnding, conversationEndingAction } from "./conversation-ending";
+import { conversationClosingText, conversationEnding, conversationEndingAction } from "./conversation-ending";
 import { applyTextEmojiPreference, conversationStyleInstructions, selectConversationReaction } from "./conversation-style";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { parseOrderRevisionIntent, parseOrderRevisionClarification, parseOrderRevisionTotalQuantity, normalizeOrderRevisionSpeech, isOrderRevisionNoChangeIntent, type OrderRevisionIntent } from "./order-revision-intent";
@@ -1045,7 +1045,7 @@ async function processWhatsappAgentRunWithScope(input: {
       await assertRunStillTargetsLatestInbound(client, context, latestInbound);
       try {
         const { queueAgendaHandoff } = await import("@/lib/automations/agenda-handoff");
-        await queueAgendaHandoff(client, { organizationId: organization.id, leadId: lead.id, conversationId: context.conversationId, agentId: agent.id, runId: run.id, instanceId: context.instance.id, reason: agendaTurn.handoffReason, requestText: userText });
+        await queueAgendaHandoff(client, { organizationId: organization.id, leadId: lead.id, conversationId: context.conversationId, agentId: agent.id, runId: run.id, instanceId: context.instance.id, reason: agendaTurn.handoffReason, requestText: stripRuntimeNotes(userText) || (latestInbound?.text_content ?? "") });
         // Let the LLM compose a natural, empathetic response instead of a robotic
         // system message.  The agendaContext guides the model; enforceAgendaResponse
         // still blocks any false booking confirmation via result.fallback.
@@ -1266,7 +1266,8 @@ async function handleConversationEnding(input: {
     && !resolveLeadPersonalName({ displayName: context.lead?.display_name, metadata: context.lead?.metadata })
     && !declinedName
     && !context.messages.some((message) => message.direction === "outbound" && (message.text_content ?? "").includes(closingNameQuestion));
-  const text = askClosingName ? `Por nada! ${closingNameQuestion}` : "Por nada! Até mais.";
+  const closing = conversationClosingText(userText);
+  const text = askClosingName ? `${closing.startsWith("Por nada") ? "Por nada!" : "Certo!"} ${closingNameQuestion}` : closing;
   const sent = await sendWhatsappText({
     credentials: context.credentials, token, phone, text,
     trackId: `conversation_ending_${context.run.id}`,
@@ -3186,7 +3187,15 @@ function buildSalesCatalogShippingIntentText(
     }
     return intentText;
   }
-  if (hasSalesCatalogPickupSignal(latest) || extractRuntimeAddress(null, latest)) return latest;
+  if (hasSalesCatalogPickupSignal(latest)) return latest;
+  if (extractRuntimeAddress(null, latest)) {
+    // A CEP sent alone just before the address (e.g. "CEP + e-mail", then the
+    // street) belongs to it. A CEP tied to another address is never inherited.
+    const previous = deliveryTexts.find(text => text !== latest);
+    const previousCep = !extractFirstBrazilianCep(latest) && previous && !extractRuntimeAddress(null, previous)
+      && !hasSalesCatalogPickupSignal(previous) ? extractFirstBrazilianCep(previous) : null;
+    return previousCep ? `${latest}\nCEP ${previousCep}` : latest;
+  }
   // A CEP sent separately may complete the preceding address. A new address,
   // however, must never inherit a CEP from an older, different destination.
   const latestCep = extractFirstBrazilianCep(latest);
@@ -4448,6 +4457,28 @@ function extractGroundingKeywords(value: string) {
   return keywords;
 }
 
+/**
+ * The agent is taking over a conversation a person from the company was
+ * conducting. Continue it; never restart it or swap the company's role.
+ */
+function buildHumanHandbackInstruction(conversationMetadata: Record<string, unknown> | null, messages: ConversationMessageRow[]) {
+  const human = readRecord(readRecord(conversationMetadata)?.human_intervention);
+  if (!human?.last_human_message_at || human.auto_resume_reason !== "lead_unanswered_after_handoff") return [];
+  // Only while the latest company message is still the person's, not the agent's.
+  const lastOutbound = [...messages].reverse().find(message => message.direction === "outbound");
+  if (!lastOutbound || readRecord(lastOutbound.payload)?.agent_run_id) return [];
+  const first = messages.find(message => message.direction === "inbound" || message.direction === "outbound");
+  const companyStarted = first?.direction === "outbound" && !readRecord(first.payload)?.agent_run_id;
+  return [
+    "RETOMADA DE ATENDIMENTO HUMANO",
+    "Uma pessoa da empresa conduziu esta conversa pelo WhatsApp e o lead ficou sem resposta. As mensagens enviadas pela empresa no histórico incluem as dela.",
+    "Continue exatamente do ponto em que a conversa parou, respondendo à última mensagem do lead. Não cumprimente de novo, não se apresente e não peça dados que já aparecem na conversa.",
+    companyStarted
+      ? "Esta conversa foi iniciada pela empresa (prospecção). Mantenha o papel da empresa na conversa: quem procurou o contato foi a empresa; não trate o contato como se ele tivesse pedido atendimento."
+      : "",
+  ].filter(Boolean);
+}
+
 function buildSystemInstruction(input: {
   checkoutScope?: { organizationId: string; conversationId: string; instanceId: string };
   checkoutRevisionContext?: RuntimeOrderRevisionDraft | null;
@@ -4591,6 +4622,7 @@ function buildSystemInstruction(input: {
     ...buildTemporalAwarenessInstruction(input.behavior),
     ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
     ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
+    ...buildHumanHandbackInstruction(input.conversationMetadata, input.messages),
     ...buildSmallTalkContext(input.behavior),
     ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
     ...buildConfiguredNicheCareLines(input.agent),
@@ -17768,6 +17800,10 @@ async function sendContextualSticker(
   responseText: string,
   behavior: WhatsappBehaviorConfig,
 ) {
+  // Every sticker sent in September 2026 returned HTTP 500 from the provider
+  // (valid 512x512 WebP, publicly reachable). Keep them off for all agents
+  // until the provider delivers them again; the agent setting is preserved.
+  if (!stickerDeliveryEnabled) return;
   if (!behavior.sendStickers) return;
   if (behavior.conversationStyle === "discreet") return;
   if (Math.random() * 100 >= behavior.stickerProbability) return;
@@ -17788,6 +17824,8 @@ async function sendContextualSticker(
     tolerateError: true,
   });
 }
+
+const stickerDeliveryEnabled = false;
 
 const stickerMap: Record<string, string[]> = {
   greeting: ["/whatsapp-stickers/greeting.webp"],
@@ -19286,6 +19324,14 @@ function resolveFollowUpProbeUserText(input: {
     `Pedido anterior ainda sem resposta completa: ${previousText}`,
     "Responda agora ao pedido anterior de forma objetiva, comercial e completa, sem pedir para o lead repetir.",
   ].join("\n");
+}
+
+/** What the lead actually asked, without runtime notes meant only for the model. */
+function stripRuntimeNotes(text: string) {
+  return text.split("\n")
+    .filter(line => !/^\s*(?:Nota interna:|Responda agora ao pedido anterior\b)/i.test(line))
+    .map(line => line.replace(/^\s*Pedido anterior ainda sem resposta completa:\s*/i, ""))
+    .join("\n").trim();
 }
 
 function findPreviousUnansweredInbound(messages: ConversationMessageRow[], latestInbound: ConversationMessageRow) {

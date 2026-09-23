@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
+import { conversationEnding } from "./conversation-ending";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -58,6 +59,21 @@ export async function cancelQueuedWhatsappRunsForConversation(
     .contains("metadata", { conversationId });
 }
 
+/** Whether the conversation before this lead message had been closed (a farewell without a pending question). */
+async function humanClosedConversation(client: SupabaseClient, conversationId: string, beforeIso: string) {
+  const { data } = await client
+    .from("conversation_messages")
+    .select("id,direction,text_content,message_type,payload,occurred_at")
+    .eq("conversation_id", conversationId)
+    .lt("occurred_at", beforeIso)
+    .order("occurred_at", { ascending: false })
+    .limit(20);
+  const prior = (data ?? []).slice().reverse() as Array<{ direction: string; text_content: string | null; message_type: string | null; payload: unknown }>;
+  // Unknown history is treated as an active conversation: waiting is safer
+  // than the agent interrupting a human negotiation.
+  return prior.length > 0 && conversationEnding(prior).ended;
+}
+
 export async function scheduleHumanInterventionAutoResumeForLead(input: {
   client: SupabaseClient;
   conversationId: string;
@@ -79,12 +95,22 @@ export async function scheduleHumanInterventionAutoResumeForLead(input: {
 
   const currentPausedUntilMs = parseIsoTimestamp(readString(currentHuman.paused_until));
   const messageMs = parseIsoTimestamp(input.messageOccurredAt);
+  // Business rule: the 5-minute fallback only applies after the human closed
+  // the conversation. While the human is mid-conversation (e.g. waiting for an
+  // answer to "Pede quanto?"), the lead waits until the configured window ends.
+  // An open-ended manual takeover is never resumed automatically.
+  // Judge the conversation as it stood when the lead started waiting, so a
+  // second unanswered message does not push an earlier fallback back.
+  const waitingSince = readString(currentHuman.lead_waiting_since) ?? input.messageOccurredAt;
+  const humanClosed = await humanClosedConversation(input.client, input.conversationId, waitingSince);
+  if (!humanClosed && currentPausedUntilMs === null) return null;
   const fallbackBaseMs = messageMs && messageMs <= nowMs ? messageMs : nowMs;
   const fallbackUntilMs = Math.max(nowMs + 10_000, fallbackBaseMs + HUMAN_INTERVENTION_UNANSWERED_LEAD_MS);
-  const effectivePausedUntilMs = Math.min(currentPausedUntilMs ?? fallbackUntilMs, fallbackUntilMs);
+  const effectivePausedUntilMs = humanClosed
+    ? Math.min(currentPausedUntilMs ?? fallbackUntilMs, fallbackUntilMs)
+    : Math.max(nowMs + 10_000, currentPausedUntilMs!);
   const resumeAt = new Date(effectivePausedUntilMs).toISOString();
   const now = new Date(nowMs).toISOString();
-  const waitingSince = readString(currentHuman.lead_waiting_since) ?? input.messageOccurredAt;
 
   await input.client
     .from("conversations")
@@ -98,6 +124,7 @@ export async function scheduleHumanInterventionAutoResumeForLead(input: {
           last_unanswered_lead_message_at: input.messageOccurredAt,
           last_unanswered_lead_provider_message_id: input.providerMessageId,
           auto_resume_reason: "lead_unanswered_after_handoff",
+          auto_resume_rule: humanClosed ? "closed_conversation_fallback" : "window_end",
           auto_resume_after: resumeAt,
           paused_until: resumeAt,
           updated_at: now,

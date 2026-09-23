@@ -26,6 +26,13 @@ describe("shared lead identification", () => {
     expect(findLeadNameEvidence([msg("outbound", "Para liberar o pagamento, falta nome completo.", "question"), msg("outbound", "Depois preparo o acesso ao pagamento.", "explanation"), msg("inbound", "Carlos Almeida Santos")])?.name).toBe("Carlos Almeida Santos");
     expect(findLeadNameEvidence([msg("outbound", "Qual seu nome?", "question"), msg("inbound", "Não quero informar", "refusal"), msg("outbound", "Qual produto você quer?", "product"), msg("inbound", "Caderno Azul")])).toBeNull();
   });
+  it.each(["então preciso mudar", "quero comprar um imóvel", "estou buscando casa"])("does not record a sentence answering the name question as a name: %s", text => {
+    const question = msg("outbound", "Como posso te chamar? Me diz também se você procura um imóvel para morar ou investir.", "question");
+    expect(findLeadNameEvidence([question, msg("inbound", text)])).toBeNull();
+  });
+  it.each(["Magno", "Maria da Silva", "João dos Santos"])("still accepts a real name: %s", name => {
+    expect(findLeadNameEvidence([msg("outbound", "Como posso te chamar?", "question"), msg("inbound", name)])?.name).toBe(name);
+  });
   it.each([null, "Magno Gomes"])("only attempts to reserve after identification: %s", async leadName => {
     const start = "2099-01-02T12:00:00Z";
     const db = commerceDatabase({ customer_agenda_settings: [{ organization_id: "org", enabled: true }], customer_agenda_offers: [{ organization_id: "org", conversation_id: "conversation", lead_id: "lead", resource_id: "resource", expires_at: "2099-01-01T00:00:00Z", slots: [{ starts_at: start, ends_at: "2099-01-02T13:00:00Z" }], party_size: 1 }] });

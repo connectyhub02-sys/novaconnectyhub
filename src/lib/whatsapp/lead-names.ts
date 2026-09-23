@@ -103,6 +103,10 @@ export function resolveLeadPersonalName(input: LeadNameInput) {
 
 type IdentityMessage = { id?: string; direction: string; text_content?: string | null };
 
+// An answer to "como posso te chamar?" that reads as a sentence ("então preciso
+// mudar", "quero comprar") is not a name. Particles such as "da"/"dos" are allowed.
+const sentenceWords = /\b(?:ele|ela|voce|aqui|ai|la|quero|queria|gostaria|procuro|procurando|buscando|busco|preciso|precisa|precisamos|mudar|comprar|vender|alugar|investir|morar|anunciar|falando|corretor|dentista|sou|estou|to|tenho|temos|prefiro|informar|dizer|passar|nao|sim|depois|entao|agora|hoje|amanha|ainda|tambem|mas|porque|so|apenas|isso|esse|essa|este|esta|pode|podemos|vou|vamos|oi|ola|ok|obrigado|obrigada|tudo|bem|certo|claro|beleza|imovel|casa|apartamento|terreno|lote|valor|preco|produto|pedido|quanto|qual|quando|onde|como)\b/;
+
 // Names mentioned by the assistant, quoted third parties and greetings are not self-identification.
 export function findLeadNameEvidence(messages: IdentityMessage[]) {
   for (let index = messages.length - 1; index >= 0; index--) {
@@ -122,8 +126,7 @@ export function findLeadNameEvidence(messages: IdentityMessage[]) {
       || /\bcom quem (?:eu )?(?:falo|estou falando|tenho o prazer de falar)\b/.test(request)
       || /\bpara liberar o pagamento\b.{0,40}\bfaltam?\s+(?:o |seu )?nome completo\b/.test(request);
     const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '\u2019-]{1,79}[.!]?$/u.test(text) ? text.replace(/[.!]$/, "") : null));
-    if (candidate && isLikelyPersonalLeadName(candidate)
-      && !/\b(?:ele|ela|voce|você|aqui|quero|procuro|falando|corretor|dentista|sou|prefiro|informar|dizer|passar|nao|não|depois)\b/i.test(candidate)) {
+    if (candidate && isLikelyPersonalLeadName(candidate) && !sentenceWords.test(normalizeSearchText(candidate))) {
       return { name: candidate, messageId: message.id ?? null };
     }
   }

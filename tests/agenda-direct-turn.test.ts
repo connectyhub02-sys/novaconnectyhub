@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import * as agenda from "../src/lib/automations/agenda";
+import * as agendaActivation from "../src/lib/automations/agenda-activation";
 import type * as Agent from "../src/lib/automations/agenda-agent";
 import { commerceDatabase } from "./helpers/commerce-database";
 import { serverModuleHarness } from "./helpers/server-module-harness";
@@ -34,7 +35,7 @@ function fixture(options: { empty?: boolean; finish?: string; fail?: string } = 
     };
     return Object.assign(q, { delete: () => { f.tables[table] = []; return q; } });
   } };
-  const agendaAgent = serverModuleHarness<typeof Agent>("src/lib/automations/agenda-agent.ts", { "./agenda": agenda, "@/lib/billing/gemini-metering": { meterGeminiGenerationUsage: vi.fn() } }, [], { fetch, Date });
+  const agendaAgent = serverModuleHarness<typeof Agent>("src/lib/automations/agenda-agent.ts", { "./agenda": agenda, "./agenda-activation": agendaActivation, "@/lib/billing/gemini-metering": { meterGeminiGenerationUsage: vi.fn() } }, [], { fetch, Date });
   const input = { client, organizationId: "org", leadId: "lead", conversationId: "chat", runId: "run", agentId: "agent", leadName: "Magno", userText: "sim podemos marcar para amanha as 13 da tarde", messages: [], credentials: { model: "fake", apiKey: "not-real" }, assertCurrent: vi.fn(), catalogAppointment: true };
   return { ...f, rpc, fetch, input, decide: (value: Record<string, unknown>) => { decision = value; }, turn: (extra = {}) => agendaAgent.processAgendaTurn({ ...input, ...extra } as never) };
 }
@@ -54,8 +55,14 @@ describe("direct agenda attendance", () => {
     expect(f.fetch).toHaveBeenCalledTimes(1); expect(result?.booked).toBe(true);
     expect(f.rpc).toHaveBeenCalledWith("reserve_customer_appointment_item", expect.objectContaining({ p_item: "property" }));
   });
+  it("uses the company's only calendar when neither the item nor a default is set", async () => {
+    const f = fixture(); f.tables.customer_agenda_settings[0].default_resource_id = null;
+    const result = await f.turn({ userText: "na próxima terça", messages: [{ direction: "outbound", text_content: "Qual dia e horário para a visita?" }], catalogItemId: "property" });
+    expect(result?.handoffReason).toBeUndefined();
+  });
   it("reports missing item linkage on a date continuation rather than promising a consultation", async () => {
     const f = fixture(); f.tables.customer_agenda_settings[0].default_resource_id = null;
+    f.tables.customer_agenda_resources.push({ ...f.tables.customer_agenda_resources[0], id: "second-resource", name: "Outra agenda" });
     const result = await f.turn({ userText: "na próxima terça", messages: [{ direction: "outbound", text_content: "Qual dia e horário para a visita?" }], catalogItemId: "property" });
     expect(result).toMatchObject({ booked: false, handoffReason: expect.stringContaining("não tem agenda vinculada") });
     expect(f.rpc).not.toHaveBeenCalled(); expect(f.fetch).not.toHaveBeenCalled();

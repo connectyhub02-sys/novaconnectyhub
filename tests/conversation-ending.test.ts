@@ -59,6 +59,51 @@ describe("conversation ending shared by attendance and follow-up", () => {
     const messages = [outbound("Até mais!"), inbound("Qual o preço?", "question"), inbound("Obrigado!")];
     expect(conversationEndingAction(messages, "latest", "Obrigado!")).toBe("continue");
   });
+  describe("with provider message types persisted by UAZAPI", () => {
+    const typed = (text: string, id = "latest", message_type = "Conversation") => ({ ...inbound(text, id), message_type });
+    it.each([["Conversation"], ["ExtendedTextMessage"], ["ReactionMessage"]])("recognizes a courtesy stored as %s", type => {
+      const messages = [outbound("Por nada! Até mais."), typed("Ok", "latest", type)];
+      expect(conversationEndingAction(messages, "latest", "Ok")).toBe("silence");
+    });
+    it("still treats an image caption as a new need", () => {
+      const messages = [outbound("Até mais!"), typed("Obrigado!", "latest", "ImageMessage")];
+      expect(conversationEndingAction(messages, "latest", "Obrigado!")).toBe("continue");
+    });
+    it("silences the real courtesy loop after the agent's goodbye", () => {
+      const history: Array<ReturnType<typeof typed> | ReturnType<typeof outbound>> = [outbound("Um abraço e boa noite!")];
+      for (const [i, text] of ["Obrigado", "Ok", "👍", "Ok Abraços e Fique Com Deus", "Top obrigado", "blz vlw"].entries()) {
+        history.push(typed(text, `c-${i}`));
+        expect(conversationEndingAction(history, `c-${i}`, text)).toBe("silence");
+      }
+    });
+    it.each(["Um excelente domingo para você também e nos falamos em breve!", "Bom descanso para vocês e até logo!", "Tenha uma ótima semana!"])(
+      "recognizes a generated closing: %s", text => {
+        expect(conversationEnding([outbound(text)]).ended).toBe(true);
+      });
+    it.each(["👍", "Ok", "Sim", "Beleza", "Top"])("keeps %s after a proposal as an answer, never a farewell", text => {
+      const messages = [outbound("Vamos levar esse produto?"), typed(text)];
+      expect(conversationEndingAction(messages, "latest", text)).toBe("continue");
+    });
+    it.each(["Até lá! 😉", "Dia 5 a gente se fala então!", "Fechou! Até mais tarde então. 💪"])("recognizes the closing %s", text => {
+      expect(conversationEndingAction([outbound(text), typed("👍")], "latest", "👍")).toBe("silence");
+    });
+    it("stays quiet on an acknowledgement of a promised update without ending the conversation", () => {
+      const messages = [outbound("Assim que tivermos novidades sobre a de 30mg, eu te aviso aqui, Felipe. 😉"), typed("👍")];
+      expect(conversationEndingAction(messages, "latest", "👍")).toBe("silence");
+      expect(conversationEnding(messages).ended).toBe(false);
+    });
+    it("keeps answering an acknowledgement in the middle of a presentation", () => {
+      const messages = [outbound("Eu tenho várias opções na região do Parati e do Aero Rancho"), typed("Ok")];
+      expect(conversationEndingAction(messages, "latest", "Ok")).toBe("continue");
+    });
+    it("reopens when a later agent bubble asks a question", () => {
+      expect(conversationEnding([outbound("Um abraço!"), outbound("Ah, quer que eu reserve para você?")]).ended).toBe(false);
+    });
+    it("answers a courtesy that arrives with a new request", () => {
+      const messages = [outbound("Até mais!"), typed("Valeu!", "thanks"), typed("tem entrega sábado", "latest")];
+      expect(conversationEndingAction(messages, "latest", "tem entrega sábado")).toBe("continue");
+    });
+  });
   it("does not discard an attachment carrying a courtesy caption", () => {
     const messages = [outbound("Até mais!"), { ...inbound("Obrigado!"), message_type: "image" }];
     expect(conversationEndingAction(messages, "latest", "Obrigado!")).toBe("continue");

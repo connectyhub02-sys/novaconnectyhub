@@ -69,6 +69,16 @@ describe("runtime order lifecycle boundaries", () => {
     s.context.messages.unshift(msg(address, "2026-09-13T18:50:00.000Z"));
     expect(s.call<string>("buildSalesCatalogShippingIntentText", s.context, s.latest.text_content)).toContain("Rua das Flores");
   });
+  it("completes an address with the CEP sent alone just before it", () => {
+    const s = fixture("Rua 1131 numero 61 bairro centro cidade balneario camboriu", []);
+    s.context.messages.unshift(msg("88330786\ncliente@example.com", "2026-09-13T19:28:00.000Z"));
+    expect(s.call<string>("buildSalesCatalogShippingIntentText", s.context, s.latest.text_content)).toContain("CEP 88330786");
+  });
+  it("never gives a new address the CEP of an older, different address", () => {
+    const s = fixture("Rua 1131 numero 61 bairro centro cidade balneario camboriu", []);
+    s.context.messages.unshift(msg("Rua das Flores, número 42, Centro, Florianópolis, CEP 88010000", "2026-09-13T19:28:00.000Z"));
+    expect(s.call<string>("buildSalesCatalogShippingIntentText", s.context, s.latest.text_content)).not.toContain("88010000");
+  });
   it("does not borrow that address for an explicitly new purchase", () => {
     const s = fixture("quero outro pedido");
     expect(s.call("buildSalesCatalogShippingIntentText", s.context, s.latest.text_content)).toBe(s.latest.text_content);

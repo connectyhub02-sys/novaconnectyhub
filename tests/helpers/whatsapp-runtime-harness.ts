@@ -50,7 +50,7 @@ const exposed = [
   "recordSalesCatalogOrderIntent", "sendSalesCatalogPaymentLink", "isSalesCatalogPaymentLinkFollowUp",
   "maybeSendExistingSalesCatalogCheckoutLink", "maybeHandleRuntimePaymentDataRecovery", "buildConfiguredNicheCareLines",
   "prepareSalesCatalogDeliveryText", "hasSalesCatalogOrderIntent", "hasSalesCatalogCheckoutConfirmationIntent",
-  "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction",
+  "sendAgentResponse", "resolveOutboundDelivery", "buildCloneProfileLines", "buildSystemInstruction", "buildHumanHandbackInstruction",
   "resolveRuntimeAgentPrompt", "sendEmojiReaction",
   "buildSalesCatalogOrderIntentText",
   "persistCloneRealTestTurn", "extractCloneMemory", "detectSalesCatalogPreferredPaymentMethod",
@@ -63,7 +63,7 @@ const exposed = [
   "resolveSalesCatalogCartBoundaryMs", "buildSalesCatalogShippingIntentText",
   "maybeAttachSalesCatalogShippingQuoteToOrder", "maybeAttachSalesCatalogDeliveryAddressToOrder",
   "maybeAttachSalesCatalogLocalDeliveryToOrder", "maybeAttachSalesCatalogPickupToOrder",
-  "buildSalesCatalogLines", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
+  "buildSalesCatalogLines", "stripRuntimeNotes", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}, maybeHandleSalesCatalogOrderRevision: typeof maybeHandleSalesCatalogOrderRevision === "function" ? maybeHandleSalesCatalogOrderRevision : undefined};`, {

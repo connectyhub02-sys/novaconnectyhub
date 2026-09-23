@@ -7,7 +7,7 @@ import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { availableAppointments, agendaErrorMessage } from "@/lib/automations/agenda";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { localContactTime } from "@/lib/automations/contact-window";
-import { readAgendaActivation, agendaDisabledMessage } from "@/lib/automations/agenda-activation";
+import { readAgendaActivation, agendaDisabledMessage, resolveCompanyAgendaResourceId } from "@/lib/automations/agenda-activation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, context: Context) {
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
     const activation = await readAgendaActivation(client, item.companyId);
     if (!activation.enabled) return NextResponse.json({ enabled: false, slots: [], error: agendaDisabledMessage }, { status: 409, headers: { "Cache-Control": "no-store" } });
-    const resourceId = item.fulfillment.agendaResourceId || activation.defaultResourceId;
+    const resourceId = await resolveCompanyAgendaResourceId(client, item.companyId, item.fulfillment.agendaResourceId, activation.defaultResourceId);
     if (!resourceId) return NextResponse.json({ slots: [], contactRequired: true });
     const timezone = activation.timezone;
     const requested = request.nextUrl.searchParams.get("from");
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, context: Context) {
     const unavailable = await publicCommerceBlockResponse(item.companyId, client); if (unavailable) return unavailable;
     const activation = await readAgendaActivation(client, item.companyId);
     if (!activation.enabled) return NextResponse.json({ enabled: false, error: agendaDisabledMessage }, { status: 409 });
-    const resourceId = item.fulfillment.agendaResourceId || activation.defaultResourceId;
+    const resourceId = await resolveCompanyAgendaResourceId(client, item.companyId, item.fulfillment.agendaResourceId, activation.defaultResourceId);
     if (!resourceId) throw new Error("Solicite o atendimento para combinar um horário.");
     const key = `public:${createHash("sha256").update([item.companyId, item.id, resourceId, phone, startsAt.toISOString()].join("|")).digest("hex")}`;
     const previous = await client.from("customer_agenda_bookings").select("starts_at,ends_at,status").eq("organization_id", item.companyId).eq("request_key", key).maybeSingle();
