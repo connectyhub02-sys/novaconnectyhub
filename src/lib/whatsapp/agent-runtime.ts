@@ -810,7 +810,10 @@ async function processWhatsappAgentRunWithScope(input: {
       return await completeRun(client, run.id, preview(financialReply, 500), { sent: true, reason: "financial_review", messages: 1, mode: "text" });
     }
 
-    const revisedOrder = await maybeHandleSalesCatalogOrderRevision({ client, context, token, phone, latestInbound, userText });
+    // With order tools the model interprets edits and payment changes; the
+    // legacy phrase routes stay in place for every other instance.
+    const orderToolScope = latestInbound ? resolveOrderToolScope(context) : null;
+    const revisedOrder = orderToolScope ? null : await maybeHandleSalesCatalogOrderRevision({ client, context, token, phone, latestInbound, userText });
     if (revisedOrder) {
       return await completeRun(client, run.id, preview(revisedOrder.text, 500), { sent: true, reason: "sales_catalog_order_revision", messages: 1, mode: revisedOrder.mode });
     }
@@ -916,7 +919,7 @@ async function processWhatsappAgentRunWithScope(input: {
       return await completeRun(client, run.id, "Lead pediu opt-out.", { sent: true, reason: "lead_opt_out" });
     }
 
-    const existingCheckoutLink = await maybeSendExistingSalesCatalogCheckoutLink({
+    const existingCheckoutLink = orderToolScope ? null : await maybeSendExistingSalesCatalogCheckoutLink({
       client,
       context,
       token,
@@ -1064,69 +1067,33 @@ async function processWhatsappAgentRunWithScope(input: {
       settings: context.salesCatalogShippingSettings,
       userText,
     });
-    let aiResponse = cachedAiResponse
+    const generationInput = {
+      checkoutScope: { organizationId: context.organization.id, conversationId: context.conversationId, instanceId: context.instance.id },
+      checkoutRevisionContext: readRuntimeOrderRevision(context),
+      agendaContext: agendaTurn?.context,
+      credentials: context.geminiCredentials,
+      organization, agent, globalAgent, behavior,
+      qualification: context.qualification, lead,
+      knowledge: context.knowledge, linkButtons: context.linkButtons, companyLocations: context.companyLocations,
+      salesCatalog: context.salesCatalog, salesCatalogSettings: context.salesCatalogSettings,
+      salesCatalogShippingSettings: context.salesCatalogShippingSettings, salesCatalogShippingQuotes,
+      salesCatalogOrders: context.salesCatalogOrders, learnings: context.learnings,
+      crossAgentContext: context.crossAgentContext, commerceStoreContext: context.commerceStoreContext,
+      registeredClientContext, messages: context.messages, latestInbound, userText,
+      conversationMetadata: context.conversationMetadata,
+    };
+    const toolTurn = orderToolScope && latestInbound && !cachedAiResponse
+      ? await runOrderToolTurn({ ...generationInput, systemInstruction: buildSystemInstruction(generationInput), client, context, scope: orderToolScope, token, phone, latestInbound })
+      : null;
+    let aiResponse = toolTurn ? toolTurn.response : cachedAiResponse
       ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
-      : await generateAgentResponse({
-          checkoutScope: { organizationId: context.organization.id, conversationId: context.conversationId, instanceId: context.instance.id },
-          checkoutRevisionContext: readRuntimeOrderRevision(context),
-          agendaContext: agendaTurn?.context,
-          credentials: context.geminiCredentials,
-          organization,
-          agent,
-          globalAgent,
-          behavior,
-          qualification: context.qualification,
-          lead,
-          knowledge: context.knowledge,
-          linkButtons: context.linkButtons,
-          companyLocations: context.companyLocations,
-          salesCatalog: context.salesCatalog,
-          salesCatalogSettings: context.salesCatalogSettings,
-          salesCatalogShippingSettings: context.salesCatalogShippingSettings,
-          salesCatalogShippingQuotes,
-          salesCatalogOrders: context.salesCatalogOrders,
-          learnings: context.learnings,
-          crossAgentContext: context.crossAgentContext,
-          commerceStoreContext: context.commerceStoreContext,
-          registeredClientContext,
-          messages: context.messages,
-          latestInbound,
-          userText,
-          conversationMetadata: context.conversationMetadata,
-        });
+      : await generateAgentResponse(generationInput);
 
-    aiResponse = await maybeRepairMediaGroundingResponse({
+    if (!toolTurn) aiResponse = await maybeRepairMediaGroundingResponse({
       client,
       context,
       cached: Boolean(cachedAiResponse),
-      baseInput: {
-        checkoutScope: { organizationId: context.organization.id, conversationId: context.conversationId, instanceId: context.instance.id },
-        checkoutRevisionContext: readRuntimeOrderRevision(context),
-        agendaContext: agendaTurn?.context,
-        credentials: context.geminiCredentials,
-        organization,
-        agent,
-        globalAgent,
-        behavior,
-        qualification: context.qualification,
-        lead,
-        knowledge: context.knowledge,
-        linkButtons: context.linkButtons,
-        companyLocations: context.companyLocations,
-        salesCatalog: context.salesCatalog,
-        salesCatalogSettings: context.salesCatalogSettings,
-        salesCatalogShippingSettings: context.salesCatalogShippingSettings,
-        salesCatalogShippingQuotes,
-        salesCatalogOrders: context.salesCatalogOrders,
-        learnings: context.learnings,
-        crossAgentContext: context.crossAgentContext,
-        commerceStoreContext: context.commerceStoreContext,
-        registeredClientContext,
-        messages: context.messages,
-        latestInbound,
-        userText,
-        conversationMetadata: context.conversationMetadata,
-      },
+      baseInput: generationInput,
       response: aiResponse,
     });
 
@@ -1173,14 +1140,18 @@ async function processWhatsappAgentRunWithScope(input: {
       throw error;
     });
 
-    const outbound = await sendAgentResponse({
-      client,
-      context,
-      token,
-      phone,
-      actionUrls: agendaTurn?.actionUrls,
-      text: aiText,
-    });
+    // A retried tool turn replays its cached reply through the same plain sender;
+    // its tool effects are already persisted and are never executed twice.
+    const outbound = orderToolScope && latestInbound
+      ? await sendOrderToolTurn({ client, context, token, phone, text: aiText, deferred: toolTurn?.deferred ?? [], latestInbound })
+      : await sendAgentResponse({
+          client,
+          context,
+          token,
+          phone,
+          actionUrls: agendaTurn?.actionUrls,
+          text: aiText,
+        });
 
     for (const message of outbound) {
       if (!message.persisted) {
@@ -1218,6 +1189,7 @@ async function processWhatsappAgentRunWithScope(input: {
       mode: outbound[0]?.mode ?? "text",
       agenda_booking_id: agendaTurn?.bookingId ?? null,
       agenda_handoff: Boolean(agendaTurn?.handoffReason),
+      order_tool_calls: toolTurn?.calls ?? null,
       text_usage_event_id: textMetering?.usageEventId ?? null,
       text_usage_billing_mode: textMetering?.billingMode ?? null,
       text_usage_charge_credits: textMetering?.chargeCredits ?? null,
@@ -12620,16 +12592,53 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     draft.source_message_id = latestInbound.id;
     draft.request_id = randomUUID();
   }
-  const selections = runtimeRevisionSelections(context, draft);
   if (draft.delivery_update) {
     await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
     return reply(draft.delivery_update.cep ? "Preservei o endereço anterior. Para usar o novo destino, me informe rua, número, bairro e cidade."
       : "Preservei o endereço anterior. Me informe o novo endereço completo com CEP para conferir a alteração da entrega.");
   }
-  if (!selections?.length) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply("A revisão ficou sem itens. Você quer adicionar algum produto ou cancelar o pedido inteiro?");
+  const proposal = computeRuntimeRevisionProposal(context, order, draft);
+  if (!proposal.ok) {
+    if (proposal.unchanged) {
+      await invalidateRuntimeCheckoutDraft(client, context, text);
+      await persistRuntimeOrderRevision(client, context, null);
+    } else {
+      await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    }
+    return reply(proposal.message);
   }
+  const { total, fingerprint } = proposal;
+  if (confirmed && draft.total === total && draft.fingerprint === fingerprint) {
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    const applied = await applyRuntimeRevisionProposal(client, context, order, draft, proposal);
+    if (!applied.ok) return reply(applied.message);
+    const outbound = await sendSalesCatalogPaymentLink({ ...input, payment: applied.payment });
+    await finishRuntimeRevisionPaymentDelivery(client, context, applied.payment, outbound);
+    return outbound;
+  }
+  draft.total = total;
+  draft.fingerprint = fingerprint;
+  draft.preview_text = proposal.previewText;
+  await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+  const result = await reply(draft.preview_text);
+  await persistRuntimeOrderRevision(client, context, { ...draft, ready: true });
+  return result;
+}
+
+type RuntimeRevisionProposal =
+  | { ok: true; rows: ReturnType<typeof buildRuntimeSalesCatalogOrderRows>; shipping: Parameters<typeof applySalesCatalogOrderRevision>[0]["shipping"];
+    total: string; fingerprint: string; previewText: string }
+  | { ok: false; message: string; unchanged?: boolean };
+
+/**
+ * Prices a revision draft against the saved order: catalog prices, preserved
+ * options, delivery quote, discount and operating hours. Never writes; the
+ * fingerprint binds a later confirmation to exactly this proposal.
+ */
+function computeRuntimeRevisionProposal(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder, draft: RuntimeOrderRevisionDraft): RuntimeRevisionProposal {
+  const selections = runtimeRevisionSelections(context, draft);
+  if (!selections?.length) return { ok: false, message: "A revisão ficou sem itens. Você quer adicionar algum produto ou cancelar o pedido inteiro?" };
   const priced = priceRuntimeSalesCatalogSelections(selections, "", "");
   // Unchanged options must survive quantity changes and additions. If the catalog
   // can no longer reproduce an existing variant, do not silently choose another.
@@ -12639,80 +12648,356 @@ async function maybeHandleSalesCatalogOrderRevision(input: {
     const original = order.items.find(item => item.catalogItemId === line.item.id);
     return original && ((original.skuId ?? null) !== (line.sku?.id ?? null)
       || optionsKey(original.attributes) !== optionsKey(line.attributes));
-  })) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply("Preciso conferir as opções de um dos itens para preservar sua escolha na alteração. O pedido continua como estava.");
-  }
+  })) return { ok: false, message: "Preciso conferir as opções de um dos itens para preservar sua escolha na alteração. O pedido continua como estava." };
   const subtotal = normalizeCurrencyAmount(sumRuntimeOrderTotal(priced));
-  if (subtotal === null) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply("Preciso conferir os preços dos itens antes de concluir a alteração.");
-  }
+  if (subtotal === null) return { ok: false, message: "Preciso conferir os preços dos itens antes de concluir a alteração." };
   draft.cep = draft.cep?.replace(/\D/g, "") || null;
   const delivery = quoteOrderDelivery({ entries: selections, settings: context.salesCatalogShippingSettings,
     subtotal, cep: draft.cep ?? "", address: draft.address ?? "", coordinates: boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep) ?? boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep) });
   const quote = chooseOrderDeliveryQuote(delivery.quotes, draft.method);
   if (delivery.physical && (!quote || !quote.pickup && (!draft.address || !hasRuntimeCompleteDeliveryAddress(draft.address)))) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply(!draft.cep && !quote?.pickup ? "Mantive os itens da revisão. Me informe o CEP e o endereço completo para calcular a entrega."
+    return { ok: false, message: !draft.cep && !quote?.pickup ? "Mantive os itens da revisão. Me informe o CEP e o endereço completo para calcular a entrega."
       : !draft.address ? "Já tenho o CEP. Me informe rua, número, bairro e cidade para completar a entrega."
-        : delivery.error ? `Mantive os itens e o endereço. Para a entrega: ${delivery.error}` : "Mantive os itens e o endereço, mas não encontrei uma tarifa de entrega para essa revisão. Você prefere outro endereço ou combinar a entrega com a equipe?");
+        : delivery.error ? `Mantive os itens e o endereço. Para a entrega: ${delivery.error}` : "Mantive os itens e o endereço, mas não encontrei uma tarifa de entrega para essa revisão. Você prefere outro endereço ou combinar a entrega com a equipe?" };
   }
   const payable = subtotal - (normalizeCurrencyAmount(order.discountTotal) ?? 0) + (quote?.amount ?? 0);
-  if (payable <= 0) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply("Preciso conferir o desconto do pedido antes de concluir essa alteração.");
-  }
+  if (payable <= 0) return { ok: false, message: "Preciso conferir o desconto do pedido antes de concluir essa alteração." };
   const total = formatRuntimeOrderMoney(payable);
   const unchangedItems = draft.items.length === order.items.length && draft.items.every(item => order.items.some(line => line.catalogItemId === item.id && line.quantity === item.quantity));
   if (unchangedItems && draft.address === order.destinationAddress && draft.cep === order.destinationCep && draft.method === order.shippingMethod
     && (!draft.location_quote || JSON.stringify(boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep)) === JSON.stringify(boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep)))
     && normalizeCurrencyAmount(total) === normalizeCurrencyAmount(order.total) && draft.preferred_method === order.preferredPaymentMethod) {
-    await invalidateRuntimeCheckoutDraft(client, context, text);
-    await persistRuntimeOrderRevision(client, context, null);
-    return reply("Os itens e as quantidades já correspondem ao pedido salvo. Mantive o pedido e o pagamento existentes, sem gerar uma nova cobrança.");
+    return { ok: false, unchanged: true, message: "Os itens e as quantidades já correspondem ao pedido salvo. Mantive o pedido e o pagamento existentes, sem gerar uma nova cobrança." };
   }
   const operation = evaluateOrderOperation(context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(selections.map(selection => selection.item), quote?.name));
-  if (!operation.allowed) {
-    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-    return reply(operation.message!);
-  }
+  if (!operation.allowed) return { ok: false, message: operation.message! };
   const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, order.id);
   const shipping = { total: quote?.amount ?? 0, method: quote?.name ?? null,
     destinationCep: quote?.pickup ? null : draft.cep, destinationAddress: quote?.pickup ? null : draft.address,
     quote: quote ? { ...quote, coordinates: quote.pickup ? null : boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep) ?? boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep), destination_address: draft.address, cep: draft.cep } : {} };
   const fingerprint = createHash("sha256").update(JSON.stringify({ rows, shipping, total, preferredMethod: draft.preferred_method })).digest("hex");
-  if (confirmed && draft.total === total && draft.fingerprint === fingerprint) {
-    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
-    try {
-      await applySalesCatalogOrderRevision({ client, organizationId: context.organization.id, leadId: context.lead.id,
-        conversationId: context.conversationId, orderId: order.id, expectedRevision: draft.expected_revision, requestId: draft.request_id,
-        rows, shipping, operationHours: context.salesCatalogSettings?.orderPolicy?.operations,
-        expectedTotal: normalizeCurrencyAmount(total)!, preferredPaymentMethod: draft.preferred_method });
-    } catch {
-      await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-      return reply("Não consegui confirmar a alteração com segurança. O pedido ou o pagamento precisa ser conferido antes de enviar o checkout atualizado.");
-    }
-    context.salesCatalogOrders = await loadOrganizationSalesCatalogOrders(client, { organizationId: context.organization.id, leadId: context.lead.id, conversationId: context.conversationId });
-    await persistRuntimeOrderRevision(client, context, { ...draft, applied: true });
-    const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total, preferredMethod: draft.preferred_method });
-    if (!payment) return reply("Os itens foram atualizados. Preciso conferir o acesso ao pagamento antes de enviar o checkout.");
-    const outbound = await sendSalesCatalogPaymentLink({ ...input, payment });
-    if (!payment.gatewayUnavailable && !payment.paymentDeferred && !payment.confirmationPending
-      && readRecord(outbound.providerResponse)?.delivery !== "whatsapp_pix_code_missing") {
-      await persistRuntimeOrderRevision(client, context, null);
-    }
-    return outbound;
-  }
-  draft.total = total;
-  draft.fingerprint = fingerprint;
-  draft.preview_text = [draft.legacy_cart_reconciled_at ? "O resumo anterior contém itens que ainda não foram gravados no pedido. Confira a proposta completa:" : "Confira a alteração do seu pedido:", selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line).join("\n"),
+  const previewText = [draft.legacy_cart_reconciled_at ? "O resumo anterior contém itens que ainda não foram gravados no pedido. Confira a proposta completa:" : "Confira a alteração do seu pedido:", selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line).join("\n"),
     quote ? `Frete: R$ ${formatRuntimeOrderMoney(quote.amount)} (${quote.name}).` : "",
     operation.estimate, `Total: R$ ${total}.`, draft.address && !quote?.pickup ? `Entrega: ${draft.address}.` : "", draft.preferred_method ? `Pagamento: ${draft.preferred_method === "card" ? "cartão" : "Pix"}.` : "", "Confirma essa alteração?"].filter(Boolean).join("\n\n");
-  await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
-  const result = await reply(draft.preview_text);
-  await persistRuntimeOrderRevision(client, context, { ...draft, ready: true });
-  return result;
+  return { ok: true, rows, shipping, total, fingerprint, previewText };
+}
+
+/** Applies a priced proposal with the order version check and prepares its payment. */
+async function applyRuntimeRevisionProposal(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  order: RuntimeSalesCatalogOrder, draft: RuntimeOrderRevisionDraft, proposal: Extract<RuntimeRevisionProposal, { ok: true }>)
+  : Promise<{ ok: true; payment: SalesCatalogPaymentLinkResult } | { ok: false; message: string }> {
+  try {
+    await applySalesCatalogOrderRevision({ client, organizationId: context.organization.id, leadId: context.lead!.id,
+      conversationId: context.conversationId, orderId: order.id, expectedRevision: draft.expected_revision, requestId: draft.request_id,
+      rows: proposal.rows, shipping: proposal.shipping, operationHours: context.salesCatalogSettings?.orderPolicy?.operations,
+      expectedTotal: normalizeCurrencyAmount(proposal.total)!, preferredPaymentMethod: draft.preferred_method });
+  } catch {
+    await persistRuntimeOrderRevision(client, context, { ...draft, ready: false });
+    return { ok: false, message: "Não consegui confirmar a alteração com segurança. O pedido ou o pagamento precisa ser conferido antes de enviar o checkout atualizado." };
+  }
+  context.salesCatalogOrders = await loadOrganizationSalesCatalogOrders(client, { organizationId: context.organization.id, leadId: context.lead!.id, conversationId: context.conversationId });
+  await persistRuntimeOrderRevision(client, context, { ...draft, applied: true });
+  const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total: proposal.total, preferredMethod: draft.preferred_method });
+  if (!payment) return { ok: false, message: "Os itens foram atualizados. Preciso conferir o acesso ao pagamento antes de enviar o checkout." };
+  return { ok: true, payment };
+}
+
+/** An applied revision is cleared only once its payment access was really delivered. */
+async function finishRuntimeRevisionPaymentDelivery(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  payment: SalesCatalogPaymentLinkResult, outbound: OutboundMessage) {
+  if (!payment.gatewayUnavailable && !payment.paymentDeferred && !payment.confirmationPending
+    && readRecord(outbound.providerResponse)?.delivery !== "whatsapp_pix_code_missing") {
+    await persistRuntimeOrderRevision(client, context, null);
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Order tools: the model interprets the conversation, the server executes.
+// Enabled per WhatsApp instance (metadata.order_tools === true) while there is
+// exactly one editable order in this conversation. Every tool reuses the same
+// pricing, fingerprint, version check and payment functions as the legacy
+// revision route; the model never writes prices, items or links itself.
+// ---------------------------------------------------------------------------
+
+type RunContext = NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+type OrderToolScope = { order: RuntimeSalesCatalogOrder };
+type OrderToolDeferred = () => Promise<OutboundMessage>;
+type OrderToolCall = { name: string; ok: boolean; reason?: string };
+
+const orderToolMaxRounds = 5;
+
+function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
+  if (readRecord(context.instance.metadata)?.order_tools !== true) return null;
+  if (!runtimeAllowsCheckout(context) || !context.lead) return null;
+  const progress = readRecord(readRecord(context.lead.metadata)?.checkout_runtime_state);
+  const activeId = progress?.conversation_id === context.conversationId && progress?.instance_id === context.instance.id
+    ? asString(progress.order_id) : null;
+  const editable = context.salesCatalogOrders.filter(order => order.companyId === context.organization.id
+    && order.conversationId === context.conversationId && order.leadId === context.lead!.id
+    && isCurrentRuntimeCheckoutOrder(context, order) && isEditableCheckoutOrder(order) && !order.checkoutPaymentLock);
+  const order = editable.find(candidate => candidate.id === activeId) ?? (editable.length === 1 ? editable[0] : null);
+  // Custom compositions and repeated variants keep the legacy route and its human review.
+  if (!order || order.items.some(line => line.foodSummary || !line.catalogItemId)
+    || new Set(order.items.map(line => line.catalogItemId)).size !== order.items.length) return null;
+  return { order };
+}
+
+const orderToolDeclarations = [
+  { name: "ver_pedido", description: "Mostra o estado real do pedido em aberto: itens, frete, total, forma de pagamento, se o pagamento já foi enviado e se há uma proposta de alteração aguardando o cliente.", parameters: { type: "object", properties: {} } },
+  { name: "buscar_produtos", description: "Procura produtos vendáveis no catálogo pelo nome, apelido ou descrição e devolve produto_id, preço e versões.", parameters: { type: "object", properties: { texto: { type: "string", description: "Como o cliente se referiu ao produto." } }, required: ["texto"] } },
+  { name: "propor_alteracao", description: "Monta uma proposta de alteração do pedido. Informe a lista COMPLETA de itens como o pedido deve ficar (inclua os que continuam). Não altera o pedido: o sistema envia ao cliente o resumo oficial com total e frete para ele confirmar.", parameters: { type: "object", properties: {
+    itens: { type: "array", items: { type: "object", properties: { produto_id: { type: "string" }, quantidade: { type: "integer" }, versao_id: { type: "string", description: "Obrigatório quando o produto tem mais de uma versão." } }, required: ["produto_id", "quantidade"] } },
+    forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["itens"] } },
+  { name: "confirmar_alteracao", description: "Aplica a proposta já enviada ao cliente e prepara o pagamento atualizado. Use somente quando a última mensagem do cliente aceitou esse resumo.", parameters: { type: "object", properties: { codigo_proposta: { type: "string" } }, required: ["codigo_proposta"] } },
+  { name: "trocar_forma_pagamento", description: "Troca apenas a forma de pagamento do pedido atual, sem mudar itens, e prepara o novo acesso ao pagamento.", parameters: { type: "object", properties: { forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["forma_pagamento"] } },
+  { name: "reenviar_pagamento", description: "Reenvia o acesso ao pagamento atual quando o cliente pede o link, o botão ou o código de novo.", parameters: { type: "object", properties: {} } },
+];
+
+const orderToolInstructionLines = [
+  "FERRAMENTAS DO PEDIDO EM ABERTO",
+  "Este cliente tem um pedido em aberto nesta conversa. Para saber o estado do pedido ou alterar itens, quantidades ou forma de pagamento, use as ferramentas. Nunca invente itens, valores ou o estado do pagamento.",
+  "Para incluir, remover ou trocar produtos: use buscar_produtos quando não tiver o produto_id exato e depois propor_alteracao com a lista completa de itens após a alteração. Se houver mais de um produto ou versão possível, pergunte qual antes de propor.",
+  "Depois que propor_alteracao retornar ok, escreva apenas uma frase curta de transição. O sistema envia o resumo oficial logo em seguida; não repita itens nem valores.",
+  "Chame confirmar_alteracao somente quando a última mensagem do cliente aceitar o resumo enviado (por exemplo 'sim', 'pode', 'confirmo', 'fechado' ou um joinha respondendo ao resumo). Dúvida, elogio ou pergunta não é aceite.",
+  "Para trocar só a forma de pagamento, use trocar_forma_pagamento. Se houver proposta aguardando confirmação, inclua a nova forma em propor_alteracao.",
+  "Perguntas sobre parcelamento, prazo ou produtos são respondidas sem ferramentas de alteração.",
+  "Nunca diga que alterou, confirmou, gerou, enviou ou trocou algo se a ferramenta correspondente não retornou ok=true nesta resposta. Se uma ferramenta recusar, explique o motivo ao cliente com naturalidade.",
+  "Não escreva links nem códigos de pagamento: o acesso ao pagamento é enviado pelo sistema.",
+];
+
+function describeOrderForTool(context: RunContext, order: RuntimeSalesCatalogOrder) {
+  const draft = readRuntimeOrderRevision(context);
+  const pending = draft && !draft.applied && draft.ready && draft.order_id === order.id && draft.fingerprint;
+  return {
+    itens: order.items.map(line => ({ produto_id: line.catalogItemId, nome: [line.title, ...(line.attributes ?? []).flatMap(attribute => attribute.values)].join(" "), quantidade: line.quantity, total: line.total })),
+    frete: order.shippingTotal, metodo_entrega: order.shippingMethod, entrega: order.destinationAddress, total: order.total,
+    forma_pagamento: readRuntimeOrderPaymentPreference(context, order.id) ?? order.preferredPaymentMethod ?? null,
+    formas_disponiveis: getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings).map(choice => choice.preference),
+    pagamento_enviado: Boolean(order.latestPaymentSessionId), status_pagamento: order.paymentStatus,
+    proposta_pendente: pending ? { codigo_proposta: draft.fingerprint!.slice(0, 12), resumo: draft.preview_text } : null,
+  };
+}
+
+function searchOrderToolProducts(context: RunContext, text: string) {
+  const eligible = context.salesCatalog.filter(item => item.status === "active" && isSalesCatalogItemSellable(item)
+    && effectiveRuntimeDestination(item, context.agent) === "connectyhub_checkout");
+  const exact = selectRuntimeRevisionProducts(eligible, text);
+  const tokens = normalizeSearch(text).split(/\s+/).filter(token => token.length >= 3);
+  const scored = eligible.map(item => {
+    const haystack = normalizeSearch([item.title, item.description, item.category, ...item.skus.map(sku => sku.title ?? "")].join(" "));
+    return { item, score: (exact.includes(item) ? 100 : 0) + tokens.filter(token => haystack.includes(token)).length };
+  }).filter(entry => entry.score > 0).sort((left, right) => right.score - left.score).slice(0, 8);
+  return scored.map(({ item }) => ({
+    produto_id: item.id, nome: item.title, preco: item.offer?.salePrice ?? item.price,
+    versoes: item.skus.filter(sku => sku.status === "active").map(sku => ({ versao_id: sku.id, nome: [sku.title, sku.skuCode].filter(Boolean).join(" — "),
+      disponivel: sku.stockStatus !== "out_of_stock" || item.inventory.allowBackorder })),
+  }));
+}
+
+function assertOrderToolPaymentMethod(context: RunContext, method: unknown): SalesCatalogRuntimePaymentPreference | string {
+  if (method !== "pix" && method !== "card") return "Forma de pagamento inválida.";
+  return isSalesCatalogRuntimePaymentPreferenceEnabled(getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings), method)
+    ? method : "Essa forma de pagamento não está habilitada nesta loja.";
+}
+
+async function executeOrderTool(input: {
+  client: SupabaseClient; context: RunContext; scope: OrderToolScope; latestInbound: ConversationMessageRow;
+  token: string; phone: string; deferred: OrderToolDeferred[]; name: string; args: JsonRecord;
+}): Promise<JsonRecord> {
+  const { client, context, latestInbound } = input;
+  const order = context.salesCatalogOrders.find(candidate => candidate.id === input.scope.order.id) ?? input.scope.order;
+  const fail = (motivo: string) => ({ ok: false, motivo });
+  const deferPayment = (payment: SalesCatalogPaymentLinkResult, finishRevision: boolean) => input.deferred.push(async () => {
+    const outbound = await sendSalesCatalogPaymentLink({ client, context, token: input.token, phone: input.phone, payment });
+    if (finishRevision) await finishRuntimeRevisionPaymentDelivery(client, context, payment, outbound);
+    return outbound;
+  });
+
+  if (input.name === "ver_pedido") return { ok: true, pedido: describeOrderForTool(context, order) };
+  if (input.name === "buscar_produtos") {
+    const text = asString(input.args.texto);
+    if (!text) return fail("Informe o texto da busca.");
+    const produtos = searchOrderToolProducts(context, text);
+    return produtos.length ? { ok: true, produtos } : fail("Nenhum produto vendável encontrado com esse nome.");
+  }
+  if (input.name === "propor_alteracao") {
+    const existing = readRuntimeOrderRevision(context);
+    if (existing?.applied) return fail("A alteração anterior já foi aplicada e aguarda o envio do pagamento. Use reenviar_pagamento.");
+    const lines = Array.isArray(input.args.itens) ? input.args.itens.map(readRecord) : [];
+    if (!lines.length || lines.length > salesCatalogCheckoutItemLimit) return fail("Informe de 1 a " + salesCatalogCheckoutItemLimit + " itens.");
+    const method = input.args.forma_pagamento === undefined ? null : assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
+    if (typeof method === "string" && method !== "pix" && method !== "card") return fail(method);
+    const baseMention = new Map(order.items.map(line => [line.catalogItemId!, [line.title, ...(line.attributes ?? []).flatMap(attribute => attribute.values)].join(" ")]));
+    const items: RuntimeOrderRevisionDraft["items"] = [];
+    for (const line of lines) {
+      const id = asString(line?.produto_id);
+      const quantity = typeof line?.quantidade === "number" ? line.quantidade : NaN;
+      const item = id ? context.salesCatalog.find(candidate => candidate.id === id) : null;
+      if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout") return fail(`Produto ${id ?? "sem id"} não está disponível para venda.`);
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return fail(`Quantidade inválida para ${item.title}.`);
+      if (items.some(existingLine => existingLine.id === item.id)) return fail(`${item.title} aparece repetido; informe uma linha por produto.`);
+      const skuId = asString(line?.versao_id);
+      let mention = baseMention.get(item.id) ?? item.title;
+      if (skuId) {
+        const sku = item.skus.find(candidate => candidate.id === skuId && candidate.status === "active");
+        if (!sku) return fail(`Versão inválida para ${item.title}.`);
+        const original = order.items.find(orderLine => orderLine.catalogItemId === item.id);
+        if (original && (original.skuId ?? null) !== sku.id) return fail(`Para trocar a versão de ${item.title}, remova o item e inclua a nova versão em uma alteração separada com a equipe.`);
+        if (!original) mention = [item.title, sku.title, sku.skuCode].filter(Boolean).join(" ");
+      } else if (!baseMention.has(item.id) && needsRuntimeRevisionSkuChoice(item, mention)) {
+        const options = item.skus.filter(sku => sku.status === "active").slice(0, 6).map(sku => `${sku.id}: ${[sku.title, sku.skuCode].filter(Boolean).join(" — ")}`);
+        return fail(`${item.title} tem versões; pergunte ao cliente qual deseja e informe versao_id. Opções: ${options.join("; ")}.`);
+      }
+      items.push({ id: item.id, quantity, mention_text: mention });
+    }
+    const draft: RuntimeOrderRevisionDraft = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
+      order_id: order.id, request_id: randomUUID(), expected_revision: order.checkoutRevision ?? 0, source_message_id: latestInbound.id, items,
+      address: order.destinationAddress, cep: order.destinationCep, method: order.shippingMethod,
+      base_delivery: { address: order.destinationAddress, cep: order.destinationCep, method: order.shippingMethod },
+      preferred_method: (method as SalesCatalogRuntimePaymentPreference | null) ?? readRuntimeOrderPaymentPreference(context, order.id) ?? order.preferredPaymentMethod ?? null,
+      ready: false, preview_text: null, total: null };
+    recoverRuntimeRevisionDelivery(context, order, draft);
+    const proposal = computeRuntimeRevisionProposal(context, order, draft);
+    if (!proposal.ok) {
+      if (proposal.unchanged) await persistRuntimeOrderRevision(client, context, null);
+      return fail(proposal.message);
+    }
+    Object.assign(draft, { total: proposal.total, fingerprint: proposal.fingerprint, preview_text: proposal.previewText });
+    await persistRuntimeOrderRevision(client, context, draft);
+    input.deferred.push(async () => {
+      const providerResponse = await sendWhatsappText({ credentials: context.credentials, token: input.token, phone: input.phone,
+        text: proposal.previewText, trackId: `order_tool_preview_${context.run.id}` });
+      const outbound: OutboundMessage = { text: proposal.previewText, mode: "text", providerResponse, persisted: true,
+        runtimeEvent: { type: "order_tool_proposal", fingerprint: proposal.fingerprint } };
+      await saveOutboundMessage(client, context, outbound);
+      await persistRuntimeOrderRevision(client, context, { ...draft, ready: true });
+      return outbound;
+    });
+    return { ok: true, codigo_proposta: proposal.fingerprint.slice(0, 12), total: proposal.total, resumo: proposal.previewText,
+      observacao: "O resumo oficial será enviado ao cliente logo após a sua mensagem. Aguarde a resposta dele antes de confirmar." };
+  }
+  if (input.name === "confirmar_alteracao") {
+    const code = asString(input.args.codigo_proposta) ?? "";
+    const draft = readRuntimeOrderRevision(context);
+    if (!draft || draft.applied || !draft.ready || !draft.fingerprint || code.length < 8 || !draft.fingerprint.startsWith(code) || draft.order_id !== order.id) {
+      return fail("Não há proposta enviada com esse código aguardando confirmação. Consulte ver_pedido.");
+    }
+    if (draft.source_message_id === latestInbound.id) return fail("A proposta acabou de ser montada; aguarde o cliente responder ao resumo.");
+    if ((order.checkoutRevision ?? 0) !== draft.expected_revision) {
+      await persistRuntimeOrderRevision(client, context, null);
+      return fail("O pedido mudou desde a proposta. Monte uma nova proposta.");
+    }
+    const proposal = computeRuntimeRevisionProposal(context, order, draft);
+    if (!proposal.ok || proposal.fingerprint !== draft.fingerprint) return fail("Os valores mudaram desde a proposta. Monte uma nova proposta.");
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    const applied = await applyRuntimeRevisionProposal(client, context, order, draft, proposal);
+    if (!applied.ok) return fail(applied.message);
+    deferPayment(applied.payment, true);
+    return { ok: true, total: proposal.total, forma_pagamento: draft.preferred_method,
+      observacao: "Pedido atualizado. O acesso ao pagamento será enviado logo após a sua mensagem." };
+  }
+  if (input.name === "trocar_forma_pagamento" || input.name === "reenviar_pagamento") {
+    const draft = readRuntimeOrderRevision(context);
+    if (draft && !draft.applied && draft.ready) return fail("Há uma proposta de alteração aguardando o cliente. Para mudar a forma de pagamento junto, use propor_alteracao.");
+    let method = readRuntimeOrderPaymentPreference(context, order.id) ?? order.preferredPaymentMethod ?? null;
+    if (input.name === "trocar_forma_pagamento") {
+      const requested = assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
+      if (requested !== "pix" && requested !== "card") return fail(requested);
+      method = requested;
+      await persistRuntimeOrderPaymentPreference(client, context, order.id, requested, latestInbound);
+    }
+    const total = draft?.applied ? draft.total ?? order.total : order.total;
+    const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total, preferredMethod: method });
+    if (!payment || payment.gatewayUnavailable) return fail("O pagamento não pôde ser preparado agora. Informe que a equipe vai conferir.");
+    deferPayment(payment, Boolean(draft?.applied));
+    return { ok: true, forma_pagamento: method, total, observacao: "O acesso ao pagamento será enviado logo após a sua mensagem." };
+  }
+  return fail("Ferramenta desconhecida.");
+}
+
+function claimsUnexecutedOrderAction(text: string) {
+  return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei)\b/.test(normalizeSearch(text));
+}
+
+function sumGeminiUsage(total: GeminiTokenUsage | null, next: GeminiTokenUsage | null): GeminiTokenUsage | null {
+  if (!next) return total;
+  if (!total) return next;
+  return { inputTokens: total.inputTokens + next.inputTokens, outputTokens: total.outputTokens + next.outputTokens,
+    totalTokens: total.totalTokens + next.totalTokens, cachedTokens: total.cachedTokens + next.cachedTokens,
+    thoughtsTokens: total.thoughtsTokens + next.thoughtsTokens, toolInputTokens: (total.toolInputTokens ?? 0) + (next.toolInputTokens ?? 0),
+    raw: { calls: [...(Array.isArray(total.raw.calls) ? total.raw.calls : [total.raw]), next.raw] } };
+}
+
+/** One attendance turn with order tools. Side effects run in tools; customer messages are deferred until after the reply. */
+async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentResponse>[0], "credentials" | "agent" | "behavior" | "messages" | "userText"> & {
+  systemInstruction: string;
+  client: SupabaseClient; context: RunContext; scope: OrderToolScope; token: string; phone: string; latestInbound: ConversationMessageRow;
+}): Promise<{ response: AgentResponseResult; deferred: OrderToolDeferred[]; calls: OrderToolCall[] }> {
+  const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
+  url.searchParams.set("key", input.credentials.apiKey);
+  const systemText = [input.systemInstruction, "", ...orderToolInstructionLines].join("\n");
+  const contents: JsonRecord[] = buildGeminiContents(input.messages, input.userText, input.latestInbound.id, input.userText) as JsonRecord[];
+  const deferred: OrderToolDeferred[] = [];
+  const calls: OrderToolCall[] = [];
+  let usage: GeminiTokenUsage | null = null;
+  let corrected = false;
+  for (let round = 0; round < orderToolMaxRounds; round++) {
+    const response = await fetchWithTimeout(url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
+        tools: [{ functionDeclarations: orderToolDeclarations }], toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+        generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
+    }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
+    const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
+    if (!response.ok) throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
+    usage = sumGeminiUsage(usage, extractGeminiUsageMetadata(data));
+    const content = readRecord(readRecord(Array.isArray(readRecord(data)?.candidates) ? (readRecord(data)!.candidates as unknown[])[0] : null)?.content);
+    const parts = Array.isArray(content?.parts) ? content!.parts as unknown[] : [];
+    const functionCalls = parts.map(part => readRecord(readRecord(part)?.functionCall)).filter((call): call is JsonRecord => Boolean(call?.name));
+    if (functionCalls.length) {
+      // Keep the model turn intact (including thought signatures) before answering it.
+      contents.push({ role: "model", parts });
+      const responses: JsonRecord[] = [];
+      for (const call of functionCalls) {
+        const name = String(call.name);
+        const result = await executeOrderTool({ client: input.client, context: input.context, scope: input.scope, latestInbound: input.latestInbound,
+          token: input.token, phone: input.phone, deferred, name, args: readRecord(call.args) ?? {} });
+        calls.push({ name, ok: result.ok === true, reason: result.ok === true ? undefined : asString(result.motivo) ?? undefined });
+        responses.push({ functionResponse: { name, ...(call.id ? { id: call.id } : {}), response: result } });
+      }
+      contents.push({ role: "user", parts: responses });
+      continue;
+    }
+    const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
+    if (!text) throw new Error("Gemini nao retornou uma resposta para o lead.");
+    // A claimed action needs a successful tool in this same turn.
+    if (!corrected && !calls.some(call => call.ok && call.name !== "ver_pedido" && call.name !== "buscar_produtos") && claimsUnexecutedOrderAction(text)) {
+      corrected = true;
+      contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
+      continue;
+    }
+    const rendered = enforceIdentityGuard(normalizeAssistantText(text.replace(/https?:\/\/\S+/g, "").trim()), input.behavior, input.agent);
+    return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+  }
+  throw new Error("O atendimento com ferramentas do pedido excedeu o limite de etapas.");
+}
+
+/** Sends the reply as plain text, then the system messages produced by the tools. */
+async function sendOrderToolTurn(input: {
+  client: SupabaseClient; context: RunContext; token: string; phone: string; text: string; deferred: OrderToolDeferred[]; latestInbound: ConversationMessageRow;
+}) {
+  const outbound: OutboundMessage[] = [];
+  const chunks = input.text.split(/\n{2,}/).map(chunk => chunk.trim()).filter(Boolean).slice(0, 4);
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  for (const [chunkIndex, text] of chunks.entries()) {
+    const message = await sendTextOutboundChunk({ client: input.client, context: input.context, token: input.token, phone: input.phone,
+      text, chunkIndex, chunksTotal: chunks.length, trackIdPrefix: "order_tool_reply" });
+    if (message) outbound.push(message);
+  }
+  for (const action of input.deferred) outbound.push(await action());
+  return outbound;
 }
 
 

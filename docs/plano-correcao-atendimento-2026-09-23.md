@@ -32,6 +32,20 @@ Proibido nesta leva: consertar registros de um cliente no banco para "fazer func
 
 Validação: suíte completa com 3.483 testes aprovados; 17 falhas sob carga, das quais 15 (SQL/IA/voz) passaram isoladas e 2 dependem do decodificador de áudio ausente na máquina local. TypeScript, ESLint dos arquivos alterados e build de produção (webpack) aprovados. Nenhum teste real no WhatsApp.
 
+## Status da Fase 2 em 23/09/2026 (branch `feat/atendimento-ferramentas`, local)
+
+Implementada para pedidos já abertos, atrás da chave `order_tools: true` nos metadados da instância de WhatsApp (desligada por padrão; nenhuma mudança de comportamento sem ela).
+
+- Seis ferramentas: `ver_pedido`, `buscar_produtos`, `propor_alteracao`, `confirmar_alteracao`, `trocar_forma_pagamento`, `reenviar_pagamento`.
+- O cálculo e a aplicação da proposta foram extraídos (`computeRuntimeRevisionProposal`, `applyRuntimeRevisionProposal`) e são os mesmos da rota antiga; 1.444 testes de pedido/checkout passaram após a extração.
+- Garantias no servidor: produto e versão do catálogo, quantidade 1–99, confirmação só da proposta enviada (código = início do fingerprint), nunca no mesmo turno em que foi montada, versão do pedido conferida, valores recalculados antes de aplicar, pagamento reaproveitando a sessão ativa.
+- A IA escreve só a frase de transição; o resumo oficial e o botão de pagamento são enviados pelo sistema depois dela. Links são removidos do texto.
+- Trava de honestidade: se a resposta afirmar uma ação sem ferramenta bem-sucedida no mesmo turno, a IA reescreve uma vez.
+- Com a chave ligada, as rotas antigas de revisão e de reenvio de link não rodam para esse pedido, e a resposta não passa pelas travas que substituíam o texto da IA.
+- Fora do escopo: pedidos com montagem (alimentação) ou versões repetidas do mesmo produto continuam na rota antiga; primeira compra (Fase 4) e agenda (Fase 3) ainda não usam ferramentas. Em reprocessamento após falha, ações adiadas (resumo/botão) não são reenviadas.
+
+Validação: 10 testes novos (roteiro de 23/09 em versão fictícia), suíte completa 3.497 aprovados; 13 falhas sob carga passaram isoladas (exceto 2 que exigem decodificador de áudio local). TypeScript, ESLint e build aprovados.
+
 ## Fase 0 — Regressões antes de mexer
 
 Converter as conversas reais em testes automáticos, com dados fictícios:
