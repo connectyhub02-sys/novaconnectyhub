@@ -243,7 +243,7 @@ export function ApiDocsReference({ catalog }: { catalog: ApiDocsCatalog }) {
         </div>
 
         <aside className="mt-8 min-w-0 lg:col-start-2 xl:sticky xl:top-20 xl:col-start-auto xl:mt-0 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:border-l xl:border-white/10 xl:pl-5">
-          {voiceSection ? <div className="rounded-xl border border-violet-300/20 p-5 text-sm text-slate-300"><p className="font-semibold text-white">Conta → projeto → chave</p><p className="mt-3 leading-6">O catálogo e os recibos identificam o projeto e a conta pagadora. Use uma chave dedicada de Voz; amostras e áudios privados nunca recebem acesso público.</p><a href="/docs/api/voz/openapi.json" className="mt-4 block text-violet-200 underline">Baixar OpenAPI de Voz (JSON)</a></div> : aiSection ? <AiDocsSidePanel /> : <SidePanel
+          {voiceSection ? <div className="rounded-xl border border-violet-300/20 p-5 text-sm text-slate-300"><p className="font-semibold text-white">Conta → projeto → chave</p><p className="mt-3 leading-6">O catálogo e os recibos identificam o projeto e a conta pagadora. Use uma chave dedicada de Voz; amostras e áudios privados nunca recebem acesso público.</p><a href="/docs/api/voz/openapi.json" download="connectyhub-voz-openapi.json" className="mt-4 block text-violet-200 underline">Baixar OpenAPI de Voz (JSON)</a><a href="/docs/api/voz/guide.md" download="connectyhub-voz.md" className="mt-3 block text-violet-200 underline">Baixar guia de Voz (Markdown)</a></div> : aiSection ? <AiDocsSidePanel /> : <SidePanel
             apiToken={apiToken}
             baseUrl={baseUrl}
             catalog={catalog}
