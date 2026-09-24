@@ -812,7 +812,7 @@ async function processWhatsappAgentRunWithScope(input: {
 
     // With order tools the model interprets edits and payment changes; the
     // legacy phrase routes stay in place for every other instance.
-    const orderToolScope = latestInbound ? resolveOrderToolScope(context) : null;
+    const orderToolScope = latestInbound ? resolveOrderToolScope(context) ?? resolveCartToolScope(context) : null;
     const revisedOrder = orderToolScope ? null : await maybeHandleSalesCatalogOrderRevision({ client, context, token, phone, latestInbound, userText });
     if (revisedOrder) {
       return await completeRun(client, run.id, preview(revisedOrder.text, 500), { sent: true, reason: "sales_catalog_order_revision", messages: 1, mode: revisedOrder.mode });
@@ -6201,8 +6201,10 @@ function selectCartComplements(settings: ClientSalesCatalogSettings | null, cata
   const price = (item: RuntimeSalesCatalogItem) => normalizeCurrencyAmount(item.offer.salePrice ?? item.price);
   // The cart is what the customer chose (or the saved draft), never what the agent itself mentioned or offered.
   const chosenText = messages.slice(-10).filter(message => message.direction === "inbound").map(message => message.text_content ?? "").join("\n");
-  const draft = readRecord(readRecord(lead?.metadata)?.checkout_cart_draft);
-  const draftIds = new Set((Array.isArray(draft?.items) ? draft.items : []).map(line => asString(readRecord(line)?.id)).filter(Boolean));
+  const draftIds = new Set(["checkout_cart_draft", "checkout_tool_cart"].flatMap(key => {
+    const draft = readRecord(readRecord(lead?.metadata)?.[key]);
+    return (Array.isArray(draft?.items) ? draft.items : []).map(line => asString(readRecord(line)?.id)).filter(Boolean);
+  }));
   const cart = sellable.filter(item => draftIds.has(item.id) || selectSalesCatalogItemsFromText([item], chosenText).length > 0);
   if (!cart.length) return [];
   const conversation = normalizeSearch(messages.filter(message => message.direction === "outbound").slice(-30).map(message => message.text_content ?? "").join("\n"));
@@ -11794,6 +11796,31 @@ async function recordSalesCatalogOrderIntent(input: {
     confirmationPreview?.id ?? latestInbound?.id ?? input.context.run.id,
   ])).digest("hex");
   const orderId = `${intentHash.slice(0, 8)}-${intentHash.slice(8, 12)}-5${intentHash.slice(13, 16)}-a${intentHash.slice(17, 20)}-${intentHash.slice(20, 32)}`;
+  return createRuntimeSalesCatalogOrder({ client: input.client, context: input.context, text: input.text, intentText,
+    selections: orderCatalogSelections, paymentPreference, orderId, confirmationPreviewId: confirmationPreview?.id ?? null });
+}
+
+/**
+ * Persists a confirmed cart as one order and prepares its payment. The order id
+ * is derived by the caller from what was confirmed, so a retried run or a
+ * repeated confirmation finds the same order instead of creating another.
+ */
+async function createRuntimeSalesCatalogOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  text: string;
+  intentText: string;
+  selections: RuntimeSalesCatalogOrderSelection[];
+  paymentPreference: SalesCatalogRuntimePaymentPreference | null;
+  orderId: string;
+  confirmationPreviewId: string | null;
+  variantsFromMentionOnly?: boolean;
+}): Promise<SalesCatalogPaymentLinkResult | null> {
+  const { intentText, paymentPreference, orderId } = input;
+  const orderCatalogSelections = input.selections;
+  const items = orderCatalogSelections.map((selection) => selection.item);
+  const latestInbound = findLatestInbound(input.context.messages);
+  const confirmationPreview = input.confirmationPreviewId ? { id: input.confirmationPreviewId } : null;
   const { data: existingData, error: existingOrderError } = await input.client
     .from("sales_catalog_orders")
     .select("id, total, status, payment_status, metadata")
@@ -11835,7 +11862,11 @@ async function recordSalesCatalogOrderIntent(input: {
     ?? extractRuntimeEmail(customerDataText);
   const customerDocument = normalizeRuntimeCustomerDocument(findString(leadMetadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document", "customer_cpf_cnpj"]))
     ?? extractRuntimeCustomerDocument(customerDataText);
-  const orderSelections = priceRuntimeSalesCatalogSelections(orderCatalogSelections, intentText, input.text);
+  // Tool-built carts carry each item's exact version in its own mention; the
+  // conversation text must not pick a variant for the other items.
+  const orderSelections = input.variantsFromMentionOnly
+    ? priceRuntimeSalesCatalogSelections(orderCatalogSelections, "", "")
+    : priceRuntimeSalesCatalogSelections(orderCatalogSelections, intentText, input.text);
   if (orderSelections.length > 100) return null;
   const primaryItem = orderSelections[0].item;
   const total = sumRuntimeOrderTotal(orderSelections);
@@ -12911,7 +12942,7 @@ async function finishRuntimeRevisionPaymentDelivery(client: SupabaseClient, cont
 // ---------------------------------------------------------------------------
 
 type RunContext = NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
-type OrderToolScope = { order: RuntimeSalesCatalogOrder };
+type OrderToolScope = { kind: "order"; order: RuntimeSalesCatalogOrder } | { kind: "cart" };
 type OrderToolDeferred = () => Promise<OutboundMessage>;
 type OrderToolCall = { name: string; ok: boolean; reason?: string };
 
@@ -12936,7 +12967,7 @@ function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
   // Custom compositions and repeated variants keep the legacy route and its human review.
   if (!order || order.items.some(line => line.foodSummary || !line.catalogItemId)
     || new Set(order.items.map(line => line.catalogItemId)).size !== order.items.length) return null;
-  return { order };
+  return { kind: "order", order };
 }
 
 const orderToolDeclarations = [
@@ -13003,7 +13034,9 @@ async function executeOrderTool(input: {
   token: string; phone: string; deferred: OrderToolDeferred[]; name: string; args: JsonRecord;
 }): Promise<JsonRecord> {
   const { client, context, latestInbound } = input;
-  const order = context.salesCatalogOrders.find(candidate => candidate.id === input.scope.order.id) ?? input.scope.order;
+  if (input.scope.kind === "cart") return executeCartTool(input);
+  const scopedOrder = input.scope.order;
+  const order = context.salesCatalogOrders.find(candidate => candidate.id === scopedOrder.id) ?? scopedOrder;
   const fail = (motivo: string) => ({ ok: false, motivo });
   // One payment access per reply: "confirmar" followed by "enviar" in the same
   // turn must not send two identical checkout buttons.
@@ -13120,7 +13153,7 @@ async function executeOrderTool(input: {
   return fail("Ferramenta desconhecida.");
 }
 
-const orderToolExecutingNames = new Set(["confirmar_alteracao", "trocar_forma_pagamento", "enviar_pagamento"]);
+const orderToolExecutingNames = new Set(["confirmar_alteracao", "trocar_forma_pagamento", "enviar_pagamento", "fechar_pedido"]);
 
 function claimsUnexecutedOrderAction(text: string, checkPromises = true) {
   const normalized = normalizeSearch(text);
@@ -13138,6 +13171,275 @@ function sumGeminiUsage(total: GeminiTokenUsage | null, next: GeminiTokenUsage |
     raw: { calls: [...(Array.isArray(total.raw.calls) ? total.raw.calls : [total.raw]), next.raw] } };
 }
 
+// ---------------------------------------------------------------------------
+// Cart tools (first purchase): the model builds the cart with exact product
+// ids, versions and pizza compositions; the server prices it, quotes delivery,
+// sends the official summary and creates the order only after acceptance.
+// Same order creation as the legacy route (createRuntimeSalesCatalogOrder).
+// ---------------------------------------------------------------------------
+
+type CartToolState = {
+  organization_id: string; conversation_id: string; instance_id: string;
+  items: Array<{ id: string; quantity: number; mention_text: string; food_units?: FoodUnitSelection[] }>;
+  preferred_method: SalesCatalogRuntimePaymentPreference | null;
+  fingerprint: string; preview_text: string; total: string; source_message_id: string; ready: boolean;
+};
+
+const cartToolStateKey = "checkout_tool_cart";
+
+function resolveCartToolScope(context: RunContext): OrderToolScope | null {
+  if (readRecord(context.instance.metadata)?.order_tools !== true) return null;
+  if (!runtimeAllowsCheckout(context) || !context.lead) return null;
+  // An order already in this conversation keeps its own route (billing data or order tools).
+  if (context.salesCatalogOrders.some(order => isCurrentRuntimeCheckoutOrder(context, order, true))) return null;
+  return { kind: "cart" };
+}
+
+function readCartToolState(context: RunContext): CartToolState | null {
+  const state = readRecord(readRecord(context.lead?.metadata)?.[cartToolStateKey]);
+  if (!state || state.organization_id !== context.organization.id || state.conversation_id !== context.conversationId
+    || state.instance_id !== context.instance.id || !Array.isArray(state.items)) return null;
+  return JSON.parse(JSON.stringify(state)) as CartToolState;
+}
+
+async function persistCartToolState(client: SupabaseClient, context: RunContext, state: CartToolState | null) {
+  if (!context.lead) return;
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => ({ metadata: { ...metadata, [cartToolStateKey]: state } }) });
+  context.lead.metadata = saved.metadata;
+}
+
+const cartToolDeclarations = [
+  { name: "buscar_produtos", description: "Procura produtos vendáveis no catálogo pelo nome, apelido ou descrição. Devolve produto_id, preço, versões e, em produtos com montagem (pizza), tamanhos, sabores e opções com seus ids.", parameters: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"] } },
+  { name: "ver_carrinho", description: "Mostra o resumo de pedido já enviado ao cliente (se houver), a forma de pagamento escolhida e quais dados de entrega e cobrança já foram informados ou faltam.", parameters: { type: "object", properties: {} } },
+  { name: "montar_pedido", description: "Monta o pedido com a lista COMPLETA de itens que o cliente quer comprar. O sistema calcula preços, entrega e total e envia ao cliente o resumo oficial para ele confirmar. Não cria o pedido.", parameters: { type: "object", properties: {
+    itens: { type: "array", items: { type: "object", properties: {
+      produto_id: { type: "string" }, quantidade: { type: "integer" },
+      versao_id: { type: "string", description: "Obrigatório quando o produto tem mais de uma versão (tamanho, cor...)." },
+      montagem: { type: "array", description: "Para produtos com montagem (pizza): uma entrada por unidade.", items: { type: "object", properties: {
+        tamanho_id: { type: "string" },
+        sabores: { type: "array", items: { type: "object", properties: { sabor_id: { type: "string" }, fracoes: { type: "integer" } }, required: ["sabor_id", "fracoes"] } },
+        opcoes: { type: "array", items: { type: "object", properties: { grupo_id: { type: "string" }, opcao_id: { type: "string" }, quantidade: { type: "integer" }, sabor_id: { type: "string" } }, required: ["grupo_id", "opcao_id"] } },
+        observacao: { type: "string" } }, required: ["tamanho_id", "sabores"] } } },
+      required: ["produto_id", "quantidade"] } },
+    forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["itens"] } },
+  { name: "fechar_pedido", description: "Cria o pedido do resumo já enviado e prepara o pagamento. Use somente quando a última mensagem do cliente aceitou esse resumo.", parameters: { type: "object", properties: {
+    codigo_resumo: { type: "string" }, forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["codigo_resumo"] } },
+  { name: "mostrar_produto", description: "Envia ao cliente a primeira foto do produto e o botão da página com todas as fotos e detalhes.", parameters: { type: "object", properties: { produto_id: { type: "string" } }, required: ["produto_id"] } },
+];
+
+const cartToolInstructionLines = [
+  "FERRAMENTAS DE PEDIDO (NOVA COMPRA)",
+  "Valores, taxa de entrega, frete e total vêm sempre das ferramentas; não calcule nem prometa um total por conta própria.",
+  "Quando o cliente escolher o que quer comprar, chame montar_pedido com a lista completa de itens usando o produto_id exato (do catálogo ou de buscar_produtos). Em produtos com versões informe versao_id; em produtos com montagem (pizza) informe tamanho, sabores e opções de cada unidade. Se houver dois produtos ou versões parecidos, pergunte qual antes de montar.",
+  "Se montar_pedido disser que falta endereço ou dados, peça ao cliente tudo o que falta em UMA mensagem.",
+  "Depois que montar_pedido retornar ok, escreva só uma frase curta de transição. O sistema envia o resumo oficial; não repita itens nem valores.",
+  "Chame fechar_pedido somente quando a última mensagem do cliente aceitar o resumo enviado. Se a forma de pagamento ainda não foi escolhida, pergunte Pix ou cartão e informe em fechar_pedido.",
+  "Nunca diga que fechou o pedido, gerou ou enviou o pagamento se fechar_pedido não retornou ok. Não escreva links: fotos, páginas e pagamento são enviados pelo sistema (use mostrar_produto para fotos).",
+];
+
+function describeFoodCompositionForTool(item: RuntimeSalesCatalogItem) {
+  const policy = item.foodComposition;
+  if (!policy?.enabled) return undefined;
+  return {
+    regra_preco: policy.pricing,
+    tamanhos: policy.sizes.filter(size => size.active).map(size => ({ id: size.id, nome: size.name, fracoes: size.portions, max_sabores: size.maxFlavors })),
+    sabores: policy.flavors.filter(flavor => flavor.active).slice(0, 80).map(flavor => ({ id: flavor.id, nome: flavor.name })),
+    opcoes: policy.groups.map(group => ({ grupo_id: group.id, nome: group.name, minimo: group.min, maximo: group.max,
+      itens: group.options.filter(option => option.active).slice(0, 30).map(option => ({ id: option.id, nome: option.name, preco: option.price })) })),
+  };
+}
+
+function cartToolFoodUnits(value: unknown): FoodUnitSelection[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.map(entry => {
+    const unit = readRecord(entry) ?? {};
+    return {
+      sizeId: asString(unit.tamanho_id) ?? "",
+      flavors: (Array.isArray(unit.sabores) ? unit.sabores : []).map(flavor => ({ flavorId: asString(readRecord(flavor)?.sabor_id) ?? "", portions: Number(readRecord(flavor)?.fracoes) })),
+      options: (Array.isArray(unit.opcoes) ? unit.opcoes : []).map(option => {
+        const row = readRecord(option) ?? {};
+        return { groupId: asString(row.grupo_id) ?? "", optionId: asString(row.opcao_id) ?? "", quantity: Number(row.quantidade ?? 1), flavorId: asString(row.sabor_id) };
+      }),
+      note: (asString(unit.observacao) ?? "").slice(0, 300),
+    };
+  });
+}
+
+function cartSelectionsFromState(context: RunContext, state: CartToolState): RuntimeSalesCatalogOrderSelection[] | null {
+  const selections: RuntimeSalesCatalogOrderSelection[] = [];
+  for (const line of state.items) {
+    const item = context.salesCatalog.find(candidate => candidate.id === line.id);
+    if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout") return null;
+    selections.push({ item, quantity: line.quantity, mentionText: line.mention_text, source: "cart_draft", quantitySignal: null, fractionalQuantity: null,
+      ...(line.food_units ? { foodUnits: line.food_units } : {}) });
+  }
+  return selections;
+}
+
+/** Prices a cart and quotes its delivery exactly as the order will be created. */
+function quoteCartToolSelections(context: RunContext, selections: RuntimeSalesCatalogOrderSelection[], latestText: string)
+  : { ok: true; shipping: ReturnType<typeof resolveInitialSalesCatalogOrderShipping>; total: string; core: string; lines: string[]; estimate: string | null }
+  | { ok: false; motivo: string; faltam?: string[] } {
+  const priced = priceRuntimeSalesCatalogSelections(selections, "", "");
+  const subtotal = sumRuntimeOrderTotal(priced);
+  if (subtotal === null) return { ok: false, motivo: "Um item está sem preço cadastrado; encaminhe ao responsável." };
+  const physical = hasPhysicalSalesCatalogSelection(priced);
+  const shipping = physical ? resolveInitialSalesCatalogOrderShipping({ context, selections: priced, intentText: latestText }) : null;
+  if (physical && !shipping) {
+    if (!canResolveSalesCatalogDeliveryForSelections(context, priced)) return { ok: false, motivo: "A loja não tem entrega ou retirada configurada para este pedido; encaminhe ao responsável." };
+    const shippingText = buildSalesCatalogShippingIntentText(context, latestText);
+    const address = extractRuntimeAddress(null, shippingText);
+    const cep = extractFirstBrazilianCep(shippingText);
+    const billing = missingCheckoutBillingLabels(context.lead);
+    if (!address && !cep) return { ok: false, motivo: "Falta o endereço de entrega.", faltam: ["endereço completo com rua, número, bairro, cidade e CEP", ...billing] };
+    const quote = quoteOrderDelivery({ entries: selections.map(selection => ({ item: selection.item, quantity: selection.quantity })),
+      settings: context.salesCatalogShippingSettings, cep: cep ?? "", address: address ?? shippingText, subtotal: normalizeCurrencyAmount(subtotal) ?? 0 });
+    return { ok: false, motivo: quote.error ?? "Não há entrega disponível para esse endereço. Ofereça retirada, se existir, ou outro endereço." };
+  }
+  const operation = evaluateOrderOperation(context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(priced.map(selection => selection.item), shipping?.shippingMethod));
+  if (!operation.allowed) return { ok: false, motivo: operation.message ?? "A loja não está recebendo pedidos agora." };
+  const total = shipping ? addRuntimeMoney(subtotal, shipping.shippingTotal) ?? subtotal : subtotal;
+  const rows = buildRuntimeSalesCatalogOrderRows(priced, context.organization.id, "preview");
+  const core = createHash("sha256").update(JSON.stringify({ rows, shipping: shipping ? [shipping.shippingTotal, shipping.shippingMethod, shipping.destinationCep, shipping.destinationAddress] : null, total })).digest("hex");
+  return { ok: true, shipping, total, core, lines: selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line), estimate: operation.estimate ?? null };
+}
+
+async function executeCartTool(input: {
+  client: SupabaseClient; context: RunContext; latestInbound: ConversationMessageRow;
+  token: string; phone: string; deferred: OrderToolDeferred[]; name: string; args: JsonRecord;
+}): Promise<JsonRecord> {
+  const { client, context, latestInbound } = input;
+  const fail = (motivo: string, extra: JsonRecord = {}) => ({ ok: false, motivo, ...extra });
+  const latestText = latestInbound.text_content ?? "";
+  const choices = getEnabledSalesCatalogRuntimePaymentChoices(context.salesCatalogSettings);
+
+  if (input.name === "buscar_produtos") {
+    const text = asString(input.args.texto);
+    if (!text) return fail("Informe o texto da busca.");
+    const produtos = searchOrderToolProducts(context, text).map(product => {
+      const item = context.salesCatalog.find(candidate => candidate.id === product.produto_id);
+      const montagem = item ? describeFoodCompositionForTool(item) : undefined;
+      return montagem ? { ...product, montagem } : product;
+    });
+    return produtos.length ? { ok: true, produtos } : fail("Nenhum produto vendável encontrado com esse nome.");
+  }
+  if (input.name === "ver_carrinho") {
+    const state = readCartToolState(context);
+    const address = readLeadSavedDeliveryAddress(context.lead?.metadata);
+    return { ok: true, resumo_enviado: state?.ready ? { codigo_resumo: state.fingerprint.slice(0, 12), resumo: state.preview_text } : null,
+      forma_pagamento: state?.preferred_method ?? resolveSalesCatalogConfirmedPaymentPreference(context, latestText),
+      formas_disponiveis: choices.map(choice => choice.preference),
+      endereco_salvo: address ? formatLeadSavedDeliveryAddress(address) : null,
+      dados_de_cobranca_faltando: missingCheckoutBillingLabels(context.lead) };
+  }
+  if (input.name === "mostrar_produto") {
+    const item = context.salesCatalog.find(candidate => candidate.id === asString(input.args.produto_id));
+    if (!item || !isSalesCatalogItemAvailableForDetails(item)) return fail("Produto não encontrado.");
+    const attachments = collectSalesCatalogAttachments([item]).slice(0, 1);
+    input.deferred.push(async () => {
+      const media = attachments.length ? await sendSalesCatalogMediaAttachments({ client, context, token: input.token, phone: input.phone,
+        attachments, persistedChunks: new Set(), startChunkIndex: 60 }) : [];
+      const page = await maybeSendSalesCatalogProductPageLinks({ client, context, token: input.token, phone: input.phone, latestInbound,
+        items: [item], chunkIndex: 61, chunksTotal: 61, persistedChunks: new Set() });
+      return page ?? media[0] ?? { text: "", mode: "text", providerResponse: null, persisted: true };
+    });
+    return { ok: true, observacao: "A foto e o botão da página serão enviados logo após a sua mensagem." };
+  }
+  if (input.name === "montar_pedido") {
+    const lines = Array.isArray(input.args.itens) ? input.args.itens.map(readRecord) : [];
+    if (!lines.length || lines.length > salesCatalogCheckoutItemLimit) return fail(`Informe de 1 a ${salesCatalogCheckoutItemLimit} itens.`);
+    const selections: RuntimeSalesCatalogOrderSelection[] = [];
+    for (const line of lines) {
+      const id = asString(line?.produto_id);
+      const item = id ? context.salesCatalog.find(candidate => candidate.id === id) : null;
+      if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout") return fail(`Produto ${id ?? "sem id"} não está disponível para venda.`);
+      if (selections.some(selection => selection.item.id === item.id)) return fail(`${item.title} aparece repetido; informe uma linha por produto.`);
+      let quantity = typeof line?.quantidade === "number" ? line.quantidade : NaN;
+      let mention = item.title;
+      let foodUnits: FoodUnitSelection[] | undefined;
+      if (item.foodComposition?.enabled) {
+        const units = cartToolFoodUnits(line?.montagem);
+        if (!units?.length) return fail(`${item.title} precisa da montagem de cada unidade (tamanho e sabores). Consulte buscar_produtos.`);
+        try { quoteFoodComposition(item.foodComposition, units, units.length); }
+        catch (error) { return fail(`${item.title}: ${error instanceof Error ? error.message : "montagem inválida"}`); }
+        foodUnits = units;
+        quantity = units.length;
+      } else {
+        const skuId = asString(line?.versao_id);
+        if (skuId) {
+          const sku = item.skus.find(candidate => candidate.id === skuId && candidate.status === "active");
+          if (!sku) return fail(`Versão inválida para ${item.title}.`);
+          mention = [item.title, sku.title, sku.skuCode].filter(Boolean).join(" ");
+        } else if (needsRuntimeRevisionSkuChoice(item, mention)) {
+          const options = item.skus.filter(sku => sku.status === "active").slice(0, 6).map(sku => `${sku.id}: ${[sku.title, sku.skuCode].filter(Boolean).join(" — ")}`);
+          return fail(`${item.title} tem versões; pergunte ao cliente qual deseja e informe versao_id. Opções: ${options.join("; ")}.`);
+        }
+      }
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return fail(`Quantidade inválida para ${item.title}.`);
+      selections.push({ item, quantity, mentionText: mention, source: "cart_draft", quantitySignal: null, fractionalQuantity: null, ...(foodUnits ? { foodUnits } : {}) });
+    }
+    const requested = input.args.forma_pagamento === undefined ? null : assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
+    if (typeof requested === "string" && requested !== "pix" && requested !== "card") return fail(requested);
+    const quote = quoteCartToolSelections(context, selections, latestText);
+    if (!quote.ok) return fail(quote.motivo, quote.faltam ? { faltam: quote.faltam } : {});
+    const method = (requested as SalesCatalogRuntimePaymentPreference | null) ?? resolveSalesCatalogConfirmedPaymentPreference(context, latestText);
+    const previewText = ["Antes de fechar, confirma se o pedido ficou assim:", quote.lines.join("\n"),
+      buildSalesCatalogOrderConfirmationShippingLine(quote.shipping), quote.estimate ?? "", `Total: R$ ${formatRuntimeOrderMoney(normalizeCurrencyAmount(quote.total) ?? 0)}.`,
+      quote.shipping?.destinationAddress ? `Entrega: ${quote.shipping.destinationAddress}.` : "",
+      method ? `Pagamento: ${method === "card" ? "cartão" : "Pix"}.` : "",
+      method ? "Posso fechar seu pedido e gerar o pagamento?" : "Se estiver tudo certo, me diz se prefere pagar no Pix ou no cartão.",
+    ].filter(Boolean).join("\n\n");
+    const state: CartToolState = { organization_id: context.organization.id, conversation_id: context.conversationId, instance_id: context.instance.id,
+      items: selections.map(selection => ({ id: selection.item.id, quantity: selection.quantity, mention_text: selection.mentionText ?? selection.item.title,
+        ...(selection.foodUnits ? { food_units: selection.foodUnits } : {}) })),
+      preferred_method: method, fingerprint: quote.core, preview_text: previewText, total: quote.total, source_message_id: latestInbound.id, ready: false };
+    await persistCartToolState(client, context, state);
+    input.deferred.push(async () => {
+      const providerResponse = await sendWhatsappText({ credentials: context.credentials, token: input.token, phone: input.phone,
+        text: previewText, trackId: `cart_tool_preview_${context.run.id}` });
+      const outbound: OutboundMessage = { text: previewText, mode: "text", providerResponse, persisted: true,
+        runtimeEvent: { type: "cart_tool_preview", fingerprint: quote.core } };
+      await saveOutboundMessage(client, context, outbound);
+      await persistCartToolState(client, context, { ...state, ready: true });
+      return outbound;
+    });
+    return { ok: true, codigo_resumo: quote.core.slice(0, 12), total: quote.total, forma_pagamento: method, resumo: previewText,
+      observacao: "O resumo oficial será enviado ao cliente logo após a sua mensagem. Aguarde a resposta dele antes de fechar." };
+  }
+  if (input.name === "fechar_pedido") {
+    const code = asString(input.args.codigo_resumo) ?? "";
+    const state = readCartToolState(context);
+    if (!state?.ready || code.length < 8 || !state.fingerprint.startsWith(code)) return fail("Não há resumo enviado com esse código aguardando confirmação. Consulte ver_carrinho.");
+    if (state.source_message_id === latestInbound.id) return fail("O resumo acabou de ser montado; aguarde o cliente responder.");
+    const requested = input.args.forma_pagamento === undefined ? null : assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
+    if (typeof requested === "string" && requested !== "pix" && requested !== "card") return fail(requested);
+    const method = (requested as SalesCatalogRuntimePaymentPreference | null) ?? state.preferred_method
+      ?? resolveSalesCatalogConfirmedPaymentPreference(context, latestText) ?? (choices.length === 1 ? choices[0].preference : null);
+    if (!method) return fail("A forma de pagamento ainda não foi escolhida. Pergunte Pix ou cartão e chame fechar_pedido com forma_pagamento.");
+    const selections = cartSelectionsFromState(context, state);
+    if (!selections) return fail("Um item do resumo não está mais disponível. Monte o pedido de novo.");
+    const quote = quoteCartToolSelections(context, selections, latestText);
+    if (!quote.ok || quote.core !== state.fingerprint) return fail("Os valores ou a entrega mudaram desde o resumo. Monte o pedido de novo.");
+    const hash = createHash("sha256").update(JSON.stringify([context.organization.id, context.lead?.id, context.conversationId, state.fingerprint])).digest("hex");
+    const orderId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    const payment = await createRuntimeSalesCatalogOrder({ client, context, text: "", intentText: latestText, selections,
+      paymentPreference: method, orderId, confirmationPreviewId: null, variantsFromMentionOnly: true });
+    if (!payment) return fail("Não consegui criar o pedido com segurança agora. Informe que a equipe vai conferir.");
+    await persistCartToolState(client, context, null);
+    const queued = input.deferred as OrderToolDeferred[] & { paymentQueued?: boolean };
+    if (!queued.paymentQueued) {
+      queued.paymentQueued = true;
+      input.deferred.push(() => sendSalesCatalogPaymentLink({ client, context, token: input.token, phone: input.phone, payment }));
+    }
+    return { ok: true, total: quote.total, forma_pagamento: method,
+      observacao: payment.paymentDeferred ? "Pedido criado. Faltam dados de cobrança; o sistema pede ao cliente logo após a sua mensagem." : "Pedido criado. O acesso ao pagamento será enviado logo após a sua mensagem." };
+  }
+  return fail("Ferramenta desconhecida.");
+}
+
+
 /** One attendance turn with order tools. Side effects run in tools; customer messages are deferred until after the reply. */
 async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentResponse>[0], "credentials" | "agent" | "behavior" | "messages" | "userText"> & {
   systemInstruction: string;
@@ -13146,7 +13448,8 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
   const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
-  const systemText = [input.systemInstruction, "", ...orderToolInstructionLines].join("\n");
+  const cart = input.scope.kind === "cart";
+  const systemText = [input.systemInstruction, "", ...(cart ? cartToolInstructionLines : orderToolInstructionLines)].join("\n");
   const contents: JsonRecord[] = buildGeminiContents(input.messages, input.userText, input.latestInbound.id, input.userText) as JsonRecord[];
   const deferred: OrderToolDeferred[] = [];
   const calls: OrderToolCall[] = [];
@@ -13156,7 +13459,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     const response = await fetchWithTimeout(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
       body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
-        tools: [{ functionDeclarations: orderToolDeclarations }], toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+        tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }], toolConfig: { functionCallingConfig: { mode: "AUTO" } },
         generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
     }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
     const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
@@ -13184,7 +13487,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     // A claimed action needs a successful tool in this same turn.
     // "Done" needs an executing tool; a proposal only justifies announcing the summary.
     const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
-    const proposed = calls.some(call => call.ok && call.name === "propor_alteracao");
+    const proposed = calls.some(call => call.ok && (call.name === "propor_alteracao" || call.name === "montar_pedido"));
     if (!corrected && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
       corrected = true;
       contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
@@ -13201,8 +13504,26 @@ async function sendOrderToolTurn(input: {
   client: SupabaseClient; context: RunContext; token: string; phone: string; text: string; deferred: OrderToolDeferred[]; latestInbound: ConversationMessageRow;
 }) {
   const outbound: OutboundMessage[] = [];
-  const chunks = input.text.split(/\n{2,}/).map(chunk => chunk.trim()).filter(Boolean).slice(0, 4);
+  // Product tags from the catalog become readable mentions, without repeating a price already in the prose.
+  const rendered = renderSalesCatalogTags(input.text, input.context.salesCatalog);
+  const text = sanitizeSalesCatalogCustomerText(dropRepeatedCatalogMentionLines(rendered.text, rendered.items, input.context.messages),
+    input.context.salesCatalog.length > 0);
+  // Same voice rule as the legacy sender: a conversational reply may go as audio;
+  // a turn that sends a summary or payment stays in text, like any order step.
+  const delivery = resolveOutboundDelivery(input.context, input.latestInbound, text, input.deferred.length > 0);
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  if (delivery.shouldSendAudio) {
+    const persisted = await loadPersistedOutboundChunks(input.client, input.context.run.id, "audio");
+    for (const [index, chunk] of delivery.chunks.entries()) {
+      if (persisted.has(index + 1)) continue;
+      await setChatPresence(input.context.credentials, input.token, input.phone, "recording", 60000);
+      outbound.push(await sendAudioOutboundChunk({ client: input.client, context: input.context, token: input.token, phone: input.phone,
+        text: chunk, chunkIndex: index + 1, chunksTotal: delivery.chunks.length, mentionMessage: input.latestInbound }));
+    }
+    for (const action of input.deferred) outbound.push(await action());
+    return outbound;
+  }
+  const chunks = delivery.chunks.map(chunk => chunk.trim()).filter(Boolean).slice(0, 4);
   for (const [chunkIndex, text] of chunks.entries()) {
     const message = await sendTextOutboundChunk({ client: input.client, context: input.context, token: input.token, phone: input.phone,
       text, chunkIndex, chunksTotal: chunks.length, trackIdPrefix: "order_tool_reply" });
