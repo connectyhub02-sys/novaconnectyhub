@@ -113,11 +113,19 @@ export function findLeadNameEvidence(messages: IdentityMessage[]) {
     const message = messages[index];
     if (message.direction !== "inbound") continue;
     const text = (message.text_content ?? "").trim();
-    const declared = text.match(/^(?:(?:oi|ol[aá]|bom dia|boa tarde|boa noite)[,! .]+)?(?:meu nome(?: completo)?\s*(?:[ée]|eh|:)\s*|(?:eu )?me chamo\s+|pode me chamar de\s+)([\p{L}][\p{L} '\u2019-]{1,79})(?=[,.;!\n]|$)/iu)?.[1];
+    // Spoken openings ("Aí, meu nome é…", "É, me chamo…") may precede the declaration.
+    const declaration = text.match(/^(?:(?:oi|ol[aá]|bom dia|boa tarde|boa noite|a[ií]|ent[aã]o|opa|ah|[eé]|bom|fala|beleza)[,! .]+){0,3}(?:meu nome(?: completo)?\s*(?:[ée]|eh|:)\s*|(?:eu )?me chamo\s+|pode me chamar de\s+)([\p{L}][\p{L} '’-]{1,79})(?=[,.;!\n]|$)/iu);
+    let declared = declaration?.[1];
+    // "Magno, Magno Macedo": a repeated first name followed by the fuller name.
+    const fuller = declaration ? text.slice(declaration[0].length).match(/^,\s*([\p{L}][\p{L} '’-]{1,79})(?=[,.;!\n]|$)/u)?.[1] : null;
+    if (declared && fuller && normalizeSearchText(fuller).split(" ")[0] === normalizeSearchText(declared).split(" ")[0]
+      && fuller.trim().split(/\s+/).length > declared.trim().split(/\s+/).length) declared = fuller;
     // A single response can be split across several outbound bubbles. Never cross
     // another inbound reply: a name request answered or declined is no longer current.
+    // An empty inbound (an audio not yet transcribed) is not a reply.
     const requestParts: string[] = [];
     for (let prior = index - 1; prior >= 0 && requestParts.length < 8; prior--) {
+      if (messages[prior].direction === "inbound" && !(messages[prior].text_content ?? "").trim()) continue;
       if (messages[prior].direction !== "outbound") break;
       requestParts.unshift(messages[prior].text_content ?? "");
     }

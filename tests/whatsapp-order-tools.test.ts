@@ -128,6 +128,54 @@ describe("first purchase payment choice (Gustavo, 23/09 20:58)", () => {
   });
 });
 
+describe("payment method chosen the night before (Gustavo, 23/09 21:10 → 24/09 09:28)", () => {
+  it("remembers the choice instead of asking 'Pix ou cartão?' again", () => {
+    const s = scenario();
+    s.ctx.salesCatalogOrders = [];
+    s.ctx.lead.metadata = {};
+    const at = (hoursAgo: number) => new Date(Date.now() - hoursAgo * 3600000).toISOString();
+    // The real sequence, relative to the final "Sim" (09:28:57).
+    const line = (direction: string, text: string, hoursAgo: number) => ({ ...s.message(direction, text), occurred_at: at(hoursAgo) });
+    s.ctx.messages = [
+      line("outbound", "Como temos mais de uma forma de pagamento (Pix e Cartão de crédito parcelado em até 12x), qual você prefere para este pedido?", 12.51),
+      line("inbound", "cartão", 12.5),
+      line("outbound", "O pagamento ainda não foi enviado. Preciso conferir qual pedido você quer retomar: me confirma os produtos e as quantidades?", 12.49),
+      line("inbound", "Cartão", 12.31),
+      line("outbound", "Perfeito, Magno! Vamos no cartão então.", 12.3),
+      line("outbound", "Para eu montar o seu pedido e mandar o link seguro do cartão, me passa só o seu e-mail e o seu CPF, por favor?", 12.29),
+      line("outbound", "Olá, Magno! Consegue me passar o seu e-mail e o seu CPF para eu gerar o link do cartão para você?", 0.38),
+      line("inbound", "cliente@example.com\n\n00000000000", 0.06),
+      line("outbound", "Show, Magno! Já salvei seu e-mail e CPF aqui.", 0.05),
+      line("outbound", "Agora, me confirma seu endereço completo com CEP, rua, número, bairro e cidade, por favor?", 0.045),
+      line("inbound", "Rua das Flores numero 42 cep 88330786 centro de balneário camboriu", 0.02),
+      line("outbound", "Antes de fechar, confirma se o pedido ficou assim:\n- 2x Pizza de queijo - R$ 120,00\n- Frete: R$ 10,00\nTotal: R$ 130,00.\nPosso fechar seu pedido e gerar o pagamento?", 0.01),
+      line("inbound", "Sim", 0),
+    ];
+    expect(s.call("resolveSalesCatalogConfirmedPaymentPreference", s.ctx, "Sim")).toBe("card");
+  });
+});
+
+describe("fewer repetitions in the sales conversation", () => {
+  it("drops a product line that repeats the prose price or a line already sent (Gustavo, 23/09 20:56)", () => {
+    const s = scenario();
+    const pizza = s.ctx.salesCatalog[0];
+    const card = s.call<string>("formatSalesCatalogCustomerMention", pizza);
+    const reply = `Excelente escolha! Tenho a Pizza de queijo por R$ 60,00.\n${card}\nQuer levar 1 ou 2?`;
+    expect(s.call<string>("dropRepeatedCatalogMentionLines", reply, [pizza], [])).not.toContain(card);
+    const alreadySent = [s.message("outbound", card)];
+    expect(s.call<string>("dropRepeatedCatalogMentionLines", `Olha essa opção:\n${card}`, [pizza], alreadySent)).not.toContain(card);
+    expect(s.call<string>("dropRepeatedCatalogMentionLines", `Olha essa opção:\n${card}`, [pizza], [])).toContain(card);
+  });
+
+  it("tells the agent what the customer already gave and to ask the rest at once", () => {
+    const s = scenario();
+    const lines = s.call<string[]>("buildCustomerCheckoutDataLines", { id: "lead", display_name: "Magno", metadata: { email: "cliente@example.com", cpf: "529.982.247-25" } }).join("\n");
+    expect(lines).toContain("Já informados: e-mail, CPF");
+    expect(lines).toContain("Faltam: nome completo, endereço completo com CEP");
+    expect(lines).toContain("UMA única mensagem");
+  });
+});
+
 describe("order tools conversation loop", () => {
   const turn = (t: ReturnType<typeof tools>) => t.call<Promise<{ response: { text: string }; deferred: Deferred[]; calls: Row[] }>>("runOrderToolTurn", {
     systemInstruction: "Você é o agente de teste.", credentials: { apiKey: "not-real", model: "gemini-test" }, agent: { id: "agent", name: "Agente", model_id: "gemini-test" },

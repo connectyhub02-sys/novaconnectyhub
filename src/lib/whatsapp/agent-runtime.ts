@@ -4430,6 +4430,27 @@ function extractGroundingKeywords(value: string) {
 }
 
 /**
+ * What the checkout still needs from this customer. A seller asks once, for
+ * everything missing, and never again for what the customer already gave.
+ */
+function buildCustomerCheckoutDataLines(lead: LeadRow | null) {
+  const metadata = lead?.metadata ?? null;
+  const name = lead ? resolveLeadPersonalName({ displayName: lead.display_name, metadata }) : null;
+  const fullName = name && name.trim().split(/\s+/).length >= 2 ? name : null;
+  const email = normalizeRuntimeEmail(findString(metadata, ["email", "customer_email", "lead_email"]));
+  const document = normalizeRuntimeCustomerDocument(findString(metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document"]));
+  const address = readLeadSavedDeliveryAddress(metadata);
+  const known = [fullName ? `nome completo (${fullName})` : null, email ? "e-mail" : null, document ? "CPF" : null, address ? "endereço de entrega com CEP" : null].filter(Boolean);
+  const missing = [fullName ? null : "nome completo", email ? null : "e-mail", document ? null : "CPF", address ? null : "endereço completo com CEP"].filter(Boolean);
+  return [
+    "DADOS DO CLIENTE PARA FECHAR O PEDIDO",
+    known.length ? `Já informados: ${known.join(", ")}. Nunca peça de novo um dado já informado.` : "",
+    missing.length ? `Faltam: ${missing.join(", ")}. Quando o cliente decidir comprar, peça todos os que faltam em UMA única mensagem, em vez de um por vez.` : "Todos os dados para o pagamento já foram informados.",
+    "Depois que o cliente confirmar o resumo do pedido, não repita o resumo: siga direto para o pagamento.",
+  ].filter(Boolean);
+}
+
+/**
  * The agent is taking over a conversation a person from the company was
  * conducting. Continue it; never restart it or swap the company's role.
  */
@@ -4597,6 +4618,7 @@ function buildSystemInstruction(input: {
     ...buildHumanHandbackInstruction(input.conversationMetadata, input.messages),
     ...buildSmallTalkContext(input.behavior),
     ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
+    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCustomerCheckoutDataLines(input.lead) : []),
     ...buildConfiguredNicheCareLines(input.agent),
     ...buildActivityCommerceInstruction(commerceJourney),
     "",
@@ -7632,6 +7654,23 @@ async function resolveInboundUserText(input: {
   const text = latestInbound.text_content?.trim();
   const mediaKind = detectInboundMediaKind(latestInbound);
 
+  // An audio followed quickly by a text is answered in the same grouped turn.
+  // Transcribe it too, or what the lead said there is lost ("como te falei").
+  if (input.context.behavior.audioTranscription) {
+    const index = input.context.messages.findIndex(message => message.id === latestInbound.id);
+    const pendingAudios: ConversationMessageRow[] = [];
+    for (let prior = index - 1; prior >= 0 && pendingAudios.length < 3; prior--) {
+      const message = input.context.messages[prior];
+      if (message.direction !== "inbound") break;
+      if (isAudioMessage(message) && !message.text_content?.trim()) pendingAudios.unshift(message);
+    }
+    for (const audio of pendingAudios) {
+      await transcribeAndPersistInboundAudio({ ...input, latestInbound: audio }).catch(async (error: unknown) => {
+        await persistAudioTranscriptionFailure(input.client, input.context, audio, error);
+      });
+    }
+  }
+
   if (input.context.behavior.audioTranscription && isAudioMessage(latestInbound)) {
     const transcript = await transcribeAndPersistInboundAudio(input).catch(async (error: unknown) => {
       await persistAudioTranscriptionFailure(input.client, input.context, latestInbound, error);
@@ -8234,7 +8273,8 @@ async function sendAgentResponse(input: {
     agent: context.agent,
   });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
-  const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
+  const customerCatalogText = sanitizeSalesCatalogCustomerText(
+    dropRepeatedCatalogMentionLines(renderedCatalog.text, renderedCatalog.items, context.messages), context.salesCatalog.length > 0);
   const budgetOnly = isCommerceBudgetStatement(buildSalesCatalogOrderIntentText(latestInbound, "", context));
   const safeCatalogText = hasCheckoutActionClaim(customerCatalogText) && (!checkoutAllowed || budgetOnly)
     ? checkoutAllowed
@@ -9185,6 +9225,29 @@ function verifiedAssistantLinkText(text: string, context: NonNullable<Awaited<Re
   }).replace(/\[([^\]]+)\]\(\s*\)/g, "$1").replace(/\(\s*\)/g, "").trim();
 }
 
+/**
+ * A standalone "Produto - R$ preço" line is dropped when it only repeats: the
+ * same line was sent in the recent conversation, or this reply already names
+ * the product with its price in the prose.
+ */
+function dropRepeatedCatalogMentionLines(text: string, items: RuntimeSalesCatalogItem[], messages: ConversationMessageRow[]) {
+  if (!items.length) return text;
+  const recent = messages.filter(message => message.direction === "outbound").slice(-12)
+    .map(message => normalizeSearch(message.text_content ?? ""));
+  const lines = text.split("\n");
+  const kept = lines.filter((line, index) => {
+    const item = items.find(candidate => line.trim() === formatSalesCatalogCustomerMention(candidate));
+    if (!item) return true;
+    const mention = normalizeSearch(line);
+    if (recent.some(previous => previous.includes(mention))) return false;
+    const rest = normalizeSearch(lines.filter((_, other) => other !== index).join(" "));
+    const price = normalizeSearch(line.split(" - R$ ").at(1) ?? "");
+    const firstWord = normalizeSearch(item.title).split(" ")[0] ?? "";
+    return !(price && firstWord && rest.includes(price) && rest.includes(firstWord));
+  });
+  return kept.length === lines.length ? text : kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) {
   let rendered = text;
   const selected = new Map<string, RuntimeSalesCatalogItem>();
@@ -9465,6 +9528,7 @@ const salesCatalogCartHistoryMessageLimit = 18;
 const salesCatalogCheckoutItemLimit = 10;
 const salesCatalogCartHistoryWindowMs = 2 * 60 * 60 * 1000;
 const salesCatalogCheckoutConfirmationWindowMs = 2 * 60 * 60 * 1000;
+const salesCatalogPaymentPreferenceMemoryMs = 24 * 60 * 60 * 1000;
 
 function resolveSalesCatalogOrderSelections(input: { context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>; currentItems: RuntimeSalesCatalogItem[]; responseText: string; intentText: string }): RuntimeSalesCatalogOrderSelection[] {
   const selections = resolveBaseSalesCatalogOrderSelections(input);
@@ -10069,7 +10133,9 @@ function detectRecentSalesCatalogPaymentPreference(
       return Number.isFinite(occurredAt)
         && (!cartBoundaryMs || occurredAt > cartBoundaryMs)
         && occurredAt <= latestInboundMs
-        && latestInboundMs - occurredAt <= salesCatalogCheckoutConfirmationWindowMs;
+        // A method chosen last night still holds this morning; a new purchase
+        // marker (cartBoundaryMs) is what resets it, not the clock.
+        && latestInboundMs - occurredAt <= salesCatalogPaymentPreferenceMemoryMs;
     })
     .sort((a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at))
     .filter((message) => resolveSalesCatalogPaymentMethodRequest(message.text_content ?? "")

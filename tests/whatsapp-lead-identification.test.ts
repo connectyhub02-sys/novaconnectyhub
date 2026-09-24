@@ -30,6 +30,12 @@ describe("shared lead identification", () => {
     const question = msg("outbound", "Como posso te chamar? Me diz também se você procura um imóvel para morar ou investir.", "question");
     expect(findLeadNameEvidence([question, msg("inbound", text)])).toBeNull();
   });
+  it("keeps the full name from a spoken declaration after an untranscribed audio (Gustavo, 23/09 20:49)", () => {
+    const messages = [msg("outbound", "Qual o seu nome? Só para eu atualizar seu cadastro por aqui.", "question"), msg("inbound", "", "audio"),
+      msg("inbound", "Aí, meu nome é Magno, Magno Macedo.")];
+    expect(findLeadNameEvidence(messages)?.name).toBe("Magno Macedo");
+    expect(findLeadNameEvidence([msg("outbound", "Qual o seu nome?", "q"), msg("inbound", "", "audio"), msg("inbound", "Magno Macedo")])?.name).toBe("Magno Macedo");
+  });
   it.each(["Magno", "Maria da Silva", "João dos Santos"])("still accepts a real name: %s", name => {
     expect(findLeadNameEvidence([msg("outbound", "Como posso te chamar?", "question"), msg("inbound", name)])?.name).toBe(name);
   });
