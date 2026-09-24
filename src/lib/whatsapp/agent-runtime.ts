@@ -12744,6 +12744,12 @@ function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
     && order.conversationId === context.conversationId && order.leadId === context.lead!.id
     && isCurrentRuntimeCheckoutOrder(context, order) && isEditableCheckoutOrder(order) && !order.checkoutPaymentLock);
   const order = editable.find(candidate => candidate.id === activeId) ?? (editable.length === 1 ? editable[0] : null);
+  // The first payment is completed by the legacy route: it collects missing
+  // billing data (name, CPF) and generates the payment as soon as it arrives.
+  // Tools take over only once the payment access was actually delivered.
+  const delivered = order && (progress?.order_id === order.id && typeof progress.stage === "string"
+    ? progress.stage === "payment_sent" : Boolean(order.latestPaymentSessionId));
+  if (!delivered) return null;
   // Custom compositions and repeated variants keep the legacy route and its human review.
   if (!order || order.items.some(line => line.foodSummary || !line.catalogItemId)
     || new Set(order.items.map(line => line.catalogItemId)).size !== order.items.length) return null;
@@ -12758,7 +12764,7 @@ const orderToolDeclarations = [
     forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["itens"] } },
   { name: "confirmar_alteracao", description: "Aplica a proposta já enviada ao cliente e prepara o pagamento atualizado. Use somente quando a última mensagem do cliente aceitou esse resumo.", parameters: { type: "object", properties: { codigo_proposta: { type: "string" } }, required: ["codigo_proposta"] } },
   { name: "trocar_forma_pagamento", description: "Troca apenas a forma de pagamento do pedido atual, sem mudar itens, e prepara o novo acesso ao pagamento.", parameters: { type: "object", properties: { forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["forma_pagamento"] } },
-  { name: "reenviar_pagamento", description: "Reenvia o acesso ao pagamento atual quando o cliente pede o link, o botão ou o código de novo.", parameters: { type: "object", properties: {} } },
+  { name: "enviar_pagamento", description: "Envia ao cliente o acesso ao pagamento do pedido atual (botão do cartão ou código Pix), gerando-o se ainda não existir. Use quando o cliente quer pagar, confirma o pagamento ou pede o link/código de novo.", parameters: { type: "object", properties: {} } },
 ];
 
 const orderToolInstructionLines = [
@@ -12768,6 +12774,7 @@ const orderToolInstructionLines = [
   "Depois que propor_alteracao retornar ok, escreva apenas uma frase curta de transição. O sistema envia o resumo oficial logo em seguida; não repita itens nem valores.",
   "Chame confirmar_alteracao somente quando a última mensagem do cliente aceitar o resumo enviado (por exemplo 'sim', 'pode', 'confirmo', 'fechado' ou um joinha respondendo ao resumo). Dúvida, elogio ou pergunta não é aceite.",
   "Para trocar só a forma de pagamento, use trocar_forma_pagamento. Se houver proposta aguardando confirmação, inclua a nova forma em propor_alteracao.",
+  "Quando o cliente quiser pagar, confirmar o pagamento ou pedir o link ou código de novo, chame enviar_pagamento. Não diga que está preparando ou vai gerar o pagamento: chame a ferramenta.",
   "Perguntas sobre parcelamento, prazo ou produtos são respondidas sem ferramentas de alteração.",
   "Nunca diga que alterou, confirmou, gerou, enviou ou trocou algo se a ferramenta correspondente não retornou ok=true nesta resposta. Se uma ferramenta recusar, explique o motivo ao cliente com naturalidade.",
   "Não escreva links nem códigos de pagamento: o acesso ao pagamento é enviado pelo sistema.",
@@ -12830,7 +12837,7 @@ async function executeOrderTool(input: {
   }
   if (input.name === "propor_alteracao") {
     const existing = readRuntimeOrderRevision(context);
-    if (existing?.applied) return fail("A alteração anterior já foi aplicada e aguarda o envio do pagamento. Use reenviar_pagamento.");
+    if (existing?.applied) return fail("A alteração anterior já foi aplicada e aguarda o envio do pagamento. Use enviar_pagamento.");
     const lines = Array.isArray(input.args.itens) ? input.args.itens.map(readRecord) : [];
     if (!lines.length || lines.length > salesCatalogCheckoutItemLimit) return fail("Informe de 1 a " + salesCatalogCheckoutItemLimit + " itens.");
     const method = input.args.forma_pagamento === undefined ? null : assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
@@ -12904,7 +12911,7 @@ async function executeOrderTool(input: {
     return { ok: true, total: proposal.total, forma_pagamento: draft.preferred_method,
       observacao: "Pedido atualizado. O acesso ao pagamento será enviado logo após a sua mensagem." };
   }
-  if (input.name === "trocar_forma_pagamento" || input.name === "reenviar_pagamento") {
+  if (input.name === "trocar_forma_pagamento" || input.name === "enviar_pagamento") {
     const draft = readRuntimeOrderRevision(context);
     if (draft && !draft.applied && draft.ready) return fail("Há uma proposta de alteração aguardando o cliente. Para mudar a forma de pagamento junto, use propor_alteracao.");
     let method = readRuntimeOrderPaymentPreference(context, order.id) ?? order.preferredPaymentMethod ?? null;
@@ -12924,7 +12931,10 @@ async function executeOrderTool(input: {
 }
 
 function claimsUnexecutedOrderAction(text: string) {
-  return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei)\b/.test(normalizeSearch(text));
+  const normalized = normalizeSearch(text);
+  // Past claims ("gerei") and promises ("estou preparando", "vou gerar") both need a tool.
+  return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei)\b/.test(normalized)
+    || /\b(?:estou|to|vou|irei)\s+(?:\S+\s+){0,3}?(?:preparando|gerando|gerar|enviando|enviar|mandando|mandar|alterando|alterar|atualizando|atualizar|incluindo|incluir|trocando|trocar)\b/.test(normalized);
 }
 
 function sumGeminiUsage(total: GeminiTokenUsage | null, next: GeminiTokenUsage | null): GeminiTokenUsage | null {

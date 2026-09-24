@@ -34,6 +34,13 @@ describe("order tools scope", () => {
     t.ctx.instance.metadata = {};
     expect(t.scope()).toBeNull();
   });
+  it("leaves the first payment to the billing-data route until it was delivered (Gustavo, 24/09 09:30)", () => {
+    const t = tools();
+    t.metadata({ checkout_runtime_state: { conversation_id: "conversation", instance_id: "instance", order_id: "order", stage: "payment_data_pending" } });
+    expect(t.scope()).toBeNull();
+    t.metadata({ checkout_runtime_state: { conversation_id: "conversation", instance_id: "instance", order_id: "order", stage: "payment_sent" } });
+    expect(t.scope()?.order.id).toBe("order");
+  });
   it("is off while a payment is being processed", () => {
     const t = tools();
     t.ctx.salesCatalogOrders[0].checkoutPaymentLock = "card-attempt";
@@ -147,6 +154,20 @@ describe("order tools conversation loop", () => {
     expect(result.deferred).toHaveLength(1);
     const followUp = t.modelRequests[1].contents as Array<{ parts: Array<{ functionResponse?: { response: Row } }> }>;
     expect(followUp.at(-1)?.parts[0].functionResponse?.response).toMatchObject({ ok: true, total: "80,00" });
+  });
+
+  it("makes the model call the payment tool instead of promising it (Gustavo, 24/09 09:31)", async () => {
+    const t = tools();
+    t.say("Sim");
+    t.modelReplies.push(modelText("Show! Estou preparando tudo para gerar o código do Pix para você agora mesmo!"),
+      functionCall("enviar_pagamento"), modelText("Pronto, Magno! Segue o acesso ao pagamento."));
+    const result = await turn(t);
+    expect(result.calls).toEqual([{ name: "enviar_pagamento", ok: true }]);
+    expect(result.deferred).toHaveLength(1);
+    // The active session with the same method and amount is reused: no second charge.
+    expect(t.createPayment).not.toHaveBeenCalled();
+    await result.deferred[0]();
+    expect(JSON.stringify(t.requests.at(-1)?.body)).toContain("original-session");
   });
 
   it("makes the model rewrite a claimed change that no tool executed", async () => {
