@@ -6193,8 +6193,11 @@ function selectCartComplements(settings: ClientSalesCatalogSettings | null, cata
   messages: ConversationMessageRow[], lead: LeadRow | null) {
   const bumps = settings?.orderBumps ?? { enabled: true, whatsappEnabled: true, autoSuggestionsEnabled: true, maxOffersPerOrder: 1, items: [] };
   if (!bumps.enabled || !bumps.whatsappEnabled) return [];
+  // A plan (recurring) can be the main product; the complement is always a one-time
+  // item, which the subscription checkout charges once with the first payment.
   const sellable = catalog.filter(item => item.status === "active" && isSalesCatalogItemSellable(item)
-    && item.salesDestination === "connectyhub_checkout" && (item.billingCycle ?? "one_time") === "one_time");
+    && item.salesDestination === "connectyhub_checkout");
+  const oneTime = (item: RuntimeSalesCatalogItem) => (item.billingCycle ?? "one_time") === "one_time";
   const price = (item: RuntimeSalesCatalogItem) => normalizeCurrencyAmount(item.offer.salePrice ?? item.price);
   // The cart is what the customer chose (or the saved draft), never what the agent itself mentioned or offered.
   const chosenText = messages.slice(-10).filter(message => message.direction === "inbound").map(message => message.text_content ?? "").join("\n");
@@ -6206,7 +6209,7 @@ function selectCartComplements(settings: ClientSalesCatalogSettings | null, cata
   const alreadyOffered = (item: RuntimeSalesCatalogItem) => conversation.includes(normalizeSearch(cleanSalesCatalogCustomerTitle(item.title)));
   const limit = Math.max(1, Math.min(3, bumps.maxOffersPerOrder ?? 1));
   const cartIds = new Set(cart.map(item => item.id));
-  const pool = sellable.filter(item => !cartIds.has(item.id) && price(item) !== null);
+  const pool = sellable.filter(item => !cartIds.has(item.id) && oneTime(item) && price(item) !== null);
   // An accepted complement is in the cart: it was offered by the agent and belongs
   // to a different category from the rest of the cart. It still counts as offered.
   const firstMention = (item: RuntimeSalesCatalogItem, direction: string) => messages.findIndex(message => message.direction === direction

@@ -244,6 +244,17 @@ describe("automatic cart complement (pizzaria)", () => {
       items: [{ productId: "petit", active: true, triggerCategory: "Pizzas", badge: null, title: null, description: null, triggerText: null }] } };
     expect(pick(settings, [msg("inbound", "quero uma pizza calabresa")])).toEqual(["petit"]);
   });
+  it("offers a one-time item with a gym plan, never another plan", () => {
+    const gym = [{ ...item("mensal", "Plano Mensal", "99,00", "Planos"), billingCycle: "recurring" },
+      { ...item("anual", "Plano Anual", "89,00", "Planos"), billingCycle: "recurring" },
+      item("camiseta", "Camiseta da Academia", "59,90", "Acessórios"), { ...item("clube", "Clube de Vantagens", "19,90", "Assinaturas"), billingCycle: "recurring" }];
+    const chosen = runtimeHarness()<Array<{ id: string }>>("selectCartComplements", null, gym, [msg("inbound", "quero o plano mensal")], null).map(entry => entry.id);
+    expect(chosen).toEqual(["camiseta"]);
+  });
+  it("offers nothing when the store has nothing complementary", () => {
+    const onlyPlans = [{ ...item("mensal", "Plano Mensal", "99,00", "Planos"), billingCycle: "recurring" }, { ...item("anual", "Plano Anual", "89,00", "Planos"), billingCycle: "recurring" }];
+    expect(runtimeHarness()("selectCartComplements", null, onlyPlans, [msg("inbound", "quero o plano mensal")], null)).toEqual([]);
+  });
   it("stays quiet with no product chosen or with offers turned off", () => {
     expect(pick(null, [msg("inbound", "boa noite, vocês abrem hoje?")])).toEqual([]);
     expect(pick({ orderBumps: { enabled: false, whatsappEnabled: true, autoSuggestionsEnabled: true, items: [] } }, [msg("inbound", "quero uma pizza calabresa")])).toEqual([]);
