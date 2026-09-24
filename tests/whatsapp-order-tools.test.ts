@@ -102,6 +102,25 @@ describe("editing an open order through tools", () => {
   });
 });
 
+describe("first purchase payment choice (Gustavo, 23/09 20:58)", () => {
+  it("delivers the model's request for delivery details instead of a false 'which order to resume' prompt", async () => {
+    const s = scenario();
+    s.ctx.salesCatalogOrders = [];
+    s.db.tables.sales_catalog_orders = [];
+    s.ctx.lead.metadata = {};
+    s.ctx.messages = [];
+    s.assistant("Então fechamos 2 unidades da Pizza de queijo (R$ 60,00 cada).");
+    s.assistant("Como temos mais de uma forma de pagamento (Pix e Cartão de crédito parcelado em até 12x), qual você prefere para este pedido?");
+    s.customer("cartão");
+    s.db.tables.conversation_messages = [...s.ctx.messages];
+    const sent = await s.call<Promise<Outbound[]>>("sendAgentResponse", { client: s.db.client, context: s.ctx, token: "fake", phone: "5500000000000",
+      text: "Show de bola! No cartão de crédito fica perfeito.\n\nPara eu calcular o frete certinho, me passa seu e-mail e seu endereço completo com CEP, por favor?" });
+    const text = sent.map(message => message.text).join("\n");
+    expect(text).not.toContain("retomar");
+    expect(text).toContain("CEP");
+  });
+});
+
 describe("order tools conversation loop", () => {
   const turn = (t: ReturnType<typeof tools>) => t.call<Promise<{ response: { text: string }; deferred: Deferred[]; calls: Row[] }>>("runOrderToolTurn", {
     systemInstruction: "Você é o agente de teste.", credentials: { apiKey: "not-real", model: "gemini-test" }, agent: { id: "agent", name: "Agente", model_id: "gemini-test" },

@@ -11147,6 +11147,11 @@ function isRuntimeMissingPaymentRequest(text: string) {
   return /^(?:(?:mas|e|entao|o|ainda)\s+)*(?:(?:cade|kd)(?:\s+(?:o|a|esse|este|meu))?(?:\s+(?:pix|botao|codigo|link|pagamento))?|(?:que\s+(?:botao|link)(?:\s+nao\s+(?:recebi|chegou|apareceu)(?:\s+nada)?)?|nao\s+(?:recebi|chegou|apareceu)(?:\s+(?:o|a))?(?:\s+(?:pix|botao|codigo|link|pagamento|nada))?)(?:\s+(?:aqui|por aqui))?)$/.test(normalized);
 }
 
+function hasConversationCheckoutOrder(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  return context.salesCatalogOrders.some(order => order.companyId === context.organization.id
+    && order.conversationId === context.conversationId && (!context.lead?.id || order.leadId === context.lead.id));
+}
+
 function hasRuntimeCheckoutRecoveryIntent(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, text: string) {
   const latestInbound = findLatestInbound(context.messages);
   const lastBlock = buildRecentOutboundMessageBlocks(context.messages, latestInbound)[0]?.text ?? "";
@@ -11163,7 +11168,9 @@ function hasRuntimeCheckoutRecoveryIntent(context: NonNullable<Awaited<ReturnTyp
   const storedDraft = readRecord(readRecord(context.lead?.metadata)?.checkout_cart_draft);
   const hasScopedDraft = storedDraft?.organization_id === context.organization.id
     && storedDraft?.conversation_id === context.conversationId && storedDraft?.instance_id === context.instance.id;
-  if (paymentFragment && (paymentContext || hasScopedDraft)) return true;
+  // Answering the agent's own "Pix ou cartão?" is a choice, not a recovery:
+  // recovery needs a saved cart, an order in this conversation or an explicit invitation.
+  if (paymentFragment && (paymentContext || hasScopedDraft)) return recoveryPrompt || hasScopedDraft || hasConversationCheckoutOrder(context);
   return ((recoveryPrompt || guardUnexecutedCheckoutClaim(lastBlock, context)) && hasSalesCatalogCheckoutConfirmationIntent(text))
     || /\b(?:manda|mande|mandar|passa|passe|passar|envia|enviar|envie|reenvia|reenviar|gera|gere|gerar|retomar)\b.{0,60}\b(?:pix|codigo|pagamento|pagar|checkout|link|pedido|cartao)\b/.test(normalized);
 }
