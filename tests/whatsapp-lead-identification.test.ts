@@ -36,6 +36,18 @@ describe("shared lead identification", () => {
     expect(findLeadNameEvidence(messages)?.name).toBe("Magno Macedo");
     expect(findLeadNameEvidence([msg("outbound", "Qual o seu nome?", "q"), msg("inbound", "", "audio"), msg("inbound", "Magno Macedo")])?.name).toBe("Magno Macedo");
   });
+  it("accepts 'Sou Fulano' as the answer to the name question (Gustavo, 24/09 11:56)", () => {
+    const question = msg("outbound", "Qual o seu nome? Me fala aí também qual é o seu objetivo fitness.", "question");
+    expect(findLeadNameEvidence([question, msg("inbound", "Sou magno macedo")])?.name).toBe("Magno Macedo");
+    expect(findLeadNameEvidence([question, msg("inbound", "Sou corretor")])).toBeNull();
+  });
+  it.each([
+    "Rua 1131, numero 61 cep 88330786 bairro centro cidade balneario camboriu\nMagno macedo gomes\n52998224725\ncliente@example.com",
+    "Magno macedo gomes\nRua 1131, numero 61 cep 88330786 centro balneario camboriu\n52998224725\ncliente@example.com",
+    "52998224725\ncliente@example.com\nRua 1131, numero 61 cep 88330786 centro\nMagno macedo gomes",
+  ])("finds the name in an address-and-billing reply in any order: %#", text => {
+    expect(runtimeHarness()("extractRuntimeCustomerNameFromStructuredReply", text)).toBe("Magno macedo gomes");
+  });
   it.each(["Magno", "Maria da Silva", "João dos Santos"])("still accepts a real name: %s", name => {
     expect(findLeadNameEvidence([msg("outbound", "Como posso te chamar?", "question"), msg("inbound", name)])?.name).toBe(name);
   });

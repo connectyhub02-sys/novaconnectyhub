@@ -3368,7 +3368,11 @@ function extractRuntimeCustomerNameFromStructuredReply(text: string) {
       const line = lines[index];
       const hasNameLabel = /^nome(?: completo)?\s*[:\-]/i.test(line);
       const followedByEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(lines[index + 1] ?? "");
-      if (!hasNameLabel && !followedByEmail) continue;
+      // Address, name, CPF and e-mail sent together may come in any order:
+      // a line without digits, "@" or address words is the name.
+      const plainNameLine = !/[\d@]/.test(line)
+        && !/\b(?:rua|r\.|avenida|av\.?|bairro|numero|n[uú]mero|condominio|condom[ií]nio|casa|apto|apartamento|travessa|estrada|rodovia|cep|cidade|centro|quadra|lote|bloco)\b/i.test(line);
+      if (!hasNameLabel && !followedByEmail && !plainNameLine) continue;
       const candidate = sanitizeRuntimeCustomerNameCandidate(line.replace(/^nome(?: completo)?\s*[:\-]\s*/i, ""), { allowSingleName: false });
       if (candidate) return candidate;
     }
@@ -4433,6 +4437,17 @@ function extractGroundingKeywords(value: string) {
  * What the checkout still needs from this customer. A seller asks once, for
  * everything missing, and never again for what the customer already gave.
  */
+/** Billing fields the payment still needs from this lead (the address is asked separately). */
+function missingCheckoutBillingLabels(lead: LeadRow | null) {
+  const metadata = lead?.metadata ?? null;
+  const name = lead ? resolveLeadPersonalName({ displayName: lead.display_name, metadata }) : null;
+  return [
+    name && name.trim().split(/\s+/).length >= 2 ? null : "seu nome completo",
+    normalizeRuntimeEmail(findString(metadata, ["email", "customer_email", "lead_email"])) ? null : "e-mail",
+    normalizeRuntimeCustomerDocument(findString(metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document"])) ? null : "CPF",
+  ].filter((label): label is string => Boolean(label));
+}
+
 function buildCustomerCheckoutDataLines(lead: LeadRow | null) {
   const metadata = lead?.metadata ?? null;
   const name = lead ? resolveLeadPersonalName({ displayName: lead.display_name, metadata }) : null;
@@ -5388,12 +5403,14 @@ function buildProactiveMediaInstruction(behavior: WhatsappBehaviorConfig): strin
 }
 
 function buildSocialProofInstruction(learnings: KnowledgeMemoryRow[]): string[] {
-  if (learnings.length === 0) return [];
+  // Applies to every agent: an invented testimonial is a false claim to the customer.
+  const noFabrication = "Nunca invente depoimentos, casos de clientes, atletas ou resultados obtidos por alguém. Não afirme que outra pessoa usou, comprou ou teve resultado com um produto, a menos que isso esteja literalmente numa experiência listada abaixo.";
+  if (learnings.length === 0) return ["", "PROVA SOCIAL:", noFabrication];
   const lines: string[] = [
     "",
     "EXPERIENCIAS RECENTES COM CLIENTES:",
-    "Você tem experiências reais de conversas anteriores. Use como prova social quando fizer sentido — nunca force.",
-    "Cite de forma natural: 'inclusive tava falando com um cliente agora pouco que teve a mesma duvida', 'um pessoal que fechou semana passada me falou que...'.",
+    "Estas são experiências reais de conversas anteriores. Cite somente o que está escrito abaixo, sem aumentar nem acrescentar resultados, e só quando fizer sentido.",
+    noFabrication,
     "NUNCA revele nomes, telefones ou dados identificaveis. Use 'um cliente', 'um pessoal', 'uma empresa aqui'.",
   ];
   for (const learning of learnings) {
@@ -9234,7 +9251,19 @@ function dropRepeatedCatalogMentionLines(text: string, items: RuntimeSalesCatalo
   if (!items.length) return text;
   const recent = messages.filter(message => message.direction === "outbound").slice(-12)
     .map(message => normalizeSearch(message.text_content ?? ""));
-  const lines = text.split("\n");
+  // A mention rendered inside a sentence that already names the product and
+  // its price only repeats it: "…por R$ 269,99 Enantato … - R$ 269,99 é…".
+  const inline = text.split("\n").map(line => items.reduce((current, item) => {
+    const mention = formatSalesCatalogCustomerMention(item);
+    if (current.trim() === mention || !current.includes(mention)) return current;
+    const without = current.replace(mention, " ").replace(/[ \t]{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").trim();
+    const price = normalizeSearch(mention.split(" - R$ ").at(1) ?? "");
+    const firstWord = normalizeSearch(item.title).split(" ")[0] ?? "";
+    const rest = normalizeSearch(without);
+    return price && firstWord && rest.includes(price) && rest.includes(firstWord) ? without : current;
+  }, line));
+  text = inline.join("\n");
+  const lines = inline;
   const kept = lines.filter((line, index) => {
     const item = items.find(candidate => line.trim() === formatSalesCatalogCustomerMention(candidate));
     if (!item) return true;
@@ -9757,10 +9786,14 @@ function buildSalesCatalogDeliveryDetailsBeforeCheckoutPrompt(input: {
     ].filter(Boolean).join("\n\n");
   }
 
+  // Ask once for everything the payment will also need, instead of one field per message.
+  const billing = missingCheckoutBillingLabels(input.context.lead);
   return [
     "Antes de fechar e calcular o total final, preciso do endereço de entrega desse pedido:",
     itemLines.join("\n"),
-    "Me envia rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver.",
+    billing.length
+      ? `Me envia rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver. Para eu já gerar o pagamento em seguida, me manda também ${formatRuntimeDataList(billing)}.`
+      : "Me envia rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -9916,11 +9949,23 @@ function buildSalesCatalogOrderConfirmationPrompt(input: {
     shouldHoldFinalTotal
       ? extractFirstBrazilianCep(shippingIntentText) && extractRuntimeAddress(null, shippingIntentText)
         ? "Não encontrei uma tarifa para essa entrega. Você prefere informar outro endereço ou combinar a entrega com a equipe?"
-        : "Me confirma o endereço completo de entrega e o CEP para calcular o frete e conferir o total?"
+        : `Me confirma o endereço completo de entrega e o CEP para calcular ${runtimeDeliveryChargeName(input.context.salesCatalogShippingSettings)} e conferir o total?`
       : input.recoverSavedAddress && shipping?.destinationAddress
         ? "Posso usar esse mesmo endereço, fechar seu pedido e gerar o pagamento?"
         : "Posso fechar seu pedido e gerar o pagamento?",
   ].filter(Boolean).join("\n\n");
+}
+
+/** A local-only store charges a delivery fee, never "frete". */
+function runtimeDeliveryChargeName(settings: ClientSalesCatalogShippingSettings | null) {
+  return settings?.localDeliveryEnabled && !settings.shippingEnabled ? "a taxa de entrega" : "o frete";
+}
+
+function formatRevisionDeliveryLine(quote: { name: string; amount: number; pickup: boolean }) {
+  const amount = formatRuntimeOrderMoney(quote.amount);
+  if (quote.pickup) return `Retirada na loja: R$ ${amount}.`;
+  if (normalizeSearch(quote.name).includes("entrega local")) return `Taxa de entrega (${quote.name}): R$ ${amount}.`;
+  return `Frete: R$ ${amount} (${quote.name}).`;
 }
 
 function buildSalesCatalogOrderConfirmationShippingLine(
@@ -12750,7 +12795,7 @@ function computeRuntimeRevisionProposal(context: NonNullable<Awaited<ReturnType<
     quote: quote ? { ...quote, coordinates: quote.pickup ? null : boundDeliveryCoordinates(draft.location_quote, draft.address, draft.cep) ?? boundDeliveryCoordinates(order.shippingQuote, draft.address, draft.cep), destination_address: draft.address, cep: draft.cep } : {} };
   const fingerprint = createHash("sha256").update(JSON.stringify({ rows, shipping, total, preferredMethod: draft.preferred_method })).digest("hex");
   const previewText = [draft.legacy_cart_reconciled_at ? "O resumo anterior contém itens que ainda não foram gravados no pedido. Confira a proposta completa:" : "Confira a alteração do seu pedido:", selections.map(selection => buildSalesCatalogOrderPreviewItem(selection).line).join("\n"),
-    quote ? `Frete: R$ ${formatRuntimeOrderMoney(quote.amount)} (${quote.name}).` : "",
+    quote ? formatRevisionDeliveryLine(quote) : "",
     operation.estimate, `Total: R$ ${total}.`, draft.address && !quote?.pickup ? `Entrega: ${draft.address}.` : "", draft.preferred_method ? `Pagamento: ${draft.preferred_method === "card" ? "cartão" : "Pix"}.` : "", "Confirma essa alteração?"].filter(Boolean).join("\n\n");
   return { ok: true, rows, shipping, total, fingerprint, previewText };
 }
@@ -12888,11 +12933,18 @@ async function executeOrderTool(input: {
   const { client, context, latestInbound } = input;
   const order = context.salesCatalogOrders.find(candidate => candidate.id === input.scope.order.id) ?? input.scope.order;
   const fail = (motivo: string) => ({ ok: false, motivo });
-  const deferPayment = (payment: SalesCatalogPaymentLinkResult, finishRevision: boolean) => input.deferred.push(async () => {
-    const outbound = await sendSalesCatalogPaymentLink({ client, context, token: input.token, phone: input.phone, payment });
-    if (finishRevision) await finishRuntimeRevisionPaymentDelivery(client, context, payment, outbound);
-    return outbound;
-  });
+  // One payment access per reply: "confirmar" followed by "enviar" in the same
+  // turn must not send two identical checkout buttons.
+  const queued = input.deferred as OrderToolDeferred[] & { paymentQueued?: boolean };
+  const deferPayment = (payment: SalesCatalogPaymentLinkResult, finishRevision: boolean) => {
+    if (queued.paymentQueued) return;
+    queued.paymentQueued = true;
+    input.deferred.push(async () => {
+      const outbound = await sendSalesCatalogPaymentLink({ client, context, token: input.token, phone: input.phone, payment });
+      if (finishRevision) await finishRuntimeRevisionPaymentDelivery(client, context, payment, outbound);
+      return outbound;
+    });
+  };
 
   if (input.name === "ver_pedido") return { ok: true, pedido: describeOrderForTool(context, order) };
   if (input.name === "buscar_produtos") {
@@ -12996,11 +13048,13 @@ async function executeOrderTool(input: {
   return fail("Ferramenta desconhecida.");
 }
 
-function claimsUnexecutedOrderAction(text: string) {
+const orderToolExecutingNames = new Set(["confirmar_alteracao", "trocar_forma_pagamento", "enviar_pagamento"]);
+
+function claimsUnexecutedOrderAction(text: string, checkPromises = true) {
   const normalized = normalizeSearch(text);
-  // Past claims ("gerei") and promises ("estou preparando", "vou gerar") both need a tool.
+  // Past claims ("gerei", "adicionei") and promises ("estou preparando", "vou gerar") both need a tool.
   return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei)\b/.test(normalized)
-    || /\b(?:estou|to|vou|irei)\s+(?:\S+\s+){0,3}?(?:preparando|gerando|gerar|enviando|enviar|mandando|mandar|alterando|alterar|atualizando|atualizar|incluindo|incluir|trocando|trocar)\b/.test(normalized);
+    || checkPromises && /\b(?:estou|to|vou|irei)\s+(?:\S+\s+){0,3}?(?:preparando|gerando|gerar|enviando|enviar|mandando|mandar|alterando|alterar|atualizando|atualizar|incluindo|incluir|trocando|trocar)\b/.test(normalized);
 }
 
 function sumGeminiUsage(total: GeminiTokenUsage | null, next: GeminiTokenUsage | null): GeminiTokenUsage | null {
@@ -13056,7 +13110,10 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
     if (!text) throw new Error("Gemini nao retornou uma resposta para o lead.");
     // A claimed action needs a successful tool in this same turn.
-    if (!corrected && !calls.some(call => call.ok && call.name !== "ver_pedido" && call.name !== "buscar_produtos") && claimsUnexecutedOrderAction(text)) {
+    // "Done" needs an executing tool; a proposal only justifies announcing the summary.
+    const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
+    const proposed = calls.some(call => call.ok && call.name === "propor_alteracao");
+    if (!corrected && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
       corrected = true;
       contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
       continue;
@@ -14023,7 +14080,7 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   const messageText = [
     intro,
     ...savedDeliveryLines,
-    needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento com frete zero." : "",
+    needsDeliveryAddress && canPickup ? "Se preferir retirada, responda \"retirada na loja\" que eu libero o pagamento sem cobrança de entrega." : "",
     needsHumanForDelivery
       ? "A loja ainda não habilitou frete, entrega local ou retirada local; vou chamar uma pessoa do time para confirmar a entrega antes do pagamento."
       : "",

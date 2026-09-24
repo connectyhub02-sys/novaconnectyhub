@@ -107,6 +107,13 @@ type IdentityMessage = { id?: string; direction: string; text_content?: string |
 // mudar", "quero comprar") is not a name. Particles such as "da"/"dos" are allowed.
 const sentenceWords = /\b(?:ele|ela|voce|aqui|ai|la|quero|queria|gostaria|procuro|procurando|buscando|busco|preciso|precisa|precisamos|mudar|comprar|vender|alugar|investir|morar|anunciar|falando|corretor|dentista|sou|estou|to|tenho|temos|prefiro|informar|dizer|passar|nao|sim|depois|entao|agora|hoje|amanha|ainda|tambem|mas|porque|so|apenas|isso|esse|essa|este|esta|pode|podemos|vou|vamos|oi|ola|ok|obrigado|obrigada|tudo|bem|certo|claro|beleza|imovel|casa|apartamento|terreno|lote|valor|preco|produto|pedido|quanto|qual|quando|onde|como)\b/;
 
+/** "magno macedo" typed in lowercase becomes "Magno Macedo"; particles stay lowercase. Mixed case is kept as typed. */
+function capitalizeTypedName(name: string) {
+  if (name !== name.toLocaleLowerCase("pt-BR")) return name;
+  return name.split(" ").map((word, index) => index > 0 && /^(?:da|das|de|do|dos|e)$/.test(word)
+    ? word : word.charAt(0).toLocaleUpperCase("pt-BR") + word.slice(1)).join(" ");
+}
+
 // Names mentioned by the assistant, quoted third parties and greetings are not self-identification.
 export function findLeadNameEvidence(messages: IdentityMessage[]) {
   for (let index = messages.length - 1; index >= 0; index--) {
@@ -133,9 +140,11 @@ export function findLeadNameEvidence(messages: IdentityMessage[]) {
     const askedName = /\b(?:qual (?:e )?(?:o )?seu nome|como (?:posso|podemos|voce prefere que eu) (?:te |lhe |o |a )?chamar|(?:me (?:diga|informe)|preciso d[eo]) (?:o )?seu nome)\b/.test(request)
       || /\bcom quem (?:eu )?(?:falo|estou falando|tenho o prazer de falar)\b/.test(request)
       || /\bpara liberar o pagamento\b.{0,40}\bfaltam?\s+(?:o |seu )?nome completo\b/.test(request);
-    const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '\u2019-]{1,79}[.!]?$/u.test(text) ? text.replace(/[.!]$/, "") : null));
+    // "Sou Magno Macedo" answering "qual o seu nome?" declares the name after "sou".
+    const answer = askedName ? text.replace(/^(?:eu\s+)?sou\s+(?:(?:o|a)\s+)?/iu, "") : text;
+    const candidate = normalizeLeadNameCandidate(declared ?? (askedName && /^[\p{L}][\p{L} '’-]{1,79}[.!]?$/u.test(answer) ? answer.replace(/[.!]$/, "") : null));
     if (candidate && isLikelyPersonalLeadName(candidate) && !sentenceWords.test(normalizeSearchText(candidate))) {
-      return { name: candidate, messageId: message.id ?? null };
+      return { name: capitalizeTypedName(candidate), messageId: message.id ?? null };
     }
   }
   return null;

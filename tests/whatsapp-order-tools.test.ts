@@ -17,9 +17,16 @@ function tools(options: Parameters<typeof scenario>[0] = {}) {
   };
   let latest = inbound("oi");
   const scope = () => s.call<{ order: { id: string } } | null>("resolveOrderToolScope", s.ctx);
+  // The runtime resolves the scope once per reply, as runOrderToolTurn does.
+  let turnScope: ReturnType<typeof scope> = null;
   const tool = (name: string, args: Row = {}) => s.call<Promise<ToolResult>>("executeOrderTool", {
-    client: s.db.client, context: s.ctx, scope: scope(), latestInbound: latest, token: "fake", phone: "5500000000000", deferred, name, args });
-  const say = (text: string) => { latest = inbound(text); deferred.length = 0; };
+    client: s.db.client, context: s.ctx, scope: turnScope ??= scope(), latestInbound: latest, token: "fake", phone: "5500000000000", deferred, name, args });
+  const say = (text: string) => {
+    latest = inbound(text);
+    deferred.length = 0;
+    turnScope = null;
+    (deferred as Deferred[] & { paymentQueued?: boolean }).paymentQueued = false;
+  };
   const flush = async () => { const sent: Outbound[] = []; for (const action of deferred.splice(0)) sent.push(await action()); return sent; };
   return { ...s, scope, tool, say, flush, deferred, latest: () => latest };
 }
@@ -70,6 +77,29 @@ describe("editing an open order through tools", () => {
     const payment = await t.flush();
     expect(payment).toHaveLength(1);
     expect(t.createPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls it a delivery fee, never 'frete', for a local-only store", async () => {
+    const t = tools();
+    t.ctx.salesCatalogShippingSettings = { configured: true, shippingEnabled: false, localPickup: false, localDeliveryEnabled: true, defaultHandlingDays: 0, rules: [],
+      localDeliveryZones: [{ id: "centro", name: "Centro", active: true, shape: "cep", cepStart: "88330000", cepEnd: "88339999", price: "8,00", priority: 0,
+        minDays: null, maxDays: null, orderMinimum: null, freeDeliveryThreshold: null, neighborhoods: [], cities: [], polygon: [] }] } as never;
+    t.say("coloca uma limonada");
+    const proposal = await t.tool("propor_alteracao", { itens: [{ produto_id: "pizza", quantidade: 1 }, { produto_id: "lemonade", quantidade: 1 }] });
+    expect(proposal.resumo).toContain("Taxa de entrega (Entrega local - Centro): R$ 8,00");
+    expect(proposal.resumo).not.toMatch(/\bFrete\b/);
+    expect(proposal.total).toBe("78,00");
+  });
+
+  it("confirms and sends a single payment button even when the model also asks to send it", async () => {
+    const t = tools();
+    t.say("coloca uma limonada");
+    const proposal = await t.tool("propor_alteracao", { itens: [{ produto_id: "pizza", quantidade: 1 }, { produto_id: "lemonade", quantidade: 1 }] });
+    await t.flush();
+    t.say("top isso mesmo pode fechar");
+    expect(await t.tool("confirmar_alteracao", { codigo_proposta: proposal.codigo_proposta })).toMatchObject({ ok: true });
+    expect(await t.tool("enviar_pagamento")).toMatchObject({ ok: true });
+    expect(t.deferred).toHaveLength(1);
   });
 
   it("changes only the payment method and prepares one payment access", async () => {
@@ -167,6 +197,15 @@ describe("fewer repetitions in the sales conversation", () => {
     expect(s.call<string>("dropRepeatedCatalogMentionLines", `Olha essa opção:\n${card}`, [pizza], [])).toContain(card);
   });
 
+  it("removes a product mention rendered inside a sentence that already has its price (Gustavo, 24/09 11:59)", () => {
+    const s = scenario();
+    const pizza = s.ctx.salesCatalog[0];
+    const card = s.call<string>("formatSalesCatalogCustomerMention", pizza);
+    const reply = `A Pizza de queijo por R$ 60,00 ${card} é a mais pedida.`;
+    const result = s.call<string>("dropRepeatedCatalogMentionLines", reply, [pizza], []);
+    expect(result).toBe("A Pizza de queijo por R$ 60,00 é a mais pedida.");
+  });
+
   it("tells the agent what the customer already gave and to ask the rest at once", () => {
     const s = scenario();
     const lines = s.call<string[]>("buildCustomerCheckoutDataLines", { id: "lead", display_name: "Magno", metadata: { email: "cliente@example.com", cpf: "529.982.247-25" } }).join("\n");
@@ -216,6 +255,15 @@ describe("order tools conversation loop", () => {
     expect(t.createPayment).not.toHaveBeenCalled();
     await result.deferred[0]();
     expect(JSON.stringify(t.requests.at(-1)?.body)).toContain("original-session");
+  });
+
+  it("does not let a proposal be announced as already added (Gustavo, 24/09 13:04)", async () => {
+    const t = tools();
+    t.say("pode ser esse de 60 mg");
+    t.modelReplies.push(functionCall("propor_alteracao", { itens: [{ produto_id: "pizza", quantidade: 1 }, { produto_id: "lemonade", quantidade: 1 }] }),
+      modelText("Perfeito! Adicionei a limonada ao seu pedido."), modelText("Perfeito! Montei a alteração com a limonada para você conferir."));
+    const result = await turn(t);
+    expect(result.response.text).toBe("Perfeito! Montei a alteração com a limonada para você conferir.");
   });
 
   it("makes the model rewrite a claimed change that no tool executed", async () => {
