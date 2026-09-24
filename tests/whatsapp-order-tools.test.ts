@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scenario, type Outbound, type Row } from "./helpers/order-revision-scenario";
+import { runtimeHarness } from "./helpers/whatsapp-runtime-harness";
 
 type ToolResult = Row & { ok: boolean; motivo?: string; codigo_proposta?: string; resumo?: string };
 type Deferred = () => Promise<Outbound>;
@@ -212,6 +213,40 @@ describe("fewer repetitions in the sales conversation", () => {
     expect(lines).toContain("Já informados: e-mail, CPF");
     expect(lines).toContain("Faltam: nome completo, endereço completo com CEP");
     expect(lines).toContain("UMA única mensagem");
+  });
+});
+
+describe("automatic cart complement (pizzaria)", () => {
+  const item = (id: string, title: string, price: string, category: string, highlightLabel: string | null = null) => ({
+    id, title, tag: `{{produto_${id}}}`, price, currency: "BRL", status: "active", salesDestination: "connectyhub_checkout", billingCycle: "one_time",
+    inventory: { status: "in_stock", allowBackorder: false }, offer: { salePrice: null }, skus: [], attributes: [], fulfillment: { mode: "physical" },
+    shipping: { profile: "default", weightGrams: 500 }, media: [], description: "", category, highlightLabel, platformProductCode: null });
+  const menu = [item("calabresa", "Pizza Calabresa", "60,00", "Pizzas"), item("queijo", "Pizza de Queijo", "55,00", "Pizzas"),
+    item("coca", "Coca-Cola 2L", "12,00", "Bebidas"), item("guarana", "Guaraná 2L", "10,00", "Bebidas", "Mais pedido"),
+    item("petit", "Petit Gâteau", "18,00", "Sobremesas"), item("familia", "Combo Família", "120,00", "Pizzas")];
+  const msg = (direction: string, text_content: string) => ({ id: `${direction}-${text_content.length}`, direction, text_content, occurred_at: new Date().toISOString(), payload: {} });
+  const pick = (settings: unknown, messages: unknown[]) => runtimeHarness()<Array<{ id: string }>>("selectCartComplements", settings, menu, messages, null).map(entry => entry.id);
+
+  it("offers a drink with the pizza, not another pizza, without any configuration", () => {
+    expect(pick(null, [msg("inbound", "quero uma pizza calabresa grande")])).toEqual(["guarana"]);
+  });
+  it("offers it only once per conversation", () => {
+    expect(pick(null, [msg("inbound", "quero uma pizza calabresa"), msg("outbound", "Quer aproveitar e levar também um Guaraná 2L?"), msg("inbound", "não, só a pizza")])).toEqual([]);
+  });
+  it("does not offer a second complement after the first was accepted", () => {
+    expect(pick(null, [msg("inbound", "quero uma pizza calabresa"), msg("outbound", "Quer aproveitar e levar também um Guaraná 2L?"), msg("inbound", "sim, coloca o guaraná 2l")])).toEqual([]);
+  });
+  it("still suggests a complement when the agent recommended the main products itself", () => {
+    expect(pick(null, [msg("outbound", "Para hoje recomendo a Pizza Calabresa."), msg("inbound", "fechado, quero a pizza calabresa")])).toEqual(["guarana"]);
+  });
+  it("puts the store's configured offer first", () => {
+    const settings = { orderBumps: { enabled: true, whatsappEnabled: true, autoSuggestionsEnabled: true, maxOffersPerOrder: 1,
+      items: [{ productId: "petit", active: true, triggerCategory: "Pizzas", badge: null, title: null, description: null, triggerText: null }] } };
+    expect(pick(settings, [msg("inbound", "quero uma pizza calabresa")])).toEqual(["petit"]);
+  });
+  it("stays quiet with no product chosen or with offers turned off", () => {
+    expect(pick(null, [msg("inbound", "boa noite, vocês abrem hoje?")])).toEqual([]);
+    expect(pick({ orderBumps: { enabled: false, whatsappEnabled: true, autoSuggestionsEnabled: true, items: [] } }, [msg("inbound", "quero uma pizza calabresa")])).toEqual([]);
   });
 });
 

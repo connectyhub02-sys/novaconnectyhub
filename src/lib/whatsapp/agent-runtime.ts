@@ -4573,6 +4573,7 @@ function buildSystemInstruction(input: {
     ...buildActivityProfileInstruction(normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).templateId, normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).professionalIdentity),
     ...(checkoutAllowed ? [
       ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
+      ...buildCartComplementSuggestionLines(input.salesCatalogSettings, input.salesCatalog, input.messages, input.lead),
       ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
       ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
       ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
@@ -6178,6 +6179,74 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
         : "";
       return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
     }),
+  ];
+}
+
+/**
+ * Picks the complement for the current cart on the server, so the agent offers
+ * something concrete instead of deciding on its own whether to offer at all.
+ * Store-configured offers come first; otherwise, with automatic suggestions on
+ * (the default), an item from another category that costs no more than the
+ * main product (a drink or dessert for a pizza). Each is offered at most once.
+ */
+function selectCartComplements(settings: ClientSalesCatalogSettings | null, catalog: RuntimeSalesCatalogItem[],
+  messages: ConversationMessageRow[], lead: LeadRow | null) {
+  const bumps = settings?.orderBumps ?? { enabled: true, whatsappEnabled: true, autoSuggestionsEnabled: true, maxOffersPerOrder: 1, items: [] };
+  if (!bumps.enabled || !bumps.whatsappEnabled) return [];
+  const sellable = catalog.filter(item => item.status === "active" && isSalesCatalogItemSellable(item)
+    && item.salesDestination === "connectyhub_checkout" && (item.billingCycle ?? "one_time") === "one_time");
+  const price = (item: RuntimeSalesCatalogItem) => normalizeCurrencyAmount(item.offer.salePrice ?? item.price);
+  // The cart is what the customer chose (or the saved draft), never what the agent itself mentioned or offered.
+  const chosenText = messages.slice(-10).filter(message => message.direction === "inbound").map(message => message.text_content ?? "").join("\n");
+  const draft = readRecord(readRecord(lead?.metadata)?.checkout_cart_draft);
+  const draftIds = new Set((Array.isArray(draft?.items) ? draft.items : []).map(line => asString(readRecord(line)?.id)).filter(Boolean));
+  const cart = sellable.filter(item => draftIds.has(item.id) || selectSalesCatalogItemsFromText([item], chosenText).length > 0);
+  if (!cart.length) return [];
+  const conversation = normalizeSearch(messages.filter(message => message.direction === "outbound").slice(-30).map(message => message.text_content ?? "").join("\n"));
+  const alreadyOffered = (item: RuntimeSalesCatalogItem) => conversation.includes(normalizeSearch(cleanSalesCatalogCustomerTitle(item.title)));
+  const limit = Math.max(1, Math.min(3, bumps.maxOffersPerOrder ?? 1));
+  const cartIds = new Set(cart.map(item => item.id));
+  const pool = sellable.filter(item => !cartIds.has(item.id) && price(item) !== null);
+  // An accepted complement is in the cart: it was offered by the agent and belongs
+  // to a different category from the rest of the cart. It still counts as offered.
+  const firstMention = (item: RuntimeSalesCatalogItem, direction: string) => messages.findIndex(message => message.direction === direction
+    && selectSalesCatalogItemsFromText([item], message.text_content ?? "").length > 0);
+  const acceptedComplements = cart.filter(item => {
+    const offeredAt = firstMention(item, "outbound");
+    const chosenAt = firstMention(item, "inbound");
+    const category = normalizeSearch(item.category ?? "");
+    return offeredAt >= 0 && (chosenAt < 0 || offeredAt < chosenAt) && Boolean(category)
+      && cart.some(other => other !== item && normalizeSearch(other.category ?? "") !== category);
+  });
+  if (pool.filter(alreadyOffered).length + acceptedComplements.length >= limit) return [];
+  const cartCategories = new Set(cart.map(item => normalizeSearch(item.category ?? "")).filter(Boolean));
+  const cartWords = new Set(cart.map(item => normalizeSearch(item.title).split(" ")[0]));
+  const subtotal = cart.reduce((sum, item) => sum + (price(item) ?? 0), 0);
+  const configured = bumps.items.filter(offer => offer.active
+    && (!offer.triggerProductId || cartIds.has(offer.triggerProductId))
+    && (!offer.triggerCategory || cartCategories.has(normalizeSearch(offer.triggerCategory)))
+    && subtotal >= (offer.minimumSubtotal ?? 0))
+    .map(offer => pool.find(item => item.id === offer.productId)).filter((item): item is RuntimeSalesCatalogItem => Boolean(item));
+  const maxMain = Math.max(...cart.map(item => price(item) ?? 0));
+  const automatic = bumps.autoSuggestionsEnabled ? pool.filter(item => {
+    const category = normalizeSearch(item.category ?? "");
+    // A similar product (same category or same product family) is a substitute, not a complement.
+    const otherKind = cartCategories.size ? Boolean(category) && !cartCategories.has(category) : !cartWords.has(normalizeSearch(item.title).split(" ")[0]);
+    return otherKind && (price(item) ?? Infinity) <= maxMain;
+  }).sort((left, right) => Number(Boolean(right.highlightLabel)) - Number(Boolean(left.highlightLabel)) || (price(left) ?? 0) - (price(right) ?? 0)) : [];
+  return [...configured, ...automatic].filter((item, index, list) => list.indexOf(item) === index && !alreadyOffered(item)).slice(0, limit);
+}
+
+function buildCartComplementSuggestionLines(settings: ClientSalesCatalogSettings | null, catalog: RuntimeSalesCatalogItem[],
+  messages: ConversationMessageRow[], lead: LeadRow | null) {
+  const complements = selectCartComplements(settings, catalog, messages, lead);
+  if (!complements.length) return [];
+  return [
+    "",
+    "COMPLEMENTO SUGERIDO PARA ESTE CARRINHO (escolhido pelo sistema):",
+    ...complements.map(item => `- ${formatSalesCatalogCustomerMention(item)} (produto_id ${item.id}).`),
+    "- Ofereça uma única vez, em uma frase curta e natural, assim que o cliente escolher o produto principal e antes de fechar o pedido (por exemplo: 'Quer aproveitar e levar também …?').",
+    "- Só inclua no pedido com aceite claro. Se o cliente recusar, ignorar ou já estiver enviando dados para pagar, não ofereça de novo.",
   ];
 }
 
