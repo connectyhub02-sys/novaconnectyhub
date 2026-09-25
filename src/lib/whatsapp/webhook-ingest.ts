@@ -17,6 +17,7 @@ import {
   syncLeadAvatarFromUazapi,
 } from "./lead-avatar-sync";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
+import { incomingCallLeadText, isInsideAiWindow, readIncomingCallOffer, rejectIncomingCall, type IncomingCallOffer } from "./incoming-call";
 import { matchesAgentResponsible } from "./responsible-attendance";
 import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
 import {
@@ -110,7 +111,7 @@ export async function ingestUazapiWebhook(input: {
   const payload = normalizePayload(input.payload);
   const eventType = input.eventType || extractEventType(payload) || "unknown";
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
-  const message = extractMessageSnapshot(payload);
+  let message = extractMessageSnapshot(payload);
   const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
   // Only server-mapped API instances may delegate their CRM to the customer.
   // The original payload is still forwarded by the authenticated webhook route;
@@ -227,7 +228,23 @@ export async function ingestUazapiWebhook(input: {
     });
   }
 
-  if (!isConversationMessageWebhookEvent(eventType)) {
+  // A ringing call becomes an inbound event of the conversation, answered by message like a person would.
+  const incomingCall = isCallWebhookEvent(eventType) ? readIncomingCallOffer(payload) : null;
+  if (incomingCall) {
+    message = {
+      providerMessageId: `call:${incomingCall.callId}`, providerChatId: incomingCall.providerChatId, phoneNumber: incomingCall.phoneNumber,
+      displayName: null, profileImageUrl: null, isGroupChat: false, fromMe: false, sentByApi: false, direction: "inbound",
+      messageType: "call", textContent: incomingCallLeadText, occurredAt: incomingCall.occurredAt, providerOccurredAt: null,
+    };
+    const known = await client.from("conversation_messages").select("id").eq("organization_id", instance.organization_id)
+      .eq("whatsapp_instance_id", instance.id).eq("provider_message_id", message.providerMessageId).limit(1);
+    if ((known.data ?? []).length > 0) {
+      await markWebhookEvent(client, eventResult.eventId, "processed", "Chamada ja registrada.");
+      return { ...baseResult, status: "processed" };
+    }
+  }
+
+  if (!isConversationMessageWebhookEvent(eventType) && !incomingCall) {
     await preserveProviderMessageChange(client, instance, message, eventType, payload);
     await markWebhookEvent(client, eventResult.eventId, "processed");
     return {
@@ -324,7 +341,10 @@ export async function ingestUazapiWebhook(input: {
           providerMessageId: message.providerMessageId,
         })
       : null;
-    const agentRun = !leadOptOut && !input.suppressAgentRun && message.direction === "inbound"
+    const callHandling = incomingCall
+      ? await handleIncomingCall(client, { instance, conversationId: conversation.id, call: incomingCall, savedMessageId: savedMessage.id })
+      : null;
+    const agentRun = !leadOptOut && !input.suppressAgentRun && message.direction === "inbound" && callHandling?.answer !== false
       ? await enqueueWhatsappAgentRun(client, {
           organizationId: instance.organization_id,
           leadId: lead?.id ?? null,
@@ -576,6 +596,31 @@ function isConnectionWebhookEvent(eventType: string) {
   const normalized = eventType.toLowerCase().replace(/[_-]+/g, " ");
 
   return normalized.includes("connection") || normalized.includes("connect") || normalized.includes("status");
+}
+
+function isCallWebhookEvent(eventType: string) {
+  return /^call/i.test(eventType.trim());
+}
+
+const incomingCallReplyWindowMs = 6 * 60 * 60 * 1000;
+
+/**
+ * Rejects the ringing call when the agent is the one attending (active, inside the AI window and
+ * no human handling the conversation) and answers by message at most once every 6 hours.
+ */
+async function handleIncomingCall(client: SupabaseClient, input: {
+  instance: { id: string; organization_id: string; instance_token_encrypted?: string | null; metadata?: JsonRecord | null };
+  conversationId: string; call: IncomingCallOffer; savedMessageId: string;
+}) {
+  const behavior = normalizeWhatsappBehaviorConfig(readRecord(input.instance.metadata)?.behavior_config);
+  const humanHandling = await isConversationPausedForHuman(client, input.conversationId);
+  if (behavior.agentEnabled && !humanHandling && isInsideAiWindow(behavior)) {
+    await rejectIncomingCall(client, input.instance, input.call);
+  }
+  const since = new Date(Date.now() - incomingCallReplyWindowMs).toISOString();
+  const earlier = await client.from("conversation_messages").select("id").eq("conversation_id", input.conversationId)
+    .eq("message_type", "call").gte("occurred_at", since).neq("id", input.savedMessageId).limit(1);
+  return { answer: !humanHandling && (earlier.data ?? []).length === 0 };
 }
 
 function isConversationMessageWebhookEvent(eventType: string) {

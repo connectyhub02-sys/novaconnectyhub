@@ -825,6 +825,7 @@ export const functions = [
   connectyhubDailyAdminReport,
   connectyhubAdminPing,
   connectyhubWhatsappSync,
+  inngest.createFunction({id:"connectyhub-whatsapp-stage-labels",name:"Etiquetas de etapa no WhatsApp Business",retries:1,concurrency:{limit:1},triggers:[{cron:"*/5 * * * *"}]},async({step})=>step.run("sync-stage-labels",async()=>{const {syncWhatsappStageLabels}=await import("@/lib/whatsapp/stage-labels");return syncWhatsappStageLabels(createServiceClient());})),
   connectyhubUazapiCostGuard,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,

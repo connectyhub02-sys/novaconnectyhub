@@ -106,3 +106,54 @@ describe("AI window keeps messages for when it opens", () => {
     expect(run("wasHandledAfterInbound", [inbound, reply], inbound)).toBe(true);
   });
 });
+
+describe("typing indicator while the reply is thought out", () => {
+  function presenceHarness() {
+    const calls: Array<Record<string, unknown>> = [];
+    const run = runtimeHarness({}, { fetch: async (url: string, init: { body: string }) => {
+      if (String(url).endsWith("/message/presence")) calls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, text: async () => "{}" };
+    } });
+    const context = (responseMode: string) => ({ credentials: { baseUrl: "https://whatsapp.invalid" }, behavior: { ...defaults, responseMode }, instance: { id: "i" } });
+    return { run, calls, context };
+  }
+
+  it("shows typing during generation, gravando for a voice reply, and takes it down when nothing is sent", async () => {
+    const { run, calls, context } = presenceHarness();
+    const result = await run<Promise<{ ok: boolean; thinkingMs: number }>>("withThinkingPresence",
+      { context: context("text"), token: "t", phone: "5500", latestInbound: message("text", "oi"), active: true }, async () => ({ ok: true }));
+    expect(result.ok).toBe(true);
+    expect(calls.at(0)).toMatchObject({ presence: "composing" });
+    await run<Promise<unknown>>("withThinkingPresence",
+      { context: context("mirror"), token: "t", phone: "5500", latestInbound: message("audio", ""), active: true }, async () => ({}));
+    expect(calls.at(-1)).toMatchObject({ presence: "recording" });
+    await expect(run<Promise<unknown>>("withThinkingPresence",
+      { context: context("text"), token: "t", phone: "5500", latestInbound: null, active: true }, async () => { throw new Error("falhou"); })).rejects.toThrow("falhou");
+    expect(calls.at(-1)).toMatchObject({ presence: "paused" });
+  });
+});
+
+describe("waiting while the lead is typing", () => {
+  const presenceClient = (event: Record<string, unknown> | null, secondsAgo: number, filters: string[] = []) => ({
+    from: () => {
+      const chain = {
+        select: () => chain, gte: () => chain, order: () => chain,
+        eq: (column: string, value: string) => { filters.push(`${column}=${value}`); return chain; },
+        limit: async () => ({ data: event ? [{ received_at: new Date(Date.now() - secondsAgo * 1000).toISOString(), payload: { event } }] : [] }),
+      };
+      return chain;
+    },
+  });
+  const context = { instance: { id: "instance", metadata: {} }, agent: { metadata: {} }, run: { metadata: {} }, conversationMetadata: {}, phoneNumber: "554788577996", lead: null, providerChatId: "554788577996@s.whatsapp.net", isGroupChat: false };
+
+  it("recognizes typing and recording, and ignores stale or finished typing", async () => {
+    const run = runtimeHarness();
+    const filters: string[] = [];
+    expect(await run("readLeadTypingState", presenceClient({ State: "composing", Media: "" }, 3, filters), context)).toBe("composing");
+    expect(filters).toContain("payload->event->>chatid=554788577996@s.whatsapp.net");
+    expect(await run("readLeadTypingState", presenceClient({ State: "composing", Media: "audio" }, 20), context)).toBe("recording");
+    expect(await run("readLeadTypingState", presenceClient({ State: "composing", Media: "" }, 20), context)).toBeNull();
+    expect(await run("readLeadTypingState", presenceClient({ State: "paused", Media: "" }, 1), context)).toBeNull();
+    expect(await run("readLeadTypingState", presenceClient(null, 0), context)).toBeNull();
+  });
+});

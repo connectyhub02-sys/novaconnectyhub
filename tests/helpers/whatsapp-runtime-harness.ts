@@ -30,7 +30,7 @@ import { serverModuleHarness } from "./server-module-harness";
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
   "enrichLeadQualificationAnalysisWithRuntimeSignals",
-  "isWithinSchedule", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
+  "isWithinSchedule", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
   "buildProactiveMediaInstruction", "buildSmallTalkContext", "resolveOutboundReplyTargets",
   "shouldSendAudioResponse", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
   "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",
@@ -119,7 +119,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
   };
   runInNewContext(compiled, {
     module: runtimeModule, exports: runtimeModule.exports, require: (name: string) => imports[name] ?? {},
-    URL, Date, Buffer, process, setTimeout, clearTimeout, AbortController, AbortSignal,
+    URL, Date, Buffer, process, setTimeout, clearTimeout, setInterval, clearInterval, AbortController, AbortSignal,
     fetch: () => { throw new Error("Unexpected external request in runtime test"); },
     ...globals,
   });

@@ -1105,20 +1105,31 @@ async function processWhatsappAgentRunWithScope(input: {
       registeredClientContext, messages: context.messages, latestInbound, userText,
       conversationMetadata: context.conversationMetadata,
     };
-    const toolTurn = orderToolScope && latestInbound && !cachedAiResponse
-      ? await runOrderToolTurn({ ...generationInput, systemInstruction: buildSystemInstruction(generationInput), client, context, scope: orderToolScope, token, phone, latestInbound })
-      : null;
-    let aiResponse = toolTurn ? toolTurn.response : cachedAiResponse
-      ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
-      : await generateAgentResponse(generationInput);
+    // A person waits while the other side is still typing or recording before answering.
+    if (!cachedAiResponse) {
+      await waitWhileLeadTyping(client, context, leadTypingWaitBeforeReplyMs);
+      // What the lead sent meanwhile is answered by its own run, together with this message.
+      await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+    }
+    // While the reply is being thought out the lead sees "digitando…" (or "gravando…"), like a person.
+    const { toolTurn, generated, thinkingMs } = await withThinkingPresence({ context, token, phone, latestInbound, active: !cachedAiResponse }, async () => {
+      const toolTurn = orderToolScope && latestInbound && !cachedAiResponse
+        ? await runOrderToolTurn({ ...generationInput, systemInstruction: buildSystemInstruction(generationInput), client, context, scope: orderToolScope, token, phone, latestInbound })
+        : null;
+      let generated = toolTurn ? toolTurn.response : cachedAiResponse
+        ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
+        : await generateAgentResponse(generationInput);
 
-    if (!toolTurn) aiResponse = await maybeRepairMediaGroundingResponse({
-      client,
-      context,
-      cached: Boolean(cachedAiResponse),
-      baseInput: generationInput,
-      response: aiResponse,
+      if (!toolTurn) generated = await maybeRepairMediaGroundingResponse({
+        client,
+        context,
+        cached: Boolean(cachedAiResponse),
+        baseInput: generationInput,
+        response: generated,
+      });
+      return { toolTurn, generated };
     });
+    let aiResponse = generated;
 
     if (agendaTurn) {
       // A company may pause scheduling while the model is composing its reply.
@@ -1145,12 +1156,14 @@ async function processWhatsappAgentRunWithScope(input: {
       });
     }
 
+    await waitWhileLeadTyping(client, context, leadTypingWaitBeforeSendMs);
     await prepareAgentPresenceBeforeSend({
       credentials: context.credentials,
       token,
       phone,
       context,
       text: aiText,
+      thinkingMs,
     });
 
     await assertRunStillTargetsLatestInbound(client, context, latestInbound);
@@ -15811,18 +15824,77 @@ async function loadPersistedOutboundChunks(client: SupabaseClient, runId: string
   return chunks;
 }
 
+const thinkingPresenceRefreshMs = 20_000;
+const leadTypingWaitBeforeReplyMs = 25_000;
+const leadTypingWaitBeforeSendMs = 15_000;
+
+/**
+ * The lead's typing state from the provider's presence events (already stored with every webhook).
+ * A "composing" without a later "paused" only counts while recent: the lead may have left the chat.
+ */
+async function readLeadTypingState(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  if (isWhatsappGroupChatContext(context)) return null;
+  const phone = normalizePhone(context.phoneNumber ?? context.lead?.phone_number ?? context.providerChatId);
+  if (!phone) return null;
+  const { data } = await client.from("whatsapp_webhook_events").select("received_at, payload")
+    .eq("whatsapp_instance_id", context.instance.id).eq("event_type", "presence")
+    .gte("received_at", new Date(Date.now() - 45_000).toISOString())
+    .eq("payload->event->>chatid", `${phone}@s.whatsapp.net`)
+    .order("received_at", { ascending: false }).limit(1);
+  const latest = (data ?? [])[0] as { received_at: string; payload: JsonRecord | null } | undefined;
+  const event = readRecord(readRecord(latest?.payload)?.event);
+  if (!latest || event?.IsFromMe === true || asString(event?.State)?.toLowerCase() !== "composing") return null;
+  const recording = asString(event?.Media) === "audio";
+  const age = Date.now() - Date.parse(latest.received_at);
+  return age <= (recording ? 40_000 : 12_000) ? (recording ? "recording" : "composing") : null;
+}
+
+async function waitWhileLeadTyping(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, maxMs: number) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline && await readLeadTypingState(client, context).catch(() => null)) {
+    await sleep(2000);
+  }
+}
+
+/** Keeps "digitando…" (or "gravando…") visible while the reply is generated; the provider drops it on send. */
+async function withThinkingPresence<T extends object>(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>; token: string; phone: string;
+  latestInbound: ConversationMessageRow | null; active: boolean;
+}, work: () => Promise<T>): Promise<T & { thinkingMs: number }> {
+  const startedAt = Date.now();
+  if (!input.active) return { ...(await work()), thinkingMs: 0 };
+  const { behavior } = input.context;
+  const voiceLikely = behavior.responseMode === "audio" || (behavior.responseMode === "mirror" && isAudioMessage(input.latestInbound));
+  const presence = voiceLikely ? "recording" : "composing";
+  const show = () => setChatPresence(input.context.credentials, input.token, input.phone, presence, thinkingPresenceRefreshMs + 10_000).catch(() => {});
+  await show();
+  const timer = setInterval(() => void show(), thinkingPresenceRefreshMs);
+  try {
+    return { ...(await work()), thinkingMs: Date.now() - startedAt };
+  } catch (error) {
+    // Nothing will be sent: take the indicator down instead of leaving it on for the lead.
+    await setChatPresence(input.context.credentials, input.token, input.phone, "paused", 1000).catch(() => {});
+    throw error;
+  } finally {
+    clearInterval(timer);
+  }
+}
+
 async function prepareAgentPresenceBeforeSend(input: {
   credentials: UazapiCredentials;
   token: string;
   phone: string;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   text: string;
+  /** Time the lead already watched the typing indicator while the reply was generated. */
+  thinkingMs?: number;
 }) {
   const latestInbound = findLatestInbound(input.context.messages);
   const cleanText = normalizeAssistantText(input.text);
   const { shouldSendAudio } = resolveOutboundDelivery(input.context, latestInbound, cleanText);
   const presence = shouldSendAudio ? "recording" : "composing";
-  const delayMs = resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio);
+  const delayMs = Math.max(input.thinkingMs ? 800 : 0,
+    resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio) - (input.thinkingMs ?? 0));
   const presenceHoldMs = shouldSendAudio ? 60000 : Math.min(delayMs + 10000, 300000);
 
   if (input.context.behavior.composingPause && delayMs > 3000) {
