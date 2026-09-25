@@ -52,7 +52,7 @@ describe("first purchase with cart tools", () => {
     t.say("quero uma pizza de queijo e uma limonada");
     const result = await t.tool("montar_pedido", pizzaAndLemonade);
     expect(result).toMatchObject({ ok: false, motivo: "Falta o endereço de entrega." });
-    expect(result.faltam).toEqual(["endereço completo com rua, número, bairro, cidade e CEP", "CPF"]);
+    expect(result.faltam).toEqual(["endereço completo com rua, número, bairro, cidade e CEP", "CPF", "forma de pagamento (Pix ou cartão)"]);
     expect(t.deferred).toHaveLength(0);
   });
 
@@ -105,6 +105,50 @@ describe("first purchase with cart tools", () => {
     expect(ambiguous.ok).toBe(false);
     expect(ambiguous.motivo).toContain("versões");
     expect(await t.tool("montar_pedido", { itens: [{ produto_id: "shirt", quantidade: 1, versao_id: "g" }] })).toMatchObject({ ok: true });
+  });
+
+  it("accepts the product tag shown in the catalog as the product id (Gustavo, 25/09)", async () => {
+    const t = cart();
+    t.say(address);
+    t.say("pizza e limonada");
+    const result = await t.tool("montar_pedido", { itens: [{ produto_id: "{{produto_pizza}}", quantidade: 1 }, { produto_id: "produto_lemonade", quantidade: 1 }] });
+    expect(result).toMatchObject({ ok: true, total: "80,00" });
+  });
+
+  it("closes on a plain 'pode' even if the model rebuilds the same summary first (Gustavo, 25/09 11:10)", async () => {
+    const t = cart();
+    t.say(address);
+    t.say("pizza e limonada no cartão");
+    const summary = await t.tool("montar_pedido", { ...pizzaAndLemonade, forma_pagamento: "card" });
+    await t.flush();
+    t.say("Pode");
+    const again = await t.tool("montar_pedido", { ...pizzaAndLemonade, forma_pagamento: "card" });
+    expect(again).toMatchObject({ ok: true, ja_enviado: true, codigo_resumo: summary.codigo_resumo });
+    expect(t.deferred).toHaveLength(0);
+    expect(await t.tool("fechar_pedido", { codigo_resumo: summary.codigo_resumo })).toMatchObject({ ok: true });
+    expect(t.db.tables.sales_catalog_orders).toHaveLength(1);
+  });
+
+  it("asks the payment method together with the other missing data", async () => {
+    const t = cart();
+    t.say("quero pizza e limonada");
+    const result = await t.tool("montar_pedido", pizzaAndLemonade);
+    expect(result.faltam).toContain("forma de pagamento (Pix ou cartão)");
+  });
+
+  it("tells the agent a typed CPF is invalid, without flagging a phone number", () => {
+    const t = cart();
+    const lines = (messages: Row[]) => t.call<string[]>("buildCustomerCheckoutDataLines", t.ctx.lead, messages).join("\n");
+    const asked = t.message("outbound", "Me passa nome completo, e-mail, CPF e endereço?");
+    expect(lines([asked, t.message("inbound", "Magno macedo Gomes\n97114659191")])).toContain("não é válido");
+    expect(lines([t.message("outbound", "Qual seu telefone?"), t.message("inbound", "47988577996")])).not.toContain("não é válido");
+    expect(t.call("normalizeRuntimeCustomerDocument", "97114659191")).toBeNull();
+    expect(t.call("normalizeRuntimeCustomerDocument", "529.982.247-25")).toBe("52998224725");
+  });
+
+  it("treats 'já solicitei à equipe' without a tool as an unexecuted claim (Gustavo, 25/09 11:16)", () => {
+    const t = cart();
+    expect(t.call("claimsUnexecutedOrderAction", "Prontinho, Magno! Já solicitei a alteração para Pix no sistema.")).toBe(true);
   });
 
   it("does not build a delivery summary from a CEP alone (Gustavo, 24/09 22:13)", async () => {

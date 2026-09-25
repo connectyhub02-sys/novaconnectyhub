@@ -3765,7 +3765,23 @@ function extractRuntimeEmail(value: string) {
 function normalizeRuntimeCustomerDocument(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
 
-  return digits.length === 11 || digits.length === 14 ? digits : null;
+  // A mistyped CPF/CNPJ is rejected here, before it reaches the order and the
+  // payment provider refuses it.
+  return (digits.length === 11 || digits.length === 14) && hasValidBrazilianDocumentDigits(digits) ? digits : null;
+}
+
+function hasValidBrazilianDocumentDigits(digits: string) {
+  if (/^(\d)\1+$/.test(digits)) return false;
+  const digit = (base: string, weights: number[]) => {
+    const rest = base.split("").reduce((sum, value, index) => sum + Number(value) * weights[index], 0) % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
+  if (digits.length === 11) {
+    const first = digit(digits.slice(0, 9), [10, 9, 8, 7, 6, 5, 4, 3, 2]);
+    return digits.endsWith(`${first}${digit(digits.slice(0, 9) + first, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2])}`);
+  }
+  const first = digit(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return digits.endsWith(`${first}${digit(digits.slice(0, 12) + first, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])}`);
 }
 
 function extractRuntimeCustomerDocument(value: string) {
@@ -4448,19 +4464,31 @@ function missingCheckoutBillingLabels(lead: LeadRow | null) {
   ].filter((label): label is string => Boolean(label));
 }
 
-function buildCustomerCheckoutDataLines(lead: LeadRow | null) {
+function buildCustomerCheckoutDataLines(lead: LeadRow | null, messages: ConversationMessageRow[] = []) {
   const metadata = lead?.metadata ?? null;
   const name = lead ? resolveLeadPersonalName({ displayName: lead.display_name, metadata }) : null;
   const fullName = name && name.trim().split(/\s+/).length >= 2 ? name : null;
   const email = normalizeRuntimeEmail(findString(metadata, ["email", "customer_email", "lead_email"]));
   const document = normalizeRuntimeCustomerDocument(findString(metadata, ["cpf", "cnpj", "cpf_cnpj", "customer_document"]));
   const address = readLeadSavedDeliveryAddress(metadata);
-  const known = [fullName ? `nome completo (${fullName})` : null, email ? "e-mail" : null, document ? "CPF" : null, address ? "endereço de entrega com CEP" : null].filter(Boolean);
-  const missing = [fullName ? null : "nome completo", email ? null : "e-mail", document ? null : "CPF", address ? null : "endereço completo com CEP"].filter(Boolean);
+  const payment = detectRecentSalesCatalogPaymentPreference(messages, findLatestInbound(messages));
+  const known = [fullName ? `nome completo (${fullName})` : null, email ? "e-mail" : null, document ? "CPF" : null, address ? "endereço de entrega com CEP" : null,
+    payment ? `forma de pagamento (${payment === "card" ? "cartão" : "Pix"})` : null].filter(Boolean);
+  const missing = [fullName ? null : "nome completo", email ? null : "e-mail", document ? null : "CPF", address ? null : "endereço completo com CEP",
+    payment ? null : "forma de pagamento (Pix ou cartão)"].filter(Boolean);
+  // A CPF that fails its check digits was typed wrong: say so instead of asking as if it never came.
+  // Only replies to a CPF request (or mentioning CPF) count, so a phone number is never flagged.
+  const invalidDocument = !document && messages.slice(-12).some((message, index, recent) => {
+    if (message.direction !== "inbound") return false;
+    const asked = [...recent.slice(0, index)].reverse().find(previous => previous.direction === "outbound");
+    const aboutCpf = /\bcpf\b/i.test(message.text_content ?? "") || /\bcpf\b/i.test(asked?.text_content ?? "");
+    return aboutCpf && Boolean((message.text_content ?? "").match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g)?.some(candidate => !normalizeRuntimeCustomerDocument(candidate)));
+  });
   return [
     "DADOS DO CLIENTE PARA FECHAR O PEDIDO",
     known.length ? `Já informados: ${known.join(", ")}. Nunca peça de novo um dado já informado.` : "",
     missing.length ? `Faltam: ${missing.join(", ")}. Quando o cliente decidir comprar, peça todos os que faltam em UMA única mensagem, em vez de um por vez.` : "Todos os dados para o pagamento já foram informados.",
+    invalidDocument ? "O CPF que o cliente enviou não é válido (os dígitos não conferem). Avise com gentileza e peça para ele conferir e mandar de novo." : "",
     "Depois que o cliente confirmar o resumo do pedido, não repita o resumo: siga direto para o pagamento.",
   ].filter(Boolean);
 }
@@ -4634,7 +4662,7 @@ function buildSystemInstruction(input: {
     ...buildHumanHandbackInstruction(input.conversationMetadata, input.messages),
     ...buildSmallTalkContext(input.behavior),
     ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
-    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCustomerCheckoutDataLines(input.lead) : []),
+    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCustomerCheckoutDataLines(input.lead, input.messages) : []),
     ...buildConfiguredNicheCareLines(input.agent),
     ...buildActivityCommerceInstruction(commerceJourney),
     "",
@@ -12994,6 +13022,16 @@ const orderToolInstructionLines = [
   "Não escreva links nem códigos de pagamento: o acesso ao pagamento é enviado pelo sistema.",
 ];
 
+/**
+ * The catalog in the prompt shows each product by its tag ({{produto_…}}), so
+ * the model often passes the tag as produto_id. Accept both, never a guess.
+ */
+function findToolCatalogItem(context: RunContext, reference: string | null | undefined) {
+  const key = reference?.trim().replace(/^\{\{/, "").replace(/\}\}$/, "");
+  if (!key) return null;
+  return context.salesCatalog.find(item => item.id === key || (item.tag ?? "").replace(/^\{\{/, "").replace(/\}\}$/, "") === key) ?? null;
+}
+
 function describeOrderForTool(context: RunContext, order: RuntimeSalesCatalogOrder) {
   const draft = readRuntimeOrderRevision(context);
   const pending = draft && !draft.applied && draft.ready && draft.order_id === order.id && draft.fingerprint;
@@ -13070,7 +13108,7 @@ async function executeOrderTool(input: {
     for (const line of lines) {
       const id = asString(line?.produto_id);
       const quantity = typeof line?.quantidade === "number" ? line.quantidade : NaN;
-      const item = id ? context.salesCatalog.find(candidate => candidate.id === id) : null;
+      const item = findToolCatalogItem(context, id);
       if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout") return fail(`Produto ${id ?? "sem id"} não está disponível para venda.`);
       if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return fail(`Quantidade inválida para ${item.title}.`);
       if (items.some(existingLine => existingLine.id === item.id)) return fail(`${item.title} aparece repetido; informe uma linha por produto.`);
@@ -13146,7 +13184,11 @@ async function executeOrderTool(input: {
     }
     const total = draft?.applied ? draft.total ?? order.total : order.total;
     const payment = await maybeCreateSalesCatalogPaymentLink({ client, context, orderId: order.id, total, preferredMethod: method });
-    if (!payment || payment.gatewayUnavailable) return fail("O pagamento não pôde ser preparado agora. Informe que a equipe vai conferir.");
+    // The provider's reason (e.g. "Confira o CPF") is what the customer needs to hear.
+    // Nobody is notified by this tool: never promise that a team will check it.
+    if (!payment || payment.gatewayUnavailable) return fail(payment?.failureReason
+      ? `${payment.failureReason} Explique isso ao cliente com sinceridade e peça o dado correto, se for o caso. Não diga que alguém da equipe vai conferir.`
+      : "O pagamento não pôde ser preparado agora. Explique ao cliente com sinceridade e ofereça manter a forma de pagamento atual ou tentar de novo em instantes. Não diga que alguém da equipe vai conferir.");
     deferPayment(payment, Boolean(draft?.applied));
     return { ok: true, forma_pagamento: method, total, observacao: "O acesso ao pagamento será enviado logo após a sua mensagem." };
   }
@@ -13158,7 +13200,7 @@ const orderToolExecutingNames = new Set(["confirmar_alteracao", "trocar_forma_pa
 function claimsUnexecutedOrderAction(text: string, checkPromises = true) {
   const normalized = normalizeSearch(text);
   // Past claims ("gerei", "adicionei") and promises ("estou preparando", "vou gerar") both need a tool.
-  return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei)\b/.test(normalized)
+  return /\b(?:alterei|alterad[oa]|atualizei|atualizad[oa]|confirmei|confirmad[oa]|inclui|incluid[oa]|adicionei|adicionad[oa]|removi|retirei|troquei|trocad[oa]|gerei|gerad[oa]|enviei|solicitei|encaminhei|avisei a equipe|pedi para a equipe|a equipe ja esta)\b/.test(normalized)
     || checkPromises && /\b(?:estou|to|vou|irei)\s+(?:\S+\s+){0,3}?(?:preparando|gerando|gerar|enviando|enviar|mandando|mandar|alterando|alterar|atualizando|atualizar|incluindo|incluir|trocando|trocar)\b/.test(normalized);
 }
 
@@ -13232,7 +13274,8 @@ const cartToolInstructionLines = [
   "FERRAMENTAS DE PEDIDO (NOVA COMPRA)",
   "Valores, taxa de entrega, frete e total vêm sempre das ferramentas; não calcule nem prometa um total por conta própria.",
   "Quando o cliente escolher o que quer comprar, chame montar_pedido com a lista completa de itens usando o produto_id exato (do catálogo ou de buscar_produtos). Em produtos com versões informe versao_id; em produtos com montagem (pizza) informe tamanho, sabores e opções de cada unidade. Se houver dois produtos ou versões parecidos, pergunte qual antes de montar.",
-  "Se montar_pedido disser que falta endereço ou dados, peça ao cliente tudo o que falta em UMA mensagem.",
+  "Se montar_pedido disser que falta endereço ou dados, peça ao cliente tudo o que falta em UMA mensagem, incluindo a forma de pagamento (Pix ou cartão) quando ainda não foi escolhida.",
+  "Quando o cliente aceitar o resumo já enviado ('pode', 'sim', 'fechado', 'pode fechar'), chame fechar_pedido direto com o codigo_resumo (consulte ver_carrinho se precisar). Não chame montar_pedido de novo para o mesmo pedido.",
   "Se uma ferramenta recusar, leia o motivo: corrija o produto ou a versão uma vez (usando buscar_produtos) ou pergunte ao cliente. Não repita a mesma chamada sem mudar nada.",
   "Depois que montar_pedido retornar ok, escreva só uma frase curta de transição. O sistema envia o resumo oficial; não repita itens nem valores.",
   "Chame fechar_pedido somente quando a última mensagem do cliente aceitar o resumo enviado. Se a forma de pagamento ainda não foi escolhida, pergunte Pix ou cartão e informe em fechar_pedido.",
@@ -13341,7 +13384,7 @@ async function executeCartTool(input: {
       dados_de_cobranca_faltando: missingCheckoutBillingLabels(context.lead) };
   }
   if (input.name === "mostrar_produto") {
-    const item = context.salesCatalog.find(candidate => candidate.id === asString(input.args.produto_id));
+    const item = findToolCatalogItem(context, asString(input.args.produto_id));
     if (!item || !isSalesCatalogItemAvailableForDetails(item)) return fail("Produto não encontrado.");
     const attachments = collectSalesCatalogAttachments([item]).slice(0, 1);
     input.deferred.push(async () => {
@@ -13359,7 +13402,7 @@ async function executeCartTool(input: {
     const selections: RuntimeSalesCatalogOrderSelection[] = [];
     for (const line of lines) {
       const id = asString(line?.produto_id);
-      const item = id ? context.salesCatalog.find(candidate => candidate.id === id) : null;
+      const item = findToolCatalogItem(context, id);
       if (!item || !isSalesCatalogItemSellable(item) || effectiveRuntimeDestination(item, context.agent) !== "connectyhub_checkout") return fail(`Produto ${id ?? "sem id"} não está disponível para venda.`);
       if (selections.some(selection => selection.item.id === item.id)) return fail(`${item.title} aparece repetido; informe uma linha por produto.`);
       let quantity = typeof line?.quantidade === "number" ? line.quantidade : NaN;
@@ -13389,8 +13432,22 @@ async function executeCartTool(input: {
     const requested = input.args.forma_pagamento === undefined ? null : assertOrderToolPaymentMethod(context, input.args.forma_pagamento);
     if (typeof requested === "string" && requested !== "pix" && requested !== "card") return fail(requested);
     const quote = quoteCartToolSelections(context, selections, latestText);
-    if (!quote.ok) return fail(quote.motivo, quote.faltam ? { faltam: quote.faltam } : {});
+    if (!quote.ok) {
+      // Everything the checkout still needs goes in the same request, payment method included.
+      const faltam = quote.faltam && !requested && choices.length > 1 && !resolveSalesCatalogConfirmedPaymentPreference(context, latestText)
+        ? [...quote.faltam, "forma de pagamento (Pix ou cartão)"] : quote.faltam;
+      return fail(quote.motivo, faltam ? { faltam } : {});
+    }
     const method = (requested as SalesCatalogRuntimePaymentPreference | null) ?? resolveSalesCatalogConfirmedPaymentPreference(context, latestText);
+    // The summary the customer already saw stays valid: rebuilding it would issue
+    // a new code and make the customer's "pode" point to an outdated summary.
+    const previous = readCartToolState(context);
+    if (previous?.ready && previous.fingerprint === quote.core) {
+      const chosen = method ?? previous.preferred_method;
+      if (chosen !== previous.preferred_method) await persistCartToolState(client, context, { ...previous, preferred_method: chosen });
+      return { ok: true, ja_enviado: true, codigo_resumo: previous.fingerprint.slice(0, 12), total: quote.total, forma_pagamento: chosen,
+        observacao: "Este resumo já foi enviado ao cliente e continua válido. Se ele aceitou, chame fechar_pedido com este código agora; não reenvie o resumo." };
+    }
     const previewText = ["Antes de fechar, confirma se o pedido ficou assim:", quote.lines.join("\n"),
       buildSalesCatalogOrderConfirmationShippingLine(quote.shipping), quote.estimate ?? "", `Total: R$ ${formatRuntimeOrderMoney(normalizeCurrencyAmount(quote.total) ?? 0)}.`,
       quote.shipping?.destinationAddress ? `Entrega: ${quote.shipping.destinationAddress}.` : "",
@@ -13433,7 +13490,7 @@ async function executeCartTool(input: {
     await assertRunStillTargetsLatestInbound(client, context, latestInbound);
     const payment = await createRuntimeSalesCatalogOrder({ client, context, text: "", intentText: latestText, selections,
       paymentPreference: method, orderId, confirmationPreviewId: null, variantsFromMentionOnly: true });
-    if (!payment) return fail("Não consegui criar o pedido com segurança agora. Informe que a equipe vai conferir.");
+    if (!payment) return fail("Não consegui criar o pedido com segurança agora. Explique ao cliente com sinceridade e peça para tentar de novo em instantes. Não diga que alguém da equipe vai conferir.");
     await persistCartToolState(client, context, null);
     const queued = input.deferred as OrderToolDeferred[] & { paymentQueued?: boolean };
     if (!queued.paymentQueued) {

@@ -23,7 +23,7 @@ const shippingSettings = {
   configured: true, shippingEnabled: true, localPickup: false, localDeliveryEnabled: false, localDeliveryZones: [], defaultHandlingDays: 0,
   rules: [{ uf: "SC", state: "Santa Catarina", active: true, price: "70,00", freeShippingThreshold: "800,00", minDays: 5, maxDays: 10, services: [], cepStart: null, cepEnd: null }],
 };
-const customerData = "Pix\nMaria Oliveira\ncliente@example.com\n12345678901\nRua das Flores, numero 42, Cep 88330786, Centro, Balneario Camboriu, apartamento 101";
+const customerData = "Pix\nMaria Oliveira\ncliente@example.com\n12345678909\nRua das Flores, numero 42, Cep 88330786, Centro, Balneario Camboriu, apartamento 101";
 const abbreviatedPreview = "Ficou assim o resumo do pedido:\n1x Serum 10ml Flora Lab (R$ 251,90)\n1x Oleo 10ml Flora Lab (R$ 251,90)\nTotal: R$ 503,80 no Pix.";
 const confirmation = "Tudo certinho! Posso fechar seu pedido e gerar o código do Pix agora?";
 const context = () => ({
@@ -32,7 +32,7 @@ const context = () => ({
     message("inbound", "?", 3), message("outbound", abbreviatedPreview, 4), message("outbound", confirmation, 5), message("inbound", "sim pode aguardando", 6)],
   salesCatalog: catalog, salesCatalogOrders: [], salesCatalogShippingSettings: shippingSettings,
   organization: { id: "store" }, agent: { id: "agent" }, instance: { id: "instance", metadata: {} }, conversationId: "conversation", run: { id: "run" },
-  lead: { id: "lead", display_name: "Maria Oliveira", metadata: { person_name: "Maria Oliveira", email: "cliente@example.com", customer_document: "12345678901" } },
+  lead: { id: "lead", display_name: "Maria Oliveira", metadata: { person_name: "Maria Oliveira", email: "cliente@example.com", customer_document: "12345678909" } },
   behavior: { proactiveFollowUp: false }, linkButtons: [], salesCatalogSettings: null, credentials: { baseUrl: "https://whatsapp.invalid" },
 });
 type Selection = { item: { id: string }; quantity: number };
@@ -81,7 +81,7 @@ describe("physical WhatsApp checkout after a natural multipart summary", () => {
     const createPayment = vi.fn(async (input: { amount: string; preferredMethod: string }) => {
       expect(input).toMatchObject({ amount: "573,80", preferredMethod: method });
       expect(db.tables.sales_catalog_orders[0]).toMatchObject({ subtotal: "503,80", total: "573,80", shipping_total: "70,00",
-        destination_cep: "88330786", customer_name: "Maria Oliveira", customer_email: "cliente@example.com", customer_document: "12345678901" });
+        destination_cep: "88330786", customer_name: "Maria Oliveira", customer_email: "cliente@example.com", customer_document: "12345678909" });
       expect(db.tables.sales_catalog_orders[0].destination_address).toContain("Rua das Flores");
       return { session: { provider: "asaas", amount: "573,80" }, checkoutUrl: "https://loja.example/checkout/teste", pixQrCode: method === "pix" ? "000201pix-ficticio" : null };
     });

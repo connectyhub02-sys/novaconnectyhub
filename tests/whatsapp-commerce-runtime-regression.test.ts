@@ -160,7 +160,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const createPayment = vi.fn(async () => {
       const order = db.tables.sales_catalog_orders[0];
-      expect(order).toMatchObject({ customer_name: "Maria Oliveira", customer_email: "cliente@example.com", customer_document: "12345678901", total: "52,80" });
+      expect(order).toMatchObject({ customer_name: "Maria Oliveira", customer_email: "cliente@example.com", customer_document: "12345678909", total: "52,80" });
       return { session: { provider: "asaas", amount: "52,80" }, checkoutUrl: "https://loja.example/checkout/teste", pixQrCode: method === "pix" ? "000201pix-ficticio" : null };
     });
     const call = runtimeHarness({
@@ -178,7 +178,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
       return { ok: true, status: 200, text: async () => JSON.stringify({ id: "fake-whatsapp-message" }) };
     } });
     const ctx = { ...context([
-      message("inbound", "Maria Oliveira\ncliente@example.com\n12345678901", 0),
+      message("inbound", "Maria Oliveira\ncliente@example.com\n12345678909", 0),
       message("outbound", "Antes de fechar, confirma se o pedido ficou assim:\n- 1x Pizza Margherita - R$ 39,90\n- 1x Suco de Laranja - R$ 12,90\nTotal: R$ 52,80.\nPosso fechar seu pedido e gerar o pagamento?", 1),
       message("inbound", "Sim", 2),
       message("outbound", "Perfeito, pedido confirmado. Qual forma de pagamento você prefere: Pix ou cartão de crédito?", 3),
@@ -210,7 +210,7 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
       message("inbound", "Sim, Pix", 1),
     ]), behavior: { proactiveFollowUp: false }, salesCatalogSettings: null };
     ctx.lead.display_name = "Maria Oliveira";
-    ctx.lead.metadata = { person_name: "Maria Oliveira", email: "cliente@example.com", customer_document: "12345678901" };
+    ctx.lead.metadata = { person_name: "Maria Oliveira", email: "cliente@example.com", customer_document: "12345678909" };
     await expect(call<Promise<unknown>>("recordSalesCatalogOrderIntent", {
       client: db.client, context: ctx, items: [], text: "Pedido confirmado", intentText: "Sim, Pix",
     })).rejects.toThrow("Simulated database failure");
@@ -278,18 +278,18 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     const call = runtimeHarness({ "@/lib/leads/metadata-update": { updateLeadMetadata: update } });
     const ctx = context([
       message("outbound", "Exemplo de e-mail: errado@example.com", 0),
-      message("inbound", "Maria Oliveira\ncliente@example.com\n12345678901", 1),
+      message("inbound", "Maria Oliveira\ncliente@example.com\n12345678909", 1),
       message("outbound", "Antes de fechar, confirma o pedido?", 2),
       message("inbound", "Pix", 3),
     ]);
     await call("maybePersistSalesCatalogLeadContactDetailsFromMessage", { context: ctx, client: {}, userText: "Pix" });
-    expect(stored).toMatchObject({ email: "cliente@example.com", customer_document: "12345678901", person_name: "Maria Oliveira" });
-    expect(ctx.lead.metadata).toMatchObject({ email: "cliente@example.com", customer_document: "12345678901" });
+    expect(stored).toMatchObject({ email: "cliente@example.com", customer_document: "12345678909", person_name: "Maria Oliveira" });
+    expect(ctx.lead.metadata).toMatchObject({ email: "cliente@example.com", customer_document: "12345678909" });
     expect(ctx.lead.display_name).toBe("Maria Oliveira");
   });
 
   it("a slow AI memory completion preserves newer checkout facts and the confirmed name", async () => {
-    const stored = { email: "novo@example.com", customer_document: "12345678901", person_name: "Maria Oliveira", lead_memory: { email: "novo@example.com", cpfCnpj: "12345678901" } };
+    const stored = { email: "novo@example.com", customer_document: "12345678909", person_name: "Maria Oliveira", lead_memory: { email: "novo@example.com", cpfCnpj: "12345678909" } };
     const update = vi.fn(async input => input.buildUpdate(stored));
     const call = runtimeHarness({
       "@/lib/leads/metadata-update": { updateLeadMetadata: update },
@@ -298,6 +298,6 @@ describe("WhatsApp commerce regression: real runtime decisions", () => {
     const ctx = { ...context([message("inbound", "Olá", 0), message("outbound", "Oi", 1)]), behavior: { leadMemory: true }, geminiCredentials: { apiKey: "fake", model: "fake" } };
     await call("extractLeadMemory", {}, ctx, "Pix");
     expect(update).toHaveBeenCalledOnce();
-    expect(ctx.lead.metadata).toMatchObject({ email: "novo@example.com", customer_document: "12345678901", person_name: "Maria Oliveira", lead_memory: { email: "novo@example.com", cpfCnpj: "12345678901", personName: "Maria Oliveira", summary: "Aguardando Pix" } });
+    expect(ctx.lead.metadata).toMatchObject({ email: "novo@example.com", customer_document: "12345678909", person_name: "Maria Oliveira", lead_memory: { email: "novo@example.com", cpfCnpj: "12345678909", personName: "Maria Oliveira", summary: "Aguardando Pix" } });
   });
 });

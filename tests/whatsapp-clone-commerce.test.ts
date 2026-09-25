@@ -52,7 +52,7 @@ describe("clone conversation and checkout boundaries", () => {
   it.each([
     "Sim", "Pix", "Pode mandar o Pix?", "Me envia o link de pagamento", "Mas eu já te passei",
     "Não recebi o código Pix", "Troca para Pix", "Muda do cartão para Pix", "Pode continuar", "Sim, Pix",
-    "Maria Oliveira\ncliente@example.com\n12345678901",
+    "Maria Oliveira\ncliente@example.com\n12345678909",
   ])("allows explicit checkout progression or already supplied data: %s", text => {
     expect(requiresCommerceConversationReply(text)).toBe(false);
   });
@@ -119,7 +119,7 @@ describe("clone conversation and checkout boundaries", () => {
       context: {
         organization: { id: "store" }, agent: { id: "agent" }, run: { id: "run" }, instance: { id: "instance", metadata: {} },
         conversationId: "conversation", credentials: { baseUrl: "https://whatsapp.invalid" }, behavior: {}, messages: [],
-        lead: { id: "lead", display_name: "Maria Oliveira", metadata: { person_name: "Maria Oliveira", customer_document: "12345678901" } },
+        lead: { id: "lead", display_name: "Maria Oliveira", metadata: { person_name: "Maria Oliveira", customer_document: "12345678909" } },
         salesCatalogOrders: [], salesCatalog: [], salesCatalogShippingSettings: null,
       },
       payment: { orderId: "order", provider: "asaas", paymentDeferred: true },
