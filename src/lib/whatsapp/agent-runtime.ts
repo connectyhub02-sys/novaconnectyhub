@@ -495,7 +495,7 @@ export async function processQueuedWhatsappAgentRuns(input: {
     .eq("run_status", "queued")
     .eq("trigger_source", "connectyhub/whatsapp.message.received")
     .order("created_at", { ascending: true })
-    .limit(50);
+    .limit(200);
 
   if (error) {
     throw new Error(`Nao foi possivel carregar fila WhatsApp: ${error.message}`);
@@ -537,7 +537,7 @@ async function expireZombieRuns(client: SupabaseClient) {
   const zombieCutoff = new Date(Date.now() - ZOMBIE_TIMEOUT_MS).toISOString();
   const queuedCutoff = new Date(Date.now() - QUEUED_EXPIRY_MS).toISOString();
 
-  const [zombies, expired] = await Promise.all([
+  const [zombies, expired, expiredWindow] = await Promise.all([
     client
       .from("agent_runs")
       .update({
@@ -557,12 +557,25 @@ async function expireZombieRuns(client: SupabaseClient) {
       })
       .eq("run_status", "queued")
       .lt("created_at", queuedCutoff)
+      // A run waiting for the AI window ages from the moment the window opens, not from its creation.
+      .or("metadata->>ai_schedule_deferred.is.null,metadata->>ai_schedule_deferred.neq.true")
+      .select("id"),
+    client
+      .from("agent_runs")
+      .update({
+        run_status: "failed",
+        error_message: "Timeout: run da janela da IA sem processamento 1 hora apos a abertura.",
+        finished_at: now,
+      })
+      .eq("run_status", "queued")
+      .eq("metadata->>ai_schedule_deferred", "true")
+      .lt("metadata->>deferredUntil", queuedCutoff)
       .select("id"),
   ]);
 
   return {
     zombies: (zombies.data ?? []).length,
-    expiredQueued: (expired.data ?? []).length,
+    expiredQueued: (expired.data ?? []).length + (expiredWindow.data ?? []).length,
   };
 }
 
@@ -593,6 +606,11 @@ async function processWhatsappAgentRunWithScope(input: {
     return { status: "skipped", reason: `run_${run.run_status}` };
   }
 
+  // Outside the configured AI window the run waits in the queue and is answered when it opens.
+  if (behavior.agentEnabled && !isWithinSchedule(behavior)) {
+    return await deferRunUntilAiWindow(client, run, behavior, findLatestInbound(context.messages));
+  }
+
   const claimed = await claimRun(client, run.id);
 
   if (!claimed) {
@@ -617,6 +635,11 @@ async function processWhatsappAgentRunWithScope(input: {
 
     if (!isWithinSchedule(behavior)) {
       return await completeRun(client, run.id, "Fora da janela de atendimento da IA.", { skipped: true, reason: "outside_ai_schedule" });
+    }
+
+    // A message kept for the AI window is only answered if nobody replied while it was closed.
+    if (readRecord(run.metadata)?.ai_schedule_deferred === true && wasHandledAfterInbound(context.messages, findLatestInbound(context.messages))) {
+      return await completeRun(client, run.id, "Conversa respondida enquanto a IA estava fora do horario.", { skipped: true, reason: "handled_outside_ai_schedule" });
     }
 
     if (await isOrgRateLimited(client, run.organization_id!)) {
@@ -18741,9 +18764,8 @@ async function sendContextualSticker(
   responseText: string,
   behavior: WhatsappBehaviorConfig,
 ) {
-  // Every sticker sent in September 2026 returned HTTP 500 from the provider
-  // (valid 512x512 WebP, publicly reachable). Keep them off for all agents
-  // until the provider delivers them again; the agent setting is preserved.
+  // Kill switch kept for provider outages: stickers failed with HTTP 500 in September 2026
+  // and were delivered again in the 25/09/2026 retest.
   if (!stickerDeliveryEnabled) return;
   if (!behavior.sendStickers) return;
   if (behavior.conversationStyle === "discreet") return;
@@ -18766,7 +18788,7 @@ async function sendContextualSticker(
   });
 }
 
-const stickerDeliveryEnabled = false;
+const stickerDeliveryEnabled = true;
 
 const stickerMap: Record<string, string[]> = {
   greeting: ["/whatsapp-stickers/greeting.webp"],
@@ -19262,6 +19284,36 @@ function isWithinSchedule(behavior: WhatsappBehaviorConfig) {
   const now = getNowMinutes(behavior.aiScheduleTimezone);
 
   return start < end ? now >= start && now < end : now >= start || now < end;
+}
+
+const aiScheduleMaxWaitMs = 24 * 60 * 60 * 1000;
+
+/** When the AI window opens next (with a human-like jitter), in the agent's timezone. */
+function nextAiWindowOpening(behavior: WhatsappBehaviorConfig, now = Date.now()) {
+  const start = parseHourMinute(behavior.aiScheduleStart);
+  if (start == null) return null;
+  const minutesUntilOpen = (start - getNowMinutes(behavior.aiScheduleTimezone) + 1440) % 1440;
+  return new Date(now + minutesUntilOpen * 60_000 + randomBetween(30_000, 150_000));
+}
+
+async function deferRunUntilAiWindow(client: SupabaseClient, run: AgentRunRow, behavior: WhatsappBehaviorConfig,
+  latestInbound: ConversationMessageRow | null) {
+  const opensAt = nextAiWindowOpening(behavior);
+  const receivedAt = latestInbound ? Date.parse(latestInbound.occurred_at) : Date.now();
+  if (!opensAt || opensAt.getTime() - (Number.isFinite(receivedAt) ? receivedAt : Date.now()) > aiScheduleMaxWaitMs) {
+    return await completeRun(client, run.id, "Fora da janela de atendimento da IA.", { skipped: true, reason: "outside_ai_schedule" });
+  }
+  const { error } = await client.from("agent_runs")
+    .update({ metadata: { ...(readRecord(run.metadata) ?? {}), deferredUntil: opensAt.toISOString(), ai_schedule_deferred: true } })
+    .eq("id", run.id).eq("run_status", "queued");
+  if (error) throw new Error(`Nao foi possivel aguardar a janela da IA: ${error.message}`);
+  return { status: "deferred", reason: "outside_ai_schedule", deferredUntil: opensAt.toISOString() };
+}
+
+function wasHandledAfterInbound(messages: ConversationMessageRow[], latestInbound: ConversationMessageRow | null) {
+  if (!latestInbound) return false;
+  const receivedAt = Date.parse(latestInbound.occurred_at);
+  return messages.some(message => message.direction === "outbound" && Date.parse(message.occurred_at) > receivedAt);
 }
 
 function parseHourMinute(value: string) {

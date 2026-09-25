@@ -119,6 +119,8 @@ export type WhatsappBehaviorConfig = {
   emotionSensing: boolean;
   conversationChoreography: boolean;
   confidenceHumility: boolean;
+  /** One switch for image, video and document understanding; born on. */
+  mediaAnalysis: boolean;
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
@@ -352,6 +354,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   emotionSensing: true,
   conversationChoreography: true,
   confidenceHumility: true,
+  mediaAnalysis: true,
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
@@ -600,9 +603,9 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.emotionSensing = true;
   behavior.conversationChoreography = true;
   behavior.confidenceHumility = true;
-  behavior.mediaImage = true;
-  behavior.mediaDocument = true;
-  behavior.mediaVideo = true;
+  behavior.mediaImage = behavior.mediaAnalysis;
+  behavior.mediaDocument = behavior.mediaAnalysis;
+  behavior.mediaVideo = behavior.mediaAnalysis;
   behavior.mediaProcessingAcknowledgement = true;
   behavior.temporalAwareness = true;
   behavior.conversationArcMemory = true;

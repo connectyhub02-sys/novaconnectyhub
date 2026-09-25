@@ -76,3 +76,33 @@ describe("agent controls connected to the real runtime", () => {
     expect(existsSync(`public${url.pathname}`)).toBe(true);
   });
 });
+
+describe("AI window keeps messages for when it opens", () => {
+  const window = { ...defaults, aiScheduleEnabled: true, aiScheduleTimezone: "America/Sao_Paulo", aiScheduleStart: "18:00", aiScheduleEnd: "23:00" };
+  function fakeRuns() {
+    const updates: Array<Record<string, unknown>> = [];
+    const client = { from: () => ({ update: (row: Record<string, unknown>) => { updates.push(row); const chain = { eq: () => chain, then: (resolve: (value: unknown) => void) => resolve({ error: null }) }; return chain; } }) };
+    return { client, updates };
+  }
+
+  it("waits in the queue until the window opens instead of dropping the message", async () => {
+    vi.useFakeTimers(); vi.setSystemTime("2026-09-18T15:00:00Z"); // 12:00 in São Paulo, window opens 18:00
+    const run = runtimeHarness();
+    const opensAt = run<Date>("nextAiWindowOpening", window);
+    expect(opensAt.getTime() - Date.now()).toBeGreaterThanOrEqual(6 * 3600_000 + 30_000);
+    expect(opensAt.getTime() - Date.now()).toBeLessThanOrEqual(6 * 3600_000 + 150_000);
+    const { client, updates } = fakeRuns();
+    const result = await run<Promise<Record<string, unknown>>>("deferRunUntilAiWindow", client, { id: "run", metadata: { conversationId: "c" } }, window, message("text", "oi"));
+    expect(result).toMatchObject({ status: "deferred", reason: "outside_ai_schedule" });
+    expect(updates[0]).toMatchObject({ metadata: { conversationId: "c", ai_schedule_deferred: true } });
+    expect(updates[0]).not.toHaveProperty("run_status");
+  });
+
+  it("does not answer a kept message that a human already answered", () => {
+    const run = runtimeHarness();
+    const inbound = message("text", "oi", 0);
+    const reply = { ...message("text", "Oi! Já te respondo", 30), direction: "outbound" };
+    expect(run("wasHandledAfterInbound", [inbound], inbound)).toBe(false);
+    expect(run("wasHandledAfterInbound", [inbound, reply], inbound)).toBe(true);
+  });
+});

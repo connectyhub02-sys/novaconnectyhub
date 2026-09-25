@@ -30,7 +30,7 @@ import { serverModuleHarness } from "./server-module-harness";
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
   "enrichLeadQualificationAnalysisWithRuntimeSignals",
-  "isWithinSchedule", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
+  "isWithinSchedule", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
   "buildProactiveMediaInstruction", "buildSmallTalkContext", "resolveOutboundReplyTargets",
   "shouldSendAudioResponse", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
   "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",

@@ -2151,7 +2151,7 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              {variant.entityIdKey === "companyId" ? null : <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
+              <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={Forward} label="Follow-up automatico" description="Envia mensagem de retomada quando o lead silencia apos engajamento." checked={behaviorDraft.proactiveFollowUp} onChange={() => updateBehavior("proactiveFollowUp", !behaviorDraft.proactiveFollowUp)} />
                   <NumberField label="Delay (min)" description="Minutos de silencio do lead antes de enviar o follow-up." value={behaviorDraft.followUpDelayMinutes} min={30} max={1440} onChange={(value) => updateBehavior("followUpDelayMinutes", value)} />
@@ -2161,37 +2161,16 @@ export function WhatsAppConsole({
                   <TextField label="Janela inicio" description="Horario minimo para enviar follow-up (ex: 09:00)." value={behaviorDraft.followUpTimeWindowStart} onChange={(value) => updateBehavior("followUpTimeWindowStart", value)} />
                   <TextField label="Janela fim" description="Horario maximo para enviar follow-up (ex: 20:00)." value={behaviorDraft.followUpTimeWindowEnd} onChange={(value) => updateBehavior("followUpTimeWindowEnd", value)} />
                 </div>
-              </BehaviorSection>}
+              </BehaviorSection>
 
               <BehaviorSection title="Audio e midia com IA" description="Define quais tipos de midia a IA pode interpretar antes de responder o lead.">
+                <div className="mb-2 grid gap-2 md:grid-cols-3">
+                  <ToggleTile icon={ImageIcon} label="Analisar midias" description="O agente olha fotos, videos e documentos enviados pelo lead. Desligado, ele pede ao lead que descreva o que enviou. Audios continuam sendo transcritos." checked={behaviorDraft.mediaAnalysis} onChange={() => updateBehavior("mediaAnalysis", !behaviorDraft.mediaAnalysis)} />
+                </div>
                 <div className="grid gap-2 md:grid-cols-3">
                   <NumberField label="Imagens" description="Maximo de imagens analisadas quando o lead envia varias midias juntas." value={behaviorDraft.mediaBatchImageLimit} min={1} max={20} onChange={(value) => updateBehavior("mediaBatchImageLimit", value)} />
                   <NumberField label="Videos" description="Maximo de videos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchVideoLimit} min={1} max={5} onChange={(value) => updateBehavior("mediaBatchVideoLimit", value)} />
                   <NumberField label="Documentos" description="Maximo de documentos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchDocumentLimit} min={1} max={8} onChange={(value) => updateBehavior("mediaBatchDocumentLimit", value)} />
-                </div>
-              </BehaviorSection>
-
-              <BehaviorSection title="Temporizadores" description="Define pausas antes de responder, para evitar respostas instantaneas demais ou fora de contexto.">
-                <div className="grid gap-3">
-                  <ToggleTile icon={Timer} label="Temporizacao inteligente" description="Ajusta o tempo de resposta conforme o tipo e a quantidade de mensagens recebidas." checked={behaviorDraft.smartTiming} onChange={() => updateBehavior("smartTiming", !behaviorDraft.smartTiming)} />
-                  <div className="grid gap-2 md:grid-cols-3 2xl:grid-cols-4">
-                    <NumberField label="So texto" description="Segundos de espera quando chega apenas uma mensagem de texto." value={behaviorDraft.timingTextSeconds} min={2} max={60} onChange={(value) => updateBehavior("timingTextSeconds", value)} />
-                    <NumberField label="Textos seguidos" description="Janela para agrupar varias mensagens seguidas antes do agente responder." value={behaviorDraft.timingTextBurstSeconds} min={3} max={90} onChange={(value) => updateBehavior("timingTextBurstSeconds", value)} />
-                    <NumberField label="Foto legenda" description="Espera antes de responder foto com legenda." value={behaviorDraft.timingMediaCaptionSeconds} min={5} max={120} onChange={(value) => updateBehavior("timingMediaCaptionSeconds", value)} />
-                    <NumberField label="Foto + texto" description="Espera quando o lead manda foto e depois texto." value={behaviorDraft.timingMediaThenTextSeconds} min={5} max={120} onChange={(value) => updateBehavior("timingMediaThenTextSeconds", value)} />
-                    <NumberField label="Foto so" description="Espera para analisar e responder imagem sem texto." value={behaviorDraft.timingMediaOnlySeconds} min={5} max={120} onChange={(value) => updateBehavior("timingMediaOnlySeconds", value)} />
-                    <NumberField label="Audio" description="Espera antes de responder quando chega audio isolado." value={behaviorDraft.timingAudioSeconds} min={5} max={120} onChange={(value) => updateBehavior("timingAudioSeconds", value)} />
-                    <NumberField label="Audio + texto" description="Espera quando o lead envia audio e complementa com texto." value={behaviorDraft.timingAudioThenTextSeconds} min={5} max={120} onChange={(value) => updateBehavior("timingAudioThenTextSeconds", value)} />
-                    <NumberField label="Video legenda" description="Espera antes de responder video com legenda." value={behaviorDraft.timingVideoCaptionSeconds} min={8} max={180} onChange={(value) => updateBehavior("timingVideoCaptionSeconds", value)} />
-                    <NumberField label="So video" description="Espera para processar video sem texto." value={behaviorDraft.timingVideoOnlySeconds} min={8} max={180} onChange={(value) => updateBehavior("timingVideoOnlySeconds", value)} />
-                    <NumberField label="Doc. + texto" description="Espera quando chegam documento e texto juntos." value={behaviorDraft.timingDocumentCaptionSeconds} min={8} max={180} onChange={(value) => updateBehavior("timingDocumentCaptionSeconds", value)} />
-                    <NumberField label="So documento" description="Espera para processar documento sem mensagem complementar." value={behaviorDraft.timingDocumentOnlySeconds} min={8} max={180} onChange={(value) => updateBehavior("timingDocumentOnlySeconds", value)} />
-                    <NumberField label="Antes botao" description="Espera antes de responder botoes ou chamadas de acao." value={behaviorDraft.timingButtonDelaySeconds} min={0} max={20} onChange={(value) => updateBehavior("timingButtonDelaySeconds", value)} />
-                    <NumberField label="Midias em lote" description="Espera quando o lead envia varias midias seguidas antes de responder o conjunto." value={behaviorDraft.timingMediaBurstSeconds} min={5} max={180} onChange={(value) => updateBehavior("timingMediaBurstSeconds", value)} />
-                    <NumberField label="Evento sem texto" description="Espera para contatos, enquetes, reacoes, mensagem apagada/editada ou evento sem texto claro." value={behaviorDraft.timingContextEventSeconds} min={2} max={60} onChange={(value) => updateBehavior("timingContextEventSeconds", value)} />
-                    <NumberField label="Audio dificil" description="Espera extra para audio sem transcricao confiavel, ruidoso, longo ou incompreensivel." value={behaviorDraft.timingAudioQualitySeconds} min={5} max={180} onChange={(value) => updateBehavior("timingAudioQualitySeconds", value)} />
-                    <NumberField label="Reativar agente" description="Minutos ate a IA voltar depois de uma intervencao humana." value={behaviorDraft.humanInterventionMinutes} min={5} max={1440} onChange={(value) => updateBehavior("humanInterventionMinutes", value)} />
-                  </div>
                 </div>
               </BehaviorSection>
 
@@ -5512,7 +5491,6 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 6} />
         <PromptCheck label="Citacao inteligente" active={behavior.quoteReplyMode !== "off"} />
-        <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>
       <div className="mt-4 grid gap-2">
         <InfoTile label="Conversa" value={formatResponseMode(behavior.responseMode)} />
