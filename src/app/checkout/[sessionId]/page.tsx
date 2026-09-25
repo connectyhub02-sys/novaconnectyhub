@@ -100,6 +100,7 @@ type CheckoutOrderRow = {
   destination_address: string | null;
   subtotal: string | null;
   shipping_total: string | null;
+  discount_total?: string | null;
   total: string | null;
   shipping_method: string | null;
   status: string | null;
@@ -227,6 +228,7 @@ export default async function CheckoutPage({
   const amountNumber = normalizeCurrency(order.total ?? session.amount ?? order.subtotal);
   const subtotal = formatCurrency(order.subtotal);
   const shipping = formatCurrency(order.shipping_total);
+  const discount = (normalizeCurrency(order.discount_total) ?? 0) > 0 ? formatCurrency(order.discount_total) : null;
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
   const paymentProviderLabel = formatCheckoutPaymentProviderLabel(session.provider);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
@@ -343,7 +345,7 @@ export default async function CheckoutPage({
             </div>
             <div className="shrink-0 text-right">
               <p className="whitespace-nowrap text-xl font-bold tracking-tight text-[color:var(--store-accent)] sm:text-2xl">{amount}</p>
-              <p className="mt-1 text-[11px] text-slate-500">{shipping ? `Frete ${shipping} incluído` : "Total do pedido"}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{[discount ? `Desconto de ${discount} aplicado` : null, shipping ? `Frete ${shipping} incluído` : null].filter(Boolean).join(" · ") || "Total do pedido"}</p>
             </div>
           </div>
           <div className="mt-3 divide-y divide-slate-100 border-b border-slate-100">
@@ -626,7 +628,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, checkout_revision, lead_id, conversation_id, customer_name, customer_phone, customer_email, customer_document, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
+      .select("id, checkout_revision, lead_id, conversation_id, customer_name, customer_phone, customer_email, customer_document, destination_cep, destination_address, subtotal, shipping_total, discount_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),

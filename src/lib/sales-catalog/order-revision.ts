@@ -42,6 +42,8 @@ export type SalesCatalogOrderRevisionInput = {
   expectedTotal: number | string;
   preferredPaymentMethod?: "pix" | "card" | null;
   operationHours?: SalesCatalogOperationHours;
+  /** New order discount (payment recovery). Omitted: the order keeps its current discount. */
+  discountTotal?: number;
 };
 
 export type RevisedSalesCatalogOrder = Record<string, unknown> & {
@@ -86,12 +88,15 @@ export async function applySalesCatalogOrderRevision(input: SalesCatalogOrderRev
     ? 0 : normalizeCurrencyAmount(input.shipping.total);
   const total = normalizeCurrencyAmount(input.expectedTotal);
   if (shipping === null || shipping < 0 || total === null || total <= 0) throw revisionError(new Error("CHECKOUT_INVALID_TOTAL"));
+  if (input.discountTotal !== undefined && (!Number.isFinite(input.discountTotal) || input.discountTotal < 0
+    || Number(input.discountTotal.toFixed(2)) !== input.discountTotal)) throw revisionError(new Error("CHECKOUT_INVALID_TOTAL"));
   const claimToken = randomUUID();
   const payload = {
     rows: input.rows,
     shipping: { total: shipping, method: input.shipping.method, destination_cep: input.shipping.destinationCep, destination_address: input.shipping.destinationAddress, ...(input.shipping.quote ? { quote: input.shipping.quote } : {}) },
     expected_total: total,
     preferred_payment_method: input.preferredPaymentMethod ?? null,
+    ...(input.discountTotal !== undefined ? { discount_total: input.discountTotal } : {}),
   };
   const { data: claim, error: claimError } = await input.client.rpc(input.checkoutSessionId ? "begin_sales_catalog_checkout_revision" : "begin_sales_catalog_order_revision", {
     p_order_id: input.orderId, p_organization_id: input.organizationId, p_lead_id: input.leadId, p_conversation_id: input.conversationId,

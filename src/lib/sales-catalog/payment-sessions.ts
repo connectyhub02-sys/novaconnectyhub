@@ -97,7 +97,8 @@ type DeferredSalesCatalogPaymentReason =
   | "billing_address_required"
   | "customer_phone_required"
   | "lead_details_required"
-  | "subscription_renewal";
+  | "subscription_renewal"
+  | "recovery_discount";
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
 
@@ -109,6 +110,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
   payerEmail?: string | null;
   preferredMethod?: "pix" | "card" | null;
   deferProvider?: boolean;
+  /** Why the provider charge waits for the checkout (renewal by default). */
+  deferReason?: "subscription_renewal" | "recovery_discount";
   source: "dashboard" | "whatsapp_agent" | "checkout";
   actorId?: string | null;
 }) {
@@ -201,7 +204,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
     if (!amount) throw new Error("Confira o total da assinatura.");
   }
 
-  if (input.deferProvider) return createDeferredSalesCatalogCheckoutSession({ ...input, order, items, amount, preferredMethod, reason: "subscription_renewal", reasonLabel: "Confira sua renovação no checkout." });
+  if (input.deferProvider) return createDeferredSalesCatalogCheckoutSession({ ...input, order, items, amount, preferredMethod, reason: input.deferReason ?? "subscription_renewal",
+    reasonLabel: input.deferReason === "recovery_discount" ? "Desconto aplicado. Escolha Pix ou cartão no checkout." : "Confira sua renovação no checkout." });
 
   const paymentProvider = await resolvePaymentGatewayProvider({
     client: input.client,

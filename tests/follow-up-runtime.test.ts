@@ -65,6 +65,7 @@ function fixture() {
   const patches: Array<Record<string, unknown>> = [];
   const queued: Array<{ data: Record<string, unknown>; when: Date }> = [];
   const scheduled: unknown[] = [];
+  const discountPlan: { current: null | { percent: number; discount: number; total: number; applied: boolean; apply: () => Promise<void> } } = { current: null };
   const fetch = vi.fn(
     async () =>
       new Response(
@@ -104,6 +105,7 @@ function fixture() {
       getLeadPaymentReviews: async () => [],
       refreshLeadOrderFinance: finance,
     },
+    "@/lib/automations/recovery-discount": { planRecoveryDiscount: async () => discountPlan.current },
     "@/lib/inngest/client": { inngest: { send: async (event: unknown) => { scheduled.push(event); } } },
     "@/lib/automations/dispatch": {
       persistFollowUpDispatch: async (_c: unknown, data: Record<string, unknown>, when: Date) => {
@@ -190,6 +192,7 @@ function fixture() {
     prepareContact,
     queued,
     scheduled,
+    discountPlan,
     execute: (extra = {}) =>
       service.executeWhatsappProactiveFollowUp({
         client: db.client,
@@ -243,6 +246,40 @@ describe("payment recovery in three attempts", () => {
     expect(f.prompt()).toContain("O Pix gerado venceu");
     const calls = f.fetch.mock.calls as unknown as Array<[string, { body: string }]>;
     expect(calls.some(([url, init]) => String(url).includes("/send/") && init.body.includes("Continuar pagamento"))).toBe(false);
+  });
+
+  it("announces the owner's discount on the last attempt and applies it only when sending", async () => {
+    const f = recoveryFixture();
+    const apply = vi.fn(async () => {
+      f.db.tables.sales_catalog_payment_sessions[0].status = "cancelled";
+      f.db.tables.sales_catalog_payment_sessions.push({ id: "discounted", organization_id: "org", order_id: "order", method: "pix", status: "created", amount: 81, metadata: {}, created_at: new Date().toISOString() });
+      Object.assign(f.db.tables.sales_catalog_orders[0], { total: 81, latest_payment_session_id: "discounted" });
+    });
+    f.discountPlan.current = { percent: 10, discount: 9, total: 81, applied: false, apply };
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 3 })).toMatchObject({ status: "sent" });
+    expect(f.prompt()).toContain("10% de desconto");
+    expect(apply).toHaveBeenCalledTimes(1);
+    const calls = f.fetch.mock.calls as unknown as Array<[string, { body: string }]>;
+    const delivery = calls.find(([url]) => String(url).endsWith("/send/menu"));
+    expect(JSON.parse(delivery![1].body).choices[0]).toBe("Continuar pagamento|https://fixture.invalid/checkout/discounted");
+  });
+
+  it("never sends a discount message when the discount could not be applied", async () => {
+    const f = recoveryFixture();
+    f.discountPlan.current = { percent: 10, discount: 9, total: 81, applied: false, apply: async () => { throw new Error("CHECKOUT_CHANGED"); } };
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 3 })).toMatchObject({ status: "failed", reason: "recovery_discount_unavailable" });
+    const calls = f.fetch.mock.calls as unknown as Array<[string]>;
+    expect(calls.some(([url]) => String(url).includes("/send/"))).toBe(false);
+  });
+
+  it("does not touch the order when the lead answered before the last attempt", async () => {
+    const f = recoveryFixture();
+    const apply = vi.fn(async () => {});
+    f.discountPlan.current = { percent: 10, discount: 9, total: 81, applied: false, apply };
+    f.db.tables.conversation_messages.push({ id: "2", conversation_id: "conversation", whatsapp_instance_id: "instance", direction: "inbound",
+      occurred_at: new Date().toISOString(), text_content: "já paguei", payload: {} });
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 3 })).toMatchObject({ status: "skipped" });
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it("stops the sequence when the lead answered", async () => {

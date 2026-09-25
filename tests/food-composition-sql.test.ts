@@ -33,6 +33,8 @@ beforeAll(async () => {
   await db.exec(readFileSync("supabase/migrations/0132_sales_catalog_order_revisions.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0140_revision_delivery_snapshot.sql", "utf8").split("-- Customer, freight")[0]);
   await db.exec(readFileSync("supabase/migrations/0142_food_composition.sql", "utf8"));
+  await db.exec("create table if not exists automation_policies(organization_id uuid primary key)");
+  await db.exec(readFileSync("supabase/migrations/0161_recovery_discount.sql", "utf8").replace("notify pgrst, 'reload schema';", ""));
   await db.query("insert into organizations values ($1)", [org]);
   await db.query("insert into intelligence_memory(id,organization_id,memory_type,title,metadata) values ($1,$3,'sales_catalog_item','Pizza','{\"price\":\"40\"}'),($2,$3,'sales_catalog_item','Limonada','{\"price\":\"10\"}')", [pizza, lemonade, org]);
   await db.query("insert into sales_catalog_skus(id,organization_id,catalog_item_id) values ($1,$2,$3)", [sku, org, lemonade]);

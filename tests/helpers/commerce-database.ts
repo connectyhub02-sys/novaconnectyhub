@@ -29,6 +29,12 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
         },
         in(key: string, values: unknown[]) { filters.push(row => values.includes(row[key])); return query; },
         neq(key: string, value: unknown) { filters.push(row => row[key] !== value); return query; },
+        like(key: string, pattern: string) {
+          const escape = (part: string) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const expression = new RegExp(`^${pattern.split("%").map(escape).join(".*")}$`);
+          filters.push(row => typeof row[key] === "string" && expression.test(row[key] as string));
+          return query;
+        },
         or(expression: string) { filters.push(row => splitFilters(expression).some(part => matchesFilter(row, part))); return query; },
         is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
         gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },

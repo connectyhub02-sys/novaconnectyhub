@@ -6,6 +6,7 @@ import {
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
 import { loadAutomationPolicy } from "@/lib/automations/dispatch";
+import { loadRecoveryDiscountPercent } from "@/lib/automations/recovery-discount";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
       .limit(50);
     if (activity.error)
       throw new Error("Não foi possível consultar as atividades.");
-    return NextResponse.json({ policy, activity: activity.data });
+    return NextResponse.json({ policy, activity: activity.data,
+      recoveryDiscountPercent: await loadRecoveryDiscountPercent(client, organizationId) });
   } catch (error) {
     return NextResponse.json(
       {
@@ -103,6 +105,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         policy: await loadAutomationPolicy(client, organizationId),
       });
+    }
+    if (body.action === "set_recovery_discount") {
+      // Empty removes the discount; nothing is ever offered unless the owner sets a value here.
+      const percent = body.percent === null || body.percent === "" ? null : Number(body.percent);
+      if (percent !== null && (!Number.isFinite(percent) || percent <= 0 || percent > 50 || Number(percent.toFixed(2)) !== percent))
+        throw new Error("Informe um desconto entre 1% e 50%, ou deixe vazio para não oferecer desconto.");
+      const existing = await loadAutomationPolicy(client, organizationId);
+      if (!existing) throw new Error("Ative o follow-up inteligente antes de configurar o desconto.");
+      const result = await client.from("automation_policies")
+        .update({ recovery_discount_percent: percent, updated_by: workspace.user.id, updated_at: new Date().toISOString() })
+        .eq("organization_id", organizationId);
+      if (result.error) throw new Error("Não foi possível salvar o desconto.");
+      return NextResponse.json({ recoveryDiscountPercent: await loadRecoveryDiscountPercent(client, organizationId) });
     }
     if (body.action === "close_uncertain") {
       if (typeof body.dispatchId !== "string")

@@ -31,6 +31,8 @@ beforeAll(async () => {
   await db.exec(readFileSync("supabase/migrations/0080_payment_evidence_and_reviews.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0132_sales_catalog_order_revisions.sql", "utf8"));
   await db.exec(readFileSync("supabase/migrations/0140_revision_delivery_snapshot.sql", "utf8").split("-- Customer, freight")[0]);
+  await db.exec("create table if not exists automation_policies(organization_id uuid primary key)");
+  await db.exec(readFileSync("supabase/migrations/0161_recovery_discount.sql", "utf8").replace("notify pgrst, 'reload schema';", ""));
   await db.query("insert into organizations values ($1)", [org]);
   await db.query("insert into intelligence_memory(id,organization_id,memory_type,title,metadata) values ($1,$3,'sales_catalog_item','Pizza','{\"price\":\"40\"}'),($2,$3,'sales_catalog_item','Limonada','{\"price\":\"10\"}')", [pizza, lemonade, org]);
   await db.query("insert into sales_catalog_skus(id,organization_id,catalog_item_id) values ($1,$2,$3)", [sku, org, lemonade]);
@@ -236,5 +238,42 @@ describe.sequential("confirmed full-cart revision transaction", () => {
       expect((await db.query("select has_function_privilege($1,'public.begin_sales_catalog_order_revision(uuid,uuid,uuid,uuid,bigint,text,uuid,jsonb)','execute') as allowed", [role])).rows[0]).toEqual({ allowed: false });
       expect((await db.query("select has_table_privilege($1,'public.sales_catalog_order_revisions','insert') as allowed", [role])).rows[0]).toEqual({ allowed: false });
     }
+  });
+});
+
+describe.sequential("payment recovery discount through the same revision", () => {
+  it("applies the store's discount to the same items and retires the previous charge", async () => {
+    const f = await fixture();
+    const p = { ...payload([item(pizza)]), discount_total: 4, expected_total: 40 - 4 + 5 };
+    await begin(f, p as ReturnType<typeof payload>);
+    const result = await finish(f);
+    const order = (await db.query<{ discount_total: string; total: string }>("select discount_total,total from sales_catalog_orders where id=$1", [f.order])).rows[0];
+    expect(order).toEqual({ discount_total: "4", total: "41" });
+    expect(result.total).toBe("41");
+    expect(await rows(f)).toEqual([{ title: "Pizza", quantity: 1, total: "40" }]);
+    const session = (await db.query<{ status: string }>("select status from sales_catalog_payment_sessions where id=$1", [f.session])).rows[0];
+    expect(session.status).toBe("cancelled");
+  });
+
+  it("keeps the order's existing discount when the revision does not carry one", async () => {
+    const f = await fixture();
+    await begin(f, payload([item(pizza)]));
+    await finish(f);
+    expect((await db.query<{ discount_total: string; total: string }>("select discount_total,total from sales_catalog_orders where id=$1", [f.order])).rows[0])
+      .toEqual({ discount_total: "2", total: "43" });
+  });
+
+  it.each([[-1], [0.001], [41]])("rejects an invalid discount of %s", async discount => {
+    const f = await fixture();
+    const p = { ...payload([item(pizza)]), discount_total: discount, expected_total: 40 - discount + 5 };
+    await expect(begin(f, p as ReturnType<typeof payload>)).rejects.toThrow(/CHECKOUT_INVALID_TOTAL/);
+  });
+
+  it("only stores a discount percentage chosen within the allowed range", async () => {
+    const policy = randomUUID();
+    await db.query("insert into automation_policies(organization_id,recovery_discount_percent) values ($1,10)", [policy]);
+    await db.query("update automation_policies set recovery_discount_percent=null where organization_id=$1", [policy]);
+    await expect(db.query("update automation_policies set recovery_discount_percent=60 where organization_id=$1", [policy])).rejects.toThrow();
+    await expect(db.query("update automation_policies set recovery_discount_percent=0 where organization_id=$1", [policy])).rejects.toThrow();
   });
 });

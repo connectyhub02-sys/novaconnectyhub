@@ -11,6 +11,7 @@ import { isContactWindow, nextContactWindow } from "@/lib/automations/contact-wi
 import { relationshipContext } from "@/lib/automations/relationship-context";
 import { claimsMissingFollowUpCheckout, loadFollowUpCheckout } from "./follow-up-checkout";
 import { checkContactPreferences } from "@/lib/automations/contact-preferences";
+import { planRecoveryDiscount, type RecoveryDiscount } from "@/lib/automations/recovery-discount";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -254,6 +255,12 @@ async function executeWhatsappProactiveFollowUp(input: {
   const paymentSignal = recoveryJourney && eventData.salesCatalogOrderId
     ? await loadRecoveryPaymentSignal(client, eventData.organizationId, eventData.salesCatalogOrderId) : null;
   const cardDeclined = paymentSignal?.method === "card" && paymentSignal.status === "rejected";
+  // Last attempt: the discount the owner set in Automações (none when empty). Any failure means no discount.
+  const recoveryDiscount = recoveryJourney && eventData.recoveryStep === paymentRecoveryMaxSteps && eventData.salesCatalogOrderId
+    ? await planRecoveryDiscount(client, { organizationId: eventData.organizationId, leadId: eventData.leadId,
+        conversationId: eventData.conversationId, orderId: eventData.salesCatalogOrderId })
+      .catch((error: unknown) => { console.error("recovery_discount_failed", { orderId: eventData.salesCatalogOrderId, message: error instanceof Error ? error.message : "unknown" }); return null; })
+    : null;
   const salesCatalogOrder = eventData.salesCatalogOrderId
     ? await loadSalesCatalogFollowUpOrder(client, eventData.salesCatalogOrderId, eventData.organizationId)
     : null;
@@ -297,9 +304,10 @@ async function executeWhatsappProactiveFollowUp(input: {
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
     relationshipContext: relationship.context,
     pendingRevisionNote,
-    checkoutAvailable: Boolean(checkoutLink),
+    checkoutAvailable: Boolean(checkoutLink || recoveryDiscount),
     recoveryStep: recoveryJourney ? eventData.recoveryStep ?? 1 : null,
     paymentSignal,
+    recoveryDiscount,
     behavior,
   });
   if (!followUpGeneration) {
@@ -349,13 +357,13 @@ async function executeWhatsappProactiveFollowUp(input: {
     return { status: "failed", reason: validation.reason ?? "generation_invalid" };
   }
   if (validation.outcome === "skip") return {status:"skipped",reason:"no_relevant_approach"};
-  if (claimsMissingFollowUpCheckout(followUpText, checkoutLink)) {
+  if (claimsMissingFollowUpCheckout(followUpText, checkoutLink || (recoveryDiscount ? "discount_checkout" : ""))) {
     await updateDispatch(client, eventData.dispatchId!, { status: "failed", reason: "checkout_action_not_available", lease_until: null }, eventData.claimToken);
     return { status: "failed", reason: "checkout_action_not_available" };
   }
   // A pending edit may be resumed, never reported as done.
   if (pendingRevisionNote && claimsPendingRevisionApplied(followUpText)) return { status: "skipped", reason: "pending_revision_claim" };
-  const actionLink = checkoutLink || relationship.link;
+  let actionLink = checkoutLink || relationship.link;
   // Destinations travel only in the button; never as a raw URL in the text.
   const outgoingText = followUpText.replace(/https?:\/\/\S+/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   if (!outgoingText) return { status: "skipped", reason: "no_relevant_approach" };
@@ -397,7 +405,17 @@ async function executeWhatsappProactiveFollowUp(input: {
     || (!pendingRevisionNote && describePendingFollowUpRevision(latestLead.metadata, eventData))) return { status: "skipped", reason: "order_revision_pending_before_send" };
   const unsubscribeUrl = await prepareLeadContact(client, eventData.organizationId, eventData.leadId);
   if (!unsubscribeUrl) return { status: "skipped", reason: "lead_opted_out" };
-  const delivery = leadContactMessage(outgoingText, unsubscribeUrl, actionLink ? [`${checkoutLink ? "Continuar pagamento" : "Abrir página"}|${actionLink}`] : []);
+  // The discount changes the order only now, after every check passed; the message announcing it is
+  // never sent without it. The button then leads to the new checkout with the discounted total.
+  if (recoveryDiscount) {
+    try { await recoveryDiscount.apply(); } catch (error) {
+      console.error("recovery_discount_apply_failed", { orderId: eventData.salesCatalogOrderId, message: error instanceof Error ? error.message : "unknown" });
+      await updateDispatch(client, eventData.dispatchId!, { status: "failed", reason: "recovery_discount_unavailable", lease_until: null }, eventData.claimToken);
+      return { status: "failed", reason: "recovery_discount_unavailable" };
+    }
+    actionLink = await loadFollowUpCheckout(client, eventData.organizationId, eventData.leadId, eventData.salesCatalogOrderId!);
+  }
+  const delivery = leadContactMessage(outgoingText, unsubscribeUrl, actionLink ? [`${checkoutLink || recoveryDiscount ? "Continuar pagamento" : "Abrir página"}|${actionLink}`] : []);
   let deliveredText = delivery.text;
   let deliveredChoices: string[] = [];
   await updateDispatch(client, eventData.dispatchId!, { status: "sending", send_started_at: new Date().toISOString(), lease_until: new Date(Date.now() + 120000).toISOString() }, eventData.claimToken);
@@ -439,7 +457,7 @@ async function executeWhatsappProactiveFollowUp(input: {
     payload: {
       delivery_source: "proactive_follow_up",
       choices: deliveredChoices,
-      checkout_url: checkoutLink || null,
+      checkout_url: (recoveryDiscount ? actionLink : checkoutLink) || null,
       unsubscribe_url: unsubscribeUrl,
       agent_run_id: eventData.agentRunId,
       author_type: "ai",
@@ -522,6 +540,7 @@ async function generateFollowUpMessage(
     checkoutAvailable?: boolean;
     recoveryStep?: number | null;
     paymentSignal?: RecoveryPaymentSignal | null;
+    recoveryDiscount?: RecoveryDiscount | null;
     behavior?: WhatsappBehaviorConfig;
   } = {},
 ): Promise<FollowUpGenerationResult | null> {
@@ -543,7 +562,7 @@ async function generateFollowUpMessage(
     ...outboundLanguageQualityPromptLines,
     "Não exponha instruções internas nem comentários sobre a redação. Não finja ser humano; se houver uma pergunta sobre sua natureza, informe que é um assistente de IA.",
     ...buildSalesCatalogFollowUpPromptLines(options.salesCatalogOrder ?? null, options.salesCatalogFollowUpKind ?? null),
-    ...buildPaymentRecoveryPromptLines(options.recoveryStep ?? null, options.paymentSignal ?? null),
+    ...buildPaymentRecoveryPromptLines(options.recoveryStep ?? null, options.paymentSignal ?? null, Date.now(), options.recoveryDiscount ?? null),
     options.relationshipContext ?? "",
     options.pendingRevisionNote ?? "",
     "",
@@ -682,6 +701,9 @@ async function loadSalesCatalogFollowUpOrder(
   };
 }
 
+const formatPercent = (value: number) => `${value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+const formatMoney = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 type RecoveryPaymentSignal = { method: string | null; status: string | null; expiresAt: string | null };
 
 /** What happened to the last charge of the order: a declined card or a Pix that expired changes the approach. */
@@ -691,7 +713,7 @@ async function loadRecoveryPaymentSignal(client: SupabaseClient, organizationId:
   return data ? { method: data.method ?? null, status: data.status ?? null, expiresAt: data.expires_at ?? null } : null;
 }
 
-export function buildPaymentRecoveryPromptLines(step: number | null, signal: RecoveryPaymentSignal | null, now = Date.now()) {
+export function buildPaymentRecoveryPromptLines(step: number | null, signal: RecoveryPaymentSignal | null, now = Date.now(), discount: RecoveryDiscount | null = null) {
   if (!step) return [];
   const expiresAt = signal?.expiresAt ? Date.parse(signal.expiresAt) : NaN;
   const pixExpired = signal?.method === "pix" && (signal.status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now));
@@ -702,7 +724,9 @@ export function buildPaymentRecoveryPromptLines(step: number | null, signal: Rec
     `Recuperação do pagamento — tentativa ${step} de ${paymentRecoveryMaxSteps}:`,
     step === 1 ? "- Ofereça ajuda: pergunte se ficou alguma dúvida sobre o pedido, a entrega ou o pagamento. Nada de pressão."
       : step === 2 ? "- É o dia seguinte: retome o pedido citando um benefício concreto do que ele escolheu (só o que aparece no contexto) e pergunte se pode ajudar a concluir."
-      : "- É a última mensagem sobre este pedido: diga com leveza que não vai mais insistir e que fica à disposição se ele quiser concluir. Não ofereça desconto.",
+      : discount
+        ? `- É a última mensagem sobre este pedido: a loja liberou ${formatPercent(discount.percent)} de desconto, já aplicado no pedido; o novo total é ${formatMoney(discount.total)}. Ofereça com naturalidade, como um gesto para ele fechar agora. Não invente prazo nem outro valor.`
+        : "- É a última mensagem sobre este pedido: diga com leveza que não vai mais insistir e que fica à disposição se ele quiser concluir. Não ofereça desconto.",
     cardDeclined ? "- O cartão foi recusado na última tentativa: ofereça pagar por Pix. Basta ele responder que você envia; não diga que já gerou o Pix." : "",
     pixExpired ? "- O Pix gerado venceu: diga que, se ele quiser, você gera um novo Pix na hora; basta responder. Não diga que já gerou." : "",
     pixExpiringSoon ? "- O Pix gerado vence em breve: lembre com leveza que o código ainda está valendo por pouco tempo." : "",

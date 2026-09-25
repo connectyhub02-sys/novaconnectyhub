@@ -44,6 +44,7 @@ const reasonLabels: Record<string, string> = {
   human_intervention: "Atendimento humano em andamento",
   empty_generation: "Nenhuma abordagem pertinente foi gerada",
   provider_rejected_or_unconfirmed: "O WhatsApp não confirmou o envio",
+  recovery_discount_unavailable: "O desconto não pôde ser aplicado; a última retomada não foi enviada",
   delivery_confirmation_missing:
     "A confirmação de entrega precisa ser verificada",
 };
@@ -58,6 +59,7 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
   const [start, setStart] = useState("09:00"),
     [end, setEnd] = useState("20:00"),
     [timezone, setTimezone] = useState("America/Sao_Paulo");
+  const [discount, setDiscount] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     fetch(
@@ -76,6 +78,7 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
             setTimezone(data.policy.timezone);
           }
           setActivity(data.activity);
+          setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
         }
       })
       .catch((failure) => {
@@ -90,6 +93,24 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
     setLoading(true);
     setError("");
     setRevision((value) => value + 1);
+  }
+  async function saveDiscount(value: string) {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/dashboard/automations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, action: "set_recovery_discount", percent: value.trim() ? Number(value.replace(",", ".")) : null }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Não foi possível salvar.");
+      setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Falha ao salvar.");
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggle() {
     setSaving(true);
@@ -256,6 +277,42 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
               >
                 Salvar horários
               </button>
+            </div>
+          </details>
+        )}
+        {policy && (
+          <details className="mt-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <summary className="cursor-pointer font-medium text-slate-700">
+              Desconto na última tentativa de pagamento · opcional
+            </summary>
+            <p className="my-2 text-slate-500">
+              Quem pediu Pix ou cartão e não pagou recebe até 3 retomadas. Se você
+              definir um desconto, ele é oferecido e aplicado só na terceira, uma vez
+              a cada 30 dias por cliente. Vazio: nenhum desconto é oferecido.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label>
+                Desconto (%)
+                <input
+                  aria-label="Desconto na última tentativa de pagamento"
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={0.5}
+                  placeholder="Sem desconto"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  className="ml-2 w-32 rounded border p-2"
+                />
+              </label>
+              <button type="button" disabled={saving || loading} className="rounded-lg border px-3 py-2" onClick={() => saveDiscount(discount)}>
+                Salvar desconto
+              </button>
+              {discount && (
+                <button type="button" disabled={saving || loading} className="rounded-lg px-3 py-2 text-slate-600 underline" onClick={() => saveDiscount("")}>
+                  Remover desconto
+                </button>
+              )}
             </div>
           </details>
         )}
