@@ -2780,7 +2780,16 @@ async function maybePersistSalesCatalogLeadContactDetailsFromMessage(input: {
   const identityMessages = input.context.messages.map((message) => message.id === latestInbound?.id
     ? { ...message, text_content: input.userText } : message);
   const nameEvidence = findLeadNameEvidence(identityMessages);
-  const customerName = nameEvidence && nameEvidence.messageId === latestInbound?.id ? nameEvidence.name : existingCustomerName
+  // A first name taken from the WhatsApp profile ("Magno") is completed by the
+  // full name the customer types in the billing data ("Magno Macedo").
+  const structuredName = extractRuntimeCustomerNameFromStructuredReply(input.userText);
+  const completesExistingName = Boolean(existingCustomerName && structuredName
+    && existingCustomerName.trim().split(/\s+/).length === 1
+    && normalizeSearch(structuredName).split(" ")[0] === normalizeSearch(existingCustomerName)
+    && structuredName.trim().split(/\s+/).length > 1);
+  const customerName = nameEvidence && nameEvidence.messageId === latestInbound?.id ? nameEvidence.name
+    : completesExistingName ? structuredName
+    : existingCustomerName
     ? null
     : nameEvidence?.name
       ?? extractRuntimeCustomerNameFromStructuredReply(input.userText)
@@ -11672,7 +11681,8 @@ function buildRuntimeSalesCatalogOrderRows(selections: ReturnType<typeof priceRu
       catalog_item_id: item.id,
       sku_id: sku?.id ?? null,
       sku_code: sku?.skuCode ?? null,
-      title: sku?.title || item.title,
+      // Imported titles may carry gallery artifacts ("- Imagem 2 …"); checkout shows the clean name.
+      title: cleanSalesCatalogCustomerTitle(sku?.title || item.title),
       tag: item.tag,
       quantity,
       unit_price: unitPrice,
@@ -13016,7 +13026,7 @@ const orderToolInstructionLines = [
   "Depois que propor_alteracao retornar ok, escreva apenas uma frase curta de transição. O sistema envia o resumo oficial logo em seguida; não repita itens nem valores.",
   "Chame confirmar_alteracao somente quando a última mensagem do cliente aceitar o resumo enviado (por exemplo 'sim', 'pode', 'confirmo', 'fechado' ou um joinha respondendo ao resumo). Dúvida, elogio ou pergunta não é aceite.",
   "Para trocar só a forma de pagamento, use trocar_forma_pagamento. Se houver proposta aguardando confirmação, inclua a nova forma em propor_alteracao.",
-  "Quando o cliente quiser pagar, confirmar o pagamento ou pedir o link ou código de novo, chame enviar_pagamento. Não diga que está preparando ou vai gerar o pagamento: chame a ferramenta.",
+  "Chame enviar_pagamento quando o cliente pedir o link ou o código de novo, disser que não recebeu, ou quiser pagar e o pagamento ainda não foi enviado (veja ver_pedido). Se ele só avisou que vai pagar ou já está pagando, apenas responda: não reenvie o pagamento. Não diga que está preparando ou vai gerar o pagamento: chame a ferramenta.",
   "Perguntas sobre parcelamento, prazo ou produtos são respondidas sem ferramentas de alteração.",
   "Nunca diga que alterou, confirmou, gerou, enviou ou trocou algo se a ferramenta correspondente não retornou ok=true nesta resposta. Se uma ferramenta recusar, explique o motivo ao cliente com naturalidade.",
   "Não escreva links nem códigos de pagamento: o acesso ao pagamento é enviado pelo sistema.",
@@ -13442,7 +13452,8 @@ async function executeCartTool(input: {
     // The summary the customer already saw stays valid: rebuilding it would issue
     // a new code and make the customer's "pode" point to an outdated summary.
     const previous = readCartToolState(context);
-    if (previous?.ready && previous.fingerprint === quote.core) {
+    // Also the summary already built in this same reply (queued, not yet sent): never two identical summaries.
+    if (previous && previous.fingerprint === quote.core && (previous.ready || previous.source_message_id === latestInbound.id)) {
       const chosen = method ?? previous.preferred_method;
       if (chosen !== previous.preferred_method) await persistCartToolState(client, context, { ...previous, preferred_method: chosen });
       return { ok: true, ja_enviado: true, codigo_resumo: previous.fingerprint.slice(0, 12), total: quote.total, forma_pagamento: chosen,

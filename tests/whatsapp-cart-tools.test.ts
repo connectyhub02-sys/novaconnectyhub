@@ -151,6 +151,37 @@ describe("first purchase with cart tools", () => {
     expect(t.call("claimsUnexecutedOrderAction", "Prontinho, Magno! Já solicitei a alteração para Pix no sistema.")).toBe(true);
   });
 
+  it("never sends two identical summaries in one reply (Gustavo, 25/09 12:20)", async () => {
+    const t = cart();
+    t.say(address);
+    t.say("pode incluir");
+    expect(await t.tool("montar_pedido", pizzaAndLemonade)).toMatchObject({ ok: true });
+    expect(await t.tool("montar_pedido", pizzaAndLemonade)).toMatchObject({ ok: true, ja_enviado: true });
+    expect(t.deferred).toHaveLength(1);
+  });
+
+  it("stores the clean product name in the order, without gallery artifacts", async () => {
+    const t = cart();
+    t.ctx.salesCatalog[0].title = "Pizza de queijo - Imagem 2 Pizza de queijo - Imagem 3 Pizza";
+    t.say(address);
+    t.say("pizza e limonada no pix");
+    const summary = await t.tool("montar_pedido", { ...pizzaAndLemonade, forma_pagamento: "pix" });
+    await t.flush();
+    t.say("pode");
+    await t.tool("fechar_pedido", { codigo_resumo: summary.codigo_resumo });
+    expect(t.db.tables.sales_catalog_order_items.map(row => row.title)).toContain("Pizza de queijo");
+  });
+
+  it("completes a profile first name with the full name typed in the billing data", async () => {
+    const t = cart();
+    t.ctx.lead.display_name = "Magno";
+    t.ctx.lead.metadata = {};
+    t.db.tables.leads[0].metadata = {};
+    t.say("Magno macedo\nCPF 52998224725\nRua 1131, numero 61, cep 88330786, bairro centro, cidade balneário camboriu\nPagamento no pix");
+    await t.call("maybePersistSalesCatalogLeadContactDetailsFromMessage", { client: t.db.client, context: t.ctx, userText: t.ctx.messages.at(-1)!.text_content });
+    expect(t.ctx.lead.metadata).toMatchObject({ person_name: "Magno macedo" });
+  });
+
   it("does not build a delivery summary from a CEP alone (Gustavo, 24/09 22:13)", async () => {
     const t = cart();
     t.say("cliente@example.com\n52998224725\n88330786");
