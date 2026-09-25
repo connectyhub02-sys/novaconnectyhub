@@ -31,7 +31,7 @@ export function dispatchKey(data: WhatsappFollowUpEventData) {
     ? `return:${data.returnId}`
     : data.recommendationProductId
       ? `recommendation:${data.recommendationProductId}:${data.recommendationPeriod}`
-      : `${data.agentRunId}:${data.salesCatalogOrderId ?? "conversation"}:${data.salesCatalogFollowUpKind ?? "conversation"}`;
+      : `${data.agentRunId}:${data.salesCatalogOrderId ?? "conversation"}:${data.salesCatalogFollowUpKind ?? "conversation"}${data.recoveryStep ? `:step${data.recoveryStep}` : ""}`;
   return createHash("sha256")
     .update([data.organizationId, data.leadId, opportunity].join(":"))
     .digest("hex");

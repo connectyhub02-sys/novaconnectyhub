@@ -63,6 +63,8 @@ function fixture() {
     ],
   });
   const patches: Array<Record<string, unknown>> = [];
+  const queued: Array<{ data: Record<string, unknown>; when: Date }> = [];
+  const scheduled: unknown[] = [];
   const fetch = vi.fn(
     async () =>
       new Response(
@@ -102,7 +104,12 @@ function fixture() {
       getLeadPaymentReviews: async () => [],
       refreshLeadOrderFinance: finance,
     },
+    "@/lib/inngest/client": { inngest: { send: async (event: unknown) => { scheduled.push(event); } } },
     "@/lib/automations/dispatch": {
+      persistFollowUpDispatch: async (_c: unknown, data: Record<string, unknown>, when: Date) => {
+        queued.push({ data, when });
+        return { id: `next-${queued.length}`, status: "pending", scheduled_for: when.toISOString() };
+      },
       loadAutomationPolicy: async () => policy,
       updateDispatch: async (
         _c: unknown,
@@ -181,6 +188,8 @@ function fixture() {
     policy,
     metering,
     prepareContact,
+    queued,
+    scheduled,
     execute: (extra = {}) =>
       service.executeWhatsappProactiveFollowUp({
         client: db.client,
@@ -188,6 +197,63 @@ function fixture() {
       }),
   };
 }
+function recoveryFixture() {
+  const f = fixture();
+  f.db.tables.leads[0].metadata = { checkout_runtime_state: { stage: "payment_sent", order_id: "order" } };
+  f.db.tables.sales_catalog_orders = [{ id: "order", organization_id: "org", lead_id: "lead", status: "pending_payment", payment_status: "pending", total: 90, latest_payment_session_id: "session" }];
+  f.db.tables.sales_catalog_payment_sessions = [{ id: "session", organization_id: "org", order_id: "order", method: "pix", status: "pending", amount: 90, metadata: {}, created_at: new Date().toISOString() }];
+  f.db.tables.sales_catalog_order_items = [{ order_id: "order", organization_id: "org", catalog_item_id: "product", title: "Produto", quantity: 1, total: 90 }];
+  f.db.tables.intelligence_memory = [{ id: "product", organization_id: "org", scope: "organization", memory_type: "sales_catalog_item", metadata: { sales_destination: "connectyhub_checkout" } }];
+  const prompt = () => {
+    const call = (f.fetch.mock.calls as unknown as Array<[string, { body: string }]>).find(([url]) => String(url).includes("generativelanguage"));
+    return call ? JSON.parse(call[1].body).contents[0].parts[0].text as string : "";
+  };
+  return { ...f, prompt };
+}
+
+describe("payment recovery in three attempts", () => {
+  it("schedules the next attempt a day later after each one, up to the third", async () => {
+    const f = recoveryFixture();
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order" })).toMatchObject({ status: "sent" });
+    expect(f.prompt()).toContain("tentativa 1 de 3");
+    expect(f.queued).toHaveLength(1);
+    expect(f.queued[0].data).toMatchObject({ recoveryStep: 2, salesCatalogOrderId: "order" });
+    expect(f.queued[0].data.dispatchId).toBeUndefined();
+    expect(f.queued[0].when.getTime() - Date.now()).toBeGreaterThan(23 * 3600_000);
+    expect(f.scheduled).toHaveLength(1);
+
+    const last = recoveryFixture();
+    expect(await last.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 3 })).toMatchObject({ status: "sent" });
+    expect(last.prompt()).toContain("última mensagem sobre este pedido");
+    expect(last.queued).toHaveLength(0);
+  });
+
+  it("offers Pix after a declined card instead of dropping the sale", async () => {
+    const f = recoveryFixture();
+    f.db.tables.sales_catalog_orders[0].payment_status = "failed";
+    f.db.tables.sales_catalog_payment_sessions[0] = { ...f.db.tables.sales_catalog_payment_sessions[0], method: "card", status: "rejected" };
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 2 })).toMatchObject({ status: "sent" });
+    expect(f.prompt()).toContain("cartão foi recusado");
+  });
+
+  it("tells the lead an expired Pix can be generated again, without a dead payment button", async () => {
+    const f = recoveryFixture();
+    f.db.tables.sales_catalog_payment_sessions[0].expires_at = new Date(Date.now() - 60_000).toISOString();
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 2 })).toMatchObject({ status: "sent" });
+    expect(f.prompt()).toContain("O Pix gerado venceu");
+    const calls = f.fetch.mock.calls as unknown as Array<[string, { body: string }]>;
+    expect(calls.some(([url, init]) => String(url).includes("/send/") && init.body.includes("Continuar pagamento"))).toBe(false);
+  });
+
+  it("stops the sequence when the lead answered", async () => {
+    const f = recoveryFixture();
+    f.db.tables.conversation_messages.push({ id: "2", conversation_id: "conversation", whatsapp_instance_id: "instance", direction: "inbound",
+      occurred_at: new Date().toISOString(), text_content: "vou pagar mais tarde", payload: {} });
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 2 })).toMatchObject({ status: "skipped" });
+    expect(f.queued).toHaveLength(0);
+  });
+});
+
 describe("follow-up execution gates", () => {
   it("blocks a queued follow-up to a registered responsible without generation or debit", async () => {
     const f = fixture();

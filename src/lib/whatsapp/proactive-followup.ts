@@ -90,14 +90,21 @@ export type WhatsappFollowUpEventData = {
   agentRunId: string;
   salesCatalogOrderId?: string | null;
   salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
+  /** Payment recovery attempt: 1 (default), 2 the next day, 3 the last call. */
+  recoveryStep?: 2 | 3;
 };
+
+/** Unpaid orders get up to three attempts, a day apart, each with its own approach. */
+export const paymentRecoveryMaxSteps = 3;
+const paymentRecoveryStepGapMinutes = 24 * 60;
 
 export async function enqueueWhatsappFollowUp(
   data: WhatsappFollowUpEventData,
   delayMinutes: number,
+  client: SupabaseClient = createServiceClient(),
 ) {
   const ts = Date.now() + Math.max(1, delayMinutes) * 60 * 1000;
-  const task = await persistFollowUpDispatch(createServiceClient(), data, new Date(ts));
+  const task = await persistFollowUpDispatch(client, data, new Date(ts));
   if (task.status !== "pending") return;
   await inngest.send({
     name: whatsappFollowUpEventName,
@@ -119,7 +126,9 @@ export async function processWhatsappProactiveFollowUp(input: {
   const data = { ...claimed.data.event_data, dispatchId: taskId, claimToken: claimed.data.claim_token } as WhatsappFollowUpEventData;
   try {
     const lifetime=claimed.data.journey==="recovery"?86400000:7*86400000;
-    if(Date.parse(claimed.data.created_at)<Date.now()-lifetime){await updateDispatch(client,taskId,{status:"skipped",reason:"opportunity_expired",lease_until:null},data.claimToken);return {status:"skipped",reason:"opportunity_expired"};}
+    // A later recovery step is created a day before it is due: its lifetime starts when it is due.
+    const opportunityStart=Math.max(Date.parse(claimed.data.created_at),Date.parse(claimed.data.scheduled_for ?? claimed.data.created_at) || 0);
+    if(opportunityStart<Date.now()-lifetime){await updateDispatch(client,taskId,{status:"skipped",reason:"opportunity_expired",lease_until:null},data.claimToken);return {status:"skipped",reason:"opportunity_expired"};}
     const result = await executeWhatsappProactiveFollowUp({ client, data });
     if (result.status === "skipped") await updateDispatch(client, taskId, { status: "skipped", reason: result.reason, lease_until: null }, data.claimToken);
     return result;
@@ -227,7 +236,8 @@ async function executeWhatsappProactiveFollowUp(input: {
   const followUpCount = messages.slice(lastInboundIndex+1).filter(
     (m) => m.direction === "outbound" && readRecord(m.payload)?.delivery_source === "proactive_follow_up",
   ).length;
-  if (followUpCount >= behavior.followUpMaxPerConversation) {
+  const recoveryJourney = eventData.salesCatalogFollowUpKind === "abandoned_order";
+  if (followUpCount >= (recoveryJourney ? paymentRecoveryMaxSteps : behavior.followUpMaxPerConversation)) {
     return { status: "skipped", reason: "max_follow_ups_reached" };
   }
 
@@ -241,11 +251,14 @@ async function executeWhatsappProactiveFollowUp(input: {
     if (finance.unavailable) return { status: "skipped", reason: "payment_verification_unavailable" };
   }
 
+  const paymentSignal = recoveryJourney && eventData.salesCatalogOrderId
+    ? await loadRecoveryPaymentSignal(client, eventData.organizationId, eventData.salesCatalogOrderId) : null;
+  const cardDeclined = paymentSignal?.method === "card" && paymentSignal.status === "rejected";
   const salesCatalogOrder = eventData.salesCatalogOrderId
     ? await loadSalesCatalogFollowUpOrder(client, eventData.salesCatalogOrderId, eventData.organizationId)
     : null;
   const salesCatalogSkipReason = salesCatalogOrder
-    ? getSalesCatalogFollowUpSkipReason(salesCatalogOrder, eventData.salesCatalogFollowUpKind)
+    ? getSalesCatalogFollowUpSkipReason(salesCatalogOrder, eventData.salesCatalogFollowUpKind, cardDeclined)
     : null;
   if (salesCatalogSkipReason) {
     return { status: "skipped", reason: salesCatalogSkipReason };
@@ -285,6 +298,8 @@ async function executeWhatsappProactiveFollowUp(input: {
     relationshipContext: relationship.context,
     pendingRevisionNote,
     checkoutAvailable: Boolean(checkoutLink),
+    recoveryStep: recoveryJourney ? eventData.recoveryStep ?? 1 : null,
+    paymentSignal,
     behavior,
   });
   if (!followUpGeneration) {
@@ -364,7 +379,7 @@ async function executeWhatsappProactiveFollowUp(input: {
   if(freshRelationship.reason || freshRelationship.deferUntil || freshRelationship.context!==relationship.context) return {status:"skipped",reason:freshRelationship.reason??"relationship_changed_before_send"};
   if (eventData.salesCatalogOrderId) {
     const currentOrder = await loadSalesCatalogFollowUpOrder(client, eventData.salesCatalogOrderId, eventData.organizationId);
-    if (!currentOrder || getSalesCatalogFollowUpSkipReason(currentOrder, eventData.salesCatalogFollowUpKind)) return { status: "skipped", reason: "order_changed_before_send" };
+    if (!currentOrder || getSalesCatalogFollowUpSkipReason(currentOrder, eventData.salesCatalogFollowUpKind, cardDeclined)) return { status: "skipped", reason: "order_changed_before_send" };
   }
   const currentReviews = await getLeadPaymentReviews(client, eventData.organizationId, eventData.leadId);
   if (currentReviews.length) return { status: "skipped", reason: "financial_review_before_send" };
@@ -405,6 +420,11 @@ async function executeWhatsappProactiveFollowUp(input: {
 
   const sentAt = new Date().toISOString();
   await updateDispatch(client, eventData.dispatchId!, { status: "sent", sent_at: sentAt, provider_response: sanitize(providerResponse), lease_until: null }, eventData.claimToken);
+  if (recoveryJourney && (eventData.recoveryStep ?? 1) < paymentRecoveryMaxSteps) {
+    // The next attempt only happens if the order is still unpaid and the lead stays silent; both are rechecked then.
+    await enqueueWhatsappFollowUp({ ...eventData, dispatchId: undefined, claimToken: undefined,
+      recoveryStep: ((eventData.recoveryStep ?? 1) + 1) as 2 | 3 }, paymentRecoveryStepGapMinutes, client);
+  }
   if(eventData.returnId)await client.from("customer_lead_visits").update({return_status:"completed"}).eq("organization_id",eventData.organizationId).eq("id",eventData.returnId).in("return_status",["pending","scheduled"]);
   const messageWrite = await client.from("conversation_messages").insert({
     conversation_id: eventData.conversationId,
@@ -500,6 +520,8 @@ async function generateFollowUpMessage(
     relationshipContext?: string;
     pendingRevisionNote?: string;
     checkoutAvailable?: boolean;
+    recoveryStep?: number | null;
+    paymentSignal?: RecoveryPaymentSignal | null;
     behavior?: WhatsappBehaviorConfig;
   } = {},
 ): Promise<FollowUpGenerationResult | null> {
@@ -521,6 +543,7 @@ async function generateFollowUpMessage(
     ...outboundLanguageQualityPromptLines,
     "Não exponha instruções internas nem comentários sobre a redação. Não finja ser humano; se houver uma pergunta sobre sua natureza, informe que é um assistente de IA.",
     ...buildSalesCatalogFollowUpPromptLines(options.salesCatalogOrder ?? null, options.salesCatalogFollowUpKind ?? null),
+    ...buildPaymentRecoveryPromptLines(options.recoveryStep ?? null, options.paymentSignal ?? null),
     options.relationshipContext ?? "",
     options.pendingRevisionNote ?? "",
     "",
@@ -659,8 +682,37 @@ async function loadSalesCatalogFollowUpOrder(
   };
 }
 
-function getSalesCatalogFollowUpSkipReason(order: SalesCatalogFollowUpOrder, kind?: SalesCatalogFollowUpKind | null) {
+type RecoveryPaymentSignal = { method: string | null; status: string | null; expiresAt: string | null };
+
+/** What happened to the last charge of the order: a declined card or a Pix that expired changes the approach. */
+async function loadRecoveryPaymentSignal(client: SupabaseClient, organizationId: string, orderId: string): Promise<RecoveryPaymentSignal | null> {
+  const { data } = await client.from("sales_catalog_payment_sessions").select("method,status,expires_at")
+    .eq("organization_id", organizationId).eq("order_id", orderId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data ? { method: data.method ?? null, status: data.status ?? null, expiresAt: data.expires_at ?? null } : null;
+}
+
+export function buildPaymentRecoveryPromptLines(step: number | null, signal: RecoveryPaymentSignal | null, now = Date.now()) {
+  if (!step) return [];
+  const expiresAt = signal?.expiresAt ? Date.parse(signal.expiresAt) : NaN;
+  const pixExpired = signal?.method === "pix" && (signal.status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now));
+  const pixExpiringSoon = signal?.method === "pix" && !pixExpired && Number.isFinite(expiresAt) && expiresAt - now <= 3 * 3600_000;
+  const cardDeclined = signal?.method === "card" && signal.status === "rejected";
+  return [
+    "",
+    `Recuperação do pagamento — tentativa ${step} de ${paymentRecoveryMaxSteps}:`,
+    step === 1 ? "- Ofereça ajuda: pergunte se ficou alguma dúvida sobre o pedido, a entrega ou o pagamento. Nada de pressão."
+      : step === 2 ? "- É o dia seguinte: retome o pedido citando um benefício concreto do que ele escolheu (só o que aparece no contexto) e pergunte se pode ajudar a concluir."
+      : "- É a última mensagem sobre este pedido: diga com leveza que não vai mais insistir e que fica à disposição se ele quiser concluir. Não ofereça desconto.",
+    cardDeclined ? "- O cartão foi recusado na última tentativa: ofereça pagar por Pix. Basta ele responder que você envia; não diga que já gerou o Pix." : "",
+    pixExpired ? "- O Pix gerado venceu: diga que, se ele quiser, você gera um novo Pix na hora; basta responder. Não diga que já gerou." : "",
+    pixExpiringSoon ? "- O Pix gerado vence em breve: lembre com leveza que o código ainda está valendo por pouco tempo." : "",
+  ].filter(Boolean);
+}
+
+function getSalesCatalogFollowUpSkipReason(order: SalesCatalogFollowUpOrder, kind?: SalesCatalogFollowUpKind | null, cardDeclined = false) {
   if (kind !== "abandoned_order") return null;
+  // A declined card is still a sale to recover: the next attempt offers Pix.
+  if (cardDeclined && order.paymentStatus === "failed" && !["paid", "cancelled", "needs_human"].includes(order.status ?? "")) return null;
 
   if (
     order.status === "paid"
