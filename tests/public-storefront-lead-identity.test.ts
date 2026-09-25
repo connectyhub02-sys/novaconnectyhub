@@ -33,7 +33,7 @@ describe("public storefront lead identity", () => {
     expect(publicTrackingContextSource).toContain("connectyhub_public_tracking_context");
     expect(publicTrackingContextSource).toContain("lead_name");
     expect(publicTrackingContextSource).toContain("lead_email");
-    expect(trackerSource).toContain("writePublicTrackingContext(result.public_tracking)");
+    expect(trackerSource).toContain("writePublicTrackingContext(fillMissingPublicTrackingContext(readPublicTrackingContext(), result.public_tracking))");
   });
 
   it("keeps known WhatsApp data out of repeated cart questions and requires email", () => {

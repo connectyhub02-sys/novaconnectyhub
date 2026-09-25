@@ -50,6 +50,7 @@ export function writePublicTrackingContext(context: ConnectyPublicTrackingContex
   }
 
   const incoming = normalizePublicTrackingContext(context);
+  const previousSignature = getPublicTrackingContextSignature(window.__CONNECTYHUB_TRACKING_CONTEXT__ ?? null);
   const normalized = context === null
     ? null
     : mergeStoredPublicTrackingContext(readStoredPublicTrackingContext(), incoming);
@@ -61,6 +62,9 @@ export function writePublicTrackingContext(context: ConnectyPublicTrackingContex
     delete window.__CONNECTYHUB_TRACKING_CONTEXT__;
     clearStoredPublicTrackingContext();
   }
+
+  // Rewriting the same context must not restart listeners (store agent, tracker page views).
+  if (normalized && getPublicTrackingContextSignature(normalized) === previousSignature) return;
 
   window.dispatchEvent(new CustomEvent(publicTrackingContextUpdatedEventName, {
     detail: { context: normalized },
@@ -126,6 +130,18 @@ export function mergePublicTrackingContext(
   });
 
   return merged;
+}
+
+// A tracking response echoes the context captured when the event was queued. It may only fill
+// what the page does not know yet; it must never replace the context the current page wrote.
+export function fillMissingPublicTrackingContext(
+  current: ConnectyPublicTrackingContext | null,
+  incoming: ConnectyPublicTrackingContext | null,
+) {
+  if (!incoming) return current;
+  if (!current) return incoming;
+  if (current.organization_id && incoming.organization_id && current.organization_id !== incoming.organization_id) return current;
+  return mergePublicTrackingContext(incoming, current);
 }
 
 export function buildPublicTrackingApiBody(context: ConnectyPublicTrackingContext | null) {

@@ -13,6 +13,7 @@ import {
   getPublicTrackingContextSignature,
   publicTrackingContextUpdatedEventName,
   readPublicTrackingContext,
+  fillMissingPublicTrackingContext,
   writePublicTrackingContext,
 } from "@/lib/tracking/public-context";
 
@@ -533,7 +534,7 @@ async function trackEvent(payload: TrackPayload) {
         },
     }) as { public_tracking?: ConnectyPublicTrackingContext | null } | null;
     if (result?.public_tracking) {
-      writePublicTrackingContext(result.public_tracking);
+      writePublicTrackingContext(fillMissingPublicTrackingContext(readPublicTrackingContext(), result.public_tracking));
     }
   } catch {
     // Tracking cannot block product flows.
