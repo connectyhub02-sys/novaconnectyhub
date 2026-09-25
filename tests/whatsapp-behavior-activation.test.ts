@@ -9,7 +9,7 @@ describe("WhatsApp activation preferences", () => {
       expect(behavior).toMatchObject({ agentEnabled: true, presenceMode: "always", alwaysOnline: true,
         markAsRead: true, responseMode: "mirror", adaptiveRapportMode: "soft", quoteReplyMode: "smart",
         emojiReactions: true, textEmojis: true, sendStickers: true, proactiveMedia: true, smallTalk: true,
-        cloneMemory: true, qualityMetrics: true, smartTiming: false, aiScheduleEnabled: false,
+        cloneMemory: true, qualityMetrics: true, smartTiming: true, aiScheduleEnabled: false,
         audioVoiceId: "", settingsVersion: 1 });
       expect(behavior.allowGroupChats).toBe(false);
       expect(behavior.campaignBroadcasts).toBe(false);
@@ -60,6 +60,18 @@ describe("WhatsApp activation preferences", () => {
         cloneMemory: false, qualityMetrics: false, sendStickers: false, smallTalk: false });
       expect(settings).toMatchObject({ agentEnabled, responseMode: "text", presenceMode: "natural",
         cloneMemory: false, qualityMetrics: false, sendStickers: false, smallTalk: false });
+    }
+  });
+});
+
+describe("system behavior rules for active agents", () => {
+  it("always pauses for a human and always uses the system timers, whatever was saved", () => {
+    const saved = { agentEnabled: true, humanIntervention: false, humanInterventionMinutes: 5, smartTiming: false,
+      timingTextSeconds: 60, timingAudioSeconds: 120, proactiveFollowUp: false };
+    for (const behavior of [normalizeWhatsappBehaviorConfig(saved), normalizeWhatsappBehaviorSettings(saved)]) {
+      expect(behavior).toMatchObject({ humanIntervention: true, detectHumanRequest: true, humanInterventionMinutes: 60, smartTiming: true,
+        timingTextSeconds: defaultWhatsappBehaviorConfig.timingTextSeconds, timingAudioSeconds: defaultWhatsappBehaviorConfig.timingAudioSeconds,
+        proactiveFollowUp: false });
     }
   });
 });

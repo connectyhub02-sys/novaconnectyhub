@@ -13618,21 +13618,38 @@ async function sendOrderToolTurn(input: {
     return outbound;
   }
   const delivery = resolveOutboundDelivery(input.context, input.latestInbound, text, input.deferred.length > 0);
-  if (delivery.shouldSendAudio) {
-    const persisted = await loadPersistedOutboundChunks(input.client, input.context.run.id, "audio");
-    for (const [index, chunk] of delivery.chunks.entries()) {
-      if (persisted.has(index + 1)) continue;
-      await setChatPresence(input.context.credentials, input.token, input.phone, "recording", 60000);
-      outbound.push(await sendAudioOutboundChunk({ client: input.client, context: input.context, token: input.token, phone: input.phone,
-        text: chunk, chunkIndex: index + 1, chunksTotal: delivery.chunks.length, mentionMessage: input.latestInbound }));
+  const { context, token, phone } = input;
+  const mode = delivery.shouldSendAudio ? "audio" : "text";
+  const chunks = delivery.chunks.map(chunk => chunk.trim()).filter(Boolean);
+  // Same delivery as the conversational sender: presence and pause between blocks,
+  // quoted replies by the configured rule and no block sent twice on a retry.
+  const replyTargets = await resolveOutboundReplyTargets(input.client, context, chunks).catch(() => []);
+  const persisted = await loadPersistedOutboundChunks(input.client, context.run.id, mode);
+  for (const [index, chunk] of chunks.entries()) {
+    const chunkIndex = index + 1;
+    if (persisted.has(chunkIndex)) {
+      outbound.push({ text: chunk, mode, providerResponse: { skipped: true, reason: "chunk_already_persisted", chunkIndex },
+        chunkIndex, chunksTotal: chunks.length, persisted: true });
+      continue;
     }
-    for (const action of input.deferred) outbound.push(await action());
-    return outbound;
-  }
-  const chunks = delivery.chunks.map(chunk => chunk.trim()).filter(Boolean).slice(0, 4);
-  for (const [chunkIndex, text] of chunks.entries()) {
-    const message = await sendTextOutboundChunk({ client: input.client, context: input.context, token: input.token, phone: input.phone,
-      text, chunkIndex, chunksTotal: chunks.length, trackIdPrefix: "order_tool_reply" });
+    if (delivery.shouldSendAudio) {
+      const delayMs = index > 0 ? resolveAudioChunkDelayMs(chunk, context.behavior) : 0;
+      await setChatPresence(context.credentials, token, phone, "recording", index > 0 ? delayMs + 15000 : 60000);
+      if (delayMs) await sleep(delayMs);
+    } else if (index > 0) {
+      const delayMs = resolveChunkDelayMs(chunk, context.behavior);
+      await setChatPresence(context.credentials, token, phone, "composing", delayMs + 6000);
+      await sleep(delayMs);
+    }
+    await assertRunStillTargetsLatestInbound(input.client, context, input.latestInbound);
+    const replyId = replyTargets[index]?.provider_message_id ?? undefined;
+    const mentionMessage = replyTargets[index] ?? input.latestInbound;
+    const message = delivery.shouldSendAudio
+      ? await sendAudioOutboundChunk({ client: input.client, context, token, phone, text: chunk, chunkIndex,
+          chunksTotal: chunks.length, replyId, mentionMessage })
+      : await sendTextOutboundChunk({ client: input.client, context, token, phone, text: chunk, chunkIndex,
+          chunksTotal: chunks.length, replyId, mentionMessage, trackIdPrefix: "order_tool_reply" });
+    persisted.add(chunkIndex);
     if (message) outbound.push(message);
   }
   for (const action of input.deferred) outbound.push(await action());

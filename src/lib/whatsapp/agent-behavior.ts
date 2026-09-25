@@ -359,7 +359,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   mediaBatchImageLimit: 8,
   mediaBatchVideoLimit: 2,
   mediaBatchDocumentLimit: 3,
-  smartTiming: false,
+  smartTiming: true,
   timingTextSeconds: 6,
   timingTextBurstSeconds: 9,
   timingMediaCaptionSeconds: 10,
@@ -545,7 +545,20 @@ export function normalizeWhatsappBehaviorSettings(value: unknown): WhatsappBehav
   return { ...normalizeWhatsappBehaviorConfig(settings, { preserveSettings: true }), settingsVersion: 1 };
 }
 
+const systemTimingKeys = [
+  "timingTextSeconds", "timingTextBurstSeconds", "timingMediaCaptionSeconds", "timingMediaThenTextSeconds",
+  "timingMediaOnlySeconds", "timingAudioSeconds", "timingAudioThenTextSeconds", "timingVideoCaptionSeconds",
+  "timingVideoOnlySeconds", "timingDocumentCaptionSeconds", "timingDocumentOnlySeconds", "timingButtonDelaySeconds",
+  "timingMediaBurstSeconds", "timingContextEventSeconds", "timingAudioQualitySeconds",
+] as const satisfies ReadonlyArray<keyof WhatsappBehaviorConfig>;
+
 function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) {
+  // System rules for every active agent (existing and new): a human reply always pauses the
+  // agent for the standard window, and response timing always follows the system timers.
+  behavior.humanIntervention = true;
+  behavior.humanInterventionMinutes = defaultWhatsappBehaviorConfig.humanInterventionMinutes;
+  behavior.smartTiming = true;
+  for (const key of systemTimingKeys) behavior[key] = defaultWhatsappBehaviorConfig[key];
   behavior.splitMessages = true;
   behavior.humanizedLanguage = true;
   behavior.timingJitter = true;

@@ -266,3 +266,25 @@ describe("first purchase with cart tools", () => {
     expect(await t.tool("montar_pedido", { itens: [{ produto_id: "pizza", quantidade: 1, montagem: [three] }] })).toMatchObject({ ok: false });
   });
 });
+
+describe("tool turn delivery", () => {
+  it("sends every block with typing between them, quoted replies and no repeat on retry", async () => {
+    const c = cart();
+    c.ctx.behavior = { ...c.ctx.behavior, splitMessages: true, quoteReplyMode: "always", wpmTypingModel: true, wpmSpeed: 45 } as typeof c.ctx.behavior;
+    c.say("oi, quero pizza");
+    const text = "Oi Maria!\n\nTemos pizza sim.\n\nQuer de queijo?\n\nOu de tomate?\n\nAs duas saem hoje.";
+    const send = () => c.call<Promise<Outbound[]>>("sendOrderToolTurn", { client: c.db.client, context: c.ctx, token: "fake", phone: "5500000000000",
+      text, deferred: [], latestInbound: c.ctx.messages.at(-1) });
+    await send();
+    const texts = c.requests.filter(request => request.url.endsWith("/send/text"));
+    const presence = c.requests.filter(request => request.url.endsWith("/message/presence"));
+    expect(texts).toHaveLength(5);
+    expect(texts.every(request => request.body.replyid === c.ctx.messages.at(-1)!.provider_message_id)).toBe(true);
+    expect(presence.filter(request => request.body.presence === "composing")).toHaveLength(4);
+    // A retried run finds the blocks already persisted and sends nothing again.
+    c.db.tables.conversation_messages = [...c.ctx.messages, ...[1, 2, 3, 4, 5].map(chunk => ({ id: `sent-${chunk}`, direction: "outbound",
+      conversation_id: "conversation", payload: { agent_run_id: c.ctx.run.id, chunk_index: chunk, delivery_mode: "text" } }))];
+    await send();
+    expect(c.requests.filter(request => request.url.endsWith("/send/text"))).toHaveLength(5);
+  }, 30000);
+});
