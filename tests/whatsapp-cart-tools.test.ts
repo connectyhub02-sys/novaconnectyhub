@@ -107,6 +107,31 @@ describe("first purchase with cart tools", () => {
     expect(await t.tool("montar_pedido", { itens: [{ produto_id: "shirt", quantidade: 1, versao_id: "g" }] })).toMatchObject({ ok: true });
   });
 
+  it("does not build a delivery summary from a CEP alone (Gustavo, 24/09 22:13)", async () => {
+    const t = cart();
+    t.say("cliente@example.com\n52998224725\n88330786");
+    const result = await t.tool("montar_pedido", pizzaAndLemonade);
+    expect(result).toMatchObject({ ok: false, motivo: "Falta o endereço completo de entrega." });
+    expect(result.faltam?.[0]).toBe("endereço completo com rua, número, bairro e cidade");
+    expect(t.deferred).toHaveLength(0);
+  });
+
+  it("always answers the customer when the model keeps calling tools (Gustavo, 24/09 22:15)", async () => {
+    const t = cart();
+    t.say(address);
+    t.say("Tem como pagar no cartao crédito");
+    const loop = { candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ functionCall: { name: "ver_carrinho", args: {} } }] } }] };
+    t.modelReplies.push(loop, loop, loop, loop, { candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: "Tem sim! No cartão dá para parcelar." }] } }] });
+    const result = await t.call<Promise<{ response: { text: string }; calls: Row[] }>>("runOrderToolTurn", {
+      systemInstruction: "Você é o agente de teste.", credentials: { apiKey: "not-real", model: "gemini-test" }, agent: { id: "agent", name: "Agente", model_id: "gemini-test" },
+      behavior: { proactiveFollowUp: false }, messages: t.ctx.messages, userText: "Tem como pagar no cartao crédito",
+      client: t.db.client, context: t.ctx, scope: { kind: "cart" }, token: "fake", phone: "5500000000000", latestInbound: t.ctx.messages.at(-1) });
+    expect(result.response.text).toBe("Tem sim! No cartão dá para parcelar.");
+    expect((t.modelRequests.at(-1)?.toolConfig as { functionCallingConfig: { mode: string } }).functionCallingConfig.mode).toBe("NONE");
+    // Only the first identical call runs; the repeats are refused as a loop.
+    expect(result.calls.filter(call => call.ok)).toHaveLength(1);
+  });
+
   it("offers the cart tools to the model and returns the real summary result", async () => {
     const t = cart();
     t.say(address);

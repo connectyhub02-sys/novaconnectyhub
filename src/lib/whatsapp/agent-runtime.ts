@@ -13297,6 +13297,12 @@ function quoteCartToolSelections(context: RunContext, selections: RuntimeSalesCa
       settings: context.salesCatalogShippingSettings, cep: cep ?? "", address: address ?? shippingText, subtotal: normalizeCurrencyAmount(subtotal) ?? 0 });
     return { ok: false, motivo: quote.error ?? "Não há entrega disponível para esse endereço. Ofereça retirada, se existir, ou outro endereço." };
   }
+  // A CEP prices the freight, but a delivery needs street, number, district and city.
+  if (shipping && !/retirada/i.test(shipping.shippingMethod ?? "")
+    && !(shipping.destinationAddress && hasRuntimeCompleteDeliveryAddress(shipping.destinationAddress))) {
+    return { ok: false, motivo: "Falta o endereço completo de entrega.",
+      faltam: ["endereço completo com rua, número, bairro e cidade", ...missingCheckoutBillingLabels(context.lead)] };
+  }
   const operation = evaluateOrderOperation(context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(priced.map(selection => selection.item), shipping?.shippingMethod));
   if (!operation.allowed) return { ok: false, motivo: operation.message ?? "A loja não está recebendo pedidos agora." };
   const total = shipping ? addRuntimeMoney(subtotal, shipping.shippingTotal) ?? subtotal : subtotal;
@@ -13455,11 +13461,15 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
   const calls: OrderToolCall[] = [];
   let usage: GeminiTokenUsage | null = null;
   let corrected = false;
+  const seenCalls = new Set<string>();
   for (let round = 0; round < orderToolMaxRounds; round++) {
+    // The last round forbids tools: the customer always gets an answer, never silence.
+    const lastRound = round === orderToolMaxRounds - 1;
     const response = await fetchWithTimeout(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
       body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
-        tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }], toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+        tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }],
+        toolConfig: { functionCallingConfig: { mode: lastRound ? "NONE" : "AUTO" } },
         generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
     }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
     const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
@@ -13474,8 +13484,15 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
       const responses: JsonRecord[] = [];
       for (const call of functionCalls) {
         const name = String(call.name);
-        const result = await executeOrderTool({ client: input.client, context: input.context, scope: input.scope, latestInbound: input.latestInbound,
-          token: input.token, phone: input.phone, deferred, name, args: readRecord(call.args) ?? {} });
+        const args = readRecord(call.args) ?? {};
+        // The same call with the same data in one reply is a loop, not new information.
+        const signature = `${name}:${JSON.stringify(args)}`;
+        const repeated = seenCalls.has(signature);
+        seenCalls.add(signature);
+        const result = repeated
+          ? { ok: false, motivo: "Esta ferramenta já foi chamada com os mesmos dados nesta resposta. Use o resultado anterior e responda ao cliente." }
+          : await executeOrderTool({ client: input.client, context: input.context, scope: input.scope, latestInbound: input.latestInbound,
+            token: input.token, phone: input.phone, deferred, name, args });
         calls.push({ name, ok: result.ok === true, reason: result.ok === true ? undefined : asString(result.motivo) ?? undefined });
         responses.push({ functionResponse: { name, ...(call.id ? { id: call.id } : {}), response: result } });
       }
@@ -13488,7 +13505,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     // "Done" needs an executing tool; a proposal only justifies announcing the summary.
     const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
     const proposed = calls.some(call => call.ok && (call.name === "propor_alteracao" || call.name === "montar_pedido"));
-    if (!corrected && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
+    if (!corrected && !lastRound && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
       corrected = true;
       contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
       continue;
@@ -13496,7 +13513,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     const rendered = enforceIdentityGuard(normalizeAssistantText(text.replace(/https?:\/\/\S+/g, "").trim()), input.behavior, input.agent);
     return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
   }
-  throw new Error("O atendimento com ferramentas do pedido excedeu o limite de etapas.");
+  throw new Error(`O atendimento com ferramentas do pedido excedeu o limite de etapas: ${calls.map(call => `${call.name}${call.ok ? "" : "(recusada)"}`).join(", ")}.`);
 }
 
 /** Sends the reply as plain text, then the system messages produced by the tools. */
