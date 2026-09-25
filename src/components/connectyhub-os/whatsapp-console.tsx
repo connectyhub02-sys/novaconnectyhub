@@ -2151,18 +2151,6 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={Forward} label="Follow-up automatico" description="Envia mensagem de retomada quando o lead silencia apos engajamento." checked={behaviorDraft.proactiveFollowUp} onChange={() => updateBehavior("proactiveFollowUp", !behaviorDraft.proactiveFollowUp)} />
-                  <NumberField label="Delay (min)" description="Minutos de silencio do lead antes de enviar o follow-up." value={behaviorDraft.followUpDelayMinutes} min={30} max={1440} onChange={(value) => updateBehavior("followUpDelayMinutes", value)} />
-                  <NumberField label="Max por conversa" description="Limite de follow-ups automaticos por conversa." value={behaviorDraft.followUpMaxPerConversation} min={1} max={5} onChange={(value) => updateBehavior("followUpMaxPerConversation", value)} />
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <TextField label="Janela inicio" description="Horario minimo para enviar follow-up (ex: 09:00)." value={behaviorDraft.followUpTimeWindowStart} onChange={(value) => updateBehavior("followUpTimeWindowStart", value)} />
-                  <TextField label="Janela fim" description="Horario maximo para enviar follow-up (ex: 20:00)." value={behaviorDraft.followUpTimeWindowEnd} onChange={(value) => updateBehavior("followUpTimeWindowEnd", value)} />
-                </div>
-              </BehaviorSection>
-
               <BehaviorSection title="Audio e midia com IA" description="Define quais tipos de midia a IA pode interpretar antes de responder o lead.">
                 <div className="mb-2 grid gap-2 md:grid-cols-3">
                   <ToggleTile icon={ImageIcon} label="Analisar midias" description="O agente olha fotos, videos e documentos enviados pelo lead. Desligado, ele pede ao lead que descreva o que enviou. Audios continuam sendo transcritos." checked={behaviorDraft.mediaAnalysis} onChange={() => updateBehavior("mediaAnalysis", !behaviorDraft.mediaAnalysis)} />

@@ -76,14 +76,13 @@ describe("system behavior rules for active agents", () => {
   });
 });
 
-describe("media understanding switch and new agent follow-up", () => {
+describe("media understanding switch and follow-up ownership", () => {
   it("analyses images, videos and documents unless the owner turns media off", () => {
     expect(normalizeWhatsappBehaviorConfig({ agentEnabled: true, mediaVideo: false })).toMatchObject({ mediaAnalysis: true, mediaImage: true, mediaVideo: true, mediaDocument: true });
     expect(normalizeWhatsappBehaviorConfig({ agentEnabled: true, mediaAnalysis: false })).toMatchObject({ mediaAnalysis: false, mediaImage: false, mediaVideo: false, mediaDocument: false, audioTranscription: true });
   });
 
-  it("creates new agents with follow-up on and keeps the saved choice of existing ones", () => {
-    expect(createActivitySetup("academia", "Lia").behavior.proactiveFollowUp).toBe(true);
-    expect(normalizeWhatsappBehaviorSettings({ agentEnabled: true, proactiveFollowUp: false }).proactiveFollowUp).toBe(false);
+  it("leaves follow-up to the company's Automations switch instead of a per-agent default", () => {
+    expect(createActivitySetup("academia", "Lia").behavior.proactiveFollowUp).toBe(false);
   });
 });

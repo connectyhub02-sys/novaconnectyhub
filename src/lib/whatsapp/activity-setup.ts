@@ -54,8 +54,6 @@ export function createActivityBehavior(templateId: unknown): WhatsappBehaviorCon
     emojiReactions: true, reactionProbability: preset.style === "warm" ? 25 : 10,
     spontaneousAudio: false,
     interactiveMessages: true, qualityMetrics: true,
-    // New agents are born with follow-up on; the owner can turn it off per agent.
-    proactiveFollowUp: true,
   });
 }
 
