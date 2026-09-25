@@ -12946,7 +12946,7 @@ type OrderToolScope = { kind: "order"; order: RuntimeSalesCatalogOrder } | { kin
 type OrderToolDeferred = () => Promise<OutboundMessage>;
 type OrderToolCall = { name: string; ok: boolean; reason?: string };
 
-const orderToolMaxRounds = 5;
+const orderToolMaxRounds = 8;
 
 function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
   if (readRecord(context.instance.metadata)?.order_tools !== true) return null;
@@ -13233,6 +13233,7 @@ const cartToolInstructionLines = [
   "Valores, taxa de entrega, frete e total vêm sempre das ferramentas; não calcule nem prometa um total por conta própria.",
   "Quando o cliente escolher o que quer comprar, chame montar_pedido com a lista completa de itens usando o produto_id exato (do catálogo ou de buscar_produtos). Em produtos com versões informe versao_id; em produtos com montagem (pizza) informe tamanho, sabores e opções de cada unidade. Se houver dois produtos ou versões parecidos, pergunte qual antes de montar.",
   "Se montar_pedido disser que falta endereço ou dados, peça ao cliente tudo o que falta em UMA mensagem.",
+  "Se uma ferramenta recusar, leia o motivo: corrija o produto ou a versão uma vez (usando buscar_produtos) ou pergunte ao cliente. Não repita a mesma chamada sem mudar nada.",
   "Depois que montar_pedido retornar ok, escreva só uma frase curta de transição. O sistema envia o resumo oficial; não repita itens nem valores.",
   "Chame fechar_pedido somente quando a última mensagem do cliente aceitar o resumo enviado. Se a forma de pagamento ainda não foi escolhida, pergunte Pix ou cartão e informe em fechar_pedido.",
   "Nunca diga que fechou o pedido, gerou ou enviou o pagamento se fechar_pedido não retornou ok. Não escreva links: fotos, páginas e pagamento são enviados pelo sistema (use mostrar_produto para fotos).",
@@ -13478,7 +13479,8 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
     const content = readRecord(readRecord(Array.isArray(readRecord(data)?.candidates) ? (readRecord(data)!.candidates as unknown[])[0] : null)?.content);
     const parts = Array.isArray(content?.parts) ? content!.parts as unknown[] : [];
     const functionCalls = parts.map(part => readRecord(readRecord(part)?.functionCall)).filter((call): call is JsonRecord => Boolean(call?.name));
-    if (functionCalls.length) {
+    // On the last round a tool call is ignored: only an answer to the customer counts.
+    if (functionCalls.length && !lastRound) {
       // Keep the model turn intact (including thought signatures) before answering it.
       contents.push({ role: "model", parts });
       const responses: JsonRecord[] = [];
@@ -13500,7 +13502,10 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
       continue;
     }
     const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
-    if (!text) throw new Error("Gemini nao retornou uma resposta para o lead.");
+    if (!text) {
+      if (!lastRound) throw new Error("Gemini nao retornou uma resposta para o lead.");
+      return { response: { text: orderToolFallbackText(calls, deferred), modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+    }
     // A claimed action needs a successful tool in this same turn.
     // "Done" needs an executing tool; a proposal only justifies announcing the summary.
     const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
@@ -13516,6 +13521,17 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
   throw new Error(`O atendimento com ferramentas do pedido excedeu o limite de etapas: ${calls.map(call => `${call.name}${call.ok ? "" : "(recusada)"}`).join(", ")}.`);
 }
 
+/**
+ * When the model ends without an answer: the system messages already produced
+ * (summary, payment) speak for themselves; otherwise tell the customer the last
+ * concrete reason a tool gave, instead of staying silent.
+ */
+function orderToolFallbackText(calls: OrderToolCall[], deferred: OrderToolDeferred[]) {
+  if (deferred.length) return "";
+  const reason = [...calls].reverse().find(call => !call.ok && call.reason && !call.reason.startsWith("Esta ferramenta já foi chamada"))?.reason;
+  return reason ? `Para seguir com o seu pedido: ${reason}` : "Me conta de novo o que você precisa para eu seguir com o seu pedido?";
+}
+
 /** Sends the reply as plain text, then the system messages produced by the tools. */
 async function sendOrderToolTurn(input: {
   client: SupabaseClient; context: RunContext; token: string; phone: string; text: string; deferred: OrderToolDeferred[]; latestInbound: ConversationMessageRow;
@@ -13527,8 +13543,13 @@ async function sendOrderToolTurn(input: {
     input.context.salesCatalog.length > 0);
   // Same voice rule as the legacy sender: a conversational reply may go as audio;
   // a turn that sends a summary or payment stays in text, like any order step.
-  const delivery = resolveOutboundDelivery(input.context, input.latestInbound, text, input.deferred.length > 0);
   await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+  // Only the system messages (e.g. the official summary) when the model wrote nothing.
+  if (!text.trim()) {
+    for (const action of input.deferred) outbound.push(await action());
+    return outbound;
+  }
+  const delivery = resolveOutboundDelivery(input.context, input.latestInbound, text, input.deferred.length > 0);
   if (delivery.shouldSendAudio) {
     const persisted = await loadPersistedOutboundChunks(input.client, input.context.run.id, "audio");
     for (const [index, chunk] of delivery.chunks.entries()) {

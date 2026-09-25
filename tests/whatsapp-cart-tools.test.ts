@@ -121,7 +121,7 @@ describe("first purchase with cart tools", () => {
     t.say(address);
     t.say("Tem como pagar no cartao crédito");
     const loop = { candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ functionCall: { name: "ver_carrinho", args: {} } }] } }] };
-    t.modelReplies.push(loop, loop, loop, loop, { candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: "Tem sim! No cartão dá para parcelar." }] } }] });
+    t.modelReplies.push(loop, loop, loop, loop, loop, loop, loop, { candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: "Tem sim! No cartão dá para parcelar." }] } }] });
     const result = await t.call<Promise<{ response: { text: string }; calls: Row[] }>>("runOrderToolTurn", {
       systemInstruction: "Você é o agente de teste.", credentials: { apiKey: "not-real", model: "gemini-test" }, agent: { id: "agent", name: "Agente", model_id: "gemini-test" },
       behavior: { proactiveFollowUp: false }, messages: t.ctx.messages, userText: "Tem como pagar no cartao crédito",
@@ -130,6 +130,28 @@ describe("first purchase with cart tools", () => {
     expect((t.modelRequests.at(-1)?.toolConfig as { functionCallingConfig: { mode: string } }).functionCallingConfig.mode).toBe("NONE");
     // Only the first identical call runs; the repeats are refused as a loop.
     expect(result.calls.filter(call => call.ok)).toHaveLength(1);
+  });
+
+  it("sends the summary instead of failing when the steps run out after it was built (Gustavo, 25/09 10:16)", async () => {
+    const t = cart();
+    t.say(`magno macedo\n52998224725\n${address}`);
+    const call = (name: string, args: Row) => ({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ functionCall: { name, args } }] } }] });
+    t.modelReplies.push(call("montar_pedido", pizzaAndLemonade));
+    for (let round = 1; round < 8; round++) t.modelReplies.push(call("buscar_produtos", { texto: `limonada ${round}` }));
+    const result = await t.call<Promise<{ response: { text: string }; calls: Row[]; deferred: Deferred[] }>>("runOrderToolTurn", {
+      systemInstruction: "Você é o agente de teste.", credentials: { apiKey: "not-real", model: "gemini-test" }, agent: { id: "agent", name: "Agente", model_id: "gemini-test" },
+      behavior: { proactiveFollowUp: false }, messages: t.ctx.messages, userText: "dados",
+      client: t.db.client, context: t.ctx, scope: { kind: "cart" }, token: "fake", phone: "5500000000000", latestInbound: t.ctx.messages.at(-1) });
+    expect(result.response.text).toBe("");
+    expect(result.deferred).toHaveLength(1);
+    // The call attempted on the last round is ignored, never executed.
+    expect(result.calls).toHaveLength(7);
+  });
+
+  it("tells the customer the last concrete reason when nothing could be done", () => {
+    const t = cart();
+    expect(t.call("orderToolFallbackText", [{ name: "montar_pedido", ok: false, reason: "Falta o endereço completo de entrega." }], []))
+      .toBe("Para seguir com o seu pedido: Falta o endereço completo de entrega.");
   });
 
   it("offers the cart tools to the model and returns the real summary result", async () => {
