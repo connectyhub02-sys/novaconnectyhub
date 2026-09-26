@@ -753,7 +753,7 @@ export function ClientWhatsappAutomationStudio({
           </div>
         ) : null}
 
-        <WhatsappTrafficRoutineCard
+        {entityIdKey === "companyId" ? <WhatsappTrafficRoutineCard
           traffic={traffic}
           targets={targets}
           products={products}
@@ -762,7 +762,7 @@ export function ClientWhatsappAutomationStudio({
           discovering={runningAction === "refresh_groups" || runningAction === "refresh_newsletters"}
           onDiscover={async () => { await runAction("refresh_groups"); await runAction("refresh_newsletters"); }}
           onSave={async (action, payload) => (await runAction(action, payload))?.traffic ?? null}
-        />
+        /> : null}
 
         <details className="rounded-xl border border-slate-200 p-3">
         <summary className="cursor-pointer text-sm font-semibold text-slate-700">Mais opções (avançado): post avulso, enquete, janela de grupo, regras de resposta e resultados</summary>
