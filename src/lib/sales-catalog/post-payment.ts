@@ -42,6 +42,7 @@ type OrderItemRow = {
   sku_code: string | null;
   title: string;
   quantity: number | null;
+  fulfillment?: JsonRecord | null;
 };
 
 type ProductRow = {
@@ -561,9 +562,62 @@ async function maybeNotifyPaymentApproved(input: {
     },
   });
 
-  await maybeAskBirthday({ client: input.client, order: input.order, instanceId: instance.id, token, phone, credentials,
-    conversation: conversation ? { id: conversation.id, provider_chat_id: conversation.provider_chat_id } : null }).catch(() => {});
+  const conversationRef = conversation ? { id: conversation.id, provider_chat_id: conversation.provider_chat_id } : null;
+  // A paid service that needs a time goes straight to scheduling; the birthday question waits for another moment.
+  const scheduling = await maybeOfferPaidScheduling({ client: input.client, order: input.order, items: input.items, instanceId: instance.id,
+    token, phone, credentials, conversation: conversationRef }).catch((error: unknown) => {
+    console.error("paid_scheduling_failed", { orderId: input.order.id, message: error instanceof Error ? error.message : "unknown" });
+    return false;
+  });
+  if (!scheduling) {
+    await maybeAskBirthday({ client: input.client, order: input.order, instanceId: instance.id, token, phone, credentials,
+      conversation: conversationRef }).catch(() => {});
+  }
 
+  return true;
+}
+
+/**
+ * "Pay first, schedule after": real calendar times right after the confirmation, or an honest "we will
+ * get back to you" with the paid order flagged for the responsible person. Once per order.
+ */
+async function maybeOfferPaidScheduling(input: {
+  client: SupabaseClient; order: OrderRow; items: OrderItemRow[]; instanceId: string; token: string; phone: string;
+  credentials: UazapiCredentials; conversation: { id: string; provider_chat_id: string | null } | null;
+}) {
+  if (!input.order.lead_id || !input.conversation) return false;
+  const { planPaidScheduling } = await import("./paid-scheduling");
+  const plan = await planPaidScheduling(input.client, { organizationId: input.order.organization_id, conversationId: input.conversation.id,
+    leadId: input.order.lead_id, items: input.items as unknown as JsonRecord[] });
+  if (!plan) return false;
+  if (plan.kind === "offer") {
+    const stored = await input.client.from("customer_agenda_offers").upsert(plan.offer);
+    if (stored.error) throw new Error("Não foi possível guardar os horários oferecidos.");
+  }
+  const providerResponse = await callUazapi(input.credentials, "/send/text", {
+    outbound: { instanceId: input.instanceId, client: input.client },
+    method: "POST",
+    token: input.token,
+    body: { number: input.phone, text: plan.text, delay: 2500, linkPreview: false, track_source: "connectyhub",
+      track_id: `paid_scheduling_${input.order.id}` },
+  });
+  const now = new Date().toISOString();
+  await input.client.from("conversation_messages").insert({
+    organization_id: input.order.organization_id, conversation_id: input.conversation.id, lead_id: input.order.lead_id,
+    whatsapp_instance_id: input.instanceId, provider: "uazapi", provider_message_id: findProviderMessageId(providerResponse),
+    provider_chat_id: input.conversation.provider_chat_id, direction: "outbound", message_type: "text", text_content: plan.text,
+    payload: { delivery_source: "paid_scheduling", author_type: "system", author_label: "Sistema", author_source: "paid_scheduling",
+      origin_channel: "whatsapp", origin_source: "connectyhub_payment_system", provider_response: sanitizeProviderData(providerResponse) },
+    occurred_at: now,
+  });
+  await input.client.from("intelligence_events").insert({
+    scope: "organization", organization_id: input.order.organization_id, source_type: "sales_catalog_order", source_id: input.order.id,
+    event_type: plan.kind === "offer" ? "sales_catalog.paid_scheduling_offered" : "sales_catalog.paid_scheduling_needed",
+    title: plan.kind === "offer" ? "Horários oferecidos após o pagamento" : "Pedido pago aguardando horário",
+    summary: plan.kind === "offer" ? plan.text : `Pedido pago de ${plan.productTitle} sem horário disponível na agenda: combinar com o cliente.`,
+    confidence: 1, visibility: "organization", tags: ["sales_catalog", "agenda", "payment"],
+    payload: { order_id: input.order.id, lead_id: input.order.lead_id, conversation_id: input.conversation.id, kind: plan.kind },
+  });
   return true;
 }
 
@@ -1417,7 +1471,7 @@ async function loadOrder(client: SupabaseClient, organizationId: string, orderId
 async function loadOrderItems(client: SupabaseClient, organizationId: string, orderId: string) {
   const { data } = await client
     .from("sales_catalog_order_items")
-    .select("id, organization_id, catalog_item_id, sku_id, sku_code, title, quantity")
+    .select("id, organization_id, catalog_item_id, sku_id, sku_code, title, quantity, fulfillment")
     .eq("order_id", orderId)
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: true });
