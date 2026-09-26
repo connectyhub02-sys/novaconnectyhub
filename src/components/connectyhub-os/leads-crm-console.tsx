@@ -691,7 +691,7 @@ function LeadsView({
                     <p className="mt-1 truncate text-[11px] text-slate-400">Score {lead.score}/100</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-slate-950">{lead.agentName ?? "Sem agente"}</p>
+                    <p className="flex items-center gap-1.5 truncate text-[12px] font-semibold text-slate-950">{lead.agentName ? <AgentAvatar avatarUrl={lead.agentAvatarUrl} name={lead.agentName} size="xs" /> : null}{lead.agentName ?? "Sem agente"}</p>
                     <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500">{lead.companyName}</p>
                   </div>
                   <StatusPill status={lead.status} />

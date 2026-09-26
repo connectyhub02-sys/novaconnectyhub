@@ -26,6 +26,7 @@ import type { LucideIcon } from "lucide-react";
 import { NeonBadge, Panel } from "./panel-primitives";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
+import { AgentPhoto } from "./agent-photo";
 import { WhatsappTrafficRoutineCard, type TrafficPayload } from "./whatsapp-traffic-routine-card";
 
 export type ClientAutomationAgent = {
@@ -35,6 +36,7 @@ export type ClientAutomationAgent = {
   personaName: string;
   roleTitle: string;
   status: string;
+  avatarUrl?: string | null;
 };
 
 type Notice = {
@@ -283,7 +285,7 @@ type Props = {
   products: ClientSalesCatalogItem[];
   selectedAutomationAgentId: string | null;
   selectedAutomationWhatsappLabel: string | null;
-  whatsappOptions?: Array<{ agentId: string; label: string; status: string }>;
+  whatsappOptions?: Array<{ agentId: string; label: string; status: string; avatarUrl?: string | null }>;
   channelEndpoint?: string;
   entityIdKey?: "companyId" | "sectorId";
 };
@@ -743,7 +745,7 @@ export function ClientWhatsappAutomationStudio({
       action={<NeonBadge tone={connected ? "green" : "amber"}>{connected ? "WhatsApp online" : "pendente"}</NeonBadge>}
     >
       <div className="grid gap-4">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600"><span aria-label="Agente em uso" className="font-medium text-slate-800">{selectedAutomationAgent?.name ?? "Escolha um agente"}</span><span>{groups.length} grupos · {newsletters.length} canais</span><span>{operations?.analytics.summary.scheduled ?? 0} envios programados</span></div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600"><span aria-label="Agente em uso" className="flex items-center gap-2 font-medium text-slate-800">{selectedAutomationAgent ? <AgentPhoto src={selectedAutomationAgent.avatarUrl} name={selectedAutomationAgent.name} size="sm" /> : null}{selectedAutomationAgent?.name ?? "Escolha um agente"}</span><span>{groups.length} grupos · {newsletters.length} canais</span><span>{operations?.analytics.summary.scheduled ?? 0} envios programados</span></div>
 
         {notice ? (
           <div className={cn(
@@ -766,9 +768,15 @@ export function ClientWhatsappAutomationStudio({
                 const routineOn = traffic?.numbers?.find((number) => number.agentId === option.agentId)?.enabled;
                 return (
                   <button key={option.agentId} type="button" aria-pressed={active} onClick={() => { setPickedAgentId(option.agentId); setSelectedTargetIds([]); setTraffic(null); }}
-                    className={cn("rounded-lg border px-3 py-2 text-left text-sm", active ? "border-emerald-600 bg-emerald-50" : "border-slate-200 hover:bg-slate-50")}>
-                    <span className="block font-semibold text-slate-800">{option.label}</span>
-                    <span className="block text-xs text-slate-500">{option.status === "connected" ? "Conectado" : "Desconectado"} · {routineOn ? "rotina ligada" : "rotina desligada"}</span>
+                    className={cn("flex items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm transition", active ? "border-emerald-600 bg-emerald-50 shadow-sm" : "border-slate-200 hover:bg-slate-50")}>
+                    <span className="relative">
+                      <AgentPhoto src={option.avatarUrl} name={option.label} size="md" />
+                      <span className={cn("absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white", option.status === "connected" ? "bg-emerald-500" : "bg-slate-400")} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold text-slate-800">{option.label}</span>
+                      <span className="block text-xs text-slate-500">{option.status === "connected" ? "Conectado" : "Desconectado"} · {routineOn ? "rotina ligada" : "rotina desligada"}</span>
+                    </span>
                   </button>
                 );
               })}

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatStorageBytes, getOrganizationStorageState } from "@/lib/storage/quotas";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
+import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 
 type JsonRecord = Record<string, unknown>;
 type DashboardTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
@@ -57,6 +58,7 @@ type AgentRow = ScopedRow & {
   role_title: string | null;
   status: string | null;
   autonomy_level: number | string | null;
+  avatar_url?: string | null;
   metadata: JsonRecord | null;
   updated_at: string | null;
   created_at: string | null;
@@ -80,6 +82,7 @@ type WhatsappInstanceRow = ScopedRow & {
   last_message_at: string | null;
   connected_at: string | null;
   updated_at: string | null;
+  metadata?: JsonRecord | null;
 };
 
 type WalletRow = ScopedRow & {
@@ -200,6 +203,7 @@ export type ClientDashboardAgent = {
   accuracy: number;
   current: string;
   updatedAt: string | null;
+  avatarUrl?: string | null;
 };
 
 export type ClientDashboardCampaign = {
@@ -542,7 +546,11 @@ export function buildClientDashboardOverviewFromRows(input: {
     leadSeries,
     recentLeads: buildRecentLeads(rows.leads),
     recentConversations: buildRecentConversations(rows.conversations, leadsById),
-    activeAgents: buildActiveAgents(rows.agents),
+    activeAgents: buildActiveAgents(rows.agents).map((agent) => ({
+      ...agent,
+      avatarUrl: rows.agents.find((row) => row.id === agent.id)?.avatar_url
+        ?? readWhatsappInstanceProfileImageUrl(rows.whatsappInstances.find((row) => row.metadata?.agent_id === agent.id)?.metadata) ?? null,
+    })),
     campaigns: buildCampaigns(rows.metricSnapshots, rows.integrationAssets),
     storage: input.storage ?? null,
   };
@@ -592,7 +600,7 @@ async function loadDashboardRows(input: {
       .limit(dashboardRowLimit)),
     safeQuery<AgentRow>("agentes", input.client
       .from("agent_registry")
-      .select("id, organization_id, name, persona_name, role_title, status, autonomy_level, metadata, updated_at, created_at")
+      .select("id, organization_id, name, persona_name, role_title, status, autonomy_level, avatar_url, metadata, updated_at, created_at")
       .eq("scope", "organization")
       .eq("organization_id", input.organizationId)
       .contains("metadata", { client_created: true })
@@ -607,7 +615,7 @@ async function loadDashboardRows(input: {
       .limit(dashboardRowLimit)),
     safeQuery<WhatsappInstanceRow>("instancias WhatsApp", input.client
       .from("whatsapp_instances")
-      .select("id, organization_id, status, phone_number, display_name, last_message_at, connected_at, updated_at")
+      .select("id, organization_id, status, phone_number, display_name, last_message_at, connected_at, updated_at, metadata")
       .eq("organization_id", input.organizationId)
       .neq("status", "archived")
       .order("updated_at", { ascending: false })

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AgentPhoto } from "./agent-photo";
 import Link from "next/link";
-import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Send, Trash2, UserRound, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoadingPanel } from "./infinity-loader";
 import {
@@ -44,6 +45,7 @@ type ClientAgent = {
   responsibleHumans?: AgentResponsibleHumanInput[];
   status: string;
   autonomyLevel: number;
+  avatarUrl?: string | null;
   updatedAt: string | null;
   createdAt: string | null;
 };
@@ -686,8 +688,8 @@ function AgentCard({
           <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
           <p className="mt-1 text-[12px] text-slate-500">{agent.roleTitle}</p>
         </div>
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300">
-          <Sparkles className="h-4 w-4" />
+        <div className="grid shrink-0 place-items-center">
+          <AgentPhoto src={agent.avatarUrl} name={agent.name} size="lg" />
         </div>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">

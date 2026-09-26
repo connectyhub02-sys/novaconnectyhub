@@ -200,6 +200,7 @@ export function ClientDashboard({
                 <AgentCard
                   key={agent.id}
                   name={agent.name}
+                  avatarUrl={agent.avatarUrl ?? null}
                   role={agent.role}
                   status={agent.status}
                   accuracy={agent.accuracy}

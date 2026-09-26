@@ -7,6 +7,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
+import { AgentPhoto } from "./agent-photo";
 import { ClientWhatsappAutomationStudio, type ClientAutomationAgent } from "./client-whatsapp-automation-studio";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
@@ -243,6 +244,8 @@ export function ClientAutomationsCenter({
 
           <label className="block">
             <FieldLabel>Agente para campanhas e contatos sem atendimento anterior</FieldLabel>
+            <span className="flex items-center gap-2">
+            {selectedAgent ? <AgentPhoto src={selectedAgent.avatarUrl} name={selectedAgent.name} size="md" /> : null}
             <select
               value={draft.automationSettings.defaultWhatsappInstanceId ?? ""}
               onChange={(event) => {
@@ -262,6 +265,7 @@ export function ClientAutomationsCenter({
                 </option>
               ))}
             </select>
+            </span>
           </label>
 
           <ToggleRow
@@ -288,7 +292,8 @@ export function ClientAutomationsCenter({
         selectedAutomationAgentId={draft.automationSettings.defaultAgentId ?? selectedWhatsapp?.agentId ?? null}
         selectedAutomationWhatsappLabel={selectedWhatsapp?.label ?? null}
         whatsappOptions={companyWhatsappInstances.filter((instance) => instance.agentId && instance.status !== "archived")
-          .map((instance) => ({ agentId: instance.agentId as string, label: instance.label, status: instance.status }))}
+          .map((instance) => ({ agentId: instance.agentId as string, label: instance.label, status: instance.status,
+            avatarUrl: agents.find((agent) => agent.id === instance.agentId)?.avatarUrl ?? null }))}
       />
 
       <Panel

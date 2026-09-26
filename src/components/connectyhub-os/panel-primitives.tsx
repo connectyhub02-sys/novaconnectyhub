@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AgentPhoto } from "./agent-photo";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpRight,
@@ -411,8 +412,8 @@ export function TelemetryFeed({ items }: { items: { time: string; actor: string;
 
 // ─── AgentCard ────────────────────────────────────────────────────────────────
 
-export function AgentCard({ name, role, status, accuracy, current, accent = "green" }: {
-  name: string; role: string; status: StatusTone; accuracy: number; current: string; accent?: Tone;
+export function AgentCard({ name, role, status, accuracy, current, accent = "green", avatarUrl }: {
+  name: string; role: string; status: StatusTone; accuracy: number; current: string; accent?: Tone; avatarUrl?: string | null;
 }) {
   const t = toneMap[accent];
   return (
@@ -426,9 +427,11 @@ export function AgentCard({ name, role, status, accuracy, current, accent = "gre
           <div className="mt-2 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{name}</div>
           <div className="font-mono text-[11px] uppercase tracking-wide text-slate-500">{role}</div>
         </div>
-        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", t.bg)}>
-          <span className={cn("font-mono text-[11px] font-bold", t.text)}>AI</span>
-        </div>
+        {avatarUrl !== undefined ? <AgentPhoto src={avatarUrl} name={name} size="md" /> : (
+          <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl", t.bg)}>
+            <span className={cn("font-mono text-[11px] font-bold", t.text)}>AI</span>
+          </div>
+        )}
       </div>
       <p className="mt-3 text-[11px] leading-4 text-slate-500">{current}</p>
       <div className="mt-3">
