@@ -35,6 +35,10 @@ export function dispatchKey(data: WhatsappFollowUpEventData) {
       ? `post_sale:${data.postSaleKind}:${data.postSaleOrderId}`
     : data.birthdayYear
       ? `birthday:${data.birthdayYear}`
+    : data.browseProductId
+      ? `browse:${data.browseSessionId}:${data.browseProductId}`
+    : data.reactivation
+      ? `reactivation:${data.reactivationMonth}`
     : data.recommendationProductId
       ? `recommendation:${data.recommendationProductId}:${data.recommendationPeriod}`
       : `${data.agentRunId}:${data.salesCatalogOrderId ?? "conversation"}:${data.salesCatalogFollowUpKind ?? "conversation"}${data.recoveryStep ? `:step${data.recoveryStep}` : ""}`;
@@ -61,6 +65,8 @@ export async function persistFollowUpDispatch(
           ? "post_sale"
         : data.birthdayYear
           ? "birthday"
+        : data.browseProductId || data.reactivation
+          ? "recommendation"
         : data.recommendationProductId
           ? "recommendation"
           : data.salesCatalogOrderId

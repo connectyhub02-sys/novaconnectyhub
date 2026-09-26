@@ -23,7 +23,7 @@ export async function relationshipContext(
   if (data.birthdayYear) {
     return { ...empty, context: "Hoje é aniversário do cliente. Mande parabéns curtos e calorosos, no seu estilo, como quem se lembrou dele. Não venda nada, não ofereça desconto nem presente e não mencione que o sistema guardou a data." };
   }
-  if (!data.returnId && !data.recommendationProductId && !data.postSaleKind) return empty;
+  if (!data.returnId && !data.recommendationProductId && !data.postSaleKind && !data.browseProductId && !data.reactivation) return empty;
   const pending = await client
     .from("sales_catalog_orders")
     .select("id")
@@ -72,6 +72,7 @@ export async function relationshipContext(
     };
   }
   if (data.postSaleKind) return postSaleContext(client, data, timezone);
+  if (data.browseProductId || data.reactivation) return engagementContext(client, data);
   const profileResult = await client
     .from("automation_lead_profiles")
     .select("evidence,preferences,updated_at")
@@ -157,4 +158,24 @@ async function postSaleContext(client: SupabaseClient, data: WhatsappFollowUpEve
     context: `Pós-venda: o cliente comprou ${JSON.stringify(bought)} em ${when}. Sugira com leveza um complemento que combina com essa compra: ${JSON.stringify({ title: product.title, price: product.offer.salePrice || product.price, category: product.category })}. Diga por que combina em uma frase, sem pressão e sem afirmar que ele precisa. Um link real para ver o produto será anexado; não invente outro link nem afirme que já gerou pedido ou Pix.`,
     link: buildLeadAwareSalesCatalogProductUrl({ productId: product.id, organizationId: data.organizationId, leadId: data.leadId, conversationId: data.conversationId, agentId: data.agentId }),
   };
+}
+
+/** Store visit without a purchase, or a lead who went quiet: one light message, never exposing tracking. */
+async function engagementContext(client: SupabaseClient, data: WhatsappFollowUpEventData) {
+  const empty = { reason: null as string | null, context: "", link: "", deferUntil: null as string | null };
+  const productId = data.browseProductId ?? data.reactivationProductId;
+  const catalog = productId ? await listOrganizationSalesCatalog(client, data.organizationId, 150) : [];
+  const product = productId ? catalog.find(item => item.id === productId) : undefined;
+  const usable = product && sellableRecommendation(product) && (!product.assignedAgentIds.length || product.assignedAgentIds.includes(data.agentId)) ? product : undefined;
+  const summary = usable ? JSON.stringify({ title: usable.title, price: usable.offer.salePrice || usable.price, category: usable.category }) : "";
+  const link = usable ? buildLeadAwareSalesCatalogProductUrl({ productId: usable.id, organizationId: data.organizationId, leadId: data.leadId,
+    conversationId: data.conversationId, agentId: data.agentId }) : "";
+  const linkNote = usable ? " Um link real para ver o produto será anexado; não invente outro link nem afirme que gerou pedido ou Pix." : "";
+  if (data.browseProductId) {
+    if (!usable) return { ...empty, reason: "product_unavailable" };
+    return { ...empty, link, context: data.browseKind === "cart"
+      ? `O cliente deixou ${summary} separado no carrinho e não finalizou. Mande UMA mensagem curta oferecendo ajuda para concluir (dúvida, entrega, forma de pagamento). Pode dizer que o produto ficou separado para ele; nunca diga que acompanhou a navegação dele.${linkNote}`
+      : `O cliente demonstrou interesse em ${summary}. Mande UMA mensagem curta, como quem separou uma opção que combina com o que ele procura, oferecendo ajuda. Nunca diga que viu ele navegando, que ele visitou a loja ou abriu a página.${linkNote}` };
+  }
+  return { ...empty, link, context: `Reativação: o cliente conversou há cerca de um mês e não comprou. Retome com leveza o assunto que ele trouxe na conversa${usable ? ` e apresente esta novidade relacionada: ${summary}` : ""}. Uma mensagem curta, sem cobrança, sem dizer que ele sumiu e sem insistir.${linkNote}` };
 }

@@ -104,6 +104,14 @@ export type WhatsappFollowUpEventData = {
   crossSellProductId?: string;
   /** Birthday message for this year. */
   birthdayYear?: number;
+  /** Store visit without a purchase: the product seen or left in the cart. */
+  browseSessionId?: string;
+  browseProductId?: string;
+  browseKind?: "cart" | "view";
+  /** Lead who talked, did not buy and went quiet: one contact a month. */
+  reactivation?: boolean;
+  reactivationMonth?: string;
+  reactivationProductId?: string;
 };
 
 /** Unpaid orders get up to three attempts, a day apart, each with its own approach. */
@@ -667,7 +675,7 @@ function claimsPendingRevisionApplied(text: string) {
 /** Prompt note for a conversation follow-up; never claims the edit was applied. */
 /** Journeys about the relationship, not about a conversation left open: returns, recommendations, post-sale, birthday. */
 function isRelationshipJourney(event: WhatsappFollowUpEventData) {
-  return Boolean(event.returnId || event.recommendationProductId || event.postSaleKind || event.birthdayYear);
+  return Boolean(event.returnId || event.recommendationProductId || event.postSaleKind || event.birthdayYear || event.browseProductId || event.reactivation);
 }
 
 /** A repeating return comes back after its interval, a limited number of times; otherwise it is done. */

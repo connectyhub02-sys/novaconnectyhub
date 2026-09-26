@@ -821,7 +821,9 @@ export const functions = [
     const relationships=await step.run("plan-relationships",async()=>{const {planLeadRelationships}=await import("@/lib/automations/relationship-profile");return planLeadRelationships(createServiceClient());});
     const postSale=await step.run("plan-post-sale",async()=>{const {planPostSale}=await import("@/lib/automations/post-sale-planner");return planPostSale(createServiceClient());});
     const birthdays=await step.run("plan-birthdays",async()=>{const {planBirthdays}=await import("@/lib/automations/post-sale-planner");return planBirthdays(createServiceClient());});
-    return {returns,relationships,postSale,birthdays};
+    const browse=await step.run("plan-browse",async()=>{const {planBrowseFollowUps}=await import("@/lib/automations/engagement-planner");return planBrowseFollowUps(createServiceClient());});
+    const reactivations=await step.run("plan-reactivations",async()=>{const {planReactivations}=await import("@/lib/automations/engagement-planner");return planReactivations(createServiceClient());});
+    return {returns,relationships,postSale,birthdays,browse,reactivations};
   }),
   connectyhubIntelligentAutomationSweep,
   connectyhubCustomerAgendaSweep,
