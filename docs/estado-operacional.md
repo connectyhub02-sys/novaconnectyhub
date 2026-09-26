@@ -1,5 +1,11 @@
 # Estado operacional da ConnectyHub
 
+## Tráfego no WhatsApp (grupos, canais e status) — 26/09/2026
+
+- Diagnóstico autorizado pelo titular: webhook das 4 instâncias conectadas correto na UAZAPI (eventos incluem groups e newsletter_messages; só `wasSentByApi` excluído) e `GET /webhook/errors` vazio. Mesmo assim, nenhum evento de grupo, canal ou status de contato chegou em 7 dias (grupos até 08/09; status nunca). Pendente: teste real (mensagem num grupo do número do Gustavo e um status postado) para localizar a perda.
+- `d5b74b3b` + `ce71ad49`: "Tráfego no WhatsApp" em 3 passos (onde, o quê, quantas vezes) no topo do painel do cliente; painel antigo em "Mais opções". Rotina contínua planeja o dia seguinte a cada hora (Inngest, 62 funções após o registro), status e grupos/canais em planos separados, IA cobrada como `whatsapp_traffic_routine_ai`, posts marcados `traffic_routine:<id>`, "Pular" arquiva um post e desligar arquiva os futuros. Migration **0165 aplicada e registrada** (`whatsapp_traffic_routines`, RLS ligado, acesso só do servidor).
+- Interação com status dos leads (ver, reagir, comentar em todos, por decisão do titular): opções gravadas na rotina; execução depende dos status dos contatos chegarem pelo webhook.
+
 ## Rodada final de programação antes dos testes reais — 26/09/2026
 
 - `49b3a2fe`: ferramentas de pedido ligadas para todos os agentes (só `order_tools === false` desliga); token da instância removido de `whatsapp_webhook_events.payload` (113.591 eventos limpos, inclusive chaves aninhadas, 0 restantes; eventos novos chegam sem o token); descadastro volta quando o lead conversa de novo (migration **0164 aplicada e registrada**: gatilho marca `paused_reason = "opt_out"` sem assumir pausa do dono, 5 perfis ajustados, RPC `reinstate_lead_contact`); envios incertos conferidos na UAZAPI a cada 2 min (achou → enviado; sumiu após 3 min → falhou, reenviável, execução do agente refeita uma vez). Conferido em produção: o follow-up "incerto" das 14:42 virou enviado.
