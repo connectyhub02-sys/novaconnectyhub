@@ -83,6 +83,41 @@ Regras:
 - A mensagem é escrita pelo agente, com o produto, a nota e o histórico. Em serviços com agenda, já
   oferece horários para remarcar.
 
+## Presente de aniversário e pergunta para quem não comprou (proposta de 26/09)
+
+Princípio do titular: o sistema trabalha para o lojista. A IA decide momento, produto e mensagem;
+o lojista só escolhe o tipo de presente e um número.
+
+**Pergunta do aniversário para quem não comprou.** Uma única vez por lead (comprando ou não). Para quem
+não comprou, o agente pergunta no fim de uma conversa boa (o lead agradeceu ou se despediu), como parte
+da despedida, nunca no meio de uma dúvida ou negociação. Sem follow-up só para isso. Quem pediu para
+sair da lista não recebe.
+
+**Presente de aniversário em Automações: um cartão, uma escolha, um número.**
+
+| Opção | O lojista define | A IA decide |
+|---|---|---|
+| Só parabéns (padrão) | nada | a mensagem |
+| Desconto nos favoritos (recomendado) | o % (até 30%) | os produtos: os que o cliente mais comprou; se nunca comprou, os que mais perguntou ou viu |
+| Desconto no pedido | o % | nada |
+| Brinde | um produto do catálogo | nada ("compre e ganhe"; ex.: pizza e ganhe refrigerante, ou pizza e ganhe outra) |
+
+Regras fixas (sem controle no painel): vale 7 dias a partir do aniversário, uma vez por ano, em um
+pedido; não soma com o desconto de recuperação (vale o maior).
+
+**Aplicação automática.** Quando o cliente fecha um pedido dentro da semana, pela conversa, pela loja
+ou pelo checkout, o sistema aplica o presente antes do pagamento, pela mesma revisão segura do desconto
+de recuperação. O brinde entra como item do pedido com desconto igual ao preço dele. O checkout mostra
+"Presente de aniversário aplicado". O agente sabe do presente (entra no contexto do lead) e o lembra
+com naturalidade. Nenhum cupom para digitar.
+
+**Base técnica.** Uma tabela de benefícios do lead (tipo, valor, produtos, validade, pedido em que foi
+usado), reaproveitável por futuras campanhas. Migration aditiva: essa tabela e três campos em
+`automation_policies` (tipo do presente, percentual, produto do brinde).
+
+**Fases.** B1: pergunta na despedida para quem não comprou. B2: presente (cartão em Automações,
+benefício na mensagem de aniversário, aplicação no pagamento, checkout).
+
 ## Fora deste plano
 
 - **Datas comemorativas** (Dia das Mães, Pais, Natal etc.): são disparo em massa. Ficam para a jornada de

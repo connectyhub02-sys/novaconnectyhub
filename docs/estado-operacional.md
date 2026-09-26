@@ -1,5 +1,162 @@
 # Estado operacional da ConnectyHub
 
+## Rodada final de programação antes dos testes reais — 26/09/2026
+
+- `49b3a2fe`: ferramentas de pedido ligadas para todos os agentes (só `order_tools === false` desliga); token da instância removido de `whatsapp_webhook_events.payload` (113.591 eventos limpos, inclusive chaves aninhadas, 0 restantes; eventos novos chegam sem o token); descadastro volta quando o lead conversa de novo (migration **0164 aplicada e registrada**: gatilho marca `paused_reason = "opt_out"` sem assumir pausa do dono, 5 perfis ajustados, RPC `reinstate_lead_contact`); envios incertos conferidos na UAZAPI a cada 2 min (achou → enviado; sumiu após 3 min → falhou, reenviável, execução do agente refeita uma vez). Conferido em produção: o follow-up "incerto" das 14:42 virou enviado.
+- Inngest: `PUT /api/inngest` após o deploy, de 58 para 60 funções (etiquetas e conferência de envios).
+- `40dc8594`: atividade "Barbearia e salão de beleza" (retorno padrão de 25 dias com repetição, botão "Agendar horário").
+- `2c10bc16`: paga primeiro, agenda depois — produto pago marcado "precisa agendar" recebe até 3 horários reais da agenda logo após a confirmação (oferta válida por 24 h); sem agenda ou sem vaga, avisa que a empresa vai chamar para marcar e registra o pedido pago aguardando horário. Nesse caso a pergunta de aniversário fica para outro momento.
+- `bdf613ee`: pergunta única "Onde você entrega?" (Brasil / Minha região / Os dois / Não entrego), mostrando só a configuração correspondente; a opção típica da atividade aparece como "Recomendado" e profissões sem entrega recebem aviso; aviso na lista de produtos com "Aplicar a todos" para levar a ação da atividade aos produtos existentes (site externo e montagem de comida ficam como estão; agendamento exige agenda ativa).
+- Grupos e canais (diagnóstico, sem alteração): 22 alvos, 2 ativos (Elite CLUB no Gustavo em "observador" e no número da BuffaloMass em "todas"); só o agente do Gustavo permite grupos. **Nenhum evento de grupo ou canal chegou ao webhook nos últimos 7 dias** nas 5 instâncias, e a última mensagem de grupo registrada é de 08/09. A fila de conteúdo tem 262 ideias, 110 em pesquisa e 34 rascunhos, sem publicação desde 28/08. Pendente: conferir na UAZAPI a configuração do webhook das instâncias (se grupos estão excluídos) antes de reativar respostas e publicações em grupos.
+
+## Follow-up: só em Automações e recuperação de pagamento em 3 tentativas — publicado em 25/09/2026
+
+- `5b5b27d0`: seção de follow-up removida do Comportamento do agente; Automações (`automation_policies`) é o único controle. Agentes novos não ligam follow-up sozinhos.
+- `02ef1d72` (em produção): pedido não pago recebe até 3 retomadas (1ª no tempo de carrinho abandonado da loja, 15 min se vazio; 2ª e 3ª com 24 h de intervalo). Cartão recusado passa a ser recuperado oferecendo Pix; Pix vencido é mencionado sem botão morto. Para ao responder, pagar ou humano assumir.
+- `bce17e1c` (em produção): desconto opcional na 3ª tentativa, cadastrado pelo lojista em Automações (vazio = nenhum). Aplicado só no envio pela revisão existente, com novo checkout adiado (sem cobrança antecipada). **Migration 0161 aplicada e registrada na VPS em 26/09** (SSH `connectyhub-vps`, container `supabase-db`), autorizada pelo titular: backup prévio `/var/backups/connectyhub/manual/pre-0161-20260926T021851Z.sql` (SHA-256 `813567c6…`), ensaio com rollback, hashes antes `670c38fe…`/`f765b902…` idênticos ao teste local e depois `6afd4263…`/`c7fc3529…` conferidos na transação. PostgREST lê `recovery_discount_percent` (vazio nas duas empresas: nenhum desconto ativo).
+- Fase 2 (26/09): follow-ups esperam o horário habitual do lead (mensagens + avisos de leitura dos últimos 30 dias, mínimo 3 dias de evidência), dentro da janela da empresa, no máximo 20 h e uma vez por envio; a 1ª tentativa de pagamento não espera. Limite de 2 contatos por semana por lead para retomadas de conversa e recomendações (pagamento pendente e retornos do lojista fora do limite).
+- Lote A (fases 3 e 4, **publicado em 26/09**, `cb6feb88`, migration 0162 aplicada e registrada na VPS com checagem na transação; 102 follow-ups existentes preservados): retornos programados (regra do produto com padrão da atividade, retorno manual com nota e repetição, retorno pedido pelo cliente na conversa, botão próprio em Automações), pós-venda ("como foi?" e produto complementar em 10 dias) e aniversário (pergunta após a confirmação do pagamento, mensagem no dia). Backup prévio `/var/backups/connectyhub/manual/pre-0162-20260926T130101Z.sql`.
+- Lote B e aniversário (26/09, publicados): Fase 5 `794d788e` (navegou e não comprou, reativação); Aniversário 1 `1c9d19a9` (pergunta na despedida, uma vez por lead); Aniversário 2 `e2939ce4` (presente configurável em Automações, aplicado antes do pagamento) — migration 0163 **aplicada e registrada na VPS em 26/09** com autorização do titular (checagem na transação; backup `/var/backups/connectyhub/manual/pre-0163-20260926T150129Z.sql`); API lê os campos, `lead_benefits` inacessível à chave pública; as duas empresas em "só parabéns"; Fase 6 (painel de resultados em Automações: enviados, respostas em 48 h, vendas pagas até 7 dias depois do último follow-up).
+- Plano completo: [plano-follow-up-inteligente-2026-09-25](plano-follow-up-inteligente-2026-09-25.md).
+
+## Comportamentos do agente, fases A, B e C — publicados em 25/09/2026
+
+Plano: [plano-comportamentos-agente-2026-09-25](plano-comportamentos-agente-2026-09-25.md). Commits `468e4f02`, `0a9058d9`, `638d3ee8` (em produção).
+
+- A: respostas com ferramentas usam a mesma entrega do envio normal (digitando entre blocos, citação, sem corte, sem repetição); intervenção humana (60 min) e temporização inteligente fixas para todo agente ativo.
+- B: temporizadores fora do painel; follow-up por agente visível no painel do cliente (agentes novos nascem ligados); botão "Analisar mídias"; figurinhas religadas após reteste real (chegou no 554788577996); mensagem fora da Janela da IA fica na fila e é respondida quando a janela abre (se ninguém respondeu e em até 24 h).
+- C: digitando/gravando enquanto a resposta é gerada; ligação recebida recusada e respondida por mensagem (1 vez a cada 6 h); espera o lead terminar de digitar (eventos `presence` já chegam do provedor); prévia de link já estava ativa; etiquetas WhatsApp Business por cron de 5 min (etiqueta "Novo lead" criada e aplicada na conversa de teste do Gustavo).
+- Pendente de validação real: formato do evento de ligação (assinatura `call` entra no webhook pelo sync de 30 min) e a espera pelo lead digitando numa conversa real.
+- Observação de segurança: `whatsapp_webhook_events.payload` guarda o token da instância enviado pelo provedor.
+
+## Agente da loja sumindo no checkout e 4 ajustes do atendimento — publicados em 25/09/2026
+
+- Versão `a0ffebb3` em produção (inclui `32e2e69a`: sem resumo ou Pix repetido, nome completo no pedido, títulos limpos nas linhas do pedido).
+- Causa do agente da loja invisível: quem passou pela loja antes chegava ao checkout com o rastreamento antigo; a resposta atrasada do `/api/track` sobrescrevia o contexto do checkout e o agente reiniciava em loop (dezenas de sessões canceladas por segundo). Agora a resposta só completa dados ausentes e reescrever o mesmo contexto não dispara evento.
+- Verificado em produção (celular emulado, loja → checkout em cartão): agente visível, zero atualizações de contexto em 4 s e formulário de cartão carregado.
+- Pendente: títulos com "Imagem 2 ..." em 4 produtos ativos da BuffaloMass precisam ser corrigidos no catálogo pelo lojista.
+
+## Download da documentação de Voz — publicado em 24/09/2026
+
+Commit `750ea1fa7cc79c2eee14dff91c7431cfc5985b22` enviado à master pela
+pipeline existente; `/api/health` público confirmou HTTP 200/ok e a mesma revisão.
+OpenAPI de Voz agora responde `Content-Disposition: attachment` com o nome
+`connectyhub-voz-openapi.json`. Topo e lateral oferecem JSON e guia Markdown,
+com orientação para enviar ambos a outro aplicativo/chat de programação.
+
+Chromium no domínio de produção baixou os quatro links com os nomes esperados
+sem sair da documentação. JSON parseado com 19 caminhos; guia de 9.758 bytes
+com autenticação/idempotência. Cópias em `Downloads/ConnectyHub-documentacao-voz`.
+Quatro testes existentes, ESLint e build webpack/TypeScript/109 páginas passaram.
+Sem alteração de contrato, credenciais, áudio ou cobrança. Registro pós-publicação
+mantido local para o próximo pacote, evitando deploy exclusivamente documental.
+[Causa e validação](download-documentacao-voz-2026-09-24.md).
+
+## "Pode" que não fechava e CPF inválido — corrigidos em 25/09/2026
+
+Reteste de 25/09 às 11:10: cada remontagem do resumo gerava um código novo e o
+"pode" do cliente era recusado; a IA usava a etiqueta do produto como id; a
+forma de pagamento era pedida à parte; um CPF digitado errado (dígitos
+inválidos) foi aceito e o Asaas recusou o Pix, e o agente prometeu falsamente
+que "a equipe" conferiria. Commit `d915fded` publicado com autorização do
+titular; health 200/ok às 11:35 BRT; início e login 200. Resumo igual mantém o
+código; etiqueta aceita como id; pagamento no pedido único de dados; CPF/CNPJ
+validados por dígito verificador; motivo real de falha de pagamento repassado.
+
+## Etapas de ferramentas esgotadas — corrigido em 25/09/2026
+
+Reteste de 25/09 às 10:16: montar_pedido só deu certo na quinta chamada e a
+execução falhou sem enviar o resumo pronto. Commit `380f0e2d` publicado com
+autorização do titular; health 200/ok às 10:38 BRT; início e login 200. Oito
+etapas, última sem ferramentas, envio das mensagens do sistema ou do último
+motivo de recusa quando não há texto; motivos de recusa gravados na execução.
+
+## Agente sem resposta no laço de ferramentas — corrigido em 25/09/2026
+
+Reteste de 24/09 às 22:15: a IA repetiu chamadas de ferramenta até o limite de
+etapas e a execução terminou em erro, sem resposta ao cliente; o resumo também
+saiu só com CEP. Commit `375de0be` publicado com autorização do titular; health
+200/ok às 01:38 BRT; início e login 200. Última etapa sem ferramentas (sempre
+responde), chamada repetida recusada e endereço completo exigido antes do resumo.
+
+## Primeira compra com ferramentas (fase 4) — publicada em 24/09/2026
+
+Commit `3675d9d9` publicado na master com autorização do titular (sistema ainda
+sem clientes em produção, apenas testes internos); health 200/ok às 19:27 BRT;
+início e login 200. Ativa nas instâncias com `order_tools` (Gustavo e Luna)
+quando não há pedido na conversa: montar_pedido/fechar_pedido com produto e
+versão pelo id, montagem de pizza validada, resumo oficial e pedido idempotente.
+Reteste real do titular pendente, a partir de lead resetado.
+
+## Entrega local, ajustes do reteste e aumento de carrinho — publicados em 24/09/2026
+
+Commits `530815be`, `6c75e23f` e `191e9f6e` publicados na master com
+autorização do titular; health 200/ok com `191e9f6e` às 16:10 BRT; início e
+login 200. Loja só com entrega local passa a falar "taxa de entrega"; um botão
+de pagamento por resposta; "adicionei" só após ferramenta que executou;
+depoimentos inventados proibidos; "Sou Fulano" e nome em qualquer linha
+reconhecidos; pedido de endereço já solicita nome/e-mail/CPF faltantes;
+complemento de carrinho escolhido pelo sistema (outra categoria, uma vez,
+também com planos recorrentes). Reteste real pendente (pizzaria a cadastrar).
+Proposta de fluxos por atividade em
+[plano-fluxos-por-atividade-2026-09-24.md](plano-fluxos-por-atividade-2026-09-24.md).
+
+## Correções do reteste do Gustavo — publicadas em 24/09/2026
+
+Commits `efc5d3b9`, `2b7ff6c9` e `0080e4b6` publicados na master com
+autorização do titular; health 200/ok com `0080e4b6` às 11:21 BRT; início e
+login 200. Corrigidos a partir da conversa real de 23–24/09: escolha "cartão"
+tratada como retomada de checkout; ferramentas assumindo antes do primeiro
+pagamento (pulando a coleta de nome/CPF e a geração do Pix); promessa "estou
+preparando o Pix" sem ação; áudio seguido de texto não transcrito; nome
+declarado não gravado; forma de pagamento esquecida após 2h (agora 24h até nova
+compra); dados de cobrança pedidos um a um; linha de produto repetida. Reteste
+real do titular pendente, recomendado a partir de lead resetado.
+
+## Ferramentas de pedido (fase 2) — publicadas e ligadas na BuffaloMass, 23/09/2026
+
+Commit `ecb3b766` publicado na master com autorização do titular; health 200/ok
+com a revisão completa às 20:19 BRT; início e login 200. Chave
+`metadata.order_tools = true` gravada, com autorização, somente nas instâncias
+conectadas Gustavo (`66aa4603`) e Luna (`e1f1be4b`), com escrita condicionada
+ao `updated_at` lido e demais chaves preservadas (43→44 e 38→39). Demais
+empresas seguem no fluxo antigo. Reverter: remover a chave. Reset de lead
+verificado em leitura (11 jobs concluídos, zero resíduos em 8 tabelas); o
+titular fará o reset dos leads de teste e o reteste real. Pedido de teste do
+Mounjaro com Pix aberto no Asaas não é cancelado pelo reset.
+
+## Correções do atendimento, fase 1 — publicadas em 23/09/2026
+
+Commit `332916dc` publicado na master com autorização do titular; health público
+respondeu 200/ok com a revisão completa às 18:59 BRT; início e login 200. A
+pausa dos agentes de conteúdo foi confirmada: nenhuma execução nem conteúdo novo
+no horário das 18h. Correções globais
+no motor compartilhado (valem para todas as empresas e agentes, antigos e
+novos): detector de despedida que nunca funcionava em produção (tipo
+`Conversation` com maiúscula), CEP enviado antes do endereço, calendário único
+usado automaticamente, pendência de alteração que silenciava follow-up, regra de
+retomada humana (5 min só após despedida), link cru no follow-up, frase gravada
+como nome, nota interna no alerta ao responsável e figurinhas desligadas.
+Reconciliação de envio incerto (503) continua pendente. Testes, tipos, lint e
+build aprovados; comportamento real no WhatsApp ainda depende do reteste do
+titular. Registro documental mantido local para o próximo pacote.
+[Plano e status](plano-correcao-atendimento-2026-09-23.md).
+
+## Agentes de conteúdo da plataforma pausados — 23/09/2026
+
+Por decisão do titular, para concentrar o trabalho no atendimento, os oito
+agentes de crescimento da própria ConnectyHub (escopo `platform`) passaram de
+`needs_review` para `paused` no `agent_registry`: Pesquisador Web, Radar de
+Mercado, Notícias, Blog, Inteligência Competitiva, SEO, AEO e GEO/AGO. O
+executor (`growth-agent-runner.ts`) pula agente pausado antes de chamar a IA;
+os crons do Inngest continuam disparando sem gerar execução nem conteúdo.
+Nenhum rascunho, execução ou memória foi apagado (406 itens preservados).
+Agentes de atendimento (Gustavo, Luna, Renata) inalterados. Sem deploy.
+Reverter: voltar o `status` desses oito registros para `needs_review`.
+Pendente: botões Pausar/Retomar na aba Agentes e decisão sobre o blog.
+Mapa de workflows e falhas do atendimento em
+[auditoria-workflows-agente-2026-09-23.md](auditoria-workflows-agente-2026-09-23.md).
+
 ## Reset global dos clones de voz — aplicado em 20/09/2026
 
 Reset solicitado após trocar a conta ElevenLabs: sete registros ativos de clone
@@ -15,7 +172,9 @@ clone padrão global. Migration 0160 aplicada e registrada, mantendo contrato e
 administração existentes. Ensaio real com dois usuários da mesma organização e
 clones sintéticos confirmou isolamento de leitura/escrita; rollback integral.
 25 testes dirigidos, ESLint e build webpack/TypeScript com 109 páginas passaram.
-Reforço da lista do painel em publicação pela master.
+Reforço da lista publicado pela master no commit `10624793`; health público
+respondeu 200/ok com a revisão completa correspondente. Confirmação posterior
+mantida local para o próximo pacote, evitando deploy apenas documental.
 [Reset, cobertura e limites](reset-isolamento-clones-2026-09-20.md).
 
 ## Cofre Supabase alinhado à VPS — 20/09/2026
