@@ -362,6 +362,9 @@ export type ClientSalesCatalogItem = {
   actionVersion?: number;
   activityProfile?: { templateId: string; professionalIdentity?: { name: string; registration: string; state: string; showPublic: boolean } };
   salesDestination: SalesCatalogSalesDestination;
+  /** Days until the customer is called again after buying; null uses the activity default, 0 turns it off. */
+  returnAfterDays?: number | null;
+  returnRepeat?: boolean;
   productUrl: string | null;
   externalLinkButtonId: string | null;
   externalLinkButtonLabel: string | null;

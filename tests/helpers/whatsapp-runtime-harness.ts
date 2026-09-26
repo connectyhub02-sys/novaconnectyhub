@@ -9,6 +9,7 @@ import { runInNewContext } from "node:vm";
 import { ModuleKind, transpileModule } from "typescript";
 import * as leadNames from "@/lib/whatsapp/lead-names";
 import * as metadataUpdate from "@/lib/leads/metadata-update";
+import * as returnRules from "@/lib/automations/return-rules";
 import * as catalogShared from "@/lib/sales-catalog/shared";
 import * as shipping from "@/lib/sales-catalog/shipping-calculator";
 import * as localDelivery from "@/lib/sales-catalog/local-delivery";
@@ -30,7 +31,7 @@ import { serverModuleHarness } from "./server-module-harness";
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
   "enrichLeadQualificationAnalysisWithRuntimeSignals",
-  "isWithinSchedule", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
+  "isWithinSchedule", "captureLeadReturnAndBirthday", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
   "buildProactiveMediaInstruction", "buildSmallTalkContext", "resolveOutboundReplyTargets",
   "shouldSendAudioResponse", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
   "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",
@@ -95,6 +96,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "node:async_hooks": require("node:async_hooks"),
     "./lead-names": leadNames,
     "@/lib/leads/metadata-update": metadataUpdate,
+    "@/lib/automations/return-rules": returnRules,
     "@/lib/sales-catalog/shared": catalogShared,
     "@/lib/sales-catalog/shipping-calculator": shipping,
     "@/lib/sales-catalog/local-delivery": localDelivery,

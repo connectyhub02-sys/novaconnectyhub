@@ -7,6 +7,7 @@ type Policy = {
   window_start: string;
   window_end: string;
   timezone: string;
+  returns_enabled?: boolean;
 };
 type Activity = {
   id: string;
@@ -108,6 +109,24 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível salvar.");
       setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Falha ao salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function toggleReturns() {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/dashboard/automations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, action: "set_returns", enabled: policy?.returns_enabled === false }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Não foi possível salvar.");
+      setPolicy(data.policy);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Falha ao salvar.");
     } finally {
@@ -318,6 +337,27 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
             </div>
           </details>
         )}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+          <div className="max-w-2xl space-y-1 text-slate-600">
+            <p className="font-medium text-slate-800">Retornos programados</p>
+            <p>
+              Chama o cliente de novo na data certa: pelo prazo do produto (ex.: corte a cada 25 dias,
+              pizza semanal), pelos retornos que você registra na ficha do lead ou quando o próprio
+              cliente pede (&quot;me chama mês que vem&quot;). Funciona mesmo com o follow-up inteligente desligado.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={policy?.returns_enabled !== false}
+            aria-label="Retornos programados"
+            disabled={loading || saving || Boolean(error)}
+            onClick={toggleReturns}
+            className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {policy?.returns_enabled === false ? "Ativar retornos" : "Desativar retornos"}
+          </button>
+        </div>
         {error && (
           <p role="alert" className="mt-3 text-sm text-rose-700">
             {error}{" "}

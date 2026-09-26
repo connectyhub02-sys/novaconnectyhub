@@ -210,7 +210,7 @@ export async function projectLeadRelationship(
   return profile;
 }
 
-async function contactContext(
+export async function contactContext(
   client: SupabaseClient,
   org: string,
   leadId: string,
@@ -419,19 +419,10 @@ export async function planLeadRelationships(client: SupabaseClient) {
       });
     }
   }
-  const enabledCompanies = await client
-    .from("automation_policies")
-    .select("organization_id")
-    .eq("follow_up_enabled", true);
-  if (enabledCompanies.error) throw new Error(enabledCompanies.error.message);
-  if (!enabledCompanies.data?.length) return { recommendations, returns };
+  // Returns follow their own switch (on by default, also for companies without the smart follow-up).
   const visits = await client
     .from("customer_lead_visits")
     .select("id,organization_id,lead_id,return_at,description")
-    .in(
-      "organization_id",
-      enabledCompanies.data.map((company) => company.organization_id),
-    )
     .eq("return_status", "pending")
     .lte("return_at", new Date(Date.now() + 3600000).toISOString())
     .gte("return_at", new Date(Date.now() - 30 * 86400000).toISOString())
@@ -440,7 +431,7 @@ export async function planLeadRelationships(client: SupabaseClient) {
   if (visits.error) throw new Error(visits.error.message);
   for (const visit of visits.data ?? []) {
     const policy = await loadAutomationPolicy(client, visit.organization_id);
-    if (!policy?.follow_up_enabled) continue;
+    if (policy?.returns_enabled === false) continue;
     const context =
       (await contactContext(client, visit.organization_id, visit.lead_id)) ??
       (await offlineReturnContext(
@@ -450,16 +441,21 @@ export async function planLeadRelationships(client: SupabaseClient) {
         visit.id,
       ));
     if (!context) continue;
-    const task = await persistFollowUpDispatch(
-      client,
-      { ...context, returnId: visit.id },
-      nextContactWindow(
-        new Date(Math.max(Date.now(), Date.parse(visit.return_at))),
-        policy.window_start,
-        policy.window_end,
-        policy.timezone,
-      ),
-    );
+    let task: { status: string };
+    try {
+      task = await persistFollowUpDispatch(
+        client,
+        { ...context, returnId: visit.id, returnDueAt: visit.return_at },
+        nextContactWindow(
+          new Date(Math.max(Date.now(), Date.parse(visit.return_at))),
+          policy?.window_start ?? "09:00",
+          policy?.window_end ?? "20:00",
+          policy?.timezone ?? "America/Sao_Paulo",
+        ),
+      );
+    } catch {
+      continue; // Another follow-up is active for this lead; the return is tried on the next run.
+    }
     if (task.status === "pending") {
       await client
         .from("customer_lead_visits")

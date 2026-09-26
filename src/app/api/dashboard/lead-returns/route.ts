@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     if (!uuid.test(leadId)) throw new Error("Contato inválido.");
     const visits = await client
       .from("customer_lead_visits")
-      .select("id,description,kind,occurred_at,return_at,return_status")
+      .select("id,description,kind,occurred_at,return_at,return_status,return_note,repeat_every_days,repeat_remaining,source")
       .eq("organization_id", org)
       .eq("lead_id", leadId)
       .order("occurred_at", { ascending: false })
@@ -127,7 +127,11 @@ export async function POST(request: NextRequest) {
       typeof body.requestKey !== "string"
     )
       throw new Error("Confira a descrição e a data do atendimento.");
-    const result = await client.rpc("record_customer_visit", {
+    const note = typeof body.note === "string" && body.note.trim() ? body.note.trim().slice(0, 300) : null;
+    const repeatDays = body.repeatDays == null ? null : Number(body.repeatDays);
+    if (repeatDays !== null && (!Number.isInteger(repeatDays) || repeatDays < 1 || repeatDays > 365 || !body.returnAt))
+      throw new Error("Informe a repetição em dias (1 a 365) junto com a data do retorno.");
+    const result = await client.rpc("record_customer_visit_v2", {
       p_org: org,
       p_lead: body.leadId,
       p_description: body.description,
@@ -136,6 +140,12 @@ export async function POST(request: NextRequest) {
       p_return: body.returnAt ?? null,
       p_key: body.requestKey,
       p_actor: workspace.user.id,
+      p_note: note,
+      p_repeat_days: repeatDays,
+      p_repeat_remaining: repeatDays ? 2 : 0,
+      p_source: "manual",
+      p_order: null,
+      p_item: null,
     });
     if (result.error)
       throw new Error(

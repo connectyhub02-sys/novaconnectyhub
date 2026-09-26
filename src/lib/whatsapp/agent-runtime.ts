@@ -42,6 +42,7 @@ import { normalizeBrazilPhone, isValidCpf, isValidCnpj } from "@/lib/account/sig
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import { readAgentResponsibleHumans } from "@/lib/agents/responsible-human";
 import { updateLeadMetadata } from "@/lib/leads/metadata-update";
+import { detectRequestedReturn, parseBirthday } from "@/lib/automations/return-rules";
 import { buildActivityCommerceInstruction, buildCommerceConversationInstruction, buildConsultativeCommerceReply, hasCheckoutActionClaim, isCommerceBudgetStatement, requiresCommerceConversationReply, resolveActivityCommerceJourney, type ActivityCommerceJourney } from "./commerce-conversation";
 import {
   estimateTokensFromText,
@@ -788,6 +789,9 @@ async function processWhatsappAgentRunWithScope(input: {
         return await completeRun(client, run.id, "Limite de respostas do grupo atingido.", { skipped: true, reason: groupRateLimitReason });
       }
     }
+
+    // "Me chama mês que vem" becomes a return; an answer to the birthday question goes to the lead file.
+    if (!isGroupChat) await captureLeadReturnAndBirthday(client, context, latestInbound).catch(() => {});
 
     const behaviorSignals = detectBehaviorSignals({
       behavior,
@@ -13288,6 +13292,34 @@ function readCartToolState(context: RunContext): CartToolState | null {
   if (!state || state.organization_id !== context.organization.id || state.conversation_id !== context.conversationId
     || state.instance_id !== context.instance.id || !Array.isArray(state.items)) return null;
   return JSON.parse(JSON.stringify(state)) as CartToolState;
+}
+
+/**
+ * The lead asked to be contacted later: a return is registered with the lead's own words (the latest
+ * request replaces an earlier pending one). The birthday is kept only as an answer to our question.
+ */
+async function captureLeadReturnAndBirthday(client: SupabaseClient, context: RunContext, latestInbound: ConversationMessageRow | null) {
+  const text = latestInbound?.direction === "inbound" ? latestInbound.text_content?.trim() ?? "" : "";
+  if (!context.lead?.id || !latestInbound || !text) return;
+  const requested = detectRequestedReturn(text);
+  if (requested) {
+    await client.rpc("record_customer_visit_v2", {
+      p_org: context.organization.id, p_lead: context.lead.id, p_description: "Pediu para ser chamado", p_kind: "visit",
+      p_occurred: new Date(Date.parse(latestInbound.occurred_at) || Date.now()).toISOString(), p_return: requested.returnAt.toISOString(),
+      p_key: `agent-return:${latestInbound.id}`, p_actor: null, p_note: requested.note, p_repeat_days: null, p_repeat_remaining: 0,
+      p_source: "agent", p_order: null, p_item: null,
+    });
+  }
+  const metadata = readRecord(context.lead.metadata);
+  if (!metadata?.birthday_asked_at || readRecord(metadata.birthday)) return;
+  const inboundIndex = context.messages.findIndex(message => message.id === latestInbound.id);
+  const previousOutbound = context.messages.slice(0, inboundIndex < 0 ? undefined : inboundIndex).reverse().find(message => message.direction === "outbound");
+  if (!previousOutbound?.text_content?.includes("dia do seu aniversário")) return;
+  const birthday = parseBirthday(text);
+  if (!birthday) return;
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: current => ({ metadata: { ...current, birthday: { ...birthday, consented_at: new Date().toISOString(), source: "whatsapp_question" } } }) });
+  context.lead.metadata = saved.metadata;
 }
 
 async function persistCartToolState(client: SupabaseClient, context: RunContext, state: CartToolState | null) {

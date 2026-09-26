@@ -7,6 +7,10 @@ type Visit = {
   occurred_at: string;
   return_at: string | null;
   return_status: string;
+  return_note?: string | null;
+  repeat_every_days?: number | null;
+  repeat_remaining?: number | null;
+  source?: string | null;
 };
 export function LeadReturnsPanel({
   companyId,
@@ -25,7 +29,9 @@ export function LeadReturnsPanel({
     [kind, setKind] = useState("service"),
     [occurred, setOccurred] = useState(""),
     [returnAt, setReturnAt] = useState(""),
-    [requestKey, setRequestKey] = useState("");
+    [requestKey, setRequestKey] = useState(""),
+    [note, setNote] = useState(""),
+    [repeatDays, setRepeatDays] = useState("");
   const [paused, setPaused] = useState(false),
     [windowStart, setWindowStart] = useState(""),
     [windowEnd, setWindowEnd] = useState("");
@@ -98,6 +104,8 @@ export function LeadReturnsPanel({
           occurredAt: new Date(occurred).toISOString(),
           returnAt: returnAt ? new Date(returnAt).toISOString() : null,
           requestKey,
+          note: note.trim() || null,
+          repeatDays: returnAt && repeatDays ? Number(repeatDays) : null,
         }),
       });
       const data = await response.json();
@@ -106,6 +114,8 @@ export function LeadReturnsPanel({
       setRevision((value) => value + 1);
       setDescription("");
       setReturnAt("");
+      setNote("");
+      setRepeatDays("");
     } catch (failure) {
       setError(
         failure instanceof Error ? failure.message : "Não foi possível salvar.",
@@ -206,7 +216,7 @@ export function LeadReturnsPanel({
         </button>
         <div hidden={!editing} className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            {[7, 15, 30].map((days) => (
+            {[1, 7, 15, 30].map((days) => (
               <button
                 type="button"
                 key={days}
@@ -222,7 +232,7 @@ export function LeadReturnsPanel({
                   )
                 }
               >
-                Convidar em {days} dias
+                {days === 1 ? "Chamar amanhã" : `Chamar em ${days} dias`}
               </button>
             ))}
           </div>
@@ -265,9 +275,32 @@ export function LeadReturnsPanel({
               onChange={(e) => setReturnAt(e.target.value)}
             />
           </label>
+          <label className="block text-sm">
+            O que falar no retorno (opcional)
+            <input
+              className={input}
+              value={note}
+              maxLength={300}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ex.: perguntar se está doendo; avisar o andamento do processo"
+            />
+          </label>
+          <label className="block text-sm">
+            Repetir a cada (dias, opcional, até 2 vezes)
+            <input
+              className={input}
+              type="number"
+              min={1}
+              max={365}
+              value={repeatDays}
+              disabled={!returnAt}
+              onChange={(e) => setRepeatDays(e.target.value)}
+              placeholder="Ex.: 25"
+            />
+          </label>
           <p className="text-xs text-slate-500">
             Datas no horário deste dispositivo. O retorno é um convite; não
-            reserva uma vaga.
+            reserva uma vaga. Se o cliente voltar antes, o convite é cancelado.
           </p>
           <button
             type="button"
@@ -290,7 +323,14 @@ export function LeadReturnsPanel({
               key={visit.id}
               className="rounded-lg border border-slate-100 p-2 text-sm"
             >
-              <p className="font-medium">{visit.description}</p>
+              <p className="font-medium">
+                {visit.description}
+                {visit.source === "product_rule" ? " · regra do produto" : visit.source === "agent" ? " · pedido pelo cliente" : ""}
+              </p>
+              {visit.return_note ? <p className="text-xs text-slate-600">O que falar: {visit.return_note}</p> : null}
+              {visit.repeat_every_days && visit.repeat_remaining ? (
+                <p className="text-xs text-slate-500">Repete a cada {visit.repeat_every_days} dias ({visit.repeat_remaining}x restantes)</p>
+              ) : null}
               {visit.return_at &&
                 ["pending", "scheduled"].includes(visit.return_status) && (
                   <button

@@ -244,6 +244,12 @@ export async function POST(request: NextRequest) {
     ? normalizeBillingInterval(readFormString(formData.get("billingInterval")))
     : "month";
   const skus = readProductSkusPayload(formData.get("skus"));
+  // Empty keeps the activity default; 0 turns returns off for this product.
+  const returnAfterDaysInput = readFormString(formData.get("returnAfterDays"));
+  const returnAfterDays = returnAfterDaysInput === null || returnAfterDaysInput === "" ? null : Number(returnAfterDaysInput);
+  if (returnAfterDays !== null && (!Number.isInteger(returnAfterDays) || returnAfterDays < 0 || returnAfterDays > 365)) {
+    return NextResponse.json({ error: "Informe em quantos dias chamar o cliente de novo (0 a 365) ou deixe vazio." }, { status: 422 });
+  }
   if (foodComposition.enabled && (billingCycle !== "one_time" || skus.filter(sku => sku.status === "active").length > 1)) return NextResponse.json({ error: "Use a montagem em venda avulsa. Cadastre tamanhos e sabores na montagem, sem múltiplas variações de estoque neste produto." }, { status: 422 });
   const storeFeatured = readFormBoolean(formData.get("storeFeatured")) ?? false;
   const storeFeaturedRank = storeFeatured
@@ -489,6 +495,8 @@ export async function POST(request: NextRequest) {
       page_content: serializeProductPageContent(pageContent),
       billing_cycle: billingCycle,
       billing_interval: billingInterval,
+      ...(formData.has("returnAfterDays") ? { return_after_days: returnAfterDays, return_repeat: readFormBoolean(formData.get("returnRepeat")) === true }
+        : { return_after_days: existingMetadata.return_after_days ?? null, return_repeat: existingMetadata.return_repeat === true }),
       media: serializeSalesCatalogMedia(media),
       skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,

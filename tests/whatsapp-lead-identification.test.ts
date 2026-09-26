@@ -132,3 +132,34 @@ describe("shared lead identification", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("returns asked by the lead and birthday answer", () => {
+  const message = (id: string, direction: string, text: string, minutesAgo: number) => ({ id, direction, text_content: text, provider_message_id: id,
+    provider_chat_id: "chat", message_type: "text", payload: {}, occurred_at: new Date(Date.now() - minutesAgo * 60000).toISOString() });
+
+  it("registers a return with the lead's own words when asked to be called later", async () => {
+    const run = runtimeHarness();
+    const rpc = vi.fn(async () => ({ data: {}, error: null }));
+    const inbound = message("in", "inbound", "agora não dá, me chama mês que vem", 0);
+    await run("captureLeadReturnAndBirthday", { rpc }, { organization: { id: "org" }, lead: { id: "lead", metadata: {} }, messages: [inbound] }, inbound);
+    expect(rpc).toHaveBeenCalledWith("record_customer_visit_v2", expect.objectContaining({ p_description: "Pediu para ser chamado", p_kind: "visit",
+      p_key: "agent-return:in", p_note: "agora não dá, me chama mês que vem", p_source: "agent" }));
+  });
+
+  it("keeps the birthday only as an answer to our question", async () => {
+    const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "org", metadata: { birthday_asked_at: new Date().toISOString() } }] });
+    const client = Object.assign(db.client, { rpc: vi.fn() });
+    const run = runtimeHarness();
+    const question = message("q", "outbound", "Ah, e se quiser, me passa o dia do seu aniversário (dia e mês) que eu te mando uma mensagem especial nesse dia 🎉", 2);
+    const answer = message("a", "inbound", "é 15/03", 0);
+    const context = { organization: { id: "org" }, lead: { id: "lead", metadata: db.tables.leads[0].metadata }, messages: [question, answer] };
+    await run("captureLeadReturnAndBirthday", client, context, answer);
+    expect(db.tables.leads[0].metadata).toMatchObject({ birthday: { day: 15, month: 3, source: "whatsapp_question" } });
+
+    const other = commerceDatabase({ leads: [{ id: "lead", organization_id: "org", metadata: { birthday_asked_at: new Date().toISOString() } }] });
+    const unrelated = message("b", "inbound", "pode entregar dia 15/03?", 0);
+    await run("captureLeadReturnAndBirthday", Object.assign(other.client, { rpc: vi.fn() }),
+      { organization: { id: "org" }, lead: { id: "lead", metadata: other.tables.leads[0].metadata }, messages: [message("x", "outbound", "Seu pedido está confirmado.", 2), unrelated] }, unrelated);
+    expect(other.tables.leads[0].metadata).not.toHaveProperty("birthday");
+  });
+});

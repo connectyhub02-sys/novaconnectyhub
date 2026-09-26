@@ -815,7 +815,14 @@ export const functions = [
   inngest.createFunction({id:'connectyhub-ai-triggers',name:'Agendamentos da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('execute-billed-ai-schedules',async()=>{const {processAiTriggers}=await import('@/lib/ai-api/automation');return processAiTriggers(createServiceClient());})),
   inngest.createFunction({id:'connectyhub-ai-webhooks',name:'Notificações da API de IA',retries:2,concurrency:{limit:1},triggers:[{cron:'* * * * *'}]},async({step})=>step.run('deliver-ai-results',async()=>{const {processAiWebhooks}=await import('@/lib/ai-api/automation');return processAiWebhooks(createServiceClient());})),
   inngest.createFunction({id:"connectyhub-agenda-notice",name:"ConnectyHub Agenda Notice",retries:1,concurrency:{limit:1,key:"event.data.organizationId"},triggers:[{event:"connectyhub/agenda.notice"}]},async({event,step})=>step.run("deliver-agenda-notice",async()=>{const {dispatchAgendaNotifications}=await import("@/lib/automations/agenda-notifications");return dispatchAgendaNotifications(createServiceClient(),event.data.noticeId);})),
-  inngest.createFunction({id:"connectyhub-lead-relationships",name:"ConnectyHub Lead Relationships",retries:1,concurrency:{limit:1},triggers:[{cron:"*/10 * * * *"}]},async({step})=>step.run("plan-relationships",async()=>{const {planLeadRelationships}=await import("@/lib/automations/relationship-profile");return planLeadRelationships(createServiceClient());})),
+  inngest.createFunction({id:"connectyhub-lead-relationships",name:"ConnectyHub Lead Relationships",retries:1,concurrency:{limit:1},triggers:[{cron:"*/10 * * * *"}]},async({step})=>{
+    // Paid orders first become returns, so post-sale planning sees them and yields to the owner's return.
+    const returns=await step.run("plan-order-returns",async()=>{const {planOrderReturns}=await import("@/lib/automations/post-sale-planner");return planOrderReturns(createServiceClient());});
+    const relationships=await step.run("plan-relationships",async()=>{const {planLeadRelationships}=await import("@/lib/automations/relationship-profile");return planLeadRelationships(createServiceClient());});
+    const postSale=await step.run("plan-post-sale",async()=>{const {planPostSale}=await import("@/lib/automations/post-sale-planner");return planPostSale(createServiceClient());});
+    const birthdays=await step.run("plan-birthdays",async()=>{const {planBirthdays}=await import("@/lib/automations/post-sale-planner");return planBirthdays(createServiceClient());});
+    return {returns,relationships,postSale,birthdays};
+  }),
   connectyhubIntelligentAutomationSweep,
   connectyhubCustomerAgendaSweep,
   inngest.createFunction({id:"connectyhub-store-subscription-renewals",name:"Renovações das assinaturas das lojas",retries:2,concurrency:{limit:1},triggers:[{cron:"*/5 * * * *"}]},async({step})=>step.run("prepare-store-renewals",()=>processStoreRenewals(createServiceClient()))),

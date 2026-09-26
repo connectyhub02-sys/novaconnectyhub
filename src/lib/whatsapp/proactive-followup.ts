@@ -96,6 +96,14 @@ export type WhatsappFollowUpEventData = {
   recoveryStep?: 2 | 3;
   /** Already moved once to the lead's usual hour; it is not moved again. */
   habitDeferred?: boolean;
+  /** Due date of this occurrence of a repeating return (each occurrence is its own contact). */
+  returnDueAt?: string;
+  /** Post-sale contact: how it went, or a complementary product. */
+  postSaleKind?: "checkin" | "crosssell";
+  postSaleOrderId?: string;
+  crossSellProductId?: string;
+  /** Birthday message for this year. */
+  birthdayYear?: number;
 };
 
 /** Unpaid orders get up to three attempts, a day apart, each with its own approach. */
@@ -175,8 +183,10 @@ async function executeWhatsappProactiveFollowUp(input: {
   );
 
   const policy = await loadAutomationPolicy(client, eventData.organizationId);
-  if ((eventData.returnId || eventData.recommendationProductId) && !policy?.follow_up_enabled) return { status: "skipped", reason: "disabled" };
-  if (!behavior.agentEnabled || !(policy?.follow_up_enabled ?? behavior.proactiveFollowUp)) {
+  // Returns follow the owner's own switch (on by default); every other journey follows the smart follow-up.
+  const ownerReturn = Boolean(eventData.returnId);
+  if (ownerReturn ? policy?.returns_enabled === false : isRelationshipJourney(eventData) && !policy?.follow_up_enabled) return { status: "skipped", reason: "disabled" };
+  if (!behavior.agentEnabled || (!ownerReturn && !(policy?.follow_up_enabled ?? behavior.proactiveFollowUp))) {
     return { status: "skipped", reason: "disabled" };
   }
 
@@ -202,7 +212,7 @@ async function executeWhatsappProactiveFollowUp(input: {
   const paymentRecovery = eventData.salesCatalogFollowUpKind === "abandoned_order";
   // Contacts the owner did not schedule (conversation retakes, recommendations) stop at 2 per week per
   // lead, counting every follow-up sent. Unpaid orders and returns set by the owner keep their own rules.
-  if (!paymentRecovery && !eventData.returnId) {
+  if (!paymentRecovery && !eventData.returnId && !eventData.birthdayYear) {
     const sentThisWeek = await client.from("automation_dispatches").select("id").eq("organization_id", eventData.organizationId)
       .eq("lead_id", eventData.leadId).eq("status", "sent").gte("sent_at", new Date(Date.now() - 7 * 86400000).toISOString()).limit(followUpWeeklyLimit);
     if (sentThisWeek.error) throw new Error(sentThisWeek.error.message);
@@ -245,7 +255,7 @@ async function executeWhatsappProactiveFollowUp(input: {
   if (!token) return { status: "skipped", reason: "missing_token" };
 
   const messages = await loadRecentMessages(client, eventData.conversationId, eventData.whatsappInstanceId);
-  const conversationJourney = !eventData.salesCatalogOrderId && !eventData.returnId && !eventData.recommendationProductId;
+  const conversationJourney = !eventData.salesCatalogOrderId && !isRelationshipJourney(eventData);
   if (conversationJourney && conversationEnding(messages).ended) return { status: "skipped", reason: "conversation_ended" };
 
   const referenceIndex = eventData.referenceMessageId ? messages.findIndex(message => message.id === eventData.referenceMessageId) : findFollowUpReferenceIndex(messages, eventData.agentRunId);
@@ -307,7 +317,7 @@ async function executeWhatsappProactiveFollowUp(input: {
     return {status:"deferred",reason:"observed_contact_window"};
   }
   // An order recovery owns payment conversations; a generic silence timer must not compete with it.
-  if (!eventData.salesCatalogOrderId && !eventData.returnId && !eventData.recommendationProductId) {
+  if (!eventData.salesCatalogOrderId && !isRelationshipJourney(eventData)) {
     if(readRecord(readRecord(lead.metadata)?.checkout_runtime_state)?.agent_run_id===eventData.agentRunId)return {status:"skipped",reason:"purchase_has_own_journey"};
     const orders=await client.from("sales_catalog_orders").select("id").eq("organization_id",eventData.organizationId).eq("lead_id",eventData.leadId).gte("created_at",messages[referenceIndex].occurred_at ?? new Date().toISOString()).limit(1);
     if(orders.error)throw new Error(orders.error.message);
@@ -402,7 +412,8 @@ async function executeWhatsappProactiveFollowUp(input: {
   const latestPolicy = await loadAutomationPolicy(client, eventData.organizationId);
   const latestInstance = await loadInstance(client, eventData.whatsappInstanceId);
   const latestBehavior = normalizeWhatsappBehaviorConfig(readRecord(latestInstance?.metadata)?.behavior_config);
-  if (!latestInstance || latestInstance.status !== "connected" || !latestBehavior.agentEnabled || !(latestPolicy?.follow_up_enabled ?? latestBehavior.proactiveFollowUp)) return { status: "skipped", reason: "disabled_before_send" };
+  if (!latestInstance || latestInstance.status !== "connected" || !latestBehavior.agentEnabled
+    || (ownerReturn ? latestPolicy?.returns_enabled === false : !(latestPolicy?.follow_up_enabled ?? latestBehavior.proactiveFollowUp))) return { status: "skipped", reason: "disabled_before_send" };
   if (readRecord(latestInstance.metadata)?.agent_id !== eventData.agentId) return {status:"skipped",reason:"agent_assignment_changed"};
   const currentStart=latestPolicy?.window_start??latestBehavior.followUpTimeWindowStart,currentEnd=latestPolicy?.window_end??latestBehavior.followUpTimeWindowEnd,currentTimezone=latestPolicy?.timezone??latestBehavior.aiScheduleTimezone;
   if (!isContactWindow(new Date(),currentStart,currentEnd,currentTimezone)) {
@@ -471,7 +482,7 @@ async function executeWhatsappProactiveFollowUp(input: {
     await enqueueWhatsappFollowUp({ ...eventData, dispatchId: undefined, claimToken: undefined,
       recoveryStep: ((eventData.recoveryStep ?? 1) + 1) as 2 | 3 }, paymentRecoveryStepGapMinutes, client);
   }
-  if(eventData.returnId)await client.from("customer_lead_visits").update({return_status:"completed"}).eq("organization_id",eventData.organizationId).eq("id",eventData.returnId).in("return_status",["pending","scheduled"]);
+  if (eventData.returnId) await completeOrRepeatReturn(client, eventData.organizationId, eventData.returnId);
   const messageWrite = await client.from("conversation_messages").insert({
     conversation_id: eventData.conversationId,
     whatsapp_instance_id: eventData.whatsappInstanceId,
@@ -654,8 +665,29 @@ function claimsPendingRevisionApplied(text: string) {
 }
 
 /** Prompt note for a conversation follow-up; never claims the edit was applied. */
+/** Journeys about the relationship, not about a conversation left open: returns, recommendations, post-sale, birthday. */
+function isRelationshipJourney(event: WhatsappFollowUpEventData) {
+  return Boolean(event.returnId || event.recommendationProductId || event.postSaleKind || event.birthdayYear);
+}
+
+/** A repeating return comes back after its interval, a limited number of times; otherwise it is done. */
+async function completeOrRepeatReturn(client: SupabaseClient, organizationId: string, returnId: string) {
+  const { data: visit } = await client.from("customer_lead_visits").select("return_at,repeat_every_days,repeat_remaining")
+    .eq("organization_id", organizationId).eq("id", returnId).maybeSingle();
+  const repeatDays = Number(visit?.repeat_every_days ?? 0);
+  const remaining = Number(visit?.repeat_remaining ?? 0);
+  if (visit?.return_at && repeatDays > 0 && remaining > 0) {
+    await client.from("customer_lead_visits").update({ return_status: "pending", repeat_remaining: remaining - 1,
+      return_at: new Date(Date.parse(visit.return_at) + repeatDays * 86400000).toISOString() })
+      .eq("organization_id", organizationId).eq("id", returnId).in("return_status", ["pending", "scheduled"]);
+    return;
+  }
+  await client.from("customer_lead_visits").update({ return_status: "completed" })
+    .eq("organization_id", organizationId).eq("id", returnId).in("return_status", ["pending", "scheduled"]);
+}
+
 function describePendingFollowUpRevision(metadata: JsonRecord | null, event: WhatsappFollowUpEventData) {
-  if (event.salesCatalogOrderId || event.returnId || event.recommendationProductId) return "";
+  if (event.salesCatalogOrderId || isRelationshipJourney(event)) return "";
   const revision = readPendingFollowUpOrderRevision(metadata, event);
   if (!revision) return "";
   const items = (revision.items as unknown[]).map(item => { const text = readRecord(item)?.mention_text; return typeof text === "string" ? text.replace(/^[-\s]+/, "") : ""; }).filter(Boolean).slice(0, 6);
@@ -667,7 +699,7 @@ function describePendingFollowUpRevision(metadata: JsonRecord | null, event: Wha
 }
 
 function readPendingFollowUpOrderRevision(metadata: JsonRecord | null, event: WhatsappFollowUpEventData) {
-  if (event.returnId || event.recommendationProductId
+  if (isRelationshipJourney(event)
     || event.salesCatalogFollowUpKind === "post_sale" || event.salesCatalogFollowUpKind === "manual") return null;
   const leadMetadata = readRecord(metadata);
   const revision = readRecord(readRecord(leadMetadata?.checkout_order_revisions)?.[event.conversationId])

@@ -788,6 +788,8 @@ export function SalesCatalogConsole({
   const [price, setPrice] = useState("");
   const [salesDestination, setSalesDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
   const [productUrl, setProductUrl] = useState("");
+  const [returnAfterDays, setReturnAfterDays] = useState("");
+  const [returnRepeat, setReturnRepeat] = useState(false);
   const [externalButtonLabel, setExternalButtonLabel] = useState("");
   const [description, setDescription] = useState("");
   const [pageFullDescription, setPageFullDescription] = useState("");
@@ -2180,6 +2182,8 @@ export function SalesCatalogConsole({
       formData.set("currency", "BRL");
       formData.set("salesDestination", salesDestination);
       formData.set("productUrl", productUrl);
+      formData.set("returnAfterDays", returnAfterDays.trim());
+      formData.set("returnRepeat", String(returnRepeat));
       formData.set("externalButtonLabel", externalButtonLabel);
       formData.set("salePrice", salePrice);
       formData.set("billingCycle", billingCycle);
@@ -3113,6 +3117,8 @@ export function SalesCatalogConsole({
     actionEdited.current = true;
     setSalesDestination(item.salesDestination);
     setProductUrl(item.productUrl ?? "");
+    setReturnAfterDays(item.returnAfterDays == null ? "" : String(item.returnAfterDays));
+    setReturnRepeat(item.returnRepeat === true);
     setExternalButtonLabel(item.externalLinkButtonLabel ?? item.title);
     setDescription(item.description);
     setPageFullDescription(item.pageContent.fullDescription ?? "");
@@ -3189,6 +3195,8 @@ export function SalesCatalogConsole({
     actionEdited.current = false;
     setSalesDestination(suggestedDestination);
     setProductUrl("");
+    setReturnAfterDays("");
+    setReturnRepeat(false);
     setExternalButtonLabel("");
     setDescription("");
     setPageFullDescription("");
@@ -5195,6 +5203,29 @@ export function SalesCatalogConsole({
 
               {!agendaActivation.enabled ? <AgendaActivationNotice companyId={selectedCompanyId} loading={agendaActivation.loading} /> : null}
               {salesDestination === "appointment" ? <AgendaResourceSelect companyId={selectedCompanyId} value={agendaResourceId} onChange={setAgendaResourceId} /> : null}
+              <div className="mt-3 grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="block">
+                  <FieldLabel>Chamar o cliente de novo (dias)</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={returnAfterDays}
+                    onChange={(event) => setReturnAfterDays(event.target.value.slice(0, 3))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Padrão da atividade"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+                <div className="text-[11px] leading-5 text-slate-500">
+                  <label className="flex items-center gap-2 text-[12px] text-slate-700">
+                    <input type="checkbox" checked={returnRepeat} disabled={!returnAfterDays || returnAfterDays === "0"} onChange={(event) => setReturnRepeat(event.target.checked)} />
+                    Repetir se o cliente não voltar (até 2 vezes)
+                  </label>
+                  Depois da compra paga, o agente chama o cliente nesse prazo (ex.: corte 25, pizza 7, suplemento 30).
+                  Vazio usa o padrão da atividade; 0 desliga para este produto.
+                </div>
+              </div>
               {salesDestination === "external_site" ? (
                 <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                   <label className="block">

@@ -38,14 +38,14 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return query;
         },
         or(expression: string) { filters.push(row => splitFilters(expression).some(part => matchesFilter(row, part))); return query; },
-        is(key: string, value: unknown) { filters.push(row => value === null ? row[key] == null : row[key] === value); return query; },
+        is(key: string, value: unknown) { filters.push(row => value === null ? readPath(row, key) == null : readPath(row, key) === value); return query; },
         gte(key: string, value: string) { filters.push(row => String(row[key] ?? "") >= value); return query; },
         gt(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) > value); return query; },
         lt(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) < value); return query; },
         lte(key: string, value: string) { filters.push(row => row[key] != null && String(row[key]) <= value); return query; },
         not(key: string, operator: string, value: unknown) {
           if (operator !== "is") throw new Error(`Unsupported operator: ${operator}`);
-          filters.push(row => value === null ? row[key] != null : row[key] !== value);
+          filters.push(row => value === null ? readPath(row, key) != null : readPath(row, key) !== value);
           return query;
         },
         contains(key: string, value: unknown[] | Row) {
@@ -96,6 +96,12 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
     },
   };
   return { client, tables };
+}
+
+/** PostgREST JSON paths such as metadata->birthday or payload->event->>chatid. */
+function readPath(row: Row, key: string): unknown {
+  const [field, ...parts] = key.split(/->>?/);
+  return parts.reduce<unknown>((value, part) => (value && typeof value === "object" ? (value as Row)[part] : undefined), row[field]);
 }
 
 function splitFilters(value: string) {

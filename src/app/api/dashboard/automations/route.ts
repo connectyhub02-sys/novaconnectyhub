@@ -106,6 +106,16 @@ export async function POST(request: NextRequest) {
         policy: await loadAutomationPolicy(client, organizationId),
       });
     }
+    if (body.action === "set_returns") {
+      if (typeof body.enabled !== "boolean") throw new Error("Ação inválida.");
+      // Returns have their own switch: it works with the smart follow-up on or off.
+      const { error } = await client.from("automation_policies").upsert(
+        { organization_id: organizationId, returns_enabled: body.enabled, updated_by: workspace.user.id, updated_at: new Date().toISOString() },
+        { onConflict: "organization_id" },
+      );
+      if (error) throw new Error("Não foi possível salvar os retornos.");
+      return NextResponse.json({ policy: await loadAutomationPolicy(client, organizationId) });
+    }
     if (body.action === "set_recovery_discount") {
       // Empty removes the discount; nothing is ever offered unless the owner sets a value here.
       const percent = body.percent === null || body.percent === "" ? null : Number(body.percent);

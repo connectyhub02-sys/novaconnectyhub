@@ -9,6 +9,8 @@ export type AutomationPolicy = {
   timezone: string;
   window_start: string;
   window_end: string;
+  /** Returns scheduled by the owner, a product rule or the agent; on unless the owner turns them off. */
+  returns_enabled: boolean;
 };
 export async function loadAutomationPolicy(
   client: SupabaseClient,
@@ -16,7 +18,7 @@ export async function loadAutomationPolicy(
 ) {
   const { data, error } = await client
     .from("automation_policies")
-    .select("follow_up_enabled,timezone,window_start,window_end")
+    .select("follow_up_enabled,timezone,window_start,window_end,returns_enabled")
     .eq("organization_id", organizationId)
     .maybeSingle<AutomationPolicy>();
   if (error)
@@ -28,7 +30,11 @@ export async function loadAutomationPolicy(
 
 export function dispatchKey(data: WhatsappFollowUpEventData) {
   const opportunity = data.returnId
-    ? `return:${data.returnId}`
+    ? `return:${data.returnId}${data.returnDueAt ? `:${data.returnDueAt}` : ""}`
+    : data.postSaleKind
+      ? `post_sale:${data.postSaleKind}:${data.postSaleOrderId}`
+    : data.birthdayYear
+      ? `birthday:${data.birthdayYear}`
     : data.recommendationProductId
       ? `recommendation:${data.recommendationProductId}:${data.recommendationPeriod}`
       : `${data.agentRunId}:${data.salesCatalogOrderId ?? "conversation"}:${data.salesCatalogFollowUpKind ?? "conversation"}${data.recoveryStep ? `:step${data.recoveryStep}` : ""}`;
@@ -51,6 +57,10 @@ export async function persistFollowUpDispatch(
       opportunity_key: key,
       journey: data.returnId
         ? "return"
+        : data.postSaleKind
+          ? "post_sale"
+        : data.birthdayYear
+          ? "birthday"
         : data.recommendationProductId
           ? "recommendation"
           : data.salesCatalogOrderId

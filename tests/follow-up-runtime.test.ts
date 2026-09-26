@@ -221,6 +221,45 @@ function recoveryFixture() {
   return { ...f, prompt };
 }
 
+describe("returns, post-sale and birthday", () => {
+  const visit = (extra: Record<string, unknown> = {}) => ({ id: "visit", organization_id: "org", lead_id: "lead", description: "Corte", return_status: "scheduled",
+    return_at: new Date(Date.now() - 3600_000).toISOString(), repeat_every_days: 25, repeat_remaining: 2, ...extra });
+
+  it("sends a return the owner scheduled even with the smart follow-up off, and schedules the repetition", async () => {
+    const f = fixture();
+    f.policy.follow_up_enabled = false;
+    f.db.tables.customer_lead_visits = [visit()];
+    expect(await f.execute({ returnId: "visit", returnDueAt: "due" })).toMatchObject({ status: "sent" });
+    const saved = f.db.tables.customer_lead_visits[0];
+    expect(saved).toMatchObject({ return_status: "pending", repeat_remaining: 1 });
+    expect(Date.parse(saved.return_at as string) - Date.now()).toBeGreaterThan(23 * 86400000);
+  });
+
+  it("completes a return with no repetition left", async () => {
+    const f = fixture();
+    f.db.tables.customer_lead_visits = [visit({ repeat_remaining: 0 })];
+    expect(await f.execute({ returnId: "visit" })).toMatchObject({ status: "sent" });
+    expect(f.db.tables.customer_lead_visits[0].return_status).toBe("completed");
+  });
+
+  it("respects the owner turning returns off", async () => {
+    const f = fixture();
+    (f.policy as Record<string, unknown>).returns_enabled = false;
+    f.db.tables.customer_lead_visits = [visit()];
+    expect(await f.execute({ returnId: "visit" })).toMatchObject({ status: "skipped", reason: "disabled" });
+  });
+
+  it("sends the birthday message even after two contacts this week, and post-sale needs the smart follow-up", async () => {
+    const sent = (id: string) => ({ id, organization_id: "org", lead_id: "lead", status: "sent", sent_at: new Date(Date.now() - 86400000).toISOString() });
+    const f = fixture();
+    f.db.tables.automation_dispatches = [sent("a"), sent("b")];
+    expect(await f.execute({ birthdayYear: 2026 })).toMatchObject({ status: "sent" });
+    const g = fixture();
+    g.policy.follow_up_enabled = false;
+    expect(await g.execute({ postSaleKind: "checkin", postSaleOrderId: "order" })).toMatchObject({ status: "skipped", reason: "disabled" });
+  });
+});
+
 describe("lead's usual hour and weekly limit", () => {
   const laterHour = () => (new Date().getUTCHours() + 6) % 24;
 

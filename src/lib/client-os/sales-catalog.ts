@@ -1045,6 +1045,8 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     actionVersion: readNumber(metadata.action_version) ?? undefined,
     activityProfile: metadata.activity_profile ? normalizeAgentPromptBuilderConfig(metadata.activity_profile) : undefined,
     salesDestination: normalizeSalesDestination(readString(metadata.sales_destination)),
+    returnAfterDays: typeof metadata.return_after_days === "number" ? metadata.return_after_days : null,
+    returnRepeat: metadata.return_repeat === true,
     productUrl: readString(metadata.source_product_url) ?? readString(metadata.product_url),
     externalLinkButtonId: readString(metadata.link_button_id) ?? readString(metadata.external_link_button_id),
     externalLinkButtonLabel: readString(metadata.link_button_label) ?? readString(metadata.external_link_button_label),

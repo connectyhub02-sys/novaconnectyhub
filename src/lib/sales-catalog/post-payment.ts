@@ -561,7 +561,48 @@ async function maybeNotifyPaymentApproved(input: {
     },
   });
 
+  await maybeAskBirthday({ client: input.client, order: input.order, instanceId: instance.id, token, phone, credentials,
+    conversation: conversation ? { id: conversation.id, provider_chat_id: conversation.provider_chat_id } : null }).catch(() => {});
+
   return true;
+}
+
+/**
+ * Right after the payment confirmation, once per customer and only when the company uses the smart
+ * follow-up (which sends the birthday message): an optional question for day and month.
+ */
+async function maybeAskBirthday(input: {
+  client: SupabaseClient; order: OrderRow; instanceId: string; token: string; phone: string; credentials: UazapiCredentials;
+  conversation: { id: string; provider_chat_id: string | null } | null;
+}) {
+  if (!input.order.lead_id || !input.conversation) return;
+  const { loadAutomationPolicy } = await import("@/lib/automations/dispatch");
+  const policy = await loadAutomationPolicy(input.client, input.order.organization_id);
+  if (!policy?.follow_up_enabled) return;
+  const { data: lead } = await input.client.from("leads").select("metadata").eq("id", input.order.lead_id)
+    .eq("organization_id", input.order.organization_id).maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(lead?.metadata);
+  if (metadata.birthday || metadata.birthday_asked_at) return;
+  const { birthdayQuestion } = await import("@/lib/automations/return-rules");
+  const { updateLeadMetadata } = await import("@/lib/leads/metadata-update");
+  // Marked first: a retry of the confirmation never asks twice.
+  await updateLeadMetadata({ client: input.client, organizationId: input.order.organization_id, leadId: input.order.lead_id,
+    buildUpdate: current => ({ metadata: { ...current, birthday_asked_at: new Date().toISOString() } }) });
+  const providerResponse = await callUazapi(input.credentials, "/send/text", {
+    outbound: { instanceId: input.instanceId, client: input.client },
+    method: "POST",
+    token: input.token,
+    body: { number: input.phone, text: birthdayQuestion, delay: 2500, linkPreview: false, track_source: "connectyhub",
+      track_id: `birthday_question_${input.order.id.slice(0, 8)}` },
+  });
+  await input.client.from("conversation_messages").insert({
+    organization_id: input.order.organization_id, conversation_id: input.conversation.id, lead_id: input.order.lead_id,
+    whatsapp_instance_id: input.instanceId, provider: "uazapi", provider_message_id: findProviderMessageId(providerResponse),
+    provider_chat_id: input.conversation.provider_chat_id, direction: "outbound", message_type: "text", text_content: birthdayQuestion,
+    payload: { delivery_source: "birthday_question", author_type: "system", author_label: "Sistema", author_source: "birthday_question",
+      origin_channel: "whatsapp", origin_source: "connectyhub_payment_system", provider_response: sanitizeProviderData(providerResponse) },
+    occurred_at: new Date().toISOString(),
+  });
 }
 
 async function maybeNotifyResponsiblePaymentApproved(input: {
