@@ -100,6 +100,7 @@ function fixture() {
       getLeadPaymentReviews: async () => [],
       refreshLeadOrderFinance: finance,
     },
+    "@/lib/automations/lead-habit": { loadLeadActiveHour: async () => null, leadHabitSendTime: () => null },
     "@/lib/automations/dispatch": {
       loadAutomationPolicy: async () => policy,
       updateDispatch: async (

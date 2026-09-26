@@ -12,6 +12,7 @@ import { relationshipContext } from "@/lib/automations/relationship-context";
 import { claimsMissingFollowUpCheckout, loadFollowUpCheckout } from "./follow-up-checkout";
 import { checkContactPreferences } from "@/lib/automations/contact-preferences";
 import { planRecoveryDiscount, type RecoveryDiscount } from "@/lib/automations/recovery-discount";
+import { leadHabitSendTime, loadLeadActiveHour } from "@/lib/automations/lead-habit";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -93,10 +94,14 @@ export type WhatsappFollowUpEventData = {
   salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
   /** Payment recovery attempt: 1 (default), 2 the next day, 3 the last call. */
   recoveryStep?: 2 | 3;
+  /** Already moved once to the lead's usual hour; it is not moved again. */
+  habitDeferred?: boolean;
 };
 
 /** Unpaid orders get up to three attempts, a day apart, each with its own approach. */
 export const paymentRecoveryMaxSteps = 3;
+/** Follow-ups the owner did not schedule, per lead, in any 7 days. */
+export const followUpWeeklyLimit = 2;
 const paymentRecoveryStepGapMinutes = 24 * 60;
 
 export async function enqueueWhatsappFollowUp(
@@ -194,6 +199,29 @@ async function executeWhatsappProactiveFollowUp(input: {
   const lead = await loadLead(client, eventData.leadId, eventData.organizationId);
   const phone = lead?.phone_number;
   if (!phone) return { status: "skipped", reason: "missing_phone" };
+  const paymentRecovery = eventData.salesCatalogFollowUpKind === "abandoned_order";
+  // Contacts the owner did not schedule (conversation retakes, recommendations) stop at 2 per week per
+  // lead, counting every follow-up sent. Unpaid orders and returns set by the owner keep their own rules.
+  if (!paymentRecovery && !eventData.returnId) {
+    const sentThisWeek = await client.from("automation_dispatches").select("id").eq("organization_id", eventData.organizationId)
+      .eq("lead_id", eventData.leadId).eq("status", "sent").gte("sent_at", new Date(Date.now() - 7 * 86400000).toISOString()).limit(followUpWeeklyLimit);
+    if (sentThisWeek.error) throw new Error(sentThisWeek.error.message);
+    if ((sentThisWeek.data ?? []).length >= followUpWeeklyLimit) return { status: "skipped", reason: "weekly_contact_limit" };
+  }
+  // Arrive when the lead is usually on WhatsApp. The first payment attempt goes right away: the lead just left.
+  if (!eventData.habitDeferred && !(paymentRecovery && !eventData.recoveryStep)) {
+    const activeHour = await loadLeadActiveHour(client, { organizationId: eventData.organizationId, leadId: eventData.leadId,
+      whatsappInstanceId: eventData.whatsappInstanceId, phone, timezone }).catch(() => null);
+    const sendAt = activeHour === null ? null : leadHabitSendTime(new Date(), activeHour, { start, end, timezone });
+    if (sendAt) {
+      const stored: WhatsappFollowUpEventData = { ...eventData, habitDeferred: true };
+      delete stored.dispatchId;
+      delete stored.claimToken;
+      await updateDispatch(client, eventData.dispatchId!, { status: "pending", scheduled_for: sendAt.toISOString(), reason: "lead_active_hour",
+        event_data: stored, lease_until: null }, eventData.claimToken);
+      return { status: "deferred", reason: "lead_active_hour" };
+    }
+  }
   if (lead.status === "archived" || readRecord(lead.metadata)?.whatsapp_opt_out === true || readRecord(readRecord(lead.metadata)?.opt_out)?.requested_at) return { status: "skipped", reason: "lead_opted_out" };
   if (hasPendingFollowUpOrderRevision(lead.metadata, eventData)) return { status: "skipped", reason: "order_revision_pending" };
   if(eventData.salesCatalogFollowUpKind==="abandoned_order"){

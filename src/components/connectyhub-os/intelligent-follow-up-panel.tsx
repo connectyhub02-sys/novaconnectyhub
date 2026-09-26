@@ -44,6 +44,8 @@ const reasonLabels: Record<string, string> = {
   human_intervention: "Atendimento humano em andamento",
   empty_generation: "Nenhuma abordagem pertinente foi gerada",
   provider_rejected_or_unconfirmed: "O WhatsApp não confirmou o envio",
+  lead_active_hour: "Aguardando o horário em que o lead costuma usar o WhatsApp",
+  weekly_contact_limit: "Limite de 2 contatos por semana para este lead",
   recovery_discount_unavailable: "O desconto não pôde ser aplicado; a última retomada não foi enviada",
   delivery_confirmation_missing:
     "A confirmação de entrega precisa ser verificada",

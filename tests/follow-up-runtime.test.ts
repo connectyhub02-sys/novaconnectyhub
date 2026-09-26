@@ -6,6 +6,10 @@ import { defaultWhatsappBehaviorConfig } from "../src/lib/whatsapp/agent-behavio
 import { describe, it, expect, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { commerceDatabase } from "./helpers/commerce-database";
+import * as contactWindow from "../src/lib/automations/contact-window";
+const leadHabit = serverModuleHarness<typeof import("../src/lib/automations/lead-habit")>("src/lib/automations/lead-habit.ts", {
+  "./contact-window": contactWindow,
+});
 const followUpCheckout = serverModuleHarness("src/lib/whatsapp/follow-up-checkout.ts", {
   "@/lib/sales-catalog/mercado-pago": { buildSalesCatalogCheckoutUrl: (id: string) => `https://fixture.invalid/checkout/${id}`, normalizeCurrencyAmount: (n: unknown) => Number(n) || null },
 });
@@ -65,6 +69,7 @@ function fixture() {
   const patches: Array<Record<string, unknown>> = [];
   const queued: Array<{ data: Record<string, unknown>; when: Date }> = [];
   const scheduled: unknown[] = [];
+  const activeHour: { current: number | null } = { current: null };
   const discountPlan: { current: null | { percent: number; discount: number; total: number; applied: boolean; apply: () => Promise<void> } } = { current: null };
   const fetch = vi.fn(
     async () =>
@@ -105,6 +110,7 @@ function fixture() {
       getLeadPaymentReviews: async () => [],
       refreshLeadOrderFinance: finance,
     },
+    "@/lib/automations/lead-habit": { loadLeadActiveHour: async () => activeHour.current, leadHabitSendTime: leadHabit.leadHabitSendTime },
     "@/lib/automations/recovery-discount": { planRecoveryDiscount: async () => discountPlan.current },
     "@/lib/inngest/client": { inngest: { send: async (event: unknown) => { scheduled.push(event); } } },
     "@/lib/automations/dispatch": {
@@ -193,6 +199,7 @@ function fixture() {
     queued,
     scheduled,
     discountPlan,
+    activeHour,
     execute: (extra = {}) =>
       service.executeWhatsappProactiveFollowUp({
         client: db.client,
@@ -213,6 +220,50 @@ function recoveryFixture() {
   };
   return { ...f, prompt };
 }
+
+describe("lead's usual hour and weekly limit", () => {
+  const laterHour = () => (new Date().getUTCHours() + 6) % 24;
+
+  it("moves a conversation retake to the lead's usual hour once, then sends it", async () => {
+    const f = fixture();
+    f.activeHour.current = laterHour();
+    expect(await f.execute()).toMatchObject({ status: "deferred", reason: "lead_active_hour" });
+    const patch = f.patches.at(-1)!;
+    expect(patch).toMatchObject({ status: "pending", reason: "lead_active_hour", event_data: { habitDeferred: true } });
+    expect((patch.event_data as Record<string, unknown>).dispatchId).toBeUndefined();
+    const hoursAhead = (Date.parse(patch.scheduled_for as string) - Date.now()) / 3600_000;
+    expect(hoursAhead).toBeGreaterThan(5);
+    expect(hoursAhead).toBeLessThan(7);
+    expect(await f.execute({ habitDeferred: true })).toMatchObject({ status: "sent" });
+  });
+
+  it("sends at once when it is already the lead's usual hour or there is no evidence", async () => {
+    const f = fixture();
+    f.activeHour.current = new Date().getUTCHours();
+    expect(await f.execute()).toMatchObject({ status: "sent" });
+    const g = fixture();
+    expect(await g.execute()).toMatchObject({ status: "sent" });
+  });
+
+  it("never delays the first payment attempt, but waits for the usual hour on the next ones", async () => {
+    const f = recoveryFixture();
+    f.activeHour.current = laterHour();
+    expect(await f.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order" })).toMatchObject({ status: "sent" });
+    const g = recoveryFixture();
+    g.activeHour.current = laterHour();
+    expect(await g.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order", recoveryStep: 2 })).toMatchObject({ status: "deferred", reason: "lead_active_hour" });
+  });
+
+  it("stops unscheduled contacts at two per week, without blocking an unpaid order", async () => {
+    const sent = (id: string) => ({ id, organization_id: "org", lead_id: "lead", status: "sent", sent_at: new Date(Date.now() - 86400000).toISOString() });
+    const f = fixture();
+    f.db.tables.automation_dispatches = [sent("a"), sent("b")];
+    expect(await f.execute()).toMatchObject({ status: "skipped", reason: "weekly_contact_limit" });
+    const g = recoveryFixture();
+    g.db.tables.automation_dispatches = [sent("a"), sent("b")];
+    expect(await g.execute({ salesCatalogOrderId: "order", salesCatalogFollowUpKind: "abandoned_order" })).toMatchObject({ status: "sent" });
+  });
+});
 
 describe("payment recovery in three attempts", () => {
   it("schedules the next attempt a day later after each one, up to the third", async () => {

@@ -21,8 +21,10 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
         range: (from: number, to: number) => { offset = from; maximum = to - from + 1; return query; },
         eq(key: string, value: unknown) {
           filters.push(row => {
-            const [field, child] = key.split("->>");
-            const actual = child ? (row[field] as Row | undefined)?.[child] : row[field];
+            const [path, child] = key.split("->>");
+            const [field, ...nested] = path.split("->");
+            const parent = nested.reduce<Row | undefined>((value, part) => value?.[part] as Row | undefined, row[field] as Row | undefined);
+            const actual = child ? parent?.[child] : row[field];
             return typeof actual === "object" ? JSON.stringify(actual) === value : actual === value;
           });
           return query;
