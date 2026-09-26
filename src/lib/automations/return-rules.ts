@@ -11,6 +11,7 @@ const activityDefaults: Record<string, ReturnRule> = {
   restaurante_lanchonete: { days: 7, repeat: true },
   esteticista: { days: 30, repeat: true },
   estetica_clinica: { days: 30, repeat: true },
+  barbearia_salao: { days: 25, repeat: true },
   dentista: { days: 180, repeat: false },
   clinica_odontologica: { days: 180, repeat: false },
   loja_suplementos: { days: 30, repeat: true },

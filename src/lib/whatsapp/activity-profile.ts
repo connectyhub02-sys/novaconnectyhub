@@ -13,6 +13,7 @@ export function activityDefaultDestination(id: AgentActivityId) {
 export function activityAppointmentLabel(id: AgentActivityId) {
   if (id === "corretor_imoveis" || id === "imobiliaria") return "Agendar visita";
   if (id === "revenda_veiculos") return "Agendar test-drive";
+  if (id === "barbearia_salao") return "Agendar horário";
   if (["dentista", "clinica_odontologica", "esteticista", "estetica_clinica"].includes(id)) return "Agendar avaliação";
   if (["advogado", "escritorio_advocacia", "contador", "escritorio_contabilidade", "arquiteto", "escritorio_arquitetura"].includes(id)) return "Agendar reunião";
   return "Agendar atendimento";

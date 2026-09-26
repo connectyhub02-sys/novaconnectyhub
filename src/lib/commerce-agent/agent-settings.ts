@@ -27,7 +27,7 @@ export function resolveAgentStoreSettings(agent: AgentIdentity, legacy: SalesCat
   const verticalPlaybook = activity === "imobiliaria" || activity === "corretor_imoveis" ? "real_estate"
     : activity === "pizzaria_delivery" || activity === "restaurante_lanchonete" ? "food"
     : activity === "moda_varejo" ? "fashion"
-    : activity === "esteticista" || activity === "estetica_clinica" ? "beauty"
+    : activity === "esteticista" || activity === "estetica_clinica" || activity === "barbearia_salao" ? "beauty"
     : activityDefaultDestination(activity) === "appointment" ? "services" : "generic";
   return {
     ...legacy,

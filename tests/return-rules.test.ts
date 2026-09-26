@@ -14,6 +14,7 @@ describe("product return rule", () => {
     expect(resolveProductReturnRule({ activity_profile: { templateId: "dentista" } }, "pizzaria_delivery")).toEqual({ days: 180, repeat: false });
     expect(resolveProductReturnRule({}, "pizzaria_delivery")).toEqual({ days: 7, repeat: true });
     expect(resolveProductReturnRule({}, "advogado")).toBeNull();
+    expect(resolveProductReturnRule({}, "barbearia_salao")).toEqual({ days: 25, repeat: true });
   });
 });
 
