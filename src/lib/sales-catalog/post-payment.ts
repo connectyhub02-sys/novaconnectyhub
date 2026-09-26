@@ -583,7 +583,9 @@ async function maybeAskBirthday(input: {
     .eq("organization_id", input.order.organization_id).maybeSingle<{ metadata: JsonRecord | null }>();
   const metadata = readRecord(lead?.metadata);
   if (metadata.birthday || metadata.birthday_asked_at) return;
-  const { birthdayQuestion } = await import("@/lib/automations/return-rules");
+  const { birthdayQuestionFor } = await import("@/lib/automations/return-rules");
+  const { loadBirthdayGift } = await import("@/lib/automations/birthday-gift");
+  const birthdayQuestion = birthdayQuestionFor(await loadBirthdayGift(input.client, input.order.organization_id).catch(() => null));
   const { updateLeadMetadata } = await import("@/lib/leads/metadata-update");
   // Marked first: a retry of the confirmation never asks twice.
   await updateLeadMetadata({ client: input.client, organizationId: input.order.organization_id, leadId: input.order.lead_id,

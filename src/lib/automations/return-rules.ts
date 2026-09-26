@@ -68,6 +68,11 @@ export function detectRequestedReturn(text: string, now = new Date()): { returnA
 
 export const birthdayQuestion = "Ah, e se quiser, me passa o dia do seu aniversário (dia e mês) que eu te mando uma mensagem especial nesse dia 🎉";
 
+/** A present is promised only when the store configured one; otherwise a special message. */
+export function birthdayQuestionFor(gift: unknown) {
+  return gift ? "Ah, e se quiser, me passa o dia do seu aniversário (dia e mês) que eu te mando um presente nesse dia 🎁" : birthdayQuestion;
+}
+
 const months = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 /** Day and month from an answer such as "15/03", "15-3", "dia 15 de março". The year is never kept. */

@@ -133,6 +133,49 @@ describe("shared lead identification", () => {
   });
 });
 
+describe("birthday question at a friendly goodbye", () => {
+  const goodbye = (id: string) => ({ id, direction: "inbound", text_content: "Obrigado, tchau!", provider_message_id: id, provider_chat_id: "chat",
+    message_type: "text", payload: {}, occurred_at: new Date().toISOString() });
+  function run(leadMetadata: Record<string, unknown>, options: { followUp?: boolean; gift?: unknown } = {}) {
+    const latest = goodbye("bye");
+    const db = commerceDatabase({ leads: [{ id: "lead", organization_id: "org", metadata: leadMetadata }], conversation_messages: [{ ...latest, conversation_id: "conversation" }] });
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ id: "sent" }), { status: 200 }));
+    const call = runtimeHarness({
+      "@/lib/automations/dispatch": { loadAutomationPolicy: async () => ({ follow_up_enabled: options.followUp !== false }) },
+      "@/lib/automations/birthday-gift": { loadBirthdayGift: async () => options.gift ?? null },
+    }, { fetch });
+    const context = { run: { id: "run" }, organization: { id: "org" }, instance: { id: "instance", metadata: {} }, agent: { id: "agent", metadata: {} },
+      lead: { id: "lead", metadata: leadMetadata }, messages: [latest], conversationId: "conversation", credentials: { baseUrl: "https://provider.invalid" } };
+    return { db, go: () => call("handleConversationEnding", { client: db.client, context, latestInbound: latest, userText: latest.text_content, token: "t", phone: "p" }) };
+  }
+  const sent = (db: ReturnType<typeof commerceDatabase>) => String(db.tables.conversation_messages.at(-1)?.text_content ?? "");
+
+  it("asks once, with the goodbye, and records that it asked", async () => {
+    const r = run({ person_name: "Magno" });
+    await r.go();
+    expect(sent(r.db)).toContain("dia do seu aniversário");
+    expect(sent(r.db)).toContain("mensagem especial");
+    expect(r.db.tables.leads[0].metadata).toHaveProperty("birthday_asked_at");
+  });
+
+  it("promises a present only when the store configured one", async () => {
+    const r = run({ person_name: "Magno" }, { gift: { kind: "order_discount", percent: 10, productId: null } });
+    await r.go();
+    expect(sent(r.db)).toContain("um presente");
+  });
+
+  it.each([
+    ["already asked", { person_name: "Magno", birthday_asked_at: "2026-09-01T00:00:00Z" }, {}],
+    ["birthday known", { person_name: "Magno", birthday: { day: 1, month: 2 } }, {}],
+    ["left the list", { person_name: "Magno", whatsapp_opt_out: true }, {}],
+    ["smart follow-up off", { person_name: "Magno" }, { followUp: false }],
+  ])("does not ask when %s", async (_label, metadata, options) => {
+    const r = run(metadata, options);
+    await r.go();
+    expect(sent(r.db)).not.toContain("aniversário");
+  });
+});
+
 describe("returns asked by the lead and birthday answer", () => {
   const message = (id: string, direction: string, text: string, minutesAgo: number) => ({ id, direction, text_content: text, provider_message_id: id,
     provider_chat_id: "chat", message_type: "text", payload: {}, occurred_at: new Date(Date.now() - minutesAgo * 60000).toISOString() });

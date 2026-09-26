@@ -1279,7 +1279,16 @@ async function handleConversationEnding(input: {
     && !declinedName
     && !context.messages.some((message) => message.direction === "outbound" && (message.text_content ?? "").includes(closingNameQuestion));
   const closing = conversationClosingText(userText);
-  const text = askClosingName ? `${closing.startsWith("Por nada") ? "Por nada!" : "Certo!"} ${closingNameQuestion}` : closing;
+  // Once per lead, bought or not: the birthday question rides on a friendly goodbye (never with the name question).
+  const askBirthday = !askClosingName && await shouldAskBirthdayAtGoodbye(client, context).catch(() => false);
+  if (askBirthday) {
+    const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead!.id,
+      buildUpdate: metadata => ({ metadata: { ...metadata, birthday_asked_at: new Date().toISOString(), birthday_asked_from: "goodbye" } }) });
+    context.lead!.metadata = saved.metadata;
+  }
+  const text = askClosingName ? `${closing.startsWith("Por nada") ? "Por nada!" : "Certo!"} ${closingNameQuestion}`
+    : askBirthday ? `${closing.startsWith("Por nada") ? "Por nada!" : "Combinado!"} ${await loadBirthdayQuestion(client, context.organization.id)} Até mais!`
+    : closing;
   const sent = await sendWhatsappText({
     credentials: context.credentials, token, phone, text,
     trackId: `conversation_ending_${context.run.id}`,
@@ -1289,6 +1298,22 @@ async function handleConversationEnding(input: {
     runtimeEvent: { type: "conversation_ending", inbound_message_id: latestInbound.id },
   });
   return completeRun(client, context.run.id, text, { sent: true, messages: 1, reason: "conversation_ended", mode: "text" });
+}
+
+async function shouldAskBirthdayAtGoodbye(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const metadata = readRecord(context.lead?.metadata);
+  if (!context.lead?.id || isWhatsappGroupChatContext(context) || !metadata || metadata.birthday || metadata.birthday_asked_at
+    || metadata.whatsapp_opt_out === true || readRecord(metadata.opt_out)?.requested_at) return false;
+  // Only companies with the smart follow-up send the birthday message; otherwise the question is pointless.
+  const { loadAutomationPolicy } = await import("@/lib/automations/dispatch");
+  const policy = await loadAutomationPolicy(client, context.organization.id);
+  return policy?.follow_up_enabled === true;
+}
+
+async function loadBirthdayQuestion(client: SupabaseClient, organizationId: string) {
+  const { birthdayQuestionFor } = await import("@/lib/automations/return-rules");
+  const { loadBirthdayGift } = await import("@/lib/automations/birthday-gift");
+  return birthdayQuestionFor(await loadBirthdayGift(client, organizationId).catch(() => null));
 }
 
 async function loadRunContext(client: SupabaseClient, runId: string) {
