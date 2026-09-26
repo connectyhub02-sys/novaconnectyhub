@@ -13038,7 +13038,7 @@ async function finishRuntimeRevisionPaymentDelivery(client: SupabaseClient, cont
 
 // ---------------------------------------------------------------------------
 // Order tools: the model interprets the conversation, the server executes.
-// Enabled per WhatsApp instance (metadata.order_tools === true) while there is
+// On for every agent (an instance may opt out with metadata.order_tools === false) while there is
 // exactly one editable order in this conversation. Every tool reuses the same
 // pricing, fingerprint, version check and payment functions as the legacy
 // revision route; the model never writes prices, items or links itself.
@@ -13052,7 +13052,7 @@ type OrderToolCall = { name: string; ok: boolean; reason?: string };
 const orderToolMaxRounds = 8;
 
 function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
-  if (readRecord(context.instance.metadata)?.order_tools !== true) return null;
+  if (readRecord(context.instance.metadata)?.order_tools === false) return null;
   if (!runtimeAllowsCheckout(context) || !context.lead) return null;
   const progress = readRecord(readRecord(context.lead.metadata)?.checkout_runtime_state);
   const activeId = progress?.conversation_id === context.conversationId && progress?.instance_id === context.instance.id
@@ -13305,7 +13305,7 @@ type CartToolState = {
 const cartToolStateKey = "checkout_tool_cart";
 
 function resolveCartToolScope(context: RunContext): OrderToolScope | null {
-  if (readRecord(context.instance.metadata)?.order_tools !== true) return null;
+  if (readRecord(context.instance.metadata)?.order_tools === false) return null;
   if (!runtimeAllowsCheckout(context) || !context.lead) return null;
   // An order already in this conversation keeps its own route (billing data or order tools).
   if (context.salesCatalogOrders.some(order => isCurrentRuntimeCheckoutOrder(context, order, true))) return null;

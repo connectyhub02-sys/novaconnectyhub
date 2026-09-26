@@ -40,10 +40,12 @@ function cart() {
 const pizzaAndLemonade = { itens: [{ produto_id: "pizza", quantidade: 1 }, { produto_id: "lemonade", quantidade: 1 }] };
 
 describe("first purchase with cart tools", () => {
-  it("is active only with the instance flag and while no order exists in the conversation", () => {
+  it("is on for every agent unless a WhatsApp instance turns it off", () => {
     const t = cart();
     expect(t.scope()).toEqual({ kind: "cart" });
     t.ctx.instance.metadata = {};
+    expect(t.scope()).toEqual({ kind: "cart" });
+    t.ctx.instance.metadata = { order_tools: false };
     expect(t.scope()).toBeNull();
   });
 

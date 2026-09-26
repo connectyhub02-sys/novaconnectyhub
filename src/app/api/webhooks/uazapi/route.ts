@@ -7,7 +7,7 @@ import {
 import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
-import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
+import { ingestUazapiWebhook, redactProviderSecrets } from "@/lib/whatsapp/webhook-ingest";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
   if (!(await isValidWebhookRequest(request, payload))) {
     return Response.json({ ok: false, error: "Webhook não autorizado" }, { status: 401 });
   }
+  // Authenticated: from here on the instance token is dropped (never stored, logged or forwarded).
+  payload = redactProviderSecrets(payload);
 
   const event = extractWebhookEvent(payload, request);
   const ingest = await ingestUazapiWebhook({

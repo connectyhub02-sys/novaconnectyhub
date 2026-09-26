@@ -36,10 +36,12 @@ const functionCall = (name: string, args: Row = {}) => ({ candidates: [{ finishR
 const modelText = (text: string) => ({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text }] } }] });
 
 describe("order tools scope", () => {
-  it("is off unless the WhatsApp instance enables it", () => {
+  it("is on for every agent unless a WhatsApp instance turns it off", () => {
     const t = tools();
     expect(t.scope()?.order.id).toBe("order");
     t.ctx.instance.metadata = {};
+    expect(t.scope()?.order.id).toBe("order");
+    t.ctx.instance.metadata = { order_tools: false };
     expect(t.scope()).toBeNull();
   });
   it("leaves the first payment to the billing-data route until it was delivered (Gustavo, 24/09 09:30)", () => {

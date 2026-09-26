@@ -838,6 +838,7 @@ export const functions = [
   connectyhubUazapiCostGuard,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  inngest.createFunction({id:"connectyhub-whatsapp-delivery-reconciliation",name:"Conferência de envios incertos do WhatsApp",retries:1,concurrency:{limit:1},triggers:[{cron:"*/2 * * * *"}]},async({step})=>step.run("reconcile-uncertain-deliveries",async()=>{const {reconcileUncertainDeliveries}=await import("@/lib/whatsapp/outbound-reconciliation");return reconcileUncertainDeliveries(createServiceClient());})),
   connectyhubWhatsappReconnectCatchup,
   connectyhubMetaSocialMessageQueue,
   connectyhubMetaSocialCommentQueue,

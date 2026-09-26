@@ -108,7 +108,7 @@ export async function ingestUazapiWebhook(input: {
   source?: string;
 }): Promise<UazapiWebhookIngestResult> {
   const client = input.client ?? createServiceClient();
-  const payload = normalizePayload(input.payload);
+  const payload = redactProviderSecrets(normalizePayload(input.payload));
   const eventType = input.eventType || extractEventType(payload) || "unknown";
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
   let message = extractMessageSnapshot(payload);
@@ -325,6 +325,10 @@ export async function ingestUazapiWebhook(input: {
     // Consent does not depend on an enabled agent, a wallet balance or a human pause.
     const leadOptOut = message.direction === "inbound" && !message.isGroupChat && lead && isExplicitLeadOptOut(message.textContent);
     if (leadOptOut) await optOutLeadContact(client, instance.organization_id, lead.id, "whatsapp_agent");
+    // The lead talking to the company again, some minutes after leaving the list, puts the lead back on it.
+    else if (message.direction === "inbound" && !message.isGroupChat && lead && shouldReinstateLeadContact(lead.metadata, message.occurredAt)) {
+      await client.rpc("reinstate_lead_contact", { p_org: instance.organization_id, p_lead: lead.id }).then(() => undefined, () => undefined);
+    }
     if (isHumanAuthoredWhatsappMessage(message, payload)) {
       const humanInterventionMinutes = await resolveHumanInterventionMinutesForInstance({
         client,
@@ -2080,6 +2084,28 @@ function extractProviderInstanceId(payload: JsonRecord, requestUrl: string) {
 
 function extractEventType(payload: JsonRecord) {
   return findString(payload, ["event", "type", "eventType", "EventType"]) ?? "unknown";
+}
+
+/** Opted out at least 10 minutes before this message: a later message is a new conversation, not the same click. */
+export function shouldReinstateLeadContact(metadata: unknown, occurredAt: string, graceMs = 10 * 60 * 1000) {
+  const record = isRecord(metadata) ? metadata : {};
+  const optOut = isRecord(record.opt_out) ? record.opt_out : {};
+  if (record.whatsapp_opt_out !== true && typeof optOut.requested_at !== "string") return false;
+  const requestedAt = typeof optOut.requested_at === "string" ? Date.parse(optOut.requested_at) : NaN;
+  return Number.isFinite(requestedAt) && Date.parse(occurredAt) - requestedAt >= graceMs;
+}
+
+const providerSecretKeys = new Set(["token", "Token", "instanceToken", "instance_token", "admintoken", "adminToken"]);
+
+/**
+ * The provider sends the instance token inside every webhook. It authenticates the request and must never
+ * be stored in the event log nor forwarded to customer webhooks.
+ */
+export function redactProviderSecrets<T>(payload: T): T {
+  if (Array.isArray(payload)) return payload.map(redactProviderSecrets) as T;
+  if (!isRecord(payload)) return payload;
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => !providerSecretKeys.has(key))
+    .map(([key, value]) => [key, redactProviderSecrets(value)])) as T;
 }
 
 function normalizePayload(payload: unknown): JsonRecord {
