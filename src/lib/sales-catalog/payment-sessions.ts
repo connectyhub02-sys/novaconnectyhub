@@ -135,6 +135,23 @@ export async function createSalesCatalogPixPaymentSession(input: {
   await assertStoreAgreementPayable(input.client, input.organizationId, orderRow.id);
   const reviewCheck = await input.client.rpc("assert_checkout_review_clear", { p_order_id: orderRow.id });
   if (reviewCheck.error) throw new Error("Este pagamento está em conferência pela equipe. Aguarde antes de tentar pagar novamente.");
+  // A birthday present (or any active lead benefit) becomes the order discount before any charge exists.
+  // Any failure here means no present: the payment itself is never blocked by it.
+  let benefit: { discount: number; total: number } | null = null;
+  if (input.deferReason !== "recovery_discount") {
+    try {
+      const { applyLeadBenefitBeforePayment } = await import("@/lib/automations/lead-benefits");
+      benefit = await applyLeadBenefitBeforePayment(input.client, input.organizationId, orderRow.id);
+    } catch (error) {
+      console.error("lead_benefit_apply_failed", { orderId: orderRow.id, message: error instanceof Error ? error.message : "unknown" });
+    }
+  }
+  if (benefit) {
+    const { data: revised } = await input.client.from("sales_catalog_orders")
+      .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, destination_address, subtotal, shipping_total, total, shipping_method, checkout_revision, metadata")
+      .eq("id", orderRow.id).eq("organization_id", input.organizationId).maybeSingle<OrderRow>();
+    if (revised) Object.assign(orderRow, revised);
+  }
   let order = await loadCheckoutCustomer(input.client, input.organizationId, orderRow, true);
 
   const { data: itemRows } = await input.client
@@ -143,7 +160,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
     .eq("order_id", order.id)
     .order("created_at", { ascending: true });
   const items = (itemRows ?? []) as OrderItemRow[];
-  let amount = normalizeCurrencyAmount(input.amount)
+  let amount = (benefit ? benefit.total : normalizeCurrencyAmount(input.amount))
     ?? normalizeCurrencyAmount(order.total)
     ?? normalizeCurrencyAmount(order.subtotal);
   const orderMetadata = readRecord(order.metadata);

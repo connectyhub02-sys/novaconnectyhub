@@ -63,6 +63,11 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
     [end, setEnd] = useState("20:00"),
     [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [discount, setDiscount] = useState("");
+  const [giftKind, setGiftKind] = useState("none"),
+    [giftPercent, setGiftPercent] = useState("10"),
+    [giftProductId, setGiftProductId] = useState(""),
+    [giftProducts, setGiftProducts] = useState<Array<{ id: string; title: string }>>([]),
+    [giftNotice, setGiftNotice] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     fetch(
@@ -82,6 +87,10 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
           }
           setActivity(data.activity);
           setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
+          setGiftProducts(data.giftProducts ?? []);
+          setGiftKind(data.birthdayGift?.kind ?? "none");
+          if (data.birthdayGift?.percent) setGiftPercent(String(data.birthdayGift.percent));
+          setGiftProductId(data.birthdayGift?.productId ?? "");
         }
       })
       .catch((failure) => {
@@ -109,6 +118,25 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível salvar.");
       setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Falha ao salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function saveGift() {
+    setSaving(true);
+    setError("");
+    setGiftNotice("");
+    try {
+      const response = await fetch("/api/dashboard/automations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, action: "set_birthday_gift", kind: giftKind, percent: giftPercent ? Number(giftPercent.replace(",", ".")) : null, productId: giftProductId || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Não foi possível salvar.");
+      setGiftNotice("Presente salvo.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Falha ao salvar.");
     } finally {
@@ -334,6 +362,45 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
                   Remover desconto
                 </button>
               )}
+            </div>
+          </details>
+        )}
+        {policy && (
+          <details className="mt-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <summary className="cursor-pointer font-medium text-slate-700">Presente de aniversário · opcional</summary>
+            <p className="my-2 text-slate-500">
+              O agente pergunta o aniversário uma vez e manda parabéns no dia. Se você escolher um presente,
+              ele é anunciado na mensagem, vale por 7 dias e é aplicado sozinho quando o cliente fechar o pedido.
+              Nos favoritos, a IA escolhe os produtos que o cliente mais compra.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label>
+                Presente
+                <select aria-label="Presente de aniversário" value={giftKind} onChange={(e) => setGiftKind(e.target.value)} className="ml-2 rounded border p-2">
+                  <option value="none">Só parabéns</option>
+                  <option value="favorites_discount">Desconto nos favoritos do cliente</option>
+                  <option value="order_discount">Desconto no pedido</option>
+                  <option value="gift_product">Brinde (produto grátis na compra)</option>
+                </select>
+              </label>
+              {giftKind === "favorites_discount" || giftKind === "order_discount" ? (
+                <label>
+                  Desconto (%)
+                  <input aria-label="Desconto de aniversário" type="number" min={1} max={30} step={0.5} value={giftPercent}
+                    onChange={(e) => setGiftPercent(e.target.value)} className="ml-2 w-24 rounded border p-2" />
+                </label>
+              ) : null}
+              {giftKind === "gift_product" ? (
+                <label>
+                  Produto
+                  <select aria-label="Produto do brinde" value={giftProductId} onChange={(e) => setGiftProductId(e.target.value)} className="ml-2 max-w-xs rounded border p-2">
+                    <option value="">Escolha o brinde</option>
+                    {giftProducts.map((product) => <option key={product.id} value={product.id}>{product.title}</option>)}
+                  </select>
+                </label>
+              ) : null}
+              <button type="button" disabled={saving || loading} className="rounded-lg border px-3 py-2" onClick={saveGift}>Salvar presente</button>
+              {giftNotice ? <span className="text-emerald-700">{giftNotice}</span> : null}
             </div>
           </details>
         )}

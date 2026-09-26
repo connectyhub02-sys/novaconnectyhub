@@ -7,6 +7,8 @@ import {
 } from "@/lib/client-os/dashboard-route-scope";
 import { loadAutomationPolicy } from "@/lib/automations/dispatch";
 import { loadRecoveryDiscountPercent } from "@/lib/automations/recovery-discount";
+import { loadBirthdayGift } from "@/lib/automations/birthday-gift";
+import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +34,11 @@ export async function GET(request: NextRequest) {
       .limit(50);
     if (activity.error)
       throw new Error("Não foi possível consultar as atividades.");
+    const catalog = await listOrganizationSalesCatalog(client, organizationId, 150).catch(() => []);
     return NextResponse.json({ policy, activity: activity.data,
-      recoveryDiscountPercent: await loadRecoveryDiscountPercent(client, organizationId) });
+      recoveryDiscountPercent: await loadRecoveryDiscountPercent(client, organizationId),
+      birthdayGift: await loadBirthdayGift(client, organizationId).catch(() => null),
+      giftProducts: catalog.filter(product => product.status === "active").map(product => ({ id: product.id, title: product.title })) });
   } catch (error) {
     return NextResponse.json(
       {
@@ -115,6 +120,25 @@ export async function POST(request: NextRequest) {
       );
       if (error) throw new Error("Não foi possível salvar os retornos.");
       return NextResponse.json({ policy: await loadAutomationPolicy(client, organizationId) });
+    }
+    if (body.action === "set_birthday_gift") {
+      // One choice and one number: only congratulations, a % on favorites or on the order, or a product as a gift.
+      const kind = ["none", "favorites_discount", "order_discount", "gift_product"].includes(body.kind) ? body.kind : null;
+      const percent = body.percent === null || body.percent === "" || body.percent === undefined ? null : Number(body.percent);
+      const productId = typeof body.productId === "string" && body.productId ? body.productId : null;
+      if (!kind) throw new Error("Escolha o presente de aniversário.");
+      if ((kind === "favorites_discount" || kind === "order_discount") && (percent === null || !Number.isFinite(percent) || percent <= 0 || percent > 30))
+        throw new Error("Informe um desconto de aniversário entre 1% e 30%.");
+      if (kind === "gift_product") {
+        const catalog = await listOrganizationSalesCatalog(client, organizationId, 150);
+        if (!productId || !catalog.some(product => product.id === productId && product.status === "active")) throw new Error("Escolha o produto do brinde.");
+      }
+      const { error } = await client.from("automation_policies").upsert({ organization_id: organizationId, birthday_gift_kind: kind,
+        birthday_gift_percent: kind === "favorites_discount" || kind === "order_discount" ? percent : null,
+        birthday_gift_product_id: kind === "gift_product" ? productId : null, updated_by: workspace.user.id, updated_at: new Date().toISOString() },
+        { onConflict: "organization_id" });
+      if (error) throw new Error("Não foi possível salvar o presente de aniversário.");
+      return NextResponse.json({ birthdayGift: await loadBirthdayGift(client, organizationId) });
     }
     if (body.action === "set_recovery_discount") {
       // Empty removes the discount; nothing is ever offered unless the owner sets a value here.

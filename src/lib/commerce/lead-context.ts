@@ -34,7 +34,20 @@ export async function loadLeadCommercialContext(
   ]);
   if (contracts.error || events.error || campaigns.error)
     throw new Error("Condições comerciais temporariamente indisponíveis.");
+  let benefitNote: string | null = null;
+  try {
+    const { loadActiveBenefit, describeBenefit } = await import("@/lib/automations/lead-benefits");
+    const benefit = await loadActiveBenefit(client, organizationId, leadId);
+    if (benefit) {
+      const ids = [...benefit.product_ids, ...(benefit.gift_product_id ? [benefit.gift_product_id] : [])];
+      const products = ids.length ? await client.from("intelligence_memory").select("id,title").eq("organization_id", organizationId).in("id", ids) : { data: [] };
+      benefitNote = describeBenefit(benefit, new Map((products.data ?? []).map((row: { id: string; title: string }) => [row.id, row.title])));
+    }
+  } catch {
+    benefitNote = null; // The commercial context never fails because of the present.
+  }
   return JSON.stringify({
+    ...(benefitNote ? { activeBenefit: benefitNote } : {}),
     checkedAt: new Date().toISOString(),
     contracts: contracts.data.map((a) => {
       const q = quoteCampaign(

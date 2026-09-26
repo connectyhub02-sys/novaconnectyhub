@@ -12,6 +12,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
       const filters: Array<(row: Row) => boolean> = [];
       let sorting: { key: string; ascending: boolean } | null = null;
       let maximum = Infinity;
+      let conflict: { onConflict?: string; ignoreDuplicates?: boolean } | null = null;
       let offset = 0;
       const query = {
         select: () => query,
@@ -55,7 +56,7 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           return query;
         },
         insert(value: Row | Row[]) { operation = "insert"; payload = value; return query; },
-        upsert(value: Row) { operation = "upsert"; payload = value; return query; },
+        upsert(value: Row, options?: { onConflict?: string; ignoreDuplicates?: boolean }) { operation = "upsert"; payload = value; conflict = options ?? null; return query; },
         update(value: Row) { operation = "update"; payload = value; return query; },
         async maybeSingle() { const result = execute(); return { ...result, data: result.data[0] ?? null }; },
         async single() { return query.maybeSingle(); },
@@ -85,10 +86,12 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
         });
         if (operation === "upsert") {
           const value = payload as Row;
-          const previous = tables[table].find(row => row.id === value.id);
-          if (previous) Object.assign(previous, value);
-          else tables[table].push({ id: `row-${++sequence}`, ...value });
-          selected = tables[table].filter(row => row.id === value.id);
+          const keys = conflict?.onConflict?.split(",").map(key => key.trim());
+          const previous = keys ? tables[table].find(row => keys.every(key => row[key] === value[key]))
+            : tables[table].find(row => row.id === value.id);
+          if (previous && conflict?.ignoreDuplicates) selected = [];
+          else if (previous) { Object.assign(previous, value); selected = [previous]; }
+          else { const inserted = { id: `row-${++sequence}`, ...value }; tables[table].push(inserted); selected = [inserted]; }
         }
         return { data: structuredClone(selected), error: null };
       }

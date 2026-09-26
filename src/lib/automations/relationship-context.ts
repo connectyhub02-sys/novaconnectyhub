@@ -21,7 +21,22 @@ export async function relationshipContext(
     deferUntil: null as string | null,
   };
   if (data.birthdayYear) {
-    return { ...empty, context: "Hoje é aniversário do cliente. Mande parabéns curtos e calorosos, no seu estilo, como quem se lembrou dele. Não venda nada, não ofereça desconto nem presente e não mencione que o sistema guardou a data." };
+    const { loadBirthdayGift } = await import("./birthday-gift");
+    const { ensureBirthdayBenefit, describeBenefit } = await import("./lead-benefits");
+    let benefit: Awaited<ReturnType<typeof ensureBirthdayBenefit>> = null;
+    try {
+      const gift = await loadBirthdayGift(client, data.organizationId);
+      benefit = gift ? await ensureBirthdayBenefit(client, { organizationId: data.organizationId, leadId: data.leadId, year: data.birthdayYear, gift }) : null;
+    } catch {
+      benefit = null; // Without a present the message is only the congratulations.
+    }
+    if (!benefit) {
+      return { ...empty, context: "Hoje é aniversário do cliente. Mande parabéns curtos e calorosos, no seu estilo, como quem se lembrou dele. Não venda nada, não ofereça desconto nem presente e não mencione que o sistema guardou a data." };
+    }
+    const ids = [...benefit.product_ids, ...(benefit.gift_product_id ? [benefit.gift_product_id] : [])];
+    const products = await client.from("intelligence_memory").select("id,title").eq("organization_id", data.organizationId).in("id", ids);
+    const note = describeBenefit(benefit, new Map((products.data ?? []).map(row => [row.id as string, row.title as string])), timezone);
+    return { ...empty, context: `Hoje é aniversário do cliente. Mande parabéns curtos e calorosos, no seu estilo, e conte o presente da loja: ${note} Diga com alegria, sem pressionar a compra e sem mencionar que o sistema guardou a data. Não invente outro presente nem outro prazo.` };
   }
   if (!data.returnId && !data.recommendationProductId && !data.postSaleKind && !data.browseProductId && !data.reactivation) return empty;
   const pending = await client
