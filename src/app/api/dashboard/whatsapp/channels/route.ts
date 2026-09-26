@@ -35,6 +35,8 @@ import {
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
 
+import { listUpcomingRoutinePosts, loadTrafficRoutine, saveTrafficRoutine, skipRoutinePost, type TrafficRoutine, type TrafficRoutineInput } from "@/lib/whatsapp/traffic-routine";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -101,6 +103,8 @@ type ChannelActionBody = {
   requireApproval?: unknown;
   maxRepliesPerHour?: unknown;
   muteUntil?: unknown;
+  routine?: unknown;
+  itemId?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -135,10 +139,41 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       operations: await getWhatsappOperationsDashboard(client, whatsapp),
+      traffic: context.selectedAgentId ? await loadTrafficPayload(client, context.organization.id, context.selectedAgentId) : null,
     });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 500 });
   }
+}
+
+async function loadTrafficPayload(client: ReturnType<typeof createServiceClient>, organizationId: string, agentId: string) {
+  const routine = await loadTrafficRoutine(client, organizationId, agentId).catch(() => null);
+  return { routine: routine ? toClientRoutine(routine) : null, upcoming: routine ? await listUpcomingRoutinePosts(client, routine) : [] };
+}
+
+function toClientRoutine(routine: TrafficRoutine) {
+  return {
+    enabled: routine.enabled, postStatus: routine.post_status, targetIds: routine.target_ids, productMode: routine.product_mode,
+    catalogItemIds: routine.catalog_item_ids, idea: routine.idea ?? "", intensity: routine.intensity, startHour: routine.start_hour,
+    leadStatusView: routine.lead_status_view, leadStatusReact: routine.lead_status_react, leadStatusComment: routine.lead_status_comment,
+    plannedUntil: routine.planned_until, lastError: routine.last_error,
+  };
+}
+
+function readRoutineChanges(value: unknown): TrafficRoutineInput {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const changes: TrafficRoutineInput = {};
+  const bool = (key: string, target: keyof TrafficRoutineInput) => { if (typeof record[key] === "boolean") (changes as Record<string, unknown>)[target] = record[key]; };
+  bool("enabled", "enabled"); bool("postStatus", "post_status"); bool("leadStatusView", "lead_status_view");
+  bool("leadStatusReact", "lead_status_react"); bool("leadStatusComment", "lead_status_comment");
+  const uuids = (list: unknown) => Array.isArray(list) ? list.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 50) : [];
+  if ("targetIds" in record) changes.target_ids = uuids(record.targetIds);
+  if ("catalogItemIds" in record) changes.catalog_item_ids = uuids(record.catalogItemIds).slice(0, 12);
+  if (record.productMode === "featured" || record.productMode === "selected") changes.product_mode = record.productMode;
+  if (record.intensity === "light" || record.intensity === "normal" || record.intensity === "intense") changes.intensity = record.intensity;
+  if (typeof record.startHour === "number" && Number.isInteger(record.startHour) && record.startHour >= 6 && record.startHour <= 20) changes.start_hour = record.startHour;
+  if (typeof record.idea === "string") changes.idea = record.idea.slice(0, 600);
+  return changes;
 }
 
 export async function POST(request: NextRequest) {
@@ -162,6 +197,21 @@ export async function POST(request: NextRequest) {
     const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id, context.selectedAgentId);
     let result: unknown;
     let notice = "Operacao concluida.";
+
+    if (action === "save_traffic_routine" || action === "skip_routine_post") {
+      if (!context.selectedAgentId) return NextResponse.json({ error: "Escolha o agente da rotina." }, { status: 422 });
+      if (action === "save_traffic_routine") {
+        const routine = await saveTrafficRoutine(client, { organizationId: context.organization.id, agentId: context.selectedAgentId, userId: context.userId, changes: readRoutineChanges(body?.routine) });
+        if (routine.enabled && !routine.planned_until) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
+        notice = routine.enabled ? (routine.planned_until ? "Rotina atualizada." : "Rotina ligada. Os primeiros posts aparecem aqui em instantes.") : "Rotina desligada. Os posts agendados foram cancelados.";
+      } else {
+        const routine = await loadTrafficRoutine(client, context.organization.id, context.selectedAgentId);
+        if (!routine) return NextResponse.json({ error: "Rotina não encontrada." }, { status: 404 });
+        await skipRoutinePost(client, routine, asString(body?.itemId) ?? "");
+        notice = "Post pulado.";
+      }
+      return NextResponse.json({ traffic: await loadTrafficPayload(client, context.organization.id, context.selectedAgentId), notice: { tone: "success", message: notice } });
+    }
 
     if (action === "refresh_groups") {
       result = await fetchWhatsappGroups(whatsapp);

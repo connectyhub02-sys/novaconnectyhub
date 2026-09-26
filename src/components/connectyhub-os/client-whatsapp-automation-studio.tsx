@@ -26,6 +26,7 @@ import type { LucideIcon } from "lucide-react";
 import { NeonBadge, Panel } from "./panel-primitives";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
+import { WhatsappTrafficRoutineCard, type TrafficPayload } from "./whatsapp-traffic-routine-card";
 
 export type ClientAutomationAgent = {
   id: string;
@@ -252,6 +253,7 @@ type WhatsappAutomationCapability = "groups" | "status" | "campaigns" | "newslet
 
 type ChannelActionResponse = {
   operations?: WhatsappOperationsState | null;
+  traffic?: TrafficPayload | null;
   result?: {
     draft?: {
       title?: string;
@@ -298,6 +300,7 @@ export function ClientWhatsappAutomationStudio({
   const selectedAutomationAgent = companyAgents.find((agent) => agent.id === selectedAutomationAgentId) ?? null;
   const selectedAgentId = selectedAutomationAgent?.id ?? "";
   const [operations, setOperations] = useState<WhatsappOperationsState | null>(null);
+  const [traffic, setTraffic] = useState<TrafficPayload | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -452,6 +455,7 @@ export function ClientWhatsappAutomationStudio({
         }
 
         setOperations(data.operations);
+        setTraffic(data.traffic ?? null);
         setStatusMaxRecipients(data.operations.behavior.maxStatusRecipients || 180);
       } catch (error) {
         if (!cancelled) {
@@ -493,6 +497,7 @@ export function ClientWhatsappAutomationStudio({
       }
 
       if (data?.operations) setOperations(data.operations);
+      if (data?.traffic !== undefined) setTraffic(data.traffic);
       setNotice(data?.notice ?? { tone: "success", message: "Operacao concluida." });
       return data;
     } catch (error) {
@@ -518,6 +523,7 @@ export function ClientWhatsappAutomationStudio({
       }
 
       setOperations(data.operations);
+      setTraffic(data.traffic ?? null);
       setNotice({ tone: "success", message: "Painel WhatsApp atualizado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar painel." });
@@ -747,6 +753,20 @@ export function ClientWhatsappAutomationStudio({
           </div>
         ) : null}
 
+        <WhatsappTrafficRoutineCard
+          traffic={traffic}
+          targets={targets}
+          products={products}
+          connected={connected}
+          disabled={!selectedAgentId}
+          discovering={runningAction === "refresh_groups" || runningAction === "refresh_newsletters"}
+          onDiscover={async () => { await runAction("refresh_groups"); await runAction("refresh_newsletters"); }}
+          onSave={async (action, payload) => (await runAction(action, payload))?.traffic ?? null}
+        />
+
+        <details className="rounded-xl border border-slate-200 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Mais opções (avançado): post avulso, enquete, janela de grupo, regras de resposta e resultados</summary>
+        <div className="mt-3 grid gap-4">
         <nav aria-label="Áreas de grupos, canais e status" className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
           {([['campaigns', 'Campanhas'], ['schedule', 'Programação de grupos'], ['activity', 'Resultados e histórico'], ['settings', 'Destinos e configurações']] as const).map(([id, label]) => (
             <button key={id} type="button" aria-pressed={workspaceView === id} onClick={() => setWorkspaceView(id)} className={cn("rounded-lg px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-emerald-600", workspaceView === id ? "bg-emerald-50 font-semibold text-emerald-800" : "text-slate-600 hover:bg-slate-50")}>{label}</button>
@@ -1167,6 +1187,8 @@ export function ClientWhatsappAutomationStudio({
         </Section>
         {(operations?.history.length ?? 0) > historyLimit && <button type="button" onClick={() => setHistoryLimit((value) => value + 10)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">Mostrar mais</button>}
         </div>
+        </div>
+        </details>
         <HistoryInsightDrawer
           item={selectedHistoryItem}
           loading={runningAction === "sync_outbound_insights"}

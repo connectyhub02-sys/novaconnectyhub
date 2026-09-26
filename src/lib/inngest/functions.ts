@@ -838,6 +838,8 @@ export const functions = [
   connectyhubUazapiCostGuard,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  inngest.createFunction({id:"connectyhub-whatsapp-traffic-routines",name:"Rotinas de tráfego no WhatsApp",retries:1,concurrency:{limit:1},triggers:[{cron:"15 * * * *"}]},async({step})=>step.run("plan-next-traffic-day",async()=>{const {runDueTrafficRoutines}=await import("@/lib/whatsapp/traffic-routine");return runDueTrafficRoutines(createServiceClient());})),
+  inngest.createFunction({id:"connectyhub-whatsapp-traffic-routine-run",name:"Rotina de tráfego ligada agora",retries:1,concurrency:{limit:2},triggers:[{event:"connectyhub/traffic-routine.run"}]},async({event,step})=>step.run("plan-first-traffic-day",async()=>{const client=createServiceClient();const {data}=await client.from("whatsapp_traffic_routines").select("*").eq("id",String(event.data.routineId??"")).maybeSingle();if(!data)return {skipped:"missing"};const {runTrafficRoutine}=await import("@/lib/whatsapp/traffic-routine");return runTrafficRoutine(client,data);})),
   inngest.createFunction({id:"connectyhub-whatsapp-delivery-reconciliation",name:"Conferência de envios incertos do WhatsApp",retries:1,concurrency:{limit:1},triggers:[{cron:"*/2 * * * *"}]},async({step})=>step.run("reconcile-uncertain-deliveries",async()=>{const {reconcileUncertainDeliveries}=await import("@/lib/whatsapp/outbound-reconciliation");return reconcileUncertainDeliveries(createServiceClient());})),
   connectyhubWhatsappReconnectCatchup,
   connectyhubMetaSocialMessageQueue,
