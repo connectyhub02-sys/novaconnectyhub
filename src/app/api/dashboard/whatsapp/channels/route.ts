@@ -35,7 +35,7 @@ import {
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
 
-import { listUpcomingRoutinePosts, loadTrafficRoutine, saveTrafficRoutine, skipRoutinePost, type TrafficRoutine, type TrafficRoutineInput } from "@/lib/whatsapp/traffic-routine";
+import { copyTrafficRoutine, listTrafficRoutineNumbers, listUpcomingRoutinePosts, loadTrafficRoutine, saveTrafficRoutine, skipRoutinePost, type TrafficRoutine, type TrafficRoutineInput } from "@/lib/whatsapp/traffic-routine";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -105,6 +105,7 @@ type ChannelActionBody = {
   muteUntil?: unknown;
   routine?: unknown;
   itemId?: unknown;
+  fromAgentId?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -148,7 +149,8 @@ export async function GET(request: NextRequest) {
 
 async function loadTrafficPayload(client: ReturnType<typeof createServiceClient>, organizationId: string, agentId: string) {
   const routine = await loadTrafficRoutine(client, organizationId, agentId).catch(() => null);
-  return { routine: routine ? toClientRoutine(routine) : null, upcoming: routine ? await listUpcomingRoutinePosts(client, routine) : [] };
+  return { routine: routine ? toClientRoutine(routine) : null, upcoming: routine ? await listUpcomingRoutinePosts(client, routine) : [],
+    numbers: await listTrafficRoutineNumbers(client, organizationId).catch(() => []) };
 }
 
 function toClientRoutine(routine: TrafficRoutine) {
@@ -198,12 +200,17 @@ export async function POST(request: NextRequest) {
     let result: unknown;
     let notice = "Operacao concluida.";
 
-    if (action === "save_traffic_routine" || action === "skip_routine_post") {
+    if (action === "save_traffic_routine" || action === "skip_routine_post" || action === "copy_traffic_routine") {
       if (!context.selectedAgentId) return NextResponse.json({ error: "Escolha o agente da rotina." }, { status: 422 });
       if (action === "save_traffic_routine") {
         const routine = await saveTrafficRoutine(client, { organizationId: context.organization.id, agentId: context.selectedAgentId, userId: context.userId, changes: readRoutineChanges(body?.routine) });
         if (routine.enabled && !routine.planned_until) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
         notice = routine.enabled ? (routine.planned_until ? "Rotina atualizada." : "Rotina ligada. Os primeiros posts aparecem aqui em instantes.") : "Rotina desligada. Os posts agendados foram cancelados.";
+      } else if (action === "copy_traffic_routine") {
+        const fromAgentId = asString(body?.fromAgentId);
+        if (!fromAgentId || !context.agents.some((agent) => agent.id === fromAgentId)) return NextResponse.json({ error: "Número de origem inválido." }, { status: 422 });
+        await copyTrafficRoutine(client, { organizationId: context.organization.id, fromAgentId, toAgentId: context.selectedAgentId, userId: context.userId });
+        notice = "Configuração copiada. Confira os grupos e ligue a rotina deste número.";
       } else {
         const routine = await loadTrafficRoutine(client, context.organization.id, context.selectedAgentId);
         if (!routine) return NextResponse.json({ error: "Rotina não encontrada." }, { status: 404 });

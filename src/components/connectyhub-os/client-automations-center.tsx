@@ -287,6 +287,8 @@ export function ClientAutomationsCenter({
         products={companyProducts}
         selectedAutomationAgentId={draft.automationSettings.defaultAgentId ?? selectedWhatsapp?.agentId ?? null}
         selectedAutomationWhatsappLabel={selectedWhatsapp?.label ?? null}
+        whatsappOptions={companyWhatsappInstances.filter((instance) => instance.agentId && instance.status !== "archived")
+          .map((instance) => ({ agentId: instance.agentId as string, label: instance.label, status: instance.status }))}
       />
 
       <Panel

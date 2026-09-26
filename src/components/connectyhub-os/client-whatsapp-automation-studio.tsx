@@ -283,6 +283,7 @@ type Props = {
   products: ClientSalesCatalogItem[];
   selectedAutomationAgentId: string | null;
   selectedAutomationWhatsappLabel: string | null;
+  whatsappOptions?: Array<{ agentId: string; label: string; status: string }>;
   channelEndpoint?: string;
   entityIdKey?: "companyId" | "sectorId";
 };
@@ -295,9 +296,11 @@ export function ClientWhatsappAutomationStudio({
   entityIdKey = "companyId",
   products,
   selectedAutomationAgentId,
+  whatsappOptions = [],
 }: Props) {
   const companyAgents = useMemo(() => agents.filter((agent) => agent.companyId === companyId), [agents, companyId]);
-  const selectedAutomationAgent = companyAgents.find((agent) => agent.id === selectedAutomationAgentId) ?? null;
+  const [pickedAgentId, setPickedAgentId] = useState(selectedAutomationAgentId);
+  const selectedAutomationAgent = companyAgents.find((agent) => agent.id === pickedAgentId) ?? null;
   const selectedAgentId = selectedAutomationAgent?.id ?? "";
   const [operations, setOperations] = useState<WhatsappOperationsState | null>(null);
   const [traffic, setTraffic] = useState<TrafficPayload | null>(null);
@@ -753,6 +756,26 @@ export function ClientWhatsappAutomationStudio({
           </div>
         ) : null}
 
+        {entityIdKey === "companyId" && whatsappOptions.length > 0 ? (
+          <div className="rounded-xl border border-slate-200 p-3">
+            <p className="text-sm font-semibold text-slate-800">Postar a partir de qual número?</p>
+            <p className="text-xs text-slate-500">Cada número tem seus grupos, canais e a sua própria rotina. Para usar os dois, ligue a rotina em cada um.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {whatsappOptions.map((option) => {
+                const active = option.agentId === selectedAgentId;
+                const routineOn = traffic?.numbers?.find((number) => number.agentId === option.agentId)?.enabled;
+                return (
+                  <button key={option.agentId} type="button" aria-pressed={active} onClick={() => { setPickedAgentId(option.agentId); setSelectedTargetIds([]); setTraffic(null); }}
+                    className={cn("rounded-lg border px-3 py-2 text-left text-sm", active ? "border-emerald-600 bg-emerald-50" : "border-slate-200 hover:bg-slate-50")}>
+                    <span className="block font-semibold text-slate-800">{option.label}</span>
+                    <span className="block text-xs text-slate-500">{option.status === "connected" ? "Conectado" : "Desconectado"} · {routineOn ? "rotina ligada" : "rotina desligada"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {entityIdKey === "companyId" ? <WhatsappTrafficRoutineCard
           traffic={traffic}
           targets={targets}
@@ -761,6 +784,7 @@ export function ClientWhatsappAutomationStudio({
           disabled={!selectedAgentId}
           discovering={runningAction === "refresh_groups" || runningAction === "refresh_newsletters"}
           onDiscover={async () => { await runAction("refresh_groups"); await runAction("refresh_newsletters"); }}
+          copySources={whatsappOptions.filter((option) => option.agentId !== selectedAgentId && traffic?.numbers?.some((number) => number.agentId === option.agentId))}
           onSave={async (action, payload) => (await runAction(action, payload))?.traffic ?? null}
         /> : null}
 

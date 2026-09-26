@@ -84,6 +84,32 @@ export async function saveTrafficRoutine(client: SupabaseClient, input: { organi
 
 export const routineTag = (routineId: string) => `traffic_routine:${routineId}`;
 
+/**
+ * "Usar a mesma configuração": copies the choices of another number's routine. Groups and channels are
+ * matched by WhatsApp id, so the ones both numbers share come already marked. The on/off state of the
+ * destination is kept: the owner still turns it on.
+ */
+export async function copyTrafficRoutine(client: SupabaseClient, input: { organizationId: string; fromAgentId: string; toAgentId: string; userId: string }) {
+  const source = await loadTrafficRoutine(client, input.organizationId, input.fromAgentId);
+  if (!source) throw new Error("O outro número ainda não tem rotina para copiar.");
+  const context = await resolveClientWhatsappOperationalContext(client, input.organizationId, input.toAgentId);
+  const { data: sourceTargets } = source.target_ids.length
+    ? await client.from("whatsapp_channel_targets").select("target_type, provider_jid").in("id", source.target_ids) : { data: [] };
+  const jids = ((sourceTargets ?? []) as Array<{ target_type: string; provider_jid: string }>).map(row => row.provider_jid);
+  const { data: matches } = jids.length
+    ? await client.from("whatsapp_channel_targets").select("id").eq("whatsapp_instance_id", context.instance.id).in("provider_jid", jids) : { data: [] };
+  return saveTrafficRoutine(client, { organizationId: input.organizationId, agentId: input.toAgentId, userId: input.userId, changes: {
+    post_status: source.post_status, target_ids: ((matches ?? []) as Array<{ id: string }>).map(row => row.id), product_mode: source.product_mode,
+    catalog_item_ids: source.catalog_item_ids, idea: source.idea, intensity: source.intensity, start_hour: source.start_hour,
+    lead_status_view: source.lead_status_view, lead_status_react: source.lead_status_react, lead_status_comment: source.lead_status_comment,
+  } });
+}
+
+export async function listTrafficRoutineNumbers(client: SupabaseClient, organizationId: string) {
+  const { data } = await client.from("whatsapp_traffic_routines").select("agent_id, enabled").eq("organization_id", organizationId);
+  return ((data ?? []) as Array<{ agent_id: string; enabled: boolean }>).map(row => ({ agentId: row.agent_id, enabled: row.enabled }));
+}
+
 /** Turning the routine off stops what it had already scheduled. */
 async function archiveUpcomingRoutinePosts(client: SupabaseClient, routine: TrafficRoutine) {
   await client.from("content_pipeline_items").update({ status: "archived", updated_at: new Date().toISOString() })

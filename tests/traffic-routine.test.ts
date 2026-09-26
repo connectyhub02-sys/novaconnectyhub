@@ -98,3 +98,17 @@ describe("running the routine", () => {
     expect(db.tables.whatsapp_traffic_routines[0]).toMatchObject({ enabled: false, planned_until: null });
   });
 });
+
+describe("two numbers", () => {
+  it("copies the choices to the other number, marking the groups both share and keeping it off", async () => {
+    const { db, routine } = setup();
+    db.tables.whatsapp_channel_targets[0].provider_jid = "elite@g.us";
+    db.tables.whatsapp_channel_targets.push({ id: "g2", target_type: "group", provider_jid: "elite@g.us", whatsapp_instance_id: "inst", campaign_enabled: true },
+      { id: "g3", target_type: "group", provider_jid: "other@g.us", whatsapp_instance_id: "inst", campaign_enabled: true });
+    const copied = await routine.copyTrafficRoutine(db.client as never, { organizationId: "org", fromAgentId: "agent", toAgentId: "agent-2", userId: "u" });
+    expect(copied).toMatchObject({ agent_id: "agent-2", intensity: "normal", idea: "Frete grátis", post_status: true });
+    expect(copied.target_ids).toContain("g2");
+    expect(copied.target_ids).not.toContain("g3");
+    expect(copied.enabled).not.toBe(true);
+  });
+});

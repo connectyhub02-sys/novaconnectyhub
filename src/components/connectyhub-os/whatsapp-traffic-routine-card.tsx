@@ -13,6 +13,7 @@ export type TrafficRoutineState = {
 export type TrafficPayload = {
   routine: TrafficRoutineState | null;
   upcoming: Array<{ id: string; kind: "status" | "grupos e canais"; title: string; text: string; scheduledFor: string | null }>;
+  numbers?: Array<{ agentId: string; enabled: boolean }>;
 };
 type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
 
@@ -33,6 +34,7 @@ const intensities = [
 export function WhatsappTrafficRoutineCard(props: {
   traffic: TrafficPayload | null; targets: Target[]; products: ClientSalesCatalogItem[]; connected: boolean; disabled: boolean;
   onSave: (action: string, payload: Record<string, unknown>) => Promise<TrafficPayload | null>; onDiscover: () => void; discovering: boolean;
+  copySources?: Array<{ agentId: string; label: string }>;
 }) {
   const saved = props.traffic?.routine ?? defaults;
   const [draft, setDraft] = useState<TrafficRoutineState>(saved);
@@ -68,6 +70,17 @@ export function WhatsappTrafficRoutineCard(props: {
           </button>
         </div>
       </div>
+      {props.copySources?.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span>Usar a mesma configuração de:</span>
+          {props.copySources.map(source => (
+            <button key={source.agentId} type="button" disabled={props.disabled || Boolean(saving)}
+              onClick={async () => { setSaving("copy"); await props.onSave("copy_traffic_routine", { fromAgentId: source.agentId }); setSaving(null); }}
+              className="rounded-full border border-emerald-600 px-2.5 py-1 font-semibold text-emerald-800 disabled:opacity-50">{saving === "copy" ? "Copiando…" : source.label}</button>
+          ))}
+          <span className="text-slate-500">Os grupos em comum já vêm marcados. Evite postar no mesmo grupo pelos dois números.</span>
+        </div>
+      ) : null}
       {!props.connected ? <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">Conecte o WhatsApp deste agente para a rotina postar.</p> : null}
       {saved.lastError ? <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">Último aviso da rotina: {saved.lastError}</p> : null}
 
