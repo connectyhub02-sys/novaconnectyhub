@@ -158,6 +158,9 @@ function toClientRoutine(routine: TrafficRoutine) {
     enabled: routine.enabled, postStatus: routine.post_status, targetIds: routine.target_ids, productMode: routine.product_mode,
     catalogItemIds: routine.catalog_item_ids, idea: routine.idea ?? "", intensity: routine.intensity, startHour: routine.start_hour,
     leadStatusView: routine.lead_status_view, leadStatusReact: routine.lead_status_react, leadStatusComment: routine.lead_status_comment,
+    postFormat: routine.post_format ?? "auto", roomEnabled: routine.room_enabled ?? false, roomTargetIds: routine.room_target_ids ?? [],
+    roomOpenHour: routine.room_open_hour ?? 19, roomCloseHour: routine.room_close_hour ?? 20, roomDays: routine.room_days ?? [0, 1, 2, 3, 4, 5, 6],
+    roomReplies: routine.room_replies ?? true, roomPlannedUntil: routine.room_planned_until ?? null,
     plannedUntil: routine.planned_until, lastError: routine.last_error,
   };
 }
@@ -169,6 +172,13 @@ function readRoutineChanges(value: unknown): TrafficRoutineInput {
   bool("enabled", "enabled"); bool("postStatus", "post_status"); bool("leadStatusView", "lead_status_view");
   bool("leadStatusReact", "lead_status_react"); bool("leadStatusComment", "lead_status_comment");
   const uuids = (list: unknown) => Array.isArray(list) ? list.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 50) : [];
+  bool("roomEnabled", "room_enabled"); bool("roomReplies", "room_replies");
+  if ("roomTargetIds" in record) changes.room_target_ids = uuids(record.roomTargetIds);
+  if (record.postFormat === "auto" || record.postFormat === "product_audio" || record.postFormat === "product_button") changes.post_format = record.postFormat;
+  const hour = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+  if (hour(record.roomOpenHour, 6, 22) !== undefined) changes.room_open_hour = record.roomOpenHour as number;
+  if (hour(record.roomCloseHour, 7, 23) !== undefined) changes.room_close_hour = record.roomCloseHour as number;
+  if (Array.isArray(record.roomDays)) changes.room_days = Array.from(new Set(record.roomDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)));
   if ("targetIds" in record) changes.target_ids = uuids(record.targetIds);
   if ("catalogItemIds" in record) changes.catalog_item_ids = uuids(record.catalogItemIds).slice(0, 12);
   if (record.productMode === "featured" || record.productMode === "selected") changes.product_mode = record.productMode;

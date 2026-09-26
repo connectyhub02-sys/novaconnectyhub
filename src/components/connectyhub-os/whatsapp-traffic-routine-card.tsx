@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Megaphone, RefreshCcw, Sparkles, Users } from "lucide-react";
+import { Loader2, Megaphone, MessagesSquare, RefreshCcw, Sparkles, Users } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
@@ -9,10 +9,12 @@ export type TrafficRoutineState = {
   enabled: boolean; postStatus: boolean; targetIds: string[]; productMode: "featured" | "selected"; catalogItemIds: string[];
   idea: string; intensity: "light" | "normal" | "intense"; startHour: number;
   leadStatusView: boolean; leadStatusReact: boolean; leadStatusComment: boolean; plannedUntil: string | null; lastError: string | null;
+  postFormat: "auto" | "product_audio" | "product_button";
+  roomEnabled: boolean; roomTargetIds: string[]; roomOpenHour: number; roomCloseHour: number; roomDays: number[]; roomReplies: boolean; roomPlannedUntil: string | null;
 };
 export type TrafficPayload = {
   routine: TrafficRoutineState | null;
-  upcoming: Array<{ id: string; kind: "status" | "grupos e canais"; title: string; text: string; scheduledFor: string | null }>;
+  upcoming: Array<{ id: string; kind: "status" | "grupos e canais" | "sala de dúvidas"; title: string; text: string; scheduledFor: string | null }>;
   numbers?: Array<{ agentId: string; enabled: boolean }>;
 };
 type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
@@ -20,7 +22,14 @@ type Target = { id: string; type: "group" | "newsletter"; name: string; particip
 const defaults: TrafficRoutineState = {
   enabled: false, postStatus: true, targetIds: [], productMode: "featured", catalogItemIds: [], idea: "", intensity: "normal", startHour: 9,
   leadStatusView: false, leadStatusReact: false, leadStatusComment: false, plannedUntil: null, lastError: null,
+  postFormat: "auto", roomEnabled: false, roomTargetIds: [], roomOpenHour: 19, roomCloseHour: 20, roomDays: [0, 1, 2, 3, 4, 5, 6], roomReplies: true, roomPlannedUntil: null,
 };
+const postFormats = [
+  ["auto", "Automático", "A IA varia: texto, carrossel, enquete e áudio"],
+  ["product_audio", "Produto com botão + áudio", "Foto do produto, botão para ver e comprar e um áudio do agente explicando para que serve"],
+  ["product_button", "Produto com botão", "Foto do produto e botão para ver e comprar, sem áudio"],
+] as const;
+const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const intensities = [
   ["light", "Leve", "1 post por dia em cada lugar"],
   ["normal", "Normal", "2 posts por dia em cada lugar"],
@@ -41,17 +50,17 @@ export function WhatsappTrafficRoutineCard(props: {
   const [savedKey, setSavedKey] = useState(JSON.stringify(saved));
   const [saving, setSaving] = useState<string | null>(null);
   if (JSON.stringify(saved) !== savedKey) { setSavedKey(JSON.stringify(saved)); setDraft(saved); }
-  const dirty = JSON.stringify({ ...draft, plannedUntil: null, lastError: null }) !== JSON.stringify({ ...saved, plannedUntil: null, lastError: null });
+  const dirty = JSON.stringify({ ...draft, plannedUntil: null, lastError: null, roomPlannedUntil: null }) !== JSON.stringify({ ...saved, plannedUntil: null, lastError: null, roomPlannedUntil: null });
   const groups = props.targets.filter(target => target.type === "group");
   const channels = props.targets.filter(target => target.type === "newsletter");
   const places = (draft.postStatus ? 1 : 0) + draft.targetIds.length;
   const set = <K extends keyof TrafficRoutineState>(key: K, value: TrafficRoutineState[K]) => setDraft(current => ({ ...current, [key]: value }));
-  const toggleId = (key: "targetIds" | "catalogItemIds", id: string) => setDraft(current => ({ ...current,
+  const toggleId = (key: "targetIds" | "catalogItemIds" | "roomTargetIds", id: string) => setDraft(current => ({ ...current,
     [key]: current[key].includes(id) ? current[key].filter(value => value !== id) : [...current[key], id] }));
 
-  async function save(enabled: boolean) {
-    setSaving(enabled === saved.enabled ? "save" : enabled ? "on" : "off");
-    await props.onSave("save_traffic_routine", { routine: { ...draft, enabled } });
+  async function save(enabled: boolean, roomEnabled = saved.roomEnabled) {
+    setSaving(roomEnabled !== saved.roomEnabled ? "room" : enabled === saved.enabled ? "save" : enabled ? "on" : "off");
+    await props.onSave("save_traffic_routine", { routine: { ...draft, enabled, roomEnabled } });
     setSaving(null);
   }
 
@@ -105,6 +114,8 @@ export function WhatsappTrafficRoutineCard(props: {
               ))}
             </div>
           ) : null}
+          <p className="pt-1 text-xs font-semibold text-slate-600">Formato dos posts nos grupos e canais</p>
+          {postFormats.map(([id, label, hint]) => <Check key={id} radio checked={draft.postFormat === id} onChange={() => set("postFormat", id)} label={label} hint={hint} />)}
           <label className="block text-xs font-medium text-slate-600">Ideia ou oferta da semana (opcional)
             <textarea value={draft.idea} onChange={event => set("idea", event.target.value)} rows={3} maxLength={600} placeholder="Ex.: frete grátis até domingo, lançamento do sabor novo…"
               className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-800" />
@@ -123,6 +134,56 @@ export function WhatsappTrafficRoutineCard(props: {
       </div>
 
       <div className="mt-4 rounded-lg border border-slate-200 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><MessagesSquare className="h-4 w-4 text-emerald-700" />Sala de dúvidas nos grupos</p>
+            <p className="text-xs text-slate-500">O agente abre o grupo no horário, avisa, responde e fecha avisando quando abre de novo.</p>
+          </div>
+          <button type="button" disabled={props.disabled || Boolean(saving) || (!saved.roomEnabled && draft.roomTargetIds.length === 0)} onClick={() => void save(saved.enabled, !saved.roomEnabled)}
+            className={cn("rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50", saved.roomEnabled ? "border border-slate-300 text-slate-700" : "bg-emerald-700 text-white")}>
+            {saving === "room" ? <Loader2 className="h-4 w-4 animate-spin" /> : saved.roomEnabled ? "Desligar sala" : "Ligar sala"}
+          </button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div>
+            <p className="text-xs font-semibold text-slate-600">Quais grupos</p>
+            <div className="mt-1 grid max-h-44 gap-1 overflow-y-auto">
+              {groups.length ? groups.map(group => (
+                <label key={group.id} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm", group.isAdmin === false ? "opacity-60" : "cursor-pointer hover:bg-slate-50")}>
+                  <span className="flex min-w-0 items-center gap-2"><input type="checkbox" disabled={group.isAdmin === false} checked={draft.roomTargetIds.includes(group.id)} onChange={() => toggleId("roomTargetIds", group.id)} className="accent-emerald-700" /><span className="truncate text-slate-800">{group.name}</span></span>
+                  {group.isAdmin === false ? <span className="shrink-0 text-xs text-amber-700">precisa ser admin</span> : null}
+                </label>
+              )) : <p className="text-xs text-slate-500">Nenhum grupo encontrado.</p>}
+            </div>
+          </div>
+          <div className="grid content-start gap-2">
+            <p className="text-xs font-semibold text-slate-600">Horário</p>
+            <div className="flex items-center gap-2 text-sm text-slate-700">
+              Abre às
+              <select value={draft.roomOpenHour} onChange={event => { const open = Number(event.target.value); setDraft(current => ({ ...current, roomOpenHour: open, roomCloseHour: Math.max(current.roomCloseHour, open + 1) })); }} className="rounded-lg border border-slate-200 px-2 py-1">
+                {Array.from({ length: 17 }, (_, index) => index + 6).map(hour => <option key={hour} value={hour}>{hour}h</option>)}
+              </select>
+              fecha às
+              <select value={draft.roomCloseHour} onChange={event => set("roomCloseHour", Number(event.target.value))} className="rounded-lg border border-slate-200 px-2 py-1">
+                {Array.from({ length: 23 - draft.roomOpenHour }, (_, index) => draft.roomOpenHour + 1 + index).map(hour => <option key={hour} value={hour}>{hour}h</option>)}
+              </select>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {weekdays.map((label, day) => (
+                <button key={label} type="button" onClick={() => set("roomDays", draft.roomDays.includes(day) ? draft.roomDays.filter(value => value !== day) : [...draft.roomDays, day].sort())}
+                  className={cn("rounded-full border px-2.5 py-1 text-xs", draft.roomDays.includes(day) ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-200 text-slate-500")}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid content-start gap-2">
+            <Check checked={draft.roomReplies} onChange={() => set("roomReplies", !draft.roomReplies)} label="O agente responde as perguntas"
+              hint="Enquanto o grupo está aberto, responde em texto ou áudio (como no atendimento) citando quem perguntou" />
+            <p className="text-xs text-slate-500">Com o grupo fechado, ninguém escreve e o agente não responde. Para abrir e fechar, este número precisa ser admin do grupo.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 p-3">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles className="h-4 w-4 text-emerald-700" />Interagir com os leads</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <Check checked={draft.leadStatusView} onChange={() => set("leadStatusView", !draft.leadStatusView)} label="Ver o status dos leads" hint="Ser dos primeiros a visualizar quando eles postam" />
@@ -136,12 +197,13 @@ export function WhatsappTrafficRoutineCard(props: {
         <button type="button" disabled={!dirty || props.disabled || Boolean(saving)} onClick={() => void save(saved.enabled)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
           {saving === "save" ? "Salvando…" : "Salvar alterações"}
         </button>
+        {saved.roomEnabled && saved.roomPlannedUntil ? <span className="text-xs text-slate-500">Sala planejada até {new Date(saved.roomPlannedUntil).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span> : null}
         {saved.enabled && saved.plannedUntil ? <span className="text-xs text-slate-500">Planejado até {new Date(saved.plannedUntil).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span> : null}
       </div>
 
       {props.traffic?.upcoming.length ? (
         <div className="mt-4">
-          <p className="text-sm font-semibold text-slate-800">Próximos posts</p>
+          <p className="text-sm font-semibold text-slate-800">Próximos envios</p>
           <ul className="mt-2 grid gap-2 md:grid-cols-2">
             {props.traffic.upcoming.map(post => (
               <li key={post.id} className="rounded-lg border border-slate-200 p-3 text-sm">

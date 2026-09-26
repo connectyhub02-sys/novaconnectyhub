@@ -1562,6 +1562,7 @@ export async function queueWhatsappGroupWindow(
     closingText?: string | null;
     preCloseMinutes?: number | null;
     mentionAll?: boolean;
+    roomReplies?: boolean;
   },
 ) {
   assertWhatsappConnected(context);
@@ -1613,6 +1614,7 @@ export async function queueWhatsappGroupWindow(
       announce: false,
       text: openingText,
       mentions: mentionAll ? "all" : undefined,
+      roomReplies: input.roomReplies,
     }),
   }));
 
@@ -1651,6 +1653,7 @@ export async function queueWhatsappGroupWindow(
       announce: true,
       text: closingText,
       mentions: mentionAll ? "all" : undefined,
+      roomReplies: input.roomReplies,
     }),
   }));
 
@@ -2062,6 +2065,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
       providerResponse = { target_mode: "whatsapp_targets", sent: responses };
     } else if (operation === "group_announce_mode") {
       providerResponse = await sendGroupWindowPayload(context, item, payload);
+      await applyGroupRoomReplies(client, context, payload);
     } else if (operation === "newsletter_text") {
       providerResponse = await callUazapi(context, "/send/text", {
         method: "POST",
@@ -2311,6 +2315,22 @@ async function sendTargetCarouselPayloadToRecipient(
   }
 
   return responses;
+}
+
+/**
+ * Question room: the agent answers only while the group is open. Opening turns replies on (every message,
+ * quoting and mentioning who asked, with more room per hour); closing turns them off.
+ */
+async function applyGroupRoomReplies(client: SupabaseClient, context: WhatsappOperationalContext, payload: JsonRecord) {
+  if (typeof payload.room_replies !== "boolean") return;
+  const targetId = asString(payload.target_id);
+  const phase = asString(payload.phase);
+  if (!targetId || (phase !== "open" && phase !== "close")) return;
+  const patch = phase === "open" && payload.room_replies
+    ? { enabled: true, reply_mode: "all", mention_mode: "author", max_replies_per_hour: 40, mute_until: null }
+    : { reply_mode: "off" };
+  await client.from("whatsapp_channel_targets").update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", targetId).eq("whatsapp_instance_id", context.instance.id);
 }
 
 async function sendGroupWindowPayload(
@@ -4613,9 +4633,11 @@ function buildGroupWindowPayload(input: {
   announce: boolean | null;
   text: string;
   mentions?: string;
+  roomReplies?: boolean;
 }) {
   return cleanPayload({
     type: "group_announce_mode",
+    room_replies: input.roomReplies,
     phase: input.phase,
     target_id: input.targetId,
     target_jid: input.targetJid,

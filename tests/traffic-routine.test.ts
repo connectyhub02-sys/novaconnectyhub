@@ -7,13 +7,15 @@ type Routine = typeof import("../src/lib/whatsapp/traffic-routine");
 const routineRow = (extra: Record<string, unknown> = {}) => ({
   id: "r1", organization_id: "org", agent_id: "agent", enabled: true, post_status: true, target_ids: ["g1"], product_mode: "featured",
   catalog_item_ids: [], idea: "Frete grátis", intensity: "normal", start_hour: 9, lead_status_view: false, lead_status_react: false,
-  lead_status_comment: false, planned_until: null, last_run_at: null, last_error: null, ...extra,
+  lead_status_comment: false, planned_until: null, last_run_at: null, last_error: null, post_format: "auto",
+  room_enabled: false, room_target_ids: [], room_open_hour: 19, room_close_hour: 20, room_days: [0, 1, 2, 3, 4, 5, 6], room_replies: true, room_planned_until: null, ...extra,
 });
 
 function setup(options: { connected?: boolean } = {}) {
   const db = commerceDatabase({
     whatsapp_traffic_routines: [routineRow()],
-    whatsapp_channel_targets: [{ id: "g1", target_type: "group", campaign_enabled: true, whatsapp_instance_id: "inst" }],
+    whatsapp_channel_targets: [{ id: "g1", target_type: "group", campaign_enabled: true, whatsapp_instance_id: "inst", is_admin: true, display_name: "Elite", organization_id: "org" },
+      { id: "g9", target_type: "group", campaign_enabled: true, whatsapp_instance_id: "inst", is_admin: false, display_name: "Pedidos", organization_id: "org" }],
     intelligence_memory: [
       { id: "p1", scope: "organization", memory_type: "sales_catalog_item", organization_id: "org", metadata: { status: "active" }, updated_at: "2" },
       { id: "p2", scope: "organization", memory_type: "sales_catalog_item", organization_id: "org", metadata: { status: "active", store_featured: true }, updated_at: "1" },
@@ -22,6 +24,8 @@ function setup(options: { connected?: boolean } = {}) {
     content_pipeline_items: [],
   });
   const plans: Array<Record<string, unknown>> = [];
+  const windows: Array<Record<string, unknown>> = [];
+  const queuedPlans: Array<Record<string, unknown>> = [];
   let queuedId = 0;
   const channel = {
     resolveClientWhatsappOperationalContext: async () => ({ instance: { id: "inst", status: options.connected === false ? "disconnected" : "connected" },
@@ -32,7 +36,14 @@ function setup(options: { connected?: boolean } = {}) {
       plans.push(input);
       return { modelId: "gemini", systemInstruction: "s", prompt: "p", responseData: {}, items: [{ text: "post" }, { text: "post 2" }] };
     },
-    queueWhatsappGrowthCampaignPlan: async () => {
+    queueWhatsappGroupWindow: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => {
+      windows.push(input);
+      const items = ["open", "close"].map(phase => ({ id: `room-${input.targetId}-${phase}` }));
+      for (const item of items) db.tables.content_pipeline_items.push({ id: item.id, organization_id: "org", status: "scheduled", tags: ["whatsapp"] });
+      return { items };
+    },
+    queueWhatsappGrowthCampaignPlan: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => {
+      queuedPlans.push(input);
       const items = [++queuedId, ++queuedId].map(n => ({ id: `item-${n}` }));
       for (const item of items) db.tables.content_pipeline_items.push({ id: item.id, organization_id: "org", status: "scheduled", tags: ["whatsapp"], scheduled_for: `2026-09-27T1${item.id.at(-1)}:00:00Z` });
       return { count: items.length, items };
@@ -44,7 +55,7 @@ function setup(options: { connected?: boolean } = {}) {
     "@/lib/billing/gemini-metering": { meterGeminiGenerationUsage: meter },
     "@/lib/billing/trial": { assertBillableAccess: async () => null },
   });
-  return { db, routine, plans, meter, channel };
+  return { db, routine, plans, meter, channel, windows, queuedPlans };
 }
 
 describe("next day of the traffic routine", () => {
@@ -110,5 +121,51 @@ describe("two numbers", () => {
     expect(copied.target_ids).toContain("g2");
     expect(copied.target_ids).not.toContain("g3");
     expect(copied.enabled).not.toBe(true);
+  });
+});
+
+describe("question room in groups", () => {
+  it("opens on the next chosen weekday at the owner's hour", async () => {
+    const { routine } = setup();
+    // Saturday 26/09/2026 20:30 BRT: today's room is over; Sunday is off, so Monday 19h.
+    const window = routine.nextRoomWindow(new Date("2026-09-26T23:30:00Z"), { room_open_hour: 19, room_close_hour: 20, room_days: [1, 2, 3, 4, 5], room_planned_until: null });
+    expect(window?.open.toISOString()).toBe("2026-09-28T22:00:00.000Z");
+    expect(window?.close.toISOString()).toBe("2026-09-28T23:00:00.000Z");
+  });
+
+  it("schedules the opening with answers on, skips groups where the number is not admin and warns about them", async () => {
+    const { db, routine, windows, plans } = setup();
+    const row = routineRow({ enabled: false, room_enabled: true, room_target_ids: ["g1", "g9"] });
+    db.tables.whatsapp_traffic_routines[0] = row;
+    const result = await routine.runTrafficRoutine(db.client as never, row as never, new Date("2026-09-27T12:00:00Z"));
+    expect(plans).toHaveLength(0);
+    expect(windows).toHaveLength(1);
+    expect(windows[0]).toMatchObject({ targetId: "g1", roomReplies: true, preCloseMinutes: 10, openScheduledFor: "2026-09-27T22:00:00.000Z" });
+    expect(String(windows[0].closingText)).toContain("Abro de novo");
+    expect(result).toMatchObject({ roomWarning: expect.stringContaining("Pedidos") });
+    expect(db.tables.content_pipeline_items.every(item => (item.tags as string[]).includes("group_room:r1"))).toBe(true);
+    expect(db.tables.whatsapp_traffic_routines[0].room_planned_until).toBe("2026-09-27T23:00:00.000Z");
+  });
+
+  it("turning the room off cancels the openings and stops answering in those groups", async () => {
+    const { db, routine } = setup();
+    const row = routineRow({ enabled: false, room_enabled: true, room_target_ids: ["g1"] });
+    db.tables.whatsapp_traffic_routines[0] = row;
+    await routine.runTrafficRoutine(db.client as never, row as never, new Date("2026-09-27T12:00:00Z"));
+    db.tables.whatsapp_channel_targets[0].reply_mode = "all";
+    await routine.saveTrafficRoutine(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { room_enabled: false } });
+    expect(db.tables.content_pipeline_items.every(item => item.status === "archived")).toBe(true);
+    expect(db.tables.whatsapp_channel_targets[0].reply_mode).toBe("off");
+  });
+});
+
+describe("product with button and audio", () => {
+  it("asks for audio posts about one product each, with the product's button", async () => {
+    const { db, routine, plans, queuedPlans } = setup();
+    const row = routineRow({ post_status: false, post_format: "product_audio" });
+    await routine.runTrafficRoutine(db.client as never, row as never, new Date("2026-09-27T10:00:00Z"));
+    expect(plans[0]).toMatchObject({ preferredFormats: ["text_audio"], brief: expect.stringContaining("UM produto") });
+    expect(queuedPlans[0]).toMatchObject({ buttonEnabled: true, buttonLabel: "Ver produto" });
+    expect((queuedPlans[0].planItems as Array<{ productIds: string[] }>).every(item => item.productIds.length === 1)).toBe(true);
   });
 });
