@@ -8,6 +8,7 @@ import {
 import { loadAutomationPolicy } from "@/lib/automations/dispatch";
 import { loadRecoveryDiscountPercent } from "@/lib/automations/recovery-discount";
 import { loadBirthdayGift } from "@/lib/automations/birthday-gift";
+import { loadFollowUpResults } from "@/lib/automations/follow-up-results";
 import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
 
 export const runtime = "nodejs";
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ policy, activity: activity.data,
       recoveryDiscountPercent: await loadRecoveryDiscountPercent(client, organizationId),
       birthdayGift: await loadBirthdayGift(client, organizationId).catch(() => null),
-      giftProducts: catalog.filter(product => product.status === "active").map(product => ({ id: product.id, title: product.title })) });
+      giftProducts: catalog.filter(product => product.status === "active").map(product => ({ id: product.id, title: product.title })),
+      results: await loadFollowUpResults(client, organizationId).catch(() => null) });
   } catch (error) {
     return NextResponse.json(
       {

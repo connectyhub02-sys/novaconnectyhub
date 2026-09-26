@@ -9,6 +9,13 @@ type Policy = {
   timezone: string;
   returns_enabled?: boolean;
 };
+type Results = {
+  days: number;
+  revenue: number;
+  sales: number;
+  rows: Array<{ kind: string; label: string; sent: number; replied: number; sales: number; revenue: number }>;
+};
+const brl = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 type Activity = {
   id: string;
   journey: string;
@@ -63,6 +70,7 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
     [end, setEnd] = useState("20:00"),
     [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [discount, setDiscount] = useState("");
+  const [results, setResults] = useState<Results | null>(null);
   const [giftKind, setGiftKind] = useState("none"),
     [giftPercent, setGiftPercent] = useState("10"),
     [giftProductId, setGiftProductId] = useState(""),
@@ -86,6 +94,7 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
             setTimezone(data.policy.timezone);
           }
           setActivity(data.activity);
+          setResults(data.results ?? null);
           setDiscount(data.recoveryDiscountPercent == null ? "" : String(data.recoveryDiscountPercent));
           setGiftProducts(data.giftProducts ?? []);
           setGiftKind(data.birthdayGift?.kind ?? "none");
@@ -432,6 +441,40 @@ export function IntelligentFollowUpPanel({ companyId }: { companyId: string }) {
               Tentar novamente
             </button>
           </p>
+        )}
+      </Panel>
+      <Panel title="Resultados do follow-up" collapsible tone="cyan">
+        {!results || !results.rows.length ? (
+          <p className="text-sm text-slate-500">
+            Assim que os follow-ups começarem a sair, aqui aparecem as mensagens enviadas, quem respondeu e as vendas que vieram depois.
+          </p>
+        ) : (
+          <div className="space-y-3 text-sm">
+            <p className="text-slate-600">
+              Últimos {results.days} dias: <strong className="text-slate-900">{brl(results.revenue)}</strong> em {results.sales} venda(s) depois de um follow-up.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left">
+                <thead className="text-xs uppercase text-slate-500">
+                  <tr><th className="py-2">Tipo</th><th>Enviados</th><th>Responderam</th><th>Vendas</th><th>Valor</th></tr>
+                </thead>
+                <tbody>
+                  {results.rows.map((row) => (
+                    <tr key={row.kind} className="border-t border-slate-100">
+                      <td className="py-2 font-medium text-slate-800">{row.label}</td>
+                      <td>{row.sent}</td>
+                      <td>{row.replied}{row.sent ? ` (${Math.round((row.replied / row.sent) * 100)}%)` : ""}</td>
+                      <td>{row.sales}</td>
+                      <td>{brl(row.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500">
+              Resposta: o cliente escreveu em até 48 h. Venda: pedido pago em até 7 dias depois do último follow-up (o pagamento pendente conta no próprio pedido).
+            </p>
+          </div>
         )}
       </Panel>
       <Panel
