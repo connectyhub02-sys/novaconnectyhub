@@ -104,7 +104,7 @@ describe("explicit company activation", () => {
     const f = fixture(); f.tables.agent_registry = [{ organization_id: "company", metadata: { builder: {} } }];
     const defaults = serverModuleHarness<typeof import("../src/lib/sales-catalog/activity-defaults")>("src/lib/sales-catalog/activity-defaults.ts", {
       "@/lib/automations/agenda-activation": activation,
-      "@/lib/whatsapp/activity-profile": { activityDefaultDestination: () => "appointment" },
+      "@/lib/whatsapp/activity-profile": { activityDefaultDestination: () => "appointment", activityDeliveryProfile: () => "nenhum", activityLabel: () => "Imobiliária" },
       "@/lib/whatsapp/agent-prompt-templates": { promptBuilderMetadataKey: "builder", normalizeAgentPromptBuilderConfig: () => ({ templateId: "real_estate" }) },
     });
     expect(await defaults.loadCatalogActivityDefaults(f.client as never, "company")).toMatchObject({ destination: "manual_handoff" });

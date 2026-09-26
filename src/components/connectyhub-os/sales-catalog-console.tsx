@@ -818,13 +818,15 @@ export function SalesCatalogConsole({
   const [foodComposition, setFoodComposition] = useState(defaultFoodComposition());
   const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
   const [suggestedDestination, setSuggestedDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
+  const [applyingDestination, setApplyingDestination] = useState(false);
+  const [catalogActivity, setCatalogActivity] = useState<{ label: string | null; delivery: "brasil" | "regiao" | "nenhum" | "livre" }>({ label: null, delivery: "livre" });
   const agendaActivation = useAgendaActivation(selectedCompanyId);
   const actionEdited = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/dashboard/sales-catalog/activity?companyId=${encodeURIComponent(selectedCompanyId)}`, { signal: controller.signal })
       .then(async response => { if (!response.ok) return null; return response.json(); })
-      .then(data => { if (!controller.signal.aborted && data?.destination) { setSuggestedDestination(data.destination); if (!actionEdited.current) setSalesDestination(data.destination); } })
+      .then(data => { if (!controller.signal.aborted && data?.destination) { setCatalogActivity({ label: data.activityLabel ?? null, delivery: data.delivery ?? "livre" }); setSuggestedDestination(data.destination); if (!actionEdited.current) setSalesDestination(data.destination); } })
       .catch(() => {});
     return () => controller.abort();
   }, [selectedCompanyId]);
@@ -2269,6 +2271,18 @@ export function SalesCatalogConsole({
     setOrderSkuId(item?.skus.find((sku) => sku.status === "active")?.id ?? "");
     setOrderTotal(item?.offer.salePrice ?? item?.price ?? "");
     setOrderFulfillmentStatus(item?.fulfillment.schedulingRequired ? "scheduled" : "pending");
+  }
+
+  async function applyDestinationToAll() {
+    setApplyingDestination(true);
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "apply_destination_to_all", companyId: selectedCompanyId, destination: suggestedDestination }) });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) { setNotice({ tone: "error", message: data?.error ?? "Não foi possível aplicar a ação." }); return; }
+      applyUpdatedItems(data?.items);
+      setNotice({ tone: "success", message: `Ação aplicada a ${data?.items?.length ?? 0} produto(s)${data?.skipped ? `; ${data.skipped} com site externo ou montagem ficaram como estavam` : ""}.` });
+    } finally { setApplyingDestination(false); }
   }
 
   function applyUpdatedItems(updatedItems?: ClientSalesCatalogItem[]) {
@@ -4175,23 +4189,47 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  Frete por entrega
-                  <HelpHint title="Frete por entrega">Ative quando a loja entregar pedidos por CEP com regras de estado, valor e prazo.</HelpHint>
-                </span>
-                <input
-                  checked={shippingDraft.shippingEnabled}
-                  type="checkbox"
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setShippingDraft((current) => ({ ...current, shippingEnabled: checked }));
-                    if (!checked) {
-                      setQuoteResult(null);
-                    }
-                  }}
-                />
-              </label>
+              <div className="rounded-lg border p-3 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                <p className="flex items-center gap-1.5 font-semibold text-slate-200">
+                  Onde você entrega?
+                  <HelpHint title="Onde você entrega">Brasil usa frete por estado e CEP. Região usa taxa de entrega por bairro, raio ou mapa. O agente fala &quot;frete&quot; ou &quot;taxa de entrega&quot; conforme a escolha.</HelpHint>
+                </p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {([
+                    ["brasil", "Para todo o Brasil", "Frete por estado e CEP"],
+                    ["regiao", "Na minha região", "Taxa de entrega por bairro ou raio"],
+                    ["ambos", "Os dois", "Região com taxa e o resto do Brasil com frete"],
+                    ["nenhum", "Não entrego", "Só retirada, serviço ou produto digital"],
+                  ] as const).map(([mode, label, hint]) => {
+                    const current = shippingDraft.shippingEnabled && shippingDraft.localDeliveryEnabled ? "ambos"
+                      : shippingDraft.shippingEnabled ? "brasil" : shippingDraft.localDeliveryEnabled ? "regiao" : "nenhum";
+                    const recommended = catalogActivity.delivery === mode;
+                    return (
+                      <label key={mode} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 ${current === mode ? "border-cyan-300 bg-cyan-300/10" : ""}`} style={current === mode ? undefined : { borderColor: "var(--ch-border)" }}>
+                        <input
+                          type="radio"
+                          name="delivery-mode"
+                          checked={current === mode}
+                          onChange={() => {
+                            const shipping = mode === "brasil" || mode === "ambos";
+                            const local = mode === "regiao" || mode === "ambos";
+                            setShippingDraft((draft) => ({ ...draft, shippingEnabled: shipping }));
+                            if (!shipping) setQuoteResult(null);
+                            if (local !== shippingDraft.localDeliveryEnabled) setLocalDeliveryEnabled(local);
+                          }}
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-200">{label}{recommended ? <span className="ml-1.5 rounded bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">Recomendado</span> : null}</span>
+                          <span className="block text-slate-500">{hint}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {catalogActivity.label && catalogActivity.delivery === "nenhum" ? (
+                  <p className="mt-2 text-slate-500">Para {catalogActivity.label.toLocaleLowerCase("pt-BR")} normalmente não há entrega de produto. Deixe &quot;Não entrego&quot; e o agente não fala de frete.</p>
+                ) : null}
+              </div>
 
               {shippingDraft.shippingEnabled ? (
                 <>
@@ -4240,18 +4278,6 @@ export function SalesCatalogConsole({
                   <p className="mt-1 text-[12px] leading-5 text-slate-500">O agente nao vai pedir CEP nem oferecer entrega automatica.</p>
                 </div>
               )}
-
-              <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  Entrega local
-                  <HelpHint title="Entrega local">Ative para lojas que entregam por bairro, raio ou area desenhada no mapa.</HelpHint>
-                </span>
-                <input
-                  checked={shippingDraft.localDeliveryEnabled}
-                  type="checkbox"
-                  onChange={(event) => setLocalDeliveryEnabled(event.target.checked)}
-                />
-              </label>
 
               {shippingDraft.localDeliveryEnabled ? (
                 <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -6092,6 +6118,18 @@ export function SalesCatalogConsole({
         </div>
 
         <Panel className={activeTab === "products" ? "order-3" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact collapsible defaultOpen={activeTab !== "products"}>
+          {(() => {
+            const different = visibleItems.filter(item => item.salesDestination !== suggestedDestination && item.salesDestination !== "external_site").length;
+            if (!catalogActivity.label || !different || suggestedDestination === "external_site") return null;
+            return (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-300/40 bg-cyan-300/10 px-3 py-2 text-[12px] text-slate-200">
+                <span>Sua atividade é {catalogActivity.label.toLocaleLowerCase("pt-BR")}: novos produtos usam &quot;{({ connectyhub_checkout: "Vender no checkout", appointment: "Agendamento", manual_handoff: "Solicitar atendimento" } as Record<string, string>)[suggestedDestination] ?? formatSalesCatalogSalesDestination(suggestedDestination)}&quot;. {different} {different === 1 ? "produto usa" : "produtos usam"} outra ação.</span>
+                <button type="button" disabled={applyingDestination} onClick={() => void applyDestinationToAll()} className="rounded-lg border border-cyan-300 px-3 py-1.5 font-semibold text-cyan-200 disabled:opacity-50">
+                  {applyingDestination ? "Aplicando..." : "Aplicar a todos"}
+                </button>
+              </div>
+            );
+          })()}
           {visibleItems.length > 0 ? (
             <div className="grid gap-3 xl:grid-cols-2">
               {visibleItems.map((item) => (

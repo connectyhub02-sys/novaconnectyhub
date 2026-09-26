@@ -10,6 +10,15 @@ const retailActivities = new Set<AgentActivityId>(["generic_sales", "pizzaria_de
 export function activityDefaultDestination(id: AgentActivityId) {
   return retailActivities.has(id) ? "connectyhub_checkout" as const : "appointment" as const;
 }
+const nationalDelivery = new Set<AgentActivityId>(["moda_varejo", "ecommerce", "autopecas", "loja_suplementos", "academia_suplementos"]);
+const regionalDelivery = new Set<AgentActivityId>(["pizzaria_delivery", "restaurante_lanchonete", "farmacia"]);
+/** How the activity usually delivers, used to recommend the delivery choice and hide what does not apply. */
+export function activityDeliveryProfile(id: AgentActivityId): "brasil" | "regiao" | "nenhum" | "livre" {
+  if (nationalDelivery.has(id)) return "brasil";
+  if (regionalDelivery.has(id)) return "regiao";
+  return id === "generic_sales" ? "livre" : "nenhum";
+}
+export function activityLabel(id: AgentActivityId) { return activityPresets[id]?.label ?? null; }
 export function activityAppointmentLabel(id: AgentActivityId) {
   if (id === "corretor_imoveis" || id === "imobiliaria") return "Agendar visita";
   if (id === "revenda_veiculos") return "Agendar test-drive";

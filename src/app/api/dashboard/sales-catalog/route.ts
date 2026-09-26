@@ -2,6 +2,7 @@ import { readFoodComposition, validateFoodComposition } from "@/lib/sales-catalo
 import { readOperationHours, validateOperationHours } from "@/lib/sales-catalog/operation-hours";
 import { deliveryMoneyCents } from "@/lib/sales-catalog/local-delivery";
 import { validateProductAgenda } from "@/lib/sales-catalog/appointment-policy";
+import { applyDestinationToAllProducts, isBulkDestination } from "@/lib/sales-catalog/bulk-destination";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
@@ -683,6 +684,20 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       client,
     });
     await assertSalesCatalogJsonActionAccess({ action, organizationId: company.id, client });
+
+    if (action === "apply_destination_to_all") {
+      const destination = body?.destination;
+      if (!isBulkDestination(destination)) return NextResponse.json({ error: "Escolha uma ação válida." }, { status: 422 });
+      const result = await applyDestinationToAllProducts(client, { organizationId: company.id, destination, userId: workspace.user.id })
+        .catch((error: unknown) => ({ error: error instanceof Error ? error.message : "Não foi possível aplicar a ação." }));
+      if ("error" in result) return NextResponse.json({ error: result.error }, { status: 422 });
+      const { data: rows } = result.updatedIds.length
+        ? await client.from("intelligence_memory").select("id, organization_id, title, content, metadata, created_at, updated_at").in("id", result.updatedIds)
+        : { data: [] };
+      revalidatePath("/dashboard/whatsapp");
+      revalidatePath(`/loja/${company.slug ?? company.id}`);
+      return NextResponse.json({ items: (rows ?? []).map(row => mapSalesCatalogItem(row as never)), skipped: result.skipped });
+    }
 
     if (action === "cleanup_archived_product_media") {
       const result = await cleanupArchivedSalesCatalogProductMedia({
