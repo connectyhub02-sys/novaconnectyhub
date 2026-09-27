@@ -15698,7 +15698,28 @@ async function sendSalesCatalogMediaAttachments(input: {
       await sleep(delayMs);
     }
 
-    const providerResponse = await callUazapi(input.context.credentials, "/send/media", {
+    const groupMention = resolveGroupMentions(input.context, findLatestInbound(input.context.messages));
+    const productUrl = isWhatsappGroupChatContext(input.context) && media.kind === "image" ? resolveGroupProductButtonUrl(input.context, item) : null;
+    // In a group every product goes with its "Ver produto" button: anyone in the group can open it.
+    const buttonResponse = productUrl
+      ? await callUazapi(input.context.credentials, "/send/menu", {
+        method: "POST",
+        token: input.token,
+        timeoutMs: outboundTextDeliveryTimeoutMs,
+        body: {
+          number: input.phone,
+          type: "button",
+          text: withGroupMentionPrefix(caption, groupMention, input.phone),
+          imageButton: media.storageUrl,
+          choices: [`Ver produto|${productUrl}`],
+          footerText: input.context.organization.name.slice(0, 60),
+          ...(groupMention ? { mentions: groupMention } : {}),
+          track_source: "connectyhub",
+          track_id: `agent_catalog_${input.context.run.id}_${chunkIndex}`,
+        },
+      }).catch(() => null)
+      : null;
+    const providerResponse = buttonResponse ?? await callUazapi(input.context.credentials, "/send/media", {
       method: "POST",
       token: input.token,
       timeoutMs: outboundTextDeliveryTimeoutMs,
@@ -15706,8 +15727,8 @@ async function sendSalesCatalogMediaAttachments(input: {
         number: input.phone,
         type: media.kind,
         file: media.storageUrl,
-        text: caption,
-        ...(resolveGroupMentions(input.context) ? { mentions: resolveGroupMentions(input.context) } : {}),
+        text: withGroupMentionPrefix(caption, groupMention, input.phone),
+        ...(groupMention ? { mentions: groupMention } : {}),
         track_source: "connectyhub",
         track_id: `agent_catalog_${input.context.run.id}_${chunkIndex}`,
       },
@@ -15718,6 +15739,7 @@ async function sendSalesCatalogMediaAttachments(input: {
       providerResponse,
       chunkIndex,
       chunksTotal,
+      ...(buttonResponse ? { interactiveButton: true } : {}),
     };
 
     await saveOutboundMessage(input.client, input.context, message);
@@ -15751,6 +15773,19 @@ async function sendSalesCatalogMediaAttachments(input: {
   }
 
   return outbound;
+}
+
+/** Where the group's "Ver produto" button leads: the external site, or the product page with origin tracking. */
+function resolveGroupProductButtonUrl(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, item: RuntimeSalesCatalogItem) {
+  if (item.salesDestination === "external_site") return item.productUrl && /^https?:\/\//.test(item.productUrl) ? item.productUrl : null;
+  return buildLeadAwareSalesCatalogProductUrl({ productId: item.id, organizationId: context.organization.id, conversationId: context.conversationId, agentId: context.agent.id });
+}
+
+/** A group mention only shows (and notifies someone who silenced the group) with "@number" in the text. */
+function withGroupMentionPrefix(text: string, mentions: string | undefined, destination: string) {
+  if (!mentions || mentions === "all" || !destination.endsWith("@g.us")) return text;
+  const missing = mentions.split(",").map(value => value.trim()).filter(value => value && !text.includes(`@${value}`));
+  return missing.length ? `${missing.map(value => `@${value}`).join(" ")} ${text}` : text;
 }
 
 function buildSalesCatalogMediaCaption(item: RuntimeSalesCatalogItem, media: SalesCatalogMedia) {
@@ -16576,7 +16611,7 @@ async function sendWhatsappText(input: {
 }) {
   const normalized = normalizeOutboundLanguageText(input.text);
   // Last guard: a group never receives a request for personal or payment data.
-  const text = input.phone.endsWith("@g.us") && asksForPersonalData(normalized) ? groupPrivateRedirectText : normalized;
+  const text = withGroupMentionPrefix(input.phone.endsWith("@g.us") && asksForPersonalData(normalized) ? groupPrivateRedirectText : normalized, input.mentions, input.phone);
 
   return callUazapi(input.credentials, "/send/text", {
     method: "POST",
@@ -16608,7 +16643,7 @@ async function sendWhatsappInteractiveButtons(input: {
   mentions?: string;
   urlChoiceFormat?: "plain" | "prefixed";
 }) {
-  const text = normalizeOutboundLanguageText(input.text);
+  const text = withGroupMentionPrefix(normalizeOutboundLanguageText(input.text), input.mentions, input.phone);
   const urlChoiceFormat = input.urlChoiceFormat ?? "plain";
   const requestBody = {
     number: input.phone,

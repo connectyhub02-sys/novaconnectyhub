@@ -38,4 +38,11 @@ describe("group conversations, one participant at a time", () => {
     const targets = await call<Promise<Array<{ id: string } | null>>>("resolveOutboundReplyTargets", {}, context, ["Para emagrecer...", "Outra opção..."]);
     expect(targets.map(target => target?.id ?? null)).toEqual(["a1", null]);
   });
+  it("tags the person in the group text so a silenced group still notifies them", () => {
+    const call = runtimeHarness();
+    expect(call("withGroupMentionPrefix", "Para emagrecer...", "554788577996", "120363404228732400@g.us")).toBe("@554788577996 Para emagrecer...");
+    expect(call("withGroupMentionPrefix", "@554788577996 já marcado", "554788577996", "120363404228732400@g.us")).toBe("@554788577996 já marcado");
+    expect(call("withGroupMentionPrefix", "Privado", "554788577996", "554788577996")).toBe("Privado");
+    expect(call("withGroupMentionPrefix", "Todos", "all", "120363404228732400@g.us")).toBe("Todos");
+  });
 });
