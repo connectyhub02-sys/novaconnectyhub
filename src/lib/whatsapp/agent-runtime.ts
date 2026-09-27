@@ -1335,6 +1335,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
   const conversationId = asString(metadata?.conversationId);
   const leadId = asString(metadata?.leadId);
   const whatsappInstanceId = asString(metadata?.whatsappInstanceId);
+  const groupSender = metadata?.isGroupChat === true ? asString(metadata?.groupSender) : null;
 
   if (!conversationId || !whatsappInstanceId) {
     throw new Error("Execucao WhatsApp sem conversa ou instancia.");
@@ -1347,7 +1348,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     loadGlobalAgent(client, run.organization_id),
     leadId ? loadLead(client, leadId) : Promise.resolve(null),
     loadConversationMetadata(client, conversationId),
-    loadConversationMessages(client, conversationId, whatsappInstanceId),
+    loadConversationMessages(client, conversationId, whatsappInstanceId).then(rows => groupSender ? sliceGroupThread(rows, groupSender) : rows),
     loadUazapiCredentials(client),
     loadGeminiCredentials(client),
   ]);
@@ -1450,6 +1451,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     agent,
     globalAgent,
     lead,
+    groupSender,
     conversationId,
     conversationMetadata: conversation,
     messages,
@@ -1551,12 +1553,15 @@ async function loadRecentInboundMessagesForDelay(client: SupabaseClient, convers
   return (data ?? []) as ConversationMessageRow[];
 }
 
-async function loadLatestInboundMessage(client: SupabaseClient, conversationId: string) {
-  const { data, error } = await client
+async function loadLatestInboundMessage(client: SupabaseClient, conversationId: string, groupSender?: string | null) {
+  let query = client
     .from("conversation_messages")
     .select("id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
     .eq("conversation_id", conversationId)
-    .eq("direction", "inbound")
+    .eq("direction", "inbound");
+  // In a group only the same participant writing again makes this reply outdated.
+  if (groupSender) query = query.eq("payload->message->>sender_pn", groupSender);
+  const { data, error } = await query
     .order("occurred_at", { ascending: false })
     .limit(1)
     .maybeSingle<ConversationMessageRow>();
@@ -1574,7 +1579,7 @@ async function assertRunStillTargetsLatestInbound(
   activeInbound: ConversationMessageRow | null,
 ) {
   await outboundBillingScope.getStore()?.assertAttendance?.();
-  const latestInbound = await loadLatestInboundMessage(client, context.conversationId);
+  const latestInbound = await loadLatestInboundMessage(client, context.conversationId, context.groupSender);
 
   if (activeInbound && !latestInbound) {
     throw new StaleWhatsappRunError(null);
@@ -1857,6 +1862,32 @@ async function loadConversationMetadata(client: SupabaseClient, conversationId: 
     .maybeSingle<{ metadata: JsonRecord | null }>();
 
   return readRecord(data?.metadata);
+}
+
+/** Who wrote a group message (real number), as the provider sends it. */
+export function readGroupSender(payload: unknown) {
+  const record = readRecord(payload);
+  const message = readRecord(record?.message);
+  const value = asString(message?.sender_pn) ?? asString(record?.sender_pn);
+  return value && /@s\.whatsapp\.net$/.test(value) ? value : null;
+}
+
+/**
+ * A group conversation seen from one participant: only their messages and the agent's replies that came
+ * right after them, so the answer goes to the right person and never mixes other people's questions.
+ */
+export function sliceGroupThread<T extends { direction: string; payload: unknown }>(messages: T[], sender: string) {
+  const thread: T[] = [];
+  let following = false;
+  for (const message of messages) {
+    if (message.direction === "inbound") {
+      following = readGroupSender(message.payload) === sender;
+      if (following) thread.push(message);
+    } else if (following) {
+      thread.push(message);
+    }
+  }
+  return thread;
 }
 
 async function loadConversationMessages(client: SupabaseClient, conversationId: string, whatsappInstanceId: string) {
@@ -16371,6 +16402,9 @@ function resolveGroupAuthorMention(message?: ConversationMessageRow | null) {
 
   const providerMessage = readProviderMessageRecord(message);
   const candidates = [
+    // The real number first: "sender" can be a hidden id (lid) that is not a phone.
+    asString(providerMessage?.sender_pn),
+    asString(providerMessage?.participant_pn),
     asString(providerMessage?.participant),
     asString(providerMessage?.participantId),
     asString(providerMessage?.participant_id),
@@ -16385,6 +16419,7 @@ function resolveGroupAuthorMention(message?: ConversationMessageRow | null) {
   ];
 
   for (const candidate of candidates) {
+    if (candidate?.endsWith("@lid")) continue;
     const phone = normalizePhone(candidate);
     if (phone) return phone;
   }

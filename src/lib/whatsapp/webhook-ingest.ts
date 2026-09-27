@@ -1209,13 +1209,15 @@ export async function enqueueWhatsappAgentRun(
 
   const messageGroupingSeconds = Math.max(behavior.timingTextBurstSeconds, 5);
   const groupingCutoff = new Date(Date.now() - messageGroupingSeconds * 1000).toISOString();
+  // In a group each participant gets their own reply: messages are only grouped with the same person's.
+  const groupSender = isGroupChat ? readGroupMessageSender(input.senderPayload) : null;
   const { data: recentRun } = await client
     .from("agent_runs")
     .select("id")
     .eq("agent_id", agent.id)
     .eq("trigger_source", "connectyhub/whatsapp.message.received")
     .eq("run_status", "queued")
-    .contains("metadata", { conversationId: input.conversationId })
+    .contains("metadata", groupSender ? { conversationId: input.conversationId, groupSender } : { conversationId: input.conversationId })
     .gte("created_at", groupingCutoff)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -1234,6 +1236,7 @@ export async function enqueueWhatsappAgentRun(
           providerMessageId: input.providerMessageId,
           providerChatId: input.providerChatId,
           isGroupChat,
+          groupSender,
           chatKind: isGroupChat ? "group" : "direct",
           ...groupTargetMetadata,
           phoneNumber: input.phoneNumber,
@@ -1294,6 +1297,7 @@ export async function enqueueWhatsappAgentRun(
         providerMessageId: input.providerMessageId,
         providerChatId: input.providerChatId,
         isGroupChat,
+        groupSender,
         chatKind: isGroupChat ? "group" : "direct",
         ...groupTargetMetadata,
         phoneNumber: input.phoneNumber,
@@ -2400,4 +2404,10 @@ function findSharedChatId(payload: JsonRecord, messageRecord: JsonRecord) {
     findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid"]),
     chat ? findString(chat, ["wa_chatid", "waChatId"]) : null,
   ].find(isSharedChatId) ?? null;
+}
+
+function readGroupMessageSender(payload: unknown) {
+  const message = isRecord(payload) && isRecord(payload.message) ? payload.message : null;
+  const value = message && typeof message.sender_pn === "string" ? message.sender_pn : null;
+  return value && value.endsWith("@s.whatsapp.net") ? value : null;
 }
