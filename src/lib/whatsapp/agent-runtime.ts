@@ -15769,7 +15769,7 @@ async function resolveOutboundReplyTargets(
 
   // In a group every answer quotes the question it answers, whatever the quote setting, so a busy group
   // stays readable: several questions in a row are matched one by one, otherwise the first block quotes.
-  if (latestInbound?.provider_message_id && isWhatsappGroupChatContext(context)) {
+  if (latestInbound?.provider_message_id && (readRecord(context.run?.metadata)?.isGroupChat === true || isWhatsappGroupChatId(context.providerChatId))) {
     const groupCandidates = getRecentInboundCluster(context.messages).filter((message) => message.provider_message_id);
     const matched = groupCandidates.length > 1
       ? await classifySmartReplyTargets({ client, context, candidates: groupCandidates, chunks }).catch(() => null) ?? inferSmartReplyTargets(groupCandidates, chunks)
