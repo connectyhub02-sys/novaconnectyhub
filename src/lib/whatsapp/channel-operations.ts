@@ -4639,12 +4639,17 @@ function normalizeProviderTargetItem(value: unknown, type: WhatsappTargetType) {
       && (Array.isArray(item) || typeof item === "number" || typeof item === "string");
   });
 
+  // Channels keep name, description and subscribers under thread_metadata, each as { text }.
+  const thread = readRecord(record.thread_metadata) ?? readRecord(record.threadMetadata);
+  const threadText = (key: string) => asString(readRecord(thread?.[key])?.text) ?? asString(thread?.[key]);
+  const viewerRole = asString(readRecord(record.viewer_metadata)?.role);
+
   return {
     jid: normalizedJid,
-    name: findString(record, ["name", "subject", "title", "displayName", "display_name"]) ?? normalizedJid,
-    description: findString(record, ["description", "desc", "about"]),
-    participantCount: readCount(participants),
-    isAdmin: findBoolean(record, ["isAdmin", "is_admin", "IsAdmin", "isSenderAdmin", "isOwner"]),
+    name: threadText("name") ?? findString(record, ["name", "subject", "title", "displayName", "display_name"]) ?? normalizedJid,
+    description: threadText("description") ?? findString(record, ["description", "desc", "about"]),
+    participantCount: readCount(thread?.subscribers_count) ?? readCount(participants),
+    isAdmin: viewerRole ? ["owner", "admin"].includes(viewerRole) : findBoolean(record, ["isAdmin", "is_admin", "IsAdmin", "isSenderAdmin", "isOwner"]),
     isAnnouncement: findBoolean(record, ["announce", "isAnnounce", "is_announcement", "IsAnnounce", "isReadOnly", "readOnly"]),
     raw: record,
   };
