@@ -1224,7 +1224,7 @@ async function processWhatsappAgentRunWithScope(input: {
     extractNegotiationState(client, context).catch(() => {});
     if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
-    if (isGroupChat && context.groupSender) await inviteGroupParticipant(client, context, userText, outbound.some(message => asksForPersonalData(message.text ?? "")));
+    if (isGroupChat && context.groupSender) await inviteGroupParticipant(client, context, userText, outbound.some(message => asksForPersonalData(message.text ?? "") || message.text === groupPrivateRedirectText));
 
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
@@ -8537,7 +8537,7 @@ async function sendAgentResponse(input: {
     dropRepeatedCatalogMentionLines(renderedCatalog.text, renderedCatalog.items, context.messages), context.salesCatalog.length > 0);
   const budgetOnly = isCommerceBudgetStatement(buildSalesCatalogOrderIntentText(latestInbound, "", context));
   const safeCatalogText = hasCheckoutActionClaim(customerCatalogText) && (!checkoutAllowed || budgetOnly)
-    ? checkoutAllowed
+    ? isWhatsappGroupChatContext(context) ? groupPrivateRedirectText : checkoutAllowed
       ? "Entendi sua faixa de investimento. Que características você procura para eu indicar uma opção adequada?"
       : buildConsultativeCommerceReply(commerceJourney, budgetOnly)
     : customerCatalogText;

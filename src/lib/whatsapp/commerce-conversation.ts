@@ -40,6 +40,8 @@ export function hasCheckoutActionClaim(text: string) {
 
 export function buildConsultativeCommerceReply(journey: ActivityCommerceJourney, budget: boolean) {
   if (journey === "appointment") return budget ? "Entendi sua faixa de investimento. Qual atendimento você está procurando?" : "Podemos consultar os horários disponíveis para esse atendimento. Qual dia você prefere?";
+  // A store never falls into the real-estate wording.
+  if (journey === "checkout") return budget ? "Entendi sua faixa de investimento. Que características você procura para eu indicar uma opção adequada?" : "Qual dessas opções mais te interessou? Te ajudo a escolher.";
   if (budget) return journey === "vehicle"
     ? "Entendi sua faixa de investimento. Que características você procura no veículo?"
     : "Entendi sua faixa de investimento. O que não pode faltar no imóvel que você procura?";
