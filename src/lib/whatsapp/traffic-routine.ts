@@ -5,7 +5,9 @@ import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import {
   enableWhatsappAutomationCapability,
+  findOtherGroupResponder,
   generateWhatsappGrowthCampaignPlan,
+  groupResponderConflictMessage,
   queueWhatsappGroupWindow,
   queueWhatsappGrowthCampaignPlan,
   queueWhatsappStatusBroadcast,
@@ -131,6 +133,9 @@ export async function saveTrafficRoutine(client: SupabaseClient, input: { organi
     const close = changes.room_close_hour ?? before?.room_close_hour ?? 20;
     if (close <= open) throw new Error("O horário de fechar precisa ser depois do de abrir.");
   }
+  const roomWillRun = changes.room_enabled ?? before?.room_enabled ?? false;
+  const roomTargets = changes.room_target_ids ?? before?.room_target_ids ?? [];
+  if (roomWillRun && roomTargets.length) await assertGroupsFreeForRoom(client, input.organizationId, input.agentId, roomTargets);
   const row = {
     organization_id: input.organizationId, agent_id: input.agentId, updated_by: input.userId, updated_at: new Date().toISOString(),
     ...changes,
@@ -142,6 +147,14 @@ export async function saveTrafficRoutine(client: SupabaseClient, input: { organi
   if (routine.room_enabled && routine.room_target_ids.length) await enableCapabilities(client, routine.organization_id, routine.agent_id, { groups: true }, input.userId);
   if (!routine.room_enabled || roomChanged) await closeRoom(client, routine, before?.room_target_ids ?? []);
   return routine;
+}
+
+/** The question room answers in the group, so no other agent of the company may already answer there. */
+async function assertGroupsFreeForRoom(client: SupabaseClient, organizationId: string, agentId: string, targetIds: string[]) {
+  const context = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
+  const { data } = await client.from("whatsapp_channel_targets").select("provider_jid").in("id", targetIds).eq("whatsapp_instance_id", context.instance.id);
+  const conflict = await findOtherGroupResponder(client, { organizationId, instanceId: context.instance.id, groupJids: ((data ?? []) as Array<{ provider_jid: string }>).map(row => row.provider_jid) });
+  if (conflict) throw new Error(groupResponderConflictMessage(conflict));
 }
 
 async function archiveUpcoming(client: SupabaseClient, organizationId: string, tag: string) {

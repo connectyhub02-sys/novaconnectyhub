@@ -15,7 +15,7 @@ const routineRow = (extra: Record<string, unknown> = {}) => ({
   room_planned_until: null, last_run_at: null, last_error: null, ...extra,
 });
 
-function setup(options: { connected?: boolean } = {}) {
+function setup(options: { connected?: boolean; responder?: { groupName: string; agentName: string } | null } = {}) {
   const db = commerceDatabase({
     whatsapp_traffic_campaigns: [campaignRow()],
     whatsapp_traffic_routines: [routineRow()],
@@ -40,6 +40,8 @@ function setup(options: { connected?: boolean } = {}) {
     resolveClientWhatsappOperationalContext: async () => ({ instance: { id: "inst", status: options.connected === false ? "disconnected" : "connected" },
       behavior: { statusBroadcasts: true, campaignBroadcasts: true, newsletterBroadcasts: false, interactiveMessages: true, allowGroupChats: true } }),
     enableWhatsappAutomationCapability: vi.fn(async () => ({})),
+    findOtherGroupResponder: vi.fn(async () => options.responder ?? null),
+    groupResponderConflictMessage: (conflict: { groupName: string; agentName: string }) => `O grupo ${conflict.groupName} já é atendido por ${conflict.agentName}.`,
     updateWhatsappChannelTargetSettings: vi.fn(async () => ({})),
     generateWhatsappGrowthCampaignPlan: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => {
       plans.push(input);
@@ -185,5 +187,22 @@ describe("two numbers", () => {
     const copied = db.tables.whatsapp_traffic_campaigns.find(row => row.agent_id === "agent-2");
     expect(copied).toMatchObject({ name: "Semana do Whey", status: "paused" });
     expect(copied?.target_ids).toContain("g2");
+  });
+});
+
+describe("one agent answers per group", () => {
+  it("blocks the question room when another agent of the company already answers in the group", async () => {
+    const { db, traffic } = setup({ responder: { groupName: "Buffalo Administração", agentName: "Gustavo" } });
+    db.tables.whatsapp_traffic_routines[0].room_enabled = false;
+    await expect(traffic.saveTrafficRoutine(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { room_enabled: true, room_target_ids: ["g1"] } }))
+      .rejects.toThrow("já é atendido por Gustavo");
+    expect(db.tables.whatsapp_traffic_routines[0].room_enabled).toBe(false);
+  });
+
+  it("turns the room on when no other agent answers there", async () => {
+    const { db, traffic } = setup();
+    db.tables.whatsapp_traffic_routines[0].room_enabled = false;
+    const saved = await traffic.saveTrafficRoutine(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { room_enabled: true, room_target_ids: ["g1"] } });
+    expect(saved.room_enabled).toBe(true);
   });
 });

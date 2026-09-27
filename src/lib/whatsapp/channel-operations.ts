@@ -1901,6 +1901,41 @@ function describeAutomationCapability(capability: WhatsappAutomationCapability) 
   return "botoes e enquetes";
 }
 
+/**
+ * Only one agent answers in a group: a second agent of the same company cannot turn on answers or the
+ * question room in a group another agent already answers (posting products there stays free for both).
+ * Returns who holds the group, so the owner knows which agent to release.
+ */
+export async function findOtherGroupResponder(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[] }) {
+  const jids = Array.from(new Set(input.groupJids.filter(jid => jid.endsWith("@g.us"))));
+  if (!jids.length) return null;
+  const { data: others } = await client.from("whatsapp_channel_targets").select("id, provider_jid, display_name, enabled, reply_mode, whatsapp_instance_id")
+    .eq("organization_id", input.organizationId).eq("target_type", "group").in("provider_jid", jids).neq("whatsapp_instance_id", input.instanceId);
+  const rows = (others ?? []) as Array<{ id: string; provider_jid: string; display_name: string | null; enabled: boolean; reply_mode: string; whatsapp_instance_id: string }>;
+  if (!rows.length) return null;
+  const { data: instances } = await client.from("whatsapp_instances").select("id, metadata").in("id", Array.from(new Set(rows.map(row => row.whatsapp_instance_id)))).neq("status", "archived");
+  const agentByInstance = new Map(((instances ?? []) as Array<{ id: string; metadata: JsonRecord | null }>).map(instance => [instance.id, asString(instance.metadata?.agent_id)]));
+  const agentIds = Array.from(new Set(Array.from(agentByInstance.values()).filter((id): id is string => Boolean(id))));
+  const [{ data: rooms }, { data: agents }] = await Promise.all([
+    agentIds.length ? client.from("whatsapp_traffic_routines").select("agent_id, room_target_ids").eq("organization_id", input.organizationId).eq("room_enabled", true).in("agent_id", agentIds) : Promise.resolve({ data: [] }),
+    agentIds.length ? client.from("agent_registry").select("id, name, persona_name").in("id", agentIds) : Promise.resolve({ data: [] }),
+  ]);
+  const roomTargets = new Set(((rooms ?? []) as Array<{ room_target_ids: string[] | null }>).flatMap(room => room.room_target_ids ?? []));
+  const agentName = new Map(((agents ?? []) as Array<{ id: string; name: string; persona_name: string | null }>).map(agent => [agent.id, agent.persona_name?.trim() || agent.name]));
+  for (const row of rows) {
+    const agentId = agentByInstance.get(row.whatsapp_instance_id);
+    if (agentId === undefined) continue;
+    if ((row.enabled && row.reply_mode !== "off") || roomTargets.has(row.id)) {
+      return { groupName: row.display_name ?? "este grupo", agentName: (agentId && agentName.get(agentId)) || "outro agente" };
+    }
+  }
+  return null;
+}
+
+export function groupResponderConflictMessage(conflict: { groupName: string; agentName: string }) {
+  return `O grupo ${conflict.groupName} já é atendido por ${conflict.agentName}. Só um agente responde em cada grupo: desligue a sala de dúvidas ou as respostas de ${conflict.agentName} nesse grupo para liberar. Postar produtos no grupo continua liberado para os dois.`;
+}
+
 export async function updateWhatsappChannelTargetSettings(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -1927,6 +1962,13 @@ export async function updateWhatsappChannelTargetSettings(
       settings_updated_at: new Date().toISOString(),
     },
   };
+
+  const nextEnabled = typeof input.enabled === "boolean" ? input.enabled : current.enabled === true;
+  const nextReplyMode = input.replyMode !== undefined ? normalizeTargetReplyMode(input.replyMode) : current.reply_mode;
+  if (current.target_type === "group" && context.organizationId && nextEnabled && nextReplyMode !== "off") {
+    const conflict = await findOtherGroupResponder(client, { organizationId: context.organizationId, instanceId: context.instance.id, groupJids: [current.provider_jid] });
+    if (conflict) throw new Error(groupResponderConflictMessage(conflict));
+  }
 
   if (typeof input.enabled === "boolean") patch.enabled = input.enabled;
   if (typeof input.campaignEnabled === "boolean") patch.campaign_enabled = input.campaignEnabled;
