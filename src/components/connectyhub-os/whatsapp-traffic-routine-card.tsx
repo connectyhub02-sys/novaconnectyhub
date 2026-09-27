@@ -323,7 +323,7 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
           <Check checked={draft.leadStatusReact} onChange={() => set("leadStatusReact", !draft.leadStatusReact)} label="Reagir ao status do lead" hint="Um emoji que combina com o que ele postou" />
           <Check checked={draft.leadStatusComment} onChange={() => set("leadStatusComment", !draft.leadStatusComment)} label="Comentar no status do lead" hint="Chega no privado dele como resposta ao status e abre conversa" />
         </div>
-        <p className="mt-2 text-xs text-slate-500">Tudo aqui acontece no status dos seus leads. Começa a agir assim que o recebimento dos status dos contatos estiver liberado (em verificação). Comentar em muitos status aumenta o risco de bloqueio do número.</p>
+        <p className="mt-2 text-xs text-slate-500">Tudo aqui acontece no status dos seus leads. A cada 5 minutos o agente confere os status no ar (inclusive os postados antes de você ligar) e age aos poucos, com limite de 200 visualizações, 40 reações e 20 comentários por dia. Comentário: no máximo 1 por lead por dia e nunca logo depois de outra mensagem. Comentar muito aumenta o risco de bloqueio do número.</p>
       </div>
 
       {dirty ? (

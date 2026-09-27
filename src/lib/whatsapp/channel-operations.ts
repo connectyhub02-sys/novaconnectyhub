@@ -1729,6 +1729,26 @@ export async function probeWhatsappLeadStatusWatch(
   };
 }
 
+/** Recent contact status posts kept by the provider (chat "status@broadcast"), newest first. */
+export async function fetchRecentStatusMessages(context: WhatsappOperationalContext, limit = 60) {
+  assertWhatsappConnected(context);
+  const response = await callUazapi(context, "/message/find", { method: "POST", body: { chatid: "status@broadcast", limit, offset: 0 }, timeoutMs: 20_000 });
+  return extractProviderItems(response.data, ["messages", "data", "items", "response"]).map(item => readRecord(item)).filter((item): item is JsonRecord => Boolean(item));
+}
+
+/** Small provider actions used by the status interaction (mark as seen, react, reply). */
+export async function callWhatsappProvider(context: WhatsappOperationalContext, path: "/message/markread" | "/message/react" | "/send/text", body: JsonRecord) {
+  assertWhatsappConnected(context);
+  return (await callUazapi(context, path, { method: "POST", body, timeoutMs: 20_000 })).data;
+}
+
+/** Short AI text (e.g. a comment on a lead's status), with what billing needs. */
+export async function generateWhatsappShortText(client: SupabaseClient, systemInstruction: string, prompt: string) {
+  const credentials = await loadGeminiCredentials(client);
+  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, { temperature: 0.9, maxOutputTokens: 200 });
+  return { text: extractGeminiText(responseData).trim(), modelId: credentials.model, responseData };
+}
+
 export async function enableWhatsappGroupReplies(
   client: SupabaseClient,
   context: WhatsappOperationalContext,

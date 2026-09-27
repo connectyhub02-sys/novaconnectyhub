@@ -85,13 +85,15 @@ export function commerceDatabase(initial: Record<string, Row[]> = {}, failure?: 
           if (table === "leads" || table === "agent_registry") row.updated_at = `version-${++sequence}`;
         });
         if (operation === "upsert") {
-          const value = payload as Row;
           const keys = conflict?.onConflict?.split(",").map(key => key.trim());
-          const previous = keys ? tables[table].find(row => keys.every(key => row[key] === value[key]))
-            : tables[table].find(row => row.id === value.id);
-          if (previous && conflict?.ignoreDuplicates) selected = [];
-          else if (previous) { Object.assign(previous, value); selected = [previous]; }
-          else { const inserted = { id: `row-${++sequence}`, ...value }; tables[table].push(inserted); selected = [inserted]; }
+          selected = [];
+          for (const value of Array.isArray(payload) ? payload : [payload]) {
+            const previous = keys ? tables[table].find(row => keys.every(key => row[key] === value[key]))
+              : tables[table].find(row => row.id === value.id);
+            if (previous && conflict?.ignoreDuplicates) continue;
+            if (previous) { Object.assign(previous, value); selected.push(previous); }
+            else { const inserted = { id: `row-${++sequence}`, ...value }; tables[table].push(inserted); selected.push(inserted); }
+          }
         }
         return { data: structuredClone(selected), error: null };
       }

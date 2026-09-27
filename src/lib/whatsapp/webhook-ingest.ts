@@ -113,6 +113,13 @@ export async function ingestUazapiWebhook(input: {
   const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
   let message = extractMessageSnapshot(payload);
   const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
+  // A contact's status post is not a conversation: it only feeds the status interaction.
+  if (instance && isStatusBroadcastChat(message.providerChatId ?? extractStatusChatId(payload))) {
+    const { captureStatusFromWebhook } = await import("./lead-status-watch");
+    await captureStatusFromWebhook(client, instance, payload as JsonRecord).catch(() => 0);
+    return { eventId: null, eventType, duplicate: false, organizationId: instance.organization_id, whatsappInstanceId: instance.id,
+      leadId: null, conversationId: null, messageId: null, agentRunId: null, status: "processed" };
+  }
   // Only server-mapped API instances may delegate their CRM to the customer.
   // The original payload is still forwarded by the authenticated webhook route;
   // this receipt retains deduplication metadata, not a second message archive.
@@ -2369,4 +2376,13 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStatusBroadcastChat(chatId: string | null | undefined) {
+  return typeof chatId === "string" && chatId.startsWith("status@broadcast");
+}
+
+function extractStatusChatId(payload: unknown) {
+  const message = isRecord(payload) && isRecord(payload.message) ? payload.message : null;
+  return message && typeof message.chatid === "string" ? message.chatid : null;
 }
