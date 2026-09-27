@@ -14,6 +14,15 @@ function sourceBetween(source: string, start: string, end: string) {
 }
 
 describe("WhatsApp webhook ingest resilience", () => {
+  it("keeps a group message in the group, never in the sender's private conversation", () => {
+    const extractor = sourceBetween(webhookIngestSource, "function extractMessageSnapshot", "type MessageAuthorType");
+    expect(extractor.indexOf("findSharedChatId(payload, messageRecord)")).toBeGreaterThan(-1);
+    expect(extractor).toContain("sharedChatId ?? resolveCanonicalProviderChatId(");
+    const shared = webhookIngestSource.slice(webhookIngestSource.indexOf("function isSharedChatId"));
+    expect(shared).toContain('value.endsWith("@g.us")');
+    expect(shared).toContain('value.startsWith("status@broadcast")');
+  });
+
   it("does not use the organization global WhatsApp agent as a lead-facing fallback", () => {
     const start = webhookIngestSource.indexOf("async function findOrganizationWhatsappAgent");
     const end = webhookIngestSource.indexOf("async function resolveWebhookBehaviorConfig", start);

@@ -1585,7 +1585,10 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     ?? findNestedBoolean(messageRecord, ["wasSentByApi", "sentByApi", "sent_by_api", "fromApi"]);
   const rawProviderChatId = resolveRawProviderChatId(messageRecord, fromMe, sentByApi)
     ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
-  const providerChatId = resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId, fromMe === true || sentByApi === true);
+  // In a group (or channel, or status) the chat is the group itself: the sender's own number must never
+  // replace it, or the message lands in the person's private conversation and the group rules never match.
+  const sharedChatId = findSharedChatId(payload, messageRecord);
+  const providerChatId = sharedChatId ?? resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId, fromMe === true || sentByApi === true);
   const isGroupChat = isWhatsappGroupChatId(providerChatId)
     || findBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
     || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
@@ -2385,4 +2388,16 @@ function isStatusBroadcastChat(chatId: string | null | undefined) {
 function extractStatusChatId(payload: unknown) {
   const message = isRecord(payload) && isRecord(payload.message) ? payload.message : null;
   return message && typeof message.chatid === "string" ? message.chatid : null;
+}
+
+function isSharedChatId(value: string | null | undefined): value is string {
+  return typeof value === "string" && (value.endsWith("@g.us") || value.endsWith("@newsletter") || value.startsWith("status@broadcast"));
+}
+
+function findSharedChatId(payload: JsonRecord, messageRecord: JsonRecord) {
+  const chat = isRecord(payload.chat) ? payload.chat : null;
+  return [
+    findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid"]),
+    chat ? findString(chat, ["wa_chatid", "waChatId"]) : null,
+  ].find(isSharedChatId) ?? null;
 }
