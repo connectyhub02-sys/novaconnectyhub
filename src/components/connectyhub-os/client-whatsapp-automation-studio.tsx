@@ -797,10 +797,10 @@ export function ClientWhatsappAutomationStudio({
         /> : null}
 
         <details className="rounded-xl border border-slate-200 p-3">
-        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Mais opções (avançado): post avulso, enquete, janela de grupo, regras de resposta e resultados</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Mais opções (avançado): post avulso, enquete, resultados e regras de cada grupo</summary>
         <div className="mt-3 grid gap-4">
         <nav aria-label="Áreas de grupos, canais e status" className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-          {([['campaigns', 'Campanhas'], ['schedule', 'Programação de grupos'], ['activity', 'Resultados e histórico'], ['settings', 'Destinos e configurações']] as const).map(([id, label]) => (
+          {([['campaigns', 'Post avulso e enquete'], ['activity', 'Resultados e histórico'], ['settings', 'Regras de cada grupo']] as const).map(([id, label]) => (
             <button key={id} type="button" aria-pressed={workspaceView === id} onClick={() => setWorkspaceView(id)} className={cn("rounded-lg px-3 py-2 text-sm transition focus-visible:outline-2 focus-visible:outline-emerald-600", workspaceView === id ? "bg-emerald-50 font-semibold text-emerald-800" : "text-slate-600 hover:bg-slate-50")}>{label}</button>
           ))}
         </nav>

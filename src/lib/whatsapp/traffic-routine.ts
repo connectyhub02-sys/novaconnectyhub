@@ -227,10 +227,14 @@ export async function runTrafficRoutine(client: SupabaseClient, routine: Traffic
     await prepareRoutineCapabilities(client, routine, null);
     const context = await resolveClientWhatsappOperationalContext(client, routine.organization_id, routine.agent_id);
     if (context.instance.status !== "connected") throw new Error("WhatsApp desconectado: reconecte para a rotina voltar a funcionar.");
-    const result: { scheduled?: number; plannedUntil?: string; roomOpensAt?: string; roomWarning?: string } = {};
-    if (postsDue(routine, now)) Object.assign(result, await planPosts(client, context, routine, now));
+    // Posts and the question room are independent: a failure writing posts never stops the room.
+    const result: { scheduled?: number; plannedUntil?: string; roomOpensAt?: string; roomWarning?: string; postsError?: string } = {};
+    if (postsDue(routine, now)) {
+      try { Object.assign(result, await planPosts(client, context, routine, now)); }
+      catch (error) { result.postsError = `Posts: ${error instanceof Error ? error.message.slice(0, 240) : "falha ao planejar."}`; }
+    }
     if (roomDue(routine, now)) Object.assign(result, await planRoom(client, context, routine, now));
-    await client.from("whatsapp_traffic_routines").update({ last_error: result.roomWarning ?? null }).eq("id", routine.id);
+    await client.from("whatsapp_traffic_routines").update({ last_error: [result.postsError, result.roomWarning].filter(Boolean).join(" · ") || null }).eq("id", routine.id);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 300) : "Falha ao planejar a rotina.";

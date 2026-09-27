@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       if (!context.selectedAgentId) return NextResponse.json({ error: "Escolha o agente da rotina." }, { status: 422 });
       if (action === "save_traffic_routine") {
         const routine = await saveTrafficRoutine(client, { organizationId: context.organization.id, agentId: context.selectedAgentId, userId: context.userId, changes: readRoutineChanges(body?.routine) });
-        if (routine.enabled && !routine.planned_until) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
+        if ((routine.enabled && !routine.planned_until) || (routine.room_enabled && !routine.room_planned_until)) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
         notice = routine.enabled ? (routine.planned_until ? "Rotina atualizada." : "Rotina ligada. Os primeiros posts aparecem aqui em instantes.") : "Rotina desligada. Os posts agendados foram cancelados.";
       } else if (action === "copy_traffic_routine") {
         const fromAgentId = asString(body?.fromAgentId);
