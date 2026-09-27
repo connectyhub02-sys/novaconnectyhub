@@ -19,6 +19,12 @@ type LeadStatus = {
 export type StatusRecord = { messageId: string; phone: string; type: string | null; caption: string | null; postedAt: Date };
 
 const hourMs = 3600_000;
+/**
+ * The WhatsApp provider (UAZAPI) does not hand over the status posts the number receives (checked against its
+ * full API on 27/09/2026: no event, filter or search returns them). Everything below is ready and switched off
+ * until the provider exposes them; LEAD_STATUS_PROVIDER_AVAILABLE=true turns it on.
+ */
+const leadStatusProviderAvailable = () => process.env.LEAD_STATUS_PROVIDER_AVAILABLE === "true";
 const statusLifetimeMs = 24 * hourMs;
 /** Daily ceilings per number and per run: enough to be present, far from what looks like a robot. */
 export const statusLimits = { viewsPerDay: 200, reactionsPerDay: 40, commentsPerDay: 20, viewsPerRun: 8, reactionsPerRun: 3, commentsPerRun: 2 };
@@ -78,6 +84,7 @@ export async function captureStatusFromWebhook(client: SupabaseClient, instance:
 
 /** Every 5 minutes: fetch the statuses still on the air for each number with the interaction on. */
 export async function pollLeadStatuses(client: SupabaseClient, now = new Date()) {
+  if (!leadStatusProviderAvailable()) return [];
   const results = [];
   for (const routine of await routinesWithInteraction(client)) {
     try {
@@ -126,6 +133,7 @@ async function countToday(client: SupabaseClient, instanceId: string, column: "v
  * most once a day per lead.
  */
 export async function actOnLeadStatuses(client: SupabaseClient, now = new Date()) {
+  if (!leadStatusProviderAvailable()) return [];
   const results = [];
   for (const routine of await routinesWithInteraction(client)) {
     try {

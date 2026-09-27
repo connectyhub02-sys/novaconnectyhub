@@ -5,6 +5,8 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 type Watch = typeof import("../src/lib/whatsapp/lead-status-watch");
 
 const now = new Date("2026-09-27T18:00:00Z");
+// The provider does not deliver contacts' statuses yet; the logic is tested with the switch on.
+process.env.LEAD_STATUS_PROVIDER_AVAILABLE = "true";
 const providerStatus = (extra: Record<string, unknown> = {}) => ({
   messageid: "3EB0STATUS1", chatid: "status@broadcast", sender: "123@lid", sender_pn: "554799990000@s.whatsapp.net",
   fromMe: false, messageType: "ImageMessage", text: "Treino pago hoje 💪", messageTimestamp: now.getTime() - 3600_000, ...extra,
@@ -95,5 +97,17 @@ describe("interacting with the leads' statuses", () => {
     db.tables.whatsapp_lead_statuses[0].created_at = now.toISOString();
     for (const minutes of [15, 20, 25]) await watch.actOnLeadStatuses(db.client as never, later(minutes));
     expect(calls.map(call => call.path)).toEqual(["/message/markread", "/message/react"]);
+  });
+});
+
+describe("while the provider does not deliver statuses", () => {
+  it("stays off by default: nothing is fetched and nothing is done", async () => {
+    const { db, watch, calls } = setup();
+    process.env.LEAD_STATUS_PROVIDER_AVAILABLE = "";
+    try {
+      expect(await watch.pollLeadStatuses(db.client as never, now)).toEqual([]);
+      expect(await watch.actOnLeadStatuses(db.client as never, now)).toEqual([]);
+      expect(calls).toHaveLength(0);
+    } finally { process.env.LEAD_STATUS_PROVIDER_AVAILABLE = "true"; }
   });
 });

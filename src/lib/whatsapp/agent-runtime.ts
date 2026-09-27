@@ -767,7 +767,11 @@ async function processWhatsappAgentRunWithScope(input: {
       : null;
     if (endingResult) return endingResult;
 
-    if (behavior.quotedReplyContext && latestInbound) {
+    // A reply to the agent's own status post: say which post and product, whatever the quote setting.
+    const statusReplyContext = latestInbound ? await resolveStatusReplyContext(client, context, token, latestInbound).catch(() => null) : null;
+    if (statusReplyContext) {
+      userText = `${statusReplyContext}\n${userText}`;
+    } else if (behavior.quotedReplyContext && latestInbound) {
       const quotedContext = extractQuotedMessageContext(latestInbound, context.messages);
       if (quotedContext) {
         userText = `[Respondendo a mensagem: "${quotedContext}"]\n${userText}`;
@@ -19589,6 +19593,67 @@ function parseHourMinute(value: string) {
 function getNowMinutes(timeZone: string) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: timeZone || "America/Sao_Paulo" }));
   return now.getHours() * 60 + now.getMinutes();
+}
+
+/** The quoted status of a reply to a status post ("status@broadcast" in the reply's context), or null. */
+export function readQuotedStatus(message: ConversationMessageRow) {
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+  const contextInfo = readRecord(content?.contextInfo) ?? readRecord(providerMessage?.contextInfo);
+  const remote = asString(contextInfo?.remoteJID) ?? asString(contextInfo?.remoteJid);
+  if (remote !== "status@broadcast") return null;
+  const quoted = readRecord(contextInfo?.quotedMessage);
+  const image = readRecord(quoted?.imageMessage);
+  const video = readRecord(quoted?.videoMessage);
+  const caption = asString(image?.caption) ?? asString(video?.caption) ?? asString(readRecord(quoted?.extendedTextMessage)?.text) ?? asString(quoted?.conversation);
+  return {
+    stanzaId: asString(contextInfo?.stanzaID) ?? asString(contextInfo?.stanzaId),
+    caption: caption?.trim() || null,
+    kind: image ? "image" as const : video ? "video" as const : null,
+  };
+}
+
+/**
+ * The lead is answering one of the agent's status posts: find that post among what the agent published (text
+ * and exact products), else use the status caption, else download the status media (download_quoted) and look
+ * at it, so a short "quanto?" still means the product in the status.
+ */
+async function resolveStatusReplyContext(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, token: string, message: ConversationMessageRow) {
+  const quoted = readQuotedStatus(message);
+  if (!quoted) return null;
+  if (quoted.stanzaId) {
+    const { data } = await client.from("content_pipeline_items").select("body, metadata").eq("organization_id", context.organization.id)
+      .eq("content_type", "whatsapp_status").eq("status", "published").gte("published_at", new Date(Date.now() - 72 * 3600_000).toISOString()).order("published_at", { ascending: false }).limit(40);
+    const post = ((data ?? []) as Array<{ body: string | null; metadata: JsonRecord | null }>).find(row => JSON.stringify(row.metadata ?? {}).includes(quoted.stanzaId!));
+    if (post) {
+      const products = (Array.isArray(readRecord(post.metadata?.payload)?.catalog_items) ? readRecord(post.metadata?.payload)?.catalog_items as unknown[] : [])
+        .map(item => readRecord(item)).filter((item): item is JsonRecord => Boolean(item))
+        .map(item => `${asString(item.title) ?? "produto"}${asString(item.price) ? ` (R$ ${asString(item.price)})` : ""}`);
+      return `[O cliente está respondendo ao SEU status: "${preview(post.body ?? "", 240)}".${products.length ? ` Produto do status: ${products.join(", ")}.` : ""} Responda sobre esse produto.]`;
+    }
+  }
+  if (quoted.caption) return `[O cliente está respondendo ao SEU status: "${preview(quoted.caption, 240)}". Responda sobre o que o status mostra.]`;
+  if (!quoted.kind || !message.provider_message_id) return null;
+  const response = await callUazapi(context.credentials, "/message/download", {
+    method: "POST", token, tolerateError: true,
+    body: { id: message.provider_message_id, download_quoted: true, return_link: true, transcribe: false },
+  });
+  const fileUrl = response.ok ? extractProviderDownloadUrl(response.data) : null;
+  if (!fileUrl) return "[O cliente está respondendo ao SEU status (sem texto). Pergunte qual produto do status chamou a atenção.]";
+  const modelId = context.agent.model_id || context.geminiCredentials.model;
+  const analyzed = await analyzeDownloadedMediaWithGemini({ credentials: context.geminiCredentials, model: modelId, fileUrl,
+    mimeType: extractMimeType(response.data) ?? (quoted.kind === "video" ? "video/mp4" : "image/jpeg"), kind: quoted.kind, caption: null });
+  await meterGeminiGenerationUsage({
+    client, organizationId: context.organization.id, featureCode: mediaAnalysisFeatureCode(quoted.kind), modelId, agentId: context.agent.id,
+    agentRunId: context.run.id, conversationId: context.conversationId, leadId: context.lead?.id ?? null, agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: buildMediaAnalysisPrompt(quoted.kind, null), outputText: analyzed.text, usage: analyzed.usage, media: 1, megabytes: bytesToMegabytes(analyzed.byteLength),
+    requestId: `whatsapp-agent:${context.run.id}:gemini:status_reply:${message.id}`, debitDescription: "Status respondido analisado no WhatsApp",
+    metadata: { source: "whatsapp_agent", channel: "whatsapp", mediaKind: quoted.kind, messageId: message.id, statusReply: true },
+  }).catch(() => null);
+  const analysis = normalizeMediaAnalysisText(analyzed.text);
+  return analysis
+    ? `[O cliente está respondendo ao SEU status. O status mostra: ${preview(analysis, 400)}. Responda sobre esse produto.]`
+    : "[O cliente está respondendo ao SEU status (sem texto). Pergunte qual produto do status chamou a atenção.]";
 }
 
 function readProviderMessageRecord(message: ConversationMessageRow) {

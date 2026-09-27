@@ -261,7 +261,8 @@ function CampaignEditor(props: {
 function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; holders: Record<string, GroupHolder>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(props.saved);
   const set = <K extends keyof TrafficNumberSettings>(key: K, value: TrafficNumberSettings[K]) => setDraft(current => ({ ...current, [key]: value }));
-  const dirty = JSON.stringify({ ...draft, roomPlannedUntil: null, lastError: null }) !== JSON.stringify({ ...props.saved, roomPlannedUntil: null, lastError: null });
+  const comparable = (value: TrafficNumberSettings) => JSON.stringify({ ...value, roomPlannedUntil: null, lastError: null, leadStatusView: false, leadStatusReact: false, leadStatusComment: false });
+  const dirty = comparable(draft) !== comparable(props.saved);
   const busy = Boolean(props.busy);
   return (
     <>
@@ -326,19 +327,20 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
       </div>
 
       <div className="rounded-lg border border-slate-200 p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles className="h-4 w-4 text-emerald-700" />Interagir com os leads</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <Check checked={draft.leadStatusView} onChange={() => set("leadStatusView", !draft.leadStatusView)} label="Ver o status dos leads" hint="Visualizar logo que postam: o lead vê seu número entre os primeiros" />
-          <Check checked={draft.leadStatusReact} onChange={() => set("leadStatusReact", !draft.leadStatusReact)} label="Reagir ao status do lead" hint="Um emoji que combina com o que ele postou" />
-          <Check checked={draft.leadStatusComment} onChange={() => set("leadStatusComment", !draft.leadStatusComment)} label="Comentar no status do lead" hint="Chega no privado dele como resposta ao status e abre conversa" />
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles className="h-4 w-4 text-emerald-700" />Interagir com os leads<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Indisponível no momento</span></p>
+        <p className="mt-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">O provedor do WhatsApp ainda não entrega ao sistema os status que os seus contatos postam, então ver, reagir e comentar ficam desligados. Assim que ele liberar, ativamos aqui.</p>
+        <div className="mt-2 grid gap-2 opacity-60 sm:grid-cols-3" aria-disabled>
+          <Check checked={false} disabled onChange={() => undefined} label="Ver o status dos leads" hint="Visualizar logo que postam: o lead vê seu número entre os primeiros" />
+          <Check checked={false} disabled onChange={() => undefined} label="Reagir ao status do lead" hint="Um emoji que combina com o que ele postou" />
+          <Check checked={false} disabled onChange={() => undefined} label="Comentar no status do lead" hint="Chega no privado dele como resposta ao status e abre conversa" />
         </div>
-        <p className="mt-2 text-xs text-slate-500">Tudo aqui acontece no status dos seus leads. A cada 5 minutos o agente confere os status no ar (inclusive os postados antes de você ligar) e age aos poucos, com limite de 200 visualizações, 40 reações e 20 comentários por dia. Comentário: no máximo 1 por lead por dia e nunca logo depois de outra mensagem. Comentar muito aumenta o risco de bloqueio do número.</p>
+
       </div>
 
       {dirty ? (
         <div className="flex justify-end">
           <button type="button" disabled={props.disabled || busy} onClick={() => void props.onSave(draft, "settings")} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
-            {props.busy === "settings" ? "Salvando…" : "Salvar sala e interação"}
+            {props.busy === "settings" ? "Salvando…" : "Salvar sala"}
           </button>
         </div>
       ) : null}
@@ -363,10 +365,10 @@ function Step(props: { number: number; title: string; children: React.ReactNode 
   );
 }
 
-function Check(props: { checked: boolean; onChange: () => void; label: string; hint?: string; radio?: boolean }) {
+function Check(props: { checked: boolean; onChange: () => void; label: string; hint?: string; radio?: boolean; disabled?: boolean }) {
   return (
-    <label className={cn("flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-sm", props.checked ? "border-emerald-600 bg-emerald-50" : "border-slate-200")}>
-      <input type={props.radio ? "radio" : "checkbox"} checked={props.checked} onChange={props.onChange} className="mt-0.5 accent-emerald-700" />
+    <label className={cn("flex items-start gap-2 rounded-lg border px-2.5 py-2 text-sm", props.disabled ? "cursor-not-allowed" : "cursor-pointer", props.checked ? "border-emerald-600 bg-emerald-50" : "border-slate-200")}>
+      <input type={props.radio ? "radio" : "checkbox"} checked={props.checked} disabled={props.disabled} onChange={props.onChange} className="mt-0.5 accent-emerald-700" />
       <span><span className="block font-medium text-slate-800">{props.label}</span>{props.hint ? <span className="block text-xs text-slate-500">{props.hint}</span> : null}</span>
     </label>
   );
