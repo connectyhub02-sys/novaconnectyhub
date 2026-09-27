@@ -31,4 +31,11 @@ describe("group conversations, one participant at a time", () => {
     const call = runtimeHarness();
     expect(call("resolveGroupAuthorMention", { payload: { message: { sender: "202997669847166:2@lid", sender_pn: "554788577996@s.whatsapp.net" } } })).toBe("554788577996");
   });
+  it("quotes the question in the group even when the quote setting would not", async () => {
+    const call = runtimeHarness();
+    const question = { ...from("a1", "554788577996", "qual produto para emagrecer"), provider_message_id: "3EB0Q1", occurred_at: "2026-09-27T19:50:04Z" };
+    const context = { run: { id: "run", metadata: { isGroupChat: true } }, providerChatId: "120363404228732400@g.us", behavior: { quoteReplyMode: "smart" }, messages: [question] };
+    const targets = await call<Promise<Array<{ id: string } | null>>>("resolveOutboundReplyTargets", {}, context, ["Para emagrecer...", "Outra opção..."]);
+    expect(targets.map(target => target?.id ?? null)).toEqual(["a1", null]);
+  });
 });
