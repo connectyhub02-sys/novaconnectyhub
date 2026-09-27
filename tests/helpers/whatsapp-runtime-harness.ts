@@ -18,6 +18,7 @@ import * as templates from "@/lib/whatsapp/agent-prompt-templates";
 import * as activitySetup from "@/lib/whatsapp/activity-setup";
 import * as conversationStyle from "@/lib/whatsapp/conversation-style";
 import * as conversationEnding from "@/lib/whatsapp/conversation-ending";
+import * as groupRules from "@/lib/whatsapp/group-rules";
 import * as commerceConversation from "@/lib/whatsapp/commerce-conversation";
 import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
@@ -113,6 +114,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "./activity-profile": activityProfile,
     "./conversation-style": conversationStyle,
     "./conversation-ending": conversationEnding,
+    "./group-rules": groupRules,
     "./commerce-conversation": commerceConversation,
     "./agent-behavior": agentBehavior,
     "./human-handoff": humanHandoff,

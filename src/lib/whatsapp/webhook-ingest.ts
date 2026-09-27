@@ -2411,3 +2411,20 @@ function readGroupMessageSender(payload: unknown) {
   const value = message && typeof message.sender_pn === "string" ? message.sender_pn : null;
   return value && value.endsWith("@s.whatsapp.net") ? value : null;
 }
+
+/** The private lead and conversation of a person (e.g. a group participant the agent calls in private). */
+export async function ensureDirectLeadConversation(client: SupabaseClient, input: {
+  organizationId: string; whatsappInstanceId: string; phone: string; displayName: string | null; summary: string;
+}) {
+  const now = new Date().toISOString();
+  const providerChatId = `${input.phone}@s.whatsapp.net`;
+  const lead = await ensureLead(client, {
+    organizationId: input.organizationId, phoneNumber: input.phone, displayName: input.displayName, messageDirection: "outbound",
+    lastEventSummary: input.summary, lastMessageAt: now, profileImageUrl: null, providerChatId, providerMessageId: null,
+  });
+  const conversation = await ensureConversation(client, {
+    organizationId: input.organizationId, leadId: lead.id, whatsappInstanceId: input.whatsappInstanceId, providerChatId,
+    isGroupChat: false, lastMessagePreview: input.summary, lastMessageAt: now,
+  });
+  return { lead, conversation };
+}

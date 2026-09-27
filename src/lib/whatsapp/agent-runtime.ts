@@ -1,3 +1,4 @@
+import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
 import { quoteFoodComposition, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
 import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
@@ -1223,6 +1224,8 @@ async function processWhatsappAgentRunWithScope(input: {
     extractNegotiationState(client, context).catch(() => {});
     if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
+    if (isGroupChat && context.groupSender) await inviteGroupParticipant(client, context, userText, outbound.some(message => asksForPersonalData(message.text ?? "")));
+
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
       messages: outbound.length,
@@ -1888,6 +1891,21 @@ export function sliceGroupThread<T extends { direction: string; payload: unknown
     }
   }
   return thread;
+}
+
+/** Purchase intent in a group becomes a private conversation, where the order can be closed. */
+async function inviteGroupParticipant(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, question: string, force: boolean) {
+  try {
+    const { inviteGroupParticipantToPrivate } = await import("./group-private-invite");
+    const latest = findLatestInbound(context.messages);
+    const providerMessage = latest ? readProviderMessageRecord(latest) : null;
+    await inviteGroupParticipantToPrivate(client, {
+      organizationId: context.organization.id, agentId: context.agent.id, whatsappInstanceId: context.instance.id, senderJid: context.groupSender!,
+      senderName: asString(providerMessage?.senderName) ?? asString(providerMessage?.pushName), question, force,
+    });
+  } catch (error) {
+    console.error("group_private_invite_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" });
+  }
 }
 
 async function loadConversationMessages(client: SupabaseClient, conversationId: string, whatsappInstanceId: string) {
@@ -4620,6 +4638,19 @@ function buildHumanHandbackInstruction(conversationMetadata: Record<string, unkn
   ].filter(Boolean);
 }
 
+const groupAttendanceRules = [
+  "ATENDIMENTO EM GRUPO (prioridade máxima, acima de qualquer instrução de venda ou fechamento):",
+  "- Você está respondendo dentro de um grupo do WhatsApp, com várias pessoas lendo. Responda só a pessoa que perguntou, de forma curta, útil e simpática.",
+  "- O grupo é para orientar, tirar dúvidas e criar relacionamento. Nunca feche pedido no grupo.",
+  "- Nunca peça nem aceite dados pessoais no grupo: nome completo, CPF, e-mail, telefone, endereço, CEP, cartão, Pix ou qualquer dado de pagamento. Não monte pedido, não pergunte quantidades para comprar, não gere pagamento.",
+  "- Se a pessoa quiser comprar ou perguntar preço, entrega ou como comprar: indique o produto (nome e valor do catálogo, com foto ou botão do produto quando houver) e diga que vai chamá-la no privado para ajudar com o pedido.",
+  "- Não responda perguntas de outras pessoas nem repita o que outra pessoa perguntou.",
+];
+
+function isGroupConversation(metadata: Record<string, unknown> | null | undefined) {
+  return metadata?.chat_kind === "group" || metadata?.is_group_chat === true;
+}
+
 function buildSystemInstruction(input: {
   checkoutScope?: { organizationId: string; conversationId: string; instanceId: string };
   checkoutRevisionContext?: RuntimeOrderRevisionDraft | null;
@@ -4676,8 +4707,10 @@ function buildSystemInstruction(input: {
     "REGRA FINAL DE ORTOGRAFIA PARA TEXTO E AUDIO:",
     ...outboundLanguageQualityPromptLines,
     "",
-    "REGRA GLOBAL DE FECHAMENTO E PAGAMENTO:",
-    ...(checkoutAllowed ? buildGlobalCheckoutConfirmationLines() : buildActivityCommerceInstruction(commerceJourney)),
+    ...(isGroupConversation(input.conversationMetadata) ? groupAttendanceRules : [
+      "REGRA GLOBAL DE FECHAMENTO E PAGAMENTO:",
+      ...(checkoutAllowed ? buildGlobalCheckoutConfirmationLines() : buildActivityCommerceInstruction(commerceJourney)),
+    ]),
     "",
     ...buildCloneProfileLines(input.agent),
     ...conversationStyleInstructions(input.behavior),
@@ -6205,6 +6238,8 @@ function restrictedMedicalCommerceReply(context: { messages: ConversationMessage
   return null;
 }
 function runtimeAllowsCheckout(context: { agent: Pick<AgentRow, "metadata">; salesCatalog: RuntimeSalesCatalogItem[]; messages: ConversationMessageRow[]; complianceRules?: ProductComplianceRule[] }, text?: string) {
+  // Orders are closed in private, never inside a group.
+  if (readRecord((context as { run?: { metadata?: unknown } }).run?.metadata)?.isGroupChat === true) return false;
   const inbound = findLatestInbound(context.messages);
   const current = text ?? inbound?.text_content ?? "";
   if (isCommerceBudgetStatement(current)) return false;
@@ -16525,7 +16560,9 @@ async function sendWhatsappText(input: {
   mentions?: string;
   linkPreview?: boolean;
 }) {
-  const text = normalizeOutboundLanguageText(input.text);
+  const normalized = normalizeOutboundLanguageText(input.text);
+  // Last guard: a group never receives a request for personal or payment data.
+  const text = input.phone.endsWith("@g.us") && asksForPersonalData(normalized) ? groupPrivateRedirectText : normalized;
 
   return callUazapi(input.credentials, "/send/text", {
     method: "POST",
