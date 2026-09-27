@@ -1907,12 +1907,19 @@ function describeAutomationCapability(capability: WhatsappAutomationCapability) 
  * Returns who holds the group, so the owner knows which agent to release.
  */
 export async function findOtherGroupResponder(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[] }) {
+  const holders = await mapOtherGroupResponders(client, input);
+  return holders.values().next().value ?? null;
+}
+
+/** Every group (by WhatsApp id) that another agent of the company answers, with that agent's name. */
+export async function mapOtherGroupResponders(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[] }) {
+  const holders = new Map<string, { groupName: string; agentName: string }>();
   const jids = Array.from(new Set(input.groupJids.filter(jid => jid.endsWith("@g.us"))));
-  if (!jids.length) return null;
+  if (!jids.length) return holders;
   const { data: others } = await client.from("whatsapp_channel_targets").select("id, provider_jid, display_name, enabled, reply_mode, whatsapp_instance_id")
     .eq("organization_id", input.organizationId).eq("target_type", "group").in("provider_jid", jids).neq("whatsapp_instance_id", input.instanceId);
   const rows = (others ?? []) as Array<{ id: string; provider_jid: string; display_name: string | null; enabled: boolean; reply_mode: string; whatsapp_instance_id: string }>;
-  if (!rows.length) return null;
+  if (!rows.length) return holders;
   const { data: instances } = await client.from("whatsapp_instances").select("id, metadata").in("id", Array.from(new Set(rows.map(row => row.whatsapp_instance_id)))).neq("status", "archived");
   const agentByInstance = new Map(((instances ?? []) as Array<{ id: string; metadata: JsonRecord | null }>).map(instance => [instance.id, asString(instance.metadata?.agent_id)]));
   const agentIds = Array.from(new Set(Array.from(agentByInstance.values()).filter((id): id is string => Boolean(id))));
@@ -1925,11 +1932,11 @@ export async function findOtherGroupResponder(client: SupabaseClient, input: { o
   for (const row of rows) {
     const agentId = agentByInstance.get(row.whatsapp_instance_id);
     if (agentId === undefined) continue;
-    if ((row.enabled && row.reply_mode !== "off") || roomTargets.has(row.id)) {
-      return { groupName: row.display_name ?? "este grupo", agentName: (agentId && agentName.get(agentId)) || "outro agente" };
+    if (!holders.has(row.provider_jid) && ((row.enabled && row.reply_mode !== "off") || roomTargets.has(row.id))) {
+      holders.set(row.provider_jid, { groupName: row.display_name ?? "este grupo", agentName: (agentId && agentName.get(agentId)) || "outro agente" });
     }
   }
-  return null;
+  return holders;
 }
 
 export function groupResponderConflictMessage(conflict: { groupName: string; agentName: string }) {

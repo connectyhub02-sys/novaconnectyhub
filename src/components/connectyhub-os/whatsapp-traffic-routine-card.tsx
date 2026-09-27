@@ -21,6 +21,7 @@ export type TrafficPayload = {
   campaigns: TrafficCampaignView[];
   upcoming: Array<{ id: string; kind: "status" | "grupos e canais" | "sala de dúvidas"; title: string; text: string; scheduledFor: string | null; campaign: string | null }>;
   numbers?: Array<{ agentId: string; enabled: boolean }>;
+  groupHolders?: Record<string, string>;
 };
 type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
 type CampaignDraft = Omit<TrafficCampaignView, "id" | "status" | "endsAt" | "plannedUntil" | "lastError" | "sent" | "scheduled"> & { id: string | null };
@@ -152,7 +153,7 @@ export function WhatsappTrafficRoutineCard(props: {
         </div>
       ) : !editor ? <p className="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">Nenhuma campanha ainda. Clique em &quot;Nova campanha&quot; para começar.</p> : null}
 
-      <NumberSettings key={JSON.stringify(props.traffic?.routine ?? null)} saved={props.traffic?.routine ?? numberDefaults} groups={groups} disabled={props.disabled}
+      <NumberSettings key={JSON.stringify(props.traffic?.routine ?? null)} saved={props.traffic?.routine ?? numberDefaults} groups={groups} holders={props.traffic?.groupHolders ?? {}} disabled={props.disabled}
         busy={busy} onSave={(settings, key) => run(key, "save_traffic_routine", { routine: settings })} />
 
       {props.traffic?.upcoming.length ? (
@@ -256,7 +257,7 @@ function CampaignEditor(props: {
   );
 }
 
-function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
+function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; holders: Record<string, string>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(props.saved);
   const set = <K extends keyof TrafficNumberSettings>(key: K, value: TrafficNumberSettings[K]) => setDraft(current => ({ ...current, [key]: value }));
   const dirty = JSON.stringify({ ...draft, roomPlannedUntil: null, lastError: null }) !== JSON.stringify({ ...props.saved, roomPlannedUntil: null, lastError: null });
@@ -278,13 +279,19 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
           <div>
             <p className="text-xs font-semibold text-slate-600">Quais grupos</p>
             <div className="mt-1 grid max-h-44 gap-1 overflow-y-auto">
-              {props.groups.length ? props.groups.map(group => (
-                <label key={group.id} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm", group.isAdmin === false ? "opacity-60" : "cursor-pointer hover:bg-slate-50")}>
-                  <span className="flex min-w-0 items-center gap-2"><input type="checkbox" disabled={group.isAdmin === false} checked={draft.roomTargetIds.includes(group.id)}
-                    onChange={() => set("roomTargetIds", draft.roomTargetIds.includes(group.id) ? draft.roomTargetIds.filter(id => id !== group.id) : [...draft.roomTargetIds, group.id])} className="accent-emerald-700" /><span className="truncate text-slate-800">{group.name}</span></span>
-                  {group.isAdmin === false ? <span className="shrink-0 text-xs text-amber-700">precisa ser admin</span> : null}
-                </label>
-              )) : <p className="text-xs text-slate-500">Nenhum grupo encontrado.</p>}
+              {props.groups.length ? props.groups.map(group => {
+                // Only one agent answers in each group: a group another agent answers stays locked here.
+                const holder = props.holders[group.id];
+                const locked = group.isAdmin === false || Boolean(holder);
+                return (
+                  <label key={group.id} title={holder ? `Para trocar, desligue a sala de ${holder} neste grupo` : undefined}
+                    className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm", locked ? "opacity-60" : "cursor-pointer hover:bg-slate-50")}>
+                    <span className="flex min-w-0 items-center gap-2"><input type="checkbox" disabled={locked} checked={draft.roomTargetIds.includes(group.id)}
+                      onChange={() => set("roomTargetIds", draft.roomTargetIds.includes(group.id) ? draft.roomTargetIds.filter(id => id !== group.id) : [...draft.roomTargetIds, group.id])} className="accent-emerald-700" /><span className="truncate text-slate-800">{group.name}</span></span>
+                    {holder ? <span className="shrink-0 text-xs text-amber-700">atendido por {holder}</span> : group.isAdmin === false ? <span className="shrink-0 text-xs text-amber-700">precisa ser admin</span> : null}
+                  </label>
+                );
+              }) : <p className="text-xs text-slate-500">Nenhum grupo encontrado.</p>}
             </div>
           </div>
           <div className="grid content-start gap-2">
@@ -310,7 +317,7 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
           <div className="grid content-start gap-2">
             <Check checked={draft.roomReplies} onChange={() => set("roomReplies", !draft.roomReplies)} label="O agente responde as perguntas"
               hint="Enquanto o grupo está aberto, responde em texto ou áudio (como no atendimento) citando quem perguntou" />
-            <p className="text-xs text-slate-500">Com o grupo fechado, ninguém escreve e o agente não responde. Para abrir e fechar, este número precisa ser admin do grupo.</p>
+            <p className="text-xs text-slate-500">Com o grupo fechado, ninguém escreve e o agente não responde. Para abrir e fechar, este número precisa ser admin do grupo. Só um agente responde em cada grupo: grupos já atendidos por outro agente aparecem bloqueados.</p>
           </div>
         </div>
         {props.saved.lastError ? <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{props.saved.lastError}</p> : null}

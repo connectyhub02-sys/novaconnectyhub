@@ -18,6 +18,7 @@ import {
   generateWhatsappStatusDraft,
   generateWhatsappTargetCampaignDraft,
   getWhatsappOperationsDashboard,
+  mapOtherGroupResponders,
   probeWhatsappLeadStatusWatch,
   queueWhatsappGrowthCampaignPlan,
   queueWhatsappNewsletterText,
@@ -164,7 +165,17 @@ async function loadTrafficPayload(client: ReturnType<typeof createServiceClient>
     campaigns: campaigns.map(campaign => toClientCampaign(campaign, counts.get(campaign.id) ?? { sent: 0, scheduled: 0 })),
     upcoming: await listUpcomingTraffic(client, organizationId, campaigns, routine).catch(() => []),
     numbers: await listTrafficRoutineNumbers(client, organizationId).catch(() => []),
+    groupHolders: await loadGroupHolders(client, organizationId, agentId).catch(() => ({})),
   };
+}
+
+/** Groups of this number that another agent already answers: the panel shows them locked. */
+async function loadGroupHolders(client: ReturnType<typeof createServiceClient>, organizationId: string, agentId: string) {
+  const whatsapp = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
+  const { data } = await client.from("whatsapp_channel_targets").select("id, provider_jid").eq("whatsapp_instance_id", whatsapp.instance.id).eq("target_type", "group");
+  const targets = (data ?? []) as Array<{ id: string; provider_jid: string }>;
+  const holders = await mapOtherGroupResponders(client, { organizationId, instanceId: whatsapp.instance.id, groupJids: targets.map(target => target.provider_jid) });
+  return Object.fromEntries(targets.filter(target => holders.has(target.provider_jid)).map(target => [target.id, holders.get(target.provider_jid)!.agentName]));
 }
 
 function toClientRoutine(routine: TrafficRoutine) {
