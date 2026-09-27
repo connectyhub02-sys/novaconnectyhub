@@ -135,7 +135,9 @@ export async function saveTrafficRoutine(client: SupabaseClient, input: { organi
   }
   const roomWillRun = changes.room_enabled ?? before?.room_enabled ?? false;
   const roomTargets = changes.room_target_ids ?? before?.room_target_ids ?? [];
-  if (roomWillRun && roomTargets.length) await assertGroupsFreeForRoom(client, input.organizationId, input.agentId, roomTargets);
+  if (roomWillRun && roomTargets.length) await assertGroupsFreeForRoom(client, input.organizationId, input.agentId, roomTargets, {
+    open: changes.room_open_hour ?? before?.room_open_hour ?? 19, close: changes.room_close_hour ?? before?.room_close_hour ?? 20, days: changes.room_days ?? before?.room_days ?? [],
+  });
   const row = {
     organization_id: input.organizationId, agent_id: input.agentId, updated_by: input.userId, updated_at: new Date().toISOString(),
     ...changes,
@@ -150,10 +152,10 @@ export async function saveTrafficRoutine(client: SupabaseClient, input: { organi
 }
 
 /** The question room answers in the group, so no other agent of the company may already answer there. */
-async function assertGroupsFreeForRoom(client: SupabaseClient, organizationId: string, agentId: string, targetIds: string[]) {
+async function assertGroupsFreeForRoom(client: SupabaseClient, organizationId: string, agentId: string, targetIds: string[], schedule: { open: number; close: number; days: number[] }) {
   const context = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
   const { data } = await client.from("whatsapp_channel_targets").select("provider_jid").in("id", targetIds).eq("whatsapp_instance_id", context.instance.id);
-  const conflict = await findOtherGroupResponder(client, { organizationId, instanceId: context.instance.id, groupJids: ((data ?? []) as Array<{ provider_jid: string }>).map(row => row.provider_jid) });
+  const conflict = await findOtherGroupResponder(client, { organizationId, instanceId: context.instance.id, groupJids: ((data ?? []) as Array<{ provider_jid: string }>).map(row => row.provider_jid), schedule });
   if (conflict) throw new Error(groupResponderConflictMessage(conflict));
 }
 

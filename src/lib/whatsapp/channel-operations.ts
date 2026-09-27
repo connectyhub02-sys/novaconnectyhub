@@ -1,3 +1,4 @@
+import { groupHolderConflictMessage, holderConflicts, type GroupHolder, type RoomSchedule } from "@/lib/whatsapp/group-schedule";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { assertContractAccess } from "@/lib/billing/contract-access";
@@ -1906,14 +1907,18 @@ function describeAutomationCapability(capability: WhatsappAutomationCapability) 
  * question room in a group another agent already answers (posting products there stays free for both).
  * Returns who holds the group, so the owner knows which agent to release.
  */
-export async function findOtherGroupResponder(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[] }) {
+/** The first agent that answers one of these groups at a time that collides with mine (no schedule = any time). */
+export async function findOtherGroupResponder(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[]; schedule?: RoomSchedule | null }) {
   const holders = await mapOtherGroupResponders(client, input);
-  return holders.values().next().value ?? null;
+  return Array.from(holders.values()).find(holder => holderConflicts(holder, input.schedule)) ?? null;
 }
 
-/** Every group (by WhatsApp id) that another agent of the company answers, with that agent's name. */
+/**
+ * Every group (by WhatsApp id) another agent of the company answers, with that agent's name and when:
+ * the hours of its question room, or "always" for answers turned on outside a room.
+ */
 export async function mapOtherGroupResponders(client: SupabaseClient, input: { organizationId: string; instanceId: string; groupJids: string[] }) {
-  const holders = new Map<string, { groupName: string; agentName: string }>();
+  const holders = new Map<string, GroupHolder>();
   const jids = Array.from(new Set(input.groupJids.filter(jid => jid.endsWith("@g.us"))));
   if (!jids.length) return holders;
   const { data: others } = await client.from("whatsapp_channel_targets").select("id, provider_jid, display_name, enabled, reply_mode, whatsapp_instance_id")
@@ -1923,24 +1928,33 @@ export async function mapOtherGroupResponders(client: SupabaseClient, input: { o
   const { data: instances } = await client.from("whatsapp_instances").select("id, metadata").in("id", Array.from(new Set(rows.map(row => row.whatsapp_instance_id)))).neq("status", "archived");
   const agentByInstance = new Map(((instances ?? []) as Array<{ id: string; metadata: JsonRecord | null }>).map(instance => [instance.id, asString(instance.metadata?.agent_id)]));
   const agentIds = Array.from(new Set(Array.from(agentByInstance.values()).filter((id): id is string => Boolean(id))));
-  const [{ data: rooms }, { data: agents }] = await Promise.all([
-    agentIds.length ? client.from("whatsapp_traffic_routines").select("agent_id, room_target_ids").eq("organization_id", input.organizationId).eq("room_enabled", true).in("agent_id", agentIds) : Promise.resolve({ data: [] }),
+  const [{ data: routines }, { data: agents }] = await Promise.all([
+    agentIds.length ? client.from("whatsapp_traffic_routines").select("agent_id, room_enabled, room_target_ids, room_open_hour, room_close_hour, room_days").eq("organization_id", input.organizationId).in("agent_id", agentIds) : Promise.resolve({ data: [] }),
     agentIds.length ? client.from("agent_registry").select("id, name, persona_name").in("id", agentIds) : Promise.resolve({ data: [] }),
   ]);
-  const roomTargets = new Set(((rooms ?? []) as Array<{ room_target_ids: string[] | null }>).flatMap(room => room.room_target_ids ?? []));
+  const roomsByTarget = new Map<string, RoomSchedule>();
+  for (const routine of (routines ?? []) as Array<{ room_enabled: boolean; room_target_ids: string[] | null; room_open_hour: number; room_close_hour: number; room_days: number[] | null }>) {
+    if (!routine.room_enabled) continue;
+    for (const targetId of routine.room_target_ids ?? []) roomsByTarget.set(targetId, { open: routine.room_open_hour, close: routine.room_close_hour, days: routine.room_days ?? [] });
+  }
   const agentName = new Map(((agents ?? []) as Array<{ id: string; name: string; persona_name: string | null }>).map(agent => [agent.id, agent.persona_name?.trim() || agent.name]));
   for (const row of rows) {
     const agentId = agentByInstance.get(row.whatsapp_instance_id);
     if (agentId === undefined) continue;
-    if (!holders.has(row.provider_jid) && ((row.enabled && row.reply_mode !== "off") || roomTargets.has(row.id))) {
-      holders.set(row.provider_jid, { groupName: row.display_name ?? "este grupo", agentName: (agentId && agentName.get(agentId)) || "outro agente" });
-    }
+    const room = roomsByTarget.get(row.id);
+    // Inside a room, "answers on" is the room itself; outside one it means answering at any time.
+    const always = !room && row.enabled && row.reply_mode !== "off";
+    if (!room && !always) continue;
+    const holder = holders.get(row.provider_jid) ?? { groupName: row.display_name ?? "este grupo", agentName: (agentId && agentName.get(agentId)) || "outro agente", always: false, rooms: [] };
+    holder.always = holder.always || always;
+    if (room) holder.rooms.push(room);
+    holders.set(row.provider_jid, holder);
   }
   return holders;
 }
 
-export function groupResponderConflictMessage(conflict: { groupName: string; agentName: string }) {
-  return `O grupo ${conflict.groupName} já é atendido por ${conflict.agentName}. Só um agente responde em cada grupo: desligue a sala de dúvidas ou as respostas de ${conflict.agentName} nesse grupo para liberar. Postar produtos no grupo continua liberado para os dois.`;
+export function groupResponderConflictMessage(holder: GroupHolder) {
+  return groupHolderConflictMessage(holder);
 }
 
 export async function updateWhatsappChannelTargetSettings(

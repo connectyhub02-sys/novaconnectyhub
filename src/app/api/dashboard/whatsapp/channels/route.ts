@@ -175,7 +175,7 @@ async function loadGroupHolders(client: ReturnType<typeof createServiceClient>, 
   const { data } = await client.from("whatsapp_channel_targets").select("id, provider_jid").eq("whatsapp_instance_id", whatsapp.instance.id).eq("target_type", "group");
   const targets = (data ?? []) as Array<{ id: string; provider_jid: string }>;
   const holders = await mapOtherGroupResponders(client, { organizationId, instanceId: whatsapp.instance.id, groupJids: targets.map(target => target.provider_jid) });
-  return Object.fromEntries(targets.filter(target => holders.has(target.provider_jid)).map(target => [target.id, holders.get(target.provider_jid)!.agentName]));
+  return Object.fromEntries(targets.filter(target => holders.has(target.provider_jid)).map(target => [target.id, holders.get(target.provider_jid)!]));
 }
 
 function toClientRoutine(routine: TrafficRoutine) {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, RefreshCcw, Sparkles, Trash2, Users, X } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
+import { describeHolder, holderConflicts, type GroupHolder } from "@/lib/whatsapp/group-schedule";
 
 export type TrafficNumberSettings = {
   leadStatusView: boolean; leadStatusReact: boolean; leadStatusComment: boolean;
@@ -21,7 +22,7 @@ export type TrafficPayload = {
   campaigns: TrafficCampaignView[];
   upcoming: Array<{ id: string; kind: "status" | "grupos e canais" | "sala de dúvidas"; title: string; text: string; scheduledFor: string | null; campaign: string | null }>;
   numbers?: Array<{ agentId: string; enabled: boolean }>;
-  groupHolders?: Record<string, string>;
+  groupHolders?: Record<string, GroupHolder>;
 };
 type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
 type CampaignDraft = Omit<TrafficCampaignView, "id" | "status" | "endsAt" | "plannedUntil" | "lastError" | "sent" | "scheduled"> & { id: string | null };
@@ -257,7 +258,7 @@ function CampaignEditor(props: {
   );
 }
 
-function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; holders: Record<string, string>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
+function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; holders: Record<string, GroupHolder>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(props.saved);
   const set = <K extends keyof TrafficNumberSettings>(key: K, value: TrafficNumberSettings[K]) => setDraft(current => ({ ...current, [key]: value }));
   const dirty = JSON.stringify({ ...draft, roomPlannedUntil: null, lastError: null }) !== JSON.stringify({ ...props.saved, roomPlannedUntil: null, lastError: null });
@@ -280,15 +281,16 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
             <p className="text-xs font-semibold text-slate-600">Quais grupos</p>
             <div className="mt-1 grid max-h-44 gap-1 overflow-y-auto">
               {props.groups.length ? props.groups.map(group => {
-                // Only one agent answers in each group: a group another agent answers stays locked here.
+                // One agent answers a group at a time: a group another agent answers in the chosen hours stays locked.
                 const holder = props.holders[group.id];
-                const locked = group.isAdmin === false || Boolean(holder);
+                const conflict = holder ? holderConflicts(holder, { open: draft.roomOpenHour, close: draft.roomCloseHour, days: draft.roomDays }) : false;
+                const locked = group.isAdmin === false || conflict;
                 return (
-                  <label key={group.id} title={holder ? `Para trocar, desligue a sala de ${holder} neste grupo` : undefined}
+                  <label key={group.id} title={holder ? (conflict ? `${describeHolder(holder)}: escolha outro horário ou dias, ou desligue a sala de ${holder.agentName} neste grupo` : describeHolder(holder)) : undefined}
                     className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm", locked ? "opacity-60" : "cursor-pointer hover:bg-slate-50")}>
                     <span className="flex min-w-0 items-center gap-2"><input type="checkbox" disabled={locked} checked={draft.roomTargetIds.includes(group.id)}
                       onChange={() => set("roomTargetIds", draft.roomTargetIds.includes(group.id) ? draft.roomTargetIds.filter(id => id !== group.id) : [...draft.roomTargetIds, group.id])} className="accent-emerald-700" /><span className="truncate text-slate-800">{group.name}</span></span>
-                    {holder ? <span className="shrink-0 text-xs text-amber-700">atendido por {holder}</span> : group.isAdmin === false ? <span className="shrink-0 text-xs text-amber-700">precisa ser admin</span> : null}
+                    {holder ? <span className={cn("shrink-0 text-xs", conflict ? "text-amber-700" : "text-slate-500")}>{describeHolder(holder)}</span> : group.isAdmin === false ? <span className="shrink-0 text-xs text-amber-700">precisa ser admin</span> : null}
                   </label>
                 );
               }) : <p className="text-xs text-slate-500">Nenhum grupo encontrado.</p>}
@@ -317,7 +319,7 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
           <div className="grid content-start gap-2">
             <Check checked={draft.roomReplies} onChange={() => set("roomReplies", !draft.roomReplies)} label="O agente responde as perguntas"
               hint="Enquanto o grupo está aberto, responde em texto ou áudio (como no atendimento) citando quem perguntou" />
-            <p className="text-xs text-slate-500">Com o grupo fechado, ninguém escreve e o agente não responde. Para abrir e fechar, este número precisa ser admin do grupo. Só um agente responde em cada grupo: grupos já atendidos por outro agente aparecem bloqueados.</p>
+            <p className="text-xs text-slate-500">Com o grupo fechado, ninguém escreve e o agente não responde. Para abrir e fechar, este número precisa ser admin do grupo. Só um agente responde em cada grupo por vez: grupos atendidos por outro agente em horário que cruza com o escolhido aparecem bloqueados (é preciso pelo menos 1 hora de intervalo entre as salas).</p>
           </div>
         </div>
         {props.saved.lastError ? <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{props.saved.lastError}</p> : null}
