@@ -35,7 +35,10 @@ import {
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
 
-import { copyTrafficRoutine, listTrafficRoutineNumbers, listUpcomingRoutinePosts, loadTrafficRoutine, saveTrafficRoutine, skipRoutinePost, type TrafficRoutine, type TrafficRoutineInput } from "@/lib/whatsapp/traffic-routine";
+import {
+  campaignCounts, copyTrafficRoutine, listTrafficCampaigns, listTrafficRoutineNumbers, listUpcomingTraffic, loadTrafficRoutine, saveTrafficCampaign,
+  saveTrafficRoutine, setTrafficCampaignStatus, skipTrafficItem, type TrafficCampaign, type TrafficCampaignInput, type TrafficRoutine, type TrafficRoutineInput,
+} from "@/lib/whatsapp/traffic-routine";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -106,6 +109,9 @@ type ChannelActionBody = {
   routine?: unknown;
   itemId?: unknown;
   fromAgentId?: unknown;
+  campaign?: unknown;
+  campaignId?: unknown;
+  campaignAction?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -148,43 +154,68 @@ export async function GET(request: NextRequest) {
 }
 
 async function loadTrafficPayload(client: ReturnType<typeof createServiceClient>, organizationId: string, agentId: string) {
-  const routine = await loadTrafficRoutine(client, organizationId, agentId).catch(() => null);
-  return { routine: routine ? toClientRoutine(routine) : null, upcoming: routine ? await listUpcomingRoutinePosts(client, routine) : [],
-    numbers: await listTrafficRoutineNumbers(client, organizationId).catch(() => []) };
+  const [routine, campaigns] = await Promise.all([
+    loadTrafficRoutine(client, organizationId, agentId).catch(() => null),
+    listTrafficCampaigns(client, organizationId, agentId).catch(() => [] as TrafficCampaign[]),
+  ]);
+  const counts = await campaignCounts(client, organizationId, campaigns).catch(() => new Map<string, { sent: number; scheduled: number }>());
+  return {
+    routine: routine ? toClientRoutine(routine) : null,
+    campaigns: campaigns.map(campaign => toClientCampaign(campaign, counts.get(campaign.id) ?? { sent: 0, scheduled: 0 })),
+    upcoming: await listUpcomingTraffic(client, organizationId, campaigns, routine).catch(() => []),
+    numbers: await listTrafficRoutineNumbers(client, organizationId).catch(() => []),
+  };
 }
 
 function toClientRoutine(routine: TrafficRoutine) {
   return {
-    enabled: routine.enabled, postStatus: routine.post_status, targetIds: routine.target_ids, productMode: routine.product_mode,
-    catalogItemIds: routine.catalog_item_ids, idea: routine.idea ?? "", intensity: routine.intensity, startHour: routine.start_hour,
     leadStatusView: routine.lead_status_view, leadStatusReact: routine.lead_status_react, leadStatusComment: routine.lead_status_comment,
-    postFormat: routine.post_format ?? "auto", roomEnabled: routine.room_enabled ?? false, roomTargetIds: routine.room_target_ids ?? [],
-    roomOpenHour: routine.room_open_hour ?? 19, roomCloseHour: routine.room_close_hour ?? 20, roomDays: routine.room_days ?? [0, 1, 2, 3, 4, 5, 6],
-    roomReplies: routine.room_replies ?? true, roomPlannedUntil: routine.room_planned_until ?? null,
-    plannedUntil: routine.planned_until, lastError: routine.last_error,
+    roomEnabled: routine.room_enabled ?? false, roomTargetIds: routine.room_target_ids ?? [], roomOpenHour: routine.room_open_hour ?? 19,
+    roomCloseHour: routine.room_close_hour ?? 20, roomDays: routine.room_days ?? [0, 1, 2, 3, 4, 5, 6], roomReplies: routine.room_replies ?? true,
+    roomPlannedUntil: routine.room_planned_until ?? null, lastError: routine.last_error,
   };
 }
 
+function toClientCampaign(campaign: TrafficCampaign, counts: { sent: number; scheduled: number }) {
+  return {
+    id: campaign.id, name: campaign.name, status: campaign.status, postStatus: campaign.post_status, targetIds: campaign.target_ids,
+    productMode: campaign.product_mode, catalogItemIds: campaign.catalog_item_ids, idea: campaign.idea ?? "", manualText: campaign.manual_text ?? "",
+    postFormat: campaign.post_format, intensity: campaign.intensity, startHour: campaign.start_hour, scheduleMode: campaign.schedule_mode,
+    endsAt: campaign.ends_at, plannedUntil: campaign.planned_until, lastError: campaign.last_error, sent: counts.sent, scheduled: counts.scheduled,
+  };
+}
+
+const uuidList = (list: unknown, max = 50) => Array.isArray(list) ? list.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, max) : [];
+const readRecordValue = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
 function readRoutineChanges(value: unknown): TrafficRoutineInput {
-  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const record = readRecordValue(value);
   const changes: TrafficRoutineInput = {};
   const bool = (key: string, target: keyof TrafficRoutineInput) => { if (typeof record[key] === "boolean") (changes as Record<string, unknown>)[target] = record[key]; };
-  bool("enabled", "enabled"); bool("postStatus", "post_status"); bool("leadStatusView", "lead_status_view");
-  bool("leadStatusReact", "lead_status_react"); bool("leadStatusComment", "lead_status_comment");
-  const uuids = (list: unknown) => Array.isArray(list) ? list.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 50) : [];
+  bool("leadStatusView", "lead_status_view"); bool("leadStatusReact", "lead_status_react"); bool("leadStatusComment", "lead_status_comment");
   bool("roomEnabled", "room_enabled"); bool("roomReplies", "room_replies");
-  if ("roomTargetIds" in record) changes.room_target_ids = uuids(record.roomTargetIds);
-  if (record.postFormat === "auto" || record.postFormat === "product_audio" || record.postFormat === "product_button") changes.post_format = record.postFormat;
-  const hour = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : undefined;
-  if (hour(record.roomOpenHour, 6, 22) !== undefined) changes.room_open_hour = record.roomOpenHour as number;
-  if (hour(record.roomCloseHour, 7, 23) !== undefined) changes.room_close_hour = record.roomCloseHour as number;
+  if ("roomTargetIds" in record) changes.room_target_ids = uuidList(record.roomTargetIds);
+  const hour = (item: unknown, min: number, max: number) => typeof item === "number" && Number.isInteger(item) && item >= min && item <= max;
+  if (hour(record.roomOpenHour, 6, 22)) changes.room_open_hour = record.roomOpenHour as number;
+  if (hour(record.roomCloseHour, 7, 23)) changes.room_close_hour = record.roomCloseHour as number;
   if (Array.isArray(record.roomDays)) changes.room_days = Array.from(new Set(record.roomDays.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6)));
-  if ("targetIds" in record) changes.target_ids = uuids(record.targetIds);
-  if ("catalogItemIds" in record) changes.catalog_item_ids = uuids(record.catalogItemIds).slice(0, 12);
-  if (record.productMode === "featured" || record.productMode === "selected") changes.product_mode = record.productMode;
+  return changes;
+}
+
+function readCampaignChanges(value: unknown): TrafficCampaignInput {
+  const record = readRecordValue(value);
+  const changes: TrafficCampaignInput = {};
+  if (typeof record.name === "string") changes.name = record.name.slice(0, 80);
+  if (typeof record.postStatus === "boolean") changes.post_status = record.postStatus;
+  if ("targetIds" in record) changes.target_ids = uuidList(record.targetIds);
+  if ("catalogItemIds" in record) changes.catalog_item_ids = uuidList(record.catalogItemIds, 12);
+  if (record.productMode === "featured" || record.productMode === "selected" || record.productMode === "single") changes.product_mode = record.productMode;
+  if (typeof record.idea === "string") changes.idea = record.idea.slice(0, 600);
+  if (typeof record.manualText === "string") changes.manual_text = record.manualText.slice(0, 1500);
+  if (["auto", "product_audio", "product_button", "text", "poll"].includes(String(record.postFormat))) changes.post_format = record.postFormat as TrafficCampaignInput["post_format"];
   if (record.intensity === "light" || record.intensity === "normal" || record.intensity === "intense") changes.intensity = record.intensity;
   if (typeof record.startHour === "number" && Number.isInteger(record.startHour) && record.startHour >= 6 && record.startHour <= 20) changes.start_hour = record.startHour;
-  if (typeof record.idea === "string") changes.idea = record.idea.slice(0, 600);
+  if (["once", "week", "month", "continuous"].includes(String(record.scheduleMode))) changes.schedule_mode = record.scheduleMode as TrafficCampaignInput["schedule_mode"];
   return changes;
 }
 
@@ -210,22 +241,34 @@ export async function POST(request: NextRequest) {
     let result: unknown;
     let notice = "Operacao concluida.";
 
-    if (action === "save_traffic_routine" || action === "skip_routine_post" || action === "copy_traffic_routine") {
-      if (!context.selectedAgentId) return NextResponse.json({ error: "Escolha o agente da rotina." }, { status: 422 });
+    if (["save_traffic_routine", "save_traffic_campaign", "campaign_status", "skip_routine_post", "copy_traffic_routine"].includes(action)) {
+      if (!context.selectedAgentId) return NextResponse.json({ error: "Escolha o número do tráfego." }, { status: 422 });
+      const scope = { organizationId: context.organization.id, agentId: context.selectedAgentId, userId: context.userId };
+      const runCampaign = (campaign: TrafficCampaign | null) => campaign?.status === "active" && !campaign.planned_until
+        ? inngest.send({ name: "connectyhub/traffic-campaign.run", data: { campaignId: campaign.id } }).catch(() => null) : null;
       if (action === "save_traffic_routine") {
-        const routine = await saveTrafficRoutine(client, { organizationId: context.organization.id, agentId: context.selectedAgentId, userId: context.userId, changes: readRoutineChanges(body?.routine) });
-        if ((routine.enabled && !routine.planned_until) || (routine.room_enabled && !routine.room_planned_until)) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
-        notice = routine.enabled ? (routine.planned_until ? "Rotina atualizada." : "Rotina ligada. Os primeiros posts aparecem aqui em instantes.") : "Rotina desligada. Os posts agendados foram cancelados.";
+        const routine = await saveTrafficRoutine(client, { ...scope, changes: readRoutineChanges(body?.routine) });
+        if (routine.room_enabled && !routine.room_planned_until) await inngest.send({ name: "connectyhub/traffic-routine.run", data: { routineId: routine.id } }).catch(() => null);
+        notice = "Salvo.";
+      } else if (action === "save_traffic_campaign") {
+        const campaign = await saveTrafficCampaign(client, { ...scope, campaignId: asString(body?.campaignId), changes: readCampaignChanges(body?.campaign) });
+        await runCampaign(campaign);
+        notice = campaign.schedule_mode === "once" ? "Post agendado: sai em instantes." : "Campanha salva. Os próximos posts aparecem aqui em instantes.";
+      } else if (action === "campaign_status") {
+        const campaignAction = asString(body?.campaignAction);
+        if (campaignAction !== "pause" && campaignAction !== "resume" && campaignAction !== "end" && campaignAction !== "delete") return NextResponse.json({ error: "Ação inválida." }, { status: 422 });
+        const campaign = await setTrafficCampaignStatus(client, { ...scope, campaignId: asString(body?.campaignId) ?? "", action: campaignAction });
+        await runCampaign(campaign);
+        notice = { pause: "Campanha pausada: os posts agendados foram cancelados.", resume: "Campanha retomada.", end: "Campanha encerrada.", delete: "Campanha excluída." }[campaignAction];
       } else if (action === "copy_traffic_routine") {
         const fromAgentId = asString(body?.fromAgentId);
         if (!fromAgentId || !context.agents.some((agent) => agent.id === fromAgentId)) return NextResponse.json({ error: "Número de origem inválido." }, { status: 422 });
         await copyTrafficRoutine(client, { organizationId: context.organization.id, fromAgentId, toAgentId: context.selectedAgentId, userId: context.userId });
-        notice = "Configuração copiada. Confira os grupos e ligue a rotina deste número.";
+        notice = "Configuração copiada: as campanhas chegam pausadas. Confira os grupos e ligue as que quiser.";
       } else {
-        const routine = await loadTrafficRoutine(client, context.organization.id, context.selectedAgentId);
-        if (!routine) return NextResponse.json({ error: "Rotina não encontrada." }, { status: 404 });
-        await skipRoutinePost(client, routine, asString(body?.itemId) ?? "");
-        notice = "Post pulado.";
+        const [routine, campaigns] = await Promise.all([loadTrafficRoutine(client, scope.organizationId, scope.agentId), listTrafficCampaigns(client, scope.organizationId, scope.agentId)]);
+        await skipTrafficItem(client, scope.organizationId, campaigns, routine, asString(body?.itemId) ?? "");
+        notice = "Envio pulado.";
       }
       return NextResponse.json({ traffic: await loadTrafficPayload(client, context.organization.id, context.selectedAgentId), notice: { tone: "success", message: notice } });
     }

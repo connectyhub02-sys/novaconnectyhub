@@ -796,6 +796,78 @@ export function ClientWhatsappAutomationStudio({
           onSave={async (action, payload) => (await runAction(action, payload))?.traffic ?? null}
         /> : null}
 
+        {entityIdKey === "companyId" ? (
+        <details className="rounded-xl border border-slate-200 p-3">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">Histórico de envios e resultados</summary>
+        <div className="mt-3 space-y-4">
+        <Section title="Inteligencia" badge={operations?.analytics.optimization.confidence ?? "low"}>
+          <div className="grid gap-3">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric icon={Eye} label="Views" value={formatCompactNumber(operations?.analytics.summary.views ?? 0)} detail="canais/status disponiveis" />
+              <Metric icon={MessageCircle} label="Respostas" value={formatCompactNumber(operations?.analytics.summary.replies ?? 0)} detail="grupos e status" />
+              <Metric icon={MousePointerClick} label="Cliques" value={formatCompactNumber(operations?.analytics.summary.linkClicks ?? 0)} detail="links rastreados" />
+              <Metric icon={Users} label="Leads CRM" value={formatCompactNumber(operations?.analytics.summary.knownLeads ?? 0)} detail="contatos identificados" />
+            </div>
+            {operations?.analytics.optimization.reasons.length ? (
+              <div className="rounded-xl border border-slate-200 bg-white/60 p-3 text-[12px] leading-5 text-slate-600">
+                {operations.analytics.optimization.reasons.map((reason) => <p key={reason}>- {reason}</p>)}
+              </div>
+            ) : null}
+            <div className="grid gap-3 lg:grid-cols-2">
+              <MiniList
+                emptyText="Produtos ainda sem historico de campanha."
+                items={(operations?.analytics.topProducts ?? []).map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  detail: `${item.count} uso(s) recente(s)`,
+                }))}
+                title="Produtos mais usados"
+              />
+              <MiniList
+                emptyText="Segmentos aparecem conforme campanhas e respostas forem registradas."
+                items={(operations?.analytics.segments ?? []).map((item) => ({
+                  id: item.id,
+                  title: item.label,
+                  detail: `${item.count} sinal(is) - ${item.description}`,
+                }))}
+                title="Segmentos sugeridos"
+              />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Historico recente" badge={`${operations?.history.length ?? 0} registros`}>
+          <div className="grid gap-2">
+            {operations?.history.length ? operations.history.slice(0, historyLimit).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedHistoryId(item.id)}
+                className="grid gap-2 rounded-xl border border-slate-200 bg-white/60 p-3 text-left transition hover:border-emerald-500/30 hover:bg-emerald-500/5 sm:grid-cols-[1fr_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
+                  <p className="mt-1 truncate text-[11px] text-slate-500">{item.summary ?? formatHistoryOperation(item.operation)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {buildHistoryMetricPills(item).map((metric) => (
+                      <HistoryMetricPill key={metric.label} label={metric.label} value={metric.value} />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <NeonBadge tone={item.status === "published" ? "green" : item.status === "review" ? "rose" : "amber"}>{item.status}</NeonBadge>
+                  <span className="font-mono text-[11px] text-slate-500">{formatDateTime(item.scheduledFor ?? item.publishedAt)}</span>
+                </div>
+              </button>
+            )) : (
+              <EmptyState icon={CalendarClock} text="Nenhum envio de grupos, canais ou status registrado ainda." />
+            )}
+          </div>
+        </Section>
+        {(operations?.history.length ?? 0) > historyLimit && <button type="button" onClick={() => setHistoryLimit((value) => value + 10)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">Mostrar mais</button>}
+        </div>
+        </details>
+        ) : (
         <details className="rounded-xl border border-slate-200 p-3">
         <summary className="cursor-pointer text-sm font-semibold text-slate-700">Mais opções (avançado): post avulso, enquete, resultados e regras de cada grupo</summary>
         <div className="mt-3 grid gap-4">
@@ -1221,6 +1293,7 @@ export function ClientWhatsappAutomationStudio({
         </div>
         </div>
         </details>
+        )}
         <HistoryInsightDrawer
           item={selectedHistoryItem}
           loading={runningAction === "sync_outbound_insights"}
