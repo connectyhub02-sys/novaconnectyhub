@@ -343,7 +343,7 @@ export async function POST(request: NextRequest) {
         client,
         organizationId: context.organization.id,
         userId: context.userId,
-        featureCode: "whatsapp_campaign_ai_draft",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_campaign_ai_draft)
         modelId: draft.modelId,
         agentScope: "customer",
         promptText: [draft.systemInstruction, draft.prompt],
@@ -375,7 +375,7 @@ export async function POST(request: NextRequest) {
         client,
         organizationId: context.organization.id,
         userId: context.userId,
-        featureCode: "whatsapp_growth_plan_ai",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_growth_plan_ai)
         modelId: plan.modelId,
         agentScope: "customer",
         promptText: [plan.systemInstruction, plan.prompt],
@@ -402,7 +402,7 @@ export async function POST(request: NextRequest) {
         client,
         organizationId: context.organization.id,
         userId: context.userId,
-        featureCode: "whatsapp_status_ai_draft",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_status_ai_draft)
         modelId: draft.modelId,
         agentScope: "customer",
         promptText: [draft.systemInstruction, draft.prompt],

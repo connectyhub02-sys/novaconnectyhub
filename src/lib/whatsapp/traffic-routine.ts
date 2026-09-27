@@ -78,12 +78,17 @@ export function nextRoutineDayStart(now: Date, startHour: number, plannedUntil: 
 /** Next opening of the question room: a chosen weekday, after what is planned and at least 10 minutes ahead. */
 export function nextRoomWindow(now: Date, routine: Pick<TrafficRoutine, "room_open_hour" | "room_close_hour" | "room_days" | "room_planned_until">) {
   const days = routine.room_days.length ? routine.room_days : [0, 1, 2, 3, 4, 5, 6];
-  const floor = Math.max(now.getTime() + 10 * 60_000, routine.room_planned_until ? new Date(routine.room_planned_until).getTime() : 0);
+  const planned = routine.room_planned_until ? new Date(routine.room_planned_until).getTime() : 0;
+  const soon = now.getTime() + 2 * 60_000;
   for (let offset = 0; offset < 8; offset += 1) {
     const midnight = localMidnight(now.getTime()) + offset * dayMs;
     const open = midnight + routine.room_open_hour * hourMs;
+    const close = midnight + routine.room_close_hour * hourMs;
     const weekday = new Date(midnight - brtOffsetMs).getUTCDay();
-    if (open >= floor && days.includes(weekday)) return { open: new Date(open), close: new Date(midnight + routine.room_close_hour * hourMs) };
+    if (!days.includes(weekday) || open < planned) continue;
+    if (open >= soon) return { open: new Date(open), close: new Date(close) };
+    // Turned on during today's room hours: open right away while at least 20 minutes are left.
+    if (close - soon >= 20 * 60_000) return { open: new Date(soon), close: new Date(close) };
   }
   return null;
 }
@@ -330,7 +335,7 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
       targetIds: destination.targetIds, catalogItemIds, brief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
     });
     await meterGeminiGenerationUsage({
-      client, organizationId: campaign.organization_id, featureCode: "whatsapp_traffic_routine_ai", modelId: plan.modelId, agentScope: "customer",
+      client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: plan.modelId, agentScope: "customer",
       promptText: [plan.systemInstruction, plan.prompt], outputText: plan.items.map(item => item.text).join("\n\n"), responseData: plan.responseData,
       debitDescription: "Campanha de tráfego no WhatsApp", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, agentId: campaign.agent_id, itemCount: plan.items.length },
     });

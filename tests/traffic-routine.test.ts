@@ -148,6 +148,15 @@ describe("question room in groups", () => {
     expect(window?.close.toISOString()).toBe("2026-09-28T23:00:00.000Z");
   });
 
+  it("turned on during today's room hours, opens right away; too close to closing, waits for the next day", async () => {
+    const { traffic } = setup();
+    const room = { room_open_hour: 15, room_close_hour: 16, room_days: [0, 1, 2, 3, 4, 5, 6], room_planned_until: null };
+    // 15h05 BRT: opens at 15h07 and closes at 16h.
+    expect(traffic.nextRoomWindow(new Date("2026-09-27T18:05:00Z"), room)).toEqual({ open: new Date("2026-09-27T18:07:00Z"), close: new Date("2026-09-27T19:00:00Z") });
+    // 15h50 BRT: only 8 minutes left, so tomorrow at 15h.
+    expect(traffic.nextRoomWindow(new Date("2026-09-27T18:50:00Z"), room)?.open.toISOString()).toBe("2026-09-28T18:00:00.000Z");
+  });
+
   it("schedules the opening with answers on, skips groups where the number is not admin and warns about them", async () => {
     const { db, traffic, windows } = setup();
     const result = await traffic.runTrafficRoom(db.client as never, routineRow() as never, new Date("2026-09-27T12:00:00Z"));

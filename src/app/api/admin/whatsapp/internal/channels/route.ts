@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
       });
       await meterGeminiGenerationUsage({
         client,
-        featureCode: "whatsapp_campaign_ai_draft",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_campaign_ai_draft)
         modelId: draft.modelId,
         agentScope: "platform",
         billingMode: "internal_shadow",
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
       });
       await meterGeminiGenerationUsage({
         client,
-        featureCode: "whatsapp_growth_plan_ai",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_growth_plan_ai)
         modelId: plan.modelId,
         agentScope: "platform",
         billingMode: "internal_shadow",
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
       });
       await meterGeminiGenerationUsage({
         client,
-        featureCode: "whatsapp_status_ai_draft",
+        featureCode: "content_generation", // tarifa de geração de conteúdo (whatsapp_status_ai_draft)
         modelId: draft.modelId,
         agentScope: "platform",
         billingMode: "internal_shadow",
