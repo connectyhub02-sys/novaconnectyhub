@@ -193,7 +193,7 @@ async function callUazapi(
     },
     body: JSON.stringify(options.body),
     cache: "no-store",
-  }, options.timeoutMs, `Uazapi ${path}`);
+  }, options.timeoutMs, `Servidor do WhatsApp ${path}`);
   const data = await readProviderResponse(response);
 
   return {

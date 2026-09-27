@@ -1457,7 +1457,7 @@ export function WhatsAppConsole({
   async function deleteWhatsappAgent(agent: ClientWhatsappAgent) {
     const hasUnsavedChanges = agent.id === selectedAgentId && settingsChanged;
     const confirmed = window.confirm(
-      `Excluir o agente "${agent.name}"?\n\nEsta acao remove o agente do painel e exclui qualquer instancia WhatsApp vinculada a ele na Uazapi. Leads, conversas e historico do CRM continuam preservados.${hasUnsavedChanges ? "\n\nAlteracoes nao salvas deste agente serao descartadas." : ""}`,
+      `Excluir o agente "${agent.name}"?\n\nEsta acao remove o agente do painel e desconecta o WhatsApp vinculado a ele. Leads, conversas e historico do CRM continuam preservados.${hasUnsavedChanges ? "\n\nAlteracoes nao salvas deste agente serao descartadas." : ""}`,
     );
 
     if (!confirmed) {
@@ -1748,7 +1748,7 @@ export function WhatsAppConsole({
                 }}
                 onConnectPhoneChange={setConnectPhone}
                 onDisconnect={() => {
-                  const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA instancia sera excluida do painel e da Uazapi para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
+                  const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA conexao sera excluida para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
                   if (confirmed) void runAction("disconnect");
                 }}
                 onRefresh={() => runAction("refresh_status")}
@@ -5885,7 +5885,7 @@ function CompactConnectionCard({
             icon={RefreshCcw}
             label="Status"
             compact
-            description="Consulta a Uazapi e atualiza conexao, numero, leitura e foto do WhatsApp."
+            description="Atualiza conexao, numero, leitura e foto do WhatsApp."
             disabled={!enabled || Boolean(running) || !instance}
             loading={running === "refresh_status"}
             onClick={onRefresh}
@@ -5903,7 +5903,7 @@ function CompactConnectionCard({
             icon={Power}
             label="Remover"
             compact
-            description="Exclui a instancia do painel e da Uazapi para permitir uma nova conexao sem duplicar cobranca."
+            description="Exclui a conexao para permitir uma nova sem duplicar cobranca."
             disabled={!enabled || Boolean(running) || !instance}
             loading={running === "disconnect"}
             tone="danger"
@@ -6073,7 +6073,7 @@ function CompactConnectionCard({
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <MigrationCopyButton
-                description="URL do servidor da UaZapi"
+                description="URL do servidor"
                 disabled={Boolean(migrationCopying)}
                 label="Copiar Server URL"
                 loading={migrationCopying === "serverUrl"}

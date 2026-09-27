@@ -1512,7 +1512,7 @@ export async function queueWhatsappTargetPollCampaign(
 
   const newsletterTarget = targets.find((target) => target.type === "newsletter");
   if (newsletterTarget) {
-    throw new Error("Enquetes interativas da Uazapi usam /send/menu e atualmente so sao seguras para grupos, nao canais.");
+    throw new Error("Enquetes so podem ser enviadas para grupos, nao para canais.");
   }
 
   const blocked = targets.filter((target) => !target.campaignEnabled);
@@ -3328,7 +3328,7 @@ async function callUazapi(
     : await readResponse(response);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
+    throw new Error(readProviderError(data) ?? `O servidor do WhatsApp respondeu status ${response.status}.`);
   }
 
   return { status: response.status, data };

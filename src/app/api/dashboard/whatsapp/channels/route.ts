@@ -275,10 +275,10 @@ export async function POST(request: NextRequest) {
 
     if (action === "refresh_groups") {
       result = await fetchWhatsappGroups(whatsapp);
-      notice = "Grupos carregados da Uazapi.";
+      notice = "Grupos atualizados.";
     } else if (action === "refresh_newsletters") {
       result = await fetchWhatsappNewsletters(whatsapp);
-      notice = "Canais/newsletters carregados da Uazapi.";
+      notice = "Canais atualizados.";
     } else if (action === "message_limits") {
       result = await fetchWhatsappMessageLimits(whatsapp);
       notice = "Limites de mensagens consultados.";
@@ -287,13 +287,13 @@ export async function POST(request: NextRequest) {
       notice = "Pastas de campanha consultadas.";
     } else if (action === "sync_campaign_tracking") {
       result = await syncWhatsappCampaignTracking(client, whatsapp);
-      notice = "Rastreamento de campanhas atualizado pela Uazapi.";
+      notice = "Rastreamento de campanhas atualizado.";
     } else if (action === "sync_outbound_insights") {
       result = await syncWhatsappOutboundInsights(client, whatsapp);
       notice = "Metricas de grupos, canais, status e CRM atualizadas.";
     } else if (action === "sync_group_intelligence") {
       result = await syncWhatsappGroupIntelligence(client, whatsapp);
-      notice = "Detalhes e riscos dos grupos atualizados pela Uazapi.";
+      notice = "Detalhes e riscos dos grupos atualizados.";
     } else if (action === "send_status") {
       const item = await queueWhatsappStatusBroadcast(client, whatsapp, {
         text: asString(body?.text) ?? "",

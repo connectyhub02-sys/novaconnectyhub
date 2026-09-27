@@ -2174,14 +2174,14 @@ export async function adoptAdminProviderInstance(input: {
   const providerInstance = await findProviderInstance(credentials, input.providerInstanceId);
 
   if (!providerInstance) {
-    throw new GatewayHttpError(404, "provider_instance_not_found", "Instancia nao encontrada na Uazapi.");
+    throw new GatewayHttpError(404, "provider_instance_not_found", "Instancia nao encontrada no servidor do WhatsApp.");
   }
 
   const providerInstanceId = findString(providerInstance, ["id", "instance_id", "instanceId", "instanceid"]);
   const token = findString(providerInstance, ["token", "instanceToken", "instance_token"]);
 
   if (!providerInstanceId || !token) {
-    throw new GatewayHttpError(422, "provider_instance_without_token", "A instancia existe na Uazapi, mas nao retornou id/token para adocao.");
+    throw new GatewayHttpError(422, "provider_instance_without_token", "A instancia existe no servidor do WhatsApp, mas nao retornou dados para adocao.");
   }
 
   const now = new Date().toISOString();

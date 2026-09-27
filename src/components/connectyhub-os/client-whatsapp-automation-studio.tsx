@@ -1438,7 +1438,7 @@ function HistoryInsightDrawer({
           </div>
         ) : (
           <div className="mt-4">
-            <EmptyState icon={BarChart3} text="Este envio ainda nao tem metricas sincronizadas. Clique em Atualizar metricas para consultar a Uazapi e registrar sinais no CRM." />
+            <EmptyState icon={BarChart3} text="Este envio ainda nao tem metricas sincronizadas. Clique em Atualizar métricas para buscar os resultados e registrar sinais no CRM." />
           </div>
         )}
 

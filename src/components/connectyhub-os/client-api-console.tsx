@@ -780,7 +780,7 @@ function MigrationAssistModal({
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <MigrationCopyButton
-            description="URL do servidor da UaZapi"
+            description="URL do servidor"
             disabled={Boolean(loading)}
             label="Copiar Server URL"
             loading={loading === "serverUrl"}

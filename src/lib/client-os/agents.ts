@@ -604,7 +604,7 @@ async function deleteAgentWhatsappInstances(
     });
 
     if (!deleteResult.providerDeleted && !deleteResult.skipped) {
-      throw new Error(`Nao foi possivel excluir a instancia WhatsApp ${row.id} na Uazapi. O agente nao foi excluido para evitar cobranca duplicada.`);
+      throw new Error(`Nao foi possivel desconectar o WhatsApp deste agente. O agente nao foi excluido para evitar cobranca duplicada.`);
     }
 
     const { error: archiveError } = await client

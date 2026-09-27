@@ -319,11 +319,11 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
       <div className="rounded-lg border border-slate-200 p-3">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles className="h-4 w-4 text-emerald-700" />Interagir com os leads</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <Check checked={draft.leadStatusView} onChange={() => set("leadStatusView", !draft.leadStatusView)} label="Ver o status dos leads" hint="Ser dos primeiros a visualizar quando eles postam" />
-          <Check checked={draft.leadStatusReact} onChange={() => set("leadStatusReact", !draft.leadStatusReact)} label="Reagir com emoji" hint="Uma reação que combina com o que foi postado" />
-          <Check checked={draft.leadStatusComment} onChange={() => set("leadStatusComment", !draft.leadStatusComment)} label="Comentar no status" hint="Um comentário curto e natural, que abre conversa" />
+          <Check checked={draft.leadStatusView} onChange={() => set("leadStatusView", !draft.leadStatusView)} label="Ver o status dos leads" hint="Visualizar logo que postam: o lead vê seu número entre os primeiros" />
+          <Check checked={draft.leadStatusReact} onChange={() => set("leadStatusReact", !draft.leadStatusReact)} label="Reagir ao status do lead" hint="Um emoji que combina com o que ele postou" />
+          <Check checked={draft.leadStatusComment} onChange={() => set("leadStatusComment", !draft.leadStatusComment)} label="Comentar no status do lead" hint="Chega no privado dele como resposta ao status e abre conversa" />
         </div>
-        <p className="mt-2 text-xs text-slate-500">Começa a agir assim que os status dos contatos chegarem ao sistema (em verificação com a UAZAPI). Comentar em muitos status aumenta o risco de bloqueio do número.</p>
+        <p className="mt-2 text-xs text-slate-500">Tudo aqui acontece no status dos seus leads. Começa a agir assim que o recebimento dos status dos contatos estiver liberado (em verificação). Comentar em muitos status aumenta o risco de bloqueio do número.</p>
       </div>
 
       {dirty ? (

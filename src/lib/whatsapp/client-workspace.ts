@@ -483,7 +483,7 @@ export async function connectClientWhatsapp(input: {
   }
 
   if (!connectResult.ok) {
-    throw new Error(readProviderError(connectResult.data) ?? `Uazapi respondeu status ${connectResult.status}.`);
+    throw new Error(readProviderError(connectResult.data) ?? `O servidor do WhatsApp respondeu status ${connectResult.status}.`);
   }
 
   const status = resolveUazapiWhatsappStatus(connectResult.data, "qr_pending");
@@ -628,7 +628,7 @@ export async function refreshClientWhatsappStatus(input: {
       };
     }
 
-    throw new Error(readProviderError(result.data) ?? `Uazapi respondeu status ${result.status}.`);
+    throw new Error(readProviderError(result.data) ?? `O servidor do WhatsApp respondeu status ${result.status}.`);
   }
 
   const status = resolveUazapiWhatsappStatus(result.data);
@@ -775,7 +775,7 @@ export async function disconnectClientWhatsapp(input: {
 
   if (!deleteResult.providerDeleted && !deleteResult.skipped) {
     const providerMessage = readProviderError(deleteResult.providerResponse);
-    throw new Error(providerMessage ?? "Nao foi possivel excluir a instancia na Uazapi. A conexao foi mantida para evitar divergencia.");
+    throw new Error(providerMessage ?? "Nao foi possivel excluir a conexao no servidor do WhatsApp. Ela foi mantida para evitar divergencia.");
   }
 
   await archiveWorkspaceInstanceAfterProviderDelete(client, instance, {
@@ -853,7 +853,7 @@ export async function resetClientWhatsappConnection(input: {
         replacementReason: isInvalidInstanceTokenResponse(resetResult) ? "reset_invalid_token" : "reset_not_reconnectable",
       });
     } else {
-      throw new Error(readProviderError(resetResult.data) ?? `Uazapi respondeu status ${resetResult.status}.`);
+      throw new Error(readProviderError(resetResult.data) ?? `O servidor do WhatsApp respondeu status ${resetResult.status}.`);
     }
   } else {
     await createProviderInstance(client, credentials, input.organization, agent, input.userId, {
@@ -1453,7 +1453,7 @@ async function createProviderInstance(
   const profileImageUrl = extractProfileImageUrl(result.data);
 
   if (!providerInstanceId || !token) {
-    throw new Error("A Uazapi nao retornou id/token da instancia. Tente novamente ou verifique as credenciais no Admin OS.");
+    throw new Error("O servidor do WhatsApp nao retornou os dados da conexao. Tente novamente em instantes.");
   }
 
   const webhookResult = await configureClientWebhook(credentials, token, providerInstanceId);
@@ -1589,7 +1589,7 @@ async function deleteWorkspaceProviderInstanceBeforeReplacement(
 
   if (!deleteResult.providerDeleted && !deleteResult.skipped) {
     const providerMessage = readProviderError(deleteResult.providerResponse);
-    throw new Error(providerMessage ?? "Nao foi possivel excluir a instancia antiga na Uazapi. Nenhuma nova instancia foi criada para evitar cobranca duplicada.");
+    throw new Error(providerMessage ?? "Nao foi possivel excluir a conexao antiga. Nenhuma nova foi criada para evitar cobranca duplicada.");
   }
 
   return {
@@ -1861,7 +1861,7 @@ async function upsertRecoveredClientInstance(
   const profileImageUrl = extractProfileImageUrl(providerData);
 
   if (!providerInstanceId || !token) {
-    throw new Error("Instancia encontrada na Uazapi mas sem id/token valido.");
+    throw new Error("Conexao encontrada no servidor do WhatsApp, mas sem dados validos.");
   }
 
   const webhookResult = await configureClientWebhook(credentials, token, providerInstanceId);
@@ -2474,7 +2474,7 @@ async function callUazapi(
     : await readResponse(response);
 
   if (!response.ok && !options.tolerateError) {
-    throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
+    throw new Error(readProviderError(data) ?? `O servidor do WhatsApp respondeu status ${response.status}.`);
   }
 
   return {

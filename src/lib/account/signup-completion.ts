@@ -1145,7 +1145,7 @@ async function callUazapi(
 
   if (!response.ok) {
     throw new UazapiSignupRequestError(
-      readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`,
+      readProviderError(data) ?? `O servidor do WhatsApp respondeu status ${response.status}.`,
       response.status,
       data,
     );
