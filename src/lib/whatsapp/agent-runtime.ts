@@ -1224,7 +1224,7 @@ async function processWhatsappAgentRunWithScope(input: {
     extractNegotiationState(client, context).catch(() => {});
     if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
-    if (isGroupChat && context.groupSender) await inviteGroupParticipant(client, context, userText, outbound.some(message => asksForPersonalData(message.text ?? "") || message.text === groupPrivateRedirectText));
+    if (isGroupChat && context.groupSender) await noteGroupConversation(client, context, userText);
 
     return await completeRun(client, run.id, preview(outbound.map(message => message.text).join("\n\n"), 500), {
       sent: true,
@@ -1893,15 +1893,17 @@ export function sliceGroupThread<T extends { direction: string; payload: unknown
   return thread;
 }
 
-/** Purchase intent in a group becomes a private conversation, where the order can be closed. */
-async function inviteGroupParticipant(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, question: string, force: boolean) {
+/** Who talked to the agent in a group is called in private after the room closes, to continue there. */
+async function noteGroupConversation(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, question: string) {
   try {
-    const { inviteGroupParticipantToPrivate } = await import("./group-private-invite");
+    const { noteGroupParticipant } = await import("./group-private-invite");
     const latest = findLatestInbound(context.messages);
     const providerMessage = latest ? readProviderMessageRecord(latest) : null;
-    await inviteGroupParticipantToPrivate(client, {
-      organizationId: context.organization.id, agentId: context.agent.id, whatsappInstanceId: context.instance.id, senderJid: context.groupSender!,
-      senderName: asString(providerMessage?.senderName) ?? asString(providerMessage?.pushName), question, force,
+    const groupJid = context.providerChatId?.trim();
+    if (!groupJid?.endsWith("@g.us")) return;
+    await noteGroupParticipant(client, {
+      organizationId: context.organization.id, agentId: context.agent.id, whatsappInstanceId: context.instance.id, groupJid, senderJid: context.groupSender!,
+      senderName: asString(providerMessage?.senderName) ?? asString(providerMessage?.pushName), question,
     });
   } catch (error) {
     console.error("group_private_invite_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" });
@@ -4643,7 +4645,8 @@ const groupAttendanceRules = [
   "- Você está respondendo dentro de um grupo do WhatsApp, com várias pessoas lendo. Responda só a pessoa que perguntou, de forma curta, útil e simpática.",
   "- O grupo é para orientar, tirar dúvidas e criar relacionamento. Nunca feche pedido no grupo.",
   "- Nunca peça nem aceite dados pessoais no grupo: nome completo, CPF, e-mail, telefone, endereço, CEP, cartão, Pix ou qualquer dado de pagamento. Não monte pedido, não pergunte quantidades para comprar, não gere pagamento.",
-  "- Se a pessoa quiser comprar ou perguntar preço, entrega ou como comprar: indique o produto (nome e valor do catálogo, com foto ou botão do produto quando houver) e diga que vai chamá-la no privado para ajudar com o pedido.",
+  "- Responda a dúvida por completo aqui no grupo: indique os produtos, explique para que servem e como usar, informe o valor do catálogo e mostre foto ou botão do produto quando houver. Não troque a resposta por um convite para o privado.",
+  "- Se a pessoa quiser comprar, oriente e mostre o produto; não diga que vai chamá-la no privado nem peça para ela chamar. O sistema continua a conversa no privado depois que o grupo fechar.",
   "- Não responda perguntas de outras pessoas nem repita o que outra pessoa perguntou.",
   "- Nunca diga que não há produtos cadastrados. Se não encontrar o que a pessoa descreveu, pergunte o que ela procura ou sugira os produtos do catálogo que mais se aproximam.",
 ];
@@ -8537,7 +8540,7 @@ async function sendAgentResponse(input: {
     dropRepeatedCatalogMentionLines(renderedCatalog.text, renderedCatalog.items, context.messages), context.salesCatalog.length > 0);
   const budgetOnly = isCommerceBudgetStatement(buildSalesCatalogOrderIntentText(latestInbound, "", context));
   const safeCatalogText = hasCheckoutActionClaim(customerCatalogText) && (!checkoutAllowed || budgetOnly)
-    ? isWhatsappGroupChatContext(context) ? groupPrivateRedirectText : checkoutAllowed
+    ? isWhatsappGroupChatContext(context) ? customerCatalogText : checkoutAllowed
       ? "Entendi sua faixa de investimento. Que características você procura para eu indicar uma opção adequada?"
       : buildConsultativeCommerceReply(commerceJourney, budgetOnly)
     : customerCatalogText;
