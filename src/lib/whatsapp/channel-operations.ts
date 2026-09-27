@@ -36,6 +36,9 @@ type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
 const outboundAudioDeliveryTimeoutMs = 30000;
 const whatsappStatusTextMaxBytes = 620;
 const whatsappStatusAiTargetChars = 420;
+/** Written posts are read on a phone screen; the spoken audio can go further (about one minute). */
+export const campaignTextMaxChars = 280;
+export const campaignAudioMaxChars = 900;
 
 type WhatsappInstanceRow = {
   id: string;
@@ -349,6 +352,7 @@ export type WhatsappGrowthPlanItem = {
   productIds: string[];
   pollChoices: string[];
   buttonLabel: string | null;
+  audioText?: string | null;
 };
 
 export type WhatsappGrowthCampaignPlan = {
@@ -912,6 +916,7 @@ export async function queueWhatsappTargetTextCampaign(
     interactiveMode?: string | null;
     buttonLabel?: string | null;
     buttonUrl?: string | null;
+    audioText?: string | null;
   },
 ) {
   assertWhatsappConnected(context);
@@ -977,6 +982,7 @@ export async function queueWhatsappTargetTextCampaign(
       type: "text",
       text,
       delivery_mode: deliveryMode,
+      audio_text: deliveryMode !== "text" && input.audioText?.trim() ? shortenAtSentence(input.audioText, campaignAudioMaxChars) : undefined,
       target_mode: "whatsapp_targets",
       targets: targets.map((target) => ({
         id: target.id,
@@ -1305,9 +1311,10 @@ export async function generateWhatsappGrowthCampaignPlan(
     "Quando o usuario escolher um formato principal, respeite os formatos permitidos do prompt e nao troque para outro formato.",
     "Use carousel quando houver 2 ou mais produtos com midia. Use poll para gerar conversa em grupos.",
     "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing.",
-    `Cada texto deve ter no maximo 900 caracteres e deve conduzir para conversa ou compra. Quando type=status, mire ate ${whatsappStatusAiTargetChars} caracteres.`,
+    `Todo texto escrito e curto, para caber numa tela de celular: ate ${campaignTextMaxChars} caracteres (2 ou 3 frases curtas), conduzindo para conversa ou compra. Nunca escreva textao.`,
+    `Quando type=audio ou type=text_audio, preencha tambem audioText: a fala completa do agente para virar audio (ate ${campaignAudioMaxChars} caracteres, cerca de 1 minuto), natural, sem listas nem emojis, explicando o produto; o campo text continua sendo so a legenda curta e nao repete a fala.`,
     "Retorne somente JSON valido com as chaves title, strategySummary, approvalChecklist e items.",
-    "Cada item deve ter: day, slot, type, title, text, productRefs, pollChoices e buttonLabel.",
+    "Cada item deve ter: day, slot, type, title, text, audioText (so para audio/text_audio), productRefs, pollChoices e buttonLabel.",
   ].join("\n");
   const prompt = [
     `Objetivo: ${objective}`,
@@ -1463,6 +1470,7 @@ export async function queueWhatsappGrowthCampaignPlan(
         scheduledFor: planItem.scheduledFor,
         mentionAll: input.mentionAll,
         deliveryMode: planItem.type === "audio" || planItem.type === "text_audio" ? planItem.type : "text",
+        audioText: planItem.audioText ?? null,
         catalogItemIds: productIds,
         interactiveMode: itemButtonLabel ? "button" : "none",
         buttonLabel: itemButtonLabel,
@@ -2261,7 +2269,8 @@ async function sendTargetCampaignPayloadToRecipient(
   }
 
   if ((deliveryMode === "audio" || deliveryMode === "text_audio") && text) {
-    const audioResponse = await sendCampaignAudioToRecipient(client, context, item, recipient, text, mentions);
+    // The audio has its own, fuller script; the written text is only the short caption.
+    const audioResponse = await sendCampaignAudioToRecipient(client, context, item, recipient, asString(payload.audio_text) ?? text, mentions);
     responses.push(audioResponse);
   }
 
@@ -4838,7 +4847,22 @@ function truncateUtf8Text(value: string | null | undefined, maxBytes: number) {
 function normalizeGrowthPlanText(type: WhatsappGrowthPlanItemType, text: string) {
   return type === "status"
     ? truncateUtf8Text(text, whatsappStatusTextMaxBytes)
-    : text.trim().slice(0, 900);
+    : shortenAtSentence(text, campaignTextMaxChars);
+}
+
+/** Keeps whole sentences within the limit (a written post never becomes a wall of text). */
+export function shortenAtSentence(text: string, maxChars: number) {
+  const clean = text.trim();
+  if (clean.length <= maxChars) return clean;
+  const sentences = clean.split(/(?<=[.!?…])\s+/);
+  let result = "";
+  for (const sentence of sentences) {
+    if ((result ? `${result} ${sentence}` : sentence).length > maxChars) break;
+    result = result ? `${result} ${sentence}` : sentence;
+  }
+  if (result) return result;
+  const cut = clean.slice(0, maxChars - 1);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), maxChars * 0.6)).trim()}…`;
 }
 
 function normalizeStatusMediaAttachment(
@@ -5200,6 +5224,9 @@ function normalizeGrowthPlanAiItem(
     productIds: productIds.length > 0 ? productIds : fallback?.productIds ?? [],
     pollChoices: pollChoices.length >= 2 ? pollChoices : fallback?.pollChoices ?? buildFallbackPollChoices(input.catalogItems),
     buttonLabel: (asString(record.buttonLabel) ?? asString(record.button_label) ?? fallback?.buttonLabel)?.slice(0, 24) ?? null,
+    audioText: type === "audio" || type === "text_audio"
+      ? shortenAtSentence(asString(record.audioText) ?? asString(record.audio_text) ?? asString(record.text) ?? text, campaignAudioMaxChars)
+      : null,
   };
 }
 
@@ -5243,7 +5270,7 @@ function buildFallbackGrowthPlanItems(input: {
 function normalizeQueuedGrowthPlanItems(value: unknown, fallbackTargetIds: string[], fallbackProductIds: string[]): WhatsappGrowthPlanItem[] {
   const source = Array.isArray(value) ? value : [];
   return source
-    .map((item, index) => {
+    .map((item, index): WhatsappGrowthPlanItem | null => {
       const record = readRecord(item);
       if (!record) return null;
 
@@ -5271,6 +5298,7 @@ function normalizeQueuedGrowthPlanItems(value: unknown, fallbackTargetIds: strin
           ? normalizePollChoices(record.pollChoices ?? record.poll_choices)
           : ["Quero esse", "Quero outra opcao", "Me chama no privado"],
         buttonLabel: asString(record.buttonLabel) ?? asString(record.button_label),
+        audioText: asString(record.audioText) ?? asString(record.audio_text),
       };
     })
     .filter((item): item is WhatsappGrowthPlanItem => Boolean(item))

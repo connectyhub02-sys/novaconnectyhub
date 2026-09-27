@@ -56,8 +56,8 @@ const targetFormats: Record<TrafficPostFormat, string[]> = {
 };
 const formatBriefs: Record<TrafficPostFormat, string> = {
   auto: "",
-  product_audio: "Cada post apresenta UM produto: para que serve, para quem é e por que vale a pena, com um convite para tocar no botão e ver o produto. O texto também vira um áudio na voz do agente, então escreva como fala natural, sem listas nem emojis em excesso.",
-  product_button: "Cada post apresenta UM produto com uma chamada curta para tocar no botão e ver o produto.",
+  product_audio: "Cada post apresenta UM produto. O text é só uma legenda curta (1 ou 2 frases) com o nome, o valor e o convite para tocar no botão. O audioText é a fala completa do agente, de até 1 minuto: para que serve, para quem é e por que vale a pena, em linguagem natural, sem repetir a legenda.",
+  product_button: "Cada post apresenta UM produto com uma legenda curta (1 ou 2 frases): nome, valor e o convite para tocar no botão e ver o produto.",
   text: "Posts só de texto, curtos e conversados, que puxam resposta no privado.",
   poll: "Cada post é uma enquete que gera conversa sobre os produtos.",
 };
