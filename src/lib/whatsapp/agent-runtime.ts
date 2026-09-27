@@ -1,3 +1,4 @@
+import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
 import { quoteFoodComposition, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
@@ -7706,7 +7707,8 @@ function normalizeMediaAcknowledgementText(value: string | null | undefined) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!text || text.length > 140) {
+  // A cut-off generation ("and", "Vou dar") is not an acknowledgement: the ready-made one is used instead.
+  if (!text || text.length > 140 || text.length < 12 || text.split(" ").length < 3) {
     return "";
   }
 
@@ -8536,8 +8538,11 @@ async function sendAgentResponse(input: {
     agent: context.agent,
   });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
-  const customerCatalogText = sanitizeSalesCatalogCustomerText(
-    dropRepeatedCatalogMentionLines(renderedCatalog.text, renderedCatalog.items, context.messages), context.salesCatalog.length > 0);
+  // A free-shipping promise must match the configured threshold: checked here, not left to the model's math.
+  const customerCatalogText = correctFreeShippingClaim(sanitizeSalesCatalogCustomerText(
+    dropRepeatedCatalogMentionLines(renderedCatalog.text, renderedCatalog.items, context.messages), context.salesCatalog.length > 0),
+    readFreeShippingThresholds(context.salesCatalogShippingSettings?.shippingEnabled ? context.salesCatalogShippingSettings.rules : []),
+    context.messages.filter(message => message.direction === "outbound").slice(-4).reverse().map(message => message.text_content ?? ""));
   const budgetOnly = isCommerceBudgetStatement(buildSalesCatalogOrderIntentText(latestInbound, "", context));
   const safeCatalogText = hasCheckoutActionClaim(customerCatalogText) && (!checkoutAllowed || budgetOnly)
     ? isWhatsappGroupChatContext(context) ? customerCatalogText : checkoutAllowed

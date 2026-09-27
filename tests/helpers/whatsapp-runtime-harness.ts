@@ -19,6 +19,7 @@ import * as activitySetup from "@/lib/whatsapp/activity-setup";
 import * as conversationStyle from "@/lib/whatsapp/conversation-style";
 import * as conversationEnding from "@/lib/whatsapp/conversation-ending";
 import * as groupRules from "@/lib/whatsapp/group-rules";
+import * as shippingClaims from "@/lib/whatsapp/shipping-claims";
 import * as commerceConversation from "@/lib/whatsapp/commerce-conversation";
 import * as agentBehavior from "@/lib/whatsapp/agent-behavior";
 import * as humanHandoff from "@/lib/whatsapp/human-handoff";
@@ -32,7 +33,7 @@ import { serverModuleHarness } from "./server-module-harness";
 // Execute the real runtime functions with I/O substituted, without making private helpers a public API.
 const exposed = [
   "enrichLeadQualificationAnalysisWithRuntimeSignals",
-  "withGroupMentionPrefix", "readGroupSender", "sliceGroupThread", "resolveGroupAuthorMention", "isWithinSchedule", "captureLeadReturnAndBirthday", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
+  "normalizeMediaAcknowledgementText", "withGroupMentionPrefix", "readGroupSender", "sliceGroupThread", "resolveGroupAuthorMention", "isWithinSchedule", "captureLeadReturnAndBirthday", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
   "buildProactiveMediaInstruction", "buildSmallTalkContext", "resolveOutboundReplyTargets",
   "shouldSendAudioResponse", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
   "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",
@@ -115,6 +116,7 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "./conversation-style": conversationStyle,
     "./conversation-ending": conversationEnding,
     "./group-rules": groupRules,
+    "./shipping-claims": shippingClaims,
     "./commerce-conversation": commerceConversation,
     "./agent-behavior": agentBehavior,
     "./human-handoff": humanHandoff,
