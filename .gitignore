@@ -48,3 +48,4 @@ next-*.log
 next-env.d.ts
 
 .vercel
+scripts/seed/**/.photos/
