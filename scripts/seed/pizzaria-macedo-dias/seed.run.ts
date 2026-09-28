@@ -99,19 +99,32 @@ describe(`seed pizzaria macedo&dias (${step})`, () => {
         },
       },
     }), true);
-    const zone = (id: string, name: string, fee: string, neighborhoods: string[], freeAbove: string | null = null) => ({
-      id, name, active: true, shape: "neighborhoods", baseAddress: null, baseLatitude: null, baseLongitude: null, radiusKm: null, polygon: [],
-      neighborhoods, cities: ["Joinville"], price: fee, minDays: 0, maxDays: 0, freeDeliveryThreshold: freeAbove, orderMinimum: storeSettings.minimumOrderValue,
-      notes: "Entrega em 30 a 50 minutos.",
+    const base = storeSettings.location;
+    const common = { active: true, polygon: [], minDays: 0, maxDays: 0, orderMinimum: storeSettings.minimumOrderValue, notes: "Entrega em 30 a 50 minutos." };
+    // Written neighborhood (address) and WhatsApp location pin (radius) are separate authorities, so they never overlap.
+    const byNeighborhood = (id: string, name: string, fee: string, cities: string[], neighborhoods: string[], freeAbove: string | null = null) => ({
+      ...common, id, name, shape: "neighborhoods", baseAddress: null, baseLatitude: null, baseLongitude: null, radiusKm: null,
+      neighborhoods, cities, price: fee, freeDeliveryThreshold: freeAbove,
+    });
+    // Concentric rings: the closest ring has the highest priority.
+    const byRadius = (id: string, name: string, fee: string, radiusKm: number, priority: number, freeAbove: string | null = null) => ({
+      ...common, id, name, shape: "radius", priority, baseAddress: base.address, baseLatitude: base.latitude, baseLongitude: base.longitude, radiusKm,
+      neighborhoods: [], cities: [], price: fee, freeDeliveryThreshold: freeAbove,
     });
     await callRoute(JSON.stringify({
       action: "save_shipping_settings", companyId: organizationId,
       shippingEnabled: false, localDeliveryEnabled: true, localPickup: true, rules: [],
-      companyLocations: [{ label: "Pizzaria Macedo&Dias", serviceMode: "public_storefront", address: "Rua XV de Novembro, 1200 - Centro", cep: "89201-600", city: "Joinville", region: "SC", isPrimary: true }],
+      companyLocations: [{ label: "Pizzaria Macedo&Dias", serviceMode: "public_storefront", address: base.address, cep: base.cep, city: base.city, region: "SC", latitude: base.latitude, longitude: base.longitude, isPrimary: true }],
       localDeliveryZones: [
-        zone("centro", "Centro e arredores", "5.00", ["Centro", "América", "Atiradores", "Bucarein", "Anita Garibaldi", "Glória", "Saguaçu"], "120.00"),
-        zone("zona-intermediaria", "Bairros próximos", "8.00", ["Boa Vista", "Iririú", "Costa e Silva", "Santo Antônio", "Floresta", "Guanabara", "Itaum", "Bom Retiro"], "150.00"),
-        zone("zona-distante", "Bairros mais distantes", "12.00", ["Aventureiro", "Vila Nova", "Pirabeiraba", "Itinga", "Jardim Iririú", "Comasa", "Espinheiros"]),
+        byNeighborhood("bc-centro", "Balneário Camboriú — Centro e orla", "5.00", ["Balneário Camboriú"],
+          ["Centro", "Pioneiros", "Barra Sul", "Nações", "Estados", "Bairro dos Estados", "Ariribá", "Vila Real", "Municípios", "Praia dos Amores", "Jardim Iate Clube", "Iate Clube"], "120.00"),
+        byNeighborhood("bc-bairros", "Balneário Camboriú — demais bairros", "8.00", ["Balneário Camboriú"],
+          ["Barra", "Nova Esperança", "São Judas Tadeu", "Várzea do Ranchinho", "Taquaras", "Laranjeiras", "Estaleiro", "Estaleirinho", "Praia do Estaleiro"], "150.00"),
+        byNeighborhood("camboriu", "Camboriú", "10.00", ["Camboriú"], ["Tabuleiro", "Monte Alegre", "Rio Pequeno", "Areias", "Cedro", "Santa Regina", "Lídia Duarte", "São Francisco de Assis"]),
+        byNeighborhood("itajai", "Itajaí (sul)", "12.00", ["Itajaí"], ["Praia Brava", "Fazenda", "Cabeçudas", "Ressacada", "São Judas", "Praia dos Amores", "Canto da Praia"]),
+        byRadius("raio-4km", "Até 4 km da pizzaria", "5.00", 4, 3, "120.00"),
+        byRadius("raio-8km", "De 4 a 8 km", "8.00", 8, 2, "150.00"),
+        byRadius("raio-15km", "De 8 a 15 km", "12.00", 15, 1),
       ],
     }), true);
   }, 120_000);

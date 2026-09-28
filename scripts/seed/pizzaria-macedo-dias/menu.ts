@@ -1,4 +1,4 @@
-// Realistic test menu for "Pizzaria Macedo&Dias" (Joinville/SC): the environment where the
+// Realistic test menu for "Pizzaria Macedo&Dias" (Balneário Camboriú/SC): the environment where the
 // WhatsApp food flow is exercised before and after each phase of the food plan.
 import type { FoodCompositionPolicy, FoodOptionGroup } from "../../../src/lib/sales-catalog/food-composition";
 
@@ -132,9 +132,10 @@ export const storeSettings = {
   categories: ["Pizzas", "Pizzas Doces", "Combos", "Esfihas e Calzones", "Porções", "Bebidas", "Cervejas", "Sobremesas"],
   heroTitle: "Pizza quentinha",
   heroHighlight: "na sua porta",
-  heroSubtitle: "Forno a lenha, massa de fermentação natural e entrega em Joinville.",
+  heroSubtitle: "Forno a lenha, massa de fermentação natural e entrega em Balneário Camboriú e região.",
   footerText: "Pizzaria Macedo&Dias — pizzas artesanais em forno a lenha desde 2012.",
-  footerContactText: "Rua XV de Novembro, 1200 — Centro, Joinville/SC",
+  footerContactText: "Avenida Brasil, 1500 — Centro, Balneário Camboriú/SC",
+  location: { address: "Avenida Brasil, 1500 - Centro", cep: "88330-050", city: "Balneário Camboriú", latitude: -26.9905, longitude: -48.6337 },
   minimumOrderValue: "40.00",
 };
 
