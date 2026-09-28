@@ -336,7 +336,10 @@ const integrationProviders: ClientIntegrationProvider[] = [
   },
 ];
 
-const clientVisibleIntegrationProviders = integrationProviders.filter((provider) => provider.id !== "pagbank");
+// Kept in code but hidden from clients: PagBank (paused) and cards with nothing working behind them yet
+// (e-commerce, shipping and calendar placeholders; the universal webhook only stores events).
+const hiddenClientIntegrationProviders = new Set(["pagbank", "ecommerce-hub", "calendar-hub", "shipping-hub", "webhook-universal"]);
+const clientVisibleIntegrationProviders = integrationProviders.filter((provider) => provider.id !== "pagbank" && !hiddenClientIntegrationProviders.has(provider.id));
 
 export async function getClientIntegrationHub(input: {
   userId: string;

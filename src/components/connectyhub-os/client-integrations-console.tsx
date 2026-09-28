@@ -129,6 +129,8 @@ type MetaReviewSnapshot = {
 
 const asaasInstallmentOptions = Array.from({ length: 21 }, (_, index) => index + 1);
 const asaasProductionApiKeyUrl = "https://www.asaas.com/customerApiAccessToken/index";
+// The universal webhook only stores what it receives (no lead, no agent): hidden until it actually acts on the events.
+const universalWebhookVisible = false;
 const asaasSandboxApiKeyUrl = "https://sandbox.asaas.com/customerApiAccessToken/index";
 const asaasTokenizationRequestUrl = `https://api.whatsapp.com/send?phone=5508000090037&text=${encodeURIComponent(
   "Olá! Utilizo a ConnectyHub para vender pelo meu checkout e preciso habilitar a tokenização de cartão de crédito na minha conta Asaas em produção, para cobranças recorrentes e renovações autorizadas pelos clientes. Poderiam encaminhar a solicitação ao meu gerente de contas e informar os requisitos e o prazo para liberação?",
@@ -1647,6 +1649,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             }}
           />
 
+          {universalWebhookVisible ? (
           <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1686,6 +1689,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               </div>
             ) : null}
           </div>
+          ) : null}
         </div>
       ) : null}
 
