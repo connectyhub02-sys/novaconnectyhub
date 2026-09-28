@@ -1312,7 +1312,7 @@ export async function generateWhatsappGrowthCampaignPlan(
     "Alterne formatos quando fizer sentido: texto, audio, texto_audio, carousel, status e poll.",
     "Quando o usuario escolher um formato principal, respeite os formatos permitidos do prompt e nao troque para outro formato.",
     "Use carousel quando houver 2 ou mais produtos com midia. Use poll para gerar conversa em grupos.",
-    "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing.",
+    "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing. Nunca invente escassez ou urgencia (ultimas unidades, poucas unidades, estoque acabando, lote exclusivo, antes que esgote, so hoje) sem que o briefing diga.",
     `Todo texto escrito e curto, para caber numa tela de celular: ate ${campaignTextMaxChars} caracteres (2 ou 3 frases curtas), conduzindo para conversa ou compra. Nunca escreva textao.`,
     `Quando type=audio ou type=text_audio, preencha tambem audioText: a fala completa do agente para virar audio (ate ${campaignAudioMaxChars} caracteres, cerca de 1 minuto), natural, sem listas nem emojis, explicando o produto; o campo text continua sendo so a legenda curta e nao repete a fala.`,
     "Retorne somente JSON valido com as chaves title, strategySummary, approvalChecklist e items.",

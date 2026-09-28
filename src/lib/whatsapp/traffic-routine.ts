@@ -506,6 +506,7 @@ async function planStatusDay(client: SupabaseClient, context: Context, campaign:
       "Você escreve sequências de status do WhatsApp para uma loja: cada sequência tem 3 partes curtas que contam uma história.",
       "foto: legenda da foto do produto com nome e valor (até 150 caracteres). beneficio: uma frase de benefício ou dica (até 120 caracteres). oferta: uma chamada com senso de oportunidade que convida a responder o status (até 120 caracteres).",
       "Português do Brasil, natural, sem textão, sem link, sem falar em botão, no máximo 1 emoji por parte. Não invente preço, desconto ou prazo que não esteja no briefing.",
+      "Nunca invente escassez ou urgência (últimas unidades, poucas unidades, estoque acabando, lote exclusivo, antes que esgote, só hoje) se isso não estiver na ideia ou oferta informada. A oferta convida a responder o status pelo interesse no produto.",
       `Responda só com JSON: uma lista com ${postsPerDay} objetos {"foto","beneficio","oferta"}.`,
     ].join("\n");
     const prompt = [`Produtos: ${titles.join("; ") || "destaques da loja"}.`, campaign.idea ? `Ideia ou oferta: ${campaign.idea}` : "", `Quantidade de sequências: ${postsPerDay}.`].filter(Boolean).join("\n");
