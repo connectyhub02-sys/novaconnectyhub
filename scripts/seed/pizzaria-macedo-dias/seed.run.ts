@@ -81,8 +81,10 @@ describe(`seed pizzaria macedo&dias (${step})`, () => {
 
   it.runIf(step === "settings")("saves the store settings and local delivery", async () => {
     const { createDefaultSalesCatalogPaymentMethods } = await import("@/lib/sales-catalog/shared");
-    const week = [0, 1, 2, 3, 4, 5, 6].filter(day => day !== 1); // closed on Mondays, like many pizzerias
-    const evening = week.map(day => ({ day, start: "18:00", end: "23:30" }));
+    // SEED_OPEN_24H=true keeps the store open all day while testing; otherwise real pizzeria hours (closed on Mondays).
+    const open24h = process.env.SEED_OPEN_24H === "true";
+    const week = [0, 1, 2, 3, 4, 5, 6].filter(day => open24h || day !== 1);
+    const evening = week.map(day => (open24h ? { day, start: "00:00", end: "24:00" } : { day, start: "18:00", end: "23:30" }));
     await callRoute(JSON.stringify({
       action: "save_catalog_settings", companyId: organizationId,
       businessType: storeSettings.businessType, categories: storeSettings.categories, attributes: [],
