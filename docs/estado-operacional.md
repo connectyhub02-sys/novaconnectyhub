@@ -2,6 +2,8 @@
 
 ## Aplicação migrada para VPS e DNS Cloudflare — 28/09/2026
 
+[Relatório de continuidade para o outro chat](relatorio-handoff-migracao-vps-2026-09-28.md). Após o favicon, houve relato de falha de pesquisa no celular, ainda sem esclarecer se é acesso ao site ou pesquisa interna. Domínio, login e health responderam na conferência; defeito específico não reproduzido nem resolvido.
+
 Execução autorizada pelo titular após o diagnóstico. [Plano, evidências e pendências](plano-migracao-vercel-vps-2026-09-28.md). A aplicação passou a atender pela VPS por volta de 14h BRT. Não é necessário proxy Vercel.
 
 - **Aplicação:** Next.js 16.3.2 / Node 24, Docker standalone, imagem atual `connectyhub-app:25ebc41af75ff7dee71d063b6ab1ee3cea293414` (correção de favicon após a migração). Containers `connectyhub-app-a-app-1` e `connectyhub-app-b-app-1` saudáveis; ativo **b**, porta local 3131; reserva a em 3130 com a imagem inicial `fdf2dd198220b9498d8f68cd82beb30040018374`. Limites por app: 2 CPUs / 4 GiB. Caddy atende www e mantém apex → www (307), HTTPS Let's Encrypt com renovação automática. As portas dos apps não são públicas.
