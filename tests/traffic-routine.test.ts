@@ -72,7 +72,7 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
     "@/lib/billing/trial": { assertBillableAccess: async () => null },
   });
   const campaign = () => db.tables.whatsapp_traffic_campaigns[0];
-  return { db, traffic, plans, queuedPlans, windows, direct, meter, campaign };
+  return { db, traffic, plans, queuedPlans, windows, direct, meter, campaign, channel };
 }
 
 describe("planning dates", () => {
@@ -269,5 +269,21 @@ describe("status story never loses the day", () => {
     expect(queuedPlans).toHaveLength(1);
     expect(result).toMatchObject({ scheduled: 2 });
     expect(String(campaign().last_error)).toContain("Os grupos e canais seguem normalmente");
+  });
+});
+
+describe("permissions switched on while planning", () => {
+  it("switches them on again and plans once more instead of failing", async () => {
+    const { db, traffic, channel, queuedPlans } = setup();
+    const original = channel.generateWhatsappGrowthCampaignPlan;
+    let calls = 0;
+    channel.generateWhatsappGrowthCampaignPlan = async (...args: Parameters<typeof original>) => {
+      calls += 1;
+      if (calls === 1) throw new Error("Ative Campanhas, Canais ou Status no comportamento do agente antes de criar uma rotina IA.");
+      return original(...args);
+    };
+    const result = await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(result).toMatchObject({ scheduled: 2 });
+    expect(queuedPlans).toHaveLength(1);
   });
 });

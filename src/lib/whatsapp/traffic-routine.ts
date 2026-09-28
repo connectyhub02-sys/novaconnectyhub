@@ -204,7 +204,7 @@ export async function saveTrafficCampaign(client: SupabaseClient, input: { organ
     name: (merged.name ?? "").trim().slice(0, 80) || "Campanha de tráfego",
     ...(changes.idea !== undefined ? { idea: changes.idea?.trim().slice(0, 600) || null } : {}),
     ...(changes.manual_text !== undefined ? { manual_text: changes.manual_text?.trim().slice(0, 1500) || null } : {}),
-    ...(periodChanged ? { status: "active", starts_at: now.toISOString(), planned_until: null, last_error: null,
+    ...(periodChanged ? { status: "active", starts_at: now.toISOString(), planned_until: null, last_run_at: null, last_error: null,
       ends_at: days ? new Date(localMidnight(now.getTime()) + (days + 1) * dayMs).toISOString() : null } : {}),
   };
   const query = current
@@ -229,7 +229,7 @@ export async function setTrafficCampaignStatus(client: SupabaseClient, input: { 
     return null;
   }
   const status = input.action === "resume" ? "active" : input.action === "pause" ? "paused" : "ended";
-  const { data: updated } = await client.from("whatsapp_traffic_campaigns").update({ status, planned_until: null, updated_by: input.userId, updated_at: new Date().toISOString() })
+  const { data: updated } = await client.from("whatsapp_traffic_campaigns").update({ status, planned_until: null, last_run_at: null, updated_by: input.userId, updated_at: new Date().toISOString() })
     .eq("id", campaign.id).select("*").single();
   if (status === "active") await prepareCampaignCapabilities(client, updated as TrafficCampaign, input.userId);
   return updated as TrafficCampaign;
@@ -309,7 +309,12 @@ export async function runTrafficCampaign(client: SupabaseClient, campaign: Traff
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", last_error: null }).eq("id", campaign.id);
       return { ended: true };
     }
-    const { scheduled, warning } = await planDay(client, context, campaign, dayStart);
+    // Permissions still being switched on elsewhere: switch them on again and try once more.
+    const { scheduled, warning } = await planDay(client, context, campaign, dayStart).catch(async (error: unknown) => {
+      if (!/no comportamento do agente/.test(String((error as { message?: unknown } | null)?.message ?? error))) throw error;
+      await prepareCampaignCapabilities(client, campaign, null);
+      return planDay(client, await resolveClientWhatsappOperationalContext(client, campaign.organization_id, campaign.agent_id), campaign, dayStart);
+    });
     const plannedUntil = new Date(dayStart.getTime() + postingWindowHours * hourMs).toISOString();
     await client.from("whatsapp_traffic_campaigns").update({ planned_until: plannedUntil, last_error: warning }).eq("id", campaign.id);
     return { scheduled, plannedUntil, ...(warning ? { warning } : {}) };
