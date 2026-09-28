@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
 import { whatsappTrackingOrigin } from "./tracking-origin";
 import { collectOutboundLinks, rewriteOutboundBody, planOutboundMessages } from "./outbound-links";
+import { normalizeOutboundLanguageText } from "./outbound-language";
 
 export type WhatsappOutboundScope = { instanceId: string; client?: SupabaseClient; source?: string; sensitive?: boolean; apiOrganizationId?: string };
 type Body = Record<string, unknown>;
@@ -16,6 +17,26 @@ function archiveBody(body: Body, sensitive: boolean) {
 }
 const textOf = (body: Body) => [body.text,body.caption,body.description].filter(v=>typeof v === "string").join("\n") || null;
 const typeOf = (path: string, body: Body) => path === "/send/media" ? String(body.type ?? "document") : path === "/send/text" || path === "/send/menu" ? "text" : path.split("/").at(-1) ?? "text";
+
+const spellingFields = ["text", "caption", "description", "footerText", "footer_text", "title"] as const;
+
+/**
+ * Every automated message (client and admin agents, notices, reminders, follow-ups, campaigns) goes out in correct
+ * Portuguese, accents included, because the same text is also read by the voice. Text typed by a person, sent by an
+ * external API client or carrying a verification code is delivered exactly as written.
+ */
+export function withOutboundSpelling(scope: WhatsappOutboundScope, body: Body): Body {
+  if (scope.sensitive || scope.apiOrganizationId || scope.source === "internal-operation"
+    || /_human$/.test(String(body.track_source ?? ""))) return body;
+  let next: Body | null = null;
+  for (const key of spellingFields) {
+    const value = body[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const fixed = normalizeOutboundLanguageText(value);
+    if (fixed !== value) (next ??= { ...body })[key] = fixed;
+  }
+  return next ?? body;
+}
 
 type Prepared = { id:string; path:string; body:Body };
 async function prepare(client:SupabaseClient,scope:WhatsappOutboundScope,path:string,original:Body):Promise<Prepared[]> {
@@ -78,7 +99,7 @@ export async function fetchWhatsappOutbound(input: RequestInfo | URL, init: Requ
   if (!path.startsWith("/send/") && !batch) return fetch(input, init);
   if (!scope?.instanceId) throw new Error("Remetente obrigatório para registrar o envio de WhatsApp.");
   const client = scope.client ?? createServiceClient();
-  const original = JSON.parse(String(init.body ?? "{}")) as Body;
+  const original = withOutboundSpelling(scope, JSON.parse(String(init.body ?? "{}")) as Body);
   // Set only by the authenticated gateway after checking instance ownership.
   // Neither a caller payload nor request Host can opt out of CRM/tracking.
   const nativeOrigin = scope.apiOrganizationId

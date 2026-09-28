@@ -1,3 +1,4 @@
+import * as outboundLanguage from "../src/lib/whatsapp/outbound-language";
 import * as trackingOrigin from "../src/lib/whatsapp/tracking-origin";
 import * as billingMessages from "../src/lib/billing/platform-billing-messages";
 import * as noticeActions from "../src/lib/billing/account-notice-actions";
@@ -85,7 +86,7 @@ function fixture(){
  const client={...db.client,rpc};
  const fetch=vi.fn(async(...args:[URL,RequestInit])=>{void args;return new Response('{"id":"receipt"}',{status:200});});
  const service=serverModuleHarness<typeof import("../src/lib/whatsapp/outbound-delivery")>("src/lib/whatsapp/outbound-delivery.ts",{
-  "node:crypto":{randomUUID,createHash},"@/lib/supabase/service":{createServiceClient:()=>client},"@/lib/sales-catalog/mercado-pago":{getAppBaseUrl:()=>"https://app.invalid"},"./outbound-links":links,"./tracking-origin":trackingOrigin,
+  "node:crypto":{randomUUID,createHash},"@/lib/supabase/service":{createServiceClient:()=>client},"@/lib/sales-catalog/mercado-pago":{getAppBaseUrl:()=>"https://app.invalid"},"./outbound-links":links,"./tracking-origin":trackingOrigin,"./outbound-language":outboundLanguage,
  },[],{fetch});
  return{db,rpc,fetch,service,send:(path:string,body:unknown,extra={})=>service.fetchWhatsappOutbound(`https://provider.invalid/api${path}`,{method:"POST",body:JSON.stringify(body)},{instanceId:"instance",client:client as never,...extra})};
 }
@@ -177,4 +178,13 @@ it("removes URLs from all visible nested fields, preserving media and every acti
  expect(f.db.tables.whatsapp_outbound_links).toHaveLength(6);
  const allWire=f.fetch.mock.calls.map(c=>JSON.parse(String(c[1].body)));
  for(const row of f.db.tables.whatsapp_outbound_links) expect(JSON.stringify(allWire)).toContain(`/w/${row.id}`);
+});
+it("sends every automated message with correct Portuguese accents, but never rewrites people, API clients or codes",async()=>{
+ const wire=async(body:Record<string,unknown>,extra={})=>{const f=fixture();await f.send("/send/text",{number:"5511999999999",...body},extra);return JSON.parse(String(f.fetch.mock.calls[0][1].body));};
+ expect((await wire({text:"Voce ja viu a nossa acao de hoje? Nao perca.",track_source:"connectyhub"})).text).toBe("Você já viu a nossa ação de hoje? Não perca.");
+ expect((await wire({text:"Lembrete: sua reuniao e amanha, voce confirma?",track_source:"agenda_reminder"})).text).toBe("Lembrete: sua reunião e amanhã, você confirma?");
+ expect((await wire({text:"voce ja viu a acao",track_source:"connectyhub_dashboard_human"})).text).toBe("voce ja viu a acao");
+ expect((await wire({text:"voce ja viu a acao"},{apiOrganizationId:"org"})).text).toBe("voce ja viu a acao");
+ expect((await wire({text:"Seu codigo e 123456, nao compartilhe"},{sensitive:true})).text).toBe("Seu codigo e 123456, nao compartilhe");
+ expect((await wire({text:"voce ja viu a acao"},{source:"internal-operation"})).text).toBe("voce ja viu a acao");
 });
