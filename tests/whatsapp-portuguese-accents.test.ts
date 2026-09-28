@@ -27,6 +27,7 @@ describe("Portuguese accent correction", () => {
 
   it("is part of every outbound text and of the text sent to the voice", () => {
     expect(normalizeOutboundLanguageText("Voce ja conhece a nossa acao de hoje?")).toBe("Você já conhece a nossa ação de hoje?");
+    expect(normalizeOutboundLanguageText("Voce pode consultar a acao em https://loja.test/acao-rapida")).toBe("Você pode consultar a ação em https://loja.test/acao-rapida");
     expect(normalizeOutboundSpeechText("A definicao sai por R$ 50,00, voce vai gostar.")).toContain("A definição sai por cinquenta reais, você vai gostar.");
   });
 });

@@ -144,8 +144,13 @@ const portugueseAccentExceptions = new Set(["cacao", "ciao", "macao", "caos", "n
 
 /** Restores Portuguese accents on words the model or the user typed without them. */
 export function restorePortugueseAccents(value: string) {
-  if (!portugueseOnlyPattern.test(value) || spanishOnlyPattern.test(value)) return value;
   const { text, protectedValues } = protectOutboundFragments(value);
+  return restoreOutboundFragments(accentProtectedPortuguese(text), protectedValues);
+}
+
+/** Works on text whose links and tags are already replaced by protection tokens (never restores them itself). */
+function accentProtectedPortuguese(text: string) {
+  if (!portugueseOnlyPattern.test(text) || spanishOnlyPattern.test(text)) return text;
   let fixed = text.replace(/\b[A-Za-z]+\b/g, word => {
     const accented = portugueseAccentWords[word.toLowerCase()];
     return accented && accented !== word.toLowerCase() ? applyCase(word, accented) : word;
@@ -154,7 +159,7 @@ export function restorePortugueseAccents(value: string) {
     fixed = fixed.replace(pattern, (match: string, stem: string) => portugueseAccentExceptions.has(match.toLowerCase())
       ? match : stem + (match === match.toUpperCase() ? suffix.toUpperCase() : suffix));
   }
-  return restoreOutboundFragments(fixed, protectedValues);
+  return fixed;
 }
 
 function applyCase(original: string, replacement: string) {
@@ -209,7 +214,7 @@ export function normalizeOutboundLanguageText(value: string) {
     ...(englishSignalPattern.test(text) ? englishAbbreviationRules : []),
     ...(spanishSignalPattern.test(text) ? spanishAbbreviationRules : []),
   ];
-  const expanded = restorePortugueseAccents(languageRules.reduce((current, [pattern, replacement]) => (
+  const expanded = accentProtectedPortuguese(languageRules.reduce((current, [pattern, replacement]) => (
     current.replace(pattern, (match) => matchCase(match, replacement))
   ), text));
 
