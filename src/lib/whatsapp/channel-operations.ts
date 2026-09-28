@@ -1318,11 +1318,13 @@ export async function generateWhatsappGrowthCampaignPlan(
     `Quando type=audio ou type=text_audio, preencha tambem audioText: a fala completa do agente para virar audio (ate ${campaignAudioMaxChars} caracteres, cerca de 1 minuto), natural, sem listas nem emojis, explicando o produto; o campo text continua sendo so a legenda curta e nao repete a fala.`,
     "Retorne somente JSON valido com as chaves title, strategySummary, approvalChecklist e items.",
     "Cada item deve ter: day, slot, type, title, text, audioText (so para audio/text_audio), productRefs, pollChoices e buttonLabel.",
+    "Cada post sai no horario informado para o seu day e slot. Cumprimente de acordo com esse horario: bom dia ate 11h59, boa tarde das 12h as 17h59, boa noite a partir das 18h. Nunca fale em encerrar o dia, fim de noite ou comeco de manha fora do periodo do post.",
   ].join("\n");
   const prompt = [
     `Objetivo: ${objective}`,
     `Duracao: ${durationDays} dia(s). Posts por dia: ${postsPerDay}.`,
     `Data inicial ISO: ${startFrom}. Fuso operacional: America/Sao_Paulo.`,
+    `Horario de cada post (Brasilia): ${Array.from({ length: durationDays }, (_, day) => `dia ${day + 1}: ${Array.from({ length: postsPerDay }, (_, slot) => `slot ${slot + 1} as ${formatSaoPauloTime(buildGrowthPlanScheduledFor(startFrom, day * postsPerDay + slot, postsPerDay))}`).join(", ")}`).join("; ")}.`,
     `Formatos permitidos: ${allowedFormats.join(", ")}.`,
     input.preferredFormats?.length ? `Formato principal escolhido pelo usuario: ${input.preferredFormats.join(", ")}.` : "Formato principal escolhido pelo usuario: IA pode alternar.",
     `Mencao geral em grupos: ${input.mentionAll ? "permitida quando fizer sentido" : "nao usar por padrao"}.`,
@@ -2101,7 +2103,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
     // planned before this layer existed), so the voice pronounces "ação" and never "a cão".
     for (const key of ["text", "caption", "audio_text", "title", "footerText", "footer_text"]) {
       const value = asString(payload[key]);
-      if (value) payload[key] = normalizeOutboundLanguageText(value);
+      if (value) payload[key] = alignGreetingWithTime(normalizeOutboundLanguageText(value), new Date());
     }
     if (metadata.commercial_campaign) {
       const { recheckCommercialAnnouncement } = await import("@/lib/commerce/announcements");
@@ -5398,6 +5400,24 @@ function readFlexibleStringArray(value: unknown) {
   }
 
   return [];
+}
+
+function formatSaoPauloTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+}
+
+/**
+ * Posts are written before they go out: "boa noite" planned for a slot that actually leaves at 14h40 is replaced by
+ * the greeting of the real send time (Brasília).
+ */
+export function alignGreetingWithTime(text: string, at: Date) {
+  const hour = Number(at.toLocaleString("en-US", { hour: "numeric", hourCycle: "h23", timeZone: "America/Sao_Paulo" }));
+  const right = hour >= 5 && hour < 12 ? "bom dia" : hour >= 12 && hour < 18 ? "boa tarde" : "boa noite";
+  return text.replace(/\b(bom dia|boa tarde|boa noite)\b/gi, (match: string) => {
+    if (match.toLowerCase() === right) return match;
+    if (match === match.toUpperCase()) return right.toUpperCase();
+    return match[0] === match[0].toUpperCase() ? right.charAt(0).toUpperCase() + right.slice(1) : right;
+  });
 }
 
 function buildGrowthPlanScheduledFor(startFrom: string, index: number, postsPerDay: number) {
