@@ -1,6 +1,6 @@
 # Plano de migração da aplicação ConnectyHub: Vercel → VPS
 
-Data: 28/09/2026. Inspeção ao vivo por SSH, DNS, HTTP e navegador entre aproximadamente 12h45 e 13h05 BRT. **Atualização: plano executado mediante autorização posterior do titular; aplicação na VPS e delegação DNS alterada. Pendências de propagação/aceite e cobrança constam abaixo e no estado operacional.**
+Data: 28/09/2026. Inspeção ao vivo por SSH, DNS, HTTP e navegador entre aproximadamente 12h45 e 13h05 BRT. **Atualização: plano executado mediante autorização posterior do titular; aplicação na VPS, Cloudflare Free ativa e delegação DNS confirmada no .br. Painel autenticado validado no navegador e pelo titular. Pendência de encerramento da cobrança consta abaixo e no estado operacional.**
 
 O diagnóstico das seções seguintes retrata o estado anterior à execução. Resultado atual, revisão publicada, backup, testes e limitações: [estado-operacional.md](estado-operacional.md). Publicação futura: [deploy/README.md](../deploy/README.md).
 
@@ -217,6 +217,6 @@ Na rodada inicial foram realizadas somente inspeções e documentação. Posteri
 
 ## Encerramento da cobrança: pendência verificada
 
-O projeto não está mais conectado ao Git da Vercel. A equipe contém apenas `novaconnectyhub`. O painel permitiu enviar a solicitação de downgrade, porém não confirmou a mudança; após duas tentativas e nova consulta, a API continuou indicando Pro, overdue e nenhum cancelamento agendado. Não foi efetuado pagamento. Tratar o encerramento com a Vercel; não presumir que a migração cancela a assinatura ou elimina a fatura vencida. [Cobrança da equipe](https://vercel.com/nova-connectyhub-s-projects/~/settings/billing), [suporte](https://vercel.com/help), [regras oficiais de cobrança](https://vercel.com/docs/plans/pro-plan/billing).
+O projeto não está mais conectado ao Git da Vercel e foi pausado às 14h30 BRT, com confirmação por API e health público da VPS preservado. Pausa não cancela assinatura. A equipe contém apenas `novaconnectyhub`. O painel permitiu enviar a solicitação de downgrade, porém não confirmou a mudança; após duas tentativas e nova consulta, a API continuou indicando Pro, overdue e nenhum cancelamento agendado. Não foi efetuado pagamento. Tratar o encerramento com a Vercel; não presumir que a migração cancela a assinatura ou elimina a fatura vencida. [Cobrança da equipe](https://vercel.com/nova-connectyhub-s-projects/~/settings/billing), [suporte](https://vercel.com/help), [regras oficiais de cobrança](https://vercel.com/docs/plans/pro-plan/billing).
 
 Texto preparado para o titular, **não enviado**: “Migrei a aplicação e o DNS para fora da Vercel e desconectei a publicação Git. Solicito o encerramento do plano Pro e confirmação de que não haverá nova renovação. O fluxo de downgrade não efetivou a alteração, e a equipe Nova Connectyhub's projects continua com status overdue. Favor confirmar o cancelamento e detalhar separadamente qualquer valor pendente.”
