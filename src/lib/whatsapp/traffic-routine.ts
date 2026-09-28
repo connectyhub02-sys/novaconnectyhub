@@ -7,6 +7,7 @@ import {
   enableWhatsappAutomationCapability,
   findOtherGroupResponder,
   generateWhatsappGrowthCampaignPlan,
+  generateWhatsappShortText,
   groupResponderConflictMessage,
   queueWhatsappGroupWindow,
   queueWhatsappGrowthCampaignPlan,
@@ -36,9 +37,11 @@ export type TrafficCampaign = {
   idea: string | null; manual_text: string | null; post_format: TrafficPostFormat; intensity: TrafficIntensity; start_hour: number;
   schedule_mode: TrafficScheduleMode; starts_at: string; ends_at: string | null; planned_until: string | null;
   last_run_at: string | null; last_error: string | null; created_at: string;
+  status_audience: TrafficStatusAudience; status_style: "single" | "story"; status_color: number | null;
 };
+export type TrafficStatusAudience = "all" | "interested" | "customers" | "hot";
 export type TrafficCampaignInput = Partial<Pick<TrafficCampaign, "name" | "post_status" | "target_ids" | "product_mode" | "catalog_item_ids"
-  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode">>;
+  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "status_audience" | "status_style" | "status_color">>;
 
 const brtOffsetMs = 3 * 3600_000;
 const dayMs = 24 * 3600_000;
@@ -306,10 +309,10 @@ export async function runTrafficCampaign(client: SupabaseClient, campaign: Traff
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", last_error: null }).eq("id", campaign.id);
       return { ended: true };
     }
-    const scheduled = await planDay(client, context, campaign, dayStart);
+    const { scheduled, warning } = await planDay(client, context, campaign, dayStart);
     const plannedUntil = new Date(dayStart.getTime() + postingWindowHours * hourMs).toISOString();
-    await client.from("whatsapp_traffic_campaigns").update({ planned_until: plannedUntil, last_error: null }).eq("id", campaign.id);
-    return { scheduled, plannedUntil };
+    await client.from("whatsapp_traffic_campaigns").update({ planned_until: plannedUntil, last_error: warning }).eq("id", campaign.id);
+    return { scheduled, plannedUntil, ...(warning ? { warning } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 300) : "Falha ao planejar a campanha.";
     await client.from("whatsapp_traffic_campaigns").update({ last_error: message }).eq("id", campaign.id);
@@ -344,13 +347,17 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
     campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post (benefício, uso, prova, oferta)." : "",
     "Campanha de tráfego: cada post puxa conversa no privado ou compra. Varie o ângulo em relação aos dias anteriores."].filter(Boolean).join("\n");
   let scheduled = 0;
+  let warning: string | null = null;
   for (const destination of list) {
+    if (!destination.targetIds.length) {
+      const status = await planStatusDay(client, context, campaign, dayStart, postsPerDay, catalogItemIds);
+      scheduled += status.scheduled;
+      warning = status.warning;
+      continue;
+    }
     const available = destination.formats.filter(item => context.behavior.interactiveMessages || (item !== "carousel" && item !== "poll"));
-    // A status has no button: there the invitation is to answer the status or call in private.
-    const destinationBrief = destination.targetIds.length ? brief : [campaign.idea, campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post." : "",
-      "Post de status do WhatsApp: legenda curta com o produto e o valor. Status não tem botão: convide a responder este status ou chamar no privado. Nunca fale em botão ou link."].filter(Boolean).join("\n");
     const plan = await generateWhatsappGrowthCampaignPlan(client, context, {
-      targetIds: destination.targetIds, catalogItemIds, brief: destinationBrief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
+      targetIds: destination.targetIds, catalogItemIds, brief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
     });
     await meterGeminiGenerationUsage({
       client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: plan.modelId, agentScope: "customer",
@@ -366,17 +373,148 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
     scheduled += queued.count;
     await tagItems(client, queued.items.map(item => item.id), ["traffic_campaign", campaignTag(campaign.id)]);
   }
-  return scheduled;
+  return { scheduled, warning };
+}
+
+const statusAudienceLabels: Record<TrafficStatusAudience, string> = {
+  all: "todos os contatos", interested: "interessados nos produtos da campanha", customers: "clientes que já compraram", hot: "leads quentes",
+};
+const maxStatusRecipients = 1000;
+
+/**
+ * Who sees the campaign's status. "all" leaves it to the number's contacts; the other audiences become an
+ * explicit list: people who showed interest in the campaign's products (asked, received them or ordered),
+ * customers with a confirmed payment, or leads the CRM marks as hot/VIP. Leads who opted out never enter.
+ */
+export async function resolveStatusRecipients(client: SupabaseClient, campaign: Pick<TrafficCampaign, "organization_id" | "status_audience">, productIds: string[]) {
+  if (campaign.status_audience === "all") return null;
+  const leadIds = new Set<string>();
+  if (campaign.status_audience === "customers") {
+    const { data } = await client.from("sales_catalog_orders").select("lead_id").eq("organization_id", campaign.organization_id).eq("payment_status", "confirmed").not("lead_id", "is", null).limit(5000);
+    for (const row of (data ?? []) as Array<{ lead_id: string }>) leadIds.add(row.lead_id);
+  } else if (campaign.status_audience === "interested") {
+    if (productIds.length) {
+      const [{ data: items }, { data: events }] = await Promise.all([
+        client.from("sales_catalog_order_items").select("order_id").in("catalog_item_id", productIds).limit(5000),
+        client.from("intelligence_events").select("payload").eq("organization_id", campaign.organization_id).eq("event_type", "sales_catalog.item_sent")
+          .gte("created_at", new Date(Date.now() - 90 * 24 * 3600_000).toISOString()).limit(5000),
+      ]);
+      const orderIds = Array.from(new Set(((items ?? []) as Array<{ order_id: string }>).map(row => row.order_id)));
+      if (orderIds.length) {
+        const { data: orders } = await client.from("sales_catalog_orders").select("lead_id").eq("organization_id", campaign.organization_id).in("id", orderIds.slice(0, 1000)).not("lead_id", "is", null);
+        for (const row of (orders ?? []) as Array<{ lead_id: string }>) leadIds.add(row.lead_id);
+      }
+      for (const event of (events ?? []) as Array<{ payload: Record<string, unknown> | null }>) {
+        const sent = Array.isArray(event.payload?.productIds) ? event.payload.productIds as string[] : [];
+        const leadId = typeof event.payload?.leadId === "string" ? event.payload.leadId : null;
+        if (leadId && sent.some(id => productIds.includes(id))) leadIds.add(leadId);
+      }
+    }
+  } else if (campaign.status_audience === "hot") {
+    const { data } = await client.from("leads").select("id, metadata").eq("organization_id", campaign.organization_id).limit(5000);
+    for (const lead of (data ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
+      const qualification = lead.metadata?.lead_qualification as Record<string, unknown> | undefined;
+      const temperature = String(qualification?.temperature ?? lead.metadata?.lead_temperature ?? "");
+      if (temperature === "hot" || temperature === "vip") leadIds.add(lead.id);
+    }
+  }
+  if (!leadIds.size) return [];
+  const { data: leads } = await client.from("leads").select("phone_number, metadata").in("id", Array.from(leadIds).slice(0, 5000));
+  return ((leads ?? []) as Array<{ phone_number: string | null; metadata: Record<string, unknown> | null }>)
+    .filter(lead => lead.phone_number && lead.metadata?.whatsapp_opt_out !== true && !(lead.metadata?.opt_out as Record<string, unknown> | undefined)?.requested_at)
+    .map(lead => lead.phone_number as string).slice(0, maxStatusRecipients);
+}
+
+type StatusStory = { photo: string; benefit: string; offer: string };
+
+/** Three short parts per story (photo caption, benefit, offer), written by the AI in one call. */
+export function parseStatusStories(text: string, count: number): StatusStory[] {
+  const json = text.slice(text.indexOf("["), text.lastIndexOf("]") + 1);
+  try {
+    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    return parsed.map(item => ({
+      photo: String(item.foto ?? item.photo ?? "").trim().slice(0, 200),
+      benefit: String(item.beneficio ?? item.benefit ?? "").trim().slice(0, 160),
+      offer: String(item.oferta ?? item.offer ?? "").trim().slice(0, 160),
+    })).filter(story => story.photo && story.benefit && story.offer).slice(0, count);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The campaign's status for one day: a single post per slot, or a story of three statuses a couple of
+ * minutes apart (product photo, benefit in colored text, offer in colored text), sent to the chosen audience.
+ */
+async function planStatusDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsPerDay: number, catalogItemIds: string[]) {
+  const recipients = await resolveStatusRecipients(client, campaign, catalogItemIds);
+  if (recipients && !recipients.length) {
+    return { scheduled: 0, warning: `Status: ainda não há ${statusAudienceLabels[campaign.status_audience]} para receber. Os grupos e canais seguem normalmente.` };
+  }
+  const color = campaign.status_color ?? 13;
+  const slotTime = (index: number) => new Date(dayStart.getTime() + index * Math.floor((postingWindowHours * 60) / Math.max(1, postsPerDay)) * 60_000);
+  const ids: string[] = [];
+  const statusBase = { ...(recipients ? { recipients } : {}), backgroundColor: color };
+  if (campaign.status_style === "story") {
+    const products = catalogItemIds.length ? catalogItemIds : [];
+    const { data } = products.length ? await client.from("intelligence_memory").select("id, title, metadata").in("id", products) : { data: [] };
+    const titles = ((data ?? []) as Array<{ id: string; title: string; metadata: Record<string, unknown> | null }>)
+      .map(row => `${row.title}${row.metadata?.price ? ` (R$ ${String(row.metadata.price)})` : ""}`);
+    const systemInstruction = [
+      "Você escreve sequências de status do WhatsApp para uma loja: cada sequência tem 3 partes curtas que contam uma história.",
+      "foto: legenda da foto do produto com nome e valor (até 150 caracteres). beneficio: uma frase de benefício ou dica (até 120 caracteres). oferta: uma chamada com senso de oportunidade que convida a responder o status (até 120 caracteres).",
+      "Português do Brasil, natural, sem textão, sem link, sem falar em botão, no máximo 1 emoji por parte. Não invente preço, desconto ou prazo que não esteja no briefing.",
+      `Responda só com JSON: uma lista com ${postsPerDay} objetos {"foto","beneficio","oferta"}.`,
+    ].join("\n");
+    const prompt = [`Produtos: ${titles.join("; ") || "destaques da loja"}.`, campaign.idea ? `Ideia ou oferta: ${campaign.idea}` : "", `Quantidade de sequências: ${postsPerDay}.`].filter(Boolean).join("\n");
+    const generated = await generateWhatsappShortText(client, systemInstruction, prompt, { maxOutputTokens: 300 * postsPerDay + 200 });
+    await meterGeminiGenerationUsage({
+      client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: generated.modelId, agentScope: "customer",
+      promptText: [systemInstruction, prompt], outputText: generated.text, responseData: generated.responseData,
+      debitDescription: "Sequência de status da campanha", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, statusStory: true },
+    });
+    const stories = parseStatusStories(generated.text, postsPerDay);
+    if (!stories.length) throw new Error("A IA não montou a sequência de status. Tente de novo em instantes.");
+    for (const [index, story] of stories.entries()) {
+      const start = slotTime(index).getTime();
+      const product = products.length ? [products[index % products.length]] : [];
+      ids.push((await queueWhatsappStatusBroadcast(client, context, { ...statusBase, text: story.photo, scheduledFor: new Date(start).toISOString(), catalogItemIds: product, statusType: product.length ? "image" : "text" })).id);
+      ids.push((await queueWhatsappStatusBroadcast(client, context, { ...statusBase, text: story.benefit, scheduledFor: new Date(start + 2 * 60_000).toISOString(), statusType: "text", font: 1 })).id);
+      ids.push((await queueWhatsappStatusBroadcast(client, context, { ...statusBase, text: story.offer, scheduledFor: new Date(start + 4 * 60_000).toISOString(), statusType: "text", font: 2 })).id);
+    }
+  } else {
+    const plan = await generateWhatsappGrowthCampaignPlan(client, context, {
+      targetIds: [], catalogItemIds, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: ["status"],
+      brief: [campaign.idea, campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post." : "",
+        "Post de status do WhatsApp: legenda curta com o produto e o valor. Status não tem botão: convide a responder este status ou chamar no privado. Nunca fale em botão ou link."].filter(Boolean).join("\n"),
+    });
+    await meterGeminiGenerationUsage({
+      client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: plan.modelId, agentScope: "customer",
+      promptText: [plan.systemInstruction, plan.prompt], outputText: plan.items.map(item => item.text).join("\n\n"), responseData: plan.responseData,
+      debitDescription: "Status da campanha de tráfego", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, itemCount: plan.items.length },
+    });
+    for (const [index, item] of plan.items.entries()) {
+      const product = item.productIds?.length ? item.productIds.slice(0, 1) : catalogItemIds.length ? [catalogItemIds[index % catalogItemIds.length]] : [];
+      ids.push((await queueWhatsappStatusBroadcast(client, context, { ...statusBase, text: item.text, scheduledFor: item.scheduledFor, catalogItemIds: product })).id);
+    }
+  }
+  await tagItems(client, ids, ["traffic_campaign", campaignTag(campaign.id)]);
+  return { scheduled: ids.length, warning: null };
 }
 
 /** "Uma vez agora": the owner's own text goes as written; without text the AI writes one post. */
 async function planOnce(client: SupabaseClient, context: Context, campaign: TrafficCampaign, now: Date) {
   const when = new Date(now.getTime() + 60_000).toISOString();
   const text = campaign.manual_text?.trim();
-  if (!text) return planDay(client, context, campaign, new Date(now.getTime() + 2 * 60_000), 1);
+  if (!text) return (await planDay(client, context, campaign, new Date(now.getTime() + 2 * 60_000), 1)).scheduled;
   const products = campaign.product_mode === "featured" ? [] : (await productsFor(client, campaign)).slice(0, 1);
   const ids: string[] = [];
-  if (campaign.post_status) ids.push((await queueWhatsappStatusBroadcast(client, context, { text, scheduledFor: when, catalogItemIds: products })).id);
+  if (campaign.post_status) {
+    const recipients = await resolveStatusRecipients(client, campaign, products);
+    if (!recipients || recipients.length) {
+      ids.push((await queueWhatsappStatusBroadcast(client, context, { text, scheduledFor: when, catalogItemIds: products, backgroundColor: campaign.status_color ?? 13, ...(recipients ? { recipients } : {}) })).id);
+    }
+  }
   if (campaign.target_ids.length) {
     ids.push((await queueWhatsappTargetTextCampaign(client, context, {
       title: campaign.name, text, targetIds: campaign.target_ids, scheduledFor: when, catalogItemIds: products,
@@ -527,6 +665,7 @@ export async function copyTrafficRoutine(client: SupabaseClient, input: { organi
       organization_id: input.organizationId, agent_id: input.toAgentId, name: campaign.name, status: "paused", post_status: campaign.post_status,
       target_ids: targetIds, product_mode: campaign.product_mode, catalog_item_ids: campaign.catalog_item_ids, idea: campaign.idea,
       post_format: campaign.post_format, intensity: campaign.intensity, start_hour: campaign.start_hour, schedule_mode: campaign.schedule_mode,
+      status_audience: campaign.status_audience, status_style: campaign.status_style, status_color: campaign.status_color,
       ends_at: campaign.ends_at, updated_by: input.userId,
     });
   }

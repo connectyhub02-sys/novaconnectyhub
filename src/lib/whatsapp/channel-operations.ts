@@ -764,6 +764,7 @@ export async function queueWhatsappStatusBroadcast(
     recipients?: string[];
     maxRecipients?: number;
     backgroundColor?: number;
+    font?: number;
     scheduledFor?: string | null;
     statusType?: string | null;
     mediaUrl?: string | null;
@@ -807,6 +808,7 @@ export async function queueWhatsappStatusBroadcast(
       file: selectedMedia?.file,
       media_caption: selectedMedia?.text,
       backgroundColor: clamp(Math.round(input.backgroundColor ?? 4), 1, 19),
+      ...(typeof input.font === "number" && [0, 1, 2, 6, 7, 8, 9, 10].includes(input.font) ? { font: input.font } : {}),
       ...(maxRecipients ? { max_recipients: maxRecipients } : {}),
       ...(recipients.length ? { recipients } : {}),
       catalog_items: catalogItems.map((item) => ({
@@ -1752,9 +1754,9 @@ export async function callWhatsappProvider(context: WhatsappOperationalContext, 
 }
 
 /** Short AI text (e.g. a comment on a lead's status), with what billing needs. */
-export async function generateWhatsappShortText(client: SupabaseClient, systemInstruction: string, prompt: string) {
+export async function generateWhatsappShortText(client: SupabaseClient, systemInstruction: string, prompt: string, options: { maxOutputTokens?: number } = {}) {
   const credentials = await loadGeminiCredentials(client);
-  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, { temperature: 0.9, maxOutputTokens: 200 });
+  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, { temperature: 0.9, maxOutputTokens: options.maxOutputTokens ?? 200 });
   return { text: extractGeminiText(responseData).trim(), modelId: credentials.model, responseData };
 }
 
@@ -2098,6 +2100,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
           file: payload.file,
           backgroundColor: payload.backgroundColor,
           background_color: payload.backgroundColor ?? payload.background_color,
+          font: payload.font,
           max_recipients: payload.max_recipients,
           recipients: payload.recipients,
         }),

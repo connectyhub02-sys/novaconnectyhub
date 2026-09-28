@@ -7,7 +7,8 @@ type Traffic = typeof import("../src/lib/whatsapp/traffic-routine");
 const campaignRow = (extra: Record<string, unknown> = {}) => ({
   id: "c1", organization_id: "org", agent_id: "agent", name: "Semana do Whey", status: "active", post_status: true, target_ids: ["g1"],
   product_mode: "featured", catalog_item_ids: [], idea: "Frete grátis", manual_text: null, post_format: "auto", intensity: "normal", start_hour: 9,
-  schedule_mode: "continuous", starts_at: "2026-09-27T00:00:00Z", ends_at: null, planned_until: null, last_run_at: null, last_error: null, created_at: "2026-09-27T00:00:00Z", ...extra,
+  schedule_mode: "continuous", starts_at: "2026-09-27T00:00:00Z", ends_at: null, planned_until: null, last_run_at: null, last_error: null, created_at: "2026-09-27T00:00:00Z",
+  status_audience: "all", status_style: "single", status_color: null, ...extra,
 });
 const routineRow = (extra: Record<string, unknown> = {}) => ({
   id: "r1", organization_id: "org", agent_id: "agent", lead_status_view: false, lead_status_react: false, lead_status_comment: false,
@@ -29,6 +30,13 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
       { id: "p3", scope: "organization", memory_type: "sales_catalog_item", organization_id: "org", metadata: { status: "archived" }, updated_at: "3" },
     ],
     content_pipeline_items: [],
+    leads: [
+      { id: "buyer", organization_id: "org", phone_number: "554799990001", metadata: {} },
+      { id: "hot", organization_id: "org", phone_number: "554799990002", metadata: { lead_qualification: { temperature: "hot" } } },
+      { id: "optout", organization_id: "org", phone_number: "554799990003", metadata: { whatsapp_opt_out: true, lead_temperature: "vip" } },
+    ],
+    sales_catalog_orders: [{ id: "o1", organization_id: "org", lead_id: "buyer", payment_status: "confirmed" }, { id: "o2", organization_id: "org", lead_id: "hot", payment_status: "pending" }],
+    sales_catalog_order_items: [], intelligence_events: [],
   });
   const plans: Array<Record<string, unknown>> = [];
   const queuedPlans: Array<Record<string, unknown>> = [];
@@ -53,6 +61,8 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
     },
     queueWhatsappStatusBroadcast: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { direct.push({ kind: "status", ...input }); return push(); },
     queueWhatsappTargetTextCampaign: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { direct.push({ kind: "targets", ...input }); return push(); },
+    generateWhatsappShortText: async () => ({ modelId: "gemini", responseData: {},
+      text: '[{"foto":"Enantato 10ml por R$ 269,99","beneficio":"Base clássica para ganho de força","oferta":"Responde este status e garanta o seu hoje!"},{"foto":"Deca 10ml","beneficio":"Volume com qualidade","oferta":"Me chama aqui!"}]' }),
     queueWhatsappGroupWindow: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { windows.push(input); return { items: [push(), push()] }; },
   };
   const meter = vi.fn(async () => ({}));
@@ -206,5 +216,34 @@ describe("one agent answers per group", () => {
     db.tables.whatsapp_traffic_routines[0].room_enabled = false;
     const saved = await traffic.saveTrafficRoutine(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { room_enabled: true, room_target_ids: ["g1"] } });
     expect(saved.room_enabled).toBe(true);
+  });
+});
+
+describe("status for the right people", () => {
+  it("sends the status only to customers with a confirmed payment", async () => {
+    const { traffic } = setup();
+    const db = setup().db;
+    expect(await traffic.resolveStatusRecipients(db.client as never, { organization_id: "org", status_audience: "customers" }, [])).toEqual(["554799990001"]);
+    expect(await traffic.resolveStatusRecipients(db.client as never, { organization_id: "org", status_audience: "hot" }, [])).toEqual(["554799990002"]);
+    expect(await traffic.resolveStatusRecipients(db.client as never, { organization_id: "org", status_audience: "all" }, [])).toBeNull();
+  });
+
+  it("posts a story of three statuses per slot, colored, to the chosen audience", async () => {
+    const { db, traffic, direct } = setup();
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ target_ids: [], status_style: "story", status_audience: "customers", status_color: 8 }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(direct.map(item => item.text)).toEqual(["Enantato 10ml por R$ 269,99", "Base clássica para ganho de força", "Responde este status e garanta o seu hoje!", "Deca 10ml", "Volume com qualidade", "Me chama aqui!"]);
+    expect(direct.every(item => JSON.stringify(item.recipients) === JSON.stringify(["554799990001"]) && item.backgroundColor === 8)).toBe(true);
+    expect(direct.slice(1, 3).every(item => item.statusType === "text")).toBe(true);
+    expect(new Date(String(direct[1].scheduledFor)).getTime() - new Date(String(direct[0].scheduledFor)).getTime()).toBe(2 * 60_000);
+  });
+
+  it("with nobody in the audience yet, skips the status with a warning and keeps the groups going", async () => {
+    const { db, traffic, direct, plans, campaign } = setup();
+    db.tables.sales_catalog_orders = [];
+    const result = await traffic.runTrafficCampaign(db.client as never, campaignRow({ status_audience: "customers" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(direct).toHaveLength(0);
+    expect(plans).toHaveLength(1);
+    expect(result).toMatchObject({ scheduled: 2, warning: expect.stringContaining("clientes que já compraram") });
+    expect(campaign().last_error).toContain("clientes que já compraram");
   });
 });

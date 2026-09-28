@@ -16,6 +16,7 @@ export type TrafficCampaignView = {
   productMode: "featured" | "selected" | "single"; catalogItemIds: string[]; idea: string; manualText: string;
   postFormat: "auto" | "product_audio" | "product_button" | "text" | "poll"; intensity: "light" | "normal" | "intense"; startHour: number;
   scheduleMode: "once" | "week" | "month" | "continuous"; endsAt: string | null; plannedUntil: string | null; lastError: string | null; sent: number; scheduled: number;
+  statusAudience: "all" | "interested" | "customers" | "hot"; statusStyle: "single" | "story"; statusColor: number;
 };
 export type TrafficPayload = {
   routine: TrafficNumberSettings | null;
@@ -33,7 +34,7 @@ const numberDefaults: TrafficNumberSettings = {
 };
 const newCampaign: CampaignDraft = {
   id: null, name: "", postStatus: true, targetIds: [], productMode: "featured", catalogItemIds: [], idea: "", manualText: "",
-  postFormat: "auto", intensity: "normal", startHour: 9, scheduleMode: "week",
+  postFormat: "auto", intensity: "normal", startHour: 9, scheduleMode: "week", statusAudience: "all", statusStyle: "single", statusColor: 13,
 };
 const productModes = [
   ["featured", "IA escolhe", "Os destaques da loja, variando a cada dia"],
@@ -52,6 +53,16 @@ const scheduleModes = [
   ["week", "Por 1 semana", "Posts todos os dias por 7 dias"],
   ["month", "Por 1 mês", "Posts todos os dias por 30 dias"],
   ["continuous", "Contínua", "Até você pausar"],
+] as const;
+const statusAudiences = [
+  ["all", "Todos os contatos"],
+  ["interested", "Só interessados nos produtos da campanha"],
+  ["customers", "Só clientes que já compraram"],
+  ["hot", "Só leads quentes"],
+] as const;
+const statusColors = [
+  [13, "Magenta", "#a3176a"], [8, "Azul intenso", "#1f5fbf"], [4, "Verde vibrante", "#1ea55a"], [3, "Laranja", "#f29a1d"],
+  [12, "Roxo", "#5b4bb5"], [7, "Azul piscina", "#28a9c9"], [15, "Salmão", "#e8826f"], [19, "Cinza escuro", "#3b4550"],
 ] as const;
 const intensities = [["light", "Leve", "1 por dia"], ["normal", "Normal", "2 por dia"], ["intense", "Intenso", "3 por dia"]] as const;
 const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -121,7 +132,10 @@ export function WhatsappTrafficRoutineCard(props: {
         <div className="grid gap-2">
           {campaigns.map(campaign => {
             const [statusText, statusClass] = statusStyle[campaign.status];
-            const where = [campaign.postStatus ? "Status" : null, ...campaign.targetIds.map(id => targetName.get(id) ?? "grupo/canal")].filter(Boolean);
+            const statusLabel = campaign.postStatus
+              ? `Status${campaign.statusStyle === "story" ? " em sequência" : ""}${campaign.statusAudience !== "all" ? ` (${statusAudiences.find(([id]) => id === campaign.statusAudience)?.[1].replace("Só ", "") ?? ""})` : ""}`
+              : null;
+            const where = [statusLabel, ...campaign.targetIds.map(id => targetName.get(id) ?? "grupo/canal")].filter(Boolean);
             const what = campaign.productMode === "featured" ? "IA escolhe os produtos"
               : campaign.catalogItemIds.map(id => productName.get(id) ?? "produto").slice(0, 3).join(", ");
             return (
@@ -195,7 +209,32 @@ function CampaignEditor(props: {
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-4">
         <Step number={1} title="Onde">
-          <Check checked={draft.postStatus} onChange={() => set("postStatus", !draft.postStatus)} label="Meu status" hint="Aparece para todos os contatos" />
+          <Check checked={draft.postStatus} onChange={() => set("postStatus", !draft.postStatus)} label="Meu status" hint="Foto e legenda curta, ou uma sequência de 3 status" />
+          {draft.postStatus ? (
+            <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <label className="block text-xs font-medium text-slate-600">Quem vê o status
+                <select value={draft.statusAudience} onChange={event => set("statusAudience", event.target.value as CampaignDraft["statusAudience"])} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800">
+                  {statusAudiences.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                </select>
+              </label>
+              <div className="flex gap-1">
+                {([["single", "Post único"], ["story", "Sequência (3 status)"]] as const).map(([id, label]) => (
+                  <button key={id} type="button" onClick={() => set("statusStyle", id)} className={cn("flex-1 rounded-lg border px-2 py-1 text-xs", draft.statusStyle === id ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600")}>{label}</button>
+                ))}
+              </div>
+              {draft.statusStyle === "story" ? <p className="text-[11px] text-slate-500">Foto do produto, depois um benefício e a oferta em texto colorido, com 2 minutos entre eles.</p> : null}
+              <div>
+                <p className="text-xs font-medium text-slate-600">Cor dos status em texto</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {statusColors.map(([id, label, hex]) => (
+                    <button key={id} type="button" title={label} aria-label={label} aria-pressed={draft.statusColor === id} onClick={() => set("statusColor", id)}
+                      className={cn("h-6 w-6 rounded-full border-2", draft.statusColor === id ? "border-slate-900" : "border-white shadow")} style={{ background: hex }} />
+                  ))}
+                </div>
+              </div>
+              {draft.statusAudience !== "all" ? <p className="text-[11px] text-slate-500">Só recebe quem salvou o seu número. Quem pediu para não receber mensagens nunca entra.</p> : null}
+            </div>
+          ) : null}
           <TargetList title="Grupos" icon={<Users className="h-3.5 w-3.5" />} items={props.groups} selected={draft.targetIds} onToggle={id => toggle("targetIds", id)} />
           <TargetList title="Canais" icon={<Megaphone className="h-3.5 w-3.5" />} items={props.channels} selected={draft.targetIds} onToggle={id => toggle("targetIds", id)} />
           <button type="button" disabled={props.discovering} onClick={props.onDiscover} className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50">
