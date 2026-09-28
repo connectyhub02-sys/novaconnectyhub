@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, RefreshCcw, Sparkles, Trash2, Users, X } from "lucide-react";
+import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, RefreshCcw, Trash2, Users, X } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 import { describeHolder, holderConflicts, type GroupHolder } from "@/lib/whatsapp/group-schedule";
@@ -326,16 +326,6 @@ function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[];
         {props.saved.lastError ? <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">{props.saved.lastError}</p> : null}
       </div>
 
-      <div className="rounded-lg border border-slate-200 p-3">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Sparkles className="h-4 w-4 text-emerald-700" />Interagir com os leads<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Indisponível no momento</span></p>
-        <p className="mt-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">O provedor do WhatsApp ainda não entrega ao sistema os status que os seus contatos postam, então ver, reagir e comentar ficam desligados. Assim que ele liberar, ativamos aqui.</p>
-        <div className="mt-2 grid gap-2 opacity-60 sm:grid-cols-3" aria-disabled>
-          <Check checked={false} disabled onChange={() => undefined} label="Ver o status dos leads" hint="Visualizar logo que postam: o lead vê seu número entre os primeiros" />
-          <Check checked={false} disabled onChange={() => undefined} label="Reagir ao status do lead" hint="Um emoji que combina com o que ele postou" />
-          <Check checked={false} disabled onChange={() => undefined} label="Comentar no status do lead" hint="Chega no privado dele como resposta ao status e abre conversa" />
-        </div>
-
-      </div>
 
       {dirty ? (
         <div className="flex justify-end">
