@@ -2064,6 +2064,13 @@ export async function processScheduledWhatsappOutbounds(input: {
   };
 }
 
+export const agentDisabledMessage = "Agente desativado: ative o agente para as campanhas e a sala de dúvidas voltarem a funcionar.";
+
+/** An agent switched off does nothing at all: no attendance, no posts, no campaigns, no question room. */
+export function isOperationalAgentEnabled(context: WhatsappOperationalContext) {
+  return context.scope !== "organization" || context.behavior.agentEnabled !== false;
+}
+
 async function processWhatsappOutboundItem(client: SupabaseClient, item: ContentPipelineRow) {
   const claimed = await claimOutboundItem(client, item);
   if (!claimed) return { id: item.id, status: "skipped", reason: "already_claimed" };
@@ -2081,6 +2088,12 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
 
     const operation = asString(metadata.operation) as WhatsappOutboundOperation | null;
     const context = await resolveContextByOutboundItem(client, claimed);
+    // Switched-off agent: the post is not sent now nor all at once later; it is archived with the reason.
+    if (!isOperationalAgentEnabled(context)) {
+      await client.from("content_pipeline_items").update({ status: "archived", updated_at: new Date().toISOString(),
+        metadata: { ...metadata, skipped_reason: "agent_disabled", skipped_at: new Date().toISOString() } }).eq("id", claimed.id);
+      return { id: claimed.id, status: "skipped", reason: "agent_disabled" };
+    }
     assertWhatsappConnected(context);
     const payload = readRecord(metadata.payload) ?? {};
     if (metadata.commercial_campaign) {

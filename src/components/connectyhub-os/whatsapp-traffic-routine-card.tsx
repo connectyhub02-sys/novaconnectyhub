@@ -24,6 +24,7 @@ export type TrafficPayload = {
   upcoming: Array<{ id: string; kind: "status" | "grupos e canais" | "sala de dúvidas"; title: string; text: string; scheduledFor: string | null; campaign: string | null }>;
   numbers?: Array<{ agentId: string; enabled: boolean }>;
   groupHolders?: Record<string, GroupHolder>;
+  agentEnabled?: boolean;
 };
 type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
 type CampaignDraft = Omit<TrafficCampaignView, "id" | "status" | "endsAt" | "plannedUntil" | "lastError" | "sent" | "scheduled"> & { id: string | null };
@@ -95,8 +96,15 @@ export function WhatsappTrafficRoutineCard(props: {
     return result;
   }
 
+  const agentOff = props.traffic?.agentEnabled === false;
   return (
     <section className="grid gap-4 rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+      {agentOff ? (
+        <p className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
+          Este agente está desativado. Ative o agente para usar campanhas e a sala de dúvidas: enquanto ele estiver desligado, nada é postado nem respondido.
+        </p>
+      ) : null}
+      <div className={cn("grid gap-4", agentOff && "pointer-events-none select-none opacity-50 grayscale")} aria-disabled={agentOff || undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Megaphone className="h-4 w-4 text-emerald-700" />Tráfego com IA</h3>
@@ -187,6 +195,7 @@ export function WhatsappTrafficRoutineCard(props: {
           </ul>
         </div>
       ) : null}
+      </div>
     </section>
   );
 }

@@ -4,7 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import {
+  agentDisabledMessage,
   enableWhatsappAutomationCapability,
+  isOperationalAgentEnabled,
   findOtherGroupResponder,
   generateWhatsappGrowthCampaignPlan,
   generateWhatsappShortText,
@@ -129,6 +131,7 @@ export async function loadTrafficRoutine(client: SupabaseClient, organizationId:
 export async function saveTrafficRoutine(client: SupabaseClient, input: { organizationId: string; agentId: string; userId: string; changes: TrafficRoutineInput }) {
   const changes = input.changes;
   const before = await loadTrafficRoutine(client, input.organizationId, input.agentId);
+  if (changes.room_enabled === true) await assertAgentEnabled(client, input.organizationId, input.agentId);
   const roomChanged = before?.room_enabled && ["room_target_ids", "room_open_hour", "room_close_hour", "room_days", "room_replies"]
     .some(key => key in changes && JSON.stringify(changes[key as keyof TrafficRoutineInput]) !== JSON.stringify(before[key as keyof TrafficRoutine]));
   if (changes.room_close_hour !== undefined || changes.room_open_hour !== undefined) {
@@ -190,6 +193,7 @@ export async function saveTrafficCampaign(client: SupabaseClient, input: { organ
     ? ((await client.from("whatsapp_traffic_campaigns").select("*").eq("id", input.campaignId).eq("organization_id", input.organizationId).eq("agent_id", input.agentId).maybeSingle()).data as TrafficCampaign | null)
     : null;
   if (input.campaignId && !current) throw new Error("Campanha não encontrada.");
+  await assertAgentEnabled(client, input.organizationId, input.agentId);
   const merged = { ...(current ?? {}), ...changes } as Partial<TrafficCampaign>;
   if (!merged.post_status && !(merged.target_ids ?? []).length) throw new Error("Escolha onde divulgar: status, grupos ou canais.");
   if (merged.product_mode === "single" && !(merged.catalog_item_ids ?? []).length) throw new Error("Escolha o produto da campanha.");
@@ -223,6 +227,7 @@ export async function setTrafficCampaignStatus(client: SupabaseClient, input: { 
   const campaign = data as TrafficCampaign | null;
   if (!campaign) throw new Error("Campanha não encontrada.");
   if (input.action === "resume" && campaign.ends_at && new Date(campaign.ends_at).getTime() < Date.now()) throw new Error("O período desta campanha já terminou: edite o período para reativar.");
+  if (input.action === "resume") await assertAgentEnabled(client, input.organizationId, input.agentId);
   if (input.action !== "resume") await archiveUpcoming(client, campaign.organization_id, campaignTag(campaign.id));
   if (input.action === "delete") {
     await client.from("whatsapp_traffic_campaigns").delete().eq("id", campaign.id);
@@ -235,8 +240,15 @@ export async function setTrafficCampaignStatus(client: SupabaseClient, input: { 
   return updated as TrafficCampaign;
 }
 
+/** Nothing is turned on for a switched-off agent. */
+async function assertAgentEnabled(client: SupabaseClient, organizationId: string, agentId: string) {
+  const context = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
+  if (!isOperationalAgentEnabled(context)) throw new Error(agentDisabledMessage);
+}
+
 async function enableCapabilities(client: SupabaseClient, organizationId: string, agentId: string, needs: { status?: boolean; groups?: boolean; campaigns?: boolean; newsletters?: boolean; interactive?: boolean }, userId: string | null) {
   const context = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
+  if (!isOperationalAgentEnabled(context)) throw new Error(agentDisabledMessage);
   if (context.instance.status !== "connected") return context;
   const list = [
     needs.status && !context.behavior.statusBroadcasts ? "status" : null,
@@ -296,6 +308,11 @@ export async function runTrafficCampaign(client: SupabaseClient, campaign: Traff
   if (!await claim(client, "whatsapp_traffic_campaigns", campaign.id, now)) return { skipped: "busy" as const };
   try {
     await assertBillableAccess({ organizationId: campaign.organization_id, client });
+    const agentContext = await resolveClientWhatsappOperationalContext(client, campaign.organization_id, campaign.agent_id);
+    if (!isOperationalAgentEnabled(agentContext)) {
+      await client.from("whatsapp_traffic_campaigns").update({ last_error: agentDisabledMessage }).eq("id", campaign.id);
+      return { skipped: "agent_disabled" as const };
+    }
     await prepareCampaignCapabilities(client, campaign, null);
     const context = await resolveClientWhatsappOperationalContext(client, campaign.organization_id, campaign.agent_id);
     if (context.instance.status !== "connected") throw new Error("WhatsApp desconectado: reconecte para a campanha voltar a postar.");

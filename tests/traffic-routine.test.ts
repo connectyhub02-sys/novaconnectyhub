@@ -16,7 +16,7 @@ const routineRow = (extra: Record<string, unknown> = {}) => ({
   room_planned_until: null, last_run_at: null, last_error: null, ...extra,
 });
 
-function setup(options: { connected?: boolean; responder?: { groupName: string; agentName: string } | null } = {}) {
+function setup(options: { connected?: boolean; responder?: { groupName: string; agentName: string } | null; agentEnabled?: boolean } = {}) {
   const db = commerceDatabase({
     whatsapp_traffic_campaigns: [campaignRow()],
     whatsapp_traffic_routines: [routineRow()],
@@ -46,7 +46,9 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
   const push = () => { const id = `item-${++sequence}`; db.tables.content_pipeline_items.push({ id, organization_id: "org", status: "scheduled", tags: ["whatsapp"] }); return { id }; };
   const channel = {
     resolveClientWhatsappOperationalContext: async () => ({ instance: { id: "inst", status: options.connected === false ? "disconnected" : "connected" },
-      behavior: { statusBroadcasts: true, campaignBroadcasts: true, newsletterBroadcasts: false, interactiveMessages: true, allowGroupChats: true } }),
+      behavior: { agentEnabled: options.agentEnabled !== false, statusBroadcasts: true, campaignBroadcasts: true, newsletterBroadcasts: false, interactiveMessages: true, allowGroupChats: true } }),
+    isOperationalAgentEnabled: (context: { behavior: { agentEnabled?: boolean } }) => context.behavior.agentEnabled !== false,
+    agentDisabledMessage: "Agente desativado: ative o agente para as campanhas e a sala de dúvidas voltarem a funcionar.",
     enableWhatsappAutomationCapability: vi.fn(async () => ({})),
     findOtherGroupResponder: vi.fn(async () => options.responder ?? null),
     groupResponderConflictMessage: (conflict: { groupName: string; agentName: string }) => `O grupo ${conflict.groupName} já é atendido por ${conflict.agentName}.`,
@@ -285,5 +287,24 @@ describe("permissions switched on while planning", () => {
     const result = await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false }) as never, new Date("2026-09-27T10:00:00Z"));
     expect(result).toMatchObject({ scheduled: 2 });
     expect(queuedPlans).toHaveLength(1);
+  });
+});
+
+describe("a switched-off agent does nothing", () => {
+  it("does not plan, post or switch permissions on, and says why", async () => {
+    const { db, traffic, plans, direct, channel, campaign } = setup({ agentEnabled: false });
+    const result = await traffic.runTrafficCampaign(db.client as never, campaignRow() as never, new Date("2026-09-27T10:00:00Z"));
+    expect(result).toEqual({ skipped: "agent_disabled" });
+    expect(plans).toHaveLength(0);
+    expect(direct).toHaveLength(0);
+    expect(channel.enableWhatsappAutomationCapability).not.toHaveBeenCalled();
+    expect(campaign().last_error).toContain("Agente desativado");
+  });
+
+  it("refuses to create or resume a campaign and to turn the question room on", async () => {
+    const { db, traffic } = setup({ agentEnabled: false });
+    await expect(traffic.saveTrafficCampaign(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { name: "x", post_status: true } })).rejects.toThrow("Agente desativado");
+    await expect(traffic.setTrafficCampaignStatus(db.client as never, { organizationId: "org", agentId: "agent", campaignId: "c1", action: "resume", userId: "u" })).rejects.toThrow("Agente desativado");
+    await expect(traffic.saveTrafficRoutine(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { room_enabled: true, room_target_ids: ["g1"] } })).rejects.toThrow("Agente desativado");
   });
 });

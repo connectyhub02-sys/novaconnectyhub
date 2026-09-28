@@ -18,6 +18,7 @@ import {
   generateWhatsappStatusDraft,
   generateWhatsappTargetCampaignDraft,
   getWhatsappOperationsDashboard,
+  isOperationalAgentEnabled,
   mapOtherGroupResponders,
   probeWhatsappLeadStatusWatch,
   queueWhatsappGrowthCampaignPlan,
@@ -166,6 +167,7 @@ async function loadTrafficPayload(client: ReturnType<typeof createServiceClient>
     upcoming: await listUpcomingTraffic(client, organizationId, campaigns, routine).catch(() => []),
     numbers: await listTrafficRoutineNumbers(client, organizationId).catch(() => []),
     groupHolders: await loadGroupHolders(client, organizationId, agentId).catch(() => ({})),
+    agentEnabled: await resolveClientWhatsappOperationalContext(client, organizationId, agentId).then(isOperationalAgentEnabled).catch(() => true),
   };
 }
 
