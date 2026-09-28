@@ -87,6 +87,82 @@ const portugueseAbbreviationRules: Array<[RegExp, string]> = [
   [/\bpra\b/gi, "para"],
 ];
 
+// Portuguese written without accents ("acao", "definicao", "voce") is read wrong by the voice and looks careless.
+// Only applied when the text is clearly Portuguese: in Spanish "referencia" or "rapida" are correct as they are.
+const portugueseOnlyPattern = /\b(?:voce|você|voces|vocês|nao|não|com|uma|muito|isso|tambem|também|entao|então|obrigad[oa]|nosso|nossa|pelo|pela|seu|sua|aqui|agora)\b|(?:ção|cao|ções|coes|ão)\b/i;
+const spanishOnlyPattern = /\b(?:usted|ustedes|gracias|hola|muy|pero|cómo|está usted|información|opción|también es|qué)\b/i;
+
+const portugueseAccentWords: Record<string, string> = {
+  tambem: "também", alem: "além", porem: "porém", apos: "após", atraves: "através", ja: "já", ate: "até", so: "só",
+  sao: "são", mao: "mão", maos: "mãos", pao: "pão", tao: "tão", vao: "vão", dao: "dão", mes: "mês", tres: "três",
+  voce: "você", voces: "vocês", nao: "não", cafe: "café", saude: "saúde", agua: "água", forca: "força", forcas: "forças",
+  servico: "serviço", servicos: "serviços", comeca: "começa", comecam: "começam", sera: "será", serao: "serão",
+  rapido: "rápido", rapida: "rápida", rapidos: "rápidos", rapidas: "rápidas", pratico: "prático", pratica: "prática",
+  praticos: "práticos", praticas: "práticas", unico: "único", unica: "única", unicos: "únicos", unicas: "únicas",
+  otimo: "ótimo", otima: "ótima", otimos: "ótimos", otimas: "ótimas", maximo: "máximo", maxima: "máxima",
+  minimo: "mínimo", minima: "mínima", ultimo: "último", ultima: "última", ultimos: "últimos", ultimas: "últimas",
+  facil: "fácil", faceis: "fáceis", dificil: "difícil", dificeis: "difíceis", medico: "médico", medica: "médica",
+  medicos: "médicos", basico: "básico", basica: "básica", classico: "clássico", classica: "clássica",
+  especifico: "específico", especifica: "específica", eficacia: "eficácia", farmacia: "farmácia", anabolico: "anabólico",
+  anabolica: "anabólica", anabolicos: "anabólicos", historico: "histórico", historia: "história", organico: "orgânico",
+  metodo: "método", periodo: "período", credito: "crédito", debito: "débito", codigo: "código", pagina: "página",
+  paginas: "páginas", video: "vídeo", videos: "vídeos", audio: "áudio", audios: "áudios", midia: "mídia",
+  negocio: "negócio", negocios: "negócios", necessario: "necessário", necessaria: "necessária", horario: "horário",
+  horarios: "horários", varios: "vários", varias: "várias", glicemico: "glicêmico", glicemica: "glicêmica",
+  metabolico: "metabólico", metabolica: "metabólica", hormonio: "hormônio", hormonios: "hormônios",
+  musculo: "músculo", musculos: "músculos", exercicio: "exercício", exercicios: "exercícios",
+  calorico: "calórico", aminoacido: "aminoácido", aminoacidos: "aminoácidos",
+  familia: "família", familias: "famílias", logica: "lógica", eletrico: "elétrico", plastico: "plástico",
+  cientifico: "científico", beneficio: "benefício", beneficios: "benefícios", inicio: "início",
+  inedito: "inédito", inedita: "inédita", tecnologico: "tecnológico", economico: "econômico", economica: "econômica",
+  proprios: "próprios", proprias: "próprias", sabado: "sábado", amanha: "amanhã",
+  manha: "manhã", ola: "olá", excelencia: "excelência", reposicao: "reposição",
+  seguranca: "segurança", preco: "preço", precos: "preços", numero: "número", numeros: "números", duvida: "dúvida",
+  duvidas: "dúvidas", usuario: "usuário", usuarios: "usuários", proximo: "próximo", proxima: "próxima",
+  proximos: "próximos", proximas: "próximas", tecnico: "técnico", tecnica: "técnica", comecar: "começar",
+  proprio: "próprio", propria: "própria", endereco: "endereço", orcamento: "orçamento", cartoes: "cartões",
+};
+
+const portugueseAccentSuffixRules: Array<[RegExp, string]> = [
+  [/\b([a-z]+)coes\b/gi, "ções"],
+  [/\b([a-z]+)cao\b/gi, "ção"],
+  [/\b([a-z]{2,}[rtsdnlm])oes\b/gi, "ões"],
+  [/\b([a-z]{2,})ao\b/gi, "ão"],
+  [/\b([a-z]{2,})aos\b/gi, "ãos"],
+  [/\b([a-z]+)encias\b/gi, "ências"],
+  [/\b([a-z]+)encia\b/gi, "ência"],
+  [/\b([a-z]+)ancias\b/gi, "âncias"],
+  [/\b([a-z]+)ancia\b/gi, "ância"],
+  [/\b([a-z]{2,})aveis\b/gi, "áveis"],
+  [/\b([a-z]{2,})avel\b/gi, "ável"],
+  [/\b([a-z]{2,})iveis\b/gi, "íveis"],
+  [/\b([a-z]{2,})ivel\b/gi, "ível"],
+];
+
+// Words that end like the suffix rules but are correct without accent.
+const portugueseAccentExceptions = new Set(["cacao", "ciao", "macao", "caos", "nivel"]);
+
+/** Restores Portuguese accents on words the model or the user typed without them. */
+export function restorePortugueseAccents(value: string) {
+  if (!portugueseOnlyPattern.test(value) || spanishOnlyPattern.test(value)) return value;
+  const { text, protectedValues } = protectOutboundFragments(value);
+  let fixed = text.replace(/\b[A-Za-z]+\b/g, word => {
+    const accented = portugueseAccentWords[word.toLowerCase()];
+    return accented && accented !== word.toLowerCase() ? applyCase(word, accented) : word;
+  });
+  for (const [pattern, suffix] of portugueseAccentSuffixRules) {
+    fixed = fixed.replace(pattern, (match: string, stem: string) => portugueseAccentExceptions.has(match.toLowerCase())
+      ? match : stem + (match === match.toUpperCase() ? suffix.toUpperCase() : suffix));
+  }
+  return restoreOutboundFragments(fixed, protectedValues);
+}
+
+function applyCase(original: string, replacement: string) {
+  if (original.length > 1 && original === original.toUpperCase()) return replacement.toUpperCase();
+  if (original[0] === original[0].toUpperCase()) return capitalize(replacement);
+  return replacement;
+}
+
 const brazilianCurrencyWithCodePattern = /(?<![\p{L}\p{N}/])(?:R\$\s*)?((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{1,2})?)\s*BRL\b/giu;
 const brazilianCurrencyDisplayPattern = /R\$\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{1,2})?)/giu;
 
@@ -133,9 +209,9 @@ export function normalizeOutboundLanguageText(value: string) {
     ...(englishSignalPattern.test(text) ? englishAbbreviationRules : []),
     ...(spanishSignalPattern.test(text) ? spanishAbbreviationRules : []),
   ];
-  const expanded = languageRules.reduce((current, [pattern, replacement]) => (
+  const expanded = restorePortugueseAccents(languageRules.reduce((current, [pattern, replacement]) => (
     current.replace(pattern, (match) => matchCase(match, replacement))
-  ), text);
+  ), text));
 
   return restoreOutboundFragments(normalizeBrazilianCurrencyDisplay(expanded), protectedValues)
     .replace(/[ \t]{2,}/g, " ")

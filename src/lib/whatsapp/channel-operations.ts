@@ -14,6 +14,7 @@ import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind }
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { createServiceClient } from "@/lib/supabase/service";
 import { generateConnectyVoiceAudio } from "@/lib/voice/tts";
+import { normalizeOutboundLanguageText } from "./outbound-language";
 import { normalizeWhatsappBehaviorConfig, normalizeWhatsappBehaviorSettings, type WhatsappBehaviorConfig } from "./agent-behavior";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
@@ -2096,6 +2097,12 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
     }
     assertWhatsappConnected(context);
     const payload = readRecord(metadata.payload) ?? {};
+    // Same spelling layer as the attendance: posts, status and audio scripts go out with correct accents (also for items
+    // planned before this layer existed), so the voice pronounces "ação" and never "a cão".
+    for (const key of ["text", "caption", "audio_text", "title", "footerText", "footer_text"]) {
+      const value = asString(payload[key]);
+      if (value) payload[key] = normalizeOutboundLanguageText(value);
+    }
     if (metadata.commercial_campaign) {
       const { recheckCommercialAnnouncement } = await import("@/lib/commerce/announcements");
       const checked = await recheckCommercialAnnouncement(client, metadata, claimed.scope, claimed.organization_id);
@@ -3461,6 +3468,9 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
+// Every campaign text is read aloud or shown as is: the model writes in correct Portuguese, accents included.
+const campaignSpellingRule = "Escreva todo texto para o cliente (text, audioText, legendas e status) em português do Brasil com acentuação e pontuação corretas: ação, você, não, também, força, rápida, segurança, definição. Nunca omita acentos nem vírgulas, porque o texto também vira áudio.";
+
 async function callGeminiGenerateContent(
   credentials: GeminiCredentials,
   systemInstruction: string,
@@ -3478,7 +3488,8 @@ async function callGeminiGenerateContent(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: systemInstruction }],
+        parts: [{ text: `${systemInstruction}
+${campaignSpellingRule}` }],
       },
       contents: [{
         role: "user",
