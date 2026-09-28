@@ -18,7 +18,7 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ### Direção do produto
 
-Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acessível, com agentes que atendam e vendam com qualidade, e permitir que outros projetos consumam a API de IA pagando em créditos. A migração de banco e orquestração para infraestrutura própria busca reduzir dependência de assinaturas e tornar a operação economicamente viável; não elimina custo de IA, manutenção ou consumo na Vercel.
+Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acessível, com agentes que atendam e vendam com qualidade, e permitir que outros projetos consumam a API de IA pagando em créditos. A migração de banco e orquestração para infraestrutura própria busca reduzir dependência de assinaturas e tornar a operação economicamente viável; não elimina custo de IA, manutenção, VPS e demais provedores. A aplicação também foi migrada para VPS em 28/09; o encerramento da assinatura Vercel está registrado separadamente no estado operacional.
 
 O código sustenta duas frentes complementares: operação de empresas dentro do painel e integração de sistemas externos via API. Ambas devem compartilhar controles consistentes de organização, acesso, créditos, registro de consumo e entrega. Evitar tratar catálogo de recursos como entrega comercial pronta. Antes da próxima fase de produção, priorizar os percursos essenciais de cadastro/acesso, conexão do agente, resposta, agendamento, entrega e débito correto, com recuperação de falhas.
 
@@ -26,7 +26,7 @@ Essa priorização é uma avaliação técnica da revisão de 11/09, não uma de
 
 | Componente | Destino registrado | Fontes principais |
 |---|---|---|
-| Aplicação, painéis, APIs e handlers de automações | Next.js 16 / React 19 na Vercel | `src/app`, `src/components`, `package.json` |
+| Aplicação, painéis, APIs e handlers de automações | Next.js 16 / React 19 / Node 24 em Docker na VPS, atrás do Caddy | `src/app`, `src/components`, `package.json` |
 | Banco, Auth, RLS e Supabase Storage | Supabase em Docker na VPS Contabo | `src/lib/supabase`, `supabase/migrations` |
 | Agendamento e orquestração | Inngest na mesma VPS; chama handlers da aplicação | `src/lib/inngest`, `src/lib/automations` |
 | Mídias em object storage | Cloudflare R2 permanece | referências `R2_` em `.env.example` e fontes |
@@ -37,7 +37,7 @@ Essa priorização é uma avaliação técnica da revisão de 11/09, não uma de
 
 Endereços operacionais registrados: aplicação `https://www.connectyhub.com.br`, Supabase `https://supabase.connectyhub.com.br`, Inngest `https://inngest.connectyhub.com.br`. Confirme os destinos no ambiente alvo antes de operar. Valores secretos não pertencem a este documento. Configurações reais podem combinar ambiente e credenciais criptografadas no banco; não basta ler `.env.example`.
 
-O Inngest da VPS não transfere a execução dos handlers para a VPS: os handlers continuam na Vercel. A migração atual não é uma migração da hospedagem. Supabase self-hosted não inclui toda a camada comercial/multiprojetos do Cloud. Um novo projeto independente exige planejamento de isolamento e capacidade; isso ficou para etapa posterior. n8n foi discutido como possibilidade, sem decisão de instalação.
+Desde 28/09, aplicação e handlers também rodam na VPS; Inngest mantém os mesmos domínios, app, IDs e chaves. O DNS autoritativo passou para Cloudflare Free, somente DNS, com domínio registrado no Registro.br. Não há proxy Vercel no caminho novo. Supabase self-hosted não inclui toda a camada comercial/multiprojetos do Cloud. Um novo projeto independente exige planejamento de isolamento e capacidade; isso ficou para etapa posterior. n8n foi discutido como possibilidade, sem decisão de instalação.
 
 ## Mapa para investigar um pedido
 
@@ -94,14 +94,9 @@ O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infra
 
 ### Publicação da ConnectyHub
 
-O destino de releases é o repositório GitHub `connectyhub02-sys/novaconnectyhub`,
-branch `master`. A Vercel existente publica pela pipeline conectada ao push nessa
-branch. Conferir o remote e integrar sobre a master atual, preservando o histórico
-e alterações já publicadas. Branches de trabalho não são o destino final de produção.
-Não publicar manualmente em outro projeto Vercel, não usar Pilger Landing Page,
-não criar projeto Vercel novo e não alterar DNS para contornar acesso. Conferir
-migrations, backup, webhook e flags na ordem segura de cada release e acompanhar
-o deploy gerado pelo GitHub no projeto existente.
+O destino de código é o repositório GitHub `connectyhub02-sys/novaconnectyhub`, branch `master`. Conferir o remote e preservar histórico e alterações publicadas. Desde 28/09/2026, **push no GitHub não publica automaticamente**: a integração Git da Vercel foi desconectada. A publicação é na VPS por imagem Docker de um SHA commitado, com slot local inativo e ativação no Caddy. Seguir [deploy/README.md](../deploy/README.md) e `deploy/release.sh`; configuração privada em `/opt/connectyhub/app/config`, sem segredos no Git. Conferir health/versão, autenticação, arquivos e Inngest antes de ativar. Manter o slot anterior para retorno e requisições em andamento; rollback de app não restaura banco.
+
+Não criar outro projeto Vercel, reativar publicação nela ou mudar DNS como atalho de deploy. Conferir migrations, backup, webhook e flags na ordem segura de cada release. Outras aplicações hospedadas na mesma VPS têm ciclos independentes; não parar Caddy, Supabase ou Inngest compartilhados para publicar a ConnectyHub. Estado de DNS, testes, cobrança e pendências fica em [estado-operacional.md](estado-operacional.md).
 
 ### Qualidade de atendimento dos agentes
 
