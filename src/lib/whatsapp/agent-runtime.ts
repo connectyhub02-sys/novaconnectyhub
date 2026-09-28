@@ -1233,11 +1233,13 @@ async function processWhatsappAgentRunWithScope(input: {
 
     await maybeSetInstanceAvailable(context, token, "after");
 
-    extractConversationLearning(client, context).catch(() => {});
-    await extractLeadMemory(client, context, userText).catch(() => {});
-    await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
-    extractConversationArcSummary(client, context).catch(() => {});
-    extractNegotiationState(client, context).catch(() => {});
+    if (await claimBackgroundMemoryRefresh(client, context).catch(() => false)) {
+      extractConversationLearning(client, context).catch(() => {});
+      await extractLeadMemory(client, context, userText).catch(() => {});
+      await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
+      extractConversationArcSummary(client, context).catch(() => {});
+      extractNegotiationState(client, context).catch(() => {});
+    }
     if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 
     if (isGroupChat && context.groupSender) await noteGroupConversation(client, context, userText);
@@ -18157,6 +18159,30 @@ async function extractConversationLearning(
       extracted_at: new Date().toISOString(),
     },
   });
+}
+
+const backgroundMemoryEveryInbound = 3;
+const backgroundMemoryIdleMs = 20 * 60 * 1000;
+
+/**
+ * Background memories (lead, style, learning, arc, negotiation) reread the whole conversation. Refreshing them on
+ * every customer message multiplied the cost of each turn, so they refresh every few customer messages, or when a
+ * conversation resumes after a pause.
+ */
+async function claimBackgroundMemoryRefresh(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  if (context.messages.length < 2) return false;
+  const { data } = await client.from("conversations").select("metadata").eq("id", context.conversationId).maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(data?.metadata) ?? context.conversationMetadata ?? {};
+  const lastAt = Date.parse(asString(readRecord(metadata.background_memory_refresh)?.at) ?? "");
+  const newInbound = Number.isFinite(lastAt)
+    ? context.messages.filter(message => message.direction === "inbound" && Date.parse(message.occurred_at) > lastAt).length
+    : Number.POSITIVE_INFINITY;
+  const due = !Number.isFinite(lastAt) || newInbound >= backgroundMemoryEveryInbound || Date.now() - lastAt > backgroundMemoryIdleMs;
+  if (!due) return false;
+  const next = { ...metadata, background_memory_refresh: { at: new Date().toISOString() } };
+  await client.from("conversations").update({ metadata: next }).eq("id", context.conversationId);
+  context.conversationMetadata = next;
+  return true;
 }
 
 async function extractLeadMemory(
