@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardList,
+  Clock,
   CloudDownload,
   Copy,
   CreditCard,
@@ -672,7 +673,8 @@ const salesCatalogHelpText: Record<string, string> = {
   Categorias: "Cadastre as familias de produtos que o agente usara para organizar e filtrar o catalogo.",
   Variacoes: "Crie atributos como tamanho, cor, material, publico ou qualquer escolha que o cliente precisa confirmar.",
   "Pagamentos no WhatsApp": "Ative somente os metodos que a empresa aceita e escreva como o agente deve orientar o pagamento.",
-  "Pedido e dados do lead": "Defina valor minimo, reserva, dados obrigatorios e quando uma pessoa precisa confirmar o pedido.",
+  "Horário de funcionamento": "Dias e horários em que a loja aceita pedidos. O agente conversa a qualquer hora, mas só fecha pedidos com a loja aberta.",
+  "Regras do pedido": "Defina valor minimo, reserva, dados obrigatorios do cliente e quando uma pessoa precisa confirmar o pedido.",
   "Pedido minimo": "Informe um valor minimo quando a empresa so aceitar pedidos acima de uma faixa.",
   Reserva: "Escolha em que momento o estoque fica reservado para evitar venda duplicada.",
   "Carrinho parado": "Tempo em minutos para o agente retomar um pedido iniciado e ainda nao concluido.",
@@ -3675,8 +3677,11 @@ export function SalesCatalogConsole({
                 ))}
               </div>
 
-              <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet">
+              <AccordionSection icon={Clock} title="Horário de funcionamento" tone="cyan">
                 <OperationHoursEditor value={settingsDraft.orderPolicy.operations} onChange={operations => updateOrderPolicy({ operations })} />
+              </AccordionSection>
+
+              <AccordionSection icon={ClipboardList} title="Regras do pedido" tone="violet">
                 <div className="grid gap-3 lg:grid-cols-2">
                   <label className="block">
                     <FieldLabel>Pedido minimo</FieldLabel>
