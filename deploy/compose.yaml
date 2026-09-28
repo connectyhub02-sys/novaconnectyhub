@@ -1,0 +1,28 @@
+services:
+  app:
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable release tag}
+    env_file:
+      - /opt/connectyhub/app/config/production.env
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      CONNECTYHUB_BUILD_SHA: ${APP_SHA:?Set APP_SHA to the release commit}
+      VERCEL_GIT_COMMIT_SHA: ${APP_SHA:?Set APP_SHA to the release commit}
+    ports:
+      - "127.0.0.1:${APP_PORT:?Set APP_PORT}:3000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 360s
+    cpus: 2.0
+    mem_limit: 4g
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
