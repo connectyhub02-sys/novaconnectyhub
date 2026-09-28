@@ -1928,3 +1928,20 @@ agora são aguardadas antes de encerrar a execução (antes podiam gravar o uso 
 conciliação passou a concluir usos gravados e não debitados; usos sem tarifa aparecem como
 aviso no painel de custos. Histórico não recuperado: 245 respostas de 01 a 10/09/2026 sem
 tarifa (≈ R$ 18 de custo), por decisão de não repreçar consumo antigo.
+
+### Publicação na VPS — cumprimento das campanhas no horário real — 28/09/2026, 16h59 BRT
+
+Primeira publicação deste chat pelo processo novo da VPS (`deploy/README.md`). Commit
+`c5bd05cac38f8b8a44b3a04ea2a077fee01978ec` preparado no slot a (porta 3130); candidato conferido
+com health/versão, `/` e `/login` 200, `/dashboard` 307 sem sessão, API protegida 401 e Inngest
+exigindo assinatura (mesmo comportamento do slot b, inclusive `/docs` 404 nos dois). Ativado o slot a;
+health público confirmou o SHA. Slot b mantido com `25ebc41a` para retorno. Builder parado após o
+build. Nenhuma migration e nenhuma função Inngest nova.
+
+Mudança publicada: a geração das campanhas recebe o horário de Brasília de cada post e a regra de
+cumprimento; no envio, "bom dia/boa tarde/boa noite" fora do período é trocado pelo cumprimento da
+hora real (corrige também posts já programados). Causa: o post das 14h40 do Gustavo saiu com
+"boa noite, encerrando o dia", porque a IA só recebia a data inicial em UTC.
+Auditoria da migração feita antes da publicação: produção no VPS (Caddy), `25ebc41a` já continha as
+correções deste chat de 28/09 (acentuação, cobrança, cardápio, contatos); webhooks, execuções dos
+agentes, campanhas e cobrança seguiram normais antes e depois das 14h.
