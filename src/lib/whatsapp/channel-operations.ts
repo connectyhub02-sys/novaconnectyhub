@@ -2593,6 +2593,12 @@ function assertWhatsappConnected(context: WhatsappOperationalContext) {
   }
 }
 
+/**
+ * Posts, campaigns and question rooms are scheduled by the owner: they keep their own permissions even while
+ * the agent's automatic attendance is switched off (attendance reads its behavior elsewhere and stays off).
+ */
+const preserveOperationalSettings = { preserveSettings: true };
+
 async function resolveOperationalBehaviorConfig(
   client: SupabaseClient,
   input: {
@@ -2605,7 +2611,7 @@ async function resolveOperationalBehaviorConfig(
   const instanceConfig = readRecord(input.instanceMetadata?.behavior_config);
 
   if (instanceConfig) {
-    return normalizeWhatsappBehaviorConfig(instanceConfig);
+    return normalizeWhatsappBehaviorConfig(instanceConfig, preserveOperationalSettings);
   }
 
   if (input.scope === "organization" && input.organizationId) {
@@ -2615,12 +2621,12 @@ async function resolveOperationalBehaviorConfig(
       loadOrganizationGlobalBehaviorConfig(client, input.organizationId),
     ]);
 
-    return normalizeWhatsappBehaviorConfig(agentConfig ?? globalConfig);
+    return normalizeWhatsappBehaviorConfig(agentConfig ?? globalConfig, preserveOperationalSettings);
   }
 
   if (input.scope === "platform" && input.sectorId) {
     const platformConfig = await loadPlatformSectorBehaviorConfig(client, input.sectorId);
-    return normalizeWhatsappBehaviorConfig(platformConfig);
+    return normalizeWhatsappBehaviorConfig(platformConfig, preserveOperationalSettings);
   }
 
   return normalizeWhatsappBehaviorConfig(null);
