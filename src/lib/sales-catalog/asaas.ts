@@ -838,6 +838,10 @@ async function ensureAsaasPaymentWebhook(input: {
     const webhook = await createAsaasPaymentWebhook(input);
     return { ...webhook, reused: false };
   } catch (error) {
+    // The owner's login e-mail is only a contact for webhook failures: Asaas refusing it must not leave payments unconfirmed.
+    if (input.email && isAsaasInvalidEmailError(error)) {
+      return ensureAsaasPaymentWebhook({ ...input, email: null });
+    }
     if (!isAsaasDuplicateWebhookError(error)) {
       throw error;
     }
@@ -1351,13 +1355,22 @@ function normalizeAsaasAccessToken(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+/** Asaas only accepts plain addresses (no "&", accents or spaces): anything else falls back to the platform alert address. */
 function normalizeAsaasWebhookEmail(value: string | null | undefined) {
-  const configured = value?.trim()
-    || process.env.ASAAS_WEBHOOK_ALERT_EMAIL?.trim()
-    || process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim()
-    || "connectyhub@gmail.com";
+  const accepted = (candidate: string | null | undefined) => {
+    const email = candidate?.trim().toLowerCase();
+    return email && /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(email) ? email : null;
+  };
 
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configured) ? configured.toLowerCase() : "connectyhub@gmail.com";
+  return accepted(value)
+    ?? accepted(process.env.ASAAS_WEBHOOK_ALERT_EMAIL)
+    ?? accepted(process.env.NEXT_PUBLIC_SUPPORT_EMAIL)
+    ?? "connectyhub@gmail.com";
+}
+
+function isAsaasInvalidEmailError(error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error ?? "")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return message.includes("email") && message.includes("invalid");
 }
 
 function normalizeAsaasDocument(value: string | null | undefined) {
