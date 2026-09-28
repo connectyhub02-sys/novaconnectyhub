@@ -82,6 +82,29 @@ export function quoteFoodComposition(value: unknown, selections: unknown, quanti
   return { version: 1, pricing: policy.pricing, units, totalCents, summary };
 }
 
+/** Cheapest price of one unit in each active size: one flavor filling it all, plus the cheapest mandatory choices. */
+export function foodCompositionSizePrices(value: unknown): Array<{ sizeId: string; name: string; maxFlavors: number; cents: number }> {
+  const policy = readFoodComposition(value);
+  if (!policy.enabled || validateFoodComposition(policy)) return [];
+  const mandatoryCents = policy.groups.reduce((sum, group) => {
+    if (group.min < 1) return sum;
+    const cheapest = group.options.filter(option => option.active).map(option => deliveryMoneyCents(option.price) ?? 0).sort((a, b) => a - b).slice(0, group.min);
+    return sum + cheapest.reduce((total, cents) => total + cents, 0);
+  }, 0);
+  return policy.sizes.filter(size => size.active).flatMap(size => {
+    const base = policy.pricing === "fixed"
+      ? deliveryMoneyCents(size.price)
+      : Math.min(...policy.flavors.filter(flavor => flavor.active).map(flavor => deliveryMoneyCents(flavor.prices[size.id]) ?? Number.POSITIVE_INFINITY));
+    return base !== null && Number.isFinite(base) ? [{ sizeId: size.id, name: size.name, maxFlavors: size.maxFlavors, cents: base + mandatoryCents }] : [];
+  });
+}
+
+/** "A partir de": the lowest price a customer can pay for one assembled unit, or null when the setup is incomplete. */
+export function foodCompositionStartingCents(value: unknown): number | null {
+  const prices = foodCompositionSizePrices(value).map(size => size.cents).filter(cents => cents > 0);
+  return prices.length ? Math.min(...prices) : null;
+}
+
 export function foodUnitSummary(unit: FoodUnitSnapshot, index = 0) {
   return `${index + 1}. ${unit.size}${unit.flavors.length ? `: ${unit.flavors.map(flavor => `${flavor.portions}/${unit.portions} ${flavor.name}`).join(" + ")}` : ""}${unit.options.length ? `; ${unit.options.map(option => `${option.quantity}x ${option.name}${option.flavorId ? ` em ${unit.flavors.find(flavor => flavor.id === option.flavorId)!.name}` : ""}`).join(", ")}` : ""}${unit.note ? `; observação: ${unit.note}` : ""} — R$ ${(unit.totalCents / 100).toFixed(2).replace(".", ",")}`;
 }

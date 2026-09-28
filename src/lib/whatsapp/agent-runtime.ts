@@ -1,7 +1,7 @@
 import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
-import { quoteFoodComposition, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
+import { quoteFoodComposition, foodCompositionStartingCents, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
 import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
 import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
@@ -106,7 +106,8 @@ import { readAsaasPaymentRecovery, readAsaasPixSessionRecovery, type AsaasPaymen
 import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { loadTransparentCheckout } from "@/lib/sales-catalog/transparent-checkout";
 import { searchRuntimeCatalog } from "@/lib/sales-catalog/runtime-search";
-import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
+import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
+import { buildSalesCatalogMenuMessages, isMenuRequest } from "@/lib/sales-catalog/menu-text";
 import {
   formatSalesCatalogBillingCycleWithInterval,
   formatSalesCatalogFulfillmentMode,
@@ -800,6 +801,12 @@ async function processWhatsappAgentRunWithScope(input: {
 
     // "Me chama mês que vem" becomes a return; an answer to the birthday question goes to the lead file.
     if (!isGroupChat) await captureLeadReturnAndBirthday(client, context, latestInbound).catch(() => {});
+
+    // "Me manda o cardápio": the menu goes out organized by category, straight from the catalog, with no model call.
+    const menuMessages = !isGroupChat && latestInbound ? await maybeSendSalesCatalogMenu({ client, context, token, phone, latestInbound }) : null;
+    if (menuMessages?.length) {
+      return await completeRun(client, run.id, "Cardápio enviado.", { sent: true, reason: "sales_catalog_menu", messages: menuMessages.length, mode: "text" });
+    }
 
     const behaviorSignals = detectBehaviorSignals({
       behavior,
@@ -6287,7 +6294,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
       "CATALOGO PARA CONSULTA, SEM PEDIDO OU COBRANCA:",
       "- Apresente no maximo duas opcoes adequadas, com dados reais e uma explicacao curta. Use a tag para identificar o item sem exibir a tag ao cliente.",
       "- Fotos cadastradas podem ser enviadas; sem arquivo, nao prometa enviar foto. Links cadastrados servem para consultar detalhes e a galeria.",
-      ...sellableItems.slice(0, 40).map(item => `- ${item.tag} (${item.title}) | valor de referencia: ${item.price} ${item.currency} | categoria: ${item.category ?? ""} | midias: ${item.media.length ? `${item.media.length} arquivo(s)` : "sem arquivo"}${item.productUrl ? ` | detalhes: ${item.productUrl}` : ""} | resumo: ${preview(item.description, 180)}`),
+      ...sellableItems.slice(0, 40).map(item => `- ${item.tag} (${item.title}) | valor de referencia: ${formatRuntimeItemPrice(item)} | categoria: ${item.category ?? ""} | midias: ${item.media.length ? `${item.media.length} arquivo(s)` : "sem arquivo"}${item.productUrl ? ` | detalhes: ${item.productUrl}` : ""} | resumo: ${preview(item.description, 180)}`),
     ];
   }
 
@@ -6316,6 +6323,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 2 itens do catalogo e inclua a tag de cada um.",
+    "- Excecao ao limite de 2 itens: se o lead pedir o cardapio, o catalogo, todas as opcoes, mais opcoes ou os sabores, liste as opcoes cadastradas organizadas por categoria, com nome e preco (ou 'a partir de' nos produtos de montagem), sem tags nem ficha tecnica.",
+    "- Nunca diga que outra pessoa, atendente ou equipe vai enviar cardapio, fotos, link, preco ou informacao. Voce mesmo envia o que esta cadastrado; se algo nao estiver cadastrado, diga isso com naturalidade e ofereca o que existe.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
     "- Se algum item legado aparecer como revisar destino da venda, confirme a intencao com o lead e acione o dono antes de prometer checkout.",
     "- Nunca invente desconto, cupom, prazo promocional ou condicao comercial; use somente oferta/cupom cadastrado no item.",
@@ -6361,7 +6370,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
             ? ` | site externo: ${item.productUrl}`
             : " | botao externo pendente"
         : "";
-      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
+      return `- ${item.tag} (${item.title})${formatRuntimeItemPrice(item) ? ` | ${formatRuntimeItemPrice(item)}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
     }),
   ];
 }
@@ -15548,6 +15557,8 @@ function isSalesCatalogItemSellable(item: RuntimeSalesCatalogItem) {
 }
 
 function hasRuntimeSalesCatalogPrice(item: RuntimeSalesCatalogItem) {
+  // Assembled products (pizza, combo, drinks by size) take the price from the assembly, not from the product field.
+  if (item.foodComposition?.enabled && (foodCompositionStartingCents(item.foodComposition) ?? 0) > 0) return true;
   const candidates = [
     item.offer.salePrice,
     item.price,
@@ -15804,10 +15815,70 @@ function withGroupMentionPrefix(text: string, mentions: string | undefined, dest
   return missing.length ? `${missing.map(value => `@${value}`).join(" ")} ${text}` : text;
 }
 
+/** Food stores answer a menu request with the whole menu in WhatsApp, plus a button to see it with photos. */
+async function maybeSendSalesCatalogMenu(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow;
+}) {
+  const { context } = input;
+  const foodStore = context.salesCatalogSettings?.businessType === "food" || context.salesCatalog.some(item => item.foodComposition?.enabled);
+  if (!foodStore || !isMenuRequest(input.latestInbound.text_content ?? "")) return null;
+  const menu = buildSalesCatalogMenuMessages(context.salesCatalog, context.salesCatalogSettings?.categories ?? []);
+  if (!menu.length) return null;
+
+  await assertRunStillTargetsLatestInbound(input.client, context, input.latestInbound);
+  const texts = ["Claro! Segue o nosso cardápio:", ...menu];
+  const sent: OutboundMessage[] = [];
+  for (let index = 0; index < texts.length; index++) {
+    if (index > 0) {
+      const delayMs = Math.min(resolveChunkDelayMs(texts[index], context.behavior), 2500);
+      await setChatPresence(context.credentials, input.token, input.phone, "composing", delayMs + 4000);
+      await sleep(delayMs);
+    }
+    const message = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone, text: texts[index],
+      chunkIndex: index, chunksTotal: texts.length + 1, trackIdPrefix: "catalog_menu" });
+    if (message) sent.push(message);
+  }
+
+  const closing = "Se quiser ver com fotos, é só tocar no botão. Ou me diz o que vai querer que eu monto seu pedido por aqui mesmo.";
+  const storeUrl = context.organization.slug ? buildLeadAwareSalesCatalogStoreUrl({ storeSlug: context.organization.slug, organizationId: context.organization.id,
+    leadId: context.lead?.id ?? null, conversationId: context.conversationId, agentId: context.agent.id }) : null;
+  const buttonResponse = storeUrl ? await callUazapi(context.credentials, "/send/menu", {
+    method: "POST", token: input.token, timeoutMs: outboundTextDeliveryTimeoutMs,
+    body: { number: input.phone, type: "button", text: closing, choices: [`Ver cardápio com fotos|${storeUrl}`],
+      footerText: context.organization.name.slice(0, 60), track_source: "connectyhub", track_id: `catalog_menu_${context.run.id}_button` },
+  }).catch(() => null) : null;
+  if (buttonResponse) {
+    const message: OutboundMessage = { text: closing, mode: "text", providerResponse: buttonResponse, interactiveButton: true, chunkIndex: texts.length, chunksTotal: texts.length + 1 };
+    await saveOutboundMessage(input.client, context, message);
+    sent.push({ ...message, persisted: true });
+  } else {
+    const message = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone,
+      text: storeUrl ? `${closing}\n${storeUrl}` : "Me diz o que vai querer que eu monto seu pedido por aqui mesmo.",
+      chunkIndex: texts.length, chunksTotal: texts.length + 1, trackIdPrefix: "catalog_menu" });
+    if (message) sent.push(message);
+  }
+  return sent;
+}
+
+/** Assembled products show "a partir de" the cheapest assembly; a stored "0" is never shown as the price. */
+function formatRuntimeItemPrice(item: RuntimeSalesCatalogItem) {
+  if (item.foodComposition?.enabled) {
+    const cents = foodCompositionStartingCents(item.foodComposition);
+    return cents ? `a partir de R$ ${formatRuntimeOrderMoney(cents / 100)} (preço final calculado pela montagem)` : "";
+  }
+  return item.price ? `${item.price} ${item.currency}` : "";
+}
+
 function buildSalesCatalogMediaCaption(item: RuntimeSalesCatalogItem, media: SalesCatalogMedia) {
   const parts = [
     item.title,
-    item.price ? `${item.price} ${item.currency}` : "",
+    item.foodComposition?.enabled
+      ? (foodCompositionStartingCents(item.foodComposition) ? `a partir de R$ ${formatRuntimeOrderMoney(foodCompositionStartingCents(item.foodComposition)! / 100)}` : "")
+      : item.price ? `${item.price} ${item.currency}` : "",
     media.kind === "document" ? media.fileName : "",
   ];
 
