@@ -350,7 +350,9 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
   let warning: string | null = null;
   for (const destination of list) {
     if (!destination.targetIds.length) {
-      const status = await planStatusDay(client, context, campaign, dayStart, postsPerDay, catalogItemIds);
+      // A failure in the status never takes the groups and channels down with it.
+      const status = await planStatusDay(client, context, campaign, dayStart, postsPerDay, catalogItemIds)
+        .catch((error: unknown) => ({ scheduled: 0, warning: `Status: ${error instanceof Error ? error.message.slice(0, 200) : "não foi possível planejar"}. Os grupos e canais seguem normalmente.` }));
       scheduled += status.scheduled;
       warning = status.warning;
       continue;
@@ -427,14 +429,32 @@ export async function resolveStatusRecipients(client: SupabaseClient, campaign: 
 
 type StatusStory = { photo: string; benefit: string; offer: string };
 
+/** Stories from the product itself (name and price, first sentence of the description), when the AI fails. */
+export function buildFallbackStatusStories(products: Array<{ title: string; metadata: Record<string, unknown> | null }>, count: number, idea: string | null) {
+  if (!products.length) return [];
+  return Array.from({ length: count }, (_, index) => {
+    const product = products[index % products.length];
+    const price = product.metadata?.price ? ` por R$ ${String(product.metadata.price)}` : "";
+    const description = String(product.metadata?.description ?? "").split(/(?<=[.!?])\s+/)[0]?.trim().slice(0, 140);
+    return {
+      photo: `${product.title}${price}`.slice(0, 200),
+      benefit: description || `Um dos mais procurados da loja: ${product.title}.`.slice(0, 160),
+      offer: (idea?.trim() ? `${idea.trim().slice(0, 100)} Responde este status que eu te passo os detalhes!` : "Responde este status que eu te passo os detalhes!").slice(0, 160),
+    };
+  });
+}
+
 /** Three short parts per story (photo caption, benefit, offer), written by the AI in one call. */
 export function parseStatusStories(text: string, count: number): StatusStory[] {
-  const json = text.slice(text.indexOf("["), text.lastIndexOf("]") + 1);
+  const clean = text.replace(/```(?:json)?/gi, "");
+  const json = clean.includes("[") ? clean.slice(clean.indexOf("["), clean.lastIndexOf("]") + 1) : `[${clean.slice(clean.indexOf("{"), clean.lastIndexOf("}") + 1)}]`;
   try {
-    const parsed = JSON.parse(json) as Array<Record<string, unknown>>;
+    const raw = JSON.parse(json) as unknown;
+    const list = Array.isArray(raw) ? raw : [];
+    const parsed = (list.length === 1 && Array.isArray((list[0] as Record<string, unknown>)?.historias) ? (list[0] as Record<string, unknown>).historias as unknown[] : list) as Array<Record<string, unknown>>;
     return parsed.map(item => ({
       photo: String(item.foto ?? item.photo ?? "").trim().slice(0, 200),
-      benefit: String(item.beneficio ?? item.benefit ?? "").trim().slice(0, 160),
+      benefit: String(item.beneficio ?? item["benefício"] ?? item.benefit ?? "").trim().slice(0, 160),
       offer: String(item.oferta ?? item.offer ?? "").trim().slice(0, 160),
     })).filter(story => story.photo && story.benefit && story.offer).slice(0, count);
   } catch {
@@ -467,14 +487,20 @@ async function planStatusDay(client: SupabaseClient, context: Context, campaign:
       `Responda só com JSON: uma lista com ${postsPerDay} objetos {"foto","beneficio","oferta"}.`,
     ].join("\n");
     const prompt = [`Produtos: ${titles.join("; ") || "destaques da loja"}.`, campaign.idea ? `Ideia ou oferta: ${campaign.idea}` : "", `Quantidade de sequências: ${postsPerDay}.`].filter(Boolean).join("\n");
-    const generated = await generateWhatsappShortText(client, systemInstruction, prompt, { maxOutputTokens: 300 * postsPerDay + 200 });
-    await meterGeminiGenerationUsage({
-      client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: generated.modelId, agentScope: "customer",
-      promptText: [systemInstruction, prompt], outputText: generated.text, responseData: generated.responseData,
-      debitDescription: "Sequência de status da campanha", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, statusStory: true },
-    });
-    const stories = parseStatusStories(generated.text, postsPerDay);
-    if (!stories.length) throw new Error("A IA não montou a sequência de status. Tente de novo em instantes.");
+    // The model also spends output on reasoning: give it room (billed by what it really uses) and try twice.
+    let stories: StatusStory[] = [];
+    for (let attempt = 0; attempt < 2 && stories.length === 0; attempt += 1) {
+      const generated = await generateWhatsappShortText(client, systemInstruction, prompt, { maxOutputTokens: 8192 }).catch(() => null);
+      if (!generated) continue;
+      await meterGeminiGenerationUsage({
+        client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: generated.modelId, agentScope: "customer",
+        promptText: [systemInstruction, prompt], outputText: generated.text, responseData: generated.responseData,
+        debitDescription: "Sequência de status da campanha", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, statusStory: true, attempt: attempt + 1 },
+      }).catch(() => null);
+      stories = parseStatusStories(generated.text, postsPerDay);
+    }
+    // Last resort without AI: the product's own name, price and description, so the day is never lost.
+    if (!stories.length) stories = buildFallbackStatusStories((data ?? []) as Array<{ id: string; title: string; metadata: Record<string, unknown> | null }>, postsPerDay, campaign.idea);
     for (const [index, story] of stories.entries()) {
       const start = slotTime(index).getTime();
       const product = products.length ? [products[index % products.length]] : [];

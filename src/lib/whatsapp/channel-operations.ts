@@ -1339,7 +1339,7 @@ export async function generateWhatsappGrowthCampaignPlan(
   ].filter(Boolean).join("\n\n");
   const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, {
     temperature: 0.78,
-    maxOutputTokens: 2400,
+    maxOutputTokens: 8192, // room for the model reasoning too; billing uses what it really spends
   });
   const rawText = extractGeminiText(responseData);
   const parsed = parseGeminiGrowthPlan(rawText);

@@ -247,3 +247,27 @@ describe("status for the right people", () => {
     expect(campaign().last_error).toContain("clientes que já compraram");
   });
 });
+
+describe("status story never loses the day", () => {
+  it("reads the story even inside a code block or with accented keys", () => {
+    const { traffic } = setup();
+    const text = "```json\n[{\"foto\":\"Enantato por R$ 269,99\",\"benefício\":\"Força e volume\",\"oferta\":\"Responde este status!\"}]\n```";
+    expect(traffic.parseStatusStories(text, 3)).toEqual([{ photo: "Enantato por R$ 269,99", benefit: "Força e volume", offer: "Responde este status!" }]);
+  });
+
+  it("builds the story from the product when the AI fails", () => {
+    const { traffic } = setup();
+    const stories = traffic.buildFallbackStatusStories([{ title: "Enantato 10ml", metadata: { price: "269,99", description: "Base clássica para ganho de força. Outra frase." } }], 2, null);
+    expect(stories[0]).toEqual({ photo: "Enantato 10ml por R$ 269,99", benefit: "Base clássica para ganho de força.", offer: "Responde este status que eu te passo os detalhes!" });
+    expect(stories).toHaveLength(2);
+  });
+
+  it("keeps the groups going when the status cannot be planned", async () => {
+    const { db, traffic, queuedPlans, campaign } = setup();
+    db.tables.sales_catalog_orders = null as never;
+    const result = await traffic.runTrafficCampaign(db.client as never, campaignRow({ status_audience: "customers" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(queuedPlans).toHaveLength(1);
+    expect(result).toMatchObject({ scheduled: 2 });
+    expect(String(campaign().last_error)).toContain("Os grupos e canais seguem normalmente");
+  });
+});
