@@ -1884,3 +1884,15 @@ Margem de 75% refere-se ao crédito nominal antes das despesas; bônus e pacotes
 reduzem o valor efetivo. Não é lucro líquido nem fatura conciliada. Nenhuma
 geração paga adicional; permanece US$ 0,959893 do teto US$ 1. Este registro
 prepara a publicação; a confirmação do deploy e da ativação é posterior.
+
+### Chat do atendimento espelhando o WhatsApp — 27/09/2026, 23:50 BRT
+
+Commit `8f074567` publicado (health confirma a versão) e migration `0172`
+aplicada e registrada (backup em `backup_0172_conversation_messages`, 34 linhas).
+A análise automática de foto/vídeo não sobrescreve mais a mensagem do lead:
+fica em `payload.media_analysis.text` e o agente a lê como antes. O painel
+passa a exibir foto, vídeo, figurinha, documento, contato e localização; reação
+aparece sob a mensagem reagida. Fotos de produto, figurinhas e reações enviadas
+pelo agente passam a ser gravadas no chat (antes só texto e áudio). Pendente:
+conferência visual no painel logado. Observado na auditoria: o arquivo de mídias
+dos leads tem 5.759 itens em `retry` (mídias antigas que o provedor não baixa mais).
