@@ -2926,7 +2926,22 @@ function formatThreadMessagePreview(message: ClientLeadMessage) {
     return `${author}: Áudio${text}`;
   }
 
-  return `${author}: ${message.text}`;
+  return `${author}: ${describeMessageContent(message)}`;
+}
+
+/** Short line for lists and notifications: a photo reads "📷 Foto", never an internal note. */
+function describeMessageContent(message: ClientLeadMessage) {
+  if (message.deleted) return "Mensagem apagada";
+  if (message.reaction) return message.reaction.emoji ? `Reagiu com ${message.reaction.emoji}` : "Removeu a reação";
+  if (message.contact) return `👤 ${message.contact.name}`;
+  if (message.location) return "📍 Localização";
+  const label = message.mediaKind === "image" ? "📷 Foto"
+    : message.mediaKind === "video" ? "🎥 Vídeo"
+      : message.mediaKind === "sticker" ? "Figurinha"
+        : message.mediaKind === "document" ? `📄 ${message.mediaFileName ?? "Documento"}`
+          : null;
+  if (!label) return message.text;
+  return message.text ? `${label}: ${message.text}` : label;
 }
 
 function formatHumanInterventionCountdown(humanIntervention: ClientLeadHumanIntervention, nowMs: number) {
@@ -3296,7 +3311,8 @@ function formatLeadNotificationBody(message: ClientLeadMessage) {
     return text ? `Áudio recebido: ${text}` : "Áudio recebido do lead.";
   }
 
-  return message.text ? previewNotificationText(message.text, 120) : "O lead enviou uma nova mensagem.";
+  const content = describeMessageContent(message);
+  return content ? previewNotificationText(content, 120) : "O lead enviou uma nova mensagem.";
 }
 
 function previewNotificationText(value: string, maxLength: number) {
@@ -4612,18 +4628,25 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
     previousHeight.current = container?.scrollHeight ?? 0;
   }, [lastMessageId, messages.length]);
 
+  const reactions = useMemo(() => collectMessageReactions(messages), [messages]);
+
   return (
     <div ref={topRef} className="space-y-2">
       <HistoryPageControl history={history} label="Carregar mensagens anteriores" />
       {!messages.length && !history.loading && !history.error ? <EmptyState title="Sem mensagens salvas" detail="As mensagens recebidas e enviadas aparecem aqui." /> : null}
       {messages.map((message) => {
+        // Like WhatsApp, a reaction sits under the message it reacts to instead of being a message of its own.
+        if (message.reaction && (reactions.attached.has(message.id) || !message.reaction.emoji)) return null;
+        const messageReactions = reactions.byMessage.get(providerMessageKey(message.providerMessageId) ?? "") ?? [];
         const isLead = message.author === "lead" || message.direction === "inbound";
         const isAi = message.author === "ai";
         const isHuman = message.author === "human";
         const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
         const label = (isLead && leadName) || message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
         const isOutbound = !isSystem && !isLead;
-        const isAudio = message.mediaKind === "audio";
+        const isAudio = message.mediaKind === "audio" && !message.deleted;
+        const isSticker = message.mediaKind === "sticker" && !message.deleted;
+        const emojiOnly = !message.mediaUrl && !message.reaction && isEmojiOnlyText(message.text);
         const quotedLabel = message.quotedMessage
           ? message.quotedMessage.authorLabel
             ?? (message.quotedMessage.direction === "inbound"
@@ -4646,7 +4669,7 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                 "max-w-[88%] rounded-2xl border px-3 py-2.5 text-[13px] leading-5 shadow-sm sm:max-w-[72%] sm:px-3.5",
                 isSystem && "max-w-[82%] text-center",
               )}
-              style={bubbleStyle}
+              style={isSticker ? { ...bubbleStyle, backgroundColor: "transparent", borderColor: "transparent", boxShadow: "none" } : bubbleStyle}
             >
               <div className="mb-1 flex items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -4666,7 +4689,7 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                   ) : null}
                 </span>
                 <span className="font-mono text-[11px] opacity-55">
-                  {message.type !== "text" ? `${message.type} · ` : null}
+                  {message.edited ? "editada · " : null}
                   {formatTime(message.occurredAt)}
                 </span>
               </div>
@@ -4694,20 +4717,23 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
                   </p>
                 </div>
               ) : null}
-              {isAudio ? (
+              {message.deleted ? (
+                <p className="italic opacity-60">🚫 Mensagem apagada</p>
+              ) : isAudio ? (
                 <ChatAudioMessage message={message} isOutbound={isOutbound} />
               ) : (
-                <p className="whitespace-pre-wrap">{redactInternalProviderNames(message.text)}</p>
+                <ChatMessageBody message={message} isSticker={isSticker} emojiOnly={emojiOnly} />
               )}
-              {!isAudio && message.mediaUrl ? (
-                <a
-                  className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
-                  href={message.mediaUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Abrir midia salva
-                </a>
+              {messageReactions.length ? (
+                <div className={cn("mt-1.5 flex", isOutbound ? "justify-end" : "justify-start")}>
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[14px] leading-none shadow-sm"
+                    title={messageReactions.map((reaction) => `${reaction.author}: ${reaction.emoji}`).join("\n")}
+                  >
+                    {Array.from(new Set(messageReactions.map((reaction) => reaction.emoji))).join("")}
+                    {messageReactions.length > 1 ? <span className="ml-0.5 text-[11px] text-slate-500">{messageReactions.length}</span> : null}
+                  </span>
+                </div>
               ) : null}
             </div>
           </div>
@@ -4715,6 +4741,110 @@ function ChatMessages({ messages: liveMessages, leadId, conversationId, leadName
       })}
       <div ref={bottomRef} />
     </div>
+  );
+}
+
+type ChatReaction = { emoji: string; author: string };
+
+function providerMessageKey(value: string | null | undefined) {
+  return value ? value.split(":").at(-1) ?? value : null;
+}
+
+/** Latest reaction of each person per message (an empty one removes it), as WhatsApp shows them. */
+function collectMessageReactions(messages: ClientLeadMessage[]) {
+  const known = new Set(messages.map((message) => providerMessageKey(message.providerMessageId)).filter(Boolean));
+  const latest = new Map<string, Map<string, ChatReaction>>();
+  const attached = new Set<string>();
+
+  for (const message of messages) {
+    const target = message.reaction?.targetProviderMessageId;
+    if (!message.reaction || !target || !known.has(target)) continue;
+    attached.add(message.id);
+    const author = message.direction === "inbound" ? "Lead" : message.authorLabel || "Atendimento";
+    const byAuthor = latest.get(target) ?? new Map<string, ChatReaction>();
+    if (message.reaction.emoji) byAuthor.set(`${message.direction}:${author}`, { emoji: message.reaction.emoji, author });
+    else byAuthor.delete(`${message.direction}:${author}`);
+    latest.set(target, byAuthor);
+  }
+
+  const byMessage = new Map<string, ChatReaction[]>();
+  for (const [target, byAuthor] of latest) if (byAuthor.size) byMessage.set(target, Array.from(byAuthor.values()));
+  return { byMessage, attached };
+}
+
+function isEmojiOnlyText(value: string) {
+  const text = value.replace(/\s+/g, "");
+  return text.length > 0 && text.length <= 16 && /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\p{Regional_Indicator}|\u200d|\ufe0f|\u20e3|[#*0-9])+$/u.test(text) && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(text);
+}
+
+function ChatMessageBody({ emojiOnly, isSticker, message }: { emojiOnly: boolean; isSticker: boolean; message: ClientLeadMessage }) {
+  const caption = message.text ? redactInternalProviderNames(message.text) : "";
+  const captionNode = caption ? <p className={cn("whitespace-pre-wrap", message.mediaUrl && "mt-1.5")}>{caption}</p> : null;
+
+  if (message.reaction) {
+    return <p className="text-[12px] opacity-75">Reagiu com <span className="text-[16px]">{message.reaction.emoji}</span> a uma mensagem</p>;
+  }
+  if (message.contact) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-2">
+        <Phone className="h-4 w-4 shrink-0 text-[#128C7E]" />
+        <span className="min-w-0">
+          <span className="block truncate font-semibold">{message.contact.name}</span>
+          {message.contact.phone ? <span className="block text-[12px] opacity-70">{message.contact.phone}</span> : null}
+        </span>
+      </div>
+    );
+  }
+  if (message.location) {
+    return (
+      <a className="flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-2 hover:underline" href={`https://www.google.com/maps?q=${message.location.latitude},${message.location.longitude}`} rel="noreferrer" target="_blank">
+        <MapPin className="h-4 w-4 shrink-0 text-[#128C7E]" />
+        <span>{message.location.name ?? "Localização"}</span>
+      </a>
+    );
+  }
+  if (message.mediaUrl && (message.mediaKind === "image" || isSticker)) {
+    return <><ChatMediaImage message={message} sticker={isSticker} />{captionNode}</>;
+  }
+  if (message.mediaUrl && message.mediaKind === "video") {
+    return (
+      <>
+        <video className="max-h-80 w-full min-w-[220px] rounded-lg bg-black" controls preload="metadata" src={message.mediaUrl} />
+        {captionNode}
+      </>
+    );
+  }
+  if (message.mediaUrl && message.mediaKind === "document") {
+    return (
+      <>
+        <a className="flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-2 hover:bg-black/[0.07]" href={message.mediaUrl} rel="noreferrer" target="_blank">
+          <FileText className="h-5 w-5 shrink-0 text-[#128C7E]" />
+          <span className="min-w-0 truncate font-medium">{message.mediaFileName ?? "Documento"}</span>
+        </a>
+        {captionNode}
+      </>
+    );
+  }
+  if (!caption) return <p className="italic opacity-60">Mensagem sem conteúdo para exibir</p>;
+  return <p className={cn("whitespace-pre-wrap", emojiOnly && "text-[32px] leading-10")}>{caption}</p>;
+}
+
+function ChatMediaImage({ message, sticker }: { message: ClientLeadMessage; sticker: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (!message.mediaUrl || failed) {
+    return <p className="text-[12px] italic opacity-60">{sticker ? "Figurinha" : "Foto"} indisponível no momento</p>;
+  }
+  return (
+    <a href={message.mediaUrl} rel="noreferrer" target="_blank" className="block">
+      {/* eslint-disable-next-line @next/next/no-img-element -- private per-message media served by our proxy */}
+      <img
+        alt={sticker ? "Figurinha" : "Foto enviada na conversa"}
+        className={sticker ? "h-32 w-32 object-contain" : "max-h-80 w-full min-w-[180px] rounded-lg object-cover"}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        src={message.mediaUrl}
+      />
+    </a>
   );
 }
 

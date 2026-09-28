@@ -109,7 +109,7 @@ describe("WhatsApp media followed by text or audio", () => {
     const caption = sourceBetween("function readMediaCaptionTextContent", "function isAudioMessage");
     const extractor = sourceBetween("function extractMessageCaption", "function formatMediaKind");
 
-    expect(caption).toContain("readStoredMediaAnalysisText(message, kind)");
+    expect(caption).not.toContain("readStoredMediaAnalysisText");
     expect(caption).toContain('normalized.startsWith("analise automatica de ")');
     expect(extractor).toContain("?? readMediaCaptionTextContent(message)");
   });
@@ -138,5 +138,14 @@ describe("WhatsApp media followed by text or audio", () => {
     expect(repair).toContain("shouldRepairMediaGrounding");
     expect(repair).toContain("[CORRECAO INTERNA - RESPOSTA SOBRE MIDIA GENERICA]");
     expect(repair).toContain("Obrigatorio: cite pelo menos um detalhe concreto da midia antes de avancar.");
+  });
+  it("keeps the lead message as sent and the media analysis only as agent context", () => {
+    const analyzer = sourceBetween("async function analyzeAndPersistInboundMedia", "async function persistMediaAnalysisFailure");
+    const hydrate = sourceBetween("function withStoredMediaAnalysis", "function readStoredMediaAnalysisText");
+
+    expect(analyzer).toContain(".update({ payload })");
+    expect(analyzer).not.toContain("text_content: storedText");
+    expect(analyzer).toContain("text: analysis");
+    expect(hydrate).toContain("buildStoredMediaAnalysisText(kind, text)");
   });
 });

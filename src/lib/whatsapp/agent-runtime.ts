@@ -433,6 +433,8 @@ type OutboundMessage = {
   chunkIndex?: number;
   chunksTotal?: number;
   persisted?: boolean;
+  /** Photo, video or document that went with the text, so the attendance chat shows it like WhatsApp does. */
+  media?: { kind: "image" | "video" | "document"; url: string };
 };
 
 type BehaviorSignal = {
@@ -1156,7 +1158,7 @@ async function processWhatsappAgentRunWithScope(input: {
     }
 
     if (latestInbound?.provider_message_id) {
-      await sendEmojiReaction({
+      const reaction = await sendEmojiReaction({
         credentials: context.credentials,
         token,
         phone,
@@ -1164,6 +1166,7 @@ async function processWhatsappAgentRunWithScope(input: {
         behavior,
         userText,
       });
+      if (reaction) await recordAgentSideMessage(client, context, { messageType: "ReactionMessage", text: reaction.emoji, providerResponse: reaction.providerResponse, extra: { reaction_to: latestInbound.provider_message_id } }).catch(() => {});
     }
 
     await waitWhileLeadTyping(client, context, leadTypingWaitBeforeSendMs);
@@ -1214,7 +1217,8 @@ async function processWhatsappAgentRunWithScope(input: {
       }).catch(() => {});
     }
 
-    await sendContextualSticker(context.credentials, token, phone, aiText, behavior).catch(() => {});
+    const sticker = await sendContextualSticker(context.credentials, token, phone, aiText, behavior).catch(() => null);
+    if (sticker) await recordAgentSideMessage(client, context, { messageType: "StickerMessage", text: null, providerResponse: sticker.providerResponse, extra: { sent_media: { kind: "sticker", url: sticker.url } } }).catch(() => {});
 
     if (behavior.markAsRead) {
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
@@ -1558,7 +1562,7 @@ async function loadRecentInboundMessagesForDelay(client: SupabaseClient, convers
     throw new Error(`Nao foi possivel carregar mensagens recentes para temporizacao: ${error.message}`);
   }
 
-  return (data ?? []) as ConversationMessageRow[];
+  return ((data ?? []) as ConversationMessageRow[]).map(withStoredMediaAnalysis);
 }
 
 async function loadLatestInboundMessage(client: SupabaseClient, conversationId: string, groupSender?: string | null) {
@@ -1578,7 +1582,7 @@ async function loadLatestInboundMessage(client: SupabaseClient, conversationId: 
     throw new Error(`Nao foi possivel validar mensagem mais recente da conversa: ${error.message}`);
   }
 
-  return data ?? null;
+  return data ? withStoredMediaAnalysis(data) : null;
 }
 
 async function assertRunStillTargetsLatestInbound(
@@ -1928,7 +1932,9 @@ async function loadConversationMessages(client: SupabaseClient, conversationId: 
     throw new Error(`Nao foi possivel carregar historico da conversa: ${error.message}`);
   }
 
-  return ((data ?? []) as ConversationMessageRow[]).reverse();
+  return ((data ?? []) as ConversationMessageRow[]).reverse()
+    .filter((message) => !isAgentSideDisplayMessage(message))
+    .map(withStoredMediaAnalysis);
 }
 
 async function loadOrganizationSalesCatalogOrders(
@@ -4019,6 +4025,7 @@ async function loadCrossAgentConversationContext(
   messageRows.push(...(((legacyMixedMessages ?? []) as Array<ConversationMessageRow & { conversation_id: string }>)));
 
   const messages = messageRows
+    .map(withStoredMediaAnalysis)
     .map((message) => {
       const text = buildMessageText(message).trim();
       if (!text) return null;
@@ -8454,6 +8461,8 @@ async function analyzeAndPersistInboundMedia(input: {
     mime_type: analyzed.mimeType,
     byte_length: analyzed.byteLength,
     analyzed_at: now,
+    // Internal context for the agent only: the lead's message keeps exactly what they sent.
+    text: analysis,
   };
   const storedText = buildStoredMediaAnalysisText(input.kind, analysis);
   const payload = {
@@ -8463,10 +8472,7 @@ async function analyzeAndPersistInboundMedia(input: {
 
   await input.client
     .from("conversation_messages")
-    .update({
-      text_content: storedText,
-      payload,
-    })
+    .update({ payload })
     .eq("id", input.latestInbound.id);
 
   input.latestInbound.text_content = storedText;
@@ -15749,6 +15755,7 @@ async function sendSalesCatalogMediaAttachments(input: {
       chunkIndex,
       chunksTotal,
       ...(buttonResponse ? { interactiveButton: true } : {}),
+      ...(media.storageUrl && (media.kind === "image" || media.kind === "video" || media.kind === "document") ? { media: { kind: media.kind, url: media.storageUrl } } : {}),
     };
 
     await saveOutboundMessage(input.client, input.context, message);
@@ -16763,6 +16770,7 @@ async function saveOutboundMessage(
     button_fallback: message.buttonFallback === true,
     location_message: message.locationMessage === true,
     location: message.location ?? null,
+    sent_media: message.media ?? null,
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     track_id: message.trackId ?? null,
@@ -18984,7 +18992,7 @@ async function sendEmojiReaction(input: {
   if (!emoji) return;
 
   try {
-    await callUazapi(input.credentials, "/message/react", {
+    const providerResponse = await callUazapi(input.credentials, "/message/react", {
       method: "POST",
       token: input.token,
       timeoutMs: whatsappReactionTimeoutMs,
@@ -18995,9 +19003,52 @@ async function sendEmojiReaction(input: {
       },
       tolerateError: true,
     });
+    return { emoji, providerResponse };
   } catch {
-    return;
+    return null;
   }
+}
+
+/** The agent's own reactions and stickers are only for the chat display, never part of what it reads as the conversation. */
+function isAgentSideDisplayMessage(message: ConversationMessageRow) {
+  return message.direction === "outbound"
+    && (message.message_type === "ReactionMessage" || message.message_type === "StickerMessage")
+    && message.payload?.author_source === "agent_runtime";
+}
+
+/** Reactions and stickers the agent sends are recorded too: the attendance chat mirrors the WhatsApp conversation. */
+async function recordAgentSideMessage(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: { messageType: "ReactionMessage" | "StickerMessage"; text: string | null; providerResponse: unknown; extra: JsonRecord },
+) {
+  if (readRecord(input.providerResponse)?.error) return;
+  const agentLabel = context.agent.persona_name?.trim() || context.agent.name || "Agente IA";
+  await client.from("conversation_messages").insert({
+    organization_id: context.organization.id,
+    conversation_id: context.conversationId,
+    lead_id: context.lead?.id ?? null,
+    whatsapp_instance_id: context.instance.id,
+    provider: "uazapi",
+    provider_message_id: findString(input.providerResponse, ["messageId", "message_id", "id"]),
+    provider_chat_id: context.providerChatId,
+    direction: "outbound",
+    message_type: input.messageType,
+    text_content: input.text,
+    payload: {
+      ...input.extra,
+      provider_response: sanitizeProviderData(input.providerResponse),
+      agent_run_id: context.run.id,
+      agent_id: context.agent.id,
+      agent_name: agentLabel,
+      author_type: "ai",
+      author_label: agentLabel,
+      author_source: "agent_runtime",
+      origin_source: "connectyhub_ai_whatsapp",
+      message_author: { type: "ai", label: agentLabel, source: "agent_runtime", origin_source: "connectyhub_ai_whatsapp", agent_id: context.agent.id, agent_run_id: context.run.id },
+    },
+    occurred_at: new Date().toISOString(),
+  });
 }
 
 function passesStableHumanizationChance(probability: number, ...parts: Array<string | null | undefined>) {
@@ -19035,7 +19086,7 @@ async function sendContextualSticker(
 
   await sleep(randomBetween(800, 2200));
 
-  await callUazapi(credentials, "/send/media", {
+  const providerResponse = await callUazapi(credentials, "/send/media", {
     method: "POST",
     token,
     body: {
@@ -19045,6 +19096,7 @@ async function sendContextualSticker(
     },
     tolerateError: true,
   });
+  return { url: stickerUrl, providerResponse };
 }
 
 const stickerDeliveryEnabled = true;
@@ -19811,7 +19863,19 @@ function buildStoredMediaAnalysisText(kind: InboundMediaKind, analysis: string) 
   return `Analise automatica de ${formatMediaKind(kind).toLowerCase()}: ${analysis}`;
 }
 
+/** The agent keeps reading a media analysis as the message text, while the chat shows only what the lead sent. */
+function withStoredMediaAnalysis<T extends ConversationMessageRow>(message: T): T {
+  const analysis = readRecord(message.payload?.media_analysis);
+  const text = typeof analysis?.text === "string" ? analysis.text.trim() : "";
+  const kind = analysis?.kind as InboundMediaKind | undefined;
+  if (!text || !kind || !["image", "video", "document"].includes(kind)) return message;
+  if (normalizeSearch(message.text_content ?? "").startsWith("analise automatica de ")) return message;
+  return { ...message, text_content: buildStoredMediaAnalysisText(kind, text) };
+}
+
 function readStoredMediaAnalysisText(message: ConversationMessageRow, kind: InboundMediaKind) {
+  const analysis = readRecord(message.payload?.media_analysis);
+  if (analysis?.kind === kind && typeof analysis.text === "string" && analysis.text.trim()) return analysis.text.trim();
   const text = message.text_content?.trim();
   if (!text) return null;
 
@@ -19829,9 +19893,6 @@ function readStoredMediaAnalysisText(message: ConversationMessageRow, kind: Inbo
 function readMediaCaptionTextContent(message: ConversationMessageRow) {
   const text = message.text_content?.trim();
   if (!text) return null;
-
-  const kind = detectInboundMediaKind(message);
-  if (kind && readStoredMediaAnalysisText(message, kind)) return null;
 
   const normalized = normalizeSearch(text);
   if (

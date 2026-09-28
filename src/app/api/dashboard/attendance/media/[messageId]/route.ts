@@ -6,6 +6,7 @@ import {
   buildUazapiDownloadBodies,
   extractMimeType,
   extractProviderDownloadUrl,
+  isEncryptedWhatsappMediaUrl,
   readProviderError,
   resolveConversationMessageMedia,
   type ConversationMessageMediaInput,
@@ -51,7 +52,7 @@ export async function GET(
     const message = await loadConversationMessage(client, normalizedMessageId);
 
     if (!message) {
-      return NextResponse.json({ error: "Audio nao encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "Midia nao encontrada." }, { status: 404 });
     }
 
     if (!workspace.profile.isPlatformAdmin && workspace.organization?.id !== message.organization_id) {
@@ -60,14 +61,21 @@ export async function GET(
 
     const media = resolveConversationMessageMedia(message);
 
-    if (media.kind !== "audio") {
-      return NextResponse.json({ error: "Esta mensagem nao e um audio." }, { status: 404 });
+    if (media.kind === "unknown") {
+      return NextResponse.json({ error: "Esta mensagem nao tem midia." }, { status: 404 });
+    }
+
+    const fileName = media.fileName;
+    // A copy already saved in the lead's files opens without asking the WhatsApp server again.
+    const archived = await loadArchivedMediaCopy(client, message);
+    if (archived) {
+      return new Response(archived.body, { headers: mediaHeaders(archived.mimeType ?? media.mimeType, fileName) });
     }
 
     const directUrl = media.directUrl;
 
-    if (directUrl) {
-      return await proxyAudioUrl(request, directUrl, media.mimeType);
+    if (directUrl && !isEncryptedWhatsappMediaUrl(directUrl)) {
+      return await proxyMediaUrl(request, directUrl, media.mimeType, fileName);
     }
 
     if (!message.whatsapp_instance_id) {
@@ -93,12 +101,12 @@ export async function GET(
       token,
     });
 
-    return await proxyAudioUrl(request, downloaded.url, downloaded.mimeType ?? media.mimeType);
+    return await proxyMediaUrl(request, downloaded.url, downloaded.mimeType ?? media.mimeType, fileName);
   } catch (error) {
-    console.error("[AttendanceMedia] Falha ao carregar audio da mensagem", error);
+    console.error("[AttendanceMedia] Falha ao carregar midia da mensagem", error);
 
     return NextResponse.json(
-      { error: "Nao foi possivel carregar o audio agora." },
+      { error: "Nao foi possivel carregar a midia agora." },
       {
         headers: {
           "Cache-Control": "no-store",
@@ -121,6 +129,32 @@ async function loadConversationMessage(client: ReturnType<typeof createServiceCl
   }
 
   return data ?? null;
+}
+
+async function loadArchivedMediaCopy(client: ReturnType<typeof createServiceClient>, message: MessageMediaRow) {
+  const { data } = await client
+    .from("lead_files")
+    .select("object_key, mime_type, metadata")
+    .eq("organization_id", message.organization_id)
+    .eq("message_id", message.id)
+    .not("archive_id", "is", null)
+    .limit(1)
+    .maybeSingle<{ object_key: string; mime_type: string | null; metadata: Record<string, unknown> | null }>();
+  if (!data?.object_key) return null;
+  const bucket = typeof data.metadata?.storage_bucket === "string" ? data.metadata.storage_bucket : "lead-archive";
+  const result = await client.storage.from(bucket).download(data.object_key);
+  if (result.error || !result.data) return null;
+  return { body: result.data, mimeType: data.mime_type };
+}
+
+function mediaHeaders(mimeType: string | null, fileName: string | null) {
+  return new Headers({
+    // The file of a message never changes: the browser keeps it for a day instead of downloading it at each refresh.
+    "Cache-Control": "private, max-age=86400",
+    "Content-Disposition": fileName ? `inline; filename*=UTF-8''${encodeURIComponent(fileName)}` : "inline",
+    "Content-Type": mimeType || "application/octet-stream",
+    "X-Content-Type-Options": "nosniff",
+  });
 }
 
 async function loadWhatsappInstance(client: ReturnType<typeof createServiceClient>, instanceId: string) {
@@ -165,14 +199,14 @@ async function resolveProviderAudioDownloadUrl(input: {
         };
       }
 
-      lastError = "provedor nao retornou link de audio";
+      lastError = "provedor nao retornou link da midia";
       continue;
     }
 
     lastError = readProviderError(response.data) ?? `status ${response.status}`;
   }
 
-  throw new Error(`Nao foi possivel baixar audio do WhatsApp: ${lastError}.`);
+  throw new Error(`Nao foi possivel baixar midia do WhatsApp: ${lastError}.`);
 }
 
 async function callUazapi(
@@ -203,25 +237,22 @@ async function callUazapi(
   };
 }
 
-async function proxyAudioUrl(request: NextRequest, url: string, fallbackMimeType: string | null) {
+async function proxyMediaUrl(request: NextRequest, url: string, fallbackMimeType: string | null, fileName: string | null) {
   const range = request.headers.get("range");
   const response = await fetchWithTimeout(url, {
     headers: range ? { Range: range } : undefined,
     cache: "no-store",
-  }, 30000, "Download do audio");
+  }, 30000, "Download da midia");
 
   if (!response.ok && response.status !== 206) {
-    throw new Error(`Origem do audio respondeu status ${response.status}.`);
+    throw new Error(`Origem da midia respondeu status ${response.status}.`);
   }
 
-  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim()
+  const originType = response.headers.get("content-type")?.split(";")[0]?.trim();
+  const contentType = (originType && originType !== "application/octet-stream" ? originType : null)
     || fallbackMimeType
-    || "audio/mpeg";
-  const headers = new Headers({
-    "Cache-Control": "private, max-age=300",
-    "Content-Disposition": "inline",
-    "Content-Type": contentType,
-  });
+    || "application/octet-stream";
+  const headers = mediaHeaders(contentType, fileName);
 
   for (const header of ["accept-ranges", "content-length", "content-range"]) {
     const value = response.headers.get(header);

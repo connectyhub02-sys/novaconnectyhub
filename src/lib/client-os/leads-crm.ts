@@ -177,6 +177,12 @@ export type ClientLeadMessage = {
     transcribedAt: string | null;
   } | null;
   mediaUrl: string | null;
+  /** WhatsApp reaction: shown under the message it reacts to, never as a message of its own. Empty emoji removes it. */
+  reaction: { emoji: string; targetProviderMessageId: string | null } | null;
+  contact: { name: string; phone: string | null } | null;
+  location: { latitude: number; longitude: number; name: string | null } | null;
+  deleted: boolean;
+  edited: boolean;
   occurredAt: string | null;
 };
 
@@ -1447,6 +1453,9 @@ function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): C
     proxyBasePath: "/api/dashboard/attendance/media",
   });
   const quotedMessage = buildQuotedMessagePreview(row, conversationMessages);
+  const reaction = readMessageReaction(row, payload);
+  const contact = readMessageContact(row, payload);
+  const location = readMessageLocation(row, payload);
 
   return {
     id: row.id,
@@ -1464,16 +1473,71 @@ function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): C
     provider: row.provider,
     providerMessageId: row.provider_message_id,
     providerChatId: row.provider_chat_id,
-    type: media.kind === "unknown" ? "text" : media.kind,
-    text: readMessageText(row, payload, media.url ?? media.directUrl, media.kind) ?? "Mensagem sem texto.",
+    type: reaction ? "reaction" : contact ? "contact" : location ? "location" : media.kind === "unknown" ? "text" : media.kind,
+    text: reaction?.emoji ?? readDisplayText(row, payload, media.url ?? media.directUrl, media.kind),
     quotedMessage,
     mediaKind: media.kind,
     mediaMimeType: media.mimeType,
     mediaFileName: media.fileName,
     mediaTranscription: media.transcription,
     mediaUrl: media.url,
+    reaction,
+    contact,
+    location,
+    deleted: readRecord(payload.provider_change)?.deleted === true,
+    edited: Boolean(readRecord(payload.provider_change)) && readRecord(payload.provider_change)?.deleted !== true,
     occurredAt: row.occurred_at ?? row.created_at,
   };
+}
+
+function readProviderMessage(payload: JsonRecord) {
+  return readRecord(payload.message) ?? {};
+}
+
+function readMessageReaction(row: MessageRow, payload: JsonRecord): ClientLeadMessage["reaction"] {
+  const message = readProviderMessage(payload);
+  if (row.message_type !== "ReactionMessage" && message.messageType !== "ReactionMessage") return null;
+  const content = readRecord(message.content);
+  const target = readString(readRecord(content?.key)?.ID) ?? readString(message.reaction) ?? readString(payload.reaction_to);
+  return {
+    emoji: readString(row.text_content) ?? readString(message.text) ?? readString(content?.text) ?? "",
+    targetProviderMessageId: target ? target.split(":").at(-1) ?? target : null,
+  };
+}
+
+function readMessageContact(row: MessageRow, payload: JsonRecord): ClientLeadMessage["contact"] {
+  const message = readProviderMessage(payload);
+  if (row.message_type !== "ContactMessage" && row.message_type !== "ContactsArrayMessage") return null;
+  const content = readRecord(message.content) ?? {};
+  const vcard = readString(content.vcard) ?? "";
+  const name = readString(content.displayName) ?? vcard.match(/^FN:(.+)$/m)?.[1]?.trim() ?? readString(row.text_content)?.split(/\r?\n/)[0] ?? "Contato";
+  const phone = vcard.match(/TEL[^:]*:(.+)$/m)?.[1]?.trim() ?? null;
+  return { name, phone };
+}
+
+function readMessageLocation(row: MessageRow, payload: JsonRecord): ClientLeadMessage["location"] {
+  const message = readProviderMessage(payload);
+  if (row.message_type !== "LocationMessage" && row.message_type !== "LiveLocationMessage") return null;
+  const content = readRecord(message.content) ?? {};
+  const latitude = Number(content.degreesLatitude ?? content.latitude);
+  const longitude = Number(content.degreesLongitude ?? content.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude, name: readString(content.name) ?? readString(content.address) ?? null };
+}
+
+/** What the chat shows as the message text: exactly what was typed, never an internal note or placeholder. */
+function readDisplayText(row: MessageRow, payload: JsonRecord, mediaUrl: string | null, mediaKind: WhatsappMessageMediaKind) {
+  if (row.message_type === "AlbumMessage") {
+    const content = readRecord(readProviderMessage(payload).content) ?? {};
+    const images = Number(content.expectedImageCount ?? 0);
+    const videos = Number(content.expectedVideoCount ?? 0);
+    const parts = [images ? `${images} ${images === 1 ? "foto" : "fotos"}` : null, videos ? `${videos} ${videos === 1 ? "vídeo" : "vídeos"}` : null].filter(Boolean);
+    return parts.length ? `Álbum com ${parts.join(" e ")}` : "Álbum";
+  }
+  const text = readMessageText(row, payload, mediaKind === "audio" ? mediaUrl : null, mediaKind) ?? "";
+  // Legacy rows where the automatic media analysis took the place of the caption.
+  if (/^an[aá]lise autom[aá]tica de /i.test(text)) return "";
+  return text;
 }
 
 function readMessageText(row: MessageRow, payload = readRecord(row.payload) ?? {}, mediaUrl: string | null = null, mediaKind: WhatsappMessageMediaKind = "unknown") {

@@ -2,7 +2,7 @@ import "server-only";
 
 type JsonRecord = Record<string, unknown>;
 
-export type WhatsappMessageMediaKind = "audio" | "document" | "image" | "unknown" | "video";
+export type WhatsappMessageMediaKind = "audio" | "document" | "image" | "sticker" | "unknown" | "video";
 
 export type ConversationMessageMediaInput = {
   id: string;
@@ -61,6 +61,11 @@ export function resolveConversationMessageMedia(
   message: ConversationMessageMediaInput,
   options: { proxyBasePath?: string | null } = {},
 ): ConversationMessageMedia {
+  // Photo, video or sticker the agent sent from our own storage: the saved address opens directly.
+  const sent = readSentMedia(message);
+  if (sent) {
+    return { kind: sent.kind, url: sent.url, directUrl: sent.url, mimeType: null, fileName: null, transcription: null };
+  }
   if (isDeliveredText(message)) {
     return { kind: "unknown", url: null, directUrl: null, mimeType: null, fileName: null, transcription: null };
   }
@@ -68,7 +73,8 @@ export function resolveConversationMessageMedia(
   const mimeType = readConversationMessageMimeType(message);
   const detectedKind = detectConversationMessageMediaKind(message);
   const kind = detectedKind ?? inferMediaKindFromMimeOrUrl(mimeType, directUrl) ?? "unknown";
-  const proxyUrl = kind === "audio" && options.proxyBasePath
+  // WhatsApp media links are encrypted: the panel always goes through the proxy, which downloads the real file.
+  const proxyUrl = kind !== "unknown" && options.proxyBasePath
     ? `${options.proxyBasePath.replace(/\/$/, "")}/${encodeURIComponent(message.id)}`
     : null;
 
@@ -83,7 +89,10 @@ export function resolveConversationMessageMedia(
 }
 
 export function detectConversationMessageMediaKind(message: ConversationMessageMediaInput): WhatsappMessageMediaKind | null {
+  const sent = readSentMedia(message);
+  if (sent) return sent.kind;
   if (isDeliveredText(message)) return null;
+  if (normalizeKey(message.message_type ?? "") === "stickermessage") return "sticker";
   const providerMessage = readProviderMessageRecord(message);
   const content = readRecord(providerMessage?.content);
   const signature = normalizeSearch([
@@ -106,6 +115,26 @@ export function detectConversationMessageMediaKind(message: ConversationMessageM
   if (signature.includes("document") || signature.includes("file") || signature.includes("pdf") || signature.includes("application/") || signature.includes("documentmessage")) return "document";
 
   return null;
+}
+
+export function readSentMedia(message: Pick<ConversationMessageMediaInput, "payload">): { kind: Exclude<WhatsappMessageMediaKind, "unknown" | "audio">; url: string } | null {
+  const sent = readRecord(message.payload?.sent_media);
+  const kind = asString(sent?.kind);
+  const url = asString(sent?.url);
+  if (!url || !kind || !["image", "video", "document", "sticker"].includes(kind)) return null;
+  if (!/^https?:\/\//.test(url) && !url.startsWith("/")) return null;
+  return { kind: kind as "image" | "video" | "document" | "sticker", url };
+}
+
+/** WhatsApp CDN links (mmg.whatsapp.net, .enc) hold encrypted bytes: they only play after the provider download. */
+export function isEncryptedWhatsappMediaUrl(url: string | null | undefined) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.endsWith("whatsapp.net") || parsed.pathname.endsWith(".enc");
+  } catch {
+    return false;
+  }
 }
 
 export function readConversationMessageMediaUrl(message: ConversationMessageMediaInput) {
