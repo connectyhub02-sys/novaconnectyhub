@@ -1233,6 +1233,7 @@ async function processWhatsappAgentRunWithScope(input: {
 
     await maybeSetInstanceAvailable(context, token, "after");
 
+    await maybeSaveLeadToDeviceContacts(client, context, token).catch(() => {});
     if (await claimBackgroundMemoryRefresh(client, context).catch(() => false)) {
       // Awaited: the run finishing could stop a memory call after its usage was recorded but before the credit debit.
       await Promise.allSettled([
@@ -1321,7 +1322,77 @@ async function handleConversationEnding(input: {
     text, mode: "text", providerResponse: sent,
     runtimeEvent: { type: "conversation_ending", inbound_message_id: latestInbound.id },
   });
-  return completeRun(client, context.run.id, text, { sent: true, messages: 1, reason: "conversation_ended", mode: "text" });
+  await maybeSaveLeadToDeviceContacts(client, context, token).catch(() => {});
+  const cardSent = askClosingName ? false : await maybeSendSaveContactCard(client, context, token, phone).catch(() => false);
+  return completeRun(client, context.run.id, text, { sent: true, messages: cardSent ? 3 : 1, reason: "conversation_ended", mode: "text" });
+}
+
+const deviceContactRetryMs = 24 * 60 * 60 * 1000;
+
+function isSavablePhoneNumber(digits: string) {
+  return digits.startsWith("55") ? digits.length === 12 || digits.length === 13 : digits.length >= 10 && digits.length <= 13;
+}
+
+/**
+ * The lead goes into the address book of the agent's phone as soon as the CRM knows their personal name (never a
+ * business profile name), so they can see the store's status. Once per lead and WhatsApp number.
+ */
+async function maybeSaveLeadToDeviceContacts(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, token: string) {
+  if (!context.lead?.id || isWhatsappGroupChatContext(context)) return;
+  const known = readRecord(readRecord(readRecord(context.lead.metadata)?.device_contacts)?.[context.instance.id]);
+  if (known?.saved_at) return;
+  const failedAt = Date.parse(asString(known?.failed_at) ?? "");
+  if (Number.isFinite(failedAt) && Date.now() - failedAt < deviceContactRetryMs) return;
+  // The name may have been captured by this very turn: read the stored lead, not the one loaded at the start.
+  const { data: lead } = await client.from("leads").select("display_name, phone_number, metadata")
+    .eq("id", context.lead.id).eq("organization_id", context.organization.id)
+    .maybeSingle<{ display_name: string | null; phone_number: string | null; metadata: JsonRecord | null }>();
+  if (!lead || readRecord(readRecord(readRecord(lead.metadata)?.device_contacts)?.[context.instance.id])?.saved_at) return;
+  const name = resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata });
+  const number = (lead.phone_number ?? "").replace(/\D/g, "");
+  // WhatsApp internal ids (LID, 14+ digits) are not phone numbers and must never go into the address book.
+  if (!name || !isSavablePhoneNumber(number)) return;
+  let error: string | null = null;
+  try {
+    const response = readRecord(await callUazapi(context.credentials, "/contact/add", { method: "POST", token, body: { number, name }, timeoutMs: 15000 }));
+    if (response?.success === false || response?.error) error = preview(String(response.error ?? response.message ?? "falha"), 200);
+  } catch (caught) {
+    error = preview(caught instanceof Error ? caught.message : "falha", 200);
+  }
+  const at = new Date().toISOString();
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: metadata => ({ metadata: { ...metadata, device_contacts: { ...readRecord(metadata.device_contacts),
+      [context.instance.id]: error ? { name, failed_at: at, error } : { name, saved_at: at } } } }) });
+  context.lead.metadata = saved.metadata;
+}
+
+/** At the end of the conversation the lead gets, once, a short ask and our contact card to save the number. */
+async function maybeSendSaveContactCard(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>, token: string, phone: string) {
+  if (!context.lead?.id || isWhatsappGroupChatContext(context)) return false;
+  const metadata = readRecord(context.lead.metadata) ?? {};
+  if (metadata.whatsapp_opt_out === true || readRecord(metadata.opt_out)?.requested_at) return false;
+  if (readRecord(readRecord(metadata.contact_card_requests)?.[context.instance.id])?.sent_at) return false;
+  const number = (context.instance.phone_number ?? "").replace(/\D/g, "");
+  if (number.length < 10) return false;
+  const persona = context.agent.persona_name?.trim() || context.agent.name?.trim() || "";
+  const organizationName = context.organization.name.trim();
+  const cardName = persona && !normalizeSearch(organizationName).includes(normalizeSearch(persona)) ? `${organizationName} (${persona})` : organizationName;
+  const ask = "Antes de ir: salva nosso contato aí na sua agenda 😉 Assim você acompanha as novidades e ofertas no nosso status.";
+  await sleep(1200);
+  const asked = await sendTextOutboundChunk({ client, context, token, phone, text: ask, chunkIndex: 1, chunksTotal: 3, trackIdPrefix: "save_contact" });
+  if (!asked) return false;
+  await sleep(800);
+  const cardResponse = await callUazapi(context.credentials, "/send/contact", {
+    method: "POST", token, timeoutMs: 15000,
+    body: { number: phone, fullName: cardName, phoneNumber: number, organization: organizationName, track_source: "connectyhub", track_id: `save_contact_${context.run.id}` },
+  });
+  await recordAgentSideMessage(client, context, { messageType: "ContactMessage", text: cardName, providerResponse: cardResponse,
+    extra: { message: { content: { displayName: cardName, vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${cardName}\nORG:${organizationName}\nTEL;waid=${number}:+${number}\nEND:VCARD` } } } }).catch(() => {});
+  const saved = await updateLeadMetadata({ client, organizationId: context.organization.id, leadId: context.lead.id,
+    buildUpdate: current => ({ metadata: { ...current, contact_card_requests: { ...readRecord(current.contact_card_requests),
+      [context.instance.id]: { sent_at: new Date().toISOString(), card_name: cardName } } } }) });
+  context.lead.metadata = saved.metadata;
+  return true;
 }
 
 async function shouldAskBirthdayAtGoodbye(client: SupabaseClient, context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
@@ -19120,7 +19191,7 @@ function isAgentSideDisplayMessage(message: ConversationMessageRow) {
 async function recordAgentSideMessage(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
-  input: { messageType: "ReactionMessage" | "StickerMessage"; text: string | null; providerResponse: unknown; extra: JsonRecord },
+  input: { messageType: "ReactionMessage" | "StickerMessage" | "ContactMessage"; text: string | null; providerResponse: unknown; extra: JsonRecord },
 ) {
   if (readRecord(input.providerResponse)?.error) return;
   const agentLabel = context.agent.persona_name?.trim() || context.agent.name || "Agente IA";
