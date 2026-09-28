@@ -346,8 +346,11 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
   let scheduled = 0;
   for (const destination of list) {
     const available = destination.formats.filter(item => context.behavior.interactiveMessages || (item !== "carousel" && item !== "poll"));
+    // A status has no button: there the invitation is to answer the status or call in private.
+    const destinationBrief = destination.targetIds.length ? brief : [campaign.idea, campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post." : "",
+      "Post de status do WhatsApp: legenda curta com o produto e o valor. Status não tem botão: convide a responder este status ou chamar no privado. Nunca fale em botão ou link."].filter(Boolean).join("\n");
     const plan = await generateWhatsappGrowthCampaignPlan(client, context, {
-      targetIds: destination.targetIds, catalogItemIds, brief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
+      targetIds: destination.targetIds, catalogItemIds, brief: destinationBrief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
     });
     await meterGeminiGenerationUsage({
       client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: plan.modelId, agentScope: "customer",

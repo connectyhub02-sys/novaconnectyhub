@@ -88,6 +88,8 @@ describe("campaigns", () => {
     expect(result).toMatchObject({ scheduled: 4 });
     expect(plans.map(plan => plan.preferredFormats)).toEqual([["status"], ["text", "carousel", "poll", "text_audio"]]);
     expect(plans[0]).toMatchObject({ targetIds: [], postsPerDay: 2, durationDays: 1, catalogItemIds: ["p2", "p1"] });
+    expect(String(plans[0].brief)).toContain("Status não tem botão");
+    expect(String(plans[1].brief)).not.toContain("Status não tem botão");
     expect(meter).toHaveBeenCalledTimes(2);
     expect(db.tables.content_pipeline_items.every(row => (row.tags as string[]).includes("traffic_campaign:c1"))).toBe(true);
     expect(campaign()).toMatchObject({ planned_until: "2026-09-27T22:00:00.000Z", last_error: null });
