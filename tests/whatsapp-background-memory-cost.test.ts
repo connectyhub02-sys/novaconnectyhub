@@ -9,13 +9,14 @@ describe("background memory cost", () => {
     for (const extractor of ["extractConversationLearning(", "extractLeadMemory(", "extractCloneMemory(", "extractConversationArcSummary(", "extractNegotiationState("]) {
       expect(gate).toContain(extractor);
     }
+    expect(gate).toContain("await Promise.allSettled([");
     expect(runtime).toContain("const backgroundMemoryEveryInbound = 3;");
     expect(runtime).toContain("const backgroundMemoryIdleMs = 20 * 60 * 1000;");
   });
 
   it("never calls the memory extractors outside the refresh gate", () => {
     const outside = runtime.replace(runtime.slice(runtime.indexOf("if (await claimBackgroundMemoryRefresh(client, context)"), runtime.indexOf("if (!agendaTurn?.booked")), "");
-    for (const call of ["await extractLeadMemory(client", "await extractCloneMemory(client", "extractConversationArcSummary(client, context).catch", "extractNegotiationState(client, context).catch"]) {
+    for (const call of ["extractLeadMemory(client, context, userText)", "extractCloneMemory(client, context, userText", "extractConversationArcSummary(client, context)", "extractNegotiationState(client, context)"]) {
       expect(outside).not.toContain(call);
     }
   });

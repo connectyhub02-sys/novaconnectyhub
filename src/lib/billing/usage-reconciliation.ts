@@ -2,6 +2,22 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { debitCredits, type BillingProvider } from "./cost-center";
 
+// A usage recorded as completed but whose run stopped before the debit is settled after this grace period,
+// so a debit still in flight is never raced.
+const interruptedDebitGraceMs = 10 * 60 * 1000;
+const interruptedDebitLookbackMs = 48 * 60 * 60 * 1000;
+
+type PendingDebitRow = { id: string; organization_id: string; provider: string; connecty_charge_credits: number | string };
+
+async function settle(client: SupabaseClient, row: PendingDebitRow, description: string) {
+  await debitCredits(client, {
+    organizationId: row.organization_id, usageEventId: row.id,
+    provider: row.provider as BillingProvider, amountCredits: Number(row.connecty_charge_credits),
+    description,
+    metadata: { reconciliation: true, suppressTrialNotification: true },
+  });
+}
+
 /** Retry only newly marked, priced usage; never reprice historical free usage. */
 export async function reconcileUsageDebits(client: SupabaseClient) {
   const { data, error } = await client.from("usage_events")
@@ -13,12 +29,7 @@ export async function reconcileUsageDebits(client: SupabaseClient) {
   let completed = 0, pending = 0;
   for (const row of data ?? []) {
     try {
-      await debitCredits(client, {
-        organizationId: row.organization_id, usageEventId: row.id,
-        provider: row.provider as BillingProvider, amountCredits: Number(row.connecty_charge_credits),
-        description: "Conclusão de consumo em conferência",
-        metadata: { reconciliation: true },
-      });
+      await settle(client, row, "Conclusão de consumo em conferência");
       completed++;
     } catch {
       const updated = await client.from("usage_events")
@@ -28,5 +39,42 @@ export async function reconcileUsageDebits(client: SupabaseClient) {
       pending++;
     }
   }
-  return { completed, pending };
+  const interrupted = await settleInterruptedDebits(client);
+  return { completed, pending, ...interrupted };
+}
+
+/**
+ * Priced usage recorded as completed but never debited: the run ended between recording and debiting.
+ * The debit is idempotent per usage event, so an event already debited only gets its link back.
+ */
+export async function settleInterruptedDebits(client: SupabaseClient, options: { lookbackMs?: number } = {}) {
+  const now = Date.now();
+  const { data, error } = await client.from("usage_events")
+    .select("id,organization_id,provider,connecty_charge_credits")
+    .eq("status", "completed").in("billing_mode", ["customer_billable", "trial_billable"])
+    .gt("connecty_charge_credits", 0)
+    .is("metadata->>debit_transaction_id", null)
+    .gte("occurred_at", new Date(now - (options.lookbackMs ?? interruptedDebitLookbackMs)).toISOString())
+    .lte("occurred_at", new Date(now - interruptedDebitGraceMs).toISOString())
+    .order("occurred_at").limit(1000);
+  if (error) throw new Error("Não foi possível consultar consumos sem débito.");
+  // Older debits were recorded without the link on the usage event: those already have a debit and are skipped.
+  const debitedIds = new Set<string>();
+  const ids = (data ?? []).map(row => row.id);
+  for (let index = 0; index < ids.length; index += 200) {
+    const { data: debits, error: debitError } = await client.from("credit_transactions")
+      .select("usage_event_id").eq("transaction_type", "debit").in("usage_event_id", ids.slice(index, index + 200));
+    if (debitError) throw new Error("Não foi possível conferir os débitos existentes.");
+    for (const debit of debits ?? []) if (debit.usage_event_id) debitedIds.add(debit.usage_event_id);
+  }
+  let settled = 0, failed = 0;
+  for (const row of (data ?? []).filter(row => !debitedIds.has(row.id)).slice(0, 100)) {
+    try {
+      await settle(client, row, "Conclusão de consumo interrompido");
+      settled++;
+    } catch {
+      failed++;
+    }
+  }
+  return { interruptedSettled: settled, interruptedFailed: failed };
 }

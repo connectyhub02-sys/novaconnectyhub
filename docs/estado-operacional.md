@@ -1495,7 +1495,7 @@ Próxima atualização deve separar resultados de código, testes simulados, con
 
 Diretriz de orçamento do titular em 11/09: não aumentar custos antes de começar a vender. Manter Observability Plus por enquanto e reduzir frequência de deploys, priorizando validação local e publicação de conjuntos de mudanças necessários. Não contratar serviços nem ativar extras pagos por iniciativa própria. Isso não constitui autorização para pausar atendimento ou desativar serviços existentes. Consumo variável pode continuar crescendo; não prometer teto sem controle configurado e validado.
 
-Referência financeira informada/observada: UAZAPI R$ 138/mês (valor corrigido pelo titular), Contabo US$ 28,70/mês com backup/região e Vercel Pro US$ 20/mês mais consumo excedente. Aproximadamente R$ 400 é estimativa cambial, não custo total garantido: IA, conversão do cartão e assinaturas antigas ainda ativas são adicionais. Na consulta do ciclo Vercel 22/08–22/09, excedente perto de US$ 1,81; alerta de US$ 200 adicionais e pausa automática desativada. Nenhuma configuração de cobrança foi alterada.
+Referência financeira informada/observada: UAZAPI R$ 138/mês (valor corrigido pelo titular), Contabo US$ 28,70/mês com backup/região e ElevenLabs US$ 22/mês (assinatura; a Vercel sai quando a operação for toda para a VPS, conforme decisão do titular em 28/09/2026). Aproximadamente R$ 400 é estimativa cambial, não custo total garantido: IA, conversão do cartão e assinaturas antigas ainda ativas são adicionais. Na consulta do ciclo Vercel 22/08–22/09, excedente perto de US$ 1,81; alerta de US$ 200 adicionais e pausa automática desativada. Nenhuma configuração de cobrança foi alterada.
 
 Não migrar a hospedagem da Vercel nesta etapa. Não excluir projetos Cloud como consequência implícita da auditoria. Multi-projetos, dashboard operacional central e possível n8n ficam para etapa futura. Nenhuma credencial pertence a este arquivo.
 
@@ -1896,3 +1896,16 @@ aparece sob a mensagem reagida. Fotos de produto, figurinhas e reações enviada
 pelo agente passam a ser gravadas no chat (antes só texto e áudio). Pendente:
 conferência visual no painel logado. Observado na auditoria: o arquivo de mídias
 dos leads tem 5.759 itens em `retry` (mídias antigas que o provedor não baixa mais).
+
+### Centro de custo auditado — 28/09/2026
+
+Tarifas do Gemini conferidas contra o site oficial (3.6/3.7/3.8 Flash: US$ 0,75 entrada e
+US$ 3,75 saída por milhão até 31/12/2026, o dobro a partir de 01/01/2027, já cadastrado com
+datas). ElevenLabs cadastrada acima do preço atual (US$ 0,10 contra US$ 0,08 por mil
+caracteres). Câmbio de referência R$ 6. Margem mantida em ~4x sobre o custo (~4,4x no câmbio
+real), por decisão do titular até a operação estabilizar. Assinatura da ElevenLabs
+(US$ 22/mês) entrou como custo fixo no painel de custos. Furos corrigidos: análises de fundo
+agora são aguardadas antes de encerrar a execução (antes podiam gravar o uso sem debitar); a
+conciliação passou a concluir usos gravados e não debitados; usos sem tarifa aparecem como
+aviso no painel de custos. Histórico não recuperado: 245 respostas de 01 a 10/09/2026 sem
+tarifa (≈ R$ 18 de custo), por decisão de não repreçar consumo antigo.

@@ -1234,11 +1234,14 @@ async function processWhatsappAgentRunWithScope(input: {
     await maybeSetInstanceAvailable(context, token, "after");
 
     if (await claimBackgroundMemoryRefresh(client, context).catch(() => false)) {
-      extractConversationLearning(client, context).catch(() => {});
-      await extractLeadMemory(client, context, userText).catch(() => {});
-      await extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")).catch(() => {});
-      extractConversationArcSummary(client, context).catch(() => {});
-      extractNegotiationState(client, context).catch(() => {});
+      // Awaited: the run finishing could stop a memory call after its usage was recorded but before the credit debit.
+      await Promise.allSettled([
+        extractConversationLearning(client, context),
+        extractLeadMemory(client, context, userText),
+        extractCloneMemory(client, context, userText, outbound.map((message) => message.text).filter(Boolean).join("\n\n")),
+        extractConversationArcSummary(client, context),
+        extractNegotiationState(client, context),
+      ]);
     }
     if (!agendaTurn?.booked && !agendaTurn?.handoffReason) await scheduleProactiveFollowUp(context, outbound.map(message => message.text).join("\n")).catch((error) => console.error("follow_up_schedule_failed", { runId: context.run.id, message: error instanceof Error ? error.message : "unknown" }));
 

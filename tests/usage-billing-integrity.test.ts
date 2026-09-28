@@ -95,10 +95,30 @@ describe("usage billing integrity", () => {
     ]});
     const debit=vi.fn().mockRejectedValue(new Error("insufficient"));
     const r=serverModuleHarness<typeof Reconciliation>("src/lib/billing/usage-reconciliation.ts",{"./cost-center":{debitCredits:debit}});
-    expect(await r.reconcileUsageDebits(db.client as never)).toEqual({completed:0,pending:1});
+    expect(await r.reconcileUsageDebits(db.client as never)).toEqual({completed:0,pending:1,interruptedSettled:0,interruptedFailed:0});
     expect(debit).toHaveBeenCalledTimes(1);
     expect(debit.mock.calls[0][1]).toMatchObject({usageEventId:"retry",amountCredits:5});
     expect(Date.parse(String(db.tables.usage_events[0].debit_retry_at))).toBeGreaterThan(Date.now());
+  });
+
+  it("settles priced usage whose run stopped before the debit, once, after a grace period", async () => {
+    const ago=(minutes:number)=>new Date(Date.now()-minutes*60000).toISOString();
+    const base={organization_id:"org",provider:"gemini",status:"completed",billing_mode:"customer_billable"};
+    const db=commerceDatabase({
+      usage_events:[
+        {...base,id:"interrupted",connecty_charge_credits:4,occurred_at:ago(30),metadata:{}},
+        {...base,id:"old-debited",connecty_charge_credits:3,occurred_at:ago(40),metadata:{}},
+        {...base,id:"in-flight",connecty_charge_credits:2,occurred_at:ago(1),metadata:{}},
+        {...base,id:"linked",connecty_charge_credits:6,occurred_at:ago(50),metadata:{debit_transaction_id:"tx-linked"}},
+        {...base,id:"free",connecty_charge_credits:0,occurred_at:ago(50),metadata:{}},
+      ],
+      credit_transactions:[{id:"tx-old",usage_event_id:"old-debited",transaction_type:"debit"}],
+    });
+    const debit=vi.fn().mockResolvedValue("tx-new");
+    const r=serverModuleHarness<typeof Reconciliation>("src/lib/billing/usage-reconciliation.ts",{"./cost-center":{debitCredits:debit}});
+    expect(await r.settleInterruptedDebits(db.client as never)).toEqual({interruptedSettled:1,interruptedFailed:0});
+    expect(debit).toHaveBeenCalledTimes(1);
+    expect(debit.mock.calls[0][1]).toMatchObject({usageEventId:"interrupted",amountCredits:4,metadata:{reconciliation:true,suppressTrialNotification:true}});
   });
 
   it("uses measured TTS usage and PCM duration only when provider measurement is absent", async () => {

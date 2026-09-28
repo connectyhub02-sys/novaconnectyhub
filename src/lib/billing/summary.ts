@@ -328,6 +328,10 @@ const COST_PERIOD_DAYS = 30;
 const CURRENT_COST_PROVIDERS = new Set(["gemini", "elevenlabs"]);
 const UAZAPI_MONTHLY_COST_BRL = 138;
 const UAZAPI_CAPACITY_UNITS = 100;
+// ElevenLabs Creator subscription, paid monthly on top of the per-character usage. Same reference exchange rate as the tariffs.
+const ELEVENLABS_SUBSCRIPTION_MONTHLY_USD = 22;
+const ELEVENLABS_SUBSCRIPTION_USD_TO_BRL = 6;
+const ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL = ELEVENLABS_SUBSCRIPTION_MONTHLY_USD * ELEVENLABS_SUBSCRIPTION_USD_TO_BRL;
 const R2_FREE_TIER_STORAGE_BYTES = 10 * 1024 ** 3;
 const R2_STANDARD_STORAGE_COST_USD_PER_GB_MONTH = 0.015;
 const R2_ESTIMATED_USD_TO_BRL = 5.5;
@@ -386,6 +390,7 @@ export async function getBillingAdminSummary(
     whatsappInstanceResult,
     storageUsageResult,
     commerce,
+    missingRateResult,
   ] = await Promise.all([
     supabase
       .from("usage_events")
@@ -434,9 +439,21 @@ export async function getBillingAdminSummary(
       .select("organization_id, used_bytes, billable_file_count")
       .limit(5000),
     getCommerceRevenueSummary(supabase, sinceIso),
+    // Usage without a tariff is held for review instead of being charged zero: it must be seen and priced.
+    supabase
+      .from("usage_events")
+      .select("feature_code, model_id")
+      .eq("status", "pending")
+      .eq("error_message", "billing_rate_missing")
+      .gte("occurred_at", sinceIso)
+      .limit(1000),
   ]);
 
   const errors = [usageResult.error, walletResult.error, costCenterResult.error, rateResult.error].filter(Boolean);
+  const missingRateRows = (missingRateResult.data ?? []) as Array<{ feature_code: string; model_id: string | null }>;
+  const missingRateWarning = missingRateRows.length
+    ? `${missingRateRows.length} uso(s) sem tarifa aguardando conferência, sem cobrança: ${[...new Set(missingRateRows.map(row => `${row.feature_code}${row.model_id ? ` (${row.model_id})` : ""}`))].slice(0, 4).join(", ")}. Cadastre a tarifa em Centro de custo.`
+    : null;
   const nonBlockingWarnings = [
     paymentResult.error?.message,
     creditTransactionResult.error?.message,
@@ -654,7 +671,7 @@ export async function getBillingAdminSummary(
     agentScopes,
     currentCostCenter,
     commerce,
-    warnings: [...nonBlockingWarnings, ...commerce.warnings],
+    warnings: [...(missingRateWarning ? [missingRateWarning] : []), ...nonBlockingWarnings, ...commerce.warnings],
   };
 }
 
@@ -700,6 +717,7 @@ function buildCurrentCostCenterSummary({
 
   const activeWhatsappOrganizations = connectedInstancesByOrganization.size;
   const fixedProvider = buildUazapiFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
+  const voiceSubscription = buildElevenLabsSubscriptionSummary();
   const storage = buildStorageCostSummary(storageUsageRows, costCenterById, rateRows);
   const providerMap = new Map<string, CostCenterProviderEconomics>();
   const unitProviderMap = new Map<string, ProviderUsageUnitSummary>();
@@ -849,8 +867,11 @@ function buildCurrentCostCenterSummary({
   variableCostBrl += storage.monthlyCostBrl;
   todayVariableCostBrl += storage.todayCostBrl;
 
-  const fixedCostBrl = fixedProvider.periodCostBrl;
-  const todayFixedCostBrl = fixedProvider.todayCostBrl;
+  const fixedCostBrl = fixedProvider.periodCostBrl + voiceSubscription.periodCostBrl;
+  const todayFixedCostBrl = fixedProvider.todayCostBrl + voiceSubscription.todayCostBrl;
+  // The voice subscription is a platform cost: it shows on the ElevenLabs line, not split among customers.
+  const elevenLabs = providerMap.get("elevenlabs");
+  if (elevenLabs) elevenLabs.fixedCostBrl += voiceSubscription.periodCostBrl;
   const totalCostBrl = variableCostBrl + fixedCostBrl;
   const todayTotalCostBrl = todayVariableCostBrl + todayFixedCostBrl;
   const grossProfitBrl = approvedRevenueBrl - totalCostBrl;
@@ -918,7 +939,7 @@ function buildCurrentCostCenterSummary({
     storage,
     creditEconomics,
     providers,
-    fixedProviders: [fixedProvider],
+    fixedProviders: [fixedProvider, voiceSubscription],
     customers,
   };
 }
@@ -1237,6 +1258,23 @@ function emptyCommerceSummary(schemaReady: boolean, warnings: string[]): Commerc
     netConnectyHubRevenue: 0,
     flows: [],
     warnings,
+  };
+}
+
+function buildElevenLabsSubscriptionSummary(): FixedProviderCostSummary {
+  return {
+    provider: "elevenlabs",
+    label: `${providerNames.elevenlabs} (assinatura)`,
+    monthlyCostBrl: roundMoney(ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL),
+    periodCostBrl: roundMoney(ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL),
+    todayCostBrl: roundMoney(ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL / COST_PERIOD_DAYS),
+    capacityUnits: 1,
+    activeUnits: 1,
+    activeOrganizations: 0,
+    plannedCostPerUnitBrl: roundMoney(ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL),
+    effectiveCostPerUnitBrl: roundMoney(ELEVENLABS_SUBSCRIPTION_MONTHLY_BRL),
+    unitLabel: "assinatura mensal",
+    allocationLabel: `US$ ${ELEVENLABS_SUBSCRIPTION_MONTHLY_USD}/mes (cambio de referencia R$ ${ELEVENLABS_SUBSCRIPTION_USD_TO_BRL}); custo da plataforma, sem rateio por cliente.`,
   };
 }
 

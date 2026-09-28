@@ -238,7 +238,7 @@ export function BillingCenter({
             <RuleCard
               icon={Mic2}
               title="ElevenLabs"
-              text="Hoje entra como custo variavel de voz: caracteres, requests e eventos de audio que forem registrados no consumo."
+              text="Custo variavel de voz (caracteres e audios registrados no consumo) mais a assinatura fixa de US$ 22 por mes, somada ao custo fixo da plataforma."
             />
             <RuleCard
               icon={ServerCog}
@@ -258,7 +258,7 @@ export function BillingCenter({
             <RuleCard
               icon={ReceiptText}
               title="Custos futuros"
-              text="Vercel, Supabase pago, hospedagem avancada e aquisicao ficam fora desta fase ate virarem custo real da operacao."
+              text="VPS maior, Supabase pago, impostos, taxas de pagamento e aquisicao ficam fora desta fase ate virarem custo real da operacao."
             />
           </div>
         </Panel>
