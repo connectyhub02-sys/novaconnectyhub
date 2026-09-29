@@ -1,5 +1,12 @@
 # Estado operacional da ConnectyHub
 
+## Acesso administrativo aos clientes corrigido na VPS — 29/09/2026
+
+- **Publicado e testado:** `c1a649b054c7ec61b231525c502a4809adde96e8`, ativo **b/3131**, aproximadamente 13h07 BRT. Reserva **a/3130** preserva a versão de campanhas `c5bd05cac38f8b8a44b3a04ea2a077fee01978ec`. Esse é o estado atual da aplicação, posterior aos registros históricos abaixo.
+- A proteção comparava a origem pública com `request.url`, que no standalone aponta para o contêiner. Resultado: **Acessar painel** retornava "Origem não autorizada." antes de verificar a sessão. Agora usa `NEXT_PUBLIC_APP_URL`, sem confiar em Host/forwarded do chamador; produção sem configuração válida continua bloqueada.
+- 47 testes, ESLint, build Linux/TypeScript/109 páginas passaram. No candidato, origem oficial sem sessão → 401, cinco casos de origem inválida/headers falsificados → 403; sondas públicas confirmadas. Teste real no navegador: entrada na Pizzaria Macedo&Dias com faixa de acesso assistido e retorno ao Admin OS concluídos. Sessão administrativa restaurada; nenhuma cobrança, envio, reset destrutivo ou migration executada. Builder parado.
+- **Limite:** a validação inicial da migração não cobriu o início de uma sessão assistida. Comparações semelhantes encontradas em outras rotas de cobrança, infraestrutura e voz permanecem pendentes de revisão própria, fora deste fluxo. Reteste pelo titular após a correção ainda não confirmado. [Causa, testes e continuidade](correcao-acesso-assistido-vps-2026-09-29.md).
+
 ## Aplicação migrada para VPS e DNS Cloudflare — 28/09/2026
 
 [Relatório de continuidade para o outro chat](relatorio-handoff-migracao-vps-2026-09-28.md). Após o favicon, houve relato de falha de pesquisa no celular, ainda sem esclarecer se é acesso ao site ou pesquisa interna. Domínio, login e health responderam na conferência; defeito específico não reproduzido nem resolvido.
