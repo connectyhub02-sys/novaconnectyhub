@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 const admin="00000000-0000-4000-8000-000000000001", target="00000000-0000-4000-8000-000000000002";
+const originGuard = serverModuleHarness<{isSameOriginRequest(r: Request, env: Record<string, string>): boolean}>("src/lib/admin-assisted-access.ts");
 class JsonResponse extends Response { static json(body: unknown, init?: ResponseInit) { return new JsonResponse(JSON.stringify(body),init); } }
 function fixture(options: {authDenied?: boolean; platformTarget?: boolean; internal?: boolean; issueFails?: boolean; switchFails?: boolean}={}) {
   const switchSession=vi.fn(async () => ({error:options.switchFails?new Error("switch"):null}));
@@ -24,9 +25,9 @@ function fixture(options: {authDenied?: boolean; platformTarget?: boolean; inter
     "@/lib/supabase/admin-auth":{requirePlatformAdmin:async()=>options.authDenied?JsonResponse.json({}, {status:403}):{supabase:source,userId:admin}},
     "@/lib/supabase/service":{createServiceClient:()=>service},
     "@/lib/supabase/env":{getSupabasePublicEnv:()=>({url:"https://auth.invalid",publishableKey:"public"})},
-    "@/lib/admin-assisted-access":{isSameOriginRequest:(r:Request)=>r.headers.get("origin")===new URL(r.url).origin,verifiedAuthSession:async (c:unknown)=>c===source?{userId:admin,sessionId:"origin-session"}:{userId:target,sessionId:"target-session"},issueAdminAssistedAccess:issue,revokeAdminAssistedAccess:revoke},
+    "@/lib/admin-assisted-access":{isSameOriginRequest:(r:Request)=>originGuard.isSameOriginRequest(r,{NODE_ENV:"production",NEXT_PUBLIC_APP_URL:"https://app.test"}),verifiedAuthSession:async (c:unknown)=>c===source?{userId:admin,sessionId:"origin-session"}:{userId:target,sessionId:"target-session"},issueAdminAssistedAccess:issue,revokeAdminAssistedAccess:revoke},
   });
-  const call=(userId=target,origin="https://app.test")=>route.POST(new Request("https://app.test/api/admin/users/assisted-access",{method:"POST",headers:{origin},body:JSON.stringify({userId,organizationId:"forged",isPlatformAdmin:true})}));
+  const call=(userId=target,origin="https://app.test")=>route.POST(new Request("http://0.0.0.0:3000/api/admin/users/assisted-access",{method:"POST",headers:{origin},body:JSON.stringify({userId,organizationId:"forged",isPlatformAdmin:true})}));
   return {call,issue,revoke,generateLink,switchSession,targetClient,service};
 }
 it("creates the durable grant for the authenticated originator and fresh target session before switching cookies", async()=>{
