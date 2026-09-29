@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 const admin="00000000-0000-4000-8000-000000000001", target="00000000-0000-4000-8000-000000000002";
-const originGuard = serverModuleHarness<{isSameOriginRequest(r: Request, env: Record<string, string>): boolean}>("src/lib/admin-assisted-access.ts");
+const originGuard = serverModuleHarness<{isSameOriginRequest(r: Request, env: Record<string, string>): boolean}>("src/lib/security/same-origin-request.ts");
 class JsonResponse extends Response { static json(body: unknown, init?: ResponseInit) { return new JsonResponse(JSON.stringify(body),init); } }
 function fixture(options: {authDenied?: boolean; platformTarget?: boolean; internal?: boolean; issueFails?: boolean; switchFails?: boolean}={}) {
   const switchSession=vi.fn(async () => ({error:options.switchFails?new Error("switch"):null}));
