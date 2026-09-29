@@ -1,3 +1,4 @@
+import { accountPaymentNotice, type AccountCardAttempt } from "@/lib/billing/account-payment-notice";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
@@ -86,6 +87,7 @@ type PaymentRow = {
   payload: JsonRecord | null;
   created_at: string | null;
   updated_at: string | null;
+  billing_card_attempts?: AccountCardAttempt[];
   billing_invoices: InvoiceRelation;
   organization_subscriptions: SubscriptionRelation;
 };
@@ -178,7 +180,10 @@ export async function GET() {
         .returns<SubscriptionRow[]>(),
       client
         .from("billing_payments")
-        .select("id, invoice_id, subscription_id, provider, provider_payment_id, provider_status, status, amount_brl, paid_at, payload, created_at, updated_at, billing_invoices(total_brl, due_at, status, provider_invoice_id), organization_subscriptions(plan_code)")
+        .select("id, invoice_id, subscription_id, provider, provider_payment_id, provider_status, status, amount_brl, paid_at, payload, created_at, updated_at, billing_invoices(total_brl, due_at, status, provider_invoice_id), organization_subscriptions(plan_code), billing_card_attempts(state, diagnostic, created_at)")
+        .eq("billing_card_attempts.organization_id", organization.id)
+        .order("created_at", { referencedTable: "billing_card_attempts", ascending: false })
+        .limit(1, { referencedTable: "billing_card_attempts" })
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
         .limit(12)
@@ -486,6 +491,7 @@ function mapPayment(row: PaymentRow) {
     provider: row.provider,
     providerPaymentId: row.provider_payment_id,
     providerStatus: row.provider_status,
+    attemptNotice: accountPaymentNotice(row.status, row.provider, row.billing_card_attempts?.[0]),
     status: row.status,
     amountBrl: toNumber(row.amount_brl),
     paidAt: row.paid_at,
@@ -498,7 +504,7 @@ function mapPayment(row: PaymentRow) {
     planCode: subscription?.plan_code ?? null,
     invoiceHref: row.invoice_id && invoice ? `/dashboard/minha-conta/faturas/${encodeURIComponent(row.invoice_id)}` : null,
     receiptUrl: readPublicReceiptUrl(row.payload),
-    checkoutHref: row.subscription_id && isPendingSubscription(row.status)
+    checkoutHref: row.subscription_id && (isPendingSubscription(row.status) || row.status === "rejected")
       ? buildDashboardBillingCheckoutPath(row.subscription_id)
       : null,
   };

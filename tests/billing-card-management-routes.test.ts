@@ -18,3 +18,12 @@ it("uses only the session organization, keeps responses uncached, and never trus
  const r=await POST(req({organizationId:"other-org",subscriptionId:id}));expect(r.status).toBe(200);expect(r.headers.get("Cache-Control")).toBe("no-store");expect(mock.change.mock.calls[0].slice(0,3)).toEqual(["service","session-org","actor"]);
  const get=await GET(new NextRequest(`https://www.connectyhub.com.br/api/dashboard/billing/payment-methods?subscriptionId=${id}`));expect(get.status).toBe(200);expect(mock.list).toHaveBeenCalledWith("service","session-org",id);
 });
+
+it("accepts the public origin behind the VPS proxy without trusting forwarded hosts",async()=>{
+ vi.stubEnv("NEXT_PUBLIC_APP_URL","https://www.connectyhub.com.br");
+ try {
+  const request=new NextRequest("http://0.0.0.0:3000/api/dashboard/billing/payment-methods",{method:"POST",headers:{origin:"https://www.connectyhub.com.br","Content-Type":"application/json"},body:JSON.stringify({subscriptionId:id})});
+  expect((await POST(request)).status).toBe(200);
+  expect(mock.change).toHaveBeenCalledOnce();
+ } finally {vi.unstubAllEnvs();}
+});

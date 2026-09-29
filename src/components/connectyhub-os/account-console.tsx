@@ -1,5 +1,6 @@
 "use client";
 import { BillingAddressEditor } from "./billing-address-editor";
+import type { AccountPaymentNotice } from "@/lib/billing/account-payment-notice";
 import { BillingPaymentMethods } from "./billing-payment-methods";
 import { CreditExplainer } from "./credit-explainer";
 import { NotificationSenderSettings } from "./notification-sender-settings";
@@ -130,6 +131,7 @@ type AccountData = {
     provider: string | null;
     providerPaymentId: string | null;
     providerStatus: string | null;
+    attemptNotice?: AccountPaymentNotice | null;
     status: string;
     amountBrl: number;
     paidAt: string | null;
@@ -1267,7 +1269,7 @@ function PaymentsTab({ payments }: { payments: AccountData["payments"] }) {
 }
 
 function PaymentTableRow({ payment }: { payment: AccountData["payments"][number] }) {
-  const reference = internalReference([payment.planCode, payment.providerStatus ?? payment.invoiceStatus]);
+  const reference = internalReference([payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
 
   return (
     <tr className="group">
@@ -1280,6 +1282,7 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
       </td>
       <td className="border-b border-slate-200 px-4 py-3 align-top">
         <StatusBadge status={payment.status} />
+        <PaymentAttemptNotice notice={payment.attemptNotice} />
       </td>
       <td className="border-b border-slate-200 px-4 py-3 align-top text-sm text-slate-600">
         {formatDateTime(payment.paidAt ?? payment.createdAt)}
@@ -1301,7 +1304,7 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
 }
 
 function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number] }) {
-  const reference = internalReference([payment.planCode, payment.providerStatus ?? payment.invoiceStatus]);
+  const reference = internalReference([payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
 
   return (
     <article className="rounded-md border border-slate-200 bg-white p-4">
@@ -1312,6 +1315,7 @@ function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number
         </div>
         <StatusBadge status={payment.status} />
       </div>
+      <PaymentAttemptNotice notice={payment.attemptNotice} />
       <p className="mt-3 text-sm text-slate-600">{formatDateTime(payment.paidAt ?? payment.createdAt)}</p>
       {reference ? <InternalReference value={reference} /> : null}
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1324,6 +1328,15 @@ function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number
       </div>
     </article>
   );
+}
+
+function PaymentAttemptNotice({ notice }: { notice?: AccountPaymentNotice | null }) {
+  if (!notice) return null;
+  return <div className="mt-2 max-w-sm space-y-1 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-950">
+    <p className="font-semibold">{notice.message}</p>
+    <p>{notice.recommendation}</p>
+    <p className="text-rose-700">Tentativa em {formatDateTime(notice.attemptedAt)}</p>
+  </div>;
 }
 
 function PaymentActions({ align = "right", payment }: { align?: "left" | "right"; payment: AccountData["payments"][number] }) {
@@ -1354,7 +1367,7 @@ function SubscriptionsTab({
   canManage: boolean;
 }) {
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(subscriptions);
-  const changeCard = (subscription: AccountData["subscriptions"][number]) => canManage && subscription.status === "active" ? <a href="#metodos-pagamento" className="mt-2 block min-h-11 text-sm font-semibold text-blue-700 underline">Alterar método de pagamento</a> : null;
+  const changeCard = (subscription: AccountData["subscriptions"][number]) => canManage && ["active", "past_due"].includes(subscription.status) ? <a href="#metodos-pagamento" className="mt-2 block min-h-11 text-sm font-semibold text-blue-700 underline">Alterar método de pagamento</a> : null;
 
   if (!subscriptions.length) {
     return <EmptyState text="Nenhuma assinatura registrada nesta conta." />;

@@ -1,5 +1,9 @@
 # Estado operacional da ConnectyHub
 
+## Recusa no painel e troca de cartão — 29/09/2026 (em publicação)
+
+Correção preparada: classificação segura da recusa em `payWithCreditCard`, bloqueio de regressão de tentativa recusada para pendente (migration 0173), aviso da última tentativa no histórico da conta e botão Pagar preservado. Troca/cadastro de cartão passam a validar o domínio público configurado na VPS; formulário compartilhado com máscaras, bandeira, CVV protegido e campos no padrão do checkout. Salvar cartão continua sem cobrança. Testes locais passaram; aplicação da migration, reparo restrito do registro já recusado e validação na VPS ainda pendentes. Nenhuma nova cobrança autorizada ou executada nesta correção.
+
 ## Diagnóstico da renovação Vision / André Sampaio — 29/09/2026
 
 **Tentativa posterior autorizada pelo titular, 13h47 BRT:** enviada uma única cobrança no cartão salvo de **R$ 497,00**, vinculada à fatura existente. Asaas `pay_tmr74n15dad6qpt2`, tentativa local `601fbac2-142f-4f58-885a-bf18c914cfa1`. Resposta HTTP 400 `invalid_object`; log do Asaas: "Transação não autorizada, verifique o limite disponível no cartão." GET posterior confirmou `PENDING`, sem data de pagamento. Não houve segunda tentativa nem confirmação de pagamento; assinatura permanece `past_due`. Conciliação deixou tentativa `pending` e pagamento local `in_process` / `PENDING`, o que não comprova débito. Nenhuma mudança na regra automática ou no vencimento. Antes de eventual nova tentativa, conferir limite/alternativa e reconciliar a mesma cobrança. Classificação genérica de validação e distinção visual entre recusa e pendência ficam registradas para revisão.

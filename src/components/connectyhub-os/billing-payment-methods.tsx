@@ -3,12 +3,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CreditCard, LockKeyhole, Plus } from "lucide-react";
 import { cardManagementConsent, cardManagementConsentVersion } from "@/lib/billing/card-management-policy";
 import { isCardWithinValidity } from "@/lib/billing/card-display";
+import { SavedCardFields, savedCardInputClass } from "@/components/checkout/saved-card-fields";
 import { BillingCardReplacement } from "./billing-card-replacement";
 
 type Card = {id:string;status:string;brand:string|null;last_digits:string|null;exp_month:string|null;exp_year:string|null};
 type Data = {subscriptionId:string;periodEnd:string|null;nextBillingAt:string|null;blocker:string|null;cards:Card[]};
 type Subscription = {id:string;planName:string;status:string};
-const field="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-950 focus:outline-blue-500";
+const field=savedCardInputClass;
 const button="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50";
 async function fetchCards(id:string):Promise<Data>{
   const response=await fetch('/api/dashboard/billing/payment-methods?subscriptionId='+encodeURIComponent(id),{cache:'no-store'});
@@ -53,7 +54,7 @@ export function BillingPaymentMethods({subscriptions}:{subscriptions:Subscriptio
     finally{formRef.current?.reset();locked.current=false;setBusy(false);}
   }
   return <section id="metodos-pagamento" aria-labelledby="payment-methods-title" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="payment-methods-title" className="flex items-center gap-2 text-xl font-semibold text-slate-950"><CreditCard size={21}/>Métodos de pagamento</h2><p className="mt-1 text-sm text-slate-600">O cartão padrão será usado na próxima renovação. Adicionar ou trocar o cartão não cobra novamente o ciclo atual.</p></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 id="payment-methods-title" className="flex items-center gap-2 text-xl font-semibold text-slate-950"><CreditCard size={21}/>Métodos de pagamento</h2><p className="mt-1 text-sm text-slate-600">O cartão padrão será usado na próxima renovação. Adicionar ou trocar o cartão não realiza cobrança. Para quitar uma fatura recusada, use Pagar em Pagamentos.</p></div>
       {data&&!data.blocker?<button className={button} disabled={busy} onClick={()=>{setChoice("add");setMessage("");setError("");}}><Plus size={16}/>Adicionar novo</button>:null}</div>
     {!subscription?<p className="mt-4 text-sm text-slate-600">Você ainda não possui uma assinatura ativa ou vencida para cadastrar um cartão de renovação.</p>:null}
     {active.length>1?<label className="mt-4 block max-w-sm text-sm font-medium text-slate-700">Assinatura<select disabled={busy} className={field} value={subscription?.id} onChange={e=>setSelected(e.target.value)}>{active.map(s=><option key={s.id} value={s.id}>{s.planName}</option>)}</select></label>:null}
@@ -68,7 +69,7 @@ export function BillingPaymentMethods({subscriptions}:{subscriptions:Subscriptio
     {choice&&data&&!data.blocker&&!(choice==="add"&&data.cards.some(c=>c.status==="active"))?<form ref={formRef} onSubmit={submit} data-sensitive="payment" className="mt-5 max-w-2xl space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <h3 className="font-semibold text-slate-950">{choice==="add"?"Adicionar novo cartão e tornar padrão":"Confirmar cartão padrão"}</h3>
       <fieldset disabled={busy} className="space-y-4">
-        {choice==="add"?<><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium text-slate-800 sm:col-span-2">Número do cartão<input className={field} name="number" autoComplete="cc-number" inputMode="numeric" maxLength={23} required/></label><label className="text-sm font-medium text-slate-800 sm:col-span-2">Nome impresso no cartão<input className={field} name="holderName" autoComplete="cc-name" maxLength={120} required/></label><label className="text-sm font-medium text-slate-800">Validade (MM/AA)<input className={field} name="expiry" autoComplete="cc-exp" placeholder="MM/AA" inputMode="numeric" maxLength={7} required onChange={e=>{const d=e.target.value.replace(/\D/g,"").slice(0,6);e.target.value=d.length>2?`${d.slice(0,2)}/${d.slice(2)}`:d;}}/></label><label className="text-sm font-medium text-slate-800">Código de segurança<input className={field} name="ccv" type="password" autoComplete="cc-csc" inputMode="numeric" maxLength={4} required/></label></div>
+        {choice==="add"?<><SavedCardFields />
         <div><h4 className="text-sm font-semibold text-slate-800">Dados do titular</h4><p className="mt-1 text-xs text-slate-600">Os dados serão salvos como sugestão para revisar em Faturamento e consumo.</p><div className="mt-2 grid gap-3 sm:grid-cols-2">{[{key:"name",label:"Nome completo"},{key:"email",label:"E-mail"},{key:"cpfCnpj",label:"CPF/CNPJ"},{key:"phone",label:"Telefone"},{key:"postalCode",label:"CEP"},{key:"addressNumber",label:"Número do endereço"}].map(f=><label key={f.key} className="text-sm font-medium text-slate-800">{f.label}<input className={field} name={f.key} defaultValue={holderDefaults[f.key]??""} type={f.key==="email"?"email":"text"} maxLength={120} required/></label>)}</div></div></>:<p className="text-sm text-slate-700">Selecionado: {data.cards.find(c=>c.id===choice)?.brand??"Cartão"} •••• {data.cards.find(c=>c.id===choice)?.last_digits??"dados antigos"}.</p>}
         <label className="flex items-start gap-3 text-sm leading-6 text-slate-700"><input className="mt-1.5" name="consent" type="checkbox" required/>{cardManagementConsent}</label>
         <div className="flex flex-wrap gap-3"><button className={button}><LockKeyhole size={16}/>{busy?"Salvando…":choice==="add"?"Salvar e usar na próxima renovação":"Confirmar como padrão"}</button><button className="min-h-11 px-3 text-sm font-semibold text-slate-700" type="button" onClick={()=>setChoice(null)}>Cancelar</button></div>

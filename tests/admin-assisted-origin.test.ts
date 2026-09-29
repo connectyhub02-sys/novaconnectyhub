@@ -3,7 +3,7 @@ import { serverModuleHarness } from "./helpers/server-module-harness";
 
 const { isSameOriginRequest } = serverModuleHarness<{
   isSameOriginRequest(r: Request, env: Record<string, string | undefined>): boolean;
-}>("src/lib/admin-assisted-access.ts");
+}>("src/lib/security/same-origin-request.ts");
 const production = { NODE_ENV: "production", NEXT_PUBLIC_APP_URL: "https://www.connectyhub.com.br" };
 const internalUrl = "http://0.0.0.0:3000/api/admin/users/assisted-access";
 const request = (origin?: string, extra: Record<string, string> = {}, url = internalUrl) =>

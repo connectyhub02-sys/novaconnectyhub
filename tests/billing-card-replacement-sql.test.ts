@@ -157,6 +157,13 @@ describe("atomic subscription card replacement", () => {
     await db.query("insert into commercial_agreements(platform_subscription_id,cancel_at_period_end) values ($1,true)", [sub]);
     expect(await begin()).toMatchObject({ result_code: "automatic_renewal_required" });
   });
+  it.each(["rejected", "error"])("allows replacing the card after a definitive %s outcome", async state => {
+    await db.query("update billing_card_attempts set state=$1 where id=$2", [state, oldAttempt]);
+    const request = await begin();
+    expect(request.claimed).toBe(true);
+    expect(await finish(request.id)).toMatchObject({ state: "succeeded" });
+    expect((await active())[0].id).not.toBe(card);
+  });
   it.each(["processing", "pending", "unknown"])("does not replace a card while a renewal/top-up is %s", async state => {
     const attempt = await begin();
     await db.query("insert into billing_card_attempts values ($1,$2,$3,$4)", [randomUUID(), org, otherSub, state]);

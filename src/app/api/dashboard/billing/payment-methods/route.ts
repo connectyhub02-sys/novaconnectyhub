@@ -1,3 +1,4 @@
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -24,7 +25,7 @@ export async function GET(request:NextRequest){
 export async function POST(request:NextRequest){
   try{
     const w=await workspace();
-    if(request.headers.get("origin")!==new URL(request.url).origin) return reply({error:"Origem não autorizada."},403);
+    if(!isSameOriginRequest(request)) return reply({error:"Origem não autorizada."},403);
     const guard=validatePublicWriteRequest({headers:request.headers,requestUrl:request.url,routeKey:`billing-card-management:${w.organization!.id}`,maxPayloadBytes:16384,rateLimit:{limit:6,windowMs:60000}});
     if(!guard.ok) return reply({error:guard.message},guard.status);
     const raw=await request.text();if(raw.length>16384)return reply({error:"Dados excedem o limite permitido."},413);

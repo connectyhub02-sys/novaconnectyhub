@@ -1,3 +1,4 @@
+import * as sameOrigin from "../src/lib/security/same-origin-request";
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -110,6 +111,7 @@ describe("cookie-authenticated payment method route", () => {
       "@/lib/supabase/service": { createServiceClient: () => h.client },
       "@/lib/billing/card-replacement": { ...h.api, replaceSubscriptionCard: replace, readCardReplacement: read },
       "@/lib/security/public-request-guard": guard,
+      "@/lib/security/same-origin-request": sameOrigin,
     });
     return { api, replace, read };
   }

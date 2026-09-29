@@ -1,3 +1,4 @@
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, context: Context) {
     if (!guard.ok) return json({ error: guard.message }, guard.status);
     // Cookie-authenticated mutations require the same origin and JSON, regardless
     // of unrelated public tracking origins allowed by the shared guard.
-    if (request.headers.get("origin") !== new URL(request.url).origin || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
+    if (!isSameOriginRequest(request) || !request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Origem ou formato não autorizado." }, 403);
     const raw = await request.text();
     if (Buffer.byteLength(raw, "utf8") > 12000) return json({ error: "Payload grande demais." }, 413);
     let body;

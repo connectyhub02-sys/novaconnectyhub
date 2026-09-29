@@ -15,6 +15,7 @@ beforeAll(async () => {
  create table intelligence_events(scope text,organization_id uuid,source_type text,source_id uuid,event_type text,title text,summary text,visibility text,tags text[],payload jsonb);
  `);
  await db.exec(readFileSync('supabase/migrations/0078_ecosystem_native_billing.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/0173_preserve_card_failure_outcome.sql','utf8'));
  await db.query('insert into organizations values ($1)',[org]); await db.query('insert into organization_subscriptions(id,organization_id) values ($1,$2)',[sub,org]);
  await db.query('insert into billing_invoices(id,organization_id,subscription_id,status,total_brl) values ($1,$2,$3,\'open\',130)',[inv,org,sub]);
  await db.query(`insert into billing_payments(id,organization_id,subscription_id,invoice_id,status,amount_brl,payload) values ($1,$2,$3,$4,'pending',130,'{"selected_bumps":[{"code":"monthly","recurrence":"monthly","price_brl":10},{"code":"once","recurrence":"one_time","price_brl":20}],"target_plan_code":"starter"}')`,[pay,org,sub,inv]);
@@ -40,6 +41,13 @@ describe.sequential('native panel financial boundaries',()=>{
  });
  it('retains an unknown result and cannot dispatch a second charge',async()=>{
   await db.query("select finish_native_billing_card($1,'unknown')",[first]); expect((await claim(second)).attempt.state).toBe('unknown');
+ });
+ it('keeps a definitive refusal when the same invoice later says pending', async()=>{
+  await db.query("select finish_native_billing_card($1,'rejected','pay_test','PENDING')",[first]);
+  await db.query("select finish_native_billing_card($1,'pending','pay_test','PENDING')",[first]);
+  await db.query("select finish_native_billing_card($1,'unknown','pay_test','PENDING')",[first]);
+  expect((await db.query('select state from billing_card_attempts where id=$1',[first])).rows[0]).toEqual({state:'rejected'});
+  expect((await db.query('select status from billing_payments where id=$1',[pay])).rows[0]).toEqual({status:'rejected'});
  });
  it('commits approval and a single audit even when events are repeated or late',async()=>{
   await db.query("select finish_native_billing_card($1,'approved','pay_test','CONFIRMED')",[first]);
