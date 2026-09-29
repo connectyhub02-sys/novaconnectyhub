@@ -47,3 +47,39 @@ e do consentimento atual, não um reparo técnico silencioso.
 Nenhuma consulta direta ao extrato do Asaas, tentativa de débito, alteração de
 vencimento ou liberação manual foi feita. A conclusão sobre ausência de tentativa
 é sustentada pelos registros da ConnectyHub e pelas condições do código/SQL.
+
+## Tentativa pontual posteriormente autorizada — 29/09, 13h47 BRT
+
+Após o diagnóstico, o titular pediu explicitamente uma cobrança de teste da
+fatura pendente de R$ 497,00 no cartão cadastrado. Conferidos novamente valor,
+revisão, titularidade da organização/assinatura, cartão ativo, ausência de tentativa
+local e ausência de cobrança correspondente no Asaas por referências externas.
+
+Execução administrativa pontual usando `claim_native_billing_card`, o cartão
+tokenizado existente e os adaptadores `createManagedAsaasInvoice`,
+`payManagedAsaasInvoice` e `finishNativeBilling`. Não foi alterada a janela
+automática nem simulada uma data passada. Autorização manual registrada no
+payload da mesma fatura; reserva transacional antes da chamada ao provedor.
+
+- Uma criação de cobrança externa sem débito, ligada à fatura existente:
+  `pay_tmr74n15dad6qpt2`.
+- **Uma única chamada de pagamento** com o token salvo, R$ 497,00.
+- Tentativa local: `601fbac2-142f-4f58-885a-bf18c914cfa1`.
+- Retorno HTTP 400, código `invalid_object`. O diagnóstico técnico local o
+  classificou genericamente como validação. O log autenticado do Asaas mostrou
+  o motivo exato: **"Transação não autorizada, verifique o limite disponível no cartão."**
+- Consulta GET posterior ao Asaas confirmou `PENDING`, valor 497, referência
+  correta e sem data de pagamento. Não houve confirmação de débito aprovado.
+- Após conciliação/webhook, tentativa local `pending`, pagamento `in_process` /
+  `PENDING`; assinatura continua `past_due` e vencimento permanece 16/09.
+  Não liberar acesso/créditos manualmente nem interpretar `in_process` como pago.
+
+Não houve segunda tentativa. O titular deve conferir o limite com o cliente ou
+usar outra forma de pagamento no fluxo existente. Antes de nova tentativa,
+reconsultar o provedor e preservar a mesma cobrança, conciliando seu estado.
+Pendência técnica adicional: melhorar a classificação desse `invalid_object` e
+a apresentação de recusa versus fatura ainda pendente; isso não autoriza retry.
+
+O procedimento privado fica em `/opt/connectyhub/app/ops/vision-renewal-20260929`
+com identificadores fixos e limites de uma criação/uma chamada de pagamento,
+usando credenciais somente em memória. Não publicar tokens ou detalhes do cartão.

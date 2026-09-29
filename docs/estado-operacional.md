@@ -2,6 +2,8 @@
 
 ## Diagnóstico da renovação Vision / André Sampaio — 29/09/2026
 
+**Tentativa posterior autorizada pelo titular, 13h47 BRT:** enviada uma única cobrança no cartão salvo de **R$ 497,00**, vinculada à fatura existente. Asaas `pay_tmr74n15dad6qpt2`, tentativa local `601fbac2-142f-4f58-885a-bf18c914cfa1`. Resposta HTTP 400 `invalid_object`; log do Asaas: "Transação não autorizada, verifique o limite disponível no cartão." GET posterior confirmou `PENDING`, sem data de pagamento. Não houve segunda tentativa nem confirmação de pagamento; assinatura permanece `past_due`. Conciliação deixou tentativa `pending` e pagamento local `in_process` / `PENDING`, o que não comprova débito. Nenhuma mudança na regra automática ou no vencimento. Antes de eventual nova tentativa, conferir limite/alternativa e reconciliar a mesma cobrança. Classificação genérica de validação e distinção visual entre recusa e pendência ficam registradas para revisão.
+
 Leitura de produção: plano Scale mensal de R$ 497,00 venceu em **16/09 às 20h24 BRT**; primeiro cartão cadastrado em **24/09 às 17h09 BRT**, sem substituir anterior. Assinatura `past_due`, fatura de renovação aberta desde 13/09, pagamento local pendente sem ID externo e zero tentativas de cartão registradas. A política/código/SQL só tentam em D−3/D−2/D−1 após 09h; salvar cartão não cobra vencidos nem muda o ciclo. Portanto, a janela passou antes do cadastro, independentemente da migração de 28/09. Nenhuma cobrança, mudança de dados ou regra realizada. Regularização pelo checkout autenticado permanece pendente; não houve consulta ao extrato do provedor. [Diagnóstico e limites](diagnostico-renovacao-vision-2026-09-29.md).
 
 ## Acesso administrativo aos clientes corrigido na VPS — 29/09/2026
