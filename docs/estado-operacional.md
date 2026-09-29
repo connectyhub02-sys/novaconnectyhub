@@ -1,5 +1,9 @@
 # Estado operacional da ConnectyHub
 
+## Diagnóstico da renovação Vision / André Sampaio — 29/09/2026
+
+Leitura de produção: plano Scale mensal de R$ 497,00 venceu em **16/09 às 20h24 BRT**; primeiro cartão cadastrado em **24/09 às 17h09 BRT**, sem substituir anterior. Assinatura `past_due`, fatura de renovação aberta desde 13/09, pagamento local pendente sem ID externo e zero tentativas de cartão registradas. A política/código/SQL só tentam em D−3/D−2/D−1 após 09h; salvar cartão não cobra vencidos nem muda o ciclo. Portanto, a janela passou antes do cadastro, independentemente da migração de 28/09. Nenhuma cobrança, mudança de dados ou regra realizada. Regularização pelo checkout autenticado permanece pendente; não houve consulta ao extrato do provedor. [Diagnóstico e limites](diagnostico-renovacao-vision-2026-09-29.md).
+
 ## Acesso administrativo aos clientes corrigido na VPS — 29/09/2026
 
 - **Publicado e testado:** `c1a649b054c7ec61b231525c502a4809adde96e8`, ativo **b/3131**, aproximadamente 13h07 BRT. Reserva **a/3130** preserva a versão de campanhas `c5bd05cac38f8b8a44b3a04ea2a077fee01978ec`. Esse é o estado atual da aplicação, posterior aos registros históricos abaixo.
