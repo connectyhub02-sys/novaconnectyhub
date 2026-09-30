@@ -2009,3 +2009,14 @@ sistema ou desativação ao cliente (também no assistente da loja; a mensagem t
 APIs); o agente não pode afirmar encaminhamento, e "sim" a uma oferta de encaminhamento feita pelo agente
 dispara o handoff real. A pergunta gravada na Luna e no Gustavo foi atualizada (backup em
 `public._backup_agent_metadata_20260930`).
+
+### Áudio no modo espelho e pedido de áudio — 30/09/2026
+
+Commit `5d041fed` publicado na VPS (slot b; slot a com `5b9f4c58` para retorno). Nenhum áudio saía desde
+25/09. Causa confirmada com as mensagens reais: a detecção de "pedido de texto" era ampla demais ("preciso
+pagar, veio essa mensagem" contava como pedido de texto e a Eliane respondeu um áudio em texto); a
+resposta do Gustavo ao Magno caiu no sorteio de 30% de texto do espelho, que é intencional. Agora o pedido
+de texto só vale quando fala do formato da resposta, e "me manda um áudio / estou no trânsito / não consigo
+ler" faz o agente responder em áudio por até 30 minutos, até o lead pedir texto de novo (não vale para
+agentes em modo só texto). O áudio espontâneo em resposta a texto depende da opção "áudio espontâneo",
+que está desligada em todos os agentes em espelho (Luna, Gustavo, Eliane, Renata, Max).
