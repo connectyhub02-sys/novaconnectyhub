@@ -1980,3 +1980,12 @@ agente desligado. Enquete da Luna de 30/09 (10h19, Elite CLUB): 24 votos de 7 pe
 5 convites enviados às 12h20/12h25 (Erick, José Daniel, Márcio, Antônio, Ivan); Eliane pulada por ser
 responsável; Magno pulado por já conversar no privado. Pendência menor: nome do perfil em minúsculas
 sai como está ("marcio").
+
+### Canais com foto do produto e botão "Ver produto" — 30/09/2026
+
+Commit `06744244` publicado na VPS (slot a; slot b com `82c7bef3` para retorno). Post de produto em
+canal agora sai como foto + legenda + link escrito (canais não aceitam botão; antes a foto se perdia e
+só ia texto/áudio); transporte não converte link em botão para `@newsletter`. Texto do botão de produto
+deixou de vir da IA (a Luna postou carrossel com "Chamar no privado" levando à página do produto): vale o
+texto do lojista/cadastro ou "Ver produto", e no envio botão de produto que promete conversa é renomeado.
+Enquete em canal continua bloqueada: a documentação da UAZAPI não confirma suporte.
