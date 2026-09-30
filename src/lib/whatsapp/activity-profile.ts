@@ -66,7 +66,7 @@ export function buildActivityProfileInstruction(id: AgentActivityId, identity?: 
     `Vocabulário: ${preset.vocabulary}`,
     ...preset.playbook,
     `Próximo passo habitual: ${activityClosing(id)}`,
-    `Exemplo de abordagem: ${activityExample(id)}`,
+    `Exemplo de pergunta para depois que o cliente disser o que procura (nunca como resposta a um simples cumprimento): ${activityExample(id)}`,
     `Cuidados: ${preset.care}`,
     ...(identity?.name ? [`Titular cadastrado: ${identity.name}.`] : []),
     ...(register && identity?.registration ? [`Registro informado pelo titular: ${register} ${identity.registration}${identity.state ? ` / ${identity.state}` : ""}. Não alegue verificação automática desse registro.`] : []),

@@ -4889,6 +4889,7 @@ function buildSystemInstruction(input: {
     ...buildContextProtectionInstruction(input.behavior),
     ...buildHumanizedLanguageInstruction(input.behavior),
     ...buildAnswerCompletenessInstruction(input.userText),
+    ...buildGreetingOnlyInstruction(input.userText),
     ...buildIntentionalTyposInstruction(input.behavior),
     ...buildNaturalAudioFillersInstruction(input.behavior),
     ...buildProactiveMediaInstruction(input.behavior),
@@ -5105,6 +5106,26 @@ function buildLeadNameContext(lead: LeadRow | null) {
   }
 
   return "- Nome pessoal do lead: ainda nao confirmado. Pergunte naturalmente como pode chamar a pessoa, mesmo se a conversa ja avancou. Pergunte uma vez: se ja perguntou e a pessoa nao respondeu, continue ajudando sem insistir. Retome para concluir compra ou agendamento, explicando o motivo, ou uma ultima vez no encerramento mesmo sem compra. Se preferiu nao informar, respeite e nao repita. Nao use o nome do agente, da empresa nem um nome citado no historico como identidade do lead.";
+}
+
+/**
+ * "Oi" is not a request. A person greets back and asks how to help; opening with a qualification question
+ * ("pizza inteira ou dois sabores?") reads as a bot. Also applies to agents whose saved prompt carries the
+ * activity's example question.
+ */
+function buildGreetingOnlyInstruction(userText: string) {
+  if (!isGreetingOnlyMessage(userText)) return [];
+  return [
+    "",
+    "O CLIENTE SÓ CUMPRIMENTOU:",
+    "- Responda como uma pessoa responderia: cumprimente de volta de forma curta e calorosa, apresente-se em poucas palavras se for o primeiro contato e pergunte, de forma aberta, como pode ajudar.",
+    "- Uma única mensagem curta. Ainda não faça pergunta de qualificação, não ofereça produto, sabor, tamanho, preço, cardápio, promoção ou link, e não use o exemplo de abordagem do perfil: ele é para depois que o cliente disser o que procura.",
+  ];
+}
+
+function isGreetingOnlyMessage(value: string) {
+  const normalized = normalizeSearch(stripInternalWhatsappContext(value)).replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  return Boolean(normalized) && /^(?:(?:oi+|ola|opa|eai|e ai|hey|hello|hi|salve|bom dia|boa tarde|boa noite|tudo bem|tudo bom|td bem|tudo certo|blz|beleza|como vai|como voce esta)\s*)+$/.test(normalized);
 }
 
 function buildAnswerCompletenessInstruction(userText: string) {
