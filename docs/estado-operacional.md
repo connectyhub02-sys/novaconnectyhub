@@ -1968,3 +1968,15 @@ hora real (corrige também posts já programados). Causa: o post das 14h40 do Gu
 Auditoria da migração feita antes da publicação: produção no VPS (Caddy), `25ebc41a` já continha as
 correções deste chat de 28/09 (acentuação, cobrança, cardápio, contatos); webhooks, execuções dos
 agentes, campanhas e cobrança seguiram normais antes e depois das 14h.
+
+### Votos em enquetes de grupo viram lead e convite no privado — 30/09/2026
+
+Commit `82c7bef3` publicado na VPS (slot b; slot a com `9e969fac` para retorno) e migration `0174`
+aplicada e registrada (backup `backup_0174_whatsapp_group_invites`). Voto em enquete postada por
+agente da empresa grava pergunta/opção/grupo/agente em `leads.metadata.poll_votes` (último voto vale) e
+entra na fila `whatsapp_group_invites` do agente autor; convite 1 h após o último voto, 8h–21h,
+uma vez por enquete, sem responsável, números da empresa, quem já conversa no privado, opt-out ou
+agente desligado. Enquete da Luna de 30/09 (10h19, Elite CLUB): 24 votos de 7 pessoas processados;
+5 convites enviados às 12h20/12h25 (Erick, José Daniel, Márcio, Antônio, Ivan); Eliane pulada por ser
+responsável; Magno pulado por já conversar no privado. Pendência menor: nome do perfil em minúsculas
+sai como está ("marcio").
