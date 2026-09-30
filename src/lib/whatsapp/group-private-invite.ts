@@ -107,7 +107,9 @@ export async function inviteGroupParticipantToPrivate(client: SupabaseClient, in
   if (!isOperationalAgentEnabled(context)) return { skipped: "agent_disabled" as const };
 
   const agentName = (agent?.persona_name as string | null)?.trim() || (agent?.name as string | null) || "o atendimento";
-  const firstName = input.senderName?.trim().split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "") || null;
+  const typedName = input.senderName?.trim().split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "") || null;
+  // Profile names typed in lowercase ("marcio") are greeted with a capital letter.
+  const firstName = typedName ? typedName.charAt(0).toLocaleUpperCase("pt-BR") + typedName.slice(1) : null;
   const question = input.question.replace(/\s+/g, " ").trim().slice(0, 90);
   const greeting = `Oi${firstName ? `, ${firstName}` : ""}! Aqui é ${agentName} 😊`;
   const text = input.poll

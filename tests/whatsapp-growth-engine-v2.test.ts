@@ -90,7 +90,7 @@ describe("WhatsApp growth engine v2", () => {
   it("keeps user campaign controls authoritative when scheduling AI plans", () => {
     expect(operationsSource).toContain("const buttonsEnabled = input.buttonEnabled !== false");
     expect(operationsSource).toContain("const userButtonLabel = input.buttonLabel?.trim().slice(0, 24) || null");
-    expect(operationsSource).toContain("userButtonLabel ?? planItem.buttonLabel ?? \"Comprar agora\"");
+    expect(operationsSource).toContain("userButtonLabel ?? productButtonDefaultLabel");
     expect(operationsSource).toContain('interactiveMode: itemButtonLabel ? "button" : "none"');
     expect(studioSource).toContain("buttonEnabled: campaignButtonEnabled");
     expect(studioSource).toContain('useState<GrowthFormatPreference>("text")');

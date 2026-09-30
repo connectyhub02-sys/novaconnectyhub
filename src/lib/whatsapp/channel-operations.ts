@@ -1409,8 +1409,10 @@ export async function queueWhatsappGrowthCampaignPlan(
     const targetIds = planItem.targetIds.length > 0 ? intersectStrings(planItem.targetIds, fallbackTargetIds) : fallbackTargetIds;
     const productIds = planItem.productIds.length > 0 ? planItem.productIds : fallbackProductIds.slice(0, 4);
     const title = planItem.title || `Rotina IA WhatsApp - dia ${planItem.day}`;
+    // The model does not name the product button (it wrote "Chamar no privado" on a link to the product page):
+    // the label typed by the store wins, otherwise the button says what it does.
     const itemButtonLabel = buttonsEnabled
-      ? userButtonLabel ?? planItem.buttonLabel ?? "Comprar agora"
+      ? userButtonLabel ?? productButtonDefaultLabel
       : null;
 
     if (planItem.type === "status") {
@@ -1452,7 +1454,7 @@ export async function queueWhatsappGrowthCampaignPlan(
           scheduledFor: planItem.scheduledFor,
           mentionAll: input.mentionAll,
           catalogItemIds: productIds,
-          buttonLabel: userButtonLabel ?? planItem.buttonLabel,
+          buttonLabel: userButtonLabel,
         }));
       } else {
         queued.push(await queueWhatsappTargetTextCampaign(client, context, {
@@ -2261,7 +2263,19 @@ async function sendTargetCampaignPayloadToRecipient(
   const responses: Array<JsonRecord> = [];
 
   if ((deliveryMode === "text" || deliveryMode === "text_audio") && text) {
-    if (interactiveMode === "button" && !recipient.endsWith("@newsletter")) {
+    if (interactiveMode === "button" && recipient.endsWith("@newsletter")) {
+      // Channels accept no buttons: the product photo goes with the text as caption and the button's link written below.
+      const links = buttons.filter((button) => button.url).map((button) => `👉 ${button.label ?? "Ver produto"}: ${button.url}`);
+      const caption = [text, ...links].join("\n\n");
+      const image = asString(payload.image_button);
+      const channelResponse = await callUazapi(context, image ? "/send/media" : "/send/text", {
+        method: "POST",
+        body: cleanPayload(image
+          ? { number: recipient, type: "image", file: image, text: caption, track_source: "connectyhub", track_id: `campaign_${item.id}_newsletter_image` }
+          : { number: recipient, text: caption, linkPreview: true, track_source: "connectyhub", track_id: `campaign_${item.id}_newsletter_text` }),
+      }).then((result) => result.data);
+      responses.push({ mode: image ? "newsletter_image" : "newsletter_text", response: sanitizeProviderData(channelResponse) as JsonRecord });
+    } else if (interactiveMode === "button") {
       const menuResponse = await callUazapi(context, "/send/menu", {
         method: "POST",
         body: cleanPayload({
@@ -2269,7 +2283,7 @@ async function sendTargetCampaignPayloadToRecipient(
           type: "button",
           text,
           mentions,
-          choices: buttons.map((button) => button.choice),
+          choices: buttons.map((button) => button.url ? `${productLinkButtonLabel(button.label ?? productButtonDefaultLabel)}|${button.url}` : button.choice),
           imageButton: asString(payload.image_button),
           footerText: resolveCampaignInteractiveFooterText(context),
           track_source: "connectyhub",
@@ -2380,7 +2394,10 @@ async function sendTargetCarouselPayloadToRecipient(
       body: cleanPayload({
         number: recipient,
         text,
-        carousel,
+        carousel: carousel.map((card) => ({ ...card, buttons: (Array.isArray(card.buttons) ? card.buttons : []).map((button) => {
+          const entry = readRecord(button) ?? {};
+          return entry.type === "URL" && typeof entry.text === "string" ? { ...entry, text: productLinkButtonLabel(entry.text) } : entry;
+        }) })),
         mentions,
         readchat: true,
         track_source: "connectyhub",
@@ -4955,7 +4972,7 @@ function normalizeCampaignButton(
     labelValue?.trim()
     || firstProduct?.externalLinkButtonLabel
     || firstProduct?.offer.callToAction
-    || "Comprar agora"
+    || productButtonDefaultLabel
   ).slice(0, 24);
   const productUrl = normalizePublicMediaUrl(urlValue)
     ?? normalizePublicMediaUrl(firstProduct?.externalLinkButtonTrackingUrl ?? null)
@@ -5013,6 +5030,13 @@ function readCampaignButtons(value: unknown) {
     .slice(0, 3);
 }
 
+const productButtonDefaultLabel = "Ver produto";
+
+/** A button that opens the product page must say so; "chamar no privado" belongs to a chat link, not to a page. */
+export function productLinkButtonLabel(label: string) {
+  return /privado|chamar|chama|conversa|fale|fala|whats|papo|me chame/i.test(label) ? productButtonDefaultLabel : label;
+}
+
 function buildCampaignCarouselCards(
   items: ClientSalesCatalogItem[],
   labelValue: string | null | undefined,
@@ -5031,7 +5055,7 @@ function buildCampaignCarouselCards(
         labelValue?.trim()
         || item.externalLinkButtonLabel
         || item.offer.callToAction
-        || "Comprar agora"
+        || productButtonDefaultLabel
       ).slice(0, 24);
       const buttons = [{
         id: productUrl ?? `quero_${item.id.slice(0, 8)}`,
@@ -5289,7 +5313,7 @@ function buildFallbackGrowthPlanItems(input: {
       targetIds: type === "status" ? [] : targetIds,
       productIds: itemProductIds,
       pollChoices: buildFallbackPollChoices(input.catalogItems),
-      buttonLabel: type === "poll" ? null : "Comprar agora",
+      buttonLabel: type === "poll" ? null : productButtonDefaultLabel,
     });
   }
 

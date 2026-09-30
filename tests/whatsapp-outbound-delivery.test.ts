@@ -188,3 +188,13 @@ it("sends every automated message with correct Portuguese accents, but never rew
  expect((await wire({text:"Seu codigo e 123456, nao compartilhe"},{sensitive:true})).text).toBe("Seu codigo e 123456, nao compartilhe");
  expect((await wire({text:"voce ja viu a acao"},{source:"internal-operation"})).text).toBe("voce ja viu a acao");
 });
+it("keeps the tracked link written in a channel post, since WhatsApp Channels accept no buttons",async()=>{
+ const f=fixture();
+ await f.send("/send/media",{number:"120363412759697625@newsletter",type:"image",file:"https://cdn.invalid/produto.jpg",text:"Mounjaro 30mg por R$ 1.750,00.\n\n👉 Ver produto: https://loja.invalid/produto/1"});
+ expect(f.fetch).toHaveBeenCalledTimes(1);
+ expect(String(f.fetch.mock.calls[0][0])).toBe("https://provider.invalid/api/send/media");
+ const wire=JSON.parse(String(f.fetch.mock.calls[0][1].body));
+ expect(wire).toMatchObject({number:"120363412759697625@newsletter",type:"image",file:"https://cdn.invalid/produto.jpg"});
+ expect(wire.text).toContain("👉 Ver produto: https://app.invalid/w/");
+ expect(wire.choices).toBeUndefined();
+});

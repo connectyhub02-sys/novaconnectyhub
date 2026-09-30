@@ -37,7 +37,7 @@ function setup(leadMetadata: Record<string, unknown> = {}) {
     },
   });
   const vote = (option: string, extra: Record<string, unknown> = {}) => votes.capturePollVote(db.client as never, { organizationId: "org", now: votedAt,
-    message: { messageType: "PollUpdateMessage", chatid: "120363420762449237@g.us", sender_pn: "557192017346@s.whatsapp.net", senderName: "Antônio Gomes 😎",
+    message: { messageType: "PollUpdateMessage", chatid: "120363420762449237@g.us", sender_pn: "557192017346@s.whatsapp.net", senderName: "antônio gomes 😎",
       groupName: "Elite CLUB", vote: option, quoted: pollId, ...extra } });
   return { db, sent, vote, invite };
 }

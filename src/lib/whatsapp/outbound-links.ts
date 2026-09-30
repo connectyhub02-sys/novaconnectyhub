@@ -88,6 +88,8 @@ export function removeVisibleOutboundUrls(body: Body): Body {
 const cleanButtonLabel = (label: string) => String(removeVisibleOutboundUrls({text:label}).text || "Abrir link");
 
 export function planOutboundMessages(path: string, body: Body, links: OutboundLink[]) {
+  // WhatsApp Channels accept no buttons: the tracked link stays written in the post.
+  if (String(body.number ?? "").endsWith("@newsletter")) return [{ path, body }];
   body = removeVisibleOutboundUrls(body);
   if (!links.length) return [{path,body}];
   if (!body.text && (path === "/send/text" || path === "/send/menu")) body.text = "Acesse pelo botão abaixo.";
