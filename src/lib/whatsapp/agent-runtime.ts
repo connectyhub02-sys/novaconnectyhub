@@ -16295,6 +16295,12 @@ function shouldSendAudioResponse(
     return false;
   }
 
+  // "Me manda um áudio, estou no trânsito": honored while the request is recent, even after text messages.
+  if (context.behavior.responseMode !== "text" && hasConfiguredAudioVoice(context.behavior)
+    && leadRecentlyRequestedAudioReply(context.messages ?? [], latestInbound)) {
+    return true;
+  }
+
   const visualMediaKind = detectInboundMediaKind(latestInbound);
   if (visualMediaKind) {
     return false;
@@ -16351,6 +16357,10 @@ function shouldUseSpontaneousMirrorAudio(
   );
 }
 
+/**
+ * Only a request about the format of the reply counts. "Preciso pagar, veio essa mensagem" or
+ * "escreve meu nome certo" are not requests for text: they made mirror mode answer an audio in text.
+ */
 function leadExplicitlyRequestsTextReply(message: ConversationMessageRow | null) {
   const normalized = normalizeSearch(stripInternalWhatsappContext(message?.text_content ?? ""));
 
@@ -16358,11 +16368,44 @@ function leadExplicitlyRequestsTextReply(message: ConversationMessageRow | null)
     return false;
   }
 
-  return /\b(?:manda|mande|envia|envie|responde|responda|fala|fale|pode mandar|pode responder|me manda|me mande|me envia|me envie|me responde|me responda)\b.{0,40}\b(?:em|por|no|na)?\s*(?:texto|mensagem|escrito|whatsapp|zap)\b/.test(normalized)
-    || /\b(?:prefiro|preciso|so consigo|consigo melhor)\b.{0,40}\b(?:texto|mensagem|escrito|digitado)\b/.test(normalized)
-    || /\b(?:nao|n)\b.{0,25}\b(?:posso|consigo|da pra|da para|vou conseguir)\b.{0,35}\b(?:escutar|ouvir|abrir audio|audio)\b/.test(normalized)
-    || /\b(?:sem|nada de|nao manda|nao mande|para de mandar|pare de mandar|evita|evite)\b.{0,25}\b(?:audio|voz|mensagem de voz|nota de voz)\b/.test(normalized)
-    || /\b(?:digita|digite|escreve|escreva|por escrito)\b/.test(normalized);
+  return /\b(?:manda|mande|mandar|envia|envie|enviar|responde|responda|responder|fala|fale|falar|escrever|pode mandar|pode responder|me manda|me mande|me envia|me envie|me responde|me responda)\b.{0,25}\b(?:em|por)\s+(?:texto|mensagem escrita|mensagem de texto|escrito)\b/.test(normalized)
+    || /\b(?:prefiro|so consigo|consigo melhor|melhor)\b.{0,15}\b(?:texto|escrito|digitado|mensagem escrita|mensagem de texto|ler)\b/.test(normalized)
+    || /\b(?:nao|n)\b.{0,25}\b(?:posso|consigo|da pra|da para|vou conseguir)\b.{0,20}\b(?:escutar|ouvir|abrir (?:o )?audio)\b/.test(normalized)
+    || /\b(?:sem|nada de)\s+(?:audio|audios|voz)\b/.test(normalized)
+    || /\b(?:nao manda|nao mande|nao envia|nao envie|para de mandar|pare de mandar|evita|evite)\b.{0,15}\b(?:audio|audios|voz|mensagem de voz|nota de voz)\b/.test(normalized)
+    || /\b(?:por escrito|(?:me )?(?:escreve|escreva|digita|digite) (?:pra|para) mim|(?:so|somente|apenas) (?:texto|escrito))\b/.test(normalized);
+}
+
+function leadExplicitlyRequestsAudioReply(message: ConversationMessageRow | null) {
+  const normalized = normalizeSearch(stripInternalWhatsappContext(message?.text_content ?? ""));
+
+  // "Não manda áudio" is a request for text.
+  if (!normalized || leadExplicitlyRequestsTextReply(message)) {
+    return false;
+  }
+
+  return /\b(?:manda|mande|envia|envie|grava|grave|responde|responda|fala|fale|pode mandar|pode responder|pode gravar|explica|explique)\b.{0,25}\b(?:audio|audios|audiozinho|voz|mensagem de voz|nota de voz)\b/.test(normalized)
+    || /\b(?:prefiro|melhor|so consigo)\b.{0,15}\b(?:audio|ouvir|escutar)\b/.test(normalized)
+    || /\b(?:nao|n)\b.{0,25}\b(?:posso|consigo|da pra|da para|vou conseguir)\b.{0,15}\b(?:ler|digitar|olhar o celular|mexer no celular)\b/.test(normalized)
+    || /\b(?:to|estou|tou|t)\s+(?:no transito|dirigindo|de moto|pilotando)\b/.test(normalized);
+}
+
+/** An audio request lasts for the next messages of the same moment, until the lead asks for text again. */
+function leadRecentlyRequestedAudioReply(messages: ConversationMessageRow[], latestInbound: ConversationMessageRow | null) {
+  if (leadExplicitlyRequestsAudioReply(latestInbound)) return true;
+  const latestAt = Date.parse(latestInbound?.occurred_at ?? "") || Date.now();
+  const recentInbound = messages
+    .filter((message) => message.direction === "inbound" && message.id !== latestInbound?.id)
+    .filter((message) => {
+      const at = Date.parse(message.occurred_at ?? "");
+      return Number.isFinite(at) && at <= latestAt && latestAt - at <= 30 * 60_000;
+    })
+    .sort((left, right) => Date.parse(right.occurred_at ?? "") - Date.parse(left.occurred_at ?? ""));
+  for (const message of recentInbound) {
+    if (leadExplicitlyRequestsTextReply(message)) return false;
+    if (leadExplicitlyRequestsAudioReply(message)) return true;
+  }
+  return false;
 }
 
 function hasConfiguredAudioVoice(behavior: WhatsappBehaviorConfig) {

@@ -36,7 +36,7 @@ const exposed = [
   "isGreetingOnlyMessage", "buildGreetingOnlyInstruction", "acceptsOfferedHumanHandoff",
   "readQuotedStatus", "normalizeMediaAcknowledgementText", "withGroupMentionPrefix", "readGroupSender", "sliceGroupThread", "resolveGroupAuthorMention", "isWithinSchedule", "captureLeadReturnAndBirthday", "withThinkingPresence", "readLeadTypingState", "nextAiWindowOpening", "deferRunUntilAiWindow", "wasHandledAfterInbound", "resolveWhatsappAgentRunDelaySeconds", "selectRecentVisualMediaBatch",
   "buildProactiveMediaInstruction", "buildSmallTalkContext", "resolveOutboundReplyTargets",
-  "shouldSendAudioResponse", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
+  "shouldSendAudioResponse", "leadExplicitlyRequestsTextReply", "leadExplicitlyRequestsAudioReply", "pickContextualStickerUrl", "isAlwaysPresenceMode", "isNaturalPresenceMode",
   "buildGeminiContents", "priceRuntimeSalesCatalogSelections", "buildRuntimeSalesCatalogOrderRows",
   "recoverRuntimePendingRevisionIntent",
   "guardUnexecutedOrderRevisionClaim",
