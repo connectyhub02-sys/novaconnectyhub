@@ -1989,3 +1989,12 @@ só ia texto/áudio); transporte não converte link em botão para `@newsletter`
 deixou de vir da IA (a Luna postou carrossel com "Chamar no privado" levando à página do produto): vale o
 texto do lojista/cadastro ou "Ver produto", e no envio botão de produto que promete conversa é renomeado.
 Enquete em canal continua bloqueada: a documentação da UAZAPI não confirma suporte.
+
+### Cumprimento humano ao "oi" — 30/09/2026
+
+Commit `416b308a` publicado na VPS (slot b; slot a com `06744244` para retorno). O Max respondeu um
+"oi" já qualificando ("pizza inteira ou dois sabores?"), copiando o "Exemplo de abordagem" do perfil
+da atividade. Agora, mensagem só de cumprimento gera instrução para cumprimentar de volta, se
+apresentar e perguntar como pode ajudar, sem qualificar nem ofertar; o exemplo das atividades passou a
+ser rotulado como pergunta para depois que o cliente disser o que procura. Vale para agentes com o
+exemplo antigo gravado no prompt.
