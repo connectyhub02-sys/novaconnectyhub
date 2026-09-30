@@ -4890,6 +4890,10 @@ function buildSystemInstruction(input: {
     ...buildHumanizedLanguageInstruction(input.behavior),
     ...buildAnswerCompletenessInstruction(input.userText),
     ...buildGreetingOnlyInstruction(input.userText),
+    "",
+    "ENCAMINHAMENTO PARA PESSOAS:",
+    "- Nunca diga que avisou, encaminhou ou passou a conversa para o responsável, a equipe ou um atendente, nem que alguém vai entrar em contato: isso só acontece quando o cliente pede para falar com uma pessoa, e o sistema faz o encaminhamento de verdade.",
+    "- Não ofereça serviço, profissional, especialista, avaliação ou consulta que a empresa não vende. Se o cliente pedir algo que não existe no catálogo, diga com naturalidade que a empresa não oferece e continue ajudando.",
     ...buildIntentionalTyposInstruction(input.behavior),
     ...buildNaturalAudioFillersInstruction(input.behavior),
     ...buildProactiveMediaInstruction(input.behavior),
@@ -20410,11 +20414,27 @@ async function detectHumanHandoffIntent(input: {
     return { handoff: true, source: "keyword", confidence: 0.98, reason: "explicit_handoff_phrase" };
   }
 
+  // "Sim" to the agent's own offer to pass the conversation on is a real request: it must happen, not be promised.
+  if (acceptsOfferedHumanHandoff(input.context.messages, text)) {
+    return { handoff: true, source: "keyword", confidence: 0.9, reason: "accepted_agent_handoff_offer" };
+  }
+
   if (!input.useAiContext || shouldSkipHumanHandoffAiClassifier(text)) {
     return { handoff: false, source: "keyword", confidence: 0.2, reason: "low_signal_or_unrelated" };
   }
 
   return classifyHumanHandoffIntentWithGemini(input);
+}
+
+const handoffOfferPattern = /\b(?:te\s+)?(?:encaminh\w*|pass\w*|transfer\w*|cham\w*|avis\w*)\b[^.?!]{0,60}\b(?:responsavel|atendente|equipe|humano|pessoa|gerente|dono|vendedor|consultor|time)\b/;
+
+function acceptsOfferedHumanHandoff(messages: ConversationMessageRow[], text: string) {
+  const answer = normalizeSearch(text).replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  if (!/^(?:sim|s|pode|pode sim|pode ser|quero|quero sim|claro|ok|beleza|por favor|isso|fechado|combinado)(?: [a-z]+){0,3}$/.test(answer) || /\bnao\b/.test(answer)) return false;
+  const lastOutbound = [...messages].reverse().find(message => message.direction === "outbound" && message.text_content?.trim());
+  // Only a question the agent asked counts as an offer; "te encaminhei os valores" is not.
+  const questions = (lastOutbound?.text_content ?? "").match(/[^.?!]*\?/g) ?? [];
+  return questions.some((question) => handoffOfferPattern.test(normalizeSearch(question)));
 }
 
 function shouldSkipHumanHandoffAiClassifier(text: string) {

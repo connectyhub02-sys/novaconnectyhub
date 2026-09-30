@@ -69,8 +69,8 @@ export function disabledAgendaTurn(): AgendaTurnResult {
   return {
     disabled: true,
     booked: false,
-    context: "AGENDA DESATIVADA pela empresa. Nenhuma operação de agenda foi executada nesta tentativa. Esta regra prevalece sobre o catálogo, o histórico e as instruções de venda: não ofereça agendamento, horários disponíveis, seleção de datas ou link para agendar; não prometa reservar, remarcar ou confirmar. Se houver interesse em visita ou atendimento, informe que o agendamento online está desativado e oriente a combinar os próximos passos com o responsável, sem afirmar encaminhamento ou reserva realizados. Outros assuntos do produto continuam normalmente.",
-    fallback: "O agendamento online está desativado no momento. Você pode combinar os próximos passos com o responsável pelo atendimento.",
+    context: "A EMPRESA NÃO FAZ AGENDAMENTO PELO ATENDIMENTO. Nenhuma operação de agenda foi executada. Esta regra prevalece sobre o catálogo, o histórico e as instruções de venda: não ofereça agendamento, horários, datas, visita, consulta, avaliação ou especialista, e não prometa reservar ou confirmar. Nunca mencione agenda, sistema, configuração ou que algo está desativado. Se o cliente pedir um serviço ou profissional que não está no catálogo, diga com naturalidade que a empresa não oferece esse serviço e continue ajudando com o que ela vende e com as dúvidas dele.",
+    fallback: "Isso a gente não oferece por aqui, mas posso te ajudar com qualquer dúvida sobre os nossos produtos. O que você gostaria de saber?",
   };
 }
 export async function processAgendaTurn(

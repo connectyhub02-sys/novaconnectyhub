@@ -1,5 +1,5 @@
 import { isPublicCommerceAvailable, storeUnavailableMessage } from "@/lib/sales-catalog/public-commerce-access";
-import { readAgendaActivation, agendaDisabledMessage } from "@/lib/automations/agenda-activation";
+import { readAgendaActivation, agendaUnavailableCustomerReply } from "@/lib/automations/agenda-activation";
 import { loadCommerceOffers } from "@/lib/sales-catalog/commerce-offers";
 import "server-only";
 
@@ -221,8 +221,8 @@ const commerceAgentAssistantMaxLength = 1600;
 const commerceAgentWelcomeBackAfterMs = 24 * 60 * 60 * 1000;
 
 function guardCommerceAgendaReply(text: string, userText: string, enabled: boolean) {
-  if (!enabled && /\b(agend\w*|reserv\w*|remarc\w*|marcar|hor[aá]rios?)\b/i.test(`${text} ${userText}`)) return agendaDisabledMessage;
-  if (/\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return enabled ? "Para consultar os horários e confirmar uma reserva, use a agenda na página do item." : agendaDisabledMessage;
+  if (!enabled && /\b(agend\w*|reserv\w*|remarc\w*|marcar|hor[aá]rios?)\b/i.test(`${text} ${userText}`)) return agendaUnavailableCustomerReply;
+  if (/\b(agendei|reservei|marquei|remarquei|(?:hor[aá]rio|agendamento|reserva|visita|atendimento)\s+(?:(?:est[aá]|ficou|foi)\s+)?(?:reservad[oa]|agendad[oa]|marcad[oa]|confirmad[oa]))\b/i.test(text)) return enabled ? "Para consultar os horários e confirmar uma reserva, use a agenda na página do item." : agendaUnavailableCustomerReply;
   return text;
 }
 
@@ -795,7 +795,7 @@ async function buildFallbackCommerceAgentReply(input: {
   const offer = promptContext.contextualOffer ?? await resolveContextualOffer(input.context).catch(() => null);
 
   if (isAppointmentJourney(input.context, promptContext)) {
-    if (!promptContext.agendaEnabled) return agendaDisabledMessage;
+    if (!promptContext.agendaEnabled) return agendaUnavailableCustomerReply;
     return promptContext.currentProduct
       ? `Posso ajudar com os detalhes de ${promptContext.currentProduct.title}. Para consultar horários, abra a opção Agendar na página. Se não houver horários disponíveis, podemos continuar pelo WhatsApp.`
       : "Posso ajudar a escolher o atendimento e orientar o agendamento. Qual opção você quer conhecer melhor?";

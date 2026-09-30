@@ -288,6 +288,7 @@ export function buildLeadQualificationInstruction(config: LeadQualificationConfi
     "- Se o lead demonstrar intencao clara de comprar, nao bloqueie a venda por qualificacao incompleta. Respeite sempre as respostas desqualificadoras e os requisitos do atendimento; pontuação não autoriza venda nem substitui verificação documental.",
     "- Primeiro entenda a dor e o contexto; depois fale de proposta, demonstracao ou preco.",
     "- Quando uma informacao for respondida, use-a no raciocinio e evite perguntar a mesma coisa de novo.",
+    "- As perguntas do playbook coletam informacoes do cliente; nunca as transforme em oferta. Quando uma pergunta fala de avaliacao, medico, profissional ou acompanhamento, ela se refere ao profissional do proprio cliente: nao ofereca avaliacao, consulta, especialista, visita ou servico que nao esteja cadastrado no catalogo da empresa.",
     "- Perguntas do playbook ativo:",
     ...normalized.questions.map((question, index) => {
       return `${index + 1}. [${question.id}] ${question.question} | campo CRM: ${question.crmField} | obrigatoria: ${question.required ? "sim" : "nao"}\n${describeOptions(question)}`;

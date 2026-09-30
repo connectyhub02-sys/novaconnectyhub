@@ -15,7 +15,7 @@ export function createProfessionalGuidanceQualification(): LeadQualificationConf
       ["Sim", 25], ["Está aguardando consulta/prescrição", 8], ["Não", 0]]],
     ["main_concern", "Principal preocupação", "O que você considera mais importante ao procurar esse tipo de produto?", [
       ["Segurança", 5], ["Procedência", 5], ["Orientação profissional", 5], ["Preço", 1], ["Resultado rápido", 0]]],
-    ["professional_evaluation", "Avaliação profissional", "Você estaria disposto a passar por avaliação profissional antes de utilizar qualquer substância?", [
+    ["professional_evaluation", "Avaliação profissional", "Você faria avaliação com um profissional de saúde de sua confiança antes de utilizar qualquer substância?", [
       ["Sim", 10], ["Talvez", 3], ["Não", 0]]],
     ["current_stage", "Estágio atual", "Em que estágio você está?", [
       ["Possui prescrição e procura canal autorizado", 10], ["Procura orientação profissional", 8], ["Apenas pesquisando", 3], ["Procura acesso sem receita", 0, true]]],

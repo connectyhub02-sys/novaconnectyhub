@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const agendaDisabledMessage = "O agendamento online está desativado nesta empresa. Solicite atendimento para combinar os próximos passos.";
+// What the customer hears: a company without scheduling simply does not offer it; configuration is never exposed.
+export const agendaUnavailableCustomerReply = "Isso a gente não oferece por aqui, mas posso te ajudar com qualquer dúvida sobre os nossos produtos.";
 
 export async function readAgendaActivation(client: SupabaseClient, companyId: string) {
   const { data, error } = await client.from("customer_agenda_settings")

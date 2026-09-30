@@ -117,7 +117,7 @@ describe("explicit company activation", () => {
     const fetch = vi.fn(), rpc = vi.fn();
     const agent = serverModuleHarness<typeof Agent>("src/lib/automations/agenda-agent.ts", {}, [], { fetch });
     const result = await agent.processAgendaTurn({ client: { ...f.client, rpc }, organizationId: "company", runId: "run", userText: "Quero agendar" } as never);
-    expect(result).toMatchObject({ disabled: true, booked: false, context: expect.stringContaining("AGENDA DESATIVADA") });
+    expect(result).toMatchObject({ disabled: true, booked: false, context: expect.stringContaining("A EMPRESA NÃO FAZ AGENDAMENTO") });
     expect(fetch).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
     const runtime = runtimeHarness();
     for (const text of ["Posso agendar para você", "Agendei sua visita", "Seu agendamento está confirmado", "Escolha um horário na página", "Vou reservar amanhã", "Sua visita foi marcada"]) {
@@ -129,7 +129,7 @@ describe("explicit company activation", () => {
     const store = serverModuleHarness<{ guardCommerceAgendaReply: (text: string, userText: string, enabled: boolean) => string }>("src/lib/commerce-agent/server.ts", {
       "@/lib/automations/agenda-activation": activation,
     }, ["guardCommerceAgendaReply"]);
-    expect(store.guardCommerceAgendaReply("Abra Agendar na página", "Quero visitar", false)).toBe(activation.agendaDisabledMessage);
+    expect(store.guardCommerceAgendaReply("Abra Agendar na página", "Quero visitar", false)).toBe(activation.agendaUnavailableCustomerReply);
     expect(store.guardCommerceAgendaReply("Sua visita foi agendada", "Sim", true)).toContain("use a agenda na página");
     expect(store.guardCommerceAgendaReply("O imóvel tem três quartos.", "Quantos quartos?", false)).toBe("O imóvel tem três quartos.");
   });
