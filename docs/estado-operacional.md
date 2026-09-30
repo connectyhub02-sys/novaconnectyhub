@@ -1998,3 +1998,14 @@ da atividade. Agora, mensagem só de cumprimento gera instrução para cumprimen
 apresentar e perguntar como pode ajudar, sem qualificar nem ofertar; o exemplo das atividades passou a
 ser rotulado como pergunta para depois que o cliente disser o que procura. Vale para agentes com o
 exemplo antigo gravado no prompt.
+
+### Atendimento honesto: sem serviço inexistente, sem agenda desativada, sem encaminhamento falso — 30/09/2026
+
+Commit `5b9f4c58` publicado na VPS (slot a; slot b com `416b308a` para retorno). A Luna ofereceu ao lead
+José Daniel "avaliação com nosso especialista" (a pergunta de qualificação de orientação profissional virou
+oferta), respondeu com o texto de agenda desativada e afirmou ter avisado o responsável sem que houvesse
+encaminhamento. Agora: perguntas do playbook nunca viram oferta; empresa sem agenda nunca menciona agenda,
+sistema ou desativação ao cliente (também no assistente da loja; a mensagem técnica segue só no painel e nas
+APIs); o agente não pode afirmar encaminhamento, e "sim" a uma oferta de encaminhamento feita pelo agente
+dispara o handoff real. A pergunta gravada na Luna e no Gustavo foi atualizada (backup em
+`public._backup_agent_metadata_20260930`).
