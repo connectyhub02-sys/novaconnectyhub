@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { commerceDatabase } from "./helpers/commerce-database";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import * as groupRules from "../src/lib/whatsapp/group-rules";
+import * as metadataUpdate from "../src/lib/leads/metadata-update";
 
 type Invite = typeof import("../src/lib/whatsapp/group-private-invite");
 const now = new Date("2026-09-27T19:40:00Z");
@@ -9,7 +10,8 @@ const now = new Date("2026-09-27T19:40:00Z");
 function setup(lead?: Record<string, unknown>) {
   const db = commerceDatabase({
     agent_registry: [{ id: "agent", name: "Luna", persona_name: "Luna", metadata: { responsible_human: { phone: "5547988118255" } } }],
-    leads: lead ? [{ id: "lead", organization_id: "org", phone_number: "554788577996", metadata: {}, ...lead }] : [],
+    leads: lead ? [{ id: "lead", organization_id: "org", phone_number: "554788577996", updated_at: "2026-09-27T00:00:00Z", metadata: {}, ...lead }] : [],
+    whatsapp_instances: [],
     conversation_messages: [],
     whatsapp_group_invites: [],
     whatsapp_channel_targets: [{ id: "g1", whatsapp_instance_id: "inst", provider_jid: "grupo@g.us", reply_mode: "all" }],
@@ -17,8 +19,10 @@ function setup(lead?: Record<string, unknown>) {
   const sent: Array<Record<string, unknown>> = [];
   const invite = serverModuleHarness<Invite>("src/lib/whatsapp/group-private-invite.ts", {
     "@/lib/whatsapp/group-rules": groupRules,
+    "@/lib/leads/metadata-update": metadataUpdate,
     "@/lib/whatsapp/channel-operations": {
       resolveClientWhatsappOperationalContext: async () => ({ instance: { id: "inst", status: "connected" } }),
+      isOperationalAgentEnabled: () => true,
       callWhatsappProvider: async (_ctx: unknown, _path: string, body: Record<string, unknown>) => { sent.push(body); return { messageid: "OUT" }; },
     },
     "@/lib/whatsapp/webhook-ingest": {
@@ -71,7 +75,8 @@ describe("group participants are called in private after the room closes", () =>
     await invite.sendPendingGroupInvites(db.client as never, new Date(now.getTime() + 5 * 60_000));
     expect(sent).toHaveLength(1);
     expect(String(sent[0].text)).toContain("qual produto para emagrecer?");
-    expect(String(sent[0].text)).toContain("Obrigada por participar do grupo");
+    expect(String(sent[0].text)).toContain("Valeu por participar do grupo");
+    expect(String(sent[0].text)).toContain("Aqui é Luna");
     expect(db.tables.whatsapp_group_invites[0]).toMatchObject({ status: "sent" });
   });
 });

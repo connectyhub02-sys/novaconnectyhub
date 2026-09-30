@@ -329,6 +329,13 @@ export async function ingestUazapiWebhook(input: {
       message,
       payload,
     });
+    // A vote in a poll posted by one of our agents goes into the voter's lead file and queues a private call.
+    const providerMessage = readRecord(payload.message);
+    if (message.isGroupChat && message.direction === "inbound" && providerMessage?.messageType === "PollUpdateMessage") {
+      const { capturePollVote } = await import("./poll-votes");
+      await capturePollVote(client, { organizationId: instance.organization_id, message: providerMessage })
+        .catch((error: unknown) => console.error("poll_vote_capture_failed", { message: error instanceof Error ? error.message : "unknown" }));
+    }
     // Consent does not depend on an enabled agent, a wallet balance or a human pause.
     const leadOptOut = message.direction === "inbound" && !message.isGroupChat && lead && isExplicitLeadOptOut(message.textContent);
     if (leadOptOut) await optOutLeadContact(client, instance.organization_id, lead.id, "whatsapp_agent");
