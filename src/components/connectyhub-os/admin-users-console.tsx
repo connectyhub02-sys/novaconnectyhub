@@ -25,59 +25,11 @@ import {
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import { InfinityLoader } from "./infinity-loader";
 import { clearAdminImpersonationReturn, saveAdminImpersonationReturn } from "@/lib/admin-impersonation";
-import type { AdminUsersSnapshot } from "@/lib/admin/users";
+import type { AdminUsersSnapshot, AdminPlatformUser } from "@/lib/admin/users";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-type PlatformUser = {
-  id: string;
-  email: string | null;
-  fullName: string | null;
-  phone: string | null;
-  phoneNormalized: string | null;
-  phoneWhatsappExists: boolean | null;
-  companyName: string | null;
-  avatarUrl: string | null;
-  avatarSource: string | null;
-  avatarSyncedAt: string | null;
-  avatarSyncStatus: string | null;
-  isPlatformAdmin: boolean;
-  organizationId: string | null;
-  orgName: string | null;
-  orgRole: string | null;
-  orgStatus: string | null;
-  planCode: string | null;
-  balanceCredits: number;
-  lifetimePurchasedCredits: number;
-  lifetimeUsedCredits: number;
-  walletStatus: string | null;
-  subscriptionId: string | null;
-  subscriptionStatus: string | null;
-  subscriptionPlanCode: string | null;
-  currentPeriodEnd: string | null;
-  nextBillingAt: string | null;
-  trialEndsAt: string | null;
-  trialDaysRemaining: number | null;
-  monthlyCreditLimit: number | null;
-  dailyCreditLimit: number | null;
-  allowOverage: boolean;
-  overageLimitCredits: number;
-  hardBlockWhenEmpty: boolean;
-  alertThresholdPercent: number;
-  manualAgentLimit: number | null;
-  manualWhatsappInstanceLimit: number | null;
-  manualUserLimit: number | null;
-  storageUsedBytes: number;
-  storageLimitBytes: number;
-  storageAvailableBytes: number;
-  storageUsedPercent: number;
-  storageBillableFileCount: number;
-  storageFileLimit: number;
-  storageMonthlyCostBrl: number;
-  storageUpdatedAt: string | null;
-  createdAt: string | null;
-  lastSignInAt: string | null;
-};
+type PlatformUser = AdminPlatformUser;
 
 type BillingPlanOption = {
   id: string;
@@ -339,7 +291,7 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
   }
 
   function openCustomerControl(user: PlatformUser) {
-    const defaultPlan = user.planCode && plans.some((plan) => plan.planCode === user.planCode)
+    const defaultPlan = user.customPlan ? `custom:${user.customPlan.id}` : user.customContracts?.length ? `custom:${user.customContracts[0].id}` : user.planCode && plans.some((plan) => plan.planCode === user.planCode)
       ? user.planCode
       : plans.find((plan) => plan.planCode !== "trial")?.planCode ?? plans[0]?.planCode ?? "";
 
@@ -423,10 +375,12 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
     setNotice(null);
 
     try {
-      const response = await fetch("/api/admin/billing/customer-control", {
+      const customId = controlDraft.planCode.startsWith("custom:") ? controlDraft.planCode.slice(7) : null;
+      const activateCustom = customId && (controlDraft.action === "activate_plan" || controlDraft.action === "renew_plan");
+      const response = await fetch(activateCustom ? "/api/admin/custom-contracts/activate" : "/api/admin/billing/customer-control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(activateCustom ? { organizationId: controlUser.organizationId, contractId: customId } : {
           action: controlDraft.action,
           organizationId: controlUser.organizationId,
           planCode: controlDraft.planCode,
@@ -454,7 +408,7 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
       }
 
       await refreshUsers();
-      setNotice({ tone: "success", message: data.message ?? "Controle aplicado." });
+      setNotice({ tone: "success", message: data.message ?? (activateCustom ? "Plano personalizado ativado. Condições aplicadas à conta, sem débito automático." : "Controle aplicado.") });
       setControlUser(null);
       setControlDraft(null);
     } catch (error) {
@@ -867,7 +821,23 @@ function CustomerControlModal({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const selectedPlan = plans.find((plan) => plan.planCode === draft.planCode) ?? null;
+  const customId = draft.planCode.startsWith("custom:") ? draft.planCode.slice(7) : null;
+  const [checkedAt] = useState(() => Date.now());
+  const selectedContract = user.customContracts?.find(contract => contract.id === customId);
+  const accepted = customId === user.customPlan?.id ? user.customPlan : null;
+  const basePlan = plans.find(plan => plan.planCode === selectedContract?.base_plan_code);
+  const limits = accepted?.resourceLimits ?? selectedContract?.resource_limits;
+  const selectedPlan = customId ? {
+    includedCredits: accepted?.includedCredits ?? Number(selectedContract?.included_credits ?? 0),
+    agentLimit: limits?.agent_limit ?? basePlan?.agentLimit ?? null,
+    whatsappInstanceLimit: limits?.whatsapp_instance_limit ?? basePlan?.whatsappInstanceLimit ?? null,
+    userLimit: limits?.user_limit ?? basePlan?.userLimit ?? null,
+  } : plans.find((plan) => plan.planCode === draft.planCode) ?? null;
+  const contractAction = Boolean(customId) && (draft.action === "activate_plan" || draft.action === "renew_plan");
+  const isCurrentContract = Boolean(accepted);
+  const availableContracts = user.customContracts ?? [];
+  const latestEffective = [...availableContracts].filter(c => new Date(c.effective_at).getTime() <= checkedAt).sort((a,b) => new Date(b.effective_at).getTime() - new Date(a.effective_at).getTime() || b.version-a.version)[0];
+  const contractUnavailable = Boolean(selectedContract && selectedContract.id !== latestEffective?.id);
 
   function update(patch: Partial<ControlDraft>) {
     onChange({ ...draft, ...patch });
@@ -888,8 +858,9 @@ function CustomerControlModal({
             <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-amber-300">controle administrativo</p>
             <h2 className="mt-1 truncate text-[18px] font-bold text-white">{user.orgName || user.companyName || user.email}</h2>
             <p className="mt-1 text-[12px] text-slate-400">
-              Plano atual {user.planCode ?? "sem plano"} / status {user.orgStatus ?? "sem status"} / {formatCredits(user.balanceCredits)} creditos.
+              Plano atual {user.customPlan?.label ?? user.planCode ?? "sem plano"} / status {user.orgStatus ?? "sem status"} / {formatCredits(user.balanceCredits)} creditos.
             </p>
+            {user.customPlan && <p className="mt-2 text-sm text-blue-700">{user.customPlan.name} · versão {user.customPlan.version} · {formatMoney(user.customPlan.priceBrl)}/mês · franquia de {formatCredits(user.customPlan.includedCredits)} créditos por ciclo</p>}
             {user.organizationId && <a href={`/admin/contratos?organizationId=${user.organizationId}`} className="mt-2 inline-flex min-h-11 items-center rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800">Configurar contrato personalizado</a>}
           </div>
           <button
@@ -908,8 +879,8 @@ function CustomerControlModal({
           <div className="space-y-4">
             <div className="grid gap-2 sm:grid-cols-3">
               <ControlStat label="Saldo" value={formatCredits(user.balanceCredits)} />
-              <ControlStat label="Comprados" value={formatCredits(user.lifetimePurchasedCredits)} />
-              <ControlStat label="Usados" value={formatCredits(user.lifetimeUsedCredits)} />
+              <ControlStat label="Recebidos no histórico" value={formatCredits(user.lifetimePurchasedCredits)} />
+              <ControlStat label="Consumos e retiradas" value={formatCredits(user.lifetimeUsedCredits)} />
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
@@ -954,8 +925,12 @@ function CustomerControlModal({
                     onChange={(event) => update({ planCode: event.target.value })}
                     className={controlInputClass}
                   >
+                    {availableContracts.map(contract => <option key={contract.id} value={`custom:${contract.id}`}>
+                      Personalizado · {contract.name} · v{contract.version} / {formatMoney(Number(contract.monthly_price_brl))} / {formatCredits(Number(contract.included_credits))} créditos{contract.id === user.customPlan?.id ? " · vigente na conta" : " · condições cadastradas"}
+                    </option>)}
+                    {user.customPlan && !availableContracts.some(c => c.id === user.customPlan?.id) && <option value={`custom:${user.customPlan.id}`}>Personalizado · {user.customPlan.name} · vigente na conta</option>}
                     {plans.map((plan) => (
-                      <option key={plan.id} value={plan.planCode}>
+                      <option key={plan.id} value={plan.planCode} disabled={availableContracts.length > 0 || Boolean(user.customPlan)}>
                         {plan.name} / {formatMoney(plan.monthlyPriceBrl)} / {formatCredits(plan.includedCredits)} creditos
                       </option>
                     ))}
@@ -970,7 +945,10 @@ function CustomerControlModal({
                   </div>
                 )}
 
-                <label className="flex items-start gap-2 rounded-xl border p-3 text-[12px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
+                {contractAction ? <div className="rounded-xl border border-blue-300 bg-blue-50 p-3 text-sm text-slate-900">
+                  {isCurrentContract ? <>Esta versão já está vinculada à conta. A franquia mensal é de {formatCredits(selectedPlan?.includedCredits ?? 0)} créditos; o saldo disponível aparece separadamente. A renovação segue a cobrança e o vencimento de {user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toLocaleDateString("pt-BR") : "seu contrato"}. Para alterar condições, configure uma nova versão.</> : <>Ao confirmar, esta versão libera o acesso e aplica os recursos contratados. A franquia já concedida no ciclo não será duplicada. O pagamento permanece pendente, sem débito automático. Primeiro vencimento: {selectedContract ? new Date(selectedContract.first_period_end).toLocaleDateString("pt-BR") : "—"}.</>}
+                  {contractUnavailable && !isCurrentContract && <p className="mt-2">Escolha a versão mais recente com vigência iniciada.</p>}
+                </div> : <label className="flex items-start gap-2 rounded-xl border p-3 text-[12px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
                   <input
                     type="checkbox"
                     checked={draft.grantIncludedCredits}
@@ -978,7 +956,7 @@ function CustomerControlModal({
                     className="mt-1"
                   />
                   <span>Conceder os creditos inclusos do plano ao confirmar esta acao.</span>
-                </label>
+                </label>}
               </div>
             )}
 
@@ -1064,11 +1042,11 @@ function CustomerControlModal({
 
             <button
               type="submit"
-              disabled={loading || !user.organizationId}
+              disabled={loading || !user.organizationId || (contractAction && (isCurrentContract || contractUnavailable))}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              Confirmar acao
+              {contractAction ? isCurrentContract ? "Contrato já vinculado" : "Ativar plano personalizado" : "Confirmar acao"}
             </button>
           </div>
         </div>
@@ -1219,7 +1197,7 @@ function UserRow({
           )}
           {user.planCode && (
             <span className="font-mono text-[11px] uppercase tracking-wide text-slate-600">
-              {user.planCode}
+              {user.customPlan?.label ?? user.planCode}
             </span>
           )}
           {user.avatarSource === "whatsapp_profile" && (

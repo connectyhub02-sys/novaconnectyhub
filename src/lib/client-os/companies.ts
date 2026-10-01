@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export type ClientCompany = {
+  planLabel?: string;
   featureOverrides?:Record<string,boolean>;
   id: string;
   name: string;

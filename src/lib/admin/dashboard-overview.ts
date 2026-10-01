@@ -1,4 +1,5 @@
 import "server-only";
+import { readCustomPlan } from "@/lib/billing/custom-plan-presentation";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -43,6 +44,7 @@ type MembershipRow = {
 };
 
 type SubscriptionRow = {
+  metadata: Record<string, unknown> | null;
   organization_id: string;
   plan_code: string | null;
   status: string | null;
@@ -316,7 +318,8 @@ export async function getAdminDashboardOverview(
       .limit(10000)),
     safeRows<SubscriptionRow>("organization_subscriptions", client
       .from("organization_subscriptions")
-      .select("organization_id, plan_code, status, current_period_end, next_billing_at, created_at")
+      .select("organization_id, plan_code, status, current_period_end, next_billing_at, created_at, metadata")
+      .eq("subscription_kind", "plan")
       .order("created_at", { ascending: false })
       .limit(10000)),
     safeRows<BillingPlanRow>("billing_plans", client
@@ -487,7 +490,7 @@ export async function getAdminDashboardOverview(
       return total;
     }
 
-    return total + planPrice(planCode, plansByCode);
+    return total + (readCustomPlan(subscription?.metadata)?.priceBrl ?? planPrice(planCode, plansByCode));
   }, 0);
   const usage30 = usageResult.rows.filter((row) => isOnOrAfter(row.occurred_at, since30));
   const usagePrevious30 = usageResult.rows.filter((row) => {
@@ -816,9 +819,9 @@ function buildClientRows(input: {
         id: `CLI-${String(index + 1).padStart(3, "0")}`,
         company: organization.name,
         owner: owner?.full_name ?? owner?.email ?? owner?.company_name ?? "Responsavel nao identificado",
-        plan: planLabel(planCode, input.planPrices),
+        plan: readCustomPlan(subscription?.metadata)?.label ?? planLabel(planCode, input.planPrices),
         health: `${health}${duplicateDetail}`,
-        mrr: formatMoney(subscription && !activeSubscriptionStatuses.has(subscription.status ?? "") ? 0 : planPrice(planCode, input.planPrices)),
+        mrr: formatMoney(subscription && !activeSubscriptionStatuses.has(subscription.status ?? "") ? 0 : (readCustomPlan(subscription?.metadata)?.priceBrl ?? planPrice(planCode, input.planPrices))),
         tokens: `${formatCompact(balance)} saldo / ${formatCompact(Math.max(purchased, used))} total`,
         agents: agents.length,
         status: clientStatusTone(organization, subscription, wallet, conversations),

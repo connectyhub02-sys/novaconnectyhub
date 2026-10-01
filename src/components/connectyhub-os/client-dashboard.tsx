@@ -357,7 +357,7 @@ export function ClientDashboard({
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{company.name}</p>
                     <p className="font-mono text-[11px] uppercase tracking-widest text-slate-500">
-                      {company.planCode} / {company.status}
+                      {company.planLabel ?? company.planCode} / {company.status}
                     </p>
                   </div>
                   {overview.company?.id === company.id ? (

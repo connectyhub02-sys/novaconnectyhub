@@ -1,3 +1,4 @@
+import { loadAcceptedCustomTerms } from "@/lib/billing/custom-contracts";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -407,6 +408,11 @@ export async function getClientDashboardOverview(input: {
     });
   }
 
+  const customTerms = await loadAcceptedCustomTerms(client, company.id);
+  if (customTerms) {
+    company = { ...company, planLabel: "Personalizado" };
+    companies = companies.map(item => item.id === company!.id ? { ...item, planLabel: "Personalizado" } : item);
+  }
   const { rows, warnings } = await loadDashboardRows({
     client,
     organizationId: company.id,

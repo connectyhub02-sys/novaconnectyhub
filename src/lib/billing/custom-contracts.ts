@@ -15,5 +15,5 @@ export async function loadAcceptedCustomTerms(client: SupabaseClient, organizati
   const { data, error } = await client.from("organization_subscriptions").select("metadata").eq("id", access.subscription_id).single();
   if (error) throw new Error("Não foi possível conferir os recursos do contrato.");
   const terms = data?.metadata?.commercial_terms;
-  return terms?.custom_contract_id ? terms as { custom_contract_id: string; custom_contract_version?: number; included_credits: number; name: string; features: Record<string, boolean>; resource_limits: Record<string, number>; development_scope?: ContractDevelopmentScope | null } : null;
+  return terms?.custom_contract_id ? terms as { custom_contract_id: string; price_brl: number; custom_contract_version?: number; included_credits: number; name: string; features: Record<string, boolean>; resource_limits: Record<string, number>; development_scope?: ContractDevelopmentScope | null } : null;
 }

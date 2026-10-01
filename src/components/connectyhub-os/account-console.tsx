@@ -899,7 +899,7 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-center">
           <div className="min-w-0">
             <h3 className="truncate text-2xl font-semibold text-slate-950">{planName}</h3>
-            <p className="mt-1 text-sm text-slate-600">{formatCredits(access.includedCredits)} créditos</p>
+            <p className="mt-1 text-sm text-slate-600">Franquia do ciclo: {formatCredits(access.includedCredits)} créditos</p>
             {trialText ? (
               <p className="mt-4 inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                 Teste gratis: {trialText}

@@ -1,3 +1,4 @@
+import { readCustomPlan } from "@/lib/billing/custom-plan-presentation";
 import { accountPaymentNotice, type AccountCardAttempt } from "@/lib/billing/account-payment-notice";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
@@ -41,6 +42,7 @@ type BillingPlanRelation = {
 }> | null;
 
 type SubscriptionRow = {
+  metadata: JsonRecord | null;
   id: string;
   plan_code: string;
   status: string;
@@ -122,6 +124,7 @@ type UsageSummaryEventRow = {
 };
 
 type BillingCycleRow = {
+  metadata: JsonRecord | null;
   id: string;
   cycle_start: string | null;
   cycle_end: string | null;
@@ -172,7 +175,7 @@ export async function GET() {
         .maybeSingle<WalletRow>(),
       client
         .from("organization_subscriptions")
-        .select("id, plan_code, status, billing_provider, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, canceled_at, created_at, updated_at, billing_plans(name, monthly_price_brl, included_credits)")
+        .select("id, plan_code, status, billing_provider, provider_subscription_id, payer_email, current_period_start, current_period_end, next_billing_at, canceled_at, created_at, updated_at, metadata, billing_plans(name, monthly_price_brl, included_credits)")
         .eq("subscription_kind", "plan")
         .eq("organization_id", organization.id)
         .order("created_at", { ascending: false })
@@ -215,7 +218,7 @@ export async function GET() {
         .returns<UsageSummaryEventRow[]>(),
       client
         .from("billing_cycles")
-        .select("id, cycle_start, cycle_end, included_credits, used_credits, overage_credits, status, created_at, billing_plans(plan_code, name)")
+        .select("id, cycle_start, cycle_end, included_credits, used_credits, overage_credits, status, created_at, metadata, billing_plans(plan_code, name)")
         .eq("organization_id", organization.id)
         .order("cycle_start", { ascending: false })
         .limit(6)
@@ -458,18 +461,19 @@ function mapWallet(row: WalletRow | null, balanceCredits: number) {
 }
 
 function mapSubscription(row: SubscriptionRow) {
+  const custom = readCustomPlan(row.metadata);
   const plan = firstRelation(row.billing_plans);
 
   return {
     id: row.id,
     planCode: row.plan_code,
-    planName: plan?.name ?? row.plan_code,
+    planName: custom ? `Personalizado · ${custom.name}` : plan?.name ?? row.plan_code,
     status: row.status,
     billingProvider: row.billing_provider,
     providerSubscriptionId: row.provider_subscription_id,
     payerEmail: row.payer_email,
-    monthlyPriceBrl: toNumber(plan?.monthly_price_brl),
-    includedCredits: toNumber(plan?.included_credits),
+    monthlyPriceBrl: custom?.priceBrl ?? toNumber(plan?.monthly_price_brl),
+    includedCredits: custom?.includedCredits ?? toNumber(plan?.included_credits),
     currentPeriodStart: row.current_period_start,
     currentPeriodEnd: row.current_period_end,
     nextBillingAt: row.next_billing_at,
@@ -598,7 +602,7 @@ function mapCycle(row: BillingCycleRow) {
   return {
     id: row.id,
     planCode: plan?.plan_code ?? null,
-    planName: plan?.name ?? null,
+    planName: row.metadata?.custom_contract_id ? "Personalizado" : plan?.name ?? null,
     cycleStart: row.cycle_start,
     cycleEnd: row.cycle_end,
     includedCredits: toNumber(row.included_credits),

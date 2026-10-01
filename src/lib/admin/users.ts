@@ -1,4 +1,6 @@
 import "server-only";
+import { readCustomPlan, type CustomPlanPresentation } from "@/lib/billing/custom-plan-presentation";
+import type { CustomContract } from "@/lib/billing/custom-contracts";
 
 import {
   readAuthUserAvatarSource,
@@ -29,6 +31,8 @@ export type AdminPlatformUser = {
   orgRole: string | null;
   orgStatus: string | null;
   planCode: string | null;
+  customPlan: CustomPlanPresentation | null;
+  customContracts: CustomContract[];
   balanceCredits: number;
   lifetimePurchasedCredits: number;
   lifetimeUsedCredits: number;
@@ -156,6 +160,7 @@ type WalletRow = {
 };
 
 type SubscriptionRow = {
+  metadata: JsonRecord | null;
   id: string;
   organization_id: string;
   plan_code: string | null;
@@ -345,6 +350,8 @@ export async function getAdminPlatformUsers(
         orgRole: membership?.role ?? null,
         orgStatus: membership?.status ?? null,
         planCode,
+        customPlan: readCustomPlan(subscription?.metadata),
+        customContracts: organizationState.customContracts.get(membership?.organizationId ?? "") ?? [],
         balanceCredits: toNumber(wallet?.balance_credits),
         lifetimePurchasedCredits: toNumber(wallet?.lifetime_purchased_credits),
         lifetimeUsedCredits: toNumber(wallet?.lifetime_used_credits),
@@ -626,6 +633,7 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
     storagePlansResult,
     storageAddonsResult,
     storagePackagesResult,
+    customContractsResult,
   ] = await Promise.all([
     service
       .from("credit_wallets")
@@ -633,7 +641,8 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
       .in("organization_id", organizationIds),
     service
       .from("organization_subscriptions")
-      .select("id, organization_id, plan_code, status, current_period_end, next_billing_at, created_at")
+      .select("id, organization_id, plan_code, status, current_period_end, next_billing_at, created_at, metadata")
+      .eq("subscription_kind", "plan")
       .in("organization_id", organizationIds)
       .order("created_at", { ascending: false })
       .limit(1000),
@@ -665,9 +674,15 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
       .from("storage_addon_packages")
       .select("code, storage_bytes, file_limit, monthly_price_brl, status")
       .limit(100),
+    service.from("organization_custom_contracts").select("id,organization_id,version,name,base_plan_code,monthly_price_brl,included_credits,effective_at,first_period_end,resource_limits,features").in("organization_id", organizationIds).order("version", { ascending: false }),
   ]);
 
   const state = emptyOrganizationState();
+  if (customContractsResult.error) state.warnings.push(`Contratos personalizados: ${customContractsResult.error.message}`);
+  for (const contract of (customContractsResult.data ?? []) as CustomContract[]) {
+    const rows = state.customContracts.get(contract.organization_id) ?? [];
+    rows.push(contract); state.customContracts.set(contract.organization_id, rows);
+  }
   if (walletsResult.error) state.warnings.push(`credit_wallets: ${walletsResult.error.message}`);
   if (subscriptionsResult.error) state.warnings.push(`organization_subscriptions: ${subscriptionsResult.error.message}`);
   if (limitsResult.error) state.warnings.push(`organization_billing_limits: ${limitsResult.error.message}`);
@@ -723,6 +738,7 @@ function emptyOrganizationState() {
   return {
     wallets: new Map<string, WalletRow>(),
     subscriptions: new Map<string, SubscriptionRow>(),
+    customContracts: new Map<string, CustomContract[]>(),
     limits: new Map<string, LimitsRow>(),
     trialCycles: new Map<string, CycleRow>(),
     storageUsage: new Map<string, StorageUsageRow>(),

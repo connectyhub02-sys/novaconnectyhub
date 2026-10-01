@@ -34,7 +34,7 @@ export function CustomContractEditor({ organizations, initialOrganizationId }: {
     <div className="mx-auto max-w-5xl space-y-6 text-slate-900">
       <div>
         <h1 className="text-3xl font-bold">Contratos personalizados</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">Cadastre as condições, revise o escopo e ative o contrato para liberar o acesso do cliente. Salvar uma versão não a ativa. Faturas já emitidas mantêm suas condições.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-600">Cadastre as condições e use Salvar e ativar para vincular o plano personalizado ao cliente. Você também pode salvar sem ativar. Faturas já emitidas mantêm suas condições.</p>
       </div>
       <section className="space-y-3" aria-label="Contas com contrato personalizado">
         <h2 className="text-lg font-bold">Contas com contrato personalizado</h2>
@@ -86,7 +86,7 @@ function AccountContracts({ organizationId, onBusyChange, onChanged }: { organiz
     return () => controller.abort();
   }, [organizationId, reload]);
 
-  async function save(data: Record<string, unknown>) {
+  async function save(data: Record<string, unknown>, activateNow: boolean) {
     setBusy(true);
     onBusyChange(true);
     setNotice("");
@@ -101,6 +101,13 @@ function AccountContracts({ organizationId, onBusyChange, onChanged }: { organiz
       setNotice("Versão salva. Revise as condições abaixo e use Ativar contrato para aplicá-las ao painel do cliente.");
       setShowForm(false);
       onChanged();
+      if (activateNow) {
+        const activationResponse = await fetch("/api/admin/custom-contracts/activate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ organizationId, contractId: result.contract.id }) });
+        const activationResult = await activationResponse.json();
+        if (!activationResponse.ok) throw new Error(`Versão salva, mas não ativada: ${activationResult.error ?? "confira as condições e tente novamente"}`);
+        setNotice("Plano personalizado salvo e ativado. O cliente já aparece como Personalizado na lista e no Controle. Pagamento pendente, sem débito automático.");
+        setReload(value => value + 1); onChanged();
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível salvar.");
     } finally {
@@ -159,7 +166,7 @@ function AccountContracts({ organizationId, onBusyChange, onChanged }: { organiz
   </>;
 }
 
-function ContractForm({ template, busy, onSave }: { template: CustomContract | null; busy: boolean; onSave: (data: Record<string, unknown>) => Promise<void> }) {
+function ContractForm({ template, busy, onSave }: { template: CustomContract | null; busy: boolean; onSave: (data: Record<string, unknown>, activateNow: boolean) => Promise<void> }) {
   const [development, setDevelopment] = useState(Boolean(template?.development_scope));
   const [additional, setAdditional] = useState(() => (template?.development_scope?.additional_fields ?? []).map((item, index) => ({ ...item, id: String(index) })));
   const [error, setError] = useState("");
@@ -183,7 +190,7 @@ function ContractForm({ template, busy, onSave }: { template: CustomContract | n
         ...Object.fromEntries(developmentScopeFields.map(item => [item.key, data.get(`development:${item.key}`)])),
         additional_fields: additional.map(item => ({ label: data.get(`additional:${item.id}:label`), value: data.get(`additional:${item.id}:value`) })),
       } : null);
-      await onSave({ name: data.get("name"), base_plan_code: data.get("base_plan_code"), monthly_price_brl: data.get("monthly_price_brl"), included_credits: data.get("included_credits"), effective_at: new Date(String(data.get("effective_at"))).toISOString(), first_period_end: new Date(String(data.get("first_period_end"))).toISOString(), features, resource_limits, development_scope });
+      await onSave({ name: data.get("name"), base_plan_code: data.get("base_plan_code"), monthly_price_brl: data.get("monthly_price_brl"), included_credits: data.get("included_credits"), effective_at: new Date(String(data.get("effective_at"))).toISOString(), first_period_end: new Date(String(data.get("first_period_end"))).toISOString(), features, resource_limits, development_scope }, (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") !== "save");
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Confira os campos do contrato."); }
   }
 
@@ -226,7 +233,11 @@ function ContractForm({ template, busy, onSave }: { template: CustomContract | n
         <div className="mt-5 grid gap-3 sm:grid-cols-2">{limits.map(([key, label]) => <label className="text-sm" key={key}>{label}<input name={key} type="number" min={0} step={1} defaultValue={template?.resource_limits[key]} placeholder="Limite do plano base" className={field} /></label>)}</div>
       </details>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <button disabled={busy} className="min-h-11 rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{busy ? "Aguarde…" : "Salvar condições individuais"}</button>
+      <p className="text-sm text-slate-600">Salvar e ativar aplica estas condições ao cliente imediatamente. A franquia do ciclo não será duplicada; o pagamento fica pendente, sem débito automático. Vigência futura deve ser salva sem ativar.</p>
+      <div className="flex flex-wrap gap-3">
+        <button type="submit" value="activate" disabled={busy} className="min-h-11 rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{busy ? "Aguarde…" : "Salvar e ativar plano personalizado"}</button>
+        <button type="submit" value="save" disabled={busy} className="min-h-11 rounded-xl border border-blue-300 px-5 py-3 text-sm font-bold text-blue-800 disabled:opacity-50">Salvar sem ativar</button>
+      </div>
     </fieldset>
   </form>;
 }

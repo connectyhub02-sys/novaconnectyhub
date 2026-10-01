@@ -59,15 +59,16 @@ export default async function DashboardPlanosPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <section className="space-y-6">
-        {accepted?.development_scope && <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-slate-900">
-          <h2 className="font-bold">Seu contrato ativo: {accepted.name}{accepted.custom_contract_version ? ` · versão ${accepted.custom_contract_version}` : ""}</h2>
+        {accepted && <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-slate-900">
+          <h2 className="font-bold">Plano Personalizado: {accepted.name}{accepted.custom_contract_version ? ` · versão ${accepted.custom_contract_version}` : ""}</h2>
+          <p>{Number(accepted.price_brl).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês · {Number(accepted.included_credits).toLocaleString("pt-BR")} créditos por ciclo</p>
           <ContractDevelopmentSummary scope={accepted.development_scope} />
         </section>}
-        {custom && <CustomContractOffer name={custom.name} price={Number(custom.monthly_price_brl)} credits={Number(custom.included_credits)} planCode={custom.base_plan_code} version={custom.version} developmentScope={custom.development_scope}/>}
+        {custom && custom.id !== accepted?.custom_contract_id && <CustomContractOffer name={custom.name} price={Number(custom.monthly_price_brl)} credits={Number(custom.included_credits)} planCode={custom.base_plan_code} version={custom.version} developmentScope={custom.development_scope}/>}
         {pendingPlan ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-slate-900">
           <div><h2 className="font-bold">{pendingPlan.renewal ? "Regularize seu plano" : "Conclua o pagamento do plano"}</h2>
             <p className="mt-1 text-sm">{pendingPlan.planName} · {pendingPlan.amountBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
-            <p className="mt-1 text-sm text-slate-600">A liberação acontece após a confirmação do pagamento.</p></div>
+            <p className="mt-1 text-sm text-slate-600">{accepted ? "Seu contrato já está liberado. Esta cobrança permanece pendente para o próximo vencimento." : "A liberação acontece após a confirmação do pagamento."}</p></div>
           <Link href={pendingPlan.checkoutUrl} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white">Pagar fatura do plano</Link>
         </div> : null}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -76,23 +77,23 @@ export default async function DashboardPlanosPage() {
               Billing / planos
             </div>
             <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
-              Escolha o plano ideal para sua operacao.
+              {accepted ? "Seu plano personalizado" : "Escolha o plano ideal para sua operacao."}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Compare creditos, armazenamento, agentes, WhatsApps e recursos. Ative, finalize ou troque seu plano com seguranca quando sua operacao precisar crescer.
+              {accepted ? "Consulte as condições, a franquia e o escopo vinculados à sua conta. Alterações são acordadas em uma nova versão do contrato." : "Compare creditos, armazenamento, agentes, WhatsApps e recursos. Ative, finalize ou troque seu plano com seguranca quando sua operacao precisar crescer."}
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 font-mono text-[11px] uppercase tracking-wide text-slate-400">
-            Plano atual: <span className="font-bold text-emerald-300">{currentPlanCode ?? "sem plano"}</span>
+            Plano atual: <span className="font-bold text-emerald-300">{accepted ? "Personalizado" : currentPlanCode ?? "sem plano"}</span>
           </div>
         </div>
 
-        <PricingPlansGrid
+        {!accepted && <PricingPlansGrid
           currentPlanCode={currentPlanCode}
           initialPlans={pricingPlans}
           pendingPlan={pendingPlan}
           surface="dashboard"
-        />
+        />}
       </section>
     </ConnectyShell>
   );
