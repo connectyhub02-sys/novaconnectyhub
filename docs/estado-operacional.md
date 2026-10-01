@@ -24,7 +24,7 @@ sobrescrevem a versão administrativa; cada nova fatura personalizada recebe sua
 própria identidade de concessão de créditos. A renovação paga continua concedendo
 a franquia do próximo ciclo uma única vez.
 
-Validação: 61 testes nos grupos de contratos, acesso, campanhas e recursos,
+Validação: 62 testes nos grupos de contratos, acesso, campanhas e recursos,
 incluindo nova proteção Pix; TypeScript e lint dos arquivos novos aprovados.
 Prévia real do componente conferida em desktop e 390×844: listagem, seleção,
 ativação, status, cópia de versão e ausência de overflow horizontal.
@@ -45,6 +45,15 @@ no cadastro privado. Painel também conferido por acesso administrativo assistid
 Integrações externas, chaves e números conectados ainda exigem configuração e
 validação própria; esta publicação comprova liberação comercial, não operação
 de ponta a ponta das integrações da plataforma do cliente.
+
+Complemento **0178 aplicado e registrado** após a conferência do painel: a ativação
+restaura imediatamente clientes API, chaves e webhooks pausados pelo guard de
+cobrança. Pausas manuais, revogações e outras contas permanecem preservadas,
+com cobertura de teste SQL. Na conta solicitada havia um cadastro API legado
+pausado sem marca do guard: liberação administrativa específica registrada em
+auditoria, conforme pedido de ativação das APIs; painel conferido como `ACTIVE`.
+Nenhuma chave criada nem webhook disparado. Backup privado das três tabelas API
+em `api-before-0178.sql` no mesmo diretório de backup citado acima.
 
 ## Cadastro real de condições individuais — 01/10/2026
 

@@ -10,12 +10,30 @@ beforeAll(async () => {
   await db.exec(`alter table profiles add column is_platform_admin boolean default false;
     create table organization_billing_limits(organization_id uuid primary key,allow_overage boolean,overage_limit_credits numeric,hard_block_when_empty boolean,alert_threshold_percent integer);
     create table billing_pix_authorizations(subscription_id uuid,state text);
+    create table connectyhub_api_clients(id uuid primary key,organization_id uuid,status text,metadata jsonb);
+    create table connectyhub_api_keys(id uuid primary key,client_id uuid,status text,metadata jsonb);
+    create table connectyhub_webhook_endpoints(id uuid primary key,client_id uuid,status text,metadata jsonb);
     insert into billing_plans(plan_code,name,status,monthly_price_brl,included_credits) values('scale','Scale','active',497,1000);`);
   await db.query("insert into auth.users(id) values($1)", [admin]);
   await db.query("insert into profiles(id,is_platform_admin) values($1,true)", [admin]);
-  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation", "0177_custom_contract_provider_guard"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
+  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation", "0177_custom_contract_provider_guard", "0178_custom_contract_api_restore"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
 }, 60000);
 afterAll(async () => { await db?.close(); });
+it("restores billing-paused API resources atomically while retaining manual and revoked access states", async () => {
+  const a=await account(), b=await account(), api=randomUUID(), manual=randomUUID(), other=randomUUID();
+  const guard=JSON.stringify({connectyhub_api_access_guard:{paused_by:'connectyhub_api_access_guard',allowed:false}});
+  await db.query("insert into connectyhub_api_clients values($1,$2,'paused',$3),($4,$2,'paused','{}'),($5,$6,'paused',$3)",[api,a.org,guard,manual,other,b.org]);
+  for(const table of ['connectyhub_api_keys','connectyhub_webhook_endpoints']) {
+    await db.query(`insert into ${table} values($1,$2,'paused',$3),($4,$2,'paused','{}'),($5,$2,'revoked',$3),($6,$7,'paused',$3)`,[randomUUID(),api,guard,randomUUID(),randomUUID(),randomUUID(),manual]);
+  }
+  await activate(a.org,await contract(a));
+  expect((await db.query("select status from connectyhub_api_clients where id=$1",[api])).rows).toEqual([{status:'active'}]);
+  expect((await db.query("select status from connectyhub_api_clients where id in ($1,$2)",[manual,other])).rows).toEqual([{status:'paused'},{status:'paused'}]);
+  for(const table of ['connectyhub_api_keys','connectyhub_webhook_endpoints']) {
+    expect((await db.query(`select status from ${table} where client_id=$1 order by status`,[api])).rows).toEqual([{status:'active'},{status:'paused'},{status:'revoked'}]);
+    expect((await db.query(`select status from ${table} where client_id=$1`,[manual])).rows).toEqual([{status:'paused'}]);
+  }
+});
 async function account() {
   const org = randomUUID(), owner = randomUUID(), sub = randomUUID();
   await db.query("insert into auth.users(id) values($1)", [owner]);
