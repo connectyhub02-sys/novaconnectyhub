@@ -55,6 +55,12 @@ auditoria, conforme pedido de ativação das APIs; painel conferido como `ACTIVE
 Nenhuma chave criada nem webhook disparado. Backup privado das três tabelas API
 em `api-before-0178.sql` no mesmo diretório de backup citado acima.
 
+Pendência observada fora da tela de contratos: o resumo executivo do Admin ainda
+exibe preço do catálogo Scale na lista de clientes e no MRR, mesmo com snapshot
+personalizado ativo. A fatura emitida e a tela de contratos têm o valor negociado
+correto. Ajustar os agregados executivos para usar os termos ativos em trabalho
+posterior; essa divergência visual não foi tratada nesta publicação.
+
 ## Cadastro real de condições individuais — 01/10/2026
 
 Primeira versão real com desenvolvimento e APIs cadastrada pelo formulário administrativo,
