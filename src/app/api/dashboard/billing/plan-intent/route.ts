@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const custom = await loadCustomContract(client, organization.id);
     if (custom?.base_plan_code === plan.plan_code) {
-      Object.assign(plan, { name: custom.name, monthly_price_brl: custom.monthly_price_brl, included_credits: custom.included_credits, billing_cycle: "recurring", billing_interval: "month", annual_discount_percent: 0, first_purchase_discount_percent: 0, custom_contract_id: custom.id, custom_contract_version: custom.version, features: custom.features, resource_limits: custom.resource_limits });
+      Object.assign(plan, { name: custom.name, monthly_price_brl: custom.monthly_price_brl, included_credits: custom.included_credits, billing_cycle: "recurring", billing_interval: "month", annual_discount_percent: 0, first_purchase_discount_percent: 0, custom_contract_id: custom.id, custom_contract_version: custom.version, features: custom.features, resource_limits: custom.resource_limits, development_scope: custom.development_scope ?? null });
       if (campaignSelection) return NextResponse.json({ error: "Este contrato já tem condições individuais. Não é possível somar uma campanha pública." }, { status:422 });
     }
     let amountBrl = snapshotPlanCommercialTerms(plan).price_brl;

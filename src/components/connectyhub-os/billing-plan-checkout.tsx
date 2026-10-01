@@ -28,6 +28,7 @@ import { InfinityMark } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type BillingPlanCheckoutProps = {
+  contractScope?: ReactNode;
   purchaseKind?: "plan" | "product";
   renewal?: boolean;
   commercialLabel?: string;
@@ -107,6 +108,7 @@ type CheckoutStatusResponse = {
 };
 
 export function BillingPlanCheckout({
+  contractScope,
   purchaseKind = "plan",
   renewal = false,
   commercialLabel,
@@ -652,6 +654,10 @@ export function BillingPlanCheckout({
             <p className="mt-2 leading-5">{formatCredits(includedCredits)} créditos{storageLimitBytes > 0 ? " · " + formatStorageBytes(storageLimitBytes) + " de armazenamento" : ""}. {purchaseKind === "product" ? "Não altera seu plano." : "Válidos no período contratado."}</p>
             {storageLimitBytes > 0 ? <CheckoutStorageSummary storageLimitBytes={storageLimitBytes} storageFileLimit={storageFileLimit} storageImageMaxBytes={storageImageMaxBytes} storageVideoMaxBytes={storageVideoMaxBytes} storageFileMaxBytes={storageFileMaxBytes} /> : null}
           </details>
+          {contractScope ? <details className="mt-3 border-t border-slate-200 pt-2 text-sm text-slate-700">
+            <summary className="cursor-pointer py-2 font-semibold">Projeto e serviços incluídos</summary>
+            <div className="mt-2">{contractScope}</div>
+          </details> : null}
         </div>
       </aside>
     </div>

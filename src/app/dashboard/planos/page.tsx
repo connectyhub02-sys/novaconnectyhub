@@ -9,7 +9,8 @@ import { loadPendingPlan } from "@/lib/billing/pending-plan";
 import { loadPublicPricingPlans } from "@/lib/billing/public-pricing-server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
-import { loadCustomContract } from "@/lib/billing/custom-contracts";
+import { loadAcceptedCustomTerms, loadCustomContract } from "@/lib/billing/custom-contracts";
+import { ContractDevelopmentSummary } from "@/components/connectyhub-os/contract-development-summary";
 import { CustomContractOffer } from "@/components/connectyhub-os/custom-contract-offer";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function DashboardPlanosPage() {
   ]);
   const currentPlanCode = getCurrentPurchasablePlanCode(organization?.planCode, organization?.status);
   const custom = organization ? await loadCustomContract(client,organization.id) : null;
+  const accepted = organization ? await loadAcceptedCustomTerms(client, organization.id) : null;
 
   return (
     <ConnectyShell
@@ -57,7 +59,11 @@ export default async function DashboardPlanosPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <section className="space-y-6">
-        {custom && <CustomContractOffer name={custom.name} price={Number(custom.monthly_price_brl)} credits={Number(custom.included_credits)} planCode={custom.base_plan_code}/>}
+        {accepted?.development_scope && <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-slate-900">
+          <h2 className="font-bold">Seu contrato ativo: {accepted.name}{accepted.custom_contract_version ? ` · versão ${accepted.custom_contract_version}` : ""}</h2>
+          <ContractDevelopmentSummary scope={accepted.development_scope} />
+        </section>}
+        {custom && <CustomContractOffer name={custom.name} price={Number(custom.monthly_price_brl)} credits={Number(custom.included_credits)} planCode={custom.base_plan_code} version={custom.version} developmentScope={custom.development_scope}/>}
         {pendingPlan ? <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-slate-900">
           <div><h2 className="font-bold">{pendingPlan.renewal ? "Regularize seu plano" : "Conclua o pagamento do plano"}</h2>
             <p className="mt-1 text-sm">{pendingPlan.planName} · {pendingPlan.amountBrl.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>

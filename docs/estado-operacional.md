@@ -1,5 +1,34 @@
 # Estado operacional da ConnectyHub
 
+## Desenvolvimento nos contratos personalizados — implementação local em 01/10/2026
+
+O contrato individual passa a descrever também o desenvolvimento de plataformas e
+os serviços sob medida: nome/objetivo, escopo e entregas previstas, serviços incluídos
+na mensalidade, exclusões/condições e até 12 campos adicionais com nome e descrição.
+A seção é opcional e todo o conteúdo é visível ao cliente. O preço continua sendo
+a mensalidade total negociada; os textos não criam cobranças ou créditos adicionais.
+O exemplo Vision foi usado apenas em prévia sintética, sem cadastrar condições reais.
+
+Migration **0175_custom_contract_development.sql preparada, ainda não aplicada na VPS**:
+adiciona `development_scope` à versão, valida os dados e copia o escopo da versão
+escolhida para cada novo pagamento/fatura. Preserva os termos de faturas já emitidas;
+o fulfillment existente leva o snapshot pago à assinatura. O painel de planos exibe
+separadamente o escopo ativo e as condições disponíveis; checkout lê somente o
+snapshot da cobrança, sem buscar uma proposta mais nova para preencher o histórico.
+Admin permite copiar uma versão (exigindo novas datas), consultar seus recursos/escopo
+e limpa formulário/histórico ao trocar cliente; respostas de consultas antigas são
+canceladas. Não há relatório de execução ou marcação automática de entregas concluídas.
+
+Validação local: **43 testes em 7 arquivos** (validação, endpoint administrativo,
+transações de contratos, renovação, concessão única, isolamento, limites e permissões),
+TypeScript e ESLint aprovados. Prévia com componentes reais e API simulada em
+1440 px/390 px confirmou gravação dos campos, cópia de versão, troca de cliente,
+oferta e ausência de overflow/erros JavaScript. Evidências locais em
+`tmp/contract-development-qa/`. Build Next/webpack de produção aprovado, incluindo
+TypeScript e geração de 109 páginas.
+**Pendente:** aplicar a migration antes de publicar o código e conferir o fluxo
+autenticado em produção. Nenhum contrato, pagamento ou saldo real foi alterado.
+
 ## Recusa no painel e troca de cartão — publicado em 29/09/2026
 
 - **Produção atual:** `9e969fac41819df06bd29fcc27db6782703c49f1`, ativo **a/3130** às 14h20 BRT; reserva **b/3131** `c1a649b054c7ec61b231525c502a4809adde96e8`. Build Linux/TypeScript/109 páginas concluídos, health público com SHA esperado; builder parado.

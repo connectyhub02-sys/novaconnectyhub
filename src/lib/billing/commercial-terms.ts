@@ -31,7 +31,7 @@ export function snapshotPlanCommercialTerms(plan: Record<string, unknown>) {
     list_price_brl: listPrice, annual_discount_percent: annualPercent,
     first_purchase_discount_percent: Number(plan.first_purchase_discount_percent ?? 0),
     included_credits: Number(plan.included_credits ?? 0),
-    ...(plan.custom_contract_id ? { custom_contract_id: plan.custom_contract_id, custom_contract_version: plan.custom_contract_version, name: plan.name, features: plan.features, resource_limits: plan.resource_limits } : {}) };
+    ...(plan.custom_contract_id ? { custom_contract_id: plan.custom_contract_id, custom_contract_version: plan.custom_contract_version, name: plan.name, features: plan.features, resource_limits: plan.resource_limits, development_scope: plan.development_scope ?? null } : {}) };
 }
 
 export function billingPeriodEnd(start: Date, terms: CommercialTerms): Date {

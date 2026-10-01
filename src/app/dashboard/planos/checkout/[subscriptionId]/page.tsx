@@ -23,6 +23,8 @@ import { loadMercadoPagoPlatformBillingConfig, normalizeCurrencyAmount } from "@
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildBillingPaymentFailureCopy } from "@/lib/billing/payment-feedback";
+import { ContractDevelopmentSummary } from "@/components/connectyhub-os/contract-development-summary";
+import { readContractDevelopmentScope } from "@/lib/billing/contract-development";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +89,7 @@ export default async function DashboardBillingCheckoutPage({
         .then((config) => config.publicKey)
         .catch(() => null)
     : null;
+  const developmentScope = intent ? readContractDevelopmentScope(intent.payment.payload?.commercial_terms) : null;
 
   return (
     <ConnectyShell
@@ -145,6 +148,7 @@ export default async function DashboardBillingCheckoutPage({
 
           {intent.payment.payload?.campaign_pricing ? <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900">{campaignPriceNotice(intent.payment.payload.campaign_pricing as CampaignPricing)}</p> : ["pending", "rejected"].includes(intent.payment.status) ? <PlatformOffers planCode={String(intent.payment.payload?.purchase_product_id ?? intent.targetPlanCode)} subscriptionId={subscriptionId}/> : null }
           <BillingPlanCheckout
+            contractScope={developmentScope ? <ContractDevelopmentSummary scope={developmentScope} title="Desenvolvimento incluído nesta cobrança" /> : null}
             purchaseKind={intent.payment.payload?.purchase_kind === "product" ? "product" : "plan"}
             renewal={intent.checkoutKind === "renewal"}
             commercialLabel={billingTermsLabel(readCheckoutCommercialTerms(intent))}
