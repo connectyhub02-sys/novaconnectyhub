@@ -1,6 +1,6 @@
 # Estado operacional da ConnectyHub
 
-## Desenvolvimento nos contratos personalizados — implementação local em 01/10/2026
+## Desenvolvimento nos contratos personalizados — publicado em 01/10/2026, 12h55 BRT
 
 O contrato individual passa a descrever também o desenvolvimento de plataformas e
 os serviços sob medida: nome/objetivo, escopo e entregas previstas, serviços incluídos
@@ -9,7 +9,7 @@ A seção é opcional e todo o conteúdo é visível ao cliente. O preço contin
 a mensalidade total negociada; os textos não criam cobranças ou créditos adicionais.
 O exemplo Vision foi usado apenas em prévia sintética, sem cadastrar condições reais.
 
-Migration **0175_custom_contract_development.sql preparada, ainda não aplicada na VPS**:
+Migration **0175_custom_contract_development.sql aplicada e registrada na VPS**:
 adiciona `development_scope` à versão, valida os dados e copia o escopo da versão
 escolhida para cada novo pagamento/fatura. Preserva os termos de faturas já emitidas;
 o fulfillment existente leva o snapshot pago à assinatura. O painel de planos exibe
@@ -26,8 +26,29 @@ TypeScript e ESLint aprovados. Prévia com componentes reais e API simulada em
 oferta e ausência de overflow/erros JavaScript. Evidências locais em
 `tmp/contract-development-qa/`. Build Next/webpack de produção aprovado, incluindo
 TypeScript e geração de 109 páginas.
-**Pendente:** aplicar a migration antes de publicar o código e conferir o fluxo
-autenticado em produção. Nenhum contrato, pagamento ou saldo real foi alterado.
+
+Publicação autorizada pelo titular: commit **838218fcd21af6a5c2a8395f67e6a0c34391ac8c**
+na master e em produção, slot **a/3130**. Reserva **b/3131** mantém `5d041fed`.
+Build Linux/webpack/TypeScript e 109 páginas aprovados; health público confirmou o
+SHA. Candidato: `/`, `/login`, `/solucoes-personalizadas` e `/docs/api` 200; áreas
+privadas 307 sem sessão, APIs administrativas/cliente 401; oito assets 200; GET
+Inngest assinado 200, autenticado e 51 funções (igual ao slot anterior), anônimo 401.
+PostgREST confirmou leitura da nova coluna. Builder parado após a ativação.
+
+Backup antes da migration em
+`/var/backups/connectyhub/manual/pre-0175-20261001T154547Z/`: schema e tabela de
+contratos; cópia privada fora da VPS em `.codex/backups/connectyhub/` com os mesmos
+SHA-256 (schema `fb1dae0e…`, contratos `db42bac9…`). Ensaio transacional com rollback
+e aplicação definitiva validaram permissões, restrição do escopo e preservação do
+fingerprint dos pagamentos. Não houve ensaio de restauração integral do banco.
+
+Conferência autenticada na página publicada: formulário/consulta carregaram, seção
+de desenvolvimento abriu e campos adicionais puderam ser adicionados/removidos.
+A aba anterior com rascunho do titular foi preservada; tela nova ficou em outra aba.
+Nenhum contrato foi salvo: tabela continuou com zero registros. Nenhuma cobrança,
+pagamento ou saldo real foi alterado. **Pendente apenas a validação comercial do
+primeiro contrato real pelo titular e o percurso do cliente com esse contrato pago**;
+os snapshots de oferta, fatura, ativação e renovação passaram em testes locais.
 
 ## Recusa no painel e troca de cartão — publicado em 29/09/2026
 
