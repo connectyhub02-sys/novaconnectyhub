@@ -170,7 +170,7 @@ export async function processPaidBillingLifecycleNotifications(
         }
         continue; // Inform about access expiry without issuing a renewal invoice or debt notice.
       }
-      const cardAttempt = await (renewalPolicy.cardChargeAttemptEnabled ? attemptManagedAsaasRenewal(client, {organizationId:subscription.organization_id,subscriptionId:subscription.id,periodEnd:context.periodEnd,now,prepare:()=>ensureLifecycleRenewalCheckout(client,context,"paid_plan_renewal_reminder","card")}) : Promise.resolve({attempted:false,approved:false,failed:false})).catch((error) => {
+      const cardAttempt = await (renewalPolicy.cardChargeAttemptEnabled && subscription.metadata?.auto_charge_disabled !== true ? attemptManagedAsaasRenewal(client, {organizationId:subscription.organization_id,subscriptionId:subscription.id,periodEnd:context.periodEnd,now,prepare:()=>ensureLifecycleRenewalCheckout(client,context,"paid_plan_renewal_reminder","card")}) : Promise.resolve({attempted:false,approved:false,failed:false})).catch((error) => {
         summary.warnings.push(error instanceof Error ? error.message : "Falha na tentativa automatica de cartao.");
         return { attempted: false, approved: false, failed: true };
       });

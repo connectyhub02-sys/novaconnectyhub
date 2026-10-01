@@ -23,7 +23,7 @@ export default async function Page({searchParams}:{searchParams:Promise<{organiz
   if (result.error) throw new Error("Não foi possível listar os clientes.");
   const organizations = (result.data??[]).map(org => {
     const owner = accountUsers.find(user => roots.get(user.organizationId!)===org.id && user.orgRole==="owner") ?? accountUsers.find(user => roots.get(user.organizationId!)===org.id);
-    return {...org,name:owner?.email?`${org.name} · ${owner.email}`:org.name};
+    return {...org,name:[org.name,owner?.fullName,owner?.email].filter(Boolean).join(" · ")};
   });
   const requested = (await searchParams).organizationId;
   const initialOrganizationId = organizations.some(org=>org.id===requested)?requested:undefined;

@@ -170,6 +170,9 @@ async function applyControlAction(
   const { action } = input.payload;
 
   if (action === "activate_plan" || action === "renew_plan") {
+    const custom = await client.from("organization_custom_contracts").select("id").eq("organization_id", input.organization.id).limit(1);
+    if (custom.error) throw new Error("Não foi possível conferir as condições individuais.");
+    if (custom.data?.length) throw new Error("Esta conta possui contrato personalizado. Use Contratos personalizados para ativar a versão e preservar seus recursos, créditos e vencimento.");
     return activateOrRenewPlan(client, input);
   }
 

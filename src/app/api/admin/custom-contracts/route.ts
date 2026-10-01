@@ -3,11 +3,27 @@ import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { planFeatureDefinitions } from "@/lib/billing/plan-entitlements";
 import { parseContractDevelopmentScope } from "@/lib/billing/contract-development";
+import { loadCustomContractAccount } from "@/lib/billing/custom-contract-admin";
 export async function GET(request: Request) {
   const auth = await requirePlatformAdmin(); if (auth instanceof NextResponse) return auth;
   const id = new URL(request.url).searchParams.get("organizationId");
-  const { data, error } = await createServiceClient().from("organization_custom_contracts").select("*").eq("organization_id", id).order("version", { ascending: false }).limit(30);
-  return NextResponse.json(error ? { error: "Não foi possível carregar os contratos." } : { contracts: data }, { status: error ? 503 : 200 });
+  const client = createServiceClient();
+  try {
+    if (!id) {
+      const result = await client.from("organization_custom_contracts").select("id,organization_id,version,name,monthly_price_brl,included_credits").order("version", { ascending: false });
+      if (result.error) throw new Error("Não foi possível listar os contratos.");
+      const latest = Array.from(new Map((result.data ?? []).toReversed().map(row => [row.organization_id, row])).values());
+      const accounts = await Promise.all(latest.map(async contract => ({ contract, account: await loadCustomContractAccount(client, contract.organization_id) })));
+      return NextResponse.json({ accounts });
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Conta inválida." }, { status: 422 });
+    const account = await loadCustomContractAccount(client, id);
+    const { data, error } = await client.from("organization_custom_contracts").select("*").eq("organization_id", account.organizationId).order("version", { ascending: false }).limit(30);
+    if (error) throw new Error("Não foi possível carregar os contratos.");
+    return NextResponse.json({ contracts: data, account });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível carregar os contratos." }, { status: 503 });
+  }
 }
 export async function POST(request: Request) {
   const auth = await requirePlatformAdmin(); if (auth instanceof NextResponse) return auth;
