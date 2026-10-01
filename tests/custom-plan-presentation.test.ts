@@ -14,6 +14,15 @@ it("shows the accepted price and allowance in the customer's account without cha
   expect(mapSubscription(row)).toMatchObject({ planCode: "scale", planName: "Personalizado · Plataforma A", monthlyPriceBrl: 10000, includedCredits: 150000 });
   expect(mapSubscription({ ...row, metadata: {} })).toMatchObject({ planName: "Scale", monthlyPriceBrl: 497, includedCredits: 25000 });
 });
+it("labels new custom payments from their own snapshot while preserving old catalog history", () => {
+  const { mapPayment } = serverModuleHarness<{ mapPayment: (row: object) => Record<string, unknown> }>("src/app/api/dashboard/account/route.ts", {
+    "@/lib/billing/custom-plan-presentation": presentation,
+    "@/lib/billing/account-payment-notice": { accountPaymentNotice: () => null },
+  }, ["mapPayment"]);
+  const row = { id: "payment", status: "approved", organization_subscriptions: { plan_code: "scale" }, billing_invoices: null, payload: metadata };
+  expect(mapPayment(row)).toMatchObject({ planName: "Personalizado", planCode: "scale" });
+  expect(mapPayment({ ...row, payload: {} })).toMatchObject({ planName: null, planCode: "scale" });
+});
 it("lists each customer's own drafts separately from their accepted contract", async () => {
   const rows: Record<string, Record<string, unknown>[]> = {
     profiles: [{ id: "owner-a" }, { id: "owner-b" }],

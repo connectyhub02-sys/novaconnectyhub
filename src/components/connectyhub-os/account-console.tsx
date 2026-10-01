@@ -111,6 +111,7 @@ type AccountData = {
     id: string;
     planCode: string;
     planName: string;
+    autoChargeDisabled?: boolean;
     status: string;
     billingProvider: string | null;
     payerEmail: string | null;
@@ -142,6 +143,7 @@ type AccountData = {
     invoiceTotalBrl: number;
     providerInvoiceId: string | null;
     planCode: string | null;
+    planName?: string | null;
     invoiceHref: string | null;
     receiptUrl: string | null;
     checkoutHref: string | null;
@@ -1269,7 +1271,7 @@ function PaymentsTab({ payments }: { payments: AccountData["payments"] }) {
 }
 
 function PaymentTableRow({ payment }: { payment: AccountData["payments"][number] }) {
-  const reference = internalReference([payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
+  const reference = internalReference([payment.planName ? null : payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
 
   return (
     <tr className="group">
@@ -1277,7 +1279,7 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
         {formatCurrency(payment.amountBrl)}
       </td>
       <td className="border-b border-slate-200 px-4 py-3 align-top">
-        <p className="text-sm font-semibold text-slate-950">{formatPlanName(payment.planCode ?? "Plano")}</p>
+        <p className="text-sm font-semibold text-slate-950">{payment.planName ?? formatPlanName(payment.planCode ?? "Plano")}</p>
         {reference ? <InternalReference value={reference} /> : null}
       </td>
       <td className="border-b border-slate-200 px-4 py-3 align-top">
@@ -1304,14 +1306,14 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
 }
 
 function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number] }) {
-  const reference = internalReference([payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
+  const reference = internalReference([payment.planName ? null : payment.planCode, payment.attemptNotice ? null : payment.providerStatus ?? payment.invoiceStatus]);
 
   return (
     <article className="rounded-md border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-base font-semibold text-slate-950">{formatCurrency(payment.amountBrl)}</p>
-          <p className="mt-1 text-sm text-slate-500">{formatPlanName(payment.planCode ?? "Plano")}</p>
+          <p className="mt-1 text-sm text-slate-500">{payment.planName ?? formatPlanName(payment.planCode ?? "Plano")}</p>
         </div>
         <StatusBadge status={payment.status} />
       </div>

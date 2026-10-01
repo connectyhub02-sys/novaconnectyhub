@@ -468,6 +468,7 @@ function mapSubscription(row: SubscriptionRow) {
     id: row.id,
     planCode: row.plan_code,
     planName: custom ? `Personalizado · ${custom.name}` : plan?.name ?? row.plan_code,
+    autoChargeDisabled: row.metadata?.auto_charge_disabled === true,
     status: row.status,
     billingProvider: row.billing_provider,
     providerSubscriptionId: row.provider_subscription_id,
@@ -506,6 +507,7 @@ function mapPayment(row: PaymentRow) {
     invoiceTotalBrl: toNumber(invoice?.total_brl),
     providerInvoiceId: invoice?.provider_invoice_id ?? null,
     planCode: subscription?.plan_code ?? null,
+    planName: readCustomPlan(row.payload) ? "Personalizado" : null,
     invoiceHref: row.invoice_id && invoice ? `/dashboard/minha-conta/faturas/${encodeURIComponent(row.invoice_id)}` : null,
     receiptUrl: readPublicReceiptUrl(row.payload),
     checkoutHref: row.subscription_id && (isPendingSubscription(row.status) || row.status === "rejected")

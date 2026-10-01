@@ -1,3 +1,4 @@
+import { readCustomPlan } from "@/lib/billing/custom-plan-presentation";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 };
 
 type InvoiceRow = {
+  metadata: Record<string, unknown> | null;
   id: string;
   organization_id: string;
   subscription_id: string | null;
@@ -88,7 +90,7 @@ export default async function DashboardInvoicePage({
   const [{ data: invoice, error: invoiceError }, { data: items, error: itemsError }, { data: payments, error: paymentsError }] = await Promise.all([
     client
       .from("billing_invoices")
-      .select("id, organization_id, subscription_id, cycle_id, status, currency, subtotal_brl, discount_brl, total_brl, due_at, paid_at, provider, provider_invoice_id, provider_payment_id, created_at")
+      .select("id, organization_id, subscription_id, cycle_id, status, currency, subtotal_brl, discount_brl, total_brl, due_at, paid_at, provider, provider_invoice_id, provider_payment_id, created_at, metadata")
       .eq("id", invoiceId)
       .eq("organization_id", organization.id)
       .maybeSingle<InvoiceRow>(),
@@ -176,7 +178,7 @@ export default async function DashboardInvoicePage({
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <Info label="Plano" value={subscription?.plan_code ?? "Nao vinculado"} />
+            <Info label="Plano" value={readCustomPlan(invoice.metadata)?.label ?? subscription?.plan_code ?? "Nao vinculado"} />
             <Info label="Pagamento" value={invoice.paid_at ? formatDate(invoice.paid_at) : "Pendente"} />
             <Info label="Provedor" value={invoice.provider ?? "interno"} />
           </div>

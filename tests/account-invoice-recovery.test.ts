@@ -1,3 +1,4 @@
+import * as presentation from "../src/lib/billing/custom-plan-presentation";
 import { describe, expect, it, vi } from "vitest";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -13,7 +14,7 @@ function fixture(status="past_due",found=true){
   return q;
  });
  const page=serverModuleHarness<{default:(args:{params:Promise<{invoiceId:string}>})=>Promise<ReactNode>}>('src/app/dashboard/minha-conta/faturas/[invoiceId]/page.tsx',{
-  'react/jsx-runtime':jsxRuntime,'next/server':{connection:async()=>{}},'next/navigation':{notFound:()=>{throw Error('NOT_FOUND');},redirect:()=>{throw Error('REDIRECT');}},
+  '@/lib/billing/custom-plan-presentation':presentation,'react/jsx-runtime':jsxRuntime,'next/server':{connection:async()=>{}},'next/navigation':{notFound:()=>{throw Error('NOT_FOUND');},redirect:()=>{throw Error('REDIRECT');}},
   '@/lib/supabase/profile':{getCurrentWorkspace},'@/lib/supabase/service':{createServiceClient:()=>({from})},
   '@/components/connectyhub-os/connecty-shell':{ConnectyShell:({children}:{children:ReactNode})=>children},'@/components/connectyhub-os/account-invoice-actions':{AccountInvoiceActions:()=>null},
  });
