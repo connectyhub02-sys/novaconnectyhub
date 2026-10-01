@@ -9,10 +9,11 @@ beforeAll(async () => {
   db = await commercialDb();
   await db.exec(`alter table profiles add column is_platform_admin boolean default false;
     create table organization_billing_limits(organization_id uuid primary key,allow_overage boolean,overage_limit_credits numeric,hard_block_when_empty boolean,alert_threshold_percent integer);
+    create table billing_pix_authorizations(subscription_id uuid,state text);
     insert into billing_plans(plan_code,name,status,monthly_price_brl,included_credits) values('scale','Scale','active',497,1000);`);
   await db.query("insert into auth.users(id) values($1)", [admin]);
   await db.query("insert into profiles(id,is_platform_admin) values($1,true)", [admin]);
-  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
+  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation", "0177_custom_contract_provider_guard"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
 }, 60000);
 afterAll(async () => { await db?.close(); });
 async function account() {
@@ -109,4 +110,12 @@ it("rejects other accounts, non-admins, stale/future versions, expired deadlines
   expect((await db.query("select * from test_credit_grants where organization_id=$1",[d.org])).rows).toHaveLength(0);
   const permission = await db.query("select has_function_privilege('authenticated','activate_custom_contract(uuid,uuid,uuid)','EXECUTE') allowed");
   expect(permission.rows[0]).toEqual({allowed:false});
+});
+it("rolls back access and credits when an external Pix agreement is still preparing", async () => {
+  const a=await account(), id=await contract(a);
+  await db.query("insert into billing_pix_authorizations(subscription_id,state) values($1,'preparing')",[a.sub]);
+  await expect(activate(a.org,id)).rejects.toThrow("PROVIDER_SUBSCRIPTION_REVIEW_REQUIRED");
+  expect((await db.query("select * from test_credit_grants where organization_id=$1",[a.org])).rows).toHaveLength(0);
+  expect((await db.query<{status:string}>("select status from organization_subscriptions where id=$1",[a.sub])).rows[0].status).toBe("past_due");
+  expect((await db.query("select * from billing_payments where organization_id=$1",[a.org])).rows).toHaveLength(0);
 });
