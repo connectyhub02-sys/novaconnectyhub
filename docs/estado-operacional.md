@@ -1,5 +1,65 @@
 # Estado operacional da ConnectyHub
 
+## Ativação administrativa de contratos personalizados — publicada em 01/10/2026, 16h12 BRT
+
+Implementação `ddf173bf`; complemento SQL `76263092`. A tela lista contas com
+contrato, titular, versão ativa e vencimento. O formulário de nova versão fica
+recolhido quando já há condições. APIs externas e ferramentas do painel têm
+explicações separadas. A ação de ativação mostra previamente créditos e vencimento.
+
+Migrations **0176 e 0177 aplicadas e registradas**: ativação transacional e auditada,
+somente por administrador, vinculando snapshot à assinatura e liberando a franquia.
+Não marca pagamento como aprovado. Idempotência por versão; alteração durante ciclo
+ativo preserva datas e concede apenas eventual diferença positiva de franquia.
+Permissões e limites da nova versão entram em vigor com a ativação administrativa.
+O botão genérico de ativar/renovar catálogo direciona contas personalizadas para
+esse fluxo, evitando substituir seus termos pelos valores do Scale.
+
+A primeira ativação usa o vencimento futuro cadastrado; pagamento fica pendente
+em fatura local, sem requisição ao provedor ou débito automático. Mudanças no mesmo
+ciclo substituem somente cobranças locais não enviadas, preservando seus registros
+cancelados e valores originais. Pagamento em andamento, assinatura externa ou Pix
+Automático em estado vivo impedem a ativação integralmente. Pagamentos antigos não
+sobrescrevem a versão administrativa; cada nova fatura personalizada recebe sua
+própria identidade de concessão de créditos. A renovação paga continua concedendo
+a franquia do próximo ciclo uma única vez.
+
+Validação: 61 testes nos grupos de contratos, acesso, campanhas e recursos,
+incluindo nova proteção Pix; TypeScript e lint dos arquivos novos aprovados.
+Prévia real do componente conferida em desktop e 390×844: listagem, seleção,
+ativação, status, cópia de versão e ausência de overflow horizontal.
+Backup privado prévio em `/var/backups/connectyhub/manual/pre-0176-20261001/`,
+com cópia local fora do Git. Não é backup integral de toda a instalação.
+Aplicação `ddf173bff67d0135806a94b8906e308b950c9c4d` publicada no slot **b/3131**;
+health local e público conferidos, endpoints administrativos sem sessão retornam 401.
+Slot anterior preservado para rollback e builder parado sob lock após a publicação.
+
+Primeiro contrato real ativado pelo formulário às 16h13 BRT, conforme autorização
+do titular. Conferência independente confirmou organização e assinatura ativas,
+snapshot da versão correta, limite específico e permissões das três APIs; regra
+de acesso do cliente permite os recursos faturáveis e o cadastro está completo.
+Uma ativação registrada, concessão integral única da franquia e fatura local aberta
+com vencimento negociado. Pagamento novo pendente, tentativa antiga recusada
+preservada e nenhuma nova tentativa de cartão. Valores e dados do cliente ficam
+no cadastro privado. Painel também conferido por acesso administrativo assistido.
+Integrações externas, chaves e números conectados ainda exigem configuração e
+validação própria; esta publicação comprova liberação comercial, não operação
+de ponta a ponta das integrações da plataforma do cliente.
+
+## Cadastro real de condições individuais — 01/10/2026
+
+Primeira versão real com desenvolvimento e APIs cadastrada pelo formulário administrativo,
+após confirmação do titular. Persistência conferida no histórico e em consulta somente
+leitura ao banco: escopo, seis campos adicionais e limite explícito de WhatsApp.
+Condições comerciais e conteúdo do cliente ficam no cadastro privado, fora deste registro.
+O início histórico do projeto foi descrito no escopo; a API aceita vigência técnica
+atual ou futura, não retroativa. Não houve emissão de cobrança, pagamento, crédito,
+ativação de API ou alteração do ciclo/faturas anteriores. A data de primeiro pagamento
+registrada no escopo não agenda por si só cobrança de uma assinatura já existente.
+Ampliações de limite dependem do snapshot da nova versão ativado na assinatura;
+editar uma proposta não modifica imediatamente o limite vigente. Regularização da
+cobrança existente e validação das integrações permanecem etapas separadas.
+
 ## Desenvolvimento nos contratos personalizados — publicado em 01/10/2026, 12h55 BRT
 
 O contrato individual passa a descrever também o desenvolvimento de plataformas e
@@ -7,7 +67,8 @@ os serviços sob medida: nome/objetivo, escopo e entregas previstas, serviços i
 na mensalidade, exclusões/condições e até 12 campos adicionais com nome e descrição.
 A seção é opcional e todo o conteúdo é visível ao cliente. O preço continua sendo
 a mensalidade total negociada; os textos não criam cobranças ou créditos adicionais.
-O exemplo Vision foi usado apenas em prévia sintética, sem cadastrar condições reais.
+Na validação da publicação abaixo, o exemplo Vision foi usado apenas em prévia sintética,
+sem cadastrar condições reais; o cadastro posterior está registrado acima.
 
 Migration **0175_custom_contract_development.sql aplicada e registrada na VPS**:
 adiciona `development_scope` à versão, valida os dados e copia o escopo da versão
