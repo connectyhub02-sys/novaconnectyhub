@@ -1,5 +1,51 @@
 # Estado operacional da ConnectyHub
 
+## Identidade e seleção do plano personalizado — publicado em 01/10/2026
+
+Implementação `0d2a1814`, publicada às 16:58 BRT: Clientes/Controle, Minha Conta, Planos e resumo executivo
+passam a ler nome comercial, preço e franquia do snapshot personalizado vinculado
+à assinatura. O código do plano-base continua técnico, sem substituir o nome
+comercial por Scale. MRR e lista executiva usam o valor negociado, resolvendo a
+pendência registrada na publicação anterior.
+
+Controle oferece somente os contratos da própria conta, seleciona a versão
+vinculada e mostra franquia e limites. Uma versão nova é ativada pelo mesmo RPC
+transacional, sem repetir créditos do ciclo. Catálogo genérico não pode substituir
+acidentalmente um contrato personalizado. A versão já vinculada não dispara nova
+concessão. O cadastro ganhou Salvar e ativar, além de Salvar sem ativar; se a segunda
+etapa falhar, a interface informa que a versão foi salva sem ativação.
+
+Validação local: TypeScript e lint aprovados, 43 testes em nove arquivos,
+incluindo isolamento de contratos entre clientes, termos aceitos versus propostas
+novas, concessão idempotente e regressão do painel. Prévia real do componente
+conferida em desktop e 390×844, sem overflow horizontal, e fluxo Salvar e ativar
+exercitado com dados sintéticos. Consultas somente leitura confirmaram que o
+snapshot real retorna preço, franquia e identidade personalizados, sem avisos.
+O painel autenticado do cliente em produção confirmou a identidade Personalizado,
+valor e franquia contratados, além do saldo ajustado. O controle administrativo foi
+conferido na prévia do componente e nas consultas reais; a sessão de navegador
+disponível nesta conferência era de cliente, sem permissão de administrador.
+
+Complemento `ed1213e9`: cobranças e faturas usam o snapshot da própria operação
+para identificar Personalizado, preservando o nome original do histórico do
+catálogo. O aviso de cartão respeita `auto_charge_disabled`, sem prometer débito
+automático quando desativado no contrato. TypeScript, lint e 19 testes focados
+(apresentação, recusa de cartão e recuperação de faturas) aprovados. Complemento
+publicado às 17:13 BRT no slot B/3131. Health público confirmou o SHA
+`ed1213e94e358bc377b2f0beb02d6a855710127a`; endpoints administrativos e de conta
+continuam retornando 401 sem autenticação. No painel real do cliente, a cobrança
+personalizada foi identificada corretamente, o histórico antigo manteve o plano
+original e o aviso confirmou a ausência de débito automático. Nenhum pagamento
+foi executado. Slot anterior preservado para rollback e builder parado ao concluir.
+
+Ajuste de saldo solicitado e confirmado pelo titular executado com bloqueio de
+carteira, registro de ajuste negativo no extrato, referência idempotente e auditoria.
+Não altera pagamentos, créditos originalmente recebidos nem consumo real do ciclo.
+Backup privado em `credits-before-balance-adjustment.sql`, junto ao backup da
+publicação anterior, com cópia local fora do Git. Valor e cliente ficam no registro
+privado. Consulta final confirmou saldo-alvo, ausência de reservas e um único
+ajuste idempotente. Publicação e conferência visual em produção concluídas.
+
 ## Ativação administrativa de contratos personalizados — publicada em 01/10/2026, 16h12 BRT
 
 Implementação `ddf173bf`; complemento SQL `76263092`. A tela lista contas com
