@@ -88,3 +88,14 @@ describe("prompt sections", () => {
     expect(measurePromptSections(sections)).toEqual({ global: 5, agent_prompt: 14 });
   });
 });
+
+describe("order tool failures", () => {
+  it("records provider usage of failed tool rounds as absorbed cost, never as a customer debit", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
+    const helper = source.slice(source.indexOf("async function meterAbsorbedOrderToolUsage"), source.indexOf("async function meterAbsorbedOrderToolUsage") + 900);
+    expect(helper).toContain('billingMode: "platform_absorbed"');
+    expect(helper).toContain("order_tool_failed:${randomUUID()}");
+    expect(source).toContain("if (usage) await meterAbsorbedOrderToolUsage(input.client, input.context, modelId, usage, error).catch(() => {});\n    throw error;");
+  });
+});

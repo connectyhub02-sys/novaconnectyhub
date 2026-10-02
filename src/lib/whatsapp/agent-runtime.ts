@@ -4980,6 +4980,8 @@ function buildSystemInstructionSections(input: {
   ];
 }
 
+// Full prompt text; kept for the runtime test harness, which builds prompts by name.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildSystemInstruction(input: Parameters<typeof buildSystemInstructionSections>[0]) {
   return joinPromptSections(buildSystemInstructionSections(input));
 }
@@ -13879,62 +13881,80 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
   let usage: GeminiTokenUsage | null = null;
   let corrected = false;
   const seenCalls = new Set<string>();
-  for (let round = 0; round < orderToolMaxRounds; round++) {
-    // The last round forbids tools: the customer always gets an answer, never silence.
-    const lastRound = round === orderToolMaxRounds - 1;
-    const response = await fetchWithTimeout(url, {
-      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
-        tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }],
-        toolConfig: { functionCallingConfig: { mode: lastRound ? "NONE" : "AUTO" } },
-        generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
-    }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
-    const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
-    if (!response.ok) throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
-    usage = sumGeminiUsage(usage, extractGeminiUsageMetadata(data));
-    const content = readRecord(readRecord(Array.isArray(readRecord(data)?.candidates) ? (readRecord(data)!.candidates as unknown[])[0] : null)?.content);
-    const parts = Array.isArray(content?.parts) ? content!.parts as unknown[] : [];
-    const functionCalls = parts.map(part => readRecord(readRecord(part)?.functionCall)).filter((call): call is JsonRecord => Boolean(call?.name));
-    // On the last round a tool call is ignored: only an answer to the customer counts.
-    if (functionCalls.length && !lastRound) {
-      // Keep the model turn intact (including thought signatures) before answering it.
-      contents.push({ role: "model", parts });
-      const responses: JsonRecord[] = [];
-      for (const call of functionCalls) {
-        const name = String(call.name);
-        const args = readRecord(call.args) ?? {};
-        // The same call with the same data in one reply is a loop, not new information.
-        const signature = `${name}:${JSON.stringify(args)}`;
-        const repeated = seenCalls.has(signature);
-        seenCalls.add(signature);
-        const result = repeated
-          ? { ok: false, motivo: "Esta ferramenta já foi chamada com os mesmos dados nesta resposta. Use o resultado anterior e responda ao cliente." }
-          : await executeOrderTool({ client: input.client, context: input.context, scope: input.scope, latestInbound: input.latestInbound,
-            token: input.token, phone: input.phone, deferred, name, args });
-        calls.push({ name, ok: result.ok === true, reason: result.ok === true ? undefined : asString(result.motivo) ?? undefined });
-        responses.push({ functionResponse: { name, ...(call.id ? { id: call.id } : {}), response: result } });
+  try {
+    for (let round = 0; round < orderToolMaxRounds; round++) {
+      // The last round forbids tools: the customer always gets an answer, never silence.
+      const lastRound = round === orderToolMaxRounds - 1;
+      const response = await fetchWithTimeout(url, {
+        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
+          tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }],
+          toolConfig: { functionCallingConfig: { mode: lastRound ? "NONE" : "AUTO" } },
+          generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
+      }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
+      const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
+      if (!response.ok) throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
+      usage = sumGeminiUsage(usage, extractGeminiUsageMetadata(data));
+      const content = readRecord(readRecord(Array.isArray(readRecord(data)?.candidates) ? (readRecord(data)!.candidates as unknown[])[0] : null)?.content);
+      const parts = Array.isArray(content?.parts) ? content!.parts as unknown[] : [];
+      const functionCalls = parts.map(part => readRecord(readRecord(part)?.functionCall)).filter((call): call is JsonRecord => Boolean(call?.name));
+      // On the last round a tool call is ignored: only an answer to the customer counts.
+      if (functionCalls.length && !lastRound) {
+        // Keep the model turn intact (including thought signatures) before answering it.
+        contents.push({ role: "model", parts });
+        const responses: JsonRecord[] = [];
+        for (const call of functionCalls) {
+          const name = String(call.name);
+          const args = readRecord(call.args) ?? {};
+          // The same call with the same data in one reply is a loop, not new information.
+          const signature = `${name}:${JSON.stringify(args)}`;
+          const repeated = seenCalls.has(signature);
+          seenCalls.add(signature);
+          const result = repeated
+            ? { ok: false, motivo: "Esta ferramenta já foi chamada com os mesmos dados nesta resposta. Use o resultado anterior e responda ao cliente." }
+            : await executeOrderTool({ client: input.client, context: input.context, scope: input.scope, latestInbound: input.latestInbound,
+              token: input.token, phone: input.phone, deferred, name, args });
+          calls.push({ name, ok: result.ok === true, reason: result.ok === true ? undefined : asString(result.motivo) ?? undefined });
+          responses.push({ functionResponse: { name, ...(call.id ? { id: call.id } : {}), response: result } });
+        }
+        contents.push({ role: "user", parts: responses });
+        continue;
       }
-      contents.push({ role: "user", parts: responses });
-      continue;
+      const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
+      if (!text) {
+        if (!lastRound) throw new Error("Gemini nao retornou uma resposta para o lead.");
+        return { response: { text: orderToolFallbackText(calls, deferred), modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+      }
+      // A claimed action needs a successful tool in this same turn.
+      // "Done" needs an executing tool; a proposal only justifies announcing the summary.
+      const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
+      const proposed = calls.some(call => call.ok && (call.name === "propor_alteracao" || call.name === "montar_pedido"));
+      if (!corrected && !lastRound && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
+        corrected = true;
+        contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
+        continue;
+      }
+      const rendered = enforceIdentityGuard(normalizeAssistantText(text.replace(/https?:\/\/\S+/g, "").trim()), input.behavior, input.agent);
+      return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
     }
-    const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
-    if (!text) {
-      if (!lastRound) throw new Error("Gemini nao retornou uma resposta para o lead.");
-      return { response: { text: orderToolFallbackText(calls, deferred), modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
-    }
-    // A claimed action needs a successful tool in this same turn.
-    // "Done" needs an executing tool; a proposal only justifies announcing the summary.
-    const executed = calls.some(call => call.ok && orderToolExecutingNames.has(call.name));
-    const proposed = calls.some(call => call.ok && (call.name === "propor_alteracao" || call.name === "montar_pedido"));
-    if (!corrected && !lastRound && !executed && claimsUnexecutedOrderAction(text, !proposed)) {
-      corrected = true;
-      contents.push({ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Nota interna: sua resposta afirmou uma ação no pedido que nenhuma ferramenta executou. Reescreva sem afirmar ações; se o cliente pediu uma alteração, use a ferramenta adequada." }] });
-      continue;
-    }
-    const rendered = enforceIdentityGuard(normalizeAssistantText(text.replace(/https?:\/\/\S+/g, "").trim()), input.behavior, input.agent);
-    return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+    throw new Error(`O atendimento com ferramentas do pedido excedeu o limite de etapas: ${calls.map(call => `${call.name}${call.ok ? "" : "(recusada)"}`).join(", ")}.`);
+  } catch (error) {
+    // Rounds already answered by the provider cost money even when the turn fails.
+    // The lead got no reply, so the cost is recorded as absorbed, never charged.
+    if (usage) await meterAbsorbedOrderToolUsage(input.client, input.context, modelId, usage, error).catch(() => {});
+    throw error;
   }
-  throw new Error(`O atendimento com ferramentas do pedido excedeu o limite de etapas: ${calls.map(call => `${call.name}${call.ok ? "" : "(recusada)"}`).join(", ")}.`);
+}
+
+async function meterAbsorbedOrderToolUsage(client: SupabaseClient, context: RunContext, modelId: string, usage: GeminiTokenUsage, error: unknown) {
+  await meterGeminiGenerationUsage({
+    client, organizationId: context.organization.id, featureCode: "chat_completion", modelId,
+    agentId: context.agent.id, agentRunId: context.run.id, conversationId: context.conversationId, leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context), billingMode: "platform_absorbed", usage,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:order_tool_failed:${randomUUID()}`,
+    metadata: { source: "whatsapp_agent", channel: "whatsapp", absorbed_reason: "order_tool_turn_failed",
+      error: (error instanceof Error ? error.message : String(error)).slice(0, 200) },
+  });
 }
 
 /**

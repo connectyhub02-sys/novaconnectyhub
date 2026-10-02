@@ -591,6 +591,7 @@ function mapUsageSummary(rows: UsageSummaryEventRow[], billingAccess: Awaited<Re
 
 function usagePublicCategory(featureCode: string | null) {
   if (!featureCode) return "Consumo da plataforma";
+  if (featureCode.startsWith("studio_") || featureCode === "voice_clone") return "Estudio de voz";
   if (featureCode.includes("audio") || featureCode === "voice_reply_whatsapp" || featureCode === "text_to_speech") return "Audio";
   if (featureCode.includes("media") || featureCode.includes("image") || featureCode.includes("video") || featureCode.includes("document")) return "Midia recebida";
   if (featureCode.includes("memory") || featureCode.includes("summary") || featureCode.includes("state")) return "Memoria e contexto";

@@ -66,6 +66,11 @@ function MonthBody({ data }: { data: CostCenterMonth }) {
   const { attendance, charged, voice } = data;
   return (
     <div>
+      {data.missingRates.length > 0 && (
+        <p className="mb-3 rounded-lg px-3 py-2 text-[12px] text-amber-800" style={{ background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>
+          Uso sem tarifa neste mês (não cobrado, aguardando preço): {data.missingRates.map(item => `${item.featureCode}${item.modelId ? ` (${item.modelId})` : ""} × ${item.events}`).join(", ")}.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Value label="Dinheiro recebido" value={brl(data.cash.receivedBrl)} detail={`${int(data.cash.invoicesPaid)} fatura(s) paga(s)`} />
         <Value label="Custo de IA" value={brl(data.variable.costBrl)} detail={`${usd(data.variable.costUsd)} a ${brl(data.fxUsdBrl)}`} />

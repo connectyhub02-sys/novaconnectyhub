@@ -42,6 +42,7 @@ export type CostCenterMonthRaw = {
   snapshot: { wallet_balance_credits: number; wallet_reserved_credits: number; connected_instances: number; paying_organizations: number };
   settings: Record<string, unknown>;
   fixed_costs: CostCenterFixedCostRow[];
+  missing_rates?: Array<{ feature_code: string; model_id: string | null; events: number }>;
 };
 
 export type CostCenterGroup = {
@@ -71,6 +72,8 @@ export type CostCenterMonth = {
   voice: { characters: number; quotaUnits: number | null; quotaShare: number | null; chargedBrl: number; subscriptionBrl: number; resultBrl: number; tableCostBrl: number };
   credits: { flow: Array<{ origin: string; label: string; transactions: number; credits: number }>; walletBalance: number; walletReserved: number; liabilityCostBrl: number | null };
   snapshot: { connectedInstances: number; payingOrganizations: number };
+  /** Usage waiting for a tariff: it was not charged and must be priced. */
+  missingRates: Array<{ featureCode: string; modelId: string | null; events: number }>;
   notes: string[];
 };
 
@@ -256,6 +259,7 @@ export function buildCostCenterMonth(month: string, raw: CostCenterMonthRaw): Co
       liabilityCostBrl: costPerCredit === null ? null : money(walletBalance * costPerCredit),
     },
     snapshot: { connectedInstances: num(raw.snapshot?.connected_instances), payingOrganizations: num(raw.snapshot?.paying_organizations) },
+    missingRates: (raw.missing_rates ?? []).map(row => ({ featureCode: row.feature_code, modelId: row.model_id, events: num(row.events) })),
     notes,
   };
 }
