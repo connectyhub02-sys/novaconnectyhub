@@ -806,6 +806,12 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  // 09:00 BRT: margin, missing tariffs, voice quota and invoice deviations become admin alerts.
+  inngest.createFunction({ id: "connectyhub-cost-center-daily-check", name: "Conferência diária do centro de custo", retries: 1, triggers: [{ cron: "0 12 * * *" }] },
+    async ({ step }) => step.run("check-cost-center", async () => {
+      const [{ runCostCenterDailyCheck }, { createServiceClient }] = await Promise.all([import("@/lib/billing/cost-center-month"), import("@/lib/supabase/service")]);
+      return runCostCenterDailyCheck(createServiceClient());
+    })),
   inngest.createFunction({id:'connectyhub-studio-operation',name:'Operações do Estúdio de Voz e Áudio',retries:0,concurrency:{limit:8},triggers:[{event:'connectyhub/studio.operation'}]},async({event,step})=>{
     const result=await step.run('process-studio-receipt',async()=>{const {runStudioOperation}=await import('@/lib/voice-api/studio-operations');return runStudioOperation(createServiceClient(),String(event.data.operationId??''));});
     if(['failed','uncertain','reconciliation_pending'].includes(result.status))throw new Error(`Studio operation ${result.status}`);

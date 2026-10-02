@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { brazilianDate, type CostCenterMonth } from "@/lib/billing/cost-center-report";
 import type { AgentOptimizationAdmin, CostCenterMonthResult } from "@/lib/billing/cost-center-month";
+import type { ElevenLabsQuota } from "@/lib/elevenlabs/subscription";
 import { NeonBadge, Panel } from "./panel-primitives";
 
 const brl = (value: number | null, digits = 2) =>
@@ -62,10 +63,21 @@ export function CostCenterMonthPanel({ result }: { result: CostCenterMonthResult
   );
 }
 
-function MonthBody({ data }: { data: CostCenterMonth }) {
+function MonthBody({ data }: { data: CostCenterMonth & { voiceQuota?: ElevenLabsQuota | null } }) {
   const { attendance, charged, voice } = data;
   return (
     <div>
+      {data.alerts.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          {data.alerts.slice(0, 5).map(alert => (
+            <div key={`${alert.occurredAt}:${alert.title}`} className="rounded-lg px-3 py-2 text-[12px]" style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.25)" }}>
+              <p className="font-semibold text-rose-700">{alert.title}</p>
+              {alert.summary && <p className="text-slate-600">{alert.summary}</p>}
+              <p className="text-[11px] text-slate-500">{new Date(alert.occurredAt).toLocaleDateString("pt-BR")}</p>
+            </div>
+          ))}
+        </div>
+      )}
       {data.missingRates.length > 0 && (
         <p className="mb-3 rounded-lg px-3 py-2 text-[12px] text-amber-800" style={{ background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.3)" }}>
           Uso sem tarifa neste mês (não cobrado, aguardando preço): {data.missingRates.map(item => `${item.featureCode}${item.modelId ? ` (${item.modelId})` : ""} × ${item.events}`).join(", ")}.
@@ -98,7 +110,10 @@ function MonthBody({ data }: { data: CostCenterMonth }) {
 
       <Section title="Voz ElevenLabs">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Value label="Caracteres no mês" value={int(voice.characters)} detail={voice.quotaUnits ? `${percent(voice.quotaShare)} da franquia` : "franquia não cadastrada"} />
+          <Value label="Caracteres no mês" value={int(voice.characters)}
+            detail={data.voiceQuota ? `franquia ${data.voiceQuota.tier ?? ""}: ${percent(data.voiceQuota.share)} usada (${int(data.voiceQuota.used)} de ${int(data.voiceQuota.limit)})`
+              : voice.quotaUnits ? `${percent(voice.quotaShare)} da franquia` : "franquia não cadastrada"}
+            tone={data.voiceQuota && data.voiceQuota.share >= 0.8 ? "bad" : undefined} />
           <Value label="Cobrado em voz" value={brl(voice.chargedBrl)} />
           <Value label="Assinatura" value={brl(voice.subscriptionBrl)} detail={`tabela por caractere: ${brl(voice.tableCostBrl)}`} />
           <Value label="Resultado da voz" value={brl(voice.resultBrl)} tone={voice.resultBrl >= 0 ? "good" : "bad"} />
@@ -163,6 +178,28 @@ function MonthBody({ data }: { data: CostCenterMonth }) {
           </div>
         </Section>
       </div>
+
+      <Section title="Conferência com as faturas">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+              <th className="py-1">Fornecedor</th><th className="py-1 text-right">Estimado</th><th className="py-1 text-right">Fatura</th><th className="py-1 text-right">Diferença</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.reconciliation.map(row => (
+              <tr key={row.provider} className="border-t" style={{ borderColor: "var(--ch-border)" }}>
+                <td className="py-1.5">{row.label}</td>
+                <td className="py-1.5 text-right font-mono">{brl(row.estimatedBrl)}</td>
+                <td className="py-1.5 text-right font-mono">{row.invoicedBrl === null ? "—" : brl(row.invoicedBrl)}</td>
+                <td className={`py-1.5 text-right font-mono ${row.deviation !== null && Math.abs(row.deviation) > 0.15 ? "text-rose-600" : ""}`}>{row.deviation === null ? "—" : percent(row.deviation)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {data.invoicedResultBrl !== null && <p className="mt-1 text-[12px]">Resultado com as faturas registradas: <strong>{brl(data.invoicedResultBrl)}</strong></p>}
+        <InvoiceForm month={data.month} />
+      </Section>
 
       <ul className="mt-4 list-disc space-y-1 pl-5 text-[11px] leading-5 text-slate-500">
         {data.notes.map(note => <li key={note}>{note}</li>)}
@@ -304,5 +341,32 @@ export function AgentOptimizationPanel({ data }: { data: AgentOptimizationAdmin 
         </form>
       </div>
     </Panel>
+  );
+}
+
+function InvoiceForm({ month }: { month: string }) {
+  const [provider, setProvider] = useState("gemini");
+  const [currency, setCurrency] = useState<"USD" | "BRL">("USD");
+  const [amount, setAmount] = useState("");
+  const { state, save } = useSave();
+  const field = "mt-1 rounded-md border px-2 py-1";
+  return (
+    <form className="mt-2 flex flex-wrap items-end gap-2 text-[12px]" onSubmit={(event: FormEvent) => { event.preventDefault(); void save({ invoice: { month, provider, currency, amount } }); }}>
+      <label><span className="block text-[11px] text-slate-500">Fornecedor</span>
+        <select className={field} style={{ borderColor: "var(--ch-border)" }} value={provider} onChange={event => setProvider(event.target.value)}>
+          <option value="gemini">Google Gemini</option><option value="elevenlabs">ElevenLabs</option><option value="uazapi">UAZAPI</option><option value="vps">VPS</option><option value="other">Outros</option>
+        </select>
+      </label>
+      <label><span className="block text-[11px] text-slate-500">Moeda</span>
+        <select className={field} style={{ borderColor: "var(--ch-border)" }} value={currency} onChange={event => setCurrency(event.target.value as "USD" | "BRL")}>
+          <option value="USD">US$</option><option value="BRL">R$</option>
+        </select>
+      </label>
+      <label><span className="block text-[11px] text-slate-500">Valor da fatura de {monthLabel(month)}</span>
+        <input className={`${field} w-28`} style={{ borderColor: "var(--ch-border)" }} inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} />
+      </label>
+      <button className="rounded-md bg-cyan-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50" disabled={state.busy || !amount}>Registrar fatura</button>
+      {state.message && <span className={`text-[11px] ${state.error ? "text-rose-600" : "text-emerald-600"}`}>{state.message}</span>}
+    </form>
   );
 }

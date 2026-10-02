@@ -16,7 +16,7 @@ beforeAll(async () => {
     create table credit_wallets(id uuid primary key default gen_random_uuid(), balance_credits numeric, reserved_credits numeric);
     create table whatsapp_instances(id uuid primary key default gen_random_uuid(), provider text, status text);
     create table organizations(id uuid primary key default gen_random_uuid(), status text, plan_code text);
-    create table intelligence_events(id uuid primary key default gen_random_uuid(), event_type text, payload jsonb, created_at timestamptz default now());`);
+    create table intelligence_events(id uuid primary key default gen_random_uuid(), event_type text, title text, summary text, payload jsonb, occurred_at timestamptz default now(), created_at timestamptz default now());`);
   await db.exec(readFileSync("supabase/migrations/0179_cost_center_monthly_truth.sql", "utf8"));
   await db.exec(`
     insert into usage_events(provider,feature_code,model_id,billing_mode,status,input_tokens,output_tokens,output_units,connecty_charge_credits,provider_cost,metadata,occurred_at) values
@@ -118,5 +118,22 @@ describe("cost center monthly report SQL", () => {
     expect(Number(cache.avg_humanity_score)).toBe(84);
     expect(Number(r.prompt_orders.find(row => row.prompt_order === "unmeasured")!.replies)).toBe(3);
     expect(r.missing_rates).toEqual([{ feature_code: "ai_traffic_manager", model_id: "gemini-3.6-flash", events: 1 }]);
+  });
+
+  it("reports the month's provider invoices and cost center alerts, privately", async () => {
+    await db.exec(readFileSync("supabase/migrations/0183_cost_center_reconciliation.sql", "utf8"));
+    await db.exec(`insert into provider_invoices(invoice_month,provider,currency,amount) values('2026-09-01','gemini','USD',21.5),('2026-08-01','gemini','USD',3);
+      insert into intelligence_events(event_type,title,summary,payload,occurred_at) values
+        ('cost_center.alert','Franquia ElevenLabs em 85%','x','{"kind":"voice_quota"}','2026-09-25T12:00:00Z'),
+        ('cost_center.alert','Fora do mês','x','{"kind":"margin"}','2026-10-02T12:00:00Z');`);
+    await expect(db.query("insert into provider_invoices(invoice_month,provider,currency,amount) values('2026-09-15','gemini','USD',1)")).rejects.toThrow();
+    const r = (await db.query<{ r: { invoices: Array<Record<string, unknown>>; alerts: Array<Record<string, unknown>>; prompt_orders: unknown[] } }>("select cost_center_month_report($1,$2) r", [from, to])).rows[0].r;
+    expect(r.invoices).toEqual([{ provider: "gemini", currency: "USD", amount: 21.5, notes: null }]);
+    expect(r.alerts).toHaveLength(1);
+    expect(r.alerts[0]).toMatchObject({ title: "Franquia ElevenLabs em 85%", kind: "voice_quota" });
+    expect(Array.isArray(r.prompt_orders)).toBe(true);
+    await db.exec("set role authenticated");
+    await expect(db.query("select * from provider_invoices")).rejects.toThrow();
+    await db.exec("reset role");
   });
 });

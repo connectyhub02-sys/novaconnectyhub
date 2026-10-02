@@ -77,5 +77,21 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, value });
   }
 
+  const invoice = record(body.invoice);
+  if (invoice) {
+    const month = typeof invoice.month === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(invoice.month) ? `${invoice.month}-01` : null;
+    const provider = ["gemini", "elevenlabs", "uazapi", "vps", "other"].includes(String(invoice.provider)) ? String(invoice.provider) : null;
+    const currency = invoice.currency === "USD" || invoice.currency === "BRL" ? invoice.currency : null;
+    const amount = invoice.amount === 0 || invoice.amount === "0" ? 0 : positive(invoice.amount, 10_000_000);
+    if (!month || !provider || !currency || amount === null) return NextResponse.json({ error: "Informe mês, fornecedor, moeda e valor da fatura." }, { status: 400 });
+    const { error } = await client.from("provider_invoices").upsert({
+      invoice_month: month, provider, currency, amount, notes: typeof invoice.notes === "string" ? invoice.notes.slice(0, 300) : null,
+      updated_at: now, updated_by: auth.userId,
+    }, { onConflict: "invoice_month,provider" });
+    if (error) return NextResponse.json({ error: "Não foi possível salvar a fatura." }, { status: 500 });
+    revalidatePath("/admin/financeiro");
+    return NextResponse.json({ ok: true });
+  }
+
   return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
 }

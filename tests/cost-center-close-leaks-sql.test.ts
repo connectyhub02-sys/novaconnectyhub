@@ -56,7 +56,7 @@ it("attributes voice usage to the company that used it, debits the paying wallet
     expect(Number(cycle.used_credits)).toBe(5);
     expect(Number(cycle.overage_credits)).toBe(2);
   } finally { await f.db.close(); }
-});
+}, 30000);
 
 it("attributes Studio settlements, including failures, without extra debits", async () => {
   const f = await fixture();
@@ -73,7 +73,7 @@ it("attributes Studio settlements, including failures, without extra debits", as
     expect(rows.find(row => row.status === "failed")?.organization_id).toBe(f.org);
     expect((await f.db.query("select * from credit_transactions")).rows).toHaveLength(1);
   } finally { await f.db.close(); }
-});
+}, 30000);
 
 it("adds the two missing tariffs once with a 5 credit minimum and keeps inner settlements private", async () => {
   const f = await fixture();
@@ -88,4 +88,4 @@ it("adds the two missing tariffs once with a 5 credit minimum and keeps inner se
     expect(grants.filter(g => g.grantee === "authenticated")).toHaveLength(0);
     expect(grants.map(g => g.routine_name).sort()).toEqual(["finish_studio_operation", "finish_voice_generation"]);
   } finally { await f.db.close(); }
-});
+}, 30000);

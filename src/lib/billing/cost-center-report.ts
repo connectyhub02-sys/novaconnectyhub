@@ -43,6 +43,8 @@ export type CostCenterMonthRaw = {
   settings: Record<string, unknown>;
   fixed_costs: CostCenterFixedCostRow[];
   missing_rates?: Array<{ feature_code: string; model_id: string | null; events: number }>;
+  invoices?: Array<{ provider: string; currency: "BRL" | "USD"; amount: number; notes: string | null }>;
+  alerts?: Array<{ title: string; summary: string | null; occurred_at: string; kind: string | null }>;
   prompt_orders?: Array<{ prompt_order: string; replies: number; input_tokens: number; cached_tokens: number; credits: number; scored_replies: number; avg_humanity_score: number | null }>;
 };
 
@@ -77,6 +79,11 @@ export type CostCenterMonth = {
   missingRates: Array<{ featureCode: string; modelId: string | null; events: number }>;
   /** Credits granted by the free trial plan, when known. */
   trialCredits?: number | null;
+  /** Estimated cost vs. the provider invoice registered for the month. */
+  reconciliation: Array<{ provider: string; label: string; estimatedBrl: number; invoicedBrl: number | null; deviation: number | null }>;
+  /** Result using registered invoices where they exist, estimates elsewhere. */
+  invoicedResultBrl: number | null;
+  alerts: Array<{ title: string; summary: string | null; occurredAt: string; kind: string | null }>;
   /** Cache and humanity score per prompt order, to judge the cache-friendly pilot. */
   promptOrders: Array<{ order: string; label: string; replies: number; cachedShare: number | null; creditsPerReply: number | null; scoredReplies: number; avgHumanityScore: number | null }>;
   notes: string[];
@@ -265,6 +272,8 @@ export function buildCostCenterMonth(month: string, raw: CostCenterMonthRaw): Co
     },
     snapshot: { connectedInstances: num(raw.snapshot?.connected_instances), payingOrganizations: num(raw.snapshot?.paying_organizations) },
     missingRates: (raw.missing_rates ?? []).map(row => ({ featureCode: row.feature_code, modelId: row.model_id, events: num(row.events) })),
+    ...reconcile(raw, fx, variableUsd, fixedItems, receivedBrl),
+    alerts: (raw.alerts ?? []).map(alert => ({ title: alert.title, summary: alert.summary, occurredAt: alert.occurred_at, kind: alert.kind })),
     promptOrders: (raw.prompt_orders ?? []).map(row => ({
       order: row.prompt_order,
       label: row.prompt_order === "cache" ? "Organizado para cache" : row.prompt_order === "default" ? "Ordem atual" : "Antes da medição",
@@ -276,6 +285,27 @@ export function buildCostCenterMonth(month: string, raw: CostCenterMonthRaw): Co
     })),
     notes,
   };
+}
+
+const reconciliationLabels: Record<string, string> = { gemini: "Google Gemini", elevenlabs: "ElevenLabs", uazapi: "UAZAPI", vps: "VPS", other: "Outros" };
+
+function reconcile(raw: CostCenterMonthRaw, fx: number, variableUsd: number, fixedItems: Array<{ provider: string | null; monthlyBrl: number }>, receivedBrl: number) {
+  const invoices = raw.invoices ?? [];
+  const estimates = new Map<string, number>();
+  // Gemini is variable; the other providers are billed as fixed monthly amounts.
+  const geminiUsd = (raw.usage ?? []).filter(row => row.provider === "gemini").reduce((total, row) => total + num(row.cost_usd), 0);
+  estimates.set("gemini", money(geminiUsd * fx));
+  for (const item of fixedItems) if (item.provider) estimates.set(item.provider, money((estimates.get(item.provider) ?? 0) + item.monthlyBrl));
+  for (const invoice of invoices) if (!estimates.has(invoice.provider)) estimates.set(invoice.provider, 0);
+  const reconciliation = [...estimates.entries()].map(([provider, estimatedBrl]) => {
+    const invoice = invoices.find(item => item.provider === provider);
+    const invoicedBrl = invoice ? money(num(invoice.amount) * (invoice.currency === "USD" ? fx : 1)) : null;
+    return { provider, label: reconciliationLabels[provider] ?? provider, estimatedBrl, invoicedBrl,
+      deviation: invoicedBrl !== null && estimatedBrl > 0 ? Math.round(((invoicedBrl - estimatedBrl) / estimatedBrl) * 1000) / 1000 : null };
+  });
+  const estimatedTotal = variableUsd * fx + fixedItems.reduce((total, item) => total + item.monthlyBrl, 0);
+  const adjusted = reconciliation.reduce((total, row) => total + (row.invoicedBrl === null ? 0 : row.invoicedBrl - row.estimatedBrl), estimatedTotal);
+  return { reconciliation, invoicedResultBrl: invoices.length ? money(receivedBrl - adjusted) : null };
 }
 
 export function brazilianDate(isoDate: string) {
