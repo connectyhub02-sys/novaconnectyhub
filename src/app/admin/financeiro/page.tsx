@@ -8,7 +8,7 @@ import { getBillingAdminSummary } from "@/lib/billing/summary";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getOperationAudit } from "@/lib/billing/operation-audit";
-import { getCostCenterMonth } from "@/lib/billing/cost-center-month";
+import { getAgentOptimizationAdmin, getCostCenterMonth } from "@/lib/billing/cost-center-month";
 
 export const metadata: Metadata = {
   title: "Financeiro IA | ConnectyHub",
@@ -24,12 +24,13 @@ export default async function AdminFinanceiroPage({searchParams}:{searchParams:P
   }
 
   const params=await searchParams,requestedDays=Number(params.usageDays),days=[1,7,30].includes(requestedDays)?requestedDays:1;
-  const [summary, commercialCatalog, platformBillingCatalog, operationAudit, costCenterMonth] = await Promise.all([
+  const [summary, commercialCatalog, platformBillingCatalog, operationAudit, costCenterMonth, agentOptimizations] = await Promise.all([
     getBillingAdminSummary(),
     getBillingCommercialCatalog(),
     getPlatformBillingOperationsCatalog(),
     getOperationAudit(createServiceClient(),days),
     getCostCenterMonth(createServiceClient(), params.month),
+    getAgentOptimizationAdmin(createServiceClient()),
   ]);
 
   return (
@@ -39,6 +40,7 @@ export default async function AdminFinanceiroPage({searchParams}:{searchParams:P
       platformBillingCatalog={platformBillingCatalog}
       operationAudit={operationAudit}
       costCenterMonth={costCenterMonth}
+      agentOptimizations={agentOptimizations}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     />
   );

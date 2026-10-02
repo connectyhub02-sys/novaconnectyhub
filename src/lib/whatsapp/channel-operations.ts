@@ -1,3 +1,4 @@
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { groupHolderConflictMessage, holderConflicts, type GroupHolder, type RoomSchedule } from "@/lib/whatsapp/group-schedule";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
@@ -3515,6 +3516,7 @@ ${campaignSpellingRule}` }],
         parts: [{ text: prompt }],
       }],
       generationConfig: {
+        ...geminiLowThinkingConfig(credentials.model),
         temperature: options.temperature,
         topP: 0.9,
         maxOutputTokens: options.maxOutputTokens,

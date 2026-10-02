@@ -4,7 +4,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { brazilianDate, type CostCenterMonth } from "@/lib/billing/cost-center-report";
-import type { CostCenterMonthResult } from "@/lib/billing/cost-center-month";
+import type { AgentOptimizationAdmin, CostCenterMonthResult } from "@/lib/billing/cost-center-month";
 import { NeonBadge, Panel } from "./panel-primitives";
 
 const brl = (value: number | null, digits = 2) =>
@@ -104,6 +104,30 @@ function MonthBody({ data }: { data: CostCenterMonth }) {
           <Value label="Resultado da voz" value={brl(voice.resultBrl)} tone={voice.resultBrl >= 0 ? "good" : "bad"} />
         </div>
       </Section>
+
+      {data.promptOrders.length > 0 && (
+        <Section title="Prompt: ordem atual × organizado para cache">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="py-1">Ordem</th><th className="py-1 text-right">Respostas</th><th className="py-1 text-right">Cache</th><th className="py-1 text-right">Créditos/resp.</th><th className="py-1 text-right">Humanidade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.promptOrders.map(row => (
+                <tr key={row.order} className="border-t" style={{ borderColor: "var(--ch-border)" }}>
+                  <td className="py-1.5">{row.label}</td>
+                  <td className="py-1.5 text-right font-mono">{int(row.replies)}</td>
+                  <td className="py-1.5 text-right font-mono">{percent(row.cachedShare)}</td>
+                  <td className="py-1.5 text-right font-mono">{row.creditsPerReply ?? "—"}</td>
+                  <td className="py-1.5 text-right font-mono">{row.avgHumanityScore === null ? "—" : `${row.avgHumanityScore} (${row.scoredReplies})`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1 text-[11px] text-slate-500">Humanidade: média do benchmark (0–100) nas respostas avaliadas; só agentes com o benchmark ligado.</p>
+        </Section>
+      )}
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         <Section title="Custo de IA por modo">
@@ -229,5 +253,56 @@ function FixedCostForm({ item }: { item: CostCenterMonth["fixed"]["items"][numbe
         {state.message && <span className={`text-[11px] ${state.error ? "text-rose-600" : "text-emerald-600"}`}>{state.message}</span>}
       </div>
     </form>
+  );
+}
+
+export function AgentOptimizationPanel({ data }: { data: AgentOptimizationAdmin }) {
+  const [scope, setScope] = useState(data.settings.cacheFriendlyPrompt);
+  const [pilot, setPilot] = useState<string[]>(data.settings.pilotAgentIds);
+  const { state, save } = useSave();
+  const toggle = (id: string) => setPilot(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  const options: Array<{ value: typeof scope; label: string; detail: string }> = [
+    { value: "off", label: "Desligado", detail: "ordem atual do prompt" },
+    { value: "pilot", label: "Piloto", detail: "só os agentes marcados" },
+    { value: "all", label: "Todos", detail: "todos os agentes" },
+  ];
+  return (
+    <Panel className="mb-4" title="Otimizações do agente" eyebrow="custo por resposta / qualidade" compact collapsible defaultOpen>
+      <div className="space-y-3 text-[12px]">
+        <p className="leading-5 text-slate-600">
+          <strong>Raciocínio baixo nas tarefas auxiliares:</strong> sempre ativo. Corrige memórias, análises e detecções que eram cortadas
+          antes de responder e reduz o custo dessas tarefas.
+        </p>
+        <form onSubmit={(event: FormEvent) => { event.preventDefault(); void save({ optimizations: { cacheFriendlyPrompt: scope, pilotAgentIds: pilot } }); }}>
+          <p className="font-semibold" style={{ color: "var(--ch-text)" }}>Prompt organizado para cache</p>
+          <p className="mb-2 leading-5 text-slate-500">
+            Mesmo texto, com as partes fixas primeiro. A parte repetida passa a custar 10% do preço no Gemini. Compare o cache e o
+            benchmark de humanidade dos agentes do piloto antes de ligar para todos.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {options.map(option => (
+              <label key={option.value} className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: scope === option.value ? "rgb(8,145,178)" : "var(--ch-border)" }}>
+                <input type="radio" name="cache-scope" checked={scope === option.value} onChange={() => setScope(option.value)} />
+                <span><span className="font-semibold">{option.label}</span> <span className="text-slate-500">· {option.detail}</span></span>
+              </label>
+            ))}
+          </div>
+          {scope === "pilot" && (
+            <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border p-2" style={{ borderColor: "var(--ch-border)" }}>
+              {data.agents.map(agent => (
+                <label key={agent.id} className="flex cursor-pointer items-center gap-2 py-1">
+                  <input type="checkbox" checked={pilot.includes(agent.id)} onChange={() => toggle(agent.id)} />
+                  <span>{agent.name} <span className="text-slate-500">· {agent.organization}</span></span>
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <button className="rounded-md bg-cyan-600 px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50" disabled={state.busy || (scope === "pilot" && !pilot.length)}>Salvar</button>
+            {state.message && <span className={`text-[11px] ${state.error ? "text-rose-600" : "text-emerald-600"}`}>{state.message}</span>}
+          </div>
+        </form>
+      </div>
+    </Panel>
   );
 }

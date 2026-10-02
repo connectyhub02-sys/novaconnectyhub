@@ -8,14 +8,15 @@ const from = "2026-09-01T00:00:00-03:00", to = "2026-10-01T00:00:00-03:00";
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(`create role anon; create role authenticated; create role service_role; create schema auth; create table auth.users(id uuid primary key);
-    create table usage_events(id uuid primary key default gen_random_uuid(), provider text, feature_code text, model_id text, billing_mode text, status text,
+    create table usage_events(id uuid primary key default gen_random_uuid(), agent_run_id uuid, error_message text, provider text, feature_code text, model_id text, billing_mode text, status text,
       input_tokens numeric, output_tokens numeric, output_units numeric, connecty_charge_credits numeric, provider_cost numeric, metadata jsonb default '{}', occurred_at timestamptz);
     create table credit_transactions(id uuid primary key default gen_random_uuid(), transaction_type text, amount_credits numeric, usage_event_id uuid, description text, metadata jsonb default '{}', created_at timestamptz);
     create table billing_invoices(id uuid primary key default gen_random_uuid(), status text, total_brl numeric, paid_at timestamptz);
     create table billing_payments(id uuid primary key default gen_random_uuid(), invoice_id uuid, status text, amount_brl numeric, paid_at timestamptz, created_at timestamptz, updated_at timestamptz);
     create table credit_wallets(id uuid primary key default gen_random_uuid(), balance_credits numeric, reserved_credits numeric);
     create table whatsapp_instances(id uuid primary key default gen_random_uuid(), provider text, status text);
-    create table organizations(id uuid primary key default gen_random_uuid(), status text, plan_code text);`);
+    create table organizations(id uuid primary key default gen_random_uuid(), status text, plan_code text);
+    create table intelligence_events(id uuid primary key default gen_random_uuid(), event_type text, payload jsonb, created_at timestamptz default now());`);
   await db.exec(readFileSync("supabase/migrations/0179_cost_center_monthly_truth.sql", "utf8"));
   await db.exec(`
     insert into usage_events(provider,feature_code,model_id,billing_mode,status,input_tokens,output_tokens,output_units,connecty_charge_credits,provider_cost,metadata,occurred_at) values
@@ -101,5 +102,21 @@ describe("cost center monthly report SQL", () => {
     await db.exec("update platform_fixed_costs set monthly_amount=25 where cost_key='vps'");
     await db.exec(readFileSync("supabase/migrations/0179_cost_center_monthly_truth.sql", "utf8"));
     expect(Number((await db.query<{ v: string }>("select monthly_amount v from platform_fixed_costs where cost_key='vps'")).rows[0].v)).toBe(25);
+  });
+
+  it("compares prompt orders with the humanity score of the same runs and lists missing tariffs", async () => {
+    await db.exec(readFileSync("supabase/migrations/0181_cost_center_prompt_order_report.sql", "utf8"));
+    const run = "22222222-2222-4222-8222-222222222222";
+    await db.query(`insert into usage_events(agent_run_id,provider,feature_code,model_id,billing_mode,status,input_tokens,output_tokens,connecty_charge_credits,provider_cost,metadata,occurred_at) values
+      ($1,'gemini','chat_completion','gemini-3.6-flash','customer_billable','completed',20000,20,30,0.01,'{"promptOrder":"cache","geminiUsage":{"cachedTokens":15000}}','2026-09-20T12:00:00Z')`, [run]);
+    await db.query("insert into intelligence_events(event_type,payload,created_at) values('whatsapp.clone.turing_benchmark',jsonb_build_object('agentRunId',$1::text,'score',84),'2026-09-20T12:01:00Z')", [run]);
+    await db.query("insert into usage_events(provider,feature_code,model_id,billing_mode,status,error_message,occurred_at) values('gemini','ai_traffic_manager','gemini-3.6-flash','customer_billable','pending','billing_rate_missing','2026-09-21T12:00:00Z')");
+    const r = (await db.query<{ r: { prompt_orders: Array<Record<string, string>>; missing_rates: Array<Record<string, string>> } }>("select cost_center_month_report($1,$2) r", [from, to])).rows[0].r;
+    const cache = r.prompt_orders.find(row => row.prompt_order === "cache")!;
+    expect(Number(cache.replies)).toBe(1);
+    expect(Number(cache.cached_tokens)).toBe(15000);
+    expect(Number(cache.avg_humanity_score)).toBe(84);
+    expect(Number(r.prompt_orders.find(row => row.prompt_order === "unmeasured")!.replies)).toBe(3);
+    expect(r.missing_rates).toEqual([{ feature_code: "ai_traffic_manager", model_id: "gemini-3.6-flash", events: 1 }]);
   });
 });

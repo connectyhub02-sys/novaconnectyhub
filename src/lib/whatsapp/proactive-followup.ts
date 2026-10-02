@@ -1,3 +1,4 @@
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import { prepareLeadContact } from "@/lib/automations/lead-contact-preferences";
 import { leadContactMessage, sendLeadContactMessage } from "@/lib/automations/lead-contact-message";
@@ -631,7 +632,7 @@ async function generateFollowUpMessage(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: followUpGenerationConfig,
+      generationConfig: { ...followUpGenerationConfig, ...geminiLowThinkingConfig(modelId) },
     }),
     cache: "no-store",
     signal: AbortSignal.timeout(45000),

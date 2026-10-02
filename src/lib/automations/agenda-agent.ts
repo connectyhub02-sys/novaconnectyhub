@@ -1,4 +1,5 @@
 import "server-only";
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GeminiCredentials } from "@/lib/gemini/credentials";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -159,6 +160,7 @@ export async function processAgendaTurn(
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
+          ...geminiLowThinkingConfig(input.credentials.model),
           temperature: 0,
           responseMimeType: "application/json",
           maxOutputTokens: 2048,

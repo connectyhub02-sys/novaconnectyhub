@@ -1,5 +1,7 @@
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
-import { joinPromptSections, measurePromptSections, type PromptSection } from "./prompt-sections";
+import { joinPromptSections, measurePromptSections, orderPromptSectionsForCache, type PromptSection } from "./prompt-sections";
+import { appliesToAgent, loadAgentCostOptimizations } from "@/lib/billing/cost-optimizations";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
 import { quoteFoodComposition, foodCompositionStartingCents, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
@@ -186,6 +188,7 @@ type AgentResponseResult = {
   fromCache?: boolean;
   /** Characters per system-instruction section; never the prompt text. */
   promptSections?: Record<string, number>;
+  promptOrder?: "default" | "cache";
 };
 
 const geminiSafetySettings = [
@@ -1112,7 +1115,9 @@ async function processWhatsappAgentRunWithScope(input: {
       settings: context.salesCatalogShippingSettings,
       userText,
     });
+    const costOptimizations = await loadAgentCostOptimizations(client);
     const generationInput = {
+      cacheFriendlyPrompt: appliesToAgent(costOptimizations.cacheFriendlyPrompt, costOptimizations, agent.id),
       checkoutScope: { organizationId: context.organization.id, conversationId: context.conversationId, instanceId: context.instance.id },
       checkoutRevisionContext: readRuntimeOrderRevision(context),
       agendaContext: agendaTurn?.context,
@@ -1135,11 +1140,12 @@ async function processWhatsappAgentRunWithScope(input: {
     }
     // While the reply is being thought out the lead sees "digitando…" (or "gravando…"), like a person.
     const { toolTurn, generated, thinkingMs } = await withThinkingPresence({ context, token, phone, latestInbound, active: !cachedAiResponse }, async () => {
-      const toolPromptSections = orderToolScope && latestInbound && !cachedAiResponse ? buildSystemInstructionSections(generationInput) : null;
+      const toolPromptSections = orderToolScope && latestInbound && !cachedAiResponse
+        ? orderPromptSections(buildSystemInstructionSections(generationInput), generationInput.cacheFriendlyPrompt) : null;
       const toolTurn = toolPromptSections
         ? await runOrderToolTurn({ ...generationInput, systemInstruction: joinPromptSections(toolPromptSections), client, context, scope: orderToolScope!, token, phone, latestInbound: latestInbound! })
         : null;
-      let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!) } : cachedAiResponse
+      let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!), promptOrder: generationInput.cacheFriendlyPrompt ? "cache" as const : "default" as const } : cachedAiResponse
         ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
         : await generateAgentResponse(generationInput);
 
@@ -4414,6 +4420,8 @@ function mapRuntimeLinkButton(row: LinkButtonMemoryRow): RuntimeLinkButton {
 // loadGeminiCredentials imported from @/lib/gemini/credentials
 
 async function generateAgentResponse(input: {
+  /** Stable sections first so the provider cache can reuse the prompt prefix. */
+  cacheFriendlyPrompt?: boolean;
   checkoutScope?: { organizationId: string; conversationId: string; instanceId: string };
   checkoutRevisionContext?: RuntimeOrderRevisionDraft | null;
   agendaContext?: string;
@@ -4444,7 +4452,7 @@ async function generateAgentResponse(input: {
   const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
-  const promptSections = buildSystemInstructionSections(input);
+  const promptSections = orderPromptSections(buildSystemInstructionSections(input), input.cacheFriendlyPrompt);
 
   const response = await fetchWithTimeout(url, {
     method: "POST",
@@ -4486,7 +4494,12 @@ async function generateAgentResponse(input: {
     usage: extractGeminiUsageMetadata(data),
     finishReason: extractGeminiCandidateFinishReason(data),
     promptSections: measurePromptSections(promptSections),
+    promptOrder: input.cacheFriendlyPrompt ? "cache" : "default",
   };
+}
+
+function orderPromptSections(sections: PromptSection[], cacheFriendly: boolean | undefined) {
+  return cacheFriendly ? orderPromptSectionsForCache(sections) : sections;
 }
 
 async function maybeRepairMediaGroundingResponse(input: {
@@ -5957,6 +5970,7 @@ async function analyzeAndPersistLeadQualification(
         },
       ],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.1,
         topP: 0.8,
         maxOutputTokens: 2400,
@@ -7816,6 +7830,7 @@ async function generateMediaProcessingAcknowledgement(input: {
         parts: [{ text: prompt }],
       }],
       generationConfig: {
+        ...geminiLowThinkingConfig(modelId),
         temperature: 0.9,
         topP: 0.95,
         maxOutputTokens: 70,
@@ -16138,6 +16153,7 @@ async function classifySmartReplyTargets(input: {
         }],
       }],
       generationConfig: {
+        ...geminiLowThinkingConfig(model),
         temperature: 0,
         topP: 0.1,
         maxOutputTokens: 180,
@@ -17290,6 +17306,7 @@ async function evaluateTuringScore(
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.15,
         topP: 0.8,
         maxOutputTokens: 600,
@@ -18333,7 +18350,7 @@ async function extractConversationLearning(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 200 },
+      generationConfig: { ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model), temperature: 0.3, maxOutputTokens: 200 },
       safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
@@ -18481,6 +18498,7 @@ async function extractLeadMemory(
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.15,
         topP: 0.8,
         maxOutputTokens: 700,
@@ -18629,6 +18647,7 @@ async function extractCloneMemory(
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.12,
         topP: 0.8,
         maxOutputTokens: 700,
@@ -18728,6 +18747,7 @@ async function extractConversationArcSummary(
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.15,
         topP: 0.8,
         maxOutputTokens: 400,
@@ -18818,6 +18838,7 @@ async function extractNegotiationState(
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
+        ...geminiLowThinkingConfig(context.agent.model_id || context.geminiCredentials.model),
         temperature: 0.1,
         topP: 0.8,
         maxOutputTokens: 200,
@@ -18984,7 +19005,7 @@ async function meterWhatsappAgentTextUsage(input: {
       outboundMessages: input.outboundMessages,
       fromCache: input.response.fromCache === true,
       geminiUsage: serializeGeminiUsage(usage),
-      ...(input.response.promptSections ? { promptSections: input.response.promptSections } : {}),
+      ...(input.response.promptSections ? { promptSections: input.response.promptSections, promptOrder: input.response.promptOrder ?? "default" } : {}),
     },
   });
 }
@@ -19680,6 +19701,7 @@ async function analyzeDownloadedMediaWithGemini(input: {
         },
       ],
       generationConfig: {
+        ...geminiLowThinkingConfig(normalizeGeminiModel(input.model)),
         temperature: 0.15,
         topP: 0.8,
         maxOutputTokens: input.kind === "video" ? 2200 : 1800,
@@ -19739,6 +19761,7 @@ async function transcribeDownloadedAudioWithGemini(input: {
         },
       ],
       generationConfig: {
+        ...geminiLowThinkingConfig(normalizeGeminiModel(input.model)),
         temperature: 0,
         topP: 0.8,
         maxOutputTokens: 900,
@@ -20602,6 +20625,7 @@ async function classifyHumanHandoffIntentWithGemini(input: {
         }],
       }],
       generationConfig: {
+        ...geminiLowThinkingConfig(model),
         temperature: 0,
         topP: 0.1,
         maxOutputTokens: 120,
@@ -21208,9 +21232,7 @@ function applyMidMessageCorrection(chunks: string[], behavior: WhatsappBehaviorC
 }
 
 function buildAgentResponseGenerationConfig(modelId: string) {
-  return { temperature: 0.55, topP: 0.9, maxOutputTokens: agentResponseMaxOutputTokens,
-    ...(/^gemini-3(?:[.-]|$)/.test(modelId) ? { thinkingConfig: { thinkingLevel: "LOW" } }
-      : /^gemini-2\.5(?:[.-]|$)/.test(modelId) ? { thinkingConfig: { thinkingBudget: 1024 } } : {}) };
+  return { temperature: 0.55, topP: 0.9, maxOutputTokens: agentResponseMaxOutputTokens, ...geminiLowThinkingConfig(modelId) };
 }
 
 function extractGeminiCandidateFinishReason(value: unknown) {

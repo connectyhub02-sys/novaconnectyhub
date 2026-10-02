@@ -1,5 +1,6 @@
 import "server-only";
 
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess } from "@/lib/billing/trial";
@@ -372,6 +373,7 @@ async function generateCloneProfileFromSamples(input: {
         },
       ],
       generationConfig: {
+        ...geminiLowThinkingConfig(modelId),
         temperature: 0.25,
         topP: 0.85,
         maxOutputTokens: 1200,

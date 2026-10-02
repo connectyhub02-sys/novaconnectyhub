@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { AGENT_COST_OPTIMIZATIONS_KEY, parseAgentCostOptimizations, resetAgentCostOptimizationsCache } from "@/lib/billing/cost-optimizations";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,6 +60,21 @@ export async function PATCH(request: NextRequest) {
     if (!data) return NextResponse.json({ error: "Custo fixo não encontrado." }, { status: 404 });
     revalidatePath("/admin/financeiro");
     return NextResponse.json({ ok: true });
+  }
+
+  const optimizations = record(body.optimizations);
+  if (optimizations) {
+    if (!["off", "pilot", "all"].includes(String(optimizations.cacheFriendlyPrompt))) {
+      return NextResponse.json({ error: "Escolha desligado, piloto ou todos." }, { status: 400 });
+    }
+    const value = parseAgentCostOptimizations(optimizations);
+    const { error } = await client.from("cost_center_settings").upsert({
+      setting_key: AGENT_COST_OPTIMIZATIONS_KEY, value, updated_at: now, updated_by: auth.userId,
+    });
+    if (error) return NextResponse.json({ error: "Não foi possível salvar as otimizações." }, { status: 500 });
+    resetAgentCostOptimizationsCache();
+    revalidatePath("/admin/financeiro");
+    return NextResponse.json({ ok: true, value });
   }
 
   return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });

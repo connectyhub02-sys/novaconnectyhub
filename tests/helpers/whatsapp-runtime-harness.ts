@@ -1,4 +1,6 @@
 import * as foodComposition from "@/lib/sales-catalog/food-composition";
+import * as geminiModels from "@/lib/gemini/models";
+import * as costOptimizations from "@/lib/billing/cost-optimizations";
 import * as foodConversation from "@/lib/sales-catalog/food-conversation";
 import * as operationHours from "@/lib/sales-catalog/operation-hours";
 import * as activityProfile from "@/lib/whatsapp/activity-profile";
@@ -122,7 +124,9 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "./agent-behavior": agentBehavior,
     "./human-handoff": humanHandoff,
     "./clone-humanization": humanization,
+    "@/lib/billing/cost-optimizations": costOptimizations,
     ...dependencies,
+    "@/lib/gemini/models": { ...geminiModels, ...(dependencies["@/lib/gemini/models"] as object | undefined) },
   };
   runInNewContext(compiled, {
     module: runtimeModule, exports: runtimeModule.exports, require: (name: string) => imports[name] ?? {},

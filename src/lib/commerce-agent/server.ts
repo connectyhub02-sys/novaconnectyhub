@@ -1,3 +1,4 @@
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { isPublicCommerceAvailable, storeUnavailableMessage } from "@/lib/sales-catalog/public-commerce-access";
 import { readAgendaActivation, agendaUnavailableCustomerReply } from "@/lib/automations/agenda-activation";
 import { loadCommerceOffers } from "@/lib/sales-catalog/commerce-offers";
@@ -769,6 +770,7 @@ async function callGeminiCommerceAgent(input: {
         parts: [{ text: input.turnPrompt }],
       }],
       generationConfig: {
+        ...geminiLowThinkingConfig(input.modelId),
         temperature: 0.62,
         topP: 0.9,
         maxOutputTokens: commerceAgentMaxOutputTokens,

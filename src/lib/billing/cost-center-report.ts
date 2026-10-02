@@ -43,6 +43,7 @@ export type CostCenterMonthRaw = {
   settings: Record<string, unknown>;
   fixed_costs: CostCenterFixedCostRow[];
   missing_rates?: Array<{ feature_code: string; model_id: string | null; events: number }>;
+  prompt_orders?: Array<{ prompt_order: string; replies: number; input_tokens: number; cached_tokens: number; credits: number; scored_replies: number; avg_humanity_score: number | null }>;
 };
 
 export type CostCenterGroup = {
@@ -74,6 +75,8 @@ export type CostCenterMonth = {
   snapshot: { connectedInstances: number; payingOrganizations: number };
   /** Usage waiting for a tariff: it was not charged and must be priced. */
   missingRates: Array<{ featureCode: string; modelId: string | null; events: number }>;
+  /** Cache and humanity score per prompt order, to judge the cache-friendly pilot. */
+  promptOrders: Array<{ order: string; label: string; replies: number; cachedShare: number | null; creditsPerReply: number | null; scoredReplies: number; avgHumanityScore: number | null }>;
   notes: string[];
 };
 
@@ -260,6 +263,15 @@ export function buildCostCenterMonth(month: string, raw: CostCenterMonthRaw): Co
     },
     snapshot: { connectedInstances: num(raw.snapshot?.connected_instances), payingOrganizations: num(raw.snapshot?.paying_organizations) },
     missingRates: (raw.missing_rates ?? []).map(row => ({ featureCode: row.feature_code, modelId: row.model_id, events: num(row.events) })),
+    promptOrders: (raw.prompt_orders ?? []).map(row => ({
+      order: row.prompt_order,
+      label: row.prompt_order === "cache" ? "Organizado para cache" : row.prompt_order === "default" ? "Ordem atual" : "Antes da medição",
+      replies: num(row.replies),
+      cachedShare: ratio(num(row.cached_tokens), num(row.input_tokens)),
+      creditsPerReply: num(row.replies) > 0 ? Math.round((num(row.credits) / num(row.replies)) * 10) / 10 : null,
+      scoredReplies: num(row.scored_replies),
+      avgHumanityScore: row.avg_humanity_score === null || row.avg_humanity_score === undefined ? null : num(row.avg_humanity_score),
+    })),
     notes,
   };
 }
