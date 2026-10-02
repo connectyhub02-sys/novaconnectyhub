@@ -1,5 +1,20 @@
 # Estado operacional da ConnectyHub
 
+## Estúdio de Voz — fases A a E, publicadas em 02/10/2026
+
+Relatório: [Estúdio de Voz, fases A a E](relatorio-estudio-voz-fases-a-e-2026-10-02.md).
+Commits `1e886298`, `8d3e967e`, `00775189`, `f7a87e75`/`813def32`, `655b21da`/`3b4445f0`;
+migrations 0184–0187 aplicadas após ensaio com rollback; slot b ativo
+(retorno: `release.sh activate a`); Inngest sincronizado. Cobrança pelo centro de
+custo (US$ × 6 × 4, 1 crédito = R$ 0,01): voz v2/v3 0,24 crédito/caractere,
+Flash/Turbo 0,12, efeitos 288/min, música 360/min, remix 0,24/caractere, agente
+de voz 192/min ou custo real × 4. E-books até 240 mil caracteres com reserva do
+total antes de gerar. Validações reais com chave QA interna (revogada ao final).
+Pendentes: nenhum agente de voz real criado ainda; telefonia (Twilio/SIP), PVC e
+transcrição em tempo real não implementados; webhook ponta a ponta não exercitado;
+cota Creator da ElevenLabs (131 mil caracteres/mês, renova 20/10) é menor que um
+e-book máximo — subir plano antes de divulgar.
+
 ## Centro de custo — Fases 2 a 5, publicadas em 02/10/2026
 
 Relatório completo e roteiro de testes: [relatorio-centro-custo-fases-2026-10-02.md](relatorio-centro-custo-fases-2026-10-02.md).
