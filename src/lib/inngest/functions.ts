@@ -806,6 +806,12 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  // Voice webhooks: finished asynchronous operations are delivered once, signed, with retries.
+  inngest.createFunction({ id: "connectyhub-voice-webhooks", name: "Voz: webhooks de operações", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
+    async ({ step }) => step.run("deliver-voice-webhooks", async () => {
+      const [{ dispatchVoiceWebhooks }, { createServiceClient }] = await Promise.all([import("@/lib/voice-api/webhooks"), import("@/lib/supabase/service")]);
+      return dispatchVoiceWebhooks(createServiceClient());
+    })),
   // Long texts (e-books): one memoized step per part, so a restart resumes instead of regenerating.
   inngest.createFunction({ id: "connectyhub-studio-long-tts", name: "Estúdio: texto longo (e-book)", retries: 0,
     concurrency: { key: "event.data.operationId", limit: 1 }, triggers: [{ event: "connectyhub/studio.long_tts" }] },

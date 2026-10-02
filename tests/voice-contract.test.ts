@@ -3,7 +3,10 @@ import {parseVoiceInput,voiceIdempotency} from '../src/lib/voice-api/contract';
 it('keeps explicit voice/model/settings and rejects unapproved ownership fields',()=>{
  const v=parseVoiceInput({text:' Olá   mundo ',voice_id:'private_123',model_id:'eleven_multilingual_v2',voice_settings:{stability:.45,similarity_boost:.8,style:.2,use_speaker_boost:true}});
  expect(v.text).toBe('Olá mundo');expect(v.voice_settings.stability).toBe(.45);
- for(const extra of [{organizationId:'other'},{publicOwnerId:'other'},{output_format:'pcm_44100'}]) expect(()=>parseVoiceInput({text:'ok',voice_id:'id',...extra})).toThrow('Parâmetro');
+ for(const extra of [{organizationId:'other'},{publicOwnerId:'other'}]) expect(()=>parseVoiceInput({text:'ok',voice_id:'id',...extra})).toThrow('Parâmetro');
+ // Formats are offered from an allow-list; higher-tier ones such as pcm_44100 stay refused.
+ expect(()=>parseVoiceInput({text:'ok',voice_id:'id',output_format:'pcm_44100'})).toThrow('Formato');
+ expect(parseVoiceInput({text:'ok',voice_id:'id',output_format:'ulaw_8000'}).output_format).toBe('ulaw_8000');
  expect(()=>parseVoiceInput({text:'a'.repeat(4801),voice_id:'id'})).toThrow('4800');
  expect(()=>parseVoiceInput({text:'ok',voice_id:'../../',voice_settings:{style:NaN}})).toThrow();
 });

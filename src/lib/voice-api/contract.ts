@@ -1,4 +1,12 @@
-export const voiceLimits = { characters: 4800, audioBytes: 12582912, requestsPerMinute: 10, concurrentPerWallet: 2 } as const;
+export const voiceLimits = { characters: 4800, audioBytes: 40000000, requestsPerMinute: 10, concurrentPerWallet: 2 } as const;
+/** Output formats offered to customers, with the stored file type of each. */
+export const voiceFormats = {
+  mp3_44100_128: { ext: 'mp3', mime: 'audio/mpeg' }, mp3_44100_64: { ext: 'mp3', mime: 'audio/mpeg' }, mp3_22050_32: { ext: 'mp3', mime: 'audio/mpeg' },
+  pcm_16000: { ext: 'pcm', mime: 'audio/pcm' }, pcm_22050: { ext: 'pcm', mime: 'audio/pcm' }, pcm_24000: { ext: 'pcm', mime: 'audio/pcm' },
+  ulaw_8000: { ext: 'ulaw', mime: 'audio/basic' }, opus_48000_64: { ext: 'ogg', mime: 'audio/ogg' },
+} as const;
+export type VoiceFormat = keyof typeof voiceFormats;
+export const isVoiceFormat = (value: unknown): value is VoiceFormat => typeof value === 'string' && Object.hasOwn(voiceFormats, value);
 export class VoiceError extends Error {
   constructor(public code: string, public status: number, message: string, public requestId?: string) { super(message); }
 }
@@ -6,7 +14,7 @@ export type VoiceInput = ReturnType<typeof parseVoiceInput>;
 export function parseVoiceInput(raw: unknown) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new VoiceError('invalid_input',422,'Envie um objeto JSON.');
   const b = raw as Record<string,unknown>;
-  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings','dictionary_ids','language_code'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
+  if (Object.keys(b).some(k=>!['text','voice_id','model_id','voice_settings','dictionary_ids','language_code','output_format','with_timestamps','seed','previous_text','next_text','apply_text_normalization'].includes(k))) throw new VoiceError('unsupported_parameter',422,'Parâmetro não suportado. Consulte a documentação de Voz.');
   const text = typeof b.text === 'string' ? b.text.replace(/\s+/g,' ').trim() : '';
   if (!text || text.length>voiceLimits.characters) throw new VoiceError('text_limit',422,'Envie entre 1 e 4800 caracteres.');
   if (typeof b.voice_id!=='string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(b.voice_id)) throw new VoiceError('invalid_voice',422,'Escolha uma voz disponível no catálogo.');
@@ -25,7 +33,19 @@ export function parseVoiceInput(raw: unknown) {
   const dictionaryIds = b.dictionary_ids === undefined ? [] : b.dictionary_ids;
   if(!Array.isArray(dictionaryIds)||dictionaryIds.length>3||new Set(dictionaryIds).size!==dictionaryIds.length||dictionaryIds.some(id=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))throw new VoiceError('invalid_dictionary',422,'Selecione até três dicionários do projeto.');
   if(b.language_code!==undefined && (typeof b.language_code!=='string' || !/^[a-z]{2,3}$/.test(b.language_code))) throw new VoiceError('invalid_language',422,'Idioma: código de duas ou três letras minúsculas, como pt ou en.');
-  return { ...(dictionaryIds.length?{dictionary_ids:dictionaryIds as string[]}:{}),...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),text, voice_id:b.voice_id, model_id:model, voice_settings:settings, output_format:'mp3_44100_128' as const };
+  if(b.output_format!==undefined && !isVoiceFormat(b.output_format)) throw new VoiceError('invalid_format',422,`Formato de saída inválido. Use: ${Object.keys(voiceFormats).join(', ')}.`);
+  if(b.with_timestamps!==undefined && typeof b.with_timestamps!=='boolean') throw new VoiceError('invalid_timestamps',422,'with_timestamps deve ser verdadeiro ou falso.');
+  if(b.seed!==undefined && (typeof b.seed!=='number' || !Number.isInteger(b.seed) || b.seed<0 || b.seed>4294967295)) throw new VoiceError('invalid_seed',422,'seed deve ser um inteiro entre 0 e 4294967295.');
+  for(const key of ['previous_text','next_text'] as const) if(b[key]!==undefined && (typeof b[key]!=='string' || !b[key] || (b[key] as string).length>1000)) throw new VoiceError('invalid_context',422,`${key}: texto de 1 a 1.000 caracteres.`);
+  if(b.apply_text_normalization!==undefined && !['auto','on','off'].includes(String(b.apply_text_normalization))) throw new VoiceError('invalid_normalization',422,'apply_text_normalization: auto, on ou off.');
+  const extras = {
+    ...(b.with_timestamps===true?{with_timestamps:true as const}:{}),
+    ...(typeof b.seed==='number'?{seed:b.seed}:{}),
+    ...(typeof b.previous_text==='string'?{previous_text:b.previous_text}:{}),
+    ...(typeof b.next_text==='string'?{next_text:b.next_text}:{}),
+    ...(b.apply_text_normalization!==undefined?{apply_text_normalization:b.apply_text_normalization as 'auto'|'on'|'off'}:{}),
+  };
+  return { ...extras, ...(dictionaryIds.length?{dictionary_ids:dictionaryIds as string[]}:{}),...(typeof b.language_code==='string'?{language_code:b.language_code}:{}),text, voice_id:b.voice_id, model_id:model, voice_settings:settings, output_format:(isVoiceFormat(b.output_format)?b.output_format:'mp3_44100_128') as VoiceFormat };
 }
 export function voiceIdempotency(request: Request) {
   const key=request.headers.get('idempotency-key');

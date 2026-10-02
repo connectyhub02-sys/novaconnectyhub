@@ -2,7 +2,7 @@ import 'server-only';
 import {authenticateVoice,authenticateVoiceStudio,type VoiceAuth} from './auth';
 import {voiceFailure,voiceJson,VoiceError,voiceBody} from './contract';
 import {voiceCatalog,voiceModels} from './catalog';
-import {downloadVoice,generateVoice,publicVoiceGeneration,recoverVoice,voiceGeneration} from './generations';
+import {downloadVoice,downloadVoiceAlignment,generateVoice,generateVoiceStream,publicVoiceGeneration,recoverVoice,voiceGeneration} from './generations';
 import {createPrivateClone,ownedClone,publicClone,editPrivateClone,deletePrivateClone,cloneSamples,previewPrivateClone} from './clones';
 import {createStudioAsset,ownedStudioAsset,publicStudioAsset,listStudioAssets,studioAssetTicket,deleteStudioAsset,readStudioJson} from './assets';
 import {createStudioOperation,quoteStudioOperation,ownedStudioOperation,publicStudioOperation,listStudioOperations,downloadStudioResult,downloadStudioPreview,deleteStudioResult} from './studio-operations';
@@ -39,6 +39,7 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
       if(request.method==='GET'&&path[2]==='samples'&&path.length===3)return voiceJson(await cloneSamples(auth,path[1]));
       if(request.method==='GET'&&path[2]==='samples'&&path.length===5&&path[4]==='audio')return await cloneSamples(auth,path[1],path[3]) as Response;
     }
+    if(path.length===1&&path[0]==='usage'&&request.method==='GET')return voiceJson(await voiceUsage(auth,Number(new URL(request.url).searchParams.get('days'))||30));
     if(path.length===1 && request.method==='GET') {
       if(path[0]==='voices')return voiceJson(await voiceCatalog(auth));
       if(path[0]==='models')return voiceJson(await voiceModels(auth));
@@ -46,10 +47,10 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
     }
     if(path[0]==='generations'){
       if(path.length===1 && request.method==='POST'){
-        const text=new TextDecoder().decode(await voiceBody(request,40000));
-        let body;try{body=JSON.parse(text);}catch{throw new VoiceError('invalid_json',422,'JSON inválido.');}
-        const result=await generateVoice(auth,request,body);return voiceJson(result,['reserved','processing','uncertain'].includes(result.status)?202:200);
+        const result=await generateVoice(auth,request,await jsonBody(request));return voiceJson(result,['reserved','processing','uncertain'].includes(result.status)?202:200);
       }
+      if(path.length===2 && path[1]==='stream' && request.method==='POST')return await generateVoiceStream(auth,request,await jsonBody(request));
+      if(request.method==='GET' && path.length===3 && path[2]==='alignment')return await downloadVoiceAlignment(auth,path[1]);
       if(request.method==='GET' && path.length===2)return voiceJson(publicVoiceGeneration(await recoverVoice(auth,await voiceGeneration(auth,path[1]))));
       if(request.method==='GET' && path.length===3 && path[2]==='audio')return downloadVoice(auth,path[1]);
     }
@@ -60,4 +61,22 @@ async function listGenerations(auth:VoiceAuth){
   const {data,error}=await auth.client.from('voice_generations').select('*').eq('project_id',auth.project.id).eq('organization_id',auth.project.organization_id).neq('operation','studio').order('created_at',{ascending:false}).limit(50);
   if(error)throw new VoiceError('service_unavailable',503,'Não foi possível consultar o histórico.');
   return {project_id:auth.project.id,billing_organization_id:auth.billingOrg,generations:(data??[]).map(r=>publicVoiceGeneration(r)),limit:50};
+}
+
+async function jsonBody(request:Request){
+  const text=new TextDecoder().decode(await voiceBody(request,40000));
+  try{return JSON.parse(text);}catch{throw new VoiceError('invalid_json',422,'JSON inválido.');}
+}
+/** Usage and balance for the key's project: what an API customer needs to monitor spend. */
+async function voiceUsage(auth:VoiceAuth,requestedDays:number){
+  const days=Math.min(90,Math.max(1,Math.floor(requestedDays)));
+  const [summary,wallet]=await Promise.all([
+    auth.client.rpc('voice_usage_summary',{p_org:auth.project.organization_id,p_days:days,p_admin:false,p_project:auth.project.id}),
+    auth.client.from('credit_wallets').select('balance_credits,reserved_credits').eq('organization_id',auth.billingOrg).maybeSingle<{balance_credits:number;reserved_credits:number}>(),
+  ]);
+  if(summary.error||wallet.error)throw new VoiceError('service_unavailable',503,'Não foi possível consultar o uso.');
+  const balance=Number(wallet.data?.balance_credits??0),reserved=Number(wallet.data?.reserved_credits??0);
+  return {project_id:auth.project.id,days,usage:summary.data,
+    wallet:{balance_credits:balance,reserved_credits:reserved,available_credits:Math.max(0,balance-reserved)},
+    monthly_credit_limit:auth.project.monthly_credit_limit};
 }
