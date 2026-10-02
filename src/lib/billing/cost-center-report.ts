@@ -75,6 +75,8 @@ export type CostCenterMonth = {
   snapshot: { connectedInstances: number; payingOrganizations: number };
   /** Usage waiting for a tariff: it was not charged and must be priced. */
   missingRates: Array<{ featureCode: string; modelId: string | null; events: number }>;
+  /** Credits granted by the free trial plan, when known. */
+  trialCredits?: number | null;
   /** Cache and humanity score per prompt order, to judge the cache-friendly pilot. */
   promptOrders: Array<{ order: string; label: string; replies: number; cachedShare: number | null; creditsPerReply: number | null; scoredReplies: number; avgHumanityScore: number | null }>;
   notes: string[];

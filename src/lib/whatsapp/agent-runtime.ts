@@ -18994,6 +18994,7 @@ async function meterWhatsappAgentTextUsage(input: {
     inputUnits: inputTokens,
     outputUnits: outputTokens,
     inputTokens,
+    cachedInputTokens: usage?.cachedTokens,
     outputTokens,
     totalTokens,
     requestId: `whatsapp-agent:${input.context.run.id}:gemini:chat_completion`,

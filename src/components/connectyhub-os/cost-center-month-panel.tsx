@@ -92,7 +92,7 @@ function MonthBody({ data }: { data: CostCenterMonth }) {
           <Value label="Respostas cobradas" value={int(attendance.replies)} detail={`≈ ${int(attendance.avgInputTokensPerReply)} tokens de entrada cada`} />
           <Value label="Custo por resposta" value={brl(attendance.costPerReplyBrl, 3)} detail="resposta + análises e memórias" />
           <Value label="Preço por resposta" value={brl(attendance.pricePerReplyBrl)} detail={`${attendance.creditsPerReply ?? "—"} créditos`} />
-          <Value label="1.000 créditos rendem" value={`${int(attendance.repliesPer1000Credits)} respostas`} detail={`prompt reaproveitado no cache: ${percent(attendance.cachedShare)}`} />
+          <Value label="1.000 créditos rendem" value={`${int(attendance.repliesPer1000Credits)} respostas`} detail={`${data.trialCredits && attendance.creditsPerReply ? `teste grátis (${int(data.trialCredits)} cr): ≈ ${int(Math.floor(data.trialCredits / attendance.creditsPerReply))} respostas · ` : ""}cache: ${percent(attendance.cachedShare)}`} />
         </div>
       </Section>
 

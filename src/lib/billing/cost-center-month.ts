@@ -15,7 +15,9 @@ export async function getCostCenterMonth(client: SupabaseClient, requestedMonth?
     const missing = error?.code === "PGRST202" || /cost_center_month_report/.test(error?.message ?? "");
     return { ok: false, month, error: missing ? "A migration 0179 do centro de custo ainda não foi aplicada." : "Não foi possível calcular o mês." };
   }
-  return { ok: true, data: buildCostCenterMonth(month, data as CostCenterMonthRaw) };
+  const trial = await client.from("billing_plans").select("included_credits").eq("plan_code", "trial").maybeSingle<{ included_credits: number | string | null }>();
+  const trialCredits = trial.error ? null : Number(trial.data?.included_credits ?? 0) || null;
+  return { ok: true, data: { ...buildCostCenterMonth(month, data as CostCenterMonthRaw), trialCredits } };
 }
 
 export type AgentOptimizationAdmin = {

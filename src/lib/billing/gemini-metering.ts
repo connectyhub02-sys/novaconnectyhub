@@ -63,6 +63,7 @@ export async function meterGeminiGenerationUsage(input: MeterGeminiGenerationInp
     inputUnits: inputTokens,
     outputUnits: outputTokens,
     inputTokens,
+    cachedInputTokens: usage?.cachedTokens,
     outputTokens,
     totalTokens,
     media: input.media,

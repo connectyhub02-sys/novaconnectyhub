@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
+import { estimateReplies } from "@/lib/billing/reply-estimate";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +25,9 @@ export async function GET() {
       organizationId: organization.id,
     });
 
-    return NextResponse.json({ billingAccess });
+    const { estimatedReplies } = await estimateReplies(createServiceClient(), organization.id, billingAccess.balanceCredits);
+
+    return NextResponse.json({ billingAccess: { ...billingAccess, estimatedReplies } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Nao foi possivel carregar creditos." },

@@ -101,6 +101,8 @@ type BillingAccessClientStatus = {
   state: "trial_active" | "trial_low_credits" | "trial_no_credits" | "trial_expired" | "paid_active" | "paid_no_credits" | "paid_expired" | "inactive";
   canUseBillableFeatures: boolean;
   balanceCredits: number;
+  /** Plain-language balance: replies the credits cover at the recent average. */
+  estimatedReplies?: number | null;
   trialDaysRemaining: number | null;
   includedCredits: number;
   usedCredits: number;
@@ -1347,9 +1349,11 @@ function ShellComingSoonModal({
 function CreditBalancePill({ status }: { status: BillingAccessClientStatus | null }) {
   const tone = status ? billingBannerTone(status.bannerTone) : billingBannerTone("cyan");
   const label = status ? formatShellCredits(status.balanceCredits) : "--";
+  const replies = typeof status?.estimatedReplies === "number" ? status.estimatedReplies : null;
+  const repliesLabel = replies === null ? null : `≈ ${replies.toLocaleString("pt-BR")} ${replies === 1 ? "resposta" : "respostas"}`;
 
   return (
-    <Link href="/docs/api#ia-creditos" aria-label={`Saldo ${label} créditos. Como meus créditos são usados?`}
+    <Link href="/docs/api#ia-creditos" aria-label={`Saldo ${label} créditos${repliesLabel ? `, ${repliesLabel}` : ""}. Como meus créditos são usados?`}
       className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[11px] font-bold uppercase tracking-wide sm:px-3"
       title="Como meus créditos são usados?"
       style={{
@@ -1361,6 +1365,7 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
       <Coins className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Creditos</span>
       <span>{label}</span>
+      {repliesLabel && <span className="hidden normal-case opacity-80 md:inline">· {repliesLabel}</span>}
     </Link>
   );
 }

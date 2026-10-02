@@ -166,6 +166,8 @@ type AccountData = {
   }>;
   usageSummary: {
     balanceCredits: number;
+    /** Replies the balance covers at the recent average; absent when unknown. */
+    estimatedReplies?: number | null;
     includedCredits: number;
     usedCredits: number;
     remainingCredits: number;
@@ -1463,6 +1465,7 @@ function CreditsTab({
       <CreditExplainer/>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <PlanMetric label="Saldo agora" value={formatCredits(usageSummary.balanceCredits)} />
+        {typeof usageSummary.estimatedReplies === "number" && <PlanMetric label="Rende cerca de" value={`${usageSummary.estimatedReplies.toLocaleString("pt-BR")} respostas`} />}
         <PlanMetric label="Usado no ciclo" value={formatCredits(usageSummary.usedCredits)} />
         <PlanMetric label="Gasto hoje" value={formatCredits(usageSummary.todayChargeCredits)} />
         <PlanMetric label="Gasto 30 dias" value={formatCredits(usageSummary.totalChargeCredits30d)} />

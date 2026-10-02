@@ -13,7 +13,7 @@ import type * as Reconciliation from "../src/lib/billing/usage-reconciliation";
 
 function meteringHarness(overrides = {}) {
   return serverModuleHarness<typeof Metering>("src/lib/billing/metered-usage.ts", {
-    "@/lib/billing/credit-economics": { CONNECTY_CREDIT_UNIT_BRL: .01, TARIFF_REFERENCE_USD_BRL: 6 },
+    "@/lib/billing/credit-economics": { CONNECTY_CREDIT_UNIT_BRL: .01, TARIFF_REFERENCE_USD_BRL: 6, GEMINI_CACHED_INPUT_PRICE_RATIO: .1 },
     "@/lib/billing/cost-center": { calculateGrossMargin: (cost: number, revenue: number) => revenue-cost, ...overrides },
   });
 }
@@ -69,6 +69,26 @@ describe("usage billing integrity", () => {
       {organizationId:"child",provider:"gemini",featureCode:"chat_completion",modelId:"test",inputTokens:100});
     expect(debit.mock.calls[0][1]).toMatchObject({organizationId:"child",connectyChargeCredits:2,
       metadata:{metering:{billingOrganizationId:"owner",planCode:"pro",costFxUsdBrl:6,providerCostUsd:.01666667}}});
+  });
+
+  it("prices cached Gemini input at the provider's cache ratio, keeping real token counts and the markup", async () => {
+    const debit=vi.fn().mockResolvedValue({id:"usage"});
+    const db=commerceDatabase({organizations:[{id:"org",plan_code:"pro",status:"active"}],
+      provider_cost_centers:[{id:"cc",provider:"gemini"}],provider_features:[{id:"f",cost_center_id:"cc",feature_code:"chat_completion",enabled:true,billable:true}],
+      provider_models:[{id:"m",cost_center_id:"cc",provider_model_id:"gemini-3.6-flash"}],billing_rates:[
+        {id:"in",cost_center_id:"cc",feature_id:"f",model_id:"m",unit:"input_token",active:true,connecty_price_per_unit:.0018,provider_cost_per_unit:.0000045,minimum_charge_credits:1},
+        {id:"out",cost_center_id:"cc",feature_id:"f",model_id:"m",unit:"output_token",active:true,connecty_price_per_unit:.009,provider_cost_per_unit:.0000225,minimum_charge_credits:1},
+      ]});
+    const m=meteringHarness({recordUsageAndDebitCredits:debit});
+    await m.meterUsageEvent(db.client as never,{organizationId:"org",provider:"gemini",featureCode:"chat_completion",modelId:"gemini-3.6-flash",inputTokens:100000,cachedInputTokens:80000,outputTokens:100});
+    const usage=debit.mock.calls[0][1];
+    // 20,000 uncached + 80,000 x 10% = 28,000 priced input tokens.
+    expect(usage.connectyChargeCredits).toBeCloseTo(28000*.0018+100*.009,6);
+    expect(usage.providerCost).toBeCloseTo(28000*.0000045+100*.0000225,8);
+    expect(usage.inputTokens).toBe(100000);
+    expect(usage.metadata.metering).toMatchObject({cachedInputTokens:80000,cachedInputPriceRatio:.1});
+    expect(m.applyCachedInputPrice({inputTokens:10},{provider:"elevenlabs",cachedInputTokens:10})).toEqual({inputTokens:10});
+    expect(m.applyCachedInputPrice({inputTokens:10},{provider:"gemini",cachedInputTokens:99})).toMatchObject({inputTokens:1});
   });
 
   it("authenticates agenda interpretation and meters it before applying the decision", async () => {

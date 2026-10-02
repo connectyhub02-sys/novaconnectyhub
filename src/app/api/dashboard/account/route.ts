@@ -14,6 +14,7 @@ import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
 import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { estimateReplies } from "@/lib/billing/reply-estimate";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -294,7 +295,10 @@ export async function GET() {
         payments,
         creditTransactions: (creditTransactionsResult.data ?? []).map(mapCreditTransaction),
         usageEvents: (usageEventsResult.data ?? []).map(mapUsageEvent),
-        usageSummary: mapUsageSummary(usageSummaryEventsResult.data ?? [], billingAccess),
+        usageSummary: {
+          ...mapUsageSummary(usageSummaryEventsResult.data ?? [], billingAccess),
+          estimatedReplies: (await estimateReplies(client, organization.id, billingAccess.balanceCredits)).estimatedReplies,
+        },
         cycles: (cyclesResult.data ?? []).map(mapCycle),
         actions: {
           plansHref: "/dashboard/planos",

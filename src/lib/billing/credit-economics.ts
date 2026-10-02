@@ -2,6 +2,8 @@ export const CONNECTY_CREDIT_UNIT_BRL = 0.01;
 export const INCLUDED_CREDIT_TARGET_MARKUP = 4;
 /** R$/US$ used when tariff costs were registered; the live rate is an admin setting. */
 export const TARIFF_REFERENCE_USD_BRL = 6;
+/** Gemini bills input reused from its implicit cache at 10% of the input price (official table, 2026). */
+export const GEMINI_CACHED_INPUT_PRICE_RATIO = 0.1;
 
 export type PlanCreditEconomicsInput = {
   monthlyPriceBrl: number;

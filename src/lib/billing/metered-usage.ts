@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CONNECTY_CREDIT_UNIT_BRL, TARIFF_REFERENCE_USD_BRL } from "@/lib/billing/credit-economics";
+import { CONNECTY_CREDIT_UNIT_BRL, GEMINI_CACHED_INPUT_PRICE_RATIO, TARIFF_REFERENCE_USD_BRL } from "@/lib/billing/credit-economics";
 import {
   calculateGrossMargin,
   recordUsageAndDebitCredits,
@@ -77,6 +77,8 @@ export type MeteredUsageInput = {
   inputUnits?: number;
   outputUnits?: number;
   inputTokens?: number;
+  /** Part of inputTokens the provider served from its cache (priced at a fraction). */
+  cachedInputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
   characters?: number;
@@ -195,6 +197,7 @@ export async function meterUsageEvent(
     planCode: billingOrganization?.plan_code ?? null,
   });
   const units = buildUsageUnits(input);
+  const billingUnits = applyCachedInputPrice(units, input);
   if (input.provider === "gemini" && (units.inputTokens ?? 0) > 200000
     && normalizedModelId?.startsWith("gemini-3.1-pro-preview")) {
     const longRates = await resolveActiveBillingRates(client, {
@@ -205,7 +208,7 @@ export async function meterUsageEvent(
   }
   const calculated = calculateMeteredUsageCharge({
     rates,
-    units,
+    units: billingUnits,
     chargeCreditsOverride: input.connectyChargeCreditsOverride,
     providerCostOverride: input.providerCostOverride,
   });
@@ -265,6 +268,7 @@ export async function meterUsageEvent(
       minimumChargeCredits: calculated.minimumChargeCredits,
       matchedUnits: calculated.matchedUnits,
       matchedRates: calculated.matchedRates,
+      ...(billingUnits !== units ? { cachedInputTokens: roundUsageUnits(input.cachedInputTokens ?? 0), cachedInputPriceRatio: GEMINI_CACHED_INPUT_PRICE_RATIO } : {}),
       costFxUsdBrl,
       providerCostUsd: roundMoney(providerCost / costFxUsdBrl),
     },
@@ -657,6 +661,19 @@ async function refreshAgentRunUsageTotals(
       },
     })
     .eq("id", runId);
+}
+
+/**
+ * Cached input costs the provider a fraction of the input price; the customer pays
+ * the same fraction, so the markup is kept and the saving is passed on. Recorded
+ * token counts stay real; only the priced input units change.
+ */
+export function applyCachedInputPrice(units: MeteredUsageUnits, input: Pick<MeteredUsageInput, "provider" | "cachedInputTokens">) {
+  const inputTokens = units.inputTokens ?? 0;
+  const cached = Math.min(positiveNumber(input.cachedInputTokens), inputTokens);
+  if (input.provider !== "gemini" || cached <= 0) return units;
+  const priced = inputTokens - cached * (1 - GEMINI_CACHED_INPUT_PRICE_RATIO);
+  return { ...units, inputTokens: priced, inputUnits: priced };
 }
 
 function buildUsageUnits(input: MeteredUsageInput): MeteredUsageUnits {
