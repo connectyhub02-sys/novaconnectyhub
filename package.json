@@ -12,6 +12,7 @@
     "api:audit": "node scripts/audit-uazapi-coverage.mjs --write-doc"
   },
   "dependencies": {
+    "@elevenlabs/client": "^1.26.0",
     "@elevenlabs/elevenlabs-js": "^2.51.0",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.95",

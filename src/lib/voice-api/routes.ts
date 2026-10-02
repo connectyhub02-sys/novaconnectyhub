@@ -39,6 +39,15 @@ export async function voiceRoute(request:Request,path:string[],studio=false) {
       if(request.method==='GET'&&path[2]==='samples'&&path.length===3)return voiceJson(await cloneSamples(auth,path[1]));
       if(request.method==='GET'&&path[2]==='samples'&&path.length===5&&path[4]==='audio')return await cloneSamples(auth,path[1],path[3]) as Response;
     }
+    if(path[0]==='agents'){
+      // Voice agents of the key's company: list, and a signed browser/app session per call.
+      if(path.length===1&&request.method==='GET'){const {data,error}=await auth.client.from('voice_agents').select('id,name,language,max_duration_seconds,status').eq('organization_id',auth.project.organization_id).eq('status','active');if(error)throw new VoiceError('service_unavailable',503,'Não foi possível listar os agentes de voz.');return voiceJson({agents:data});}
+      if(path.length===3&&path[2]==='session'&&request.method==='POST'){
+        const {startVoiceAgentCall,VoiceAgentError}=await import('@/lib/voice-agents/service');
+        try{return voiceJson(await startVoiceAgentCall(auth.client,auth.project.organization_id,path[1]));}
+        catch(error){if(error instanceof VoiceAgentError)throw new VoiceError(error.code,error.status,error.message);throw error;}
+      }
+    }
     if(path.length===1&&path[0]==='usage'&&request.method==='GET')return voiceJson(await voiceUsage(auth,Number(new URL(request.url).searchParams.get('days'))||30));
     if(path.length===1 && request.method==='GET') {
       if(path[0]==='voices')return voiceJson(await voiceCatalog(auth));

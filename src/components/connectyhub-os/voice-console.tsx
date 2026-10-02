@@ -7,7 +7,8 @@ import {VoiceUsageCharts} from './voice-usage-charts';
 import {StudioTools} from './studio-tools';
 import {VoiceDictionarySelect} from './voice-dictionary-select'
 import {VoiceStudioComposer} from './voice-studio-composer'
-import {VoiceDeveloperTools} from './voice-developer-tools';
+import {VoiceDeveloperTools} from './voice-developer-tools'
+import {VoiceAgentsPanel} from './voice-agents-panel';
 import {StudioAdminControls} from './studio-admin-controls';
 import {voiceModelName} from '../../lib/voice-api/model-presentation';
 type Project={id:string;name:string;status:string;monthly_credit_limit:number|null
@@ -56,7 +57,7 @@ export function VoiceConsole({admin=false}:{admin?:boolean}){
    <label className="flex items-center gap-2 text-slate-600">Uso<select aria-label="Período de uso" className="min-h-11 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900" value={days} onChange={e=>{setData(null);setDays(e.target.value);}}><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option></select></label>
    <span><strong>{summary?number(summary.requests):'…'}</strong> solicitações</span><span><strong>{summary?number(summary.credits):'…'}</strong> créditos usados</span><span className="text-slate-600">{summary?`${number(summary.failed)} falhas · ${number(summary.pending)} pendentes`:'Carregando uso…'}</span>
   </section>}
-  {!admin&&<nav aria-label="Painel do Estúdio de Voz e Áudio AI" className="grid grid-cols-2 gap-1 border-b border-slate-200 sm:flex">{[['Estúdio','Estúdio de Voz'],['API','Projetos e chaves API']].map(([value,label])=><button key={value} aria-current={tab===value?'page':undefined} onClick={()=>setTab(value)} className={`min-h-12 min-w-0 border-b-2 px-2 py-3 text-xs font-semibold sm:px-4 sm:text-sm ${tab===value?'border-blue-700 text-blue-800':'border-transparent text-slate-500 hover:text-slate-900'}`}>{label}</button>)}</nav>}
+  {!admin&&<nav aria-label="Painel do Estúdio de Voz e Áudio AI" className="grid grid-cols-2 gap-1 border-b border-slate-200 sm:flex">{[['Estúdio','Estúdio de Voz'],['Agentes','Agentes de voz'],['API','Projetos e chaves API']].map(([value,label])=><button key={value} aria-current={tab===value?'page':undefined} onClick={()=>setTab(value)} className={`min-h-12 min-w-0 border-b-2 px-2 py-3 text-xs font-semibold sm:px-4 sm:text-sm ${tab===value?'border-blue-700 text-blue-800':'border-transparent text-slate-500 hover:text-slate-900'}`}>{label}</button>)}</nav>}
   {message&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{message}</p>}
   <div className="flex flex-wrap items-end gap-3">
    {!admin&&tab==='Estúdio'&&<label className="min-w-0 flex-1 text-sm font-medium">Projeto<select aria-label="Projeto de Voz" disabled={busy||!data} className={`${field} mt-2`} value={project} onChange={e=>{setProject(e.target.value);setReceipt(null);setAudio('');}}>{!data?.projects?.length&&<option value="">{data?'Crie seu primeiro projeto':'Carregando projetos…'}</option>}{data?.projects?.map(p=><option key={p.id} value={p.id}>{p.name}{p.status!=='active'?' · pausado':''}</option>)}</select></label>}
@@ -68,6 +69,7 @@ export function VoiceConsole({admin=false}:{admin?:boolean}){
   {admin&&data.projectsTruncated&&<p className="text-sm text-amber-800">O seletor mostra os primeiros 1.000 projetos. Os totais incluem todos os projetos do filtro.</p>}
   {!admin&&!data.projects?.length&&<div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed border-blue-300 bg-white p-6"><div><h2 className="font-bold">Conecte seu primeiro projeto</h2><p className="mt-2 text-sm text-slate-600">Organize as vozes, os áudios e as chaves do seu aplicativo em um projeto.</p></div><button className={button} onClick={()=>setTab('API')}><Plus size={16}/>Criar meu projeto</button></div>}
   {!admin&&tab==='Estúdio'&&project&&!catalogReady&&<p role="status" className="text-sm text-slate-500">Carregando vozes e modelos do projeto…</p>}
+  {tab==='Agentes'&&!admin&&<VoiceAgentsPanel voices={catalogReady?voices:[]}/>}
   {tab==='Estúdio'&&!admin&&<div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
    <div className="min-w-0 space-y-3">
     {catalogReady&&<VoiceDictionarySelect key={project} project={project} revision={resourceRevision} value={dictionaries[project]??''} onChange={value=>setDictionaries(d=>({...d,[project]:value}))}/>}

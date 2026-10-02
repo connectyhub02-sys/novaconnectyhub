@@ -806,6 +806,12 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  // Voice agents: finished conversations are charged once (idempotent by provider conversation id).
+  inngest.createFunction({ id: "connectyhub-voice-agent-metering", name: "Voz: cobrança de conversas de agentes", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
+    async ({ step }) => step.run("meter-voice-agent-conversations", async () => {
+      const [{ meterVoiceAgentConversations }, { createServiceClient }] = await Promise.all([import("@/lib/voice-agents/service"), import("@/lib/supabase/service")]);
+      return meterVoiceAgentConversations(createServiceClient());
+    })),
   // Voice webhooks: finished asynchronous operations are delivered once, signed, with retries.
   inngest.createFunction({ id: "connectyhub-voice-webhooks", name: "Voz: webhooks de operações", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
     async ({ step }) => step.run("deliver-voice-webhooks", async () => {
