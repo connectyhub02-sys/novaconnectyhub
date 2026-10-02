@@ -19,12 +19,14 @@ import type {VoiceRow} from './generations';
 import {studioSubtitles} from './studio-subtitles';
 
 export const studioBucket='connectyhub-studio';
-type Operation={id:string;operation:StudioInput['operation'];model_id:string;provider:'gemini'|'elevenlabs';feature_code:string;input:StudioInput;reserved_units:MeteredUsageUnits;actual_units:MeteredUsageUnits|null;provider_receipt:string|null;result_mime:string|null;result_manifest:SavedResult|null;result_state?:string;storage_reserved_bytes:number;storage_reserved_files:number};
-type Receipt=VoiceRow&{rate_snapshot:MeteredRate[];key_id:string|null};
+/** 64 kbps MP3 is about 600 bytes per spoken character; reserve with margin, within the 250 MB e-book limit. */
+export const longTextStorageBytes=(characters:number)=>Math.min(250_000_000,characters*1000+1_000_000);
+export type Operation={id:string;operation:StudioInput['operation'];model_id:string;provider:'gemini'|'elevenlabs';feature_code:string;input:StudioInput;reserved_units:MeteredUsageUnits;actual_units:MeteredUsageUnits|null;provider_receipt:string|null;result_mime:string|null;result_manifest:SavedResult|null;result_state?:string;storage_reserved_bytes:number;storage_reserved_files:number};
+export type Receipt=VoiceRow&{rate_snapshot:MeteredRate[];key_id:string|null};
 type Resource={id:string;project_id:string;organization_id:string;operation_id:string;kind:string;provider_id:string;provider_version:string|null;name:string;object_path:string|null;metadata:Record<string,unknown>;status:string};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const providerId=(v:unknown)=>{if(typeof v!=='string'||!/^[a-zA-Z0-9_-]{1,150}$/.test(v))throw new VoiceError('provider_result_invalid',502,'Identificador de resultado inválido.');return v;};
-async function rpc(client:SupabaseClient,name:string,args:Record<string,unknown>):Promise<Receipt>{
+export async function rpc(client:SupabaseClient,name:string,args:Record<string,unknown>):Promise<Receipt>{
  const {data,error}=await client.rpc(name,args);if(error){const code=error.message.match(/voice_[a-z_]+/)?.[0]??'service_unavailable';throw new VoiceError(code,code.includes('insufficient')?402:code.includes('limit')?429:code.includes('conflict')?409:503,'Não foi possível concluir a operação do Estúdio.');}return data as Receipt;
 }
 export async function ownedStudioOperation(auth:VoiceAuth,id:string){
@@ -42,7 +44,7 @@ export async function ownedStudioResource(auth:VoiceAuth,id:string,kind?:string)
  if(!data||kind&&data.kind!==kind)throw new VoiceError('not_found',404,'Recurso não encontrado.');
  const {r}=await ownedStudioOperation(auth,data.operation_id);if(r.status!=='completed')throw new VoiceError('resource_pending',409,'Recurso ainda em processamento.');return data;
 }
-async function validateResources(auth:VoiceAuth,input:StudioInput){
+export async function validateResources(auth:VoiceAuth,input:StudioInput){
  let duration:number|undefined;
  if(input.asset_id){const a=await ownedStudioAsset(auth,input.asset_id);if(a.status!=='ready'||a.duration_seconds===null)throw new VoiceError('asset_pending',409,'Espere o áudio terminar de processar.');duration=Number(a.duration_seconds);}
  if(input.operation==='gemini_tts')studioGeminiRequest({text:input.text!,voiceId:input.voice_id!,modelId:input.model_id});
@@ -61,9 +63,9 @@ export async function createStudioOperation(auth:VoiceAuth,request:Request,raw:u
  const duration=await validateResources(auth,input),units=studioInputUnits(input,duration),{rates,price}=await studioPrice(auth,input,units);
  studioCreditCeiling(request,price.chargeCredits);
  const jsonOnly=['transcription','forced_alignment','dictionary_create','voice_design_save'].includes(input.operation);
- const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:jsonOnly?4_000_000:20_000_000,p_storage_files:input.operation==='voice_design'?4:1});
+ const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:input.operation==='long_tts'?longTextStorageBytes(input.text!.length):jsonOnly?4_000_000:20_000_000,p_storage_files:input.operation==='voice_design'?4:1});
  // A lost queue acknowledgment is safe: the sweeper finds this reserved receipt.
- await inngest.send({name:'connectyhub/studio.operation',data:{operationId:r.id}}).catch(()=>{});
+ await inngest.send({name:input.operation==='long_tts'?'connectyhub/studio.long_tts':'connectyhub/studio.operation',data:{operationId:r.id}}).catch(()=>{});
  const current=await ownedStudioOperation(auth,r.id);return {...publicStudioOperation(current.r,current.s),replayed:!r.claimed};
 }
 export async function quoteStudioOperation(auth:VoiceAuth,raw:unknown){
@@ -77,14 +79,16 @@ export async function listStudioOperations(auth:VoiceAuth){
  if(error)throw new VoiceError('service_unavailable',503,'Histórico indisponível.');
  const operations=[];for(const item of data??[]){const {r,s}=await ownedStudioOperation(auth,item.id);operations.push(publicStudioOperation(r,s));}return {operations,limit:50};
 }
-const prefix=(r:Receipt)=>`${r.organization_id}/${r.project_id}/${r.id}`;
-async function put(client:SupabaseClient,path:string,bytes:Buffer,mime:string){
+export const prefix=(r:Receipt)=>`${r.organization_id}/${r.project_id}/${r.id}`;
+export async function put(client:SupabaseClient,path:string,bytes:Buffer,mime:string){
  const result=await client.storage.from(studioBucket).upload(path,bytes,{contentType:mime,upsert:false});
  if(result.error){const old=await client.storage.from(studioBucket).download(path);if(old.error||old.data.size!==bytes.length||createHash('sha256').update(Buffer.from(await old.data.arrayBuffer())).digest('hex')!==createHash('sha256').update(bytes).digest('hex'))throw new VoiceError('storage_pending',503,'Resultado aguardando recuperação.');}
 }
 type Output={bytes:Buffer;mime:string;units:MeteredUsageUnits|null;extraBytes?:number;extraFiles?:number};
-type SavedResult={mime:string;bytes:number;main_bytes:number;sha256:string;files:number;units:MeteredUsageUnits|null};
-async function settleStored(auth:VoiceAuth,r:Receipt,s:Operation,result:SavedResult){
+/** Long texts keep their audio as parts; the result is their concatenation, in order. */
+export type ResultPart={path:string;bytes:number;sha256:string};
+export type SavedResult={mime:string;bytes:number;main_bytes:number;sha256:string;files:number;units:MeteredUsageUnits|null;parts?:ResultPart[]};
+export async function settleStored(auth:VoiceAuth,r:Receipt,s:Operation,result:SavedResult){
  const updated=await auth.client.from('voice_generations').update({object_path:`${prefix(r)}/result`,bytes_size:result.bytes}).eq('id',r.id).in('status',['processing','uncertain']);
  const op=await auth.client.from('studio_operations').update({result_mime:result.mime,result_file_count:result.files}).eq('id',r.id);
  if(updated.error||op.error)throw new VoiceError('storage_pending',503,'Resultado aguardando confirmação.');
@@ -106,6 +110,14 @@ async function persist(auth:VoiceAuth,r:Receipt,s:Operation,output:Output){
 async function recoverStored(auth:VoiceAuth,r:Receipt,s:Operation){
  const receipt=s.result_manifest;if(!receipt)return null;
  if(!['audio/mpeg','audio/wav','application/json','text/plain'].includes(receipt.mime)||!Number.isSafeInteger(receipt.bytes)||receipt.bytes<1||receipt.bytes>s.storage_reserved_bytes||!Number.isSafeInteger(receipt.files)||receipt.files<1||receipt.files>s.storage_reserved_files)throw new VoiceError('result_invalid',503,'Recibo de resultado inválido.');
+ if(receipt.parts){
+  // Parts are verified one by one; the e-book is never held in memory as a whole.
+  if(s.operation!=='long_tts'||!receipt.parts.length||receipt.parts.some(part=>!part.path.startsWith(`${prefix(r)}/parts/`)||part.path.includes('..')))throw new VoiceError('result_invalid',503,'Recibo de resultado inválido.');
+  let total=0;
+  for(const part of receipt.parts){const file=await auth.client.storage.from(studioBucket).download(part.path);if(file.error)return null;const bytes=Buffer.from(await file.data.arrayBuffer());if(bytes.length!==part.bytes||createHash('sha256').update(bytes).digest('hex')!==part.sha256)throw new VoiceError('result_invalid',503,'Integridade do resultado inválida.');total+=bytes.length;}
+  if(total!==receipt.bytes)throw new VoiceError('result_invalid',503,'Integridade do resultado inválida.');
+  return settleStored(auth,r,s,receipt);
+ }
  const saved=await auth.client.storage.from(studioBucket).download(`${prefix(r)}/result`);if(saved.error)return null;
  if(saved.data.size!==receipt.main_bytes||createHash('sha256').update(Buffer.from(await saved.data.arrayBuffer())).digest('hex')!==receipt.sha256)throw new VoiceError('result_invalid',503,'Integridade do resultado inválida.');
  if(receipt.files>1){
@@ -178,6 +190,9 @@ export async function runStudioOperation(client:SupabaseClient,id:string){
  const loaded=await client.from('voice_generations').select('*').eq('id',id).eq('operation','studio').maybeSingle<Receipt>();
  if(loaded.error)throw new Error('Studio receipt unavailable');if(!loaded.data)return {status:'not_found'};
  const r=loaded.data;if(['completed','failed'].includes(r.status))return {status:r.status};
+ const kind=await client.from('studio_operations').select('operation').eq('id',id).maybeSingle<{operation:string}>();
+ // Long texts run as one step per part in their own function; here they are only (re)queued.
+ if(kind.data?.operation==='long_tts'){await inngest.send({name:'connectyhub/studio.long_tts',data:{operationId:id}});return {status:'queued'};}
  const project=await client.from('voice_projects').select('*').eq('id',r.project_id).single<VoiceProject>();
  if(project.error)throw new Error('Studio project unavailable');
  let auth:VoiceAuth={client,project:project.data,keyId:r.key_id,planCode:null,billingOrg:r.billing_organization_id,studio:false};
@@ -249,6 +264,10 @@ export async function sweepStudioOperations(client:SupabaseClient){
 }
 export async function downloadStudioResult(auth:VoiceAuth,id:string,format?:string|null){
  const {r,s}=await ownedStudioOperation(auth,id);if(r.status!=='completed'||!r.object_path||s.result_state==='deleted'||s.result_state==='deleting')throw new VoiceError('result_pending',409,'Resultado ainda indisponível.');
+ if(s.result_manifest?.parts){
+  if(format)throw new VoiceError('invalid_format',422,'Formato não disponível para esta operação.');
+  return new Response(streamParts(auth.client,s.result_manifest.parts),{headers:{'Content-Type':'audio/mpeg','Content-Length':String(s.result_manifest.bytes),'Content-Disposition':'attachment; filename="audiobook.mp3"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+ }
  const result=await auth.client.storage.from(studioBucket).download(r.object_path);if(result.error)throw new VoiceError('result_unavailable',503,'Resultado indisponível.');
  if(format){
   if(!['srt','vtt'].includes(format)||!['transcription','forced_alignment'].includes(s.operation))throw new VoiceError('invalid_format',422,'Formato não disponível para esta operação.');
@@ -257,13 +276,22 @@ export async function downloadStudioResult(auth:VoiceAuth,id:string,format?:stri
  }
  return new Response(result.data,{headers:{'Content-Type':s.result_mime??'application/octet-stream','Content-Disposition':'attachment; filename="resultado"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 }
+function streamParts(client:SupabaseClient,parts:ResultPart[]){
+ let index=0;
+ return new ReadableStream<Uint8Array>({async pull(controller){
+  if(index>=parts.length){controller.close();return;}
+  const file=await client.storage.from(studioBucket).download(parts[index++].path);
+  if(file.error){controller.error(new Error('Parte do áudio indisponível.'));return;}
+  controller.enqueue(new Uint8Array(await file.data.arrayBuffer()));
+ }});
+}
 export async function downloadStudioPreview(auth:VoiceAuth,id:string){
  const resource=await ownedStudioResource(auth,id,'voice_preview');if(!resource.object_path)throw new VoiceError('not_found',404,'Prévia não encontrada.');
  const result=await auth.client.storage.from(studioBucket).download(resource.object_path);if(result.error)throw new VoiceError('result_unavailable',503,'Prévia indisponível.');
  return new Response(result.data,{headers:{'Content-Type':'audio/mpeg','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 }
 export async function deleteStudioResult(auth:VoiceAuth,id:string){
- const {r}=await ownedStudioOperation(auth,id);
+ const {r,s}=await ownedStudioOperation(auth,id);
  const prepared=await auth.client.rpc('prepare_studio_result_delete',{p_id:id});
  if(prepared.error)throw new VoiceError('result_in_use',409,'Aguarde a conclusão das operações que usam este resultado.');
  const data=prepared.data as {state:string;paths:string[]};
@@ -272,6 +300,11 @@ export async function deleteStudioResult(auth:VoiceAuth,id:string){
   throw new VoiceError('result_invalid',503,'A exclusão precisa de conferência.');
  // Storage removal is idempotent. A timeout keeps capacity reserved and the
  // same DELETE can safely finish without affecting billing or regenerating.
+ for(let i=0;i<(s.result_manifest?.parts?.length??0);i+=100){
+  const batch=s.result_manifest!.parts!.slice(i,i+100).map(part=>part.path);
+  if(batch.some(path=>!path.startsWith(`${prefix(r)}/parts/`)||path.includes('..')))throw new VoiceError('result_invalid',503,'A exclusão precisa de conferência.');
+  const removed=await auth.client.storage.from(studioBucket).remove(batch);if(removed.error)throw new VoiceError('delete_pending',503,'Exclusão ainda pendente. Tente novamente com o mesmo resultado.');
+ }
  if(data.paths.length){const removed=await auth.client.storage.from(studioBucket).remove(data.paths);if(removed.error)throw new VoiceError('delete_pending',503,'Exclusão ainda pendente. Tente novamente com o mesmo resultado.');}
  const finished=await auth.client.rpc('finish_studio_result_delete',{p_id:id});
  if(finished.error)throw new VoiceError('delete_pending',503,'Arquivos removidos; liberação da capacidade ainda pendente. Repita a exclusão.');

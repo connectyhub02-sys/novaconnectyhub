@@ -13,6 +13,7 @@ const object=(properties:Record<string,object>,required:string[]=Object.keys(pro
 const operation=(name:string,fields:Record<string,object>,required:string[]=Object.keys(fields))=>object({operation:{const:name},model_id:{type:'string',description:'Identificador exato de GET /capabilities; omissão usa o modelo padrão da operação.'},...fields},['operation',...required]);
 const audio={asset_id:uuid};
 const language={type:'string',pattern:'^[a-z]{2,3}$'};
+const voiceSettings=object({stability:{type:'number',minimum:0,maximum:1},similarity_boost:{type:'number',minimum:0,maximum:1},style:{type:'number',minimum:0,maximum:1},speed:{type:'number',minimum:0.7,maximum:1.2},use_speaker_boost:{type:'boolean'}},[]);
 const rule={oneOf:[object({type:{const:'alias'},string_to_replace:text(1,100),alias:text(1,200)}),object({type:{const:'phoneme'},string_to_replace:text(1,100),phoneme:text(1,200),alphabet:{enum:['ipa','cmu-arpabet']}})]};
 export const studioSchemas={
  StudioInput:{oneOf:[
@@ -20,6 +21,7 @@ export const studioSchemas={
   operation('audio_isolation',audio),operation('voice_change',{...audio,voice_id:text(1,100)}),
   operation('forced_alignment',{...audio,text:text(1,4800)}),operation('dubbing',{...audio,target_language:language}),
   operation('gemini_tts',{voice_id:text(1,100),text:text(1,4800)}),
+  operation('long_tts',{voice_id:text(1,100),text:{...text(1,240000),description:'Livro ou documento inteiro. Toda a cotação é reservada antes do início.'},voice_settings:voiceSettings,language_code:language,dictionary_ids:dictionaries},['voice_id','text']),
   operation('dialogue',{turns:{type:'array',minItems:1,maxItems:50,description:'Soma até 2.000 caracteres e 10 vozes diferentes.',items:object({voice_id:text(1,100),text:text(1,2000)})},dictionary_ids:dictionaries},['turns']),
   operation('voice_design',{description:text(20,1000),sample_text:text(100,1000)}),
   operation('voice_design_save',{preview_id:uuid,name:text(2,80),description:text(20,1000)}),
@@ -64,6 +66,9 @@ forced_alignment recebe asset_id e text de até 4.800 caracteres. É alinhamento
 dialogue recebe turns, com text e voice_id por fala: até 50 falas, 10 vozes e 2.000 caracteres no total. dictionary_create recebe name e rules: de 1 a 100 regras alias (string_to_replace, alias) ou phoneme (string_to_replace, phoneme, alphabet ipa ou cmu-arpabet). parent_dictionary_id opcional vincula uma versão anterior própria; as regras enviadas formam uma versão completa e independente. GET /resources lista os IDs. Use dictionary_ids (até três IDs distintos, em ordem de precedência) no TTS /generations ou dialogue /operations. Recursos de outro projeto são recusados. Compatibilidade de fonemas depende do modelo e idioma. Criar um dicionário e gerar áudio são operações distintas; aplicar um dicionário não acrescenta uma segunda geração ou cobrança à mesma síntese.
 
 Tarifa de gerenciamento do dicionário: preço comercial provisório por criação ou nova versão, consultável em /capabilities e /quote. Consultas e recuperação da mesma Idempotency-Key não geram outro débito; aplicação no áudio não tem tarifa adicional. Não confundir essa operação com geração TTS gratuita. O preço cotado e o teto aceito ficam preservados no recibo.
+
+## Texto longo (e-book)
+operation=long_tts recebe text de até 240.000 caracteres, voice_id do catálogo do projeto e model_id entre eleven_multilingual_v2 (padrão), eleven_v3, eleven_flash_v2_5 e eleven_turbo_v2_5. voice_settings opcional: stability, similarity_boost e style de 0 a 1, speed de 0,7 a 1,2, use_speaker_boost. language_code opcional. A cobrança é por caractere, com a mesma tarifa da geração avulsa do modelo. Antes de qualquer áudio, a cotação inteira é reservada; sem saldo suficiente, a operação é recusada (402) sem custo. O texto é convertido em partes, com continuidade entre elas, e o resultado é um único MP3 (64 kbps, qualidade de audiolivro) em /operations/{id}/result. O débito acontece uma vez, ao concluir. Livros maiores devem ser divididos em volumes.
 
 ## Voz desenhada e voz nativa
 voice_design recebe description (20–1.000 caracteres) e sample_text (100–1.000). As prévias privadas concluídas aparecem em GET /resources; ouça /resources/{id}/audio. voice_design_save recebe preview_id próprio, name (2–80) e description. A voz salva aparece no catálogo deste projeto. Cada criação/salvamento tem sua própria cotação; não são automaticamente gratuitos. gemini_tts recebe text de até 4.800 caracteres e uma voice_id de gemini_voices em /capabilities. Clones de outro serviço não são vozes nativas compatíveis. Nessa operação, a cotação é uma reserva máxima; o débito usa tokens de entrada e saída efetivamente informados, com liberação da diferença. Ausência da medição mantém a operação em conferência, sem inventar custo zero.

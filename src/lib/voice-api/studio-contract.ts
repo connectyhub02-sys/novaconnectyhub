@@ -11,10 +11,16 @@ export const studioDefinitions={
  dictionary_create:{name:'Dicionário de pronúncia',model:'pronunciation-dictionary',provider:'elevenlabs',feature:'studio_dictionary',unit:'request',audio:false},
  dubbing:{name:'Dublagem',model:'dubbing-v1',provider:'elevenlabs',feature:'studio_dubbing',unit:'minute',audio:true},
  gemini_tts:{name:'Voz nativa Gemini',model:'gemini-3.1-flash-tts-preview',provider:'gemini',feature:'voice_generation_audio',unit:'token',audio:false},
+ long_tts:{name:'Texto longo (e-book)',model:'eleven_multilingual_v2',provider:'elevenlabs',feature:'text_to_speech',unit:'character',audio:false},
 } as const;
+/** Text-to-speech models offered for long texts, priced per character like the single generation. */
+export const longTextModels=['eleven_multilingual_v2','eleven_flash_v2_5','eleven_turbo_v2_5','eleven_v3'] as const;
+/** Fits the 250 MB e-book limit at 64 kbps; longer books are split into volumes. */
+export const longTextMaxCharacters=240000;
+export type VoiceSettings={stability?:number;similarity_boost?:number;style?:number;speed?:number;use_speaker_boost?:boolean};
 export type StudioOperation=keyof typeof studioDefinitions;
 type Rule={type:'alias';string_to_replace:string;alias:string}|{type:'phoneme';string_to_replace:string;phoneme:string;alphabet:'ipa'|'cmu-arpabet'};
-export type StudioInput={operation:StudioOperation;model_id:string;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
+export type StudioInput={operation:StudioOperation;model_id:string;voice_settings?:VoiceSettings;language_code?:string;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
 const fail=(message='Parâmetros da operação inválidos.')=>new VoiceError('invalid_operation',422,message);
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw fail();return v as Record<string,unknown>;}
 function text(v:unknown,min:number,max:number){if(typeof v!=='string'||v.trim().length<min||v.length>max)throw fail(`Texto deve ter entre ${min} e ${max} caracteres.`);return v.trim();}
@@ -22,12 +28,24 @@ function identifier(v:unknown){const s=text(v,1,100);if(!/^[a-zA-Z0-9_-]+$/.test
 function uuid(v:unknown){const s=text(v,36,36);if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(s))throw fail();return s;}
 function language(v:unknown){const s=text(v,2,3);if(!/^[a-z]{2,3}$/.test(s))throw fail();return s;}
 function fields(b:Record<string,unknown>,allowed:string[]){if(Object.keys(b).some(k=>!allowed.includes(k)))throw fail('Campo não suportado nesta operação.');}
+const settingRanges:Record<string,[number,number]>={stability:[0,1],similarity_boost:[0,1],style:[0,1],speed:[0.7,1.2]};
+export function parseVoiceSettings(raw:unknown):VoiceSettings{
+ const v=object(raw),out:VoiceSettings={};
+ for(const [key,value] of Object.entries(v)){
+  if(key==='use_speaker_boost'&&typeof value==='boolean'){out.use_speaker_boost=value;continue;}
+  const range=settingRanges[key];
+  if(!range||typeof value!=='number'||!Number.isFinite(value)||value<range[0]||value>range[1])throw fail('Estabilidade, similaridade e estilo: 0 a 1; velocidade: 0,7 a 1,2; speaker boost: verdadeiro ou falso.');
+  out[key as 'stability']=value;
+ }
+ return out;
+}
 export function parseStudioInput(raw:unknown):StudioInput{
  const b=object(raw),op=b.operation;
  if(typeof op!=='string'||!Object.hasOwn(studioDefinitions,op))throw fail('Escolha uma operação disponível.');
  const operation=op as StudioOperation,d=studioDefinitions[operation];
  const result:StudioInput={operation,model_id:b.model_id===undefined?d.model:text(b.model_id,1,100)};
- if(operation!=='gemini_tts'&&result.model_id!==d.model)throw fail('Modelo não suportado para esta operação.');
+ if(operation==='long_tts'){if(!(longTextModels as readonly string[]).includes(result.model_id))throw fail('Modelo não suportado para esta operação.');}
+ else if(operation!=='gemini_tts'&&result.model_id!==d.model)throw fail('Modelo não suportado para esta operação.');
  if(operation==='gemini_tts'&&!['gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts'].includes(result.model_id))throw fail('Modelo de voz não suportado.');
  const allowed=['operation','model_id'];
  if(d.audio){allowed.push('asset_id');result.asset_id=uuid(b.asset_id);}
@@ -36,6 +54,14 @@ export function parseStudioInput(raw:unknown):StudioInput{
   case 'voice_change':allowed.push('voice_id');result.voice_id=identifier(b.voice_id);break;
   case 'forced_alignment':allowed.push('text');result.text=text(b.text,1,4800);break;
   case 'dubbing':allowed.push('target_language');result.target_language=language(b.target_language);break;
+  case 'long_tts':{
+   allowed.push('voice_id','text','voice_settings','language_code','dictionary_ids');result.voice_id=identifier(b.voice_id);
+   const normalized=typeof b.text==='string'?b.text.replace(/\r\n/g,'\n').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim():'';
+   if(normalized.length<1||normalized.length>longTextMaxCharacters)throw fail(`O texto deve ter entre 1 e ${longTextMaxCharacters.toLocaleString('pt-BR')} caracteres. Divida livros maiores em volumes.`);
+   result.text=normalized;if(b.language_code!==undefined)result.language_code=language(b.language_code);
+   if(b.voice_settings!==undefined)result.voice_settings=parseVoiceSettings(b.voice_settings);
+   const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;break;
+  }
   case 'gemini_tts':allowed.push('voice_id','text');result.voice_id=text(b.voice_id,1,100);if(!/^gemini:[a-z]+$/.test(result.voice_id))throw fail('Escolha uma voz nativa do catálogo.');result.text=text(b.text,1,4800);break;
   case 'dialogue':{
    allowed.push('turns','dictionary_ids');const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;if(!Array.isArray(b.turns)||!b.turns.length||b.turns.length>50)throw fail('Envie de1 a50 falas.');
@@ -63,6 +89,7 @@ export function studioInputUnits(input:StudioInput,duration?:number){
   return {minutes:Math.ceil(duration)/60};
  }
  if(input.operation==='dialogue')return {characters:input.turns!.reduce((n,t)=>n+t.text.length,0)};
+ if(input.operation==='long_tts')return {characters:input.text!.length};
  if(input.operation==='voice_design')return {characters:input.sample_text!.length};
  if(input.operation==='gemini_tts')return {inputTokens:Buffer.byteLength(input.text!,'utf8')+256,outputTokens:8192};
  return {requests:1};

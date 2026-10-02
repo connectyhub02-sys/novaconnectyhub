@@ -17,7 +17,7 @@ it('documents every accepted operation with strict request fields and valid exam
  const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  const examples=[{operation:'transcription',asset_id:id},{operation:'audio_isolation',asset_id:id},{operation:'voice_change',asset_id:id,voice_id:'test_voice'},
  {operation:'forced_alignment',asset_id:id,text:'Teste sintético'},{operation:'dubbing',asset_id:id,target_language:'en'},
- {operation:'gemini_tts',voice_id:'gemini:kore',text:'Teste sintético'},{operation:'dialogue',turns:[{text:'Olá',voice_id:'test_voice'}]},
+ {operation:'gemini_tts',voice_id:'gemini:kore',text:'Teste sintético'},{operation:'long_tts',voice_id:'test_voice',text:'Capítulo um.',model_id:'eleven_flash_v2_5',voice_settings:{speed:1.1},language_code:'pt'},{operation:'dialogue',turns:[{text:'Olá',voice_id:'test_voice'}]},
  {operation:'voice_design',description:'Uma voz calma para leitura de notícias.',sample_text:'Este texto é um exemplo sintético usado para conferir o contrato de geração sem executar nenhuma operação externa.'},
  {operation:'voice_design_save',preview_id:id,name:'Voz teste',description:'Uma voz calma para leitura de notícias.'},
  {operation:'dictionary_create',name:'Dicionário teste',rules:[{type:'alias',string_to_replace:'CH',alias:'ConnectyHub'}]}];

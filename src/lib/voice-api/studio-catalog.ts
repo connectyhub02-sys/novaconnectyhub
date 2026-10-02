@@ -2,12 +2,12 @@ import 'server-only';
 import {geminiTtsVoices} from '@/lib/gemini/tts';
 import type {VoiceAuth} from './auth';
 import {VoiceError} from './contract';
-import {studioDefinitions,type StudioInput} from './studio-contract';
+import {longTextModels,studioDefinitions,type StudioInput} from './studio-contract';
 import {studioPrice} from './studio-pricing';
 export async function studioCatalog(auth:VoiceAuth){
  const capabilities=[];
  for(const [operation,d] of Object.entries(studioDefinitions)){
-  const models=operation==='gemini_tts'?['gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts']:[d.model];
+  const models=operation==='gemini_tts'?['gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts']:operation==='long_tts'?[...longTextModels]:[d.model];
   for(const model of models){
    const item={operation,name:d.name,model_id:model,unit:d.unit,requires_audio:d.audio,available:false,reason:'Em preparação',rates:[] as Array<{unit:string;credits_per_unit:number;minimum_credits:number}>};
    if(process.env.STUDIO_OPERATIONS_ENABLED==='true')try{

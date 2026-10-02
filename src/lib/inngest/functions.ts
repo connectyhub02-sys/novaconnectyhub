@@ -806,6 +806,22 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  // Long texts (e-books): one memoized step per part, so a restart resumes instead of regenerating.
+  inngest.createFunction({ id: "connectyhub-studio-long-tts", name: "Estúdio: texto longo (e-book)", retries: 0,
+    concurrency: { key: "event.data.operationId", limit: 1 }, triggers: [{ event: "connectyhub/studio.long_tts" }] },
+    async ({ event, step }) => {
+      const id = String(event.data.operationId);
+      const load = () => Promise.all([import("@/lib/voice-api/studio-long-tts"), import("@/lib/supabase/service")]);
+      const prepared = await step.run("prepare", async () => { const [m, db] = await load(); return m.prepareLongText(db.createServiceClient(), id); });
+      if (prepared.status !== "processing" || !prepared.parts) return prepared;
+      const parts: Array<{ path: string; bytes: number; sha256: string }> = [];
+      for (let index = 0; index < prepared.parts; index++) {
+        const part = await step.run(`part-${index}`, async () => { const [m, db] = await load(); return m.generateLongTextPart(db.createServiceClient(), id, index); });
+        if ("error" in part) return part;
+        parts.push(part);
+      }
+      return step.run("assemble", async () => { const [m, db] = await load(); return m.assembleLongText(db.createServiceClient(), id, parts); });
+    }),
   // 09:00 BRT: margin, missing tariffs, voice quota and invoice deviations become admin alerts.
   inngest.createFunction({ id: "connectyhub-cost-center-daily-check", name: "Conferência diária do centro de custo", retries: 1, triggers: [{ cron: "0 12 * * *" }] },
     async ({ step }) => step.run("check-cost-center", async () => {
