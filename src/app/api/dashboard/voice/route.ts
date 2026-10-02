@@ -12,6 +12,14 @@ export async function GET(request:Request){try{
   client.from('voice_generations').select('id,project_id,operation,voice_id,model_id,status,characters,charged_credits,reserved_credits,error_code,created_at').eq('organization_id',org).gte('created_at',new Date(Date.now()-days*86400000).toISOString()).order('created_at',{ascending:false}).limit(50),
  ]);
  if([projects,wallet,summary,history].some(r=>r.error))throw new VoiceError('service_unavailable',503,'Não foi possível carregar a gestão de Voz.');
+ // The Studio opens ready to use: a company without projects gets a default one, so
+ // nobody has to understand projects/keys before generating audio. Projects remain a
+ // developer concept (API keys), shown only in the developer section.
+ if(!projects.data?.length){
+  await client.from('voice_projects').insert({organization_id:org,name:'Estúdio'});
+  const created=await client.from('voice_projects').select('id,name,status,monthly_credit_limit,webhook_url,voice_api_keys(id,name,key_prefix,status,expires_at)').eq('organization_id',org).order('created_at');
+  if(!created.error)projects.data=created.data;
+ }
  return voiceJson({projects:projects.data,wallet:wallet.data,summary:summary.data,history:history.data,billing_organization_id:billingOrg});
 }catch(e){return voiceFailure(e);}}
 export async function POST(request:Request){try{

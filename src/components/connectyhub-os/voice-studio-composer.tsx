@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Download, FileText, Pause, Play, RotateCcw, Search, Sparkles } from "lucide-react";
+import { ChevronRight, Download, FileText, Pause, Play, RotateCcw, Search, Sparkles, X } from "lucide-react";
 import { voiceModelName } from "../../lib/voice-api/model-presentation";
 
 // Text-to-speech composer in the spirit of the ElevenLabs studio: voice library with
@@ -29,7 +29,6 @@ const v3Tags = [
   { label: "Pausa curta", tag: "[short pause]" },
 ];
 const field = "min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 focus:outline-2 focus:outline-blue-500";
-const button = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50";
 const ghost = "inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
 const genderLabels: Record<string, string> = { female: "feminina", male: "masculina", neutral: "neutra", "non-binary": "neutra" };
 const genderLabel = (value: string | null | undefined) => (value ? genderLabels[value.toLowerCase()] ?? value : null);
@@ -42,13 +41,17 @@ async function read(response: Response) {
   return data;
 }
 
-export function VoiceStudioComposer({ project, voices, models, dictionaryId, availableCredits, onDone }: {
+export function VoiceStudioComposer({ project, voices, models, dictionaryId, availableCredits, onDone, selectedVoice, onVoiceChange }: {
   project: string; voices: StudioVoice[]; models: StudioModel[]; dictionaryId: string; availableCredits: number | null; onDone: () => void;
+  // Optional controlled voice, so the voice library page can send a voice to the composer.
+  selectedVoice?: string; onVoiceChange?: (voiceId: string) => void;
 }) {
   const base = "/api/dashboard/voice";
   const endpoint = (path: string) => `${base}/${path}?project=${encodeURIComponent(project)}`;
   const ready = useMemo(() => voices.filter(voice => voice.status === "ready"), [voices]);
-  const [chosenVoice, setVoiceId] = useState("");
+  const [ownVoice, setOwnVoice] = useState("");
+  const chosenVoice = selectedVoice ?? ownVoice;
+  const setVoiceId = onVoiceChange ?? setOwnVoice;
   const [modelId, setModelId] = useState(models.find(model => model.available)?.model_id ?? "eleven_multilingual_v2");
   const [settings, setSettings] = useState<Settings>(defaults);
   const [language, setLanguage] = useState("");
@@ -108,6 +111,13 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
       .catch(() => {});
     return () => { active = false; };
   }, [project, booksRevision]);
+
+  useEffect(() => {
+    if (!library) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setLibrary(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [library]);
 
   function insertTag(tag: string) {
     const area = textArea.current;
@@ -177,135 +187,159 @@ export function VoiceStudioComposer({ project, voices, models, dictionaryId, ava
   }
 
   const voice = ready.find(item => item.voice_id === voiceId);
+  const available = models.filter(item => item.available);
   return (
-    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">Estúdio de Voz</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {balanceMinutes !== null ? `Seu saldo rende cerca de ${number(Math.floor(balanceMinutes))} minutos de áudio neste modelo.` : "Escolha uma voz e um modelo."}
-          </p>
-        </div>
-        <button className={ghost} onClick={() => setLibrary(open => !open)} type="button"><Search size={14} />{library ? "Fechar biblioteca" : "Biblioteca de vozes"}</button>
+    <div className="min-w-0 space-y-5">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {isV3 && (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-5 py-3">
+              <span className="mr-1 text-xs font-medium text-slate-500"><Sparkles size={12} className="mr-1 inline" />Emoções</span>
+              {v3Tags.map(item => <button key={item.tag} type="button" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-violet-100 hover:text-violet-800" onClick={() => insertTag(item.tag)} title={item.tag}>{item.label}</button>)}
+            </div>
+          )}
+          <textarea ref={textArea} aria-label="Texto para transformar em voz" value={text} onChange={event => setText(event.target.value)}
+            className="min-h-[22rem] w-full flex-1 resize-y border-0 bg-transparent px-6 py-5 text-base leading-8 text-slate-900 placeholder:text-slate-400 focus:outline-none lg:min-h-[28rem]"
+            placeholder={"Comece a digitar aqui ou cole qualquer texto que você queira transformar em fala realista.\n\nDe uma frase a um livro inteiro: textos longos viram um único arquivo de áudio."} />
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+            <span className="text-xs text-slate-500">{number(chars)} / {number(LONG_LIMIT)}{chars ? ` · ≈ ${number(minutes, 1)} min` : ""}{long ? " · audiolivro" : ""}</span>
+            <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"><FileText size={13} />Importar .txt<input type="file" accept=".txt,text/plain" className="hidden" onChange={importFile} /></label>
+            <span className={`ml-auto text-sm ${insufficient ? "font-medium text-rose-700" : "text-slate-600"}`}>
+              {chars > LONG_LIMIT ? "Divida o texto em volumes de até 240 mil caracteres."
+                : shownQuote !== null ? `${insufficient ? "Saldo insuficiente · " : ""}${number(shownQuote, 2)} créditos`
+                : chars && long ? "Calculando…" : ""}
+            </span>
+            <button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-40" type="button" onClick={() => void generate()}
+              disabled={busy || !project || !voiceId || !chars || chars > LONG_LIMIT || !model?.available || insufficient || (long && quote === null)}>
+              {busy ? "Gerando…" : long ? "Gerar audiolivro" : "Gerar fala"}
+            </button>
+          </div>
+          {message && <p role="status" className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">{message}</p>}
+        </section>
+
+        <aside className="min-w-0 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Voz</p>
+            <button type="button" onClick={() => setLibrary(true)} className="mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 p-2.5 text-left hover:border-slate-300 hover:bg-slate-50">
+              {voice ? <VoiceAvatar id={voice.voice_id} /> : <span className="size-10 rounded-full bg-slate-100" />}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{voice?.name ?? "Escolher voz"}</span>
+                <span className="block truncate text-xs text-slate-500">{voice ? voiceMeta(voice) : `${ready.length} vozes disponíveis`}</span>
+              </span>
+              <ChevronRight size={16} className="text-slate-400" />
+            </button>
+            {voice?.preview_url && <audio className="mt-2 h-9 w-full" controls preload="none" src={voice.preview_url} aria-label={`Prévia da voz ${voice.name}`} />}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Modelo</p>
+            <div className="mt-2 space-y-2">
+              {available.map(item => (
+                <button key={item.model_id} type="button" onClick={() => setModelId(item.model_id)} disabled={busy}
+                  className={`w-full rounded-xl border p-3 text-left ${item.model_id === modelId ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200 hover:bg-slate-50"}`}>
+                  <span className="block text-sm font-semibold">{voiceModelName(item.model_id)}</span>
+                  <span className="block text-xs text-slate-500">{modelHints[item.model_id] ?? "Voz natural"} · {number((item.credits_per_character ?? 0) * 1000)} créditos / mil caracteres</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Ajustes</p>
+              <button className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900" type="button" onClick={() => setSettings(defaults)}><RotateCcw size={12} />Padrão</button>
+            </div>
+            <Slider label="Velocidade" left="Mais lenta" right="Mais rápida" value={settings.speed} min={0.7} max={1.2} step={0.05} onChange={value => setSettings(s => ({ ...s, speed: value }))} />
+            <Slider label="Estabilidade" left="Mais expressiva" right="Mais estável" value={settings.stability} min={0} max={1} step={isV3 ? 0.5 : 0.05} onChange={value => setSettings(s => ({ ...s, stability: value }))} />
+            <Slider label="Semelhança" left="Baixa" right="Alta" value={settings.similarity_boost} min={0} max={1} step={0.05} onChange={value => setSettings(s => ({ ...s, similarity_boost: value }))} />
+            <Slider label="Exagero de estilo" left="Nenhum" right="Exagerado" value={settings.style} min={0} max={1} step={0.05} onChange={value => setSettings(s => ({ ...s, style: value }))} />
+            <label className="flex items-center justify-between gap-2 text-sm">Reforço da voz<input type="checkbox" className="size-4" checked={settings.use_speaker_boost} onChange={event => setSettings(s => ({ ...s, use_speaker_boost: event.target.checked }))} /></label>
+            <label className="block text-sm">Idioma
+              <select className={`${field} mt-1`} value={language} onChange={event => setLanguage(event.target.value)}>
+                <option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option>
+              </select>
+            </label>
+          </div>
+
+          {balanceMinutes !== null && <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">Seu saldo rende cerca de <strong>{number(Math.floor(balanceMinutes))} min</strong> de áudio com este modelo.</p>}
+        </aside>
       </div>
 
-      {library && <VoiceLibrary voices={ready} selected={voiceId} onSelect={id => { setVoiceId(id); setLibrary(false); }} />}
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">Voz
-          <select className={`${field} mt-1`} value={voiceId} onChange={event => setVoiceId(event.target.value)} disabled={busy}>
-            {ready.map(item => <option key={item.voice_id} value={item.voice_id}>{item.name}{item.kind === "private" ? " · privada" : item.kind === "designed" ? " · desenhada" : ""}</option>)}
-          </select>
-        </label>
-        <label className="text-sm">Modelo
-          <select className={`${field} mt-1`} value={modelId} onChange={event => setModelId(event.target.value)} disabled={busy}>
-            {models.map(item => (
-              <option key={item.model_id} value={item.model_id} disabled={!item.available}>
-                {voiceModelName(item.model_id)}{item.available && item.credits_per_character ? ` · ${number(item.credits_per_character, 4)} cr/caractere` : " · indisponível"}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {voice?.preview_url && <audio className="mt-2 w-full" controls preload="none" src={voice.preview_url} aria-label={`Prévia da voz ${voice.name}`} />}
-
-      <details className="mt-4 rounded-xl border border-slate-200 p-3">
-        <summary className="cursor-pointer text-sm font-medium">Ajustes da voz</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Slider label={isV3 ? "Estabilidade (criativa · natural · robusta)" : "Estabilidade"} value={settings.stability} min={0} max={1} step={isV3 ? 0.5 : 0.05} onChange={value => setSettings(s => ({ ...s, stability: value }))} />
-          <Slider label="Similaridade com a voz" value={settings.similarity_boost} min={0} max={1} step={0.05} onChange={value => setSettings(s => ({ ...s, similarity_boost: value }))} />
-          <Slider label="Exagero de estilo" value={settings.style} min={0} max={1} step={0.05} onChange={value => setSettings(s => ({ ...s, style: value }))} />
-          <Slider label="Velocidade" value={settings.speed} min={0.7} max={1.2} step={0.05} onChange={value => setSettings(s => ({ ...s, speed: value }))} />
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={settings.use_speaker_boost} onChange={event => setSettings(s => ({ ...s, use_speaker_boost: event.target.checked }))} />Reforço de semelhança (speaker boost)</label>
-          <label className="text-sm">Idioma
-            <select className={`${field} mt-1`} value={language} onChange={event => setLanguage(event.target.value)}>
-              <option value="">Automático</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option>
-            </select>
-          </label>
-          <button className={ghost} type="button" onClick={() => setSettings(defaults)}><RotateCcw size={13} />Restaurar padrão</button>
-        </div>
-      </details>
-
-      {isV3 && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500"><Sparkles size={12} className="inline" /> Emoções (v3):</span>
-          {v3Tags.map(item => <button key={item.tag} type="button" className={ghost} onClick={() => insertTag(item.tag)} title={item.tag}>{item.label}</button>)}
+      {library && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label="Escolher voz" onClick={() => setLibrary(false)}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between"><h3 className="text-lg font-bold">Escolher voz</h3><button type="button" className="grid size-9 place-items-center rounded-full hover:bg-slate-100" aria-label="Fechar" onClick={() => setLibrary(false)}><X size={18} /></button></div>
+            <VoiceLibrary voices={ready} selected={voiceId} onSelect={id => { setVoiceId(id); setLibrary(false); }} />
+          </div>
         </div>
       )}
 
-      <label className="mt-4 block text-sm">Seu texto
-        <textarea ref={textArea} className={`${field} mt-1 min-h-56`} value={text} onChange={event => setText(event.target.value)}
-          placeholder="Escreva ou cole o texto. Textos longos, como livros inteiros, viram um único arquivo de áudio." />
-      </label>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-        <span>{number(chars)} caracteres{chars ? ` · ≈ ${number(minutes, 1)} min de áudio` : ""}{long ? " · texto longo (e-book)" : ""}</span>
-        <label className={`${ghost} cursor-pointer`}><FileText size={13} />Importar .txt<input type="file" accept=".txt,text/plain" className="hidden" onChange={importFile} /></label>
-      </div>
-      <p className={`mt-2 text-sm ${insufficient ? "text-rose-700" : "text-slate-700"}`}>
-        {chars > LONG_LIMIT ? `Limite de ${number(LONG_LIMIT)} caracteres por arquivo. Divida o livro em volumes.`
-          : shownQuote !== null ? `${insufficient ? "Saldo insuficiente: " : "Custo: "}${number(shownQuote, 2)} créditos${availableCredits !== null ? ` · disponível ${number(availableCredits, 2)}` : ""}`
-          : chars ? (long ? "Calculando o custo do texto inteiro…" : "") : ""}
-      </p>
-      {message && <p role="status" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
-      <button className={`${button} mt-4`} type="button" onClick={() => void generate()}
-        disabled={busy || !project || !voiceId || !chars || chars > LONG_LIMIT || !model?.available || insufficient || (long && quote === null)}>
-        {busy ? "Processando…" : long ? "Gerar audiolivro" : "Gerar áudio"}
-      </button>
-
-      {books.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-bold">Audiolivros deste projeto</h3>
-          <ul className="mt-2 space-y-2">
-            {books.map(book => (
-              <li key={book.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3 text-sm">
-                <span>{voiceModelName(book.model_id)} · {number(book.usage.units?.characters ?? 0)} caracteres · {book.status === "completed" ? `${number(book.usage.credits, 2)} créditos` : book.status === "failed" ? "falhou" : "em andamento"}</span>
-                {book.status === "completed" && <a className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium" href={`/api/dashboard/voice/operations/${book.id}/result?project=${encodeURIComponent(project)}`}><Download size={13} />Baixar audiolivro</a>}
+      {(jobs.length > 0 || books.length > 0) && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-bold">Seus áudios</h3>
+          <ul className="mt-3 space-y-2">
+            {jobs.map(job => <JobRow key={job.id} job={job} voiceName={voices.find(item => item.voice_id === job.voice)?.name} onReuse={() => reuse(job)} />)}
+            {books.filter(book => !jobs.some(job => job.id === book.id)).map(book => (
+              <li key={book.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 p-3 text-sm">
+                <span><strong>Audiolivro</strong> · {voiceModelName(book.model_id)} · {number(book.usage.units?.characters ?? 0)} caracteres · {book.status === "completed" ? `${number(book.usage.credits, 2)} créditos` : book.status === "failed" ? "não concluído" : "gerando…"}</span>
+                {book.status === "completed" && <a className={ghost} href={`/api/dashboard/voice/operations/${book.id}/result?project=${encodeURIComponent(project)}`}><Download size={13} />Baixar</a>}
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
-
-      {jobs.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-bold">Gerados nesta sessão</h3>
-          <ul className="mt-2 space-y-2">
-            {jobs.map(job => <JobRow key={job.id} job={job} onReuse={() => reuse(job)} />)}
-          </ul>
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 
-function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
+const modelHints: Record<string, string> = {
+  eleven_multilingual_v2: "Mais natural, ideal para narração",
+  eleven_v3: "Mais expressivo, aceita emoções",
+  eleven_flash_v2_5: "Mais rápido e econômico",
+  eleven_turbo_v2_5: "Rápido, boa qualidade",
+};
+
+const palettes = ["from-violet-400 to-fuchsia-500", "from-sky-400 to-indigo-500", "from-emerald-400 to-teal-600", "from-amber-300 to-orange-500", "from-rose-400 to-pink-600", "from-cyan-300 to-blue-600"];
+export function VoiceAvatar({ id, size = "size-10" }: { id: string; size?: string }) {
+  const index = [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palettes.length;
+  return <span aria-hidden className={`${size} shrink-0 rounded-full bg-gradient-to-br ${palettes[index]}`} />;
+}
+
+export function voiceMeta(voice: StudioVoice) {
+  return [voice.kind === "private" ? "Clonada" : voice.kind === "designed" ? "Desenhada" : null, genderLabel(voice.gender), voice.accent, voice.use_case].filter(Boolean).join(" · ") || "Voz";
+}
+
+function Slider({ label, left, right, value, min, max, step, onChange }: { label: string; left: string; right: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
   return (
-    <label className="text-sm">
-      <span className="flex justify-between"><span>{label}</span><span className="font-mono text-xs text-slate-500">{value.toFixed(2)}</span></span>
-      <input type="range" className="mt-1 w-full" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} />
+    <label className="block text-sm">
+      <span className="font-medium">{label}</span>
+      <input type="range" className="mt-1 w-full accent-slate-900" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} />
+      <span className="flex justify-between text-[11px] text-slate-400"><span>{left}</span><span>{right}</span></span>
     </label>
   );
 }
 
-function JobRow({ job, onReuse }: { job: Job; onReuse: () => void }) {
-  const labels: Record<string, string> = { reserved: "Na fila", processing: "Gerando", completed: "Pronto", failed: "Falhou", uncertain: "Em conferência" };
+function JobRow({ job, voiceName, onReuse }: { job: Job; voiceName?: string; onReuse: () => void }) {
+  const labels: Record<string, string> = { reserved: "Na fila", processing: "Gerando…", completed: "Pronto", failed: "Não concluído", uncertain: "Em conferência" };
   return (
-    <li className="rounded-xl bg-slate-50 p-3 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium">{job.kind === "long" ? "Audiolivro" : "Áudio"} · {voiceModelName(job.model)} · {labels[job.status] ?? job.status}</span>
-        <span className="text-xs text-slate-500">{number(job.credits, 2)} créditos</span>
+    <li className="rounded-xl border border-slate-100 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <VoiceAvatar id={job.voice} size="size-8" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{job.text.slice(0, 120)}</p>
+          <p className="text-xs text-slate-500">{voiceName ?? "Voz"} · {voiceModelName(job.model)} · {labels[job.status] ?? job.status} · {number(job.credits, 2)} créditos</p>
+        </div>
+        <div className="flex gap-2">
+          {job.audioUrl && <a className={ghost} href={job.audioUrl} download={job.kind === "long" ? "audiolivro.mp3" : "connectyhub-voz.mp3"}><Download size={13} />Baixar</a>}
+          <button type="button" className={ghost} onClick={onReuse}><RotateCcw size={13} />Reusar</button>
+        </div>
       </div>
-      <p className="mt-1 truncate text-xs text-slate-500">{job.text.slice(0, 140)}</p>
-      {job.audioUrl && <audio className="mt-2 w-full" controls preload="none" src={job.audioUrl} />}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {job.audioUrl && <a className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium" href={job.audioUrl} download={job.kind === "long" ? "audiolivro.mp3" : "connectyhub-voz.mp3"}><Download size={13} />Baixar MP3</a>}
-        <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium" onClick={onReuse}><RotateCcw size={13} />Gerar de novo</button>
-      </div>
+      {job.audioUrl && <audio className="mt-2 h-9 w-full" controls preload="none" src={job.audioUrl} />}
     </li>
   );
 }
 
-function VoiceLibrary({ voices, selected, onSelect }: { voices: StudioVoice[]; selected: string; onSelect: (id: string) => void }) {
+export function VoiceLibrary({ voices, selected, onSelect }: { voices: StudioVoice[]; selected: string; onSelect: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
   const [gender, setGender] = useState("all");
@@ -327,26 +361,30 @@ function VoiceLibrary({ voices, selected, onSelect }: { voices: StudioVoice[]; s
   useEffect(() => () => player.current?.pause(), []);
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <input className={field} placeholder="Buscar por nome, sotaque ou uso" value={query} onChange={event => setQuery(event.target.value)} aria-label="Buscar voz" />
-        <select className={field} value={kind} onChange={event => setKind(event.target.value)} aria-label="Tipo de voz">
-          <option value="all">Todas</option><option value="common">Biblioteca</option><option value="private">Minhas clonadas</option><option value="designed">Desenhadas</option>
-        </select>
-        <select className={field} value={gender} onChange={event => setGender(event.target.value)} aria-label="Gênero">
-          <option value="all">Qualquer gênero</option>{genders.map(item => <option key={item} value={item}>{genderLabel(item)}</option>)}
-        </select>
+    <div className="mt-4">
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input className={`${field} pl-9`} placeholder="Buscar por nome, sotaque ou uso" value={query} onChange={event => setQuery(event.target.value)} aria-label="Buscar voz" />
       </div>
-      <ul className="mt-3 grid max-h-80 gap-2 overflow-y-auto sm:grid-cols-2">
+      <div className="mt-3 flex flex-wrap gap-2">
+        {[["all", "Todas"], ["common", "Biblioteca"], ["private", "Minhas clonadas"], ["designed", "Desenhadas"]].map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setKind(value)} className={`rounded-full px-3 py-1.5 text-xs font-medium ${kind === value ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>{label}</button>
+        ))}
+        {genders.length > 0 && <select className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium" value={gender} onChange={event => setGender(event.target.value)} aria-label="Gênero">
+          <option value="all">Qualquer gênero</option>{genders.map(item => <option key={item} value={item}>{genderLabel(item)}</option>)}
+        </select>}
+      </div>
+      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
         {shown.map(voice => (
-          <li key={voice.voice_id} className={`flex items-center gap-2 rounded-lg border p-2 ${voice.voice_id === selected ? "border-blue-600 bg-blue-50" : "border-slate-200"}`}>
-            <button type="button" className="grid size-9 shrink-0 place-items-center rounded-full border border-slate-300 disabled:opacity-40" disabled={!voice.preview_url}
+          <li key={voice.voice_id} className={`flex items-center gap-3 rounded-xl border p-2.5 ${voice.voice_id === selected ? "border-slate-900 ring-1 ring-slate-900" : "border-slate-200 hover:bg-slate-50"}`}>
+            <button type="button" className="relative grid size-10 shrink-0 place-items-center disabled:opacity-40" disabled={!voice.preview_url}
               onClick={() => preview(voice)} aria-label={playing === voice.voice_id ? `Pausar prévia de ${voice.name}` : `Ouvir prévia de ${voice.name}`}>
-              {playing === voice.voice_id ? <Pause size={14} /> : <Play size={14} />}
+              <VoiceAvatar id={voice.voice_id} />
+              <span className="absolute inset-0 grid place-items-center text-white">{playing === voice.voice_id ? <Pause size={14} /> : <Play size={14} />}</span>
             </button>
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(voice.voice_id)}>
-              <span className="block truncate text-sm font-medium">{voice.name}</span>
-              <span className="block truncate text-xs text-slate-500">{[voice.kind === "private" ? "clonada" : voice.kind === "designed" ? "desenhada" : null, genderLabel(voice.gender), voice.accent, voice.use_case].filter(Boolean).join(" · ") || "voz"}</span>
+              <span className="block truncate text-sm font-semibold">{voice.name}</span>
+              <span className="block truncate text-xs text-slate-500">{voiceMeta(voice)}</span>
             </button>
           </li>
         ))}
