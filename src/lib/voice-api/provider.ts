@@ -13,7 +13,7 @@ export function requestVoiceAudio(apiKey:string,input:VoiceInput,dictionaries:Di
   // No SDK retry: a network timeout can happen after the provider charges.
   return fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(input.voice_id)}?output_format=${input.output_format}`,{
     method:'POST',headers:{'xi-api-key':apiKey,'Content-Type':'application/json',Accept:'audio/mpeg'},
-    body:JSON.stringify({text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,...(dictionaries.length?{pronunciation_dictionary_locators:dictionaries}:{})}),
+    body:JSON.stringify({text:input.text,model_id:input.model_id,voice_settings:input.voice_settings,...(input.language_code?{language_code:input.language_code}:{}),...(dictionaries.length?{pronunciation_dictionary_locators:dictionaries}:{})}),
     signal:AbortSignal.timeout(90000),redirect:'error',cache:'no-store',
   });
 }

@@ -54,6 +54,20 @@ export function longTextRequestBody(input:StudioInput,parts:string[],index:numbe
  };
 }
 
+/**
+ * Each provider response is a complete MP3 with its own ID3 tags. Only the first
+ * part keeps the leading tag; later parts drop tags so the joined file has no
+ * metadata in the middle of the audio stream.
+ */
+export function stripId3(bytes:Buffer,keepLeading:boolean){
+ let start=0,end=bytes.length;
+ if(!keepLeading&&bytes.length>=10&&bytes.toString('latin1',0,3)==='ID3'){
+  const size=((bytes[6]&0x7f)<<21)|((bytes[7]&0x7f)<<14)|((bytes[8]&0x7f)<<7)|(bytes[9]&0x7f);
+  start=Math.min(bytes.length,10+size+((bytes[5]&0x10)?10:0));
+ }
+ if(end-start>=128&&bytes.toString('latin1',end-128,end-125)==='TAG')end-=128;
+ return bytes.subarray(start,end);
+}
 const partPath=(r:Receipt,index:number)=>`${prefix(r)}/parts/${String(index).padStart(4,'0')}.mp3`;
 const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 
@@ -120,7 +134,7 @@ export async function generateLongTextPart(client:SupabaseClient,id:string,index
    // A rejected first part was not produced; later parts mean earlier audio was charged.
    return stop(client,id,index>0||![400,401,403,404,422].includes(response.status),'provider_rejected');
   }
-  const bytes=Buffer.from(await response.arrayBuffer());
+  const bytes=stripId3(Buffer.from(await response.arrayBuffer()),index===0);
   if(!bytes.length||bytes.length>maxPartBytes)return stop(client,id,true,'provider_audio_invalid');
   await put(client,path,bytes,'audio/mpeg');
   return {path,bytes:bytes.length,sha256:sha(bytes)};

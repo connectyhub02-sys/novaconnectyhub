@@ -56,3 +56,16 @@ describe("long text contract", () => {
     expect(() => parseStudioInput({ operation: "long_tts", voice_id: "v", text: "a", extra: 1 })).toThrow("Campo não suportado");
   });
 });
+
+describe("joining MP3 parts", () => {
+  const id3 = (payload: number) => Buffer.concat([Buffer.from("ID3"), Buffer.from([4, 0, 0, 0, 0, 0, payload]), Buffer.alloc(payload, 1)]);
+  const audio = Buffer.from([0xff, 0xfb, 0x90, 0x64, 1, 2, 3]);
+  it("keeps the first part's leading tag and removes tags from later parts", () => {
+    const part = Buffer.concat([id3(20), audio]);
+    expect(longText.stripId3(part, true)).toEqual(part);
+    expect(longText.stripId3(part, false)).toEqual(audio);
+    const trailer = Buffer.concat([audio, Buffer.from("TAG"), Buffer.alloc(125)]);
+    expect(longText.stripId3(trailer, false)).toEqual(audio);
+    expect(longText.stripId3(audio, false)).toEqual(audio);
+  });
+});

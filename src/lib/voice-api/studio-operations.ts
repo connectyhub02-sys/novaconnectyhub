@@ -27,7 +27,7 @@ type Resource={id:string;project_id:string;organization_id:string;operation_id:s
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const providerId=(v:unknown)=>{if(typeof v!=='string'||!/^[a-zA-Z0-9_-]{1,150}$/.test(v))throw new VoiceError('provider_result_invalid',502,'Identificador de resultado inválido.');return v;};
 export async function rpc(client:SupabaseClient,name:string,args:Record<string,unknown>):Promise<Receipt>{
- const {data,error}=await client.rpc(name,args);if(error){const code=error.message.match(/voice_[a-z_]+/)?.[0]??'service_unavailable';throw new VoiceError(code,code.includes('insufficient')?402:code.includes('limit')?429:code.includes('conflict')?409:503,'Não foi possível concluir a operação do Estúdio.');}return data as Receipt;
+ const {data,error}=await client.rpc(name,args);if(error){const code=error.message.match(/voice_[a-z_]+/)?.[0]??'service_unavailable';throw new VoiceError(code,code.includes('insufficient')?402:code.includes('limit')?429:code.includes('conflict')?409:503,code.includes('insufficient')?'Saldo disponível insuficiente para reservar este trabalho. Consulte a cotação e recarregue os créditos.':'Não foi possível concluir a operação do Estúdio.');}return data as Receipt;
 }
 export async function ownedStudioOperation(auth:VoiceAuth,id:string){
  if(!uuid.test(id))throw new VoiceError('not_found',404,'Operação não encontrada.');
