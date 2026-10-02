@@ -1,5 +1,44 @@
 # Estado operacional da ConnectyHub
 
+## Centro de custo — Resultado do mês, publicado em 02/10/2026
+
+Fase 1 do plano em [auditoria do centro de custo](auditoria-centro-custo-creditos-2026-10-02.md).
+Implementação `14e23c32`, slot `a` ativo, slot `b` mantido para retorno. Migration
+**0179 aplicada e registrada** após ensaio com rollback em produção: tabelas
+`cost_center_settings` e `platform_fixed_costs` e RPC `cost_center_month_report`,
+somente `service_role` (cliente autenticado sem leitura nem execução, conferido).
+
+Admin > Financeiro ganhou **Resultado do mês** (navegação por mês, horário de
+Brasília): dinheiro recebido (faturas pagas + pagamentos sem fatura − estornos),
+custo de IA em US$ reconvertido pela cotação editável (inicial R$ 5,23), custos
+fixos editáveis (VPS US$ 20, UAZAPI R$ 138/100 instâncias, ElevenLabs US$ 22 com
+franquia a cadastrar), margem e multiplicador do consumo cobrado, custo e preço por
+resposta do WhatsApp, cache, resultado da voz, créditos por origem e custo futuro
+do saldo em carteira. ElevenLabs entra pela assinatura; a tabela por caractere é
+só referência. Impostos e taxas ficam fora por decisão do titular.
+
+Novos eventos de uso gravam `metering.providerCostUsd` e `costFxUsdBrl`. A resposta
+do agente grava `promptSections` (somente contagem de caracteres por parte). O texto
+do prompt continua idêntico: a montagem foi dividida em 25 partes nomeadas com
+verificação estrutural de equivalência. Nenhuma tarifa, carteira ou uso passado mudou.
+
+Setembro pelo cálculo novo (leitura real): recebido R$ 12,98 (duas faturas Scale
+de R$ 497 pagas a R$ 9,99 cada, menos estorno de R$ 7); IA R$ 108,71 (US$ 20,79);
+fixos R$ 357,66; resultado −R$ 453,39. Consumo cobrado de clientes 56.253 cr
+(R$ 562,53) contra R$ 99,32 de custo, 5,66x. Resposta WhatsApp: 442 cobradas,
+≈ 19 mil tokens de entrada, custo R$ 0,19, preço 89 cr (R$ 0,89), cache 10,5%.
+Voz: R$ 98,34 cobrados contra assinatura R$ 115,06.
+
+Validação: 23 testes novos/afetados (cálculo, SQL em PGlite com grants e
+idempotência, metering), 140 testes que leem o runtime do agente, suíte completa
+com 12 arquivos SQL que só falharam por tempo em paralelo e passaram em sequência,
+TypeScript, ESLint e build de produção. Prévia do painel com dados reais de setembro
+em desktop e 375 px sem rolagem lateral. Slot conferido antes da ativação: health
+com o SHA, páginas 200, Financeiro 307 sem sessão, PATCH 401 sem sessão, Inngest 401
+sem assinatura. Pendências: conferir o painel autenticado como admin; confirmar
+`providerCostUsd` e `promptSections` no primeiro uso real; cadastrar a franquia
+ElevenLabs.
+
 ## Identidade e seleção do plano personalizado — publicado em 01/10/2026
 
 Implementação `0d2a1814`, publicada às 16:58 BRT: Clientes/Controle, Minha Conta, Planos e resumo executivo
