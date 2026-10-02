@@ -20,7 +20,7 @@ begin
       on conflict (cost_center_id, feature_code) do nothing;
     select id into feature from public.provider_features where cost_center_id = cc and feature_code = item.feature_code;
     insert into public.provider_models(cost_center_id, provider_model_id, display_name, feature_code, supports_billing, enabled, input_unit, output_unit, metadata)
-      values (cc, item.model_id, item.model_name, item.feature_code, true, true, item.unit, item.unit, '{"added":"2026-10-02"}')
+      values (cc, item.model_id, item.model_name, item.feature_code, true, true, item.unit::public.billing_unit, item.unit::public.billing_unit, '{"added":"2026-10-02"}')
       on conflict (cost_center_id, provider_model_id) do update set enabled = true;
     select id into model from public.provider_models where cost_center_id = cc and provider_model_id = item.model_id;
     if not exists (select 1 from public.billing_rates where feature_id = feature and model_id = model and active and plan_code is null) then
