@@ -13,7 +13,10 @@ export type StudioResourceRequest =
   | { operation: 'voice_design'; description: string; sampleText: string }
   | { operation: 'voice_design_save'; name: string; description: string; previewId: string }
   | { operation: 'dictionary_create'; name: string; rules: Array<AliasRule | PhonemeRule> }
-  | { operation: 'dubbing'; audio: Blob; targetLanguage: string };
+  | { operation: 'dubbing'; audio: Blob; targetLanguage: string }
+  | { operation: 'sound_effects'; text: string; durationSeconds: number; promptInfluence?: number }
+  | { operation: 'music'; prompt: string; lengthMs: number }
+  | { operation: 'voice_remix'; voiceId: string; description: string; sampleText: string };
 
 const providerOrigin = 'https://api.elevenlabs.io';
 function text(value: unknown, min: number, max: number) {
@@ -51,6 +54,18 @@ export function studioResourceProviderRequest(input: StudioResourceRequest) {
         model_id: 'eleven_multilingual_ttv_v2',
         voice_description: text(input.description, 20, 1000), text: text(input.sampleText, 100, 1000),
         auto_generate_text: false, should_enhance: false,
+      });
+    case 'sound_effects':
+      return json('/v1/sound-generation?output_format=mp3_44100_128', {
+        text: text(input.text, 3, 450), model_id: 'eleven_text_to_sound_v2', duration_seconds: input.durationSeconds,
+        ...(input.promptInfluence !== undefined ? { prompt_influence: input.promptInfluence } : {}),
+      }, true);
+    case 'music':
+      return json('/v1/music?output_format=mp3_44100_128', { prompt: text(input.prompt, 10, 2000), music_length_ms: input.lengthMs, model_id: 'music_v1' }, true);
+    case 'voice_remix':
+      // Same explicit-text rule as design: the quote covers exactly the preview text.
+      return json(`/v1/text-to-voice/${encodeURIComponent(id(input.voiceId))}/remix?output_format=mp3_44100_128`, {
+        voice_description: text(input.description, 5, 1000), text: text(input.sampleText, 100, 1000), auto_generate_text: false,
       });
     case 'voice_design_save':
       return json('/v1/text-to-voice', { voice_name: text(input.name, 1, 100), voice_description: text(input.description, 20, 1000), generated_voice_id: id(input.previewId) });

@@ -24,6 +24,9 @@ export const studioSchemas={
   operation('long_tts',{voice_id:text(1,100),text:{...text(1,240000),description:'Livro ou documento inteiro. Toda a cotação é reservada antes do início.'},voice_settings:voiceSettings,language_code:language,dictionary_ids:dictionaries},['voice_id','text']),
   operation('dialogue',{turns:{type:'array',minItems:1,maxItems:50,description:'Soma até 2.000 caracteres e 10 vozes diferentes.',items:object({voice_id:text(1,100),text:text(1,2000)})},dictionary_ids:dictionaries},['turns']),
   operation('voice_design',{description:text(20,1000),sample_text:text(100,1000)}),
+  operation('voice_remix',{voice_id:{...text(1,100),description:'Voz clonada ou desenhada do próprio projeto.'},description:text(5,1000),sample_text:text(100,1000)}),
+  operation('sound_effects',{text:text(3,450),duration_seconds:{type:'number',minimum:0.5,maximum:30},prompt_influence:{type:'number',minimum:0,maximum:1}},['text','duration_seconds']),
+  operation('music',{prompt:text(10,2000),music_length_ms:{type:'integer',minimum:10000,maximum:300000}}),
   operation('voice_design_save',{preview_id:uuid,name:text(2,80),description:text(20,1000)}),
   operation('dictionary_create',{name:text(1,100),rules:{type:'array',minItems:1,maxItems:100,items:rule},parent_dictionary_id:uuid},['name','rules']),
  ],discriminator:{propertyName:'operation'}},
@@ -69,6 +72,9 @@ Tarifa de gerenciamento do dicionário: preço comercial provisório por criaç�
 
 ## Texto longo (e-book)
 operation=long_tts recebe text de até 240.000 caracteres, voice_id do catálogo do projeto e model_id entre eleven_multilingual_v2 (padrão), eleven_v3, eleven_flash_v2_5 e eleven_turbo_v2_5. voice_settings opcional: stability, similarity_boost e style de 0 a 1, speed de 0,7 a 1,2, use_speaker_boost. language_code opcional. A cobrança é por caractere, com a mesma tarifa da geração avulsa do modelo. Antes de qualquer áudio, a cotação inteira é reservada; sem saldo suficiente, a operação é recusada (402) sem custo. O texto é convertido em partes, com continuidade entre elas, e o resultado é um único MP3 (64 kbps, qualidade de audiolivro) em /operations/{id}/result. O débito acontece uma vez, ao concluir. Livros maiores devem ser divididos em volumes.
+
+## Efeitos sonoros, música e remix de voz
+operation=sound_effects recebe text (3–450 caracteres descrevendo o som), duration_seconds de 0,5 a 30 e prompt_influence opcional (0–1). operation=music recebe prompt (10–2.000 caracteres) e music_length_ms de 10.000 a 300.000. A cobrança é por minuto de áudio pedido, cotada antes de gerar; o resultado é um MP3 em /operations/{id}/result. operation=voice_remix recebe voice_id de uma voz clonada ou desenhada do próprio projeto, description (o que mudar, 5–1.000) e sample_text (100–1.000); gera prévias em GET /resources, salvas com voice_design_save. Cobrança pelos caracteres do texto das prévias.
 
 ## Voz desenhada e voz nativa
 voice_design recebe description (20–1.000 caracteres) e sample_text (100–1.000). As prévias privadas concluídas aparecem em GET /resources; ouça /resources/{id}/audio. voice_design_save recebe preview_id próprio, name (2–80) e description. A voz salva aparece no catálogo deste projeto. Cada criação/salvamento tem sua própria cotação; não são automaticamente gratuitos. gemini_tts recebe text de até 4.800 caracteres e uma voice_id de gemini_voices em /capabilities. Clones de outro serviço não são vozes nativas compatíveis. Nessa operação, a cotação é uma reserva máxima; o débito usa tokens de entrada e saída efetivamente informados, com liberação da diferença. Ausência da medição mantém a operação em conferência, sem inventar custo zero.

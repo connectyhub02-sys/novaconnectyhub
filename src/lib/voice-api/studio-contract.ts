@@ -12,6 +12,9 @@ export const studioDefinitions={
  dubbing:{name:'Dublagem',model:'dubbing-v1',provider:'elevenlabs',feature:'studio_dubbing',unit:'minute',audio:true},
  gemini_tts:{name:'Voz nativa Gemini',model:'gemini-3.1-flash-tts-preview',provider:'gemini',feature:'voice_generation_audio',unit:'token',audio:false},
  long_tts:{name:'Texto longo (e-book)',model:'eleven_multilingual_v2',provider:'elevenlabs',feature:'text_to_speech',unit:'character',audio:false},
+ sound_effects:{name:'Efeitos sonoros',model:'eleven_text_to_sound_v2',provider:'elevenlabs',feature:'studio_sound_effects',unit:'minute',audio:false},
+ music:{name:'Música',model:'music_v1',provider:'elevenlabs',feature:'studio_music',unit:'minute',audio:false},
+ voice_remix:{name:'Remix de voz',model:'voice-remix-default',provider:'elevenlabs',feature:'studio_voice_remix',unit:'character',audio:false},
 } as const;
 /** Text-to-speech models offered for long texts, priced per character like the single generation. */
 export const longTextModels=['eleven_multilingual_v2','eleven_flash_v2_5','eleven_turbo_v2_5','eleven_v3'] as const;
@@ -20,7 +23,7 @@ export const longTextMaxCharacters=240000;
 export type VoiceSettings={stability?:number;similarity_boost?:number;style?:number;speed?:number;use_speaker_boost?:boolean};
 export type StudioOperation=keyof typeof studioDefinitions;
 type Rule={type:'alias';string_to_replace:string;alias:string}|{type:'phoneme';string_to_replace:string;phoneme:string;alphabet:'ipa'|'cmu-arpabet'};
-export type StudioInput={operation:StudioOperation;model_id:string;voice_settings?:VoiceSettings;language_code?:string;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
+export type StudioInput={operation:StudioOperation;model_id:string;voice_settings?:VoiceSettings;language_code?:string;duration_seconds?:number;prompt_influence?:number;prompt?:string;music_length_ms?:number;asset_id?:string;voice_id?:string;text?:string;language?:string;diarize?:boolean;turns?:Array<{text:string;voice_id:string}>;description?:string;sample_text?:string;preview_id?:string;name?:string;rules?:Rule[];parent_dictionary_id?:string;target_language?:string;dictionary_ids?:string[]};
 const fail=(message='Parâmetros da operação inválidos.')=>new VoiceError('invalid_operation',422,message);
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw fail();return v as Record<string,unknown>;}
 function text(v:unknown,min:number,max:number){if(typeof v!=='string'||v.trim().length<min||v.length>max)throw fail(`Texto deve ter entre ${min} e ${max} caracteres.`);return v.trim();}
@@ -62,6 +65,19 @@ export function parseStudioInput(raw:unknown):StudioInput{
    if(b.voice_settings!==undefined)result.voice_settings=parseVoiceSettings(b.voice_settings);
    const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;break;
   }
+  case 'sound_effects':{
+   allowed.push('text','duration_seconds','prompt_influence');result.text=text(b.text,3,450);
+   if(typeof b.duration_seconds!=='number'||!Number.isFinite(b.duration_seconds)||b.duration_seconds<0.5||b.duration_seconds>30)throw fail('Duração do efeito: de 0,5 a 30 segundos.');
+   result.duration_seconds=Math.round(b.duration_seconds*10)/10;
+   if(b.prompt_influence!==undefined){if(typeof b.prompt_influence!=='number'||b.prompt_influence<0||b.prompt_influence>1)throw fail('Fidelidade à descrição: de 0 a 1.');result.prompt_influence=b.prompt_influence;}
+   break;
+  }
+  case 'music':{
+   allowed.push('prompt','music_length_ms');result.prompt=text(b.prompt,10,2000);
+   if(typeof b.music_length_ms!=='number'||!Number.isInteger(b.music_length_ms)||b.music_length_ms<10000||b.music_length_ms>300000)throw fail('Duração da música: de 10 a 300 segundos (music_length_ms de 10000 a 300000).');
+   result.music_length_ms=b.music_length_ms;break;
+  }
+  case 'voice_remix':allowed.push('voice_id','description','sample_text');result.voice_id=identifier(b.voice_id);result.description=text(b.description,5,1000);result.sample_text=text(b.sample_text,100,1000);break;
   case 'gemini_tts':allowed.push('voice_id','text');result.voice_id=text(b.voice_id,1,100);if(!/^gemini:[a-z]+$/.test(result.voice_id))throw fail('Escolha uma voz nativa do catálogo.');result.text=text(b.text,1,4800);break;
   case 'dialogue':{
    allowed.push('turns','dictionary_ids');const dictionaries=parseDictionaryIds(b.dictionary_ids);if(dictionaries.length)result.dictionary_ids=dictionaries;if(!Array.isArray(b.turns)||!b.turns.length||b.turns.length>50)throw fail('Envie de1 a50 falas.');
@@ -90,6 +106,10 @@ export function studioInputUnits(input:StudioInput,duration?:number){
  }
  if(input.operation==='dialogue')return {characters:input.turns!.reduce((n,t)=>n+t.text.length,0)};
  if(input.operation==='long_tts')return {characters:input.text!.length};
+ // Generated length is chosen up front, so the quote is exact: billed per minute of output.
+ if(input.operation==='sound_effects')return {minutes:input.duration_seconds!/60};
+ if(input.operation==='music')return {minutes:input.music_length_ms!/60000};
+ if(input.operation==='voice_remix')return {characters:input.sample_text!.length};
  if(input.operation==='voice_design')return {characters:input.sample_text!.length};
  if(input.operation==='gemini_tts')return {inputTokens:Buffer.byteLength(input.text!,'utf8')+256,outputTokens:8192};
  return {requests:1};

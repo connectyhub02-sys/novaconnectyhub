@@ -48,7 +48,7 @@ export async function validateResources(auth:VoiceAuth,input:StudioInput){
  let duration:number|undefined;
  if(input.asset_id){const a=await ownedStudioAsset(auth,input.asset_id);if(a.status!=='ready'||a.duration_seconds===null)throw new VoiceError('asset_pending',409,'Espere o áudio terminar de processar.');duration=Number(a.duration_seconds);}
  if(input.operation==='gemini_tts')studioGeminiRequest({text:input.text!,voiceId:input.voice_id!,modelId:input.model_id});
- else if(input.voice_id||input.turns){const voices=(await voiceCatalog(auth)).voices;for(const id of input.turns?.map(t=>t.voice_id)??[input.voice_id!])if(!voices.some(v=>v.voice_id===id&&v.status==='ready'))throw new VoiceError('voice_unavailable',404,'Voz não disponível neste projeto.');}
+ else if(input.voice_id||input.turns){const voices=(await voiceCatalog(auth)).voices;for(const id of input.turns?.map(t=>t.voice_id)??[input.voice_id!])if(!voices.some(v=>v.voice_id===id&&v.status==='ready'&&(input.operation!=='voice_remix'||['private','designed'].includes(v.kind))))throw new VoiceError('voice_unavailable',404,input.operation==='voice_remix'?'Remix só para vozes clonadas ou desenhadas neste projeto.':'Voz não disponível neste projeto.');}
  if(input.preview_id)await ownedStudioResource(auth,input.preview_id,'voice_preview');
  if(input.parent_dictionary_id)await ownedStudioResource(auth,input.parent_dictionary_id,'dictionary');
  await resolveStudioDictionaries(auth,input.dictionary_ids??[]);
@@ -63,7 +63,7 @@ export async function createStudioOperation(auth:VoiceAuth,request:Request,raw:u
  const duration=await validateResources(auth,input),units=studioInputUnits(input,duration),{rates,price}=await studioPrice(auth,input,units);
  studioCreditCeiling(request,price.chargeCredits);
  const jsonOnly=['transcription','forced_alignment','dictionary_create','voice_design_save'].includes(input.operation);
- const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:input.operation==='long_tts'?longTextStorageBytes(input.text!.length):jsonOnly?4_000_000:20_000_000,p_storage_files:input.operation==='voice_design'?4:1});
+ const r=await rpc(auth.client,'reserve_studio_operation',{p_project:auth.project.id,p_key:auth.keyId,p_idempotency:idempotency,p_hash:hash,p_operation:input.operation,p_model:input.model_id,p_voice:input.voice_id??'studio',p_characters:Math.max(1,input.text?.length??input.sample_text?.length??input.turns?.reduce((n,t)=>n+t.text.length,0)??1),p_charge:price.chargeCredits,p_cost:price.providerCost,p_rates:rates,p_input:input,p_units:units,p_storage_bytes:input.operation==='long_tts'?longTextStorageBytes(input.text!.length):jsonOnly?4_000_000:20_000_000,p_storage_files:['voice_design','voice_remix'].includes(input.operation)?4:1});
  // A lost queue acknowledgment is safe: the sweeper finds this reserved receipt.
  await inngest.send({name:input.operation==='long_tts'?'connectyhub/studio.long_tts':'connectyhub/studio.operation',data:{operationId:r.id}}).catch(()=>{});
  const current=await ownedStudioOperation(auth,r.id);return {...publicStudioOperation(current.r,current.s),replayed:!r.claimed};
@@ -150,8 +150,8 @@ async function checkResponse(response:Response){
 }
 async function resourceOutput(auth:VoiceAuth,r:Receipt,s:Operation,response:Response):Promise<Output>{
  const input=s.input;
- if(input.operation==='dialogue'){const result=await readStudioAudioResult(response,true);return {bytes:result.bytes,mime:result.contentType,units:s.reserved_units};}
- const raw=JSON.parse(new TextDecoder().decode(await voiceBody(response,input.operation==='voice_design'?28_000_000:4_000_000)));
+ if(['dialogue','sound_effects','music'].includes(input.operation)){const result=await readStudioAudioResult(response,true);return {bytes:result.bytes,mime:result.contentType,units:s.reserved_units};}
+ const raw=JSON.parse(new TextDecoder().decode(await voiceBody(response,['voice_design','voice_remix'].includes(input.operation)?28_000_000:4_000_000)));
  if(input.operation==='dictionary_create'){
   const resource=await saveResource(auth,r,{kind:'dictionary',name:input.name!,provider_id:providerId(raw.id),provider_version:providerId(raw.version_id),metadata:{rules:input.rules,parent_dictionary_id:input.parent_dictionary_id??null}});
   return {bytes:Buffer.from(JSON.stringify({id:resource.id,name:resource.name,rules:input.rules})),mime:'application/json',units:s.reserved_units};
@@ -160,7 +160,7 @@ async function resourceOutput(auth:VoiceAuth,r:Receipt,s:Operation,response:Resp
   const resource=await saveResource(auth,r,{kind:'voice',name:input.name!,provider_id:providerId(raw.voice_id),metadata:{description:input.description,preview_id:input.preview_id}});
   return {bytes:Buffer.from(JSON.stringify({id:resource.id,name:resource.name,voice_id:resource.provider_id})),mime:'application/json',units:s.reserved_units};
  }
- if(input.operation==='voice_design'){
+ if(input.operation==='voice_design'||input.operation==='voice_remix'){
   if(!Array.isArray(raw.previews)||raw.previews.length<1||raw.previews.length>3)throw new VoiceError('provider_result_invalid',502,'Prévias indisponíveis.');
   let extraBytes=0;const previews=[];
   for(let index=0;index<raw.previews.length;index++){
@@ -231,6 +231,9 @@ export async function runStudioOperation(client:SupabaseClient,id:string){
   let request:StudioResourceRequest;
   if(input.operation==='dialogue')request={operation:'dialogue',turns:input.turns!.map(t=>({text:t.text,voiceId:t.voice_id})),dictionaries:await resolveStudioDictionaries(auth,input.dictionary_ids??[])};
   else if(input.operation==='voice_design')request={operation:'voice_design',description:input.description!,sampleText:input.sample_text!};
+  else if(input.operation==='voice_remix')request={operation:'voice_remix',voiceId:input.voice_id!,description:input.description!,sampleText:input.sample_text!};
+  else if(input.operation==='sound_effects')request={operation:'sound_effects',text:input.text!,durationSeconds:input.duration_seconds!,promptInfluence:input.prompt_influence};
+  else if(input.operation==='music')request={operation:'music',prompt:input.prompt!,lengthMs:input.music_length_ms!};
   else if(input.operation==='voice_design_save')request={operation:'voice_design_save',name:input.name!,description:input.description!,previewId:(await ownedStudioResource(auth,input.preview_id!,'voice_preview')).provider_id};
   else if(input.operation==='dictionary_create')request={operation:'dictionary_create',name:input.name!,rules:input.rules!.map(rule=>rule.type==='alias'?{type:'alias',stringToReplace:rule.string_to_replace,alias:rule.alias}:{type:'phoneme',stringToReplace:rule.string_to_replace,phoneme:rule.phoneme,alphabet:rule.alphabet})};
   else request={operation:'dubbing',audio:audio!,targetLanguage:input.target_language!};

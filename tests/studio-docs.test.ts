@@ -20,6 +20,9 @@ it('documents every accepted operation with strict request fields and valid exam
  {operation:'gemini_tts',voice_id:'gemini:kore',text:'Teste sintético'},{operation:'long_tts',voice_id:'test_voice',text:'Capítulo um.',model_id:'eleven_flash_v2_5',voice_settings:{speed:1.1},language_code:'pt'},{operation:'dialogue',turns:[{text:'Olá',voice_id:'test_voice'}]},
  {operation:'voice_design',description:'Uma voz calma para leitura de notícias.',sample_text:'Este texto é um exemplo sintético usado para conferir o contrato de geração sem executar nenhuma operação externa.'},
  {operation:'voice_design_save',preview_id:id,name:'Voz teste',description:'Uma voz calma para leitura de notícias.'},
+ {operation:'voice_remix',voice_id:'test_voice',description:'Mais grave e calma.',sample_text:'Este texto é um exemplo sintético usado para conferir o contrato de remix de voz sem executar nenhuma operação externa.'},
+ {operation:'sound_effects',text:'Porta de madeira rangendo',duration_seconds:3,prompt_influence:0.4},
+ {operation:'music',prompt:'Trilha acústica alegre com violão',music_length_ms:30000},
  {operation:'dictionary_create',name:'Dicionário teste',rules:[{type:'alias',string_to_replace:'CH',alias:'ConnectyHub'}]}];
  for(const example of examples){expect(()=>parseStudioInput(example)).not.toThrow();const schema=studioSchemas.StudioInput.oneOf.find(s=>(s.properties.operation as {const:string}).const===example.operation)!;expect(schema.additionalProperties).toBe(false);for(const key of schema.required)expect(example).toHaveProperty(key);}
 });

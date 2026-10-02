@@ -16,6 +16,10 @@ export function studioFormReady(body:string){
    case 'dubbing':return has('asset_id')&&has('target_language',2);
    case 'dialogue':return Array.isArray(b.turns)&&b.turns.length>0&&b.turns.every((t:{text?:string;voice_id?:string})=>t.text?.trim()&&t.voice_id);
    case 'voice_design':return has('description',20)&&has('sample_text',100);
+   case 'voice_remix':return has('voice_id')&&has('description',5)&&has('sample_text',100);
+   case 'sound_effects':return has('text',3)&&typeof b.duration_seconds==='number';
+   case 'music':return has('prompt',10)&&typeof b.music_length_ms==='number';
+   case 'long_tts':return has('voice_id')&&has('text');
    case 'voice_design_save':return has('preview_id')&&has('name',2)&&has('description',20);
    case 'dictionary_create':return has('name')&&Array.isArray(b.rules)&&b.rules.length>0&&b.rules.every((r:{string_to_replace?:string;type?:string;alias?:string;phoneme?:string})=>r.string_to_replace?.trim()&&(r.type==='alias'?r.alias?.trim():r.phoneme?.trim()));
    default:return false;
