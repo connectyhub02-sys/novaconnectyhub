@@ -1,5 +1,38 @@
 # Estado operacional da ConnectyHub
 
+## Centro de custo — Fases 2 a 5, publicadas em 02/10/2026
+
+Relatório completo e roteiro de testes: [relatorio-centro-custo-fases-2026-10-02.md](relatorio-centro-custo-fases-2026-10-02.md).
+Migrations **0180, 0181, 0182 e 0183 aplicadas e registradas**, cada uma com
+ensaio e rollback em produção; backups das funções substituídas em
+`/opt/connectyhub/backups`. Versão ativa `0bcdd790` (slot a); retorno pelo slot b
+(`749937ee`). Inngest sincronizado ("Successfully registered").
+
+- Fase 2 (`a6deddb5`): tarifas para importador de catálogo e análise de tráfego
+  (antes falhavam na cobrança); Voz/Estúdio atribuem o consumo à empresa que usou
+  e registram excedente no ciclo; rodadas de ferramenta que falham viram custo
+  absorvido; uso sem tarifa aparece no painel.
+- Fase 3 (`81fdd67b`): raciocínio baixo em todas as tarefas auxiliares do
+  atendimento e automações. Antes, o raciocínio padrão consumia o limite de saída
+  e cortava cerca de metade das respostas de memória, análise do lead e
+  detecções; o benchmark de humanidade nunca gerou nota. Chave "Prompt
+  organizado para cache" (desligado/piloto/todos) criada **desligada**;
+  relatório compara cache e humanidade por ordem.
+- Fase 4 (`749937ee`): parte do prompt servida do cache é cobrada a 10% (custo
+  e créditos, 4x mantido); cliente vê "≈ N respostas" no topo e em Minha conta.
+- Fase 5 (`0bcdd790`): faturas reais por mês/fornecedor com comparação ao
+  estimado; franquia ElevenLabs lida da conta (Creator, 131.000 caracteres/mês,
+  sem excedente; 7.609 usados em 02/10, renova 20/10); conferência diária às 09:00
+  com alertas no Financeiro, sem mensagens a clientes.
+
+Validação: testes dirigidos (cálculo, SQL em PGlite com permissões, metering,
+runtime do agente e automações), TypeScript, ESLint e build de produção em cada
+fase; slots conferidos (health com SHA, páginas, rotas protegidas 307/401) antes
+da ativação. Pendências: nenhuma resposta de texto real no WhatsApp após as
+publicações até 18:47 UTC; conferir no primeiro tráfego as saídas das tarefas
+auxiliares, `promptSections` e o desconto de cache; conferir o Financeiro
+logado como admin; executar o roteiro de testes do relatório.
+
 ## Centro de custo — Resultado do mês, publicado em 02/10/2026
 
 Fase 1 do plano em [auditoria do centro de custo](auditoria-centro-custo-creditos-2026-10-02.md).

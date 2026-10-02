@@ -177,6 +177,8 @@ Toda redução passa antes por avaliação com conversas reais e flag por agente
 
 ## Plano de melhoria do centro de custo (revisado em 02/10, sem impostos)
 
+**Situação:** as cinco fases foram implementadas e publicadas em 02/10/2026. Ver [relatório das fases](relatorio-centro-custo-fases-2026-10-02.md).
+
 Linha de base medida: custo por resposta R$ 0,14; 68,6 cr por resposta;
 cache 6%; voz ElevenLabs perto do equilíbrio (assinatura US$ 22); fixos
 VPS US$ 20 e UAZAPI R$ 138/100 instâncias. Nenhuma etapa altera cobrança
