@@ -33,18 +33,22 @@ import {
 import { PlatformBillingOperations } from "./platform-billing-operations";
 import { BillingOperationAudit } from "./billing-operation-audit";
 import type { OperationAudit } from "@/lib/billing/operation-audit";
+import type { CostCenterMonthResult } from "@/lib/billing/cost-center-month";
+import { CostCenterMonthPanel } from "./cost-center-month-panel";
 
 export function BillingCenter({
   summary,
   commercialCatalog,
   platformBillingCatalog,
   operationAudit,
+  costCenterMonth,
   userLabel = "CEO_HUMAN_ADM",
 }: {
   summary: BillingAdminSummary;
   commercialCatalog: BillingCommercialCatalog;
   platformBillingCatalog: PlatformBillingOperationsCatalog;
   operationAudit?: OperationAudit;
+  costCenterMonth?: CostCenterMonthResult;
   userLabel?: string;
 }) {
   const marginPercent = getMarginPercent(summary.totals.providerCost, summary.totals.connectyRevenue);
@@ -86,6 +90,7 @@ export function BillingCenter({
         </Panel>
       )}
 
+      {costCenterMonth && <CostCenterMonthPanel result={costCenterMonth} />}
       <ExecutiveCostSummary summary={summary} />
       {operationAudit && <BillingOperationAudit data={operationAudit} />}
 

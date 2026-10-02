@@ -1,4 +1,5 @@
 import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
+import { joinPromptSections, measurePromptSections, type PromptSection } from "./prompt-sections";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
 import { quoteFoodComposition, foodCompositionStartingCents, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
@@ -183,6 +184,8 @@ type AgentResponseResult = {
   modelId: string;
   usage: GeminiTokenUsage | null;
   fromCache?: boolean;
+  /** Characters per system-instruction section; never the prompt text. */
+  promptSections?: Record<string, number>;
 };
 
 const geminiSafetySettings = [
@@ -1132,10 +1135,11 @@ async function processWhatsappAgentRunWithScope(input: {
     }
     // While the reply is being thought out the lead sees "digitando…" (or "gravando…"), like a person.
     const { toolTurn, generated, thinkingMs } = await withThinkingPresence({ context, token, phone, latestInbound, active: !cachedAiResponse }, async () => {
-      const toolTurn = orderToolScope && latestInbound && !cachedAiResponse
-        ? await runOrderToolTurn({ ...generationInput, systemInstruction: buildSystemInstruction(generationInput), client, context, scope: orderToolScope, token, phone, latestInbound })
+      const toolPromptSections = orderToolScope && latestInbound && !cachedAiResponse ? buildSystemInstructionSections(generationInput) : null;
+      const toolTurn = toolPromptSections
+        ? await runOrderToolTurn({ ...generationInput, systemInstruction: joinPromptSections(toolPromptSections), client, context, scope: orderToolScope!, token, phone, latestInbound: latestInbound! })
         : null;
-      let generated = toolTurn ? toolTurn.response : cachedAiResponse
+      let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!) } : cachedAiResponse
         ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
         : await generateAgentResponse(generationInput);
 
@@ -4440,13 +4444,14 @@ async function generateAgentResponse(input: {
   const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
+  const promptSections = buildSystemInstructionSections(input);
 
   const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: buildSystemInstruction(input) }],
+        parts: [{ text: joinPromptSections(promptSections) }],
       },
       contents: buildGeminiContents(input.messages, input.userText, input.latestInbound?.id ?? null, input.userText),
       generationConfig: buildAgentResponseGenerationConfig(modelId),
@@ -4480,6 +4485,7 @@ async function generateAgentResponse(input: {
     modelId,
     usage: extractGeminiUsageMetadata(data),
     finishReason: extractGeminiCandidateFinishReason(data),
+    promptSections: measurePromptSections(promptSections),
   };
 }
 
@@ -4750,7 +4756,7 @@ function isGroupConversation(metadata: Record<string, unknown> | null | undefine
   return metadata?.chat_kind === "group" || metadata?.is_group_chat === true;
 }
 
-function buildSystemInstruction(input: {
+function buildSystemInstructionSections(input: {
   checkoutScope?: { organizationId: string; conversationId: string; instanceId: string };
   checkoutRevisionContext?: RuntimeOrderRevisionDraft | null;
   agendaContext?: string;
@@ -4775,7 +4781,7 @@ function buildSystemInstruction(input: {
   messages: ConversationMessageRow[];
   userText: string;
   conversationMetadata: Record<string, unknown> | null;
-}) {
+}): PromptSection[] {
   const agentPrompt = renderPromptVariables(resolveRuntimeAgentPrompt(input), input);
   const commerceJourney = resolveRuntimeCommerceJourney(input.agent);
   const checkoutAllowed = input.salesCatalog.some(item => effectiveRuntimeDestination(item, input.agent) === "connectyhub_checkout") || (!input.salesCatalog.length && commerceJourney === "checkout");
@@ -4791,137 +4797,191 @@ function buildSystemInstruction(input: {
   const leadNameContext = buildLeadNameContext(input.lead);
 
   return [
-    renderPromptVariables(globalPrompt, input),
-    ...(shouldAppendCustomGlobalPrompt
-      ? [
-          "",
-          "DIRETRIZES GLOBAIS DA EMPRESA:",
-          renderPromptVariables(customGlobalPrompt!, input),
-        ]
-      : []),
-    "",
-    "PROMPT DO AGENTE DA EMPRESA:",
-    agentPrompt,
-    "",
-    "REGRA FINAL DE ORTOGRAFIA PARA TEXTO E AUDIO:",
-    ...outboundLanguageQualityPromptLines,
-    "",
-    ...(isGroupConversation(input.conversationMetadata) ? groupAttendanceRules : [
-      "REGRA GLOBAL DE FECHAMENTO E PAGAMENTO:",
-      ...(checkoutAllowed ? buildGlobalCheckoutConfirmationLines() : buildActivityCommerceInstruction(commerceJourney)),
-    ]),
-    "",
-    ...buildCloneProfileLines(input.agent),
-    ...conversationStyleInstructions(input.behavior),
-    ...buildCloneMemoryLines(input.agent, input.behavior),
-    ...buildCloneConsistencyInstruction(input.agent, input.behavior),
-    ...buildCloneRealTestInstruction(input.behavior),
-    "",
-    "CONTEXTO DA EMPRESA:",
-    ...(input.agendaContext ? ["AGENDA: RESULTADO VERIFICADO NESTA TENTATIVA", input.agendaContext] : []),
-    `- Empresa: ${input.organization.name}`,
-    `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
-    leadNameContext,
-    "",
-    "CANAL DO ATENDIMENTO:",
-    buildAgentChannelRuntimeInstruction({
-      channelId: "whatsapp",
-      config: readRecord(input.agent.metadata)?.multichannel_config,
-    }),
-    ...buildLeadMemoryLines(input.lead, input.behavior),
-    ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
-    ...buildRegisteredClientProfileLines(input.registeredClientContext, input.agent),
-    ...buildKnowledgeLines(input.knowledge),
-    ...buildLinkButtonLines(input.linkButtons, input),
-    ...buildOrganizationLocationLines(input.companyLocations),
-    ...buildSalesCatalogLines(input.salesCatalog.map(item => ({ ...item, salesDestination: effectiveRuntimeDestination(item, input.agent) })), checkoutAllowed ? "checkout" : commerceJourney),
-    ...buildActivityProfileInstruction(normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).templateId, normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).professionalIdentity),
-    ...(checkoutAllowed ? [
-      ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
-      ...buildCartComplementSuggestionLines(input.salesCatalogSettings, input.salesCatalog, input.messages, input.lead),
-      ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
-      ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
-      ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
-      ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
-      ...buildSalesCatalogCheckoutStateLines(input.lead, input.checkoutScope),
-      ...buildRuntimeOrderRevisionContextLines(input.checkoutRevisionContext ?? null),
-    ] : []),
-    ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
-    "",
-    "COMPORTAMENTO CONFIGURADO:",
-    `- Modo de resposta: ${input.behavior.responseMode}.`,
-    `- Presenca WhatsApp: ${input.behavior.presenceMode}.`,
-    `- Citar mensagens: ${input.behavior.quoteReplyMode}.`,
-    `- Rapport adaptativo: ${input.behavior.adaptiveRapportMode}.`,
-    `- Dividir respostas: ${input.behavior.splitMessages ? "sim" : "nao"}.`,
-    `- Intervencao humana: ${input.behavior.humanIntervention ? "ativa" : "inativa"}.`,
-    `- Detectar pedido de humano: ${input.behavior.detectHumanRequest ? "sim" : "nao"}.`,
-    `- IA para pedido humano contextual: ${input.behavior.humanHandoffAiDetection ? "sim" : "nao"}.`,
-    `- Detectar remarcar/cancelar: ${input.behavior.detectRescheduleCancel ? "sim" : "nao"}.`,
-    `- Detectar captacao/oferta: ${input.behavior.detectPropertyCapture ? "sim" : "nao"}.`,
-    `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
-    `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
-    `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
-    `- Botoes de link rastreados: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
-    `- Memoria da empresa entre agentes: ${input.behavior.sharedCompanyContext ? "sim" : "nao"}.`,
-    `- Memoria viva do clone: ${input.behavior.cloneMemory ? "sim" : "nao"}.`,
-    `- Coerencia do clone: ${input.behavior.cloneConsistencyGuard ? "sim" : "nao"}.`,
-    `- Teste real do clone: ${input.behavior.cloneRealTestMode ? "sim" : "nao"}.`,
-    `- Mencionar todos em grupos: ${input.behavior.groupMentionAll ? "sim" : "nao"}.`,
-    `- Proteger midias em lote: ${input.behavior.mediaBurstGuard ? "sim" : "nao"}.`,
-    `- Proteger midia sem legenda: ${input.behavior.missingMediaCaptionGuard ? "sim" : "nao"}.`,
-    `- Proteger audio dificil: ${input.behavior.audioQualityGuard ? "sim" : "nao"}.`,
-    `- Reconhecer mensagem editada/apagada: ${input.behavior.messageEditDeleteAwareness ? "sim" : "nao"}.`,
-    `- Reconhecer contato/enquete/reacao: ${input.behavior.contactPollReactionHandling ? "sim" : "nao"}.`,
-    `- Detectar troca de assunto: ${input.behavior.topicShiftDetection ? "sim" : "nao"}.`,
-    `- Bloquear prompt injection: ${input.behavior.promptInjectionGuard ? "sim" : "nao"}.`,
-    `- Transcrever audio: ${input.behavior.audioTranscription ? "sim" : "nao"}.`,
-    `- Analisar imagens: ${input.behavior.mediaImage ? "sim" : "nao"}.`,
-    `- Analisar documentos: ${input.behavior.mediaDocument ? "sim" : "nao"}.`,
-    `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
-    ...buildLeadQualificationInstruction(input.qualification),
-    ...buildMediaDrivenQualificationInstruction(input.behavior, input.qualification),
-    ...buildIdentityGuardInstruction(input.behavior, input.agent),
-    ...buildElianeSelfServiceInstruction(input.agent),
-    ...buildEmotionalContextInstruction(input.behavior, input.userText, input.messages, input.agent),
-    ...buildConversationChoreographyInstruction(input.behavior),
-    ...buildConfidenceHumilityInstruction(input.behavior),
-    ...buildContextProtectionInstruction(input.behavior),
-    ...buildHumanizedLanguageInstruction(input.behavior),
-    ...buildAnswerCompletenessInstruction(input.userText),
-    ...buildGreetingOnlyInstruction(input.userText),
-    "",
-    "ENCAMINHAMENTO PARA PESSOAS:",
-    "- Nunca diga que avisou, encaminhou ou passou a conversa para o responsável, a equipe ou um atendente, nem que alguém vai entrar em contato: isso só acontece quando o cliente pede para falar com uma pessoa, e o sistema faz o encaminhamento de verdade.",
-    "- Não ofereça serviço, profissional, especialista, avaliação ou consulta que a empresa não vende. Se o cliente pedir algo que não existe no catálogo, diga com naturalidade que a empresa não oferece e continue ajudando.",
-    ...buildIntentionalTyposInstruction(input.behavior),
-    ...buildNaturalAudioFillersInstruction(input.behavior),
-    ...buildProactiveMediaInstruction(input.behavior),
-    ...buildSocialProofInstruction(input.learnings),
-    ...buildTemporalAwarenessInstruction(input.behavior),
-    ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
-    ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
-    ...buildHumanHandbackInstruction(input.conversationMetadata, input.messages),
-    ...buildSmallTalkContext(input.behavior),
-    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
-    ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCustomerCheckoutDataLines(input.lead, input.messages) : []),
-    ...buildConfiguredNicheCareLines(input.agent),
-    ...buildActivityCommerceInstruction(commerceJourney),
-    "",
-    "REGRAS TECNICAS DE SAIDA:",
-    "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
-    "- NUNCA escreva 'rs', 'rsrs', 'kk', 'kkk' no meio do texto quando a resposta pode virar audio. O TTS le 'rs' como palavra. Para expressar humor, escreva com tom leve ou use 'haha' somente no INICIO da frase isolado.",
-    "- SEMPRE coloque espaco apos ponto final, interrogacao e exclamacao. Exemplo correto: 'Entendi. Vou ver isso.' Exemplo errado: 'Entendi.Vou ver isso.'",
-    "- Responda sempre em portugues do Brasil.",
-    "- Se usar um link rastreado, inclua a URL ou tag exatamente como aparece na lista de links.",
-    "- 'Nota interna' e contexto operacional — nunca repita essa expressao para o lead.",
-    "- Quando a mensagem do lead vier com '[Respondendo a mensagem: ...]', trate esse trecho como a mensagem citada no WhatsApp e responda ao texto/audio/midia atual do lead considerando essa referencia.",
-    "- Nao responda a mensagem citada como se ela tivesse acabado de chegar; use a citacao para entender 'esse', 'isso', 'essa opcao', 'gostei', 'quero esse' e referencias parecidas.",
-    "- Se a citacao for audio, imagem, video ou documento sem texto legivel, seja transparente e peca um resumo curto apenas se o contexto atual nao for suficiente.",
-    "- Audio sem transcricao: nao mencione 'midia' ou 'arquivo'. Diga naturalmente que nao conseguiu ouvir e peca para resumir em texto.",
-    "- Midia com analise automatica: use a analise como contexto real antes de responder.",
-    "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
-  ].join("\n");
+    { key: "global", lines: [
+      renderPromptVariables(globalPrompt, input),
+      ...(shouldAppendCustomGlobalPrompt
+        ? [
+            "",
+            "DIRETRIZES GLOBAIS DA EMPRESA:",
+            renderPromptVariables(customGlobalPrompt!, input),
+          ]
+        : []),
+      "",
+    ] },
+    { key: "agent_prompt", lines: [
+      "PROMPT DO AGENTE DA EMPRESA:",
+      agentPrompt,
+      "",
+    ] },
+    { key: "language_rules", lines: [
+      "REGRA FINAL DE ORTOGRAFIA PARA TEXTO E AUDIO:",
+      ...outboundLanguageQualityPromptLines,
+      "",
+    ] },
+    { key: "closing_rules", lines: [
+      ...(isGroupConversation(input.conversationMetadata) ? groupAttendanceRules : [
+        "REGRA GLOBAL DE FECHAMENTO E PAGAMENTO:",
+        ...(checkoutAllowed ? buildGlobalCheckoutConfirmationLines() : buildActivityCommerceInstruction(commerceJourney)),
+      ]),
+      "",
+    ] },
+    { key: "clone_style", lines: [
+      ...buildCloneProfileLines(input.agent),
+      ...conversationStyleInstructions(input.behavior),
+      ...buildCloneMemoryLines(input.agent, input.behavior),
+      ...buildCloneConsistencyInstruction(input.agent, input.behavior),
+      ...buildCloneRealTestInstruction(input.behavior),
+      "",
+    ] },
+    { key: "company_context", lines: [
+      "CONTEXTO DA EMPRESA:",
+      ...(input.agendaContext ? ["AGENDA: RESULTADO VERIFICADO NESTA TENTATIVA", input.agendaContext] : []),
+      `- Empresa: ${input.organization.name}`,
+      `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
+      leadNameContext,
+      "",
+    ] },
+    { key: "channel", lines: [
+      "CANAL DO ATENDIMENTO:",
+      buildAgentChannelRuntimeInstruction({
+        channelId: "whatsapp",
+        config: readRecord(input.agent.metadata)?.multichannel_config,
+      }),
+    ] },
+    { key: "lead_memory", lines: [
+      ...buildLeadMemoryLines(input.lead, input.behavior),
+    ] },
+    { key: "cross_agent", lines: [
+      ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
+    ] },
+    { key: "registered_client", lines: [
+      ...buildRegisteredClientProfileLines(input.registeredClientContext, input.agent),
+    ] },
+    { key: "knowledge", lines: [
+      ...buildKnowledgeLines(input.knowledge),
+    ] },
+    { key: "links", lines: [
+      ...buildLinkButtonLines(input.linkButtons, input),
+    ] },
+    { key: "locations", lines: [
+      ...buildOrganizationLocationLines(input.companyLocations),
+    ] },
+    { key: "catalog", lines: [
+      ...buildSalesCatalogLines(input.salesCatalog.map(item => ({ ...item, salesDestination: effectiveRuntimeDestination(item, input.agent) })), checkoutAllowed ? "checkout" : commerceJourney),
+    ] },
+    { key: "activity_profile", lines: [
+      ...buildActivityProfileInstruction(normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).templateId, normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]).professionalIdentity),
+    ] },
+    { key: "checkout_rules", lines: [
+      ...(checkoutAllowed ? [
+        ...buildSalesCatalogCartIncreaseLines(input.salesCatalogSettings, input.salesCatalog),
+        ...buildCartComplementSuggestionLines(input.salesCatalogSettings, input.salesCatalog, input.messages, input.lead),
+        ...buildSalesCatalogCommerceLines(input.salesCatalogSettings, input.salesCatalogShippingSettings),
+        ...buildSalesCatalogShippingPolicyLines(input.salesCatalogShippingSettings),
+        ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
+        ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
+        ...buildSalesCatalogCheckoutStateLines(input.lead, input.checkoutScope),
+        ...buildRuntimeOrderRevisionContextLines(input.checkoutRevisionContext ?? null),
+      ] : []),
+    ] },
+    { key: "store_context", lines: [
+      ...buildCommerceStoreContextLines(input.commerceStoreContext, input.agent),
+      "",
+    ] },
+    { key: "behavior_flags", lines: [
+      "COMPORTAMENTO CONFIGURADO:",
+      `- Modo de resposta: ${input.behavior.responseMode}.`,
+      `- Presenca WhatsApp: ${input.behavior.presenceMode}.`,
+      `- Citar mensagens: ${input.behavior.quoteReplyMode}.`,
+      `- Rapport adaptativo: ${input.behavior.adaptiveRapportMode}.`,
+      `- Dividir respostas: ${input.behavior.splitMessages ? "sim" : "nao"}.`,
+      `- Intervencao humana: ${input.behavior.humanIntervention ? "ativa" : "inativa"}.`,
+      `- Detectar pedido de humano: ${input.behavior.detectHumanRequest ? "sim" : "nao"}.`,
+      `- IA para pedido humano contextual: ${input.behavior.humanHandoffAiDetection ? "sim" : "nao"}.`,
+      `- Detectar remarcar/cancelar: ${input.behavior.detectRescheduleCancel ? "sim" : "nao"}.`,
+      `- Detectar captacao/oferta: ${input.behavior.detectPropertyCapture ? "sim" : "nao"}.`,
+      `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
+      `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
+      `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
+      `- Botoes de link rastreados: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
+      `- Memoria da empresa entre agentes: ${input.behavior.sharedCompanyContext ? "sim" : "nao"}.`,
+      `- Memoria viva do clone: ${input.behavior.cloneMemory ? "sim" : "nao"}.`,
+      `- Coerencia do clone: ${input.behavior.cloneConsistencyGuard ? "sim" : "nao"}.`,
+      `- Teste real do clone: ${input.behavior.cloneRealTestMode ? "sim" : "nao"}.`,
+      `- Mencionar todos em grupos: ${input.behavior.groupMentionAll ? "sim" : "nao"}.`,
+      `- Proteger midias em lote: ${input.behavior.mediaBurstGuard ? "sim" : "nao"}.`,
+      `- Proteger midia sem legenda: ${input.behavior.missingMediaCaptionGuard ? "sim" : "nao"}.`,
+      `- Proteger audio dificil: ${input.behavior.audioQualityGuard ? "sim" : "nao"}.`,
+      `- Reconhecer mensagem editada/apagada: ${input.behavior.messageEditDeleteAwareness ? "sim" : "nao"}.`,
+      `- Reconhecer contato/enquete/reacao: ${input.behavior.contactPollReactionHandling ? "sim" : "nao"}.`,
+      `- Detectar troca de assunto: ${input.behavior.topicShiftDetection ? "sim" : "nao"}.`,
+      `- Bloquear prompt injection: ${input.behavior.promptInjectionGuard ? "sim" : "nao"}.`,
+      `- Transcrever audio: ${input.behavior.audioTranscription ? "sim" : "nao"}.`,
+      `- Analisar imagens: ${input.behavior.mediaImage ? "sim" : "nao"}.`,
+      `- Analisar documentos: ${input.behavior.mediaDocument ? "sim" : "nao"}.`,
+      `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
+    ] },
+    { key: "qualification", lines: [
+      ...buildLeadQualificationInstruction(input.qualification),
+      ...buildMediaDrivenQualificationInstruction(input.behavior, input.qualification),
+    ] },
+    { key: "conduct", lines: [
+      ...buildIdentityGuardInstruction(input.behavior, input.agent),
+      ...buildElianeSelfServiceInstruction(input.agent),
+      ...buildEmotionalContextInstruction(input.behavior, input.userText, input.messages, input.agent),
+      ...buildConversationChoreographyInstruction(input.behavior),
+      ...buildConfidenceHumilityInstruction(input.behavior),
+      ...buildContextProtectionInstruction(input.behavior),
+      ...buildHumanizedLanguageInstruction(input.behavior),
+      ...buildAnswerCompletenessInstruction(input.userText),
+      ...buildGreetingOnlyInstruction(input.userText),
+      "",
+    ] },
+    { key: "handoff", lines: [
+      "ENCAMINHAMENTO PARA PESSOAS:",
+      "- Nunca diga que avisou, encaminhou ou passou a conversa para o responsável, a equipe ou um atendente, nem que alguém vai entrar em contato: isso só acontece quando o cliente pede para falar com uma pessoa, e o sistema faz o encaminhamento de verdade.",
+      "- Não ofereça serviço, profissional, especialista, avaliação ou consulta que a empresa não vende. Se o cliente pedir algo que não existe no catálogo, diga com naturalidade que a empresa não oferece e continue ajudando.",
+    ] },
+    { key: "conversation_dynamics", lines: [
+      ...buildIntentionalTyposInstruction(input.behavior),
+      ...buildNaturalAudioFillersInstruction(input.behavior),
+      ...buildProactiveMediaInstruction(input.behavior),
+      ...buildSocialProofInstruction(input.learnings),
+      ...buildTemporalAwarenessInstruction(input.behavior),
+      ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
+      ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
+      ...buildHumanHandbackInstruction(input.conversationMetadata, input.messages),
+      ...buildSmallTalkContext(input.behavior),
+    ] },
+    { key: "commerce_conversation", lines: [
+      ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCommerceConversationInstruction() : []),
+      ...(checkoutAllowed && input.salesCatalog.length > 0 ? buildCustomerCheckoutDataLines(input.lead, input.messages) : []),
+    ] },
+    { key: "niche_activity", lines: [
+      ...buildConfiguredNicheCareLines(input.agent),
+      ...buildActivityCommerceInstruction(commerceJourney),
+      "",
+    ] },
+    { key: "output_rules", lines: [
+      "REGRAS TECNICAS DE SAIDA:",
+      "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
+      "- NUNCA escreva 'rs', 'rsrs', 'kk', 'kkk' no meio do texto quando a resposta pode virar audio. O TTS le 'rs' como palavra. Para expressar humor, escreva com tom leve ou use 'haha' somente no INICIO da frase isolado.",
+      "- SEMPRE coloque espaco apos ponto final, interrogacao e exclamacao. Exemplo correto: 'Entendi. Vou ver isso.' Exemplo errado: 'Entendi.Vou ver isso.'",
+      "- Responda sempre em portugues do Brasil.",
+      "- Se usar um link rastreado, inclua a URL ou tag exatamente como aparece na lista de links.",
+      "- 'Nota interna' e contexto operacional — nunca repita essa expressao para o lead.",
+      "- Quando a mensagem do lead vier com '[Respondendo a mensagem: ...]', trate esse trecho como a mensagem citada no WhatsApp e responda ao texto/audio/midia atual do lead considerando essa referencia.",
+      "- Nao responda a mensagem citada como se ela tivesse acabado de chegar; use a citacao para entender 'esse', 'isso', 'essa opcao', 'gostei', 'quero esse' e referencias parecidas.",
+      "- Se a citacao for audio, imagem, video ou documento sem texto legivel, seja transparente e peca um resumo curto apenas se o contexto atual nao for suficiente.",
+      "- Audio sem transcricao: nao mencione 'midia' ou 'arquivo'. Diga naturalmente que nao conseguiu ouvir e peca para resumir em texto.",
+      "- Midia com analise automatica: use a analise como contexto real antes de responder.",
+      "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
+    ] },
+  ];
+}
+
+function buildSystemInstruction(input: Parameters<typeof buildSystemInstructionSections>[0]) {
+  return joinPromptSections(buildSystemInstructionSections(input));
 }
 
 function resolveRuntimeAgentPrompt(input: {
@@ -18904,6 +18964,7 @@ async function meterWhatsappAgentTextUsage(input: {
       outboundMessages: input.outboundMessages,
       fromCache: input.response.fromCache === true,
       geminiUsage: serializeGeminiUsage(usage),
+      ...(input.response.promptSections ? { promptSections: input.response.promptSections } : {}),
     },
   });
 }

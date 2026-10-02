@@ -1,5 +1,7 @@
 export const CONNECTY_CREDIT_UNIT_BRL = 0.01;
 export const INCLUDED_CREDIT_TARGET_MARKUP = 4;
+/** R$/US$ used when tariff costs were registered; the live rate is an admin setting. */
+export const TARIFF_REFERENCE_USD_BRL = 6;
 
 export type PlanCreditEconomicsInput = {
   monthlyPriceBrl: number;

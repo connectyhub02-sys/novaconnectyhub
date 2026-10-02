@@ -13,7 +13,7 @@ import type * as Reconciliation from "../src/lib/billing/usage-reconciliation";
 
 function meteringHarness(overrides = {}) {
   return serverModuleHarness<typeof Metering>("src/lib/billing/metered-usage.ts", {
-    "@/lib/billing/credit-economics": { CONNECTY_CREDIT_UNIT_BRL: .01 },
+    "@/lib/billing/credit-economics": { CONNECTY_CREDIT_UNIT_BRL: .01, TARIFF_REFERENCE_USD_BRL: 6 },
     "@/lib/billing/cost-center": { calculateGrossMargin: (cost: number, revenue: number) => revenue-cost, ...overrides },
   });
 }
@@ -68,7 +68,7 @@ describe("usage billing integrity", () => {
     await meteringHarness({recordUsageAndDebitCredits:debit}).meterUsageEvent(db.client as never,
       {organizationId:"child",provider:"gemini",featureCode:"chat_completion",modelId:"test",inputTokens:100});
     expect(debit.mock.calls[0][1]).toMatchObject({organizationId:"child",connectyChargeCredits:2,
-      metadata:{metering:{billingOrganizationId:"owner",planCode:"pro"}}});
+      metadata:{metering:{billingOrganizationId:"owner",planCode:"pro",costFxUsdBrl:6,providerCostUsd:.01666667}}});
   });
 
   it("authenticates agenda interpretation and meters it before applying the decision", async () => {

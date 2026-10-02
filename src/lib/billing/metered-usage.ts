@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CONNECTY_CREDIT_UNIT_BRL } from "@/lib/billing/credit-economics";
+import { CONNECTY_CREDIT_UNIT_BRL, TARIFF_REFERENCE_USD_BRL } from "@/lib/billing/credit-economics";
 import {
   calculateGrossMargin,
   recordUsageAndDebitCredits,
@@ -241,6 +241,9 @@ export async function meterUsageEvent(
     ? calculated.providerCost
     : roundMoney(input.providerCostOverride);
   const grossMargin = calculateGrossMargin(providerCost, revenueEstimate);
+  // Tariff costs are stored in BRL at the tariff's reference rate; keep the USD
+  // amount so reports can reprice at the current rate without guessing.
+  const costFxUsdBrl = calculated.matchedRates.find(rate => rate.costFxUsdBrl)?.costFxUsdBrl ?? TARIFF_REFERENCE_USD_BRL;
   const inputTokens = roundUsageUnits(units.inputTokens ?? 0);
   const outputTokens = roundUsageUnits(units.outputTokens ?? 0);
   const totalTokens = roundUsageUnits(input.totalTokens ?? inputTokens + outputTokens);
@@ -262,6 +265,8 @@ export async function meterUsageEvent(
       minimumChargeCredits: calculated.minimumChargeCredits,
       matchedUnits: calculated.matchedUnits,
       matchedRates: calculated.matchedRates,
+      costFxUsdBrl,
+      providerCostUsd: roundMoney(providerCost / costFxUsdBrl),
     },
   };
   const usageInput = {
