@@ -28,10 +28,11 @@ describe("cache-friendly prompt order", () => {
 
 describe("agent cost optimization switches", () => {
   it("accepts only known scopes and valid agent ids", () => {
-    expect(parseAgentCostOptimizations({ cacheFriendlyPrompt: "all", pilotAgentIds: [agent, "x", 3] })).toEqual({ cacheFriendlyPrompt: "all", pilotAgentIds: [agent] });
+    expect(parseAgentCostOptimizations({ cacheFriendlyPrompt: "all", pilotAgentIds: [agent, "x", 3] })).toEqual({ cacheFriendlyPrompt: "all", explicitCache: "off", pilotAgentIds: [agent] });
     expect(parseAgentCostOptimizations({ cacheFriendlyPrompt: "maybe" }).cacheFriendlyPrompt).toBe("off");
-    expect(parseAgentCostOptimizations(null)).toEqual({ cacheFriendlyPrompt: "off", pilotAgentIds: [] });
-    const pilot = { cacheFriendlyPrompt: "pilot" as const, pilotAgentIds: [agent] };
+    expect(parseAgentCostOptimizations({ explicitCache: "pilot" }).explicitCache).toBe("pilot");
+    expect(parseAgentCostOptimizations(null)).toEqual({ cacheFriendlyPrompt: "off", explicitCache: "off", pilotAgentIds: [] });
+    const pilot = { cacheFriendlyPrompt: "pilot" as const, explicitCache: "off" as const, pilotAgentIds: [agent] };
     expect(appliesToAgent("pilot", pilot, agent)).toBe(true);
     expect(appliesToAgent("pilot", pilot, "other")).toBe(false);
     expect(appliesToAgent("off", pilot, agent)).toBe(false);

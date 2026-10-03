@@ -310,7 +310,7 @@ export function AgentOptimizationPanel({ data }: { data: AgentOptimizationAdmin 
           <strong>Raciocínio baixo nas tarefas auxiliares:</strong> sempre ativo. Corrige memórias, análises e detecções que eram cortadas
           antes de responder e reduz o custo dessas tarefas.
         </p>
-        <form onSubmit={(event: FormEvent) => { event.preventDefault(); void save({ optimizations: { cacheFriendlyPrompt: scope, pilotAgentIds: pilot } }); }}>
+        <form onSubmit={(event: FormEvent) => { event.preventDefault(); void save({ optimizations: { cacheFriendlyPrompt: scope, explicitCache: data.settings.explicitCache ?? "off", pilotAgentIds: pilot } }); }}>
           <p className="font-semibold" style={{ color: "var(--ch-text)" }}>Prompt organizado para cache</p>
           <p className="mb-2 leading-5 text-slate-500">
             Mesmo texto, com as partes fixas primeiro. A parte repetida passa a custar 10% do preço no Gemini. Compare o cache e o

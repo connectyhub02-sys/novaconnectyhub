@@ -3,19 +3,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Admin switches for cost optimizations that could change agent behavior.
 // "pilot" applies only to the listed agents so quality can be compared first.
 export type OptimizationScope = "off" | "pilot" | "all";
-export type AgentCostOptimizations = { cacheFriendlyPrompt: OptimizationScope; pilotAgentIds: string[] };
+// explicitCache: stable instructions as a provider cache (needs cacheFriendlyPrompt).
+export type AgentCostOptimizations = { cacheFriendlyPrompt: OptimizationScope; explicitCache: OptimizationScope; pilotAgentIds: string[] };
 
 export const AGENT_COST_OPTIMIZATIONS_KEY = "agent_cost_optimizations";
-const defaults: AgentCostOptimizations = { cacheFriendlyPrompt: "off", pilotAgentIds: [] };
+const defaults: AgentCostOptimizations = { cacheFriendlyPrompt: "off", explicitCache: "off", pilotAgentIds: [] };
 const cacheMs = 60_000;
 let cached: { at: number; value: AgentCostOptimizations } | null = null;
 
 export function parseAgentCostOptimizations(value: unknown): AgentCostOptimizations {
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const scope = record.cacheFriendlyPrompt;
+  const explicit = record.explicitCache;
   const ids = Array.isArray(record.pilotAgentIds) ? record.pilotAgentIds : [];
   return {
     cacheFriendlyPrompt: scope === "pilot" || scope === "all" ? scope : "off",
+    explicitCache: explicit === "pilot" || explicit === "all" ? explicit : "off",
     pilotAgentIds: ids.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 200),
   };
 }

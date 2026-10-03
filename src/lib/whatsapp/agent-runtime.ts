@@ -1,6 +1,7 @@
 import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
-import { hashPromptSections, joinPromptSections, measurePromptSections, orderPromptSectionsForCache, type PromptSection } from "./prompt-sections";
+import { hashPromptSections, joinPromptSections, measurePromptSections, orderPromptSectionsForCache, volatilePromptSectionKeys, type PromptSection } from "./prompt-sections";
+import { rejectExplicitCache, requestInstructionsWereCounted, stablePrefixCache } from "@/lib/gemini/explicit-cache";
 import { appliesToAgent, loadAgentCostOptimizations } from "@/lib/billing/cost-optimizations";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
@@ -192,6 +193,7 @@ type AgentResponseResult = {
   promptSections?: Record<string, number>;
   promptSectionHashes?: Record<string, string>;
   promptOrder?: "default" | "cache";
+  explicitCache?: string;
 };
 
 const geminiSafetySettings = [
@@ -1008,6 +1010,10 @@ async function processWhatsappAgentRunWithScope(input: {
       });
     }
 
+    // A newer lead message (common: audio then texts) supersedes this attempt. Checked
+    // before the paid analyses, so the newer attempt runs them once for everything.
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+
     const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
 
     const humanHandoffIntent = behavior.humanIntervention && behavior.detectHumanRequest
@@ -1129,6 +1135,7 @@ async function processWhatsappAgentRunWithScope(input: {
     const costOptimizations = await loadAgentCostOptimizations(client);
     const generationInput = {
       cacheFriendlyPrompt: appliesToAgent(costOptimizations.cacheFriendlyPrompt, costOptimizations, agent.id),
+      explicitCache: appliesToAgent(costOptimizations.explicitCache, costOptimizations, agent.id),
       checkoutScope: { organizationId: context.organization.id, conversationId: context.conversationId, instanceId: context.instance.id },
       checkoutRevisionContext: readRuntimeOrderRevision(context),
       agendaContext: agendaTurn?.context,
@@ -1154,7 +1161,7 @@ async function processWhatsappAgentRunWithScope(input: {
       const toolPromptSections = orderToolScope && latestInbound && !cachedAiResponse
         ? orderPromptSections(buildSystemInstructionSections(generationInput), generationInput.cacheFriendlyPrompt) : null;
       const toolTurn = toolPromptSections
-        ? await runOrderToolTurn({ ...generationInput, systemInstruction: joinPromptSections(toolPromptSections), client, context, scope: orderToolScope!, token, phone, latestInbound: latestInbound! })
+        ? await runOrderToolTurn({ ...generationInput, systemInstruction: joinPromptSections(toolPromptSections), promptSections: toolPromptSections, client, context, scope: orderToolScope!, token, phone, latestInbound: latestInbound! })
         : null;
       let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!), promptSectionHashes: hashPromptSections(toolPromptSections!), promptOrder: generationInput.cacheFriendlyPrompt ? "cache" as const : "default" as const } : cachedAiResponse
         ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
@@ -4433,6 +4440,7 @@ function mapRuntimeLinkButton(row: LinkButtonMemoryRow): RuntimeLinkButton {
 async function generateAgentResponse(input: {
   /** Stable sections first so the provider cache can reuse the prompt prefix. */
   cacheFriendlyPrompt?: boolean;
+  explicitCache?: boolean;
   checkoutScope?: { organizationId: string; conversationId: string; instanceId: string };
   checkoutRevisionContext?: RuntimeOrderRevisionDraft | null;
   agendaContext?: string;
@@ -4465,20 +4473,16 @@ async function generateAgentResponse(input: {
   url.searchParams.set("key", input.credentials.apiKey);
   const promptSections = orderPromptSections(buildSystemInstructionSections(input), input.cacheFriendlyPrompt);
 
-  const response = await fetchWithTimeout(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: joinPromptSections(promptSections) }],
-      },
+  const { response, data, explicitCache } = await postAgentGeneration({
+    url, apiKey: input.credentials.apiKey, modelId, sections: promptSections, extraSystemLines: [],
+    explicit: Boolean(input.explicitCache && input.cacheFriendlyPrompt),
+    body: {
       contents: buildGeminiContents(input.messages, input.userText, input.latestInbound?.id ?? null, input.userText),
       generationConfig: buildAgentResponseGenerationConfig(modelId),
       safetySettings: geminiSafetySettings,
-    }),
-    cache: "no-store",
-  }, geminiAgentResponseTimeoutMs, "Gemini generateContent do agente WhatsApp");
-  const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura da resposta do agente WhatsApp");
+    },
+    label: "Gemini generateContent do agente WhatsApp",
+  });
 
   if (!response.ok) {
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
@@ -4507,7 +4511,52 @@ async function generateAgentResponse(input: {
     promptSections: measurePromptSections(promptSections),
     promptSectionHashes: hashPromptSections(promptSections),
     promptOrder: input.cacheFriendlyPrompt ? "cache" : "default",
+    explicitCache,
   };
+}
+
+/**
+ * One agent generation. With the explicit cache (pilot), the stable sections travel
+ * as a provider cache and only the changing sections as the request instruction;
+ * any refusal or suspicious usage report repeats the call the usual way.
+ */
+async function postAgentGeneration(input: {
+  url: URL; apiKey: string; modelId: string; sections: PromptSection[]; extraSystemLines: string[];
+  explicit: boolean; body: JsonRecord; label: string;
+}): Promise<{ response: Response; data: unknown; explicitCache: string }> {
+  const { url } = input;
+  const send = async (body: JsonRecord) => {
+    const response = await fetchWithTimeout(url, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store",
+    }, geminiAgentResponseTimeoutMs, input.label);
+    const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, `${input.label} (leitura)`);
+    return { response, data };
+  };
+  const fullText = [joinPromptSections(input.sections), ...(input.extraSystemLines.length ? ["", ...input.extraSystemLines] : [])].join("\n");
+  let explicitCache = input.explicit ? "skipped" : "off";
+  if (input.explicit) {
+    const stable = input.sections.filter(section => !volatilePromptSectionKeys.has(section.key));
+    const changing = input.sections.filter(section => volatilePromptSectionKeys.has(section.key));
+    const requestText = [joinPromptSections(changing), ...(input.extraSystemLines.length ? ["", ...input.extraSystemLines] : [])].join("\n");
+    const handle = await stablePrefixCache({ apiKey: input.apiKey, model: input.modelId, stableText: joinPromptSections(stable) });
+    if (handle) {
+      const attempt = await send({ ...input.body, cachedContent: handle.name, systemInstruction: { parts: [{ text: requestText }] } });
+      if (attempt.response.ok) {
+        const usage = extractGeminiUsageMetadata(attempt.data);
+        if (usage && usage.cachedTokens > 0 && requestInstructionsWereCounted(usage, requestText.length)) {
+          return { ...attempt, explicitCache: handle.created ? "created" : "hit" };
+        }
+        rejectExplicitCache(`instrucoes da requisicao nao contadas (entrada ${usage?.inputTokens ?? 0}, cache ${usage?.cachedTokens ?? 0})`);
+        explicitCache = "fallback_usage";
+      } else {
+        // 404: the cache expired on the provider side; only the local entry is dropped.
+        rejectExplicitCache(`generate ${attempt.response.status}: ${readProviderError(attempt.data) ?? "sem detalhe"}`, Date.now(), attempt.response.status === 404 ? 0 : undefined);
+        explicitCache = `fallback_${attempt.response.status}`;
+      }
+    }
+  }
+  const result = await send({ ...input.body, systemInstruction: { parts: [{ text: fullText }] } });
+  return { ...result, explicitCache };
 }
 
 function orderPromptSections(sections: PromptSection[], cacheFriendly: boolean | undefined) {
@@ -13919,7 +13968,7 @@ async function executeCartTool(input: {
 
 /** One attendance turn with order tools. Side effects run in tools; customer messages are deferred until after the reply. */
 async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentResponse>[0], "credentials" | "agent" | "behavior" | "messages" | "userText"> & {
-  systemInstruction: string;
+  systemInstruction: string; promptSections?: PromptSection[]; cacheFriendlyPrompt?: boolean; explicitCache?: boolean;
   client: SupabaseClient; context: RunContext; scope: OrderToolScope; token: string; phone: string; latestInbound: ConversationMessageRow;
 }): Promise<{ response: AgentResponseResult; deferred: OrderToolDeferred[]; calls: OrderToolCall[] }> {
   const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
@@ -13933,18 +13982,25 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
   let usage: GeminiTokenUsage | null = null;
   let corrected = false;
   const seenCalls = new Set<string>();
+  const explicitCacheRounds: string[] = [];
   try {
     for (let round = 0; round < orderToolMaxRounds; round++) {
       // The last round forbids tools: the customer always gets an answer, never silence.
       const lastRound = round === orderToolMaxRounds - 1;
-      const response = await fetchWithTimeout(url, {
-        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents,
-          tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }],
-          toolConfig: { functionCallingConfig: { mode: lastRound ? "NONE" : "AUTO" } },
-          generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings }),
-      }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
-      const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido");
+      const toolLines = cart ? cartToolInstructionLines : orderToolInstructionLines;
+      const toolBody: JsonRecord = { contents,
+        tools: [{ functionDeclarations: cart ? cartToolDeclarations : orderToolDeclarations }],
+        toolConfig: { functionCallingConfig: { mode: lastRound ? "NONE" : "AUTO" } },
+        generationConfig: buildAgentResponseGenerationConfig(modelId), safetySettings: geminiSafetySettings };
+      const { response, data, explicitCache: roundCache } = input.promptSections
+        ? await postAgentGeneration({ url, apiKey: input.credentials.apiKey, modelId, sections: input.promptSections, extraSystemLines: toolLines,
+          explicit: Boolean(input.explicitCache && input.cacheFriendlyPrompt), body: toolBody, label: "Gemini generateContent com ferramentas do pedido" })
+        : { ...(await (async () => {
+            const response = await fetchWithTimeout(url, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+              body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, ...toolBody }) }, geminiAgentResponseTimeoutMs, "Gemini generateContent com ferramentas do pedido");
+            return { response, data: await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura das ferramentas do pedido") };
+          })()), explicitCache: "off" };
+      explicitCacheRounds.push(roundCache);
       if (!response.ok) throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
       usage = sumGeminiUsage(usage, extractGeminiUsageMetadata(data));
       const content = readRecord(readRecord(Array.isArray(readRecord(data)?.candidates) ? (readRecord(data)!.candidates as unknown[])[0] : null)?.content);
@@ -13975,7 +14031,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
       const text = parts.filter(part => readRecord(part)?.thought !== true).map(part => asString(readRecord(part)?.text) ?? "").join("\n").trim();
       if (!text) {
         if (!lastRound) throw new Error("Gemini nao retornou uma resposta para o lead.");
-        return { response: { text: orderToolFallbackText(calls, deferred), modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+        return { response: { text: orderToolFallbackText(calls, deferred), modelId, usage, finishReason: extractGeminiCandidateFinishReason(data), explicitCache: explicitCacheRounds.join(",") }, deferred, calls };
       }
       // A claimed action needs a successful tool in this same turn.
       // "Done" needs an executing tool; a proposal only justifies announcing the summary.
@@ -13987,7 +14043,7 @@ async function runOrderToolTurn(input: Pick<Parameters<typeof generateAgentRespo
         continue;
       }
       const rendered = enforceIdentityGuard(normalizeAssistantText(text.replace(/https?:\/\/\S+/g, "").trim()), input.behavior, input.agent);
-      return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data) }, deferred, calls };
+      return { response: { text: rendered, modelId, usage, finishReason: extractGeminiCandidateFinishReason(data), explicitCache: explicitCacheRounds.join(",") }, deferred, calls };
     }
     throw new Error(`O atendimento com ferramentas do pedido excedeu o limite de etapas: ${calls.map(call => `${call.name}${call.ok ? "" : "(recusada)"}`).join(", ")}.`);
   } catch (error) {
@@ -19043,7 +19099,7 @@ async function meterWhatsappAgentTextUsage(input: {
       outboundMessages: input.outboundMessages,
       fromCache: input.response.fromCache === true,
       geminiUsage: serializeGeminiUsage(usage),
-      ...(input.response.promptSections ? { promptSections: input.response.promptSections, promptSectionHashes: input.response.promptSectionHashes, promptOrder: input.response.promptOrder ?? "default" } : {}),
+      ...(input.response.promptSections ? { promptSections: input.response.promptSections, promptSectionHashes: input.response.promptSectionHashes, promptOrder: input.response.promptOrder ?? "default", ...(input.response.explicitCache ? { explicitCache: input.response.explicitCache } : {}) } : {}),
     },
   });
 }
