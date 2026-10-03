@@ -8,9 +8,12 @@ export function joinPromptSections(sections: PromptSection[]) {
 
 // Sections that change from one message to the next (lead state, cart, emotion,
 // agenda result). Everything else is stable for an agent and conversation.
+// clone_style and knowledge are rewritten by the learning tasks after each reply:
+// kept early, they broke the cached prefix below the provider's 4,096-token minimum.
 export const volatilePromptSectionKeys = new Set([
   "company_context", "lead_memory", "cross_agent", "registered_client", "checkout_rules",
   "store_context", "conduct", "conversation_dynamics", "commerce_conversation",
+  "clone_style", "knowledge",
 ]);
 
 /**

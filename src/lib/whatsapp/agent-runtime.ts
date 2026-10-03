@@ -59,6 +59,8 @@ import {
 } from "@/lib/billing/metered-usage";
 import { mediaAnalysisFeatureCode, meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import { checkReplyBalance } from "@/lib/billing/reply-estimate";
+import { onlyAcknowledgementsSinceLastReply } from "@/lib/whatsapp/low-signal";
 import {
   evaluateComplianceInteraction,
   isItemRestrictedByCompliance,
@@ -676,6 +678,14 @@ async function processWhatsappAgentRunWithScope(input: {
         }
 
         throw error;
+      }
+
+      const replyBalance = await checkReplyBalance(client, organization.id);
+      if (!replyBalance.ok) {
+        return await completeRun(client, run.id, "Saldo insuficiente para gerar uma resposta.", {
+          skipped: true, reason: "insufficient_balance_for_reply",
+          available_credits: replyBalance.available, needed_credits: replyBalance.needed,
+        });
       }
     }
 
@@ -5944,6 +5954,10 @@ async function analyzeAndPersistLeadQualification(
   if (!context.lead?.id || !isLeadQualificationPlaybookActive(context.qualification)) {
     return null;
   }
+  // "legal", "vou analisar": nothing new to qualify, the previous analysis stays.
+  if (readRecord(readRecord(context.lead.metadata)?.lead_qualification) && onlyAcknowledgementsSinceLastReply(context.messages)) {
+    return null;
+  }
 
   const prompt = buildLeadQualificationAnalysisPrompt({
     config: context.qualification,
@@ -6518,6 +6532,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
     "- Se o lead pedir mais fotos, video ou detalhes visuais, responda curto e use a pagina do produto para a galeria completa.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
     ...foodConversationInstructions(sellableItems.slice(0, 40)),
+    "- Padrao dos itens abaixo quando o campo nao aparece: pagamento unico, pagamento interno automatico, execucao e disponibilidade nao informadas.",
     ...sellableItems.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
         ? `${item.media.length} arquivo(s): ${item.media.map((media) => media.kind).join(", ")}`
@@ -6547,7 +6562,20 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
             ? ` | site externo: ${item.productUrl}`
             : " | botao externo pendente"
         : "";
-      return `- ${item.tag} (${item.title})${formatRuntimeItemPrice(item) ? ` | ${formatRuntimeItemPrice(item)}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | cobranca interna: ${billingSummary} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
+      // Default values (one-time payment, internal checkout, unknown fulfillment or stock)
+      // are stated once in the header and omitted per item: the same facts in fewer tokens.
+      return [
+        `- ${item.tag} (${item.title})`,
+        formatRuntimeItemPrice(item),
+        item.category ? `categoria: ${item.category}` : "",
+        (item.billingCycle ?? "one_time") === "one_time" ? "" : `cobranca interna: ${billingSummary}`,
+        item.salesDestination === "connectyhub_checkout" && !externalSummary ? "" : `venda interna: ${destinationSummary}${externalSummary}`,
+        offerSummary ? `oferta interna: ${offerSummary}` : "",
+        fulfillmentSummary ? `execucao interna: ${fulfillmentSummary}` : "",
+        inventorySummary ? `disponibilidade interna: ${inventorySummary}` : "",
+        `midias internas: ${mediaSummary}`,
+        `resumo interno: ${preview(item.description, 180)}`,
+      ].filter(Boolean).join(" | ");
     }),
   ];
 }

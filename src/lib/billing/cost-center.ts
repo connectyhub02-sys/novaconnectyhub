@@ -509,18 +509,23 @@ export async function recordUsageAndDebitCredits(
       event.status = "completed";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha desconhecida ao debitar creditos.";
+      // Without balance the run stops here and its result is never delivered, so the
+      // usage is absorbed (no retry): a later top-up must not pay for replies the
+      // customer never received. Other failures (network, database) are retried.
+      const absorbed = /insufficient/i.test(message);
 
       await client
         .from("usage_events")
         .update({
           status: "pending",
-          debit_retry_at: new Date(Date.now() + 5 * 60000).toISOString(),
+          debit_retry_at: absorbed ? null : new Date(Date.now() + 5 * 60000).toISOString(),
           connecty_revenue_estimate: 0,
           gross_margin_estimate: -Number(event.provider_cost ?? 0),
           error_message: `Falha ao debitar creditos: ${message}`.slice(0, 1000),
           metadata: {
             ...(usage.metadata ?? {}),
             debit_failure: {
+              absorbed,
               attemptedChargeCredits: charge,
               occurredAt: new Date().toISOString(),
               message: message.slice(0, 500),
