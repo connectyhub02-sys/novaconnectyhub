@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 // Named slices of the agent system instruction. Joining them must produce exactly
 // the same text as the former single array, so measuring never changes the prompt.
 export type PromptSection = { key: string; lines: string[] };
@@ -35,4 +37,14 @@ export function measurePromptSections(sections: PromptSection[]) {
     sizes[section.key] = (sizes[section.key] ?? 0) + chars;
   }
   return sizes;
+}
+
+/**
+ * Short fingerprint per section, so consecutive replies show which section changed
+ * and broke the provider's cached prefix. One-way: no prompt text is recoverable.
+ */
+export function hashPromptSections(sections: PromptSection[]) {
+  const hashes: Record<string, string> = {};
+  for (const section of sections) hashes[section.key] = createHash("sha256").update(JSON.stringify(section.lines)).digest("hex").slice(0, 10);
+  return hashes;
 }

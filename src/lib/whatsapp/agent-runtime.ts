@@ -1,6 +1,6 @@
 import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { correctFreeShippingClaim, readFreeShippingThresholds } from "./shipping-claims";
-import { joinPromptSections, measurePromptSections, orderPromptSectionsForCache, type PromptSection } from "./prompt-sections";
+import { hashPromptSections, joinPromptSections, measurePromptSections, orderPromptSectionsForCache, type PromptSection } from "./prompt-sections";
 import { appliesToAgent, loadAgentCostOptimizations } from "@/lib/billing/cost-optimizations";
 import { asksForPersonalData, groupPrivateRedirectText } from "./group-rules";
 import { extractFoodConversationProposal, foodConversationInstructions } from "@/lib/sales-catalog/food-conversation";
@@ -190,6 +190,7 @@ type AgentResponseResult = {
   fromCache?: boolean;
   /** Characters per system-instruction section; never the prompt text. */
   promptSections?: Record<string, number>;
+  promptSectionHashes?: Record<string, string>;
   promptOrder?: "default" | "cache";
 };
 
@@ -1155,7 +1156,7 @@ async function processWhatsappAgentRunWithScope(input: {
       const toolTurn = toolPromptSections
         ? await runOrderToolTurn({ ...generationInput, systemInstruction: joinPromptSections(toolPromptSections), client, context, scope: orderToolScope!, token, phone, latestInbound: latestInbound! })
         : null;
-      let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!), promptOrder: generationInput.cacheFriendlyPrompt ? "cache" as const : "default" as const } : cachedAiResponse
+      let generated = toolTurn ? { ...toolTurn.response, promptSections: measurePromptSections(toolPromptSections!), promptSectionHashes: hashPromptSections(toolPromptSections!), promptOrder: generationInput.cacheFriendlyPrompt ? "cache" as const : "default" as const } : cachedAiResponse
         ? { ...cachedAiResponse, text: normalizeAssistantText(cachedAiResponse.text) }
         : await generateAgentResponse(generationInput);
 
@@ -4504,6 +4505,7 @@ async function generateAgentResponse(input: {
     usage: extractGeminiUsageMetadata(data),
     finishReason: extractGeminiCandidateFinishReason(data),
     promptSections: measurePromptSections(promptSections),
+    promptSectionHashes: hashPromptSections(promptSections),
     promptOrder: input.cacheFriendlyPrompt ? "cache" : "default",
   };
 }
@@ -13373,6 +13375,10 @@ function resolveOrderToolScope(context: RunContext): OrderToolScope | null {
   return { kind: "order", order };
 }
 
+// Photos and the product page button, in both tool sets: a customer with an open order
+// who asks for photos must receive them too.
+const showProductToolDeclaration = { name: "mostrar_produto", description: "Envia ao cliente a primeira foto do produto e o botão da página com todas as fotos e detalhes.", parameters: { type: "object", properties: { produto_id: { type: "string" } }, required: ["produto_id"] } };
+
 const orderToolDeclarations = [
   { name: "ver_pedido", description: "Mostra o estado real do pedido em aberto: itens, frete, total, forma de pagamento, se o pagamento já foi enviado e se há uma proposta de alteração aguardando o cliente.", parameters: { type: "object", properties: {} } },
   { name: "buscar_produtos", description: "Procura produtos vendáveis no catálogo pelo nome, apelido ou descrição e devolve produto_id, preço e versões.", parameters: { type: "object", properties: { texto: { type: "string", description: "Como o cliente se referiu ao produto." } }, required: ["texto"] } },
@@ -13382,6 +13388,7 @@ const orderToolDeclarations = [
   { name: "confirmar_alteracao", description: "Aplica a proposta já enviada ao cliente e prepara o pagamento atualizado. Use somente quando a última mensagem do cliente aceitou esse resumo.", parameters: { type: "object", properties: { codigo_proposta: { type: "string" } }, required: ["codigo_proposta"] } },
   { name: "trocar_forma_pagamento", description: "Troca apenas a forma de pagamento do pedido atual, sem mudar itens, e prepara o novo acesso ao pagamento.", parameters: { type: "object", properties: { forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["forma_pagamento"] } },
   { name: "enviar_pagamento", description: "Envia ao cliente o acesso ao pagamento do pedido atual (botão do cartão ou código Pix), gerando-o se ainda não existir. Use quando o cliente quer pagar, confirma o pagamento ou pede o link/código de novo.", parameters: { type: "object", properties: {} } },
+  showProductToolDeclaration,
 ];
 
 const orderToolInstructionLines = [
@@ -13393,6 +13400,7 @@ const orderToolInstructionLines = [
   "Para trocar só a forma de pagamento, use trocar_forma_pagamento. Se houver proposta aguardando confirmação, inclua a nova forma em propor_alteracao.",
   "Chame enviar_pagamento quando o cliente pedir o link ou o código de novo, disser que não recebeu, ou quiser pagar e o pagamento ainda não foi enviado (veja ver_pedido). Se ele só avisou que vai pagar ou já está pagando, apenas responda: não reenvie o pagamento. Não diga que está preparando ou vai gerar o pagamento: chame a ferramenta.",
   "Perguntas sobre parcelamento, prazo ou produtos são respondidas sem ferramentas de alteração.",
+  "Quando o cliente pedir fotos, vídeo ou para ver o produto, chame mostrar_produto com o produto_id (use buscar_produtos se precisar). Não diga que enviou fotos ou o acesso sem chamar a ferramenta.",
   "Nunca diga que alterou, confirmou, gerou, enviou ou trocou algo se a ferramenta correspondente não retornou ok=true nesta resposta. Se uma ferramenta recusar, explique o motivo ao cliente com naturalidade.",
   "Não escreva links nem códigos de pagamento: o acesso ao pagamento é enviado pelo sistema.",
 ];
@@ -13448,6 +13456,7 @@ async function executeOrderTool(input: {
 }): Promise<JsonRecord> {
   const { client, context, latestInbound } = input;
   if (input.scope.kind === "cart") return executeCartTool(input);
+  if (input.name === "mostrar_produto") return executeCartTool(input);
   const scopedOrder = input.scope.order;
   const order = context.salesCatalogOrders.find(candidate => candidate.id === scopedOrder.id) ?? scopedOrder;
   const fail = (motivo: string) => ({ ok: false, motivo });
@@ -13670,7 +13679,7 @@ const cartToolDeclarations = [
     forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["itens"] } },
   { name: "fechar_pedido", description: "Cria o pedido do resumo já enviado e prepara o pagamento. Use somente quando a última mensagem do cliente aceitou esse resumo.", parameters: { type: "object", properties: {
     codigo_resumo: { type: "string" }, forma_pagamento: { type: "string", enum: ["pix", "card"] } }, required: ["codigo_resumo"] } },
-  { name: "mostrar_produto", description: "Envia ao cliente a primeira foto do produto e o botão da página com todas as fotos e detalhes.", parameters: { type: "object", properties: { produto_id: { type: "string" } }, required: ["produto_id"] } },
+  showProductToolDeclaration,
 ];
 
 const cartToolInstructionLines = [
@@ -19034,7 +19043,7 @@ async function meterWhatsappAgentTextUsage(input: {
       outboundMessages: input.outboundMessages,
       fromCache: input.response.fromCache === true,
       geminiUsage: serializeGeminiUsage(usage),
-      ...(input.response.promptSections ? { promptSections: input.response.promptSections, promptOrder: input.response.promptOrder ?? "default" } : {}),
+      ...(input.response.promptSections ? { promptSections: input.response.promptSections, promptSectionHashes: input.response.promptSectionHashes, promptOrder: input.response.promptOrder ?? "default" } : {}),
     },
   });
 }
