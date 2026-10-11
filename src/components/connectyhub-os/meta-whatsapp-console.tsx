@@ -86,6 +86,9 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
     type: string;
     filename: string;
   } | null>(null);
+  const messageScroller = useRef<HTMLDivElement>(null),
+    nearBottom = useRef(true),
+    lastScrollThread = useRef("");
   const intent = useRef<string | null>(null),
     attachment = useRef<HTMLInputElement>(null);
   const selectedSender = sender || data?.selectedSender || "";
@@ -118,6 +121,14 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
           a.id.localeCompare(b.id),
       )
     : [];
+  const latestMessageId = messages.at(-1)?.id;
+  useEffect(() => {
+    const box = messageScroller.current;
+    if (!conversationReady || !box) return;
+    if (lastScrollThread.current !== historyKey || nearBottom.current)
+      box.scrollTop = box.scrollHeight;
+    lastScrollThread.current = historyKey;
+  }, [conversationReady, historyKey, latestMessageId]);
   const selectedTemplate = currentTemplates.find((t) => t.id === templateId);
   const makeUrl = useCallback(
     (values: Record<string, string>) => {
@@ -875,8 +886,9 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                         {thread?.display_name || phone}
                       </h2>
                       <p className="text-[11px] text-slate-500">
-                        {connection?.label || connection?.verified_name} ·{" "}
-                        {connection?.display_phone}
+                        {connection
+                          ? `${connection.label || connection.verified_name} · ${connection.display_phone}`
+                          : "Histórico de número desconectado"}
                       </p>
                     </div>
                   </div>
@@ -884,9 +896,11 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                     <span
                       className={`hidden rounded-full px-3 py-1 text-[10px] sm:block ${openWindow ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
                     >
-                      {openWindow
-                        ? "Janela de atendimento aberta"
-                        : "Usar modelo aprovado"}
+                      {!connected
+                        ? "Número desconectado"
+                        : openWindow
+                          ? "Janela de atendimento aberta"
+                          : "Usar modelo aprovado"}
                     </span>
                     {thread && (
                       <button
@@ -910,7 +924,26 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                     )}
                   </div>
                 </div>
-                <div className="min-h-0 flex-1 space-y-4 overflow-auto bg-slate-50/40 p-4 lg:p-6">
+                <div
+                  ref={messageScroller}
+                  onScroll={(e) => {
+                    const box = e.currentTarget;
+                    nearBottom.current =
+                      box.scrollHeight - box.clientHeight - box.scrollTop < 100;
+                  }}
+                  className="min-h-0 flex-1 space-y-4 overflow-auto bg-slate-50/40 p-4 lg:p-6"
+                >
+                  {(currentOlder
+                    ? currentOlder.more
+                    : data.messages.length === 100) && (
+                    <button
+                      className={secondary}
+                      disabled={busy}
+                      onClick={() => void loadOlder()}
+                    >
+                      Carregar mensagens anteriores
+                    </button>
+                  )}
                   {messages.map((m) => (
                     <article
                       key={m.id}
@@ -964,17 +997,6 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                       Inicie esta conversa com um modelo aprovado e autorização
                       do destinatário.
                     </p>
-                  )}
-                  {(currentOlder
-                    ? currentOlder.more
-                    : data.messages.length === 100) && (
-                    <button
-                      className={secondary}
-                      disabled={busy}
-                      onClick={() => void loadOlder()}
-                    >
-                      Carregar mensagens anteriores
-                    </button>
                   )}
                 </div>
                 <div className="border-t border-slate-100 bg-white p-4">
@@ -1185,7 +1207,7 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                       className={`${primary} ${noteMode ? "ml-auto" : ""}`}
                       disabled={
                         busy ||
-                        !connected ||
+                        (!noteMode && !connected) ||
                         !phone ||
                         (noteMode
                           ? !thread || !text.trim()
@@ -1204,11 +1226,13 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                   <p className="mt-2 text-[10px] text-slate-400">
                     {noteMode
                       ? "Notas não são enviadas ao WhatsApp."
-                      : data.contact?.opted_out
-                        ? "Este contato pediu para não receber mensagens."
-                        : openWindow
-                          ? "Respostas livres disponíveis dentro da janela de 24 horas."
-                          : "Fora da janela de 24 horas, envie um modelo aprovado com autorização."}
+                      : !connected
+                        ? "Histórico preservado. Conecte um número oficial para enviar mensagens."
+                        : data.contact?.opted_out
+                          ? "Este contato pediu para não receber mensagens."
+                          : openWindow
+                            ? "Respostas livres disponíveis dentro da janela de 24 horas."
+                            : "Fora da janela de 24 horas, envie um modelo aprovado com autorização."}
                   </p>
                 </div>
               </>

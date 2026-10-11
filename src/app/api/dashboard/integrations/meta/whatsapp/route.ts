@@ -94,11 +94,24 @@ export async function GET(request: NextRequest) {
     const selected = sender
       ? connections.data.find((c) => c.phone_number_id === sender)
       : connections.data.find((c) => c.status === "connected");
-    if (sender && !selected)
-      throw new OfficialAccessError(
-        "Número não encontrado nesta empresa.",
-        404,
-      );
+    if (sender && !selected) {
+      // A sender moved out of a tenant must not take that tenant's historical
+      // conversations with it. This grants history reads only, never its token.
+      const history = await auth.client
+        .from("meta_whatsapp_threads")
+        .select("phone_number_id")
+        .eq("organization_id", auth.organizationId)
+        .eq("phone_number_id", officialAssetId(sender))
+        .limit(1)
+        .maybeSingle();
+      if (history.error)
+        throw new Error("Falha ao consultar histórico deste número.");
+      if (!history.data)
+        throw new OfficialAccessError(
+          "Número não encontrado nesta empresa.",
+          404,
+        );
+    }
     let templates: Awaited<ReturnType<typeof listOfficialTemplates>> = [],
       templateError: string | null = null;
     if (selected?.status === "connected")
@@ -127,7 +140,7 @@ export async function GET(request: NextRequest) {
     return json({
       ...inbox,
       connections: connections.data,
-      selectedSender: selected?.phone_number_id ?? null,
+      selectedSender: sender || selected?.phone_number_id || null,
       connection: selected
         ? {
             displayPhone: selected.display_phone,

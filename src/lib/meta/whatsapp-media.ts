@@ -1,4 +1,5 @@
 import "server-only";
+import { createHmac } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
@@ -30,29 +31,31 @@ export async function uploadOfficialMedia(
   form.append("messaging_product", "whatsapp");
   form.append("type", file.type);
   form.append("file", file);
-  const response = await fetch(
+  const uploadUrl = new URL(
     `https://graph.facebook.com/${config.graphVersion}/${connection.phone_number_id}/media`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-      signal: AbortSignal.timeout(60000),
-    },
   );
+  uploadUrl.searchParams.set(
+    "appsecret_proof",
+    createHmac("sha256", config.appSecret).update(token).digest("hex"),
+  );
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+    signal: AbortSignal.timeout(60000),
+  });
   const result = await response.json().catch(() => null);
   if (!response.ok || !/^\d+$/.test(String(result?.id)))
     throw new Error("Meta não aceitou o arquivo. Confira tamanho e formato.");
   const filename = file.name.replace(/[\r\n"\\/]/g, "_").slice(0, 120);
-  const stored = await client
-    .from("meta_whatsapp_media")
-    .insert({
-      id: result.id,
-      organization_id: connection.organization_id,
-      phone_number_id: connection.phone_number_id,
-      mime_type: file.type,
-      filename,
-      media_type: spec.type,
-    });
+  const stored = await client.from("meta_whatsapp_media").insert({
+    id: result.id,
+    organization_id: connection.organization_id,
+    phone_number_id: connection.phone_number_id,
+    mime_type: file.type,
+    filename,
+    media_type: spec.type,
+  });
   if (stored.error)
     throw new Error(
       "Arquivo recebido pela Meta, mas não registrado no painel. Anexe novamente.",
