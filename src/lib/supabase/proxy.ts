@@ -86,7 +86,7 @@ export async function updateSession(request: NextRequest) {
   const isAuthPage = authPages.includes(pathname);
   const review = user ? readMetaReviewAccess(user) : null;
 
-  if (review && (isProtected || isProtectedApi || isAuthPage)) {
+  if (review && (isProtected || pathname.startsWith("/api/") || isAuthPage)) {
     if (!review.active) return NextResponse.json({ error: "Acesso de avaliação expirado." }, { status: 403 });
     const { data: membership, error } = await supabase.from("organization_members")
       .select("organization_id").eq("user_id", user!.id).eq("organization_id", review.organizationId).maybeSingle();
