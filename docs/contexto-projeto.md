@@ -26,6 +26,15 @@ Anúncios podem encaminhar leads ao número atual. Disparo em massa deve exigir
 o canal oficial no servidor, sem fallback para UAZAPI. Coexistência oficial não
 será presumida como compatibilidade com UAZAPI no mesmo número.
 
+Refinamento do titular: orientar os clientes a usar WhatsApp Business no celular
+e conectar o atendimento atual à ConnectyHub por QR. Após as liberações Meta,
+avaliar um único número simultaneamente na UAZAPI (atendimento/follow-up) e
+Cloud API (campanhas). Essa é a experiência preferida, condicionada à
+compatibilidade documentada e a um piloto controlado; não está homologada.
+Preservar dois números se a combinação comprometer estabilidade ou experiência.
+Testar conexões/reconexões, recebimento nos dois canais, deduplicação, ausência
+de respostas em duplicidade/loops, histórico e recibos antes de ofertar a opção.
+
 O titular confirmou que hoje a ConnectyHub usa somente o próprio portfólio Meta
 e ainda vai começar a gerenciar clientes. Autorizou o aceite como Tech Provider
 independente após ciência da restrição de revenda nos termos atuais. O desejo de

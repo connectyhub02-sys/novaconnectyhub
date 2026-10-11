@@ -131,6 +131,24 @@ Criar adaptador próprio da Cloud API e visão **WhatsApp Oficial** no Atendimen
 
 ### 1.5 Campanhas de mensagens e cobrança
 
+#### Avaliação posterior de número único
+
+Preferência refinada pelo titular em 11/10: manter dois números nesta fase e,
+após as liberações Meta, avaliar coexistência com o mesmo número na UAZAPI e
+na Cloud API. Orientação de produto: WhatsApp Business instalado no celular,
+com atendimento atual conectado por QR à ConnectyHub. A combinação de ambas
+as APIs é desejada, mas ainda não comprovada; não prometer sua disponibilidade
+com base apenas na coexistência oficial entre aplicativo e Cloud API.
+
+Antes de oferecer número único: conferir documentação/suporte dos provedores,
+testar em número dedicado ao piloto, validar vínculo e reconexão, entrada e
+saída pelos canais, identidade do lead, deduplicação, roteamento de respostas,
+histórico, recibos e cobrança. Impedir loops e respostas duplicadas dos agentes.
+Documentar critérios de interrupção e recuperação antes de testar com clientes.
+Se houver incompatibilidade ou instabilidade, manter os números separados.
+
+#### Regras de campanha e cobrança
+
 Implementar a regra comercial do titular no servidor: **campanha de disparo em massa só usa WhatsApp oficial**. Aplicar a regra no painel, API pública, MCP, importação e workers. Não permitir que um lote seja dividido em follow-ups para contornar a regra; não fazer fallback automático de campanha oficial para UAZAPI.
 
 Preservar atendimento e follow-up inteligente do fluxo atual, com opt-out, frequência e preferências existentes. Isso preserva o comportamento do produto; não equivale a uma certificação da Meta sobre transporte não oficial.
