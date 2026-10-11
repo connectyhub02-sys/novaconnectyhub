@@ -17,6 +17,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  // Speculative navigation must never reset a working OAuth connection.
+  if (request.headers.has("next-router-prefetch") || request.headers.get("purpose") === "prefetch"
+    || request.headers.get("sec-purpose")?.includes("prefetch") || request.headers.get("rsc") === "1") {
+    return new NextResponse(null, { status: 204, headers: { "Cache-Control": "private, no-store" } });
+  }
   const baseUrl = getAppBaseUrl();
   const returnUrl = new URL("/dashboard/integracoes", baseUrl);
   const workspace = await getCurrentWorkspace();
