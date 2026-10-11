@@ -1,5 +1,36 @@
 # Estado operacional da ConnectyHub
 
+## Agentes unificados e automações Meta — publicado, 11/10/2026
+
+Aplicação `8ce71446c7c7f59e5346798560992b6510df9535` publicada às 15h37 BRT
+no slot b/3131. Fallback a/3130 em `d4dd37363c5457c068fbaaf6f81ce24e98ac4ce3`.
+Builder parado; nenhuma migration. [Entrega e limites](meta-automacoes-comentarios-2026-10-11.md).
+
+- Agentes: retirados menu duplicado e aba Redes sociais; canais aparecem na
+  criação/edição e no editor principal. Seleção exige integração, ativo,
+  permissões e webhook. WhatsApp preserva conexão QR/Comportamento.
+- Automações: comentário com palavra-chave → mensagem privada/botão;
+  qualquer comentário → IA pública; filtros por publicação, revisão,
+  simulação sem envio e follow-up privado dentro da janela permitida.
+- 253 testes relevantes passaram, além de ESLint, TypeScript e build.
+  Candidata/domínio: health/SHA, assets, logout home, autorização e Inngest
+  assinado passaram. Conta de revisão continua restrita; cópias privadas de
+  autenticação removidas após o smoke. META_SOCIAL_DISPATCH_MODE ausente:
+  dry_run preservado, sem homologação de envios externos nesta entrega.
+- Sessão do navegador no painel BuffaloMass sem faixa de acesso assistido:
+  editor e modais mostram canais e bloqueios reais; nova seção em Automações
+  carregou. Um rascunho pausado foi salvo e persistiu após recarga; sua remoção
+  está aguardando a confirmação nativa do Chrome, cujo controle travou.
+  Nenhuma automação foi ativada nem mensagem enviada.
+- Meta: seis pedidos adicionais incluídos no rascunho e descrições salvas:
+  instagram_manage_comments, instagram_manage_messages, pages_messaging,
+  pages_manage_metadata, pages_manage_engagement e pages_read_user_content.
+  Estado **Not submitted**; Submit for review desabilitado. Formulários
+  apontam testes 0/1, vídeos e declarações pendentes. WhatsApp + instagram_basic
+  também continuam sem envio final. Solicitado perfil Instagram distinto para
+  teste real; Messenger exige conta real com papel Tester. Não presumir
+  aprovação só porque o app existente aparece Published.
+
 ## Central Meta e chat integrado — publicado, 11/10/2026
 
 Aplicação `d4dd37363c5457c068fbaaf6f81ce24e98ac4ce3` publicada às 14h09 BRT
