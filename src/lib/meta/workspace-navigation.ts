@@ -27,19 +27,8 @@ export const metaWorkspaceItems = [
     key: "chat",
     label: "Chat Meta oficial",
     href: "/dashboard/chat-meta",
-    description: "Atendimento WhatsApp com vários números oficiais.",
-  },
-  {
-    key: "campanhas",
-    label: "Campanhas WhatsApp",
-    href: "/dashboard/meta/campanhas",
-    description: "Selecione o número e prepare campanhas consentidas.",
-  },
-  {
-    key: "modelos",
-    label: "Modelos WhatsApp",
-    href: "/dashboard/meta/modelos",
-    description: "Modelos prontos, personalização e aprovação na Meta.",
+    description:
+      "Atendimento, números, modelos e campanhas de mensagens no mesmo lugar.",
   },
   {
     key: "analise",

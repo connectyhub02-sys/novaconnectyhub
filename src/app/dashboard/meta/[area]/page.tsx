@@ -2,7 +2,6 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
-import { MetaWhatsAppConsole } from "@/components/connectyhub-os/meta-whatsapp-console";
 import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
 import { MetaOrganicConsole } from "@/components/connectyhub-os/meta-organic-console";
 import { WhatsAppConsole } from "@/components/connectyhub-os/whatsapp-console";
@@ -19,16 +18,12 @@ export default async function MetaArea({
 }) {
   await connection();
   const { area } = await params;
+  if (area === "campanhas") redirect("/dashboard/chat-meta?tab=campaigns");
+  if (area === "modelos") redirect("/dashboard/chat-meta?tab=models");
   if (
-    ![
-      "campanhas",
-      "modelos",
-      "analise",
-      "agentes",
-      "atendimento",
-      "calendario",
-      "criativos",
-    ].includes(area)
+    !["analise", "agentes", "atendimento", "calendario", "criativos"].includes(
+      area,
+    )
   )
     notFound();
   const workspace = await getCurrentWorkspace();
@@ -61,45 +56,35 @@ export default async function MetaArea({
       >
         ← Central Meta
       </Link>
-      {area === "campanhas" || area === "modelos" ? (
-        <MetaWhatsAppConsole
-          initialTab={area === "campanhas" ? "campaigns" : "models"}
-        />
-      ) : (
+      <h1 className="mb-2 text-2xl font-semibold text-slate-900">{title}</h1>
+      {area === "analise" && (
         <>
-          <h1 className="mb-2 text-2xl font-semibold text-slate-900">
-            {title}
-          </h1>
-          {area === "analise" && (
-            <>
-              <p className="mb-5 text-sm text-slate-500">
-                Perfil e publicações consultados na conta conectada. Métricas
-                avançadas dependem das permissões de insights.
-              </p>
-              <MetaInstagramOverview
-                userId={workspace.user.id}
-                organizationId={company.id}
-              />
-            </>
-          )}
-          {area === "agentes" && (
-            <>
-              <p className="mb-5 text-sm text-slate-500">
-                Selecione seu agente e configure Instagram Direct, Messenger e
-                comentários. As regras salvas serão usadas nos canais
-                habilitados; a autorização de envio depende da conexão Meta.
-              </p>
-              <WhatsAppConsole initialTab="channels" />
-            </>
-          )}
-          {area === "atendimento" && <MetaSocialInbox />}
-          {organic && (
-            <MetaOrganicConsole
-              overview={organic}
-              initialView={area === "calendario" ? "calendar" : "library"}
-            />
-          )}
+          <p className="mb-5 text-sm text-slate-500">
+            Perfil e publicações consultados na conta conectada. Métricas
+            avançadas dependem das permissões de insights.
+          </p>
+          <MetaInstagramOverview
+            userId={workspace.user.id}
+            organizationId={company.id}
+          />
         </>
+      )}
+      {area === "agentes" && (
+        <>
+          <p className="mb-5 text-sm text-slate-500">
+            Selecione seu agente e configure Instagram Direct, Messenger e
+            comentários. As regras salvas serão usadas nos canais habilitados; a
+            autorização de envio depende da conexão Meta.
+          </p>
+          <WhatsAppConsole initialTab="channels" />
+        </>
+      )}
+      {area === "atendimento" && <MetaSocialInbox />}
+      {organic && (
+        <MetaOrganicConsole
+          overview={organic}
+          initialView={area === "calendario" ? "calendar" : "library"}
+        />
       )}
     </ConnectyShell>
   );
