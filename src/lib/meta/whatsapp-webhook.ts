@@ -25,10 +25,12 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
         let phone: string;
         try { phone = officialPhone(message.from); } catch { continue; }
         const type = String(message.type ?? "unknown");
-        const text = String(record(message.text).body ?? record(record(message.interactive).button_reply).title ?? record(message.button).text ?? `[${type}: recebido no WhatsApp oficial]`).slice(0,4096);
+        const text = String(record(message.text).body ?? record(record(message.interactive).button_reply).title ?? record(record(message.interactive).list_reply).title ?? record(message.button).text ?? `[${type}: recebido no WhatsApp oficial]`).slice(0,4096);
+        const media=record(message[type]);
+        const content=['image','video','audio','document'].includes(type)&&typeof media.id==='string'?{[type]:{id:media.id,mime_type:media.mime_type,filename:media.filename,caption:media.caption}}:{};
         const timestamp = Number(message.timestamp) * 1000;
         if (!Number.isFinite(timestamp) || timestamp <= 0 || timestamp > Date.now()+60000) continue;
-        const inserted = await client.from("meta_whatsapp_messages").upsert({organization_id:org,phone_number_id:phoneId,phone,direction:"inbound",message_type:type,text_content:text,provider_message_id:message.id,status:"received",occurred_at:new Date(timestamp).toISOString()},{onConflict:"phone_number_id,provider_message_id",ignoreDuplicates:true}).select("id");
+        const inserted = await client.from("meta_whatsapp_messages").upsert({organization_id:org,phone_number_id:phoneId,phone,direction:"inbound",message_type:type,text_content:typeof media.caption==="string"?media.caption.slice(0,1024):text,content,provider_message_id:message.id,status:"received",occurred_at:new Date(timestamp).toISOString()},{onConflict:"phone_number_id,provider_message_id",ignoreDuplicates:true}).select("id");
         if (inserted.error) throw new Error("Falha ao persistir mensagem WhatsApp.");
         // Reprocess duplicates so a previous archive failure can recover on Meta retry.
         const row = inserted.data?.[0] ?? (await client.from("meta_whatsapp_messages").select("id").eq("phone_number_id",phoneId).eq("provider_message_id",message.id).single()).data;
@@ -59,7 +61,7 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
         }
         stored++;
       }
-      const touched = await client.from("meta_whatsapp_connections").update({webhook_at:new Date().toISOString()}).eq("organization_id",org);
+      const touched = await client.from("meta_whatsapp_connections").update({webhook_at:new Date().toISOString()}).eq("organization_id",org).eq("phone_number_id",phoneId);
       if (touched.error) throw new Error("Falha ao registrar diagnóstico do webhook.");
     }
   }

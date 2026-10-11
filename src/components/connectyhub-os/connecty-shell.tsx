@@ -1228,7 +1228,7 @@ function ConnectyShellRoot({
           <div
             className={cn(
               "connecty-shell-content mx-auto w-full px-3 sm:px-4 lg:px-6 xl:px-8",
-              isAttendancePage ? "max-w-none lg:px-4 xl:px-5" : "max-w-[1480px]",
+              (isAttendancePage || active === "/dashboard/chat-meta" || active === "/admin/meta") ? "max-w-none lg:px-4 xl:px-5" : "max-w-[1480px]",
               isAccountPage
                 ? "connecty-shell-content--compact pt-3 sm:pt-3 lg:py-3"
                 : "pt-4 sm:pt-5 lg:py-6",

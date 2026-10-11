@@ -1,4 +1,5 @@
 import "server-only";
+import { templateParameters, replyButtons, type OfficialTemplate } from "./whatsapp-workspace-policy";
 import { createHash, createHmac } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadMetaGuidedOAuthConfig } from "@/lib/client-os/guided-oauth";
@@ -8,7 +9,7 @@ import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
 import { recipientAliases, recipientIdentity, recordRecipientIdentity } from "./whatsapp-recipient";
 
 export type OfficialConnection = { organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
-export type MetaTemplate = { id: string; name: string; status: string; language: string; category: string; components: Array<{type: string; text?: string}> };
+export type MetaTemplate = OfficialTemplate;
 export class MetaCloudError extends Error {
   constructor(public code: string, public uncertain = false) { super(`Meta recusou a operação (${code}). Confira a conexão, as permissões e o status do número.`); }
 }
@@ -48,8 +49,10 @@ async function cloudList<T>(config: {graphVersion:string;appSecret:string}, toke
   throw new Error("Lista Meta excedeu o limite de consulta. Refine os ativos da conexão.");
 }
 
-export async function officialConnection(client: SupabaseClient, organizationId: string) {
-  const result = await client.from("meta_whatsapp_connections").select("*").eq("organization_id",organizationId).eq("status","connected").maybeSingle<OfficialConnection>();
+export async function officialConnection(client: SupabaseClient, organizationId: string, sender?: string) {
+  let query = client.from("meta_whatsapp_connections").select("*").eq("organization_id",organizationId).eq("status","connected");
+  if(sender) query=query.eq("phone_number_id",officialAssetId(sender));
+  const result = await query.order("connected_at",{ascending:true}).limit(1).maybeSingle<OfficialConnection>();
   if (result.error) throw new Error("Não foi possível consultar a conexão oficial.");
   return result.data;
 }
@@ -64,17 +67,12 @@ export async function connectOfficial(client: SupabaseClient, organizationId: st
   if (!phone) throw new Error("Número não pertence à conta WhatsApp autorizada.");
   const separate = await client.rpc("meta_whatsapp_number_separate",{p_phone:officialPhone(phone.display_phone_number)});
   if (separate.error || separate.data !== true) throw new Error("Use um número separado do atendimento UAZAPI. Coexistência ainda não homologada.");
-  // Do not steal a number from another workspace or replace a sender with active history.
-  const old = await client.from("meta_whatsapp_connections").select("phone_number_id").eq("organization_id",organizationId).maybeSingle();
-  if (old.error) throw new Error("Não foi possível conferir o remetente atual.");
-  if (old.data && old.data.phone_number_id !== phoneId) throw new Error("Esta empresa já tem outro número oficial. A troca exige migração do histórico.");
-  const encryptedToken = encryptCredentialValue(token);
-  const saved = await client.from("meta_whatsapp_connections").upsert({ organization_id:organizationId,waba_id:wabaId,phone_number_id:phoneId,display_phone:phone.display_phone_number,verified_name:phone.verified_name,encrypted_token:encryptedToken,permissions:debug.data.scopes,status:"connected",webhook_subscribed:false,connected_by:actorId,connected_at:new Date().toISOString() },{onConflict:"organization_id"});
-  if (saved.error) throw new Error(saved.error.code === "23505" ? "Número já conectado a outra empresa." : "Não foi possível salvar a conexão oficial.");
+  const saved = await client.rpc("connect_meta_whatsapp_sender",{p_org:organizationId,p_sender:phoneId,p_waba:wabaId,p_phone:phone.display_phone_number,p_name:phone.verified_name,p_token:encryptCredentialValue(token),p_permissions:debug.data.scopes,p_actor:actorId});
+  if (saved.error) throw new Error("Número já pertence a outra empresa ou não foi possível salvar a conexão.");
   // WABA subscription is an explicit part of connecting the account.
   const subscription = await cloudRequest<{success:boolean}>(config,token,`${wabaId}/subscribed_apps`,{});
   if (!subscription.success) throw new Error("Conexão salva, mas a Meta não confirmou a assinatura do webhook. Reconecte para tentar novamente.");
-  const activated = await client.from("meta_whatsapp_connections").update({webhook_subscribed:true}).eq("organization_id",organizationId);
+  const activated = await client.from("meta_whatsapp_connections").update({webhook_subscribed:true}).eq("organization_id",organizationId).eq("phone_number_id",phoneId);
   if (activated.error) throw new Error("Assinatura confirmada; reconecte para concluir o registro local.");
   await client.from("maintenance_audit_logs").insert({actor_id:actorId,event_type:"meta.whatsapp.connected",target_table:"meta_whatsapp_connections",target_id:organizationId,metadata:{waba_id:wabaId,phone_number_id:phoneId}});
   return { displayPhone:phone.display_phone_number, verifiedName:phone.verified_name };
@@ -99,9 +97,10 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
   if (!connection.webhook_subscribed) throw new Error("Reconecte o número para concluir a assinatura dos recibos antes de enviar.");
   const phone = officialPhone(body.phone), key = String(body.requestKey ?? "");
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(key)) throw new Error("Identificador do envio obrigatório.");
-  const type = body.type === "template" ? "template" : "text";
+  const type = String(body.type ?? "text");
+  if(!["template","text","interactive","image","audio","video","document"].includes(type))throw new Error("Tipo de mensagem inválido.");
   const org = connection.organization_id;
-  const hash = createHash("sha256").update(JSON.stringify([phone,type,body.text,body.templateName,body.language])).digest("hex");
+  const hash = createHash("sha256").update(JSON.stringify([connection.phone_number_id,phone,type,body.text,body.templateName,body.language,body.parameters,body.buttons,body.mediaId])).digest("hex");
   const existing = await client.from("meta_whatsapp_messages").select("id,status,request_hash").eq("organization_id",org).eq("request_key",key).maybeSingle();
   if (existing.error) throw new Error("Não foi possível conferir o envio anterior.");
   if (existing.data) {
@@ -125,21 +124,37 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
     if (body.consent !== true || consentNote.length < 5 || consentNote.length > 500) throw new Error("Registre como o destinatário autorizou o contato.");
     const template = (await listOfficialTemplates(client,connection)).find(t=>t.name===body.templateName && t.language===body.language && t.status==="APPROVED");
     if (!template) throw new Error("Selecione um modelo aprovado pela Meta.");
-    if (template.components.some(c=>!["BODY","FOOTER","HEADER"].includes(c.type) || !c.text || /\{\{/.test(c.text))) throw new Error("Use um modelo de texto sem variáveis, mídia ou botões nesta versão.");
-    content = template.components.map(c=>c.text ?? "").join("\n");
-    payload.template = {name:template.name,language:{code:template.language}};
+    if(body.expectedTemplate && JSON.stringify(template.components)!==JSON.stringify(body.expectedTemplate))throw new Error("O modelo mudou após a revisão da campanha.");
+    const rendered=templateParameters(template,body.parameters);
+    content = template.components.map(c=>c.type==="BODY"?rendered.text:c.text ?? "").filter(Boolean).join("\n");
+    payload.template = {name:template.name,language:{code:template.language},...(rendered.components.length?{components:rendered.components}:{})};
+    payload.templatePreview = template.components;
     const created = await client.from("meta_whatsapp_contacts").upsert({organization_id:org,phone},{onConflict:"organization_id,phone",ignoreDuplicates:true});
     if (created.error) throw new Error("Não foi possível registrar o contato.");
     const consent = await client.from("meta_whatsapp_contacts").update({consent_note:consentNote,consent_at:new Date().toISOString()}).eq("organization_id",org).eq("phone",phone).eq("opted_out",false).select("phone").maybeSingle();
     if (consent.error || !consent.data) throw new Error("Não foi possível registrar o consentimento. Confira se o contato pediu parada.");
   } else {
-    if (!contact.data?.some(c=>serviceWindowOpen(c.last_inbound_at))) throw new Error("Fora da janela de atendimento de 24 horas. Envie um modelo aprovado.");
-    if (!content || content.length > 4096) throw new Error("Mensagem deve ter entre 1 e 4.096 caracteres.");
-    payload.text = {body:content,preview_url:false};
+    const inbound=await client.from("meta_whatsapp_messages").select("occurred_at").eq("organization_id",org).eq("phone_number_id",connection.phone_number_id).in("phone",identity.phones).eq("direction","inbound").order("occurred_at",{ascending:false}).limit(1).maybeSingle();
+    if(inbound.error)throw new Error("Não foi possível conferir a janela de atendimento deste número.");
+    if (!serviceWindowOpen(inbound.data?.occurred_at ?? null)) throw new Error("Fora da janela de atendimento de 24 horas. Envie um modelo aprovado.");
+    if (["text","interactive"].includes(type)) {
+      if (!content || content.length > (type==="interactive"?1024:4096)) throw new Error("Texto vazio ou acima do limite do tipo de mensagem.");
+      if(type==="interactive")payload.interactive={type:"button",body:{text:content},action:{buttons:replyButtons(body.buttons)}};
+      else payload.text = {body:content,preview_url:false};
+    } else {
+      const media=await client.from("meta_whatsapp_media").select("id,media_type,filename").eq("organization_id",org).eq("phone_number_id",connection.phone_number_id).eq("id",String(body.mediaId ?? "")).maybeSingle();
+      if(media.error||!media.data||media.data.media_type!==type)throw new Error("Anexe um arquivo deste número antes de enviar.");
+      if(content.length>1024)throw new Error("Legenda: até 1.024 caracteres.");
+      if(type==='audio'&&content)throw new Error("Áudios não aceitam legenda. Envie o texto em uma mensagem separada.");
+      payload[type]={id:media.data.id,...(content&&type!=="audio"?{caption:content}:{}),...(type==="document"?{filename:media.data.filename}:{})};
+      content=content || `[${type}: ${media.data.filename}]`;
+    }
   }
   // The pilot does not bypass the platform's tracked-link/button delivery policy.
-  if (collectOutboundLinks({text:content}).length) throw new Error("Neste laboratório, envie texto sem links. Botões rastreáveis oficiais ainda estão em preparação.");
-  const reserved = await client.from("meta_whatsapp_messages").insert({organization_id:org,phone_number_id:connection.phone_number_id,phone,direction:"outbound",message_type:type,text_content:content,request_key:key,request_hash:hash,status:"sending",created_by:actorId}).select("id,status").single();
+  if (collectOutboundLinks({text:content}).length) throw new Error("Use texto sem URLs. Links rastreáveis em botões oficiais ainda não estão habilitados.");
+  const storedContent={...payload};delete storedContent.to;delete storedContent.messaging_product;delete storedContent.recipient_type;
+  delete payload.templatePreview;
+  const reserved = await client.from("meta_whatsapp_messages").insert({organization_id:org,phone_number_id:connection.phone_number_id,phone,direction:"outbound",message_type:type,text_content:content,request_key:key,request_hash:hash,status:"sending",content:storedContent,created_by:actorId}).select("id,status").single();
   if (reserved.error) throw new Error(reserved.error.code === "23505" ? "Este envio já está em processamento. Atualize o chat." : "Não foi possível registrar o envio.");
   const id = reserved.data.id;
   try {

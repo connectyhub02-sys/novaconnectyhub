@@ -36,9 +36,9 @@ describe("send with a verified recipient alias",()=>{
   const fetch=vi.fn(async()=>Response.json({messages:[{id:"wamid.test"}],contacts:[{input,wa_id:waId}]}));
   const rpc=vi.fn(async(name:string,args:Record<string,unknown>)=>({data:name==="meta_whatsapp_contact_allowed" ? args.p_phone!==blockedPhone : null,error:null}));
   const client={rpc,from:(table:string)=>{
-   let operation="select";
-   const result=()=>({error:null,data:table==="meta_whatsapp_contacts"?[{phone:waId,last_inbound_at:inboundAt,opted_out:false}]:table==="integration_credentials"?[]:operation==="insert"?{id:"local-message",status:"sending"}:null});
-   const q={select:()=>q,eq:()=>q,is:()=>q,in:()=>q,insert:()=>{operation="insert";return q;},update:()=>q,maybeSingle:async()=>result(),single:async()=>result(),then:(resolve:(v:unknown)=>unknown)=>Promise.resolve(result()).then(resolve)};return q;
+   let operation="select",selected="";
+   const result=()=>({error:null,data:table==="meta_whatsapp_messages"&&selected==="occurred_at"?{occurred_at:inboundAt}:table==="meta_whatsapp_contacts"?[{phone:waId,last_inbound_at:inboundAt,opted_out:false}]:table==="integration_credentials"?[]:operation==="insert"?{id:"local-message",status:"sending"}:null});
+   const q={select:(s:string)=>{selected=s;return q;},order:()=>q,limit:()=>q,eq:()=>q,is:()=>q,in:()=>q,insert:()=>{operation="insert";return q;},update:()=>q,maybeSingle:async()=>result(),single:async()=>result(),then:(resolve:(v:unknown)=>unknown)=>Promise.resolve(result()).then(resolve)};return q;
   }};
   const cloud=serverModuleHarness<typeof import("../src/lib/meta/whatsapp-cloud")>("src/lib/meta/whatsapp-cloud.ts",{
    "node:crypto":crypto,"./whatsapp-policy":{officialPhone,serviceWindowOpen},

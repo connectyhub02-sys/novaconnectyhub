@@ -806,6 +806,7 @@ export const connectyhubCustomerAgendaSweep = inngest.createFunction(
 );
 
 export const functions = [
+  inngest.createFunction({id:"connectyhub-meta-whatsapp-campaigns",name:"Campanhas WhatsApp oficial",retries:0,concurrency:{limit:1},triggers:[{cron:"* * * * *"}]},async({step})=>step.run("dispatch-official-campaigns",async()=>{const {dispatchOfficialCampaignBatch}=await import("@/lib/meta/whatsapp-campaigns");return dispatchOfficialCampaignBatch(createServiceClient());})),
   // Voice agents: finished conversations are charged once (idempotent by provider conversation id).
   inngest.createFunction({ id: "connectyhub-voice-agent-metering", name: "Voz: cobrança de conversas de agentes", retries: 0, concurrency: { limit: 1 }, triggers: [{ cron: "*/2 * * * *" }] },
     async ({ step }) => step.run("meter-voice-agent-conversations", async () => {

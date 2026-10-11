@@ -15,6 +15,7 @@ beforeAll(async()=>{
  await db.exec(readFileSync("supabase/migrations/0189_meta_whatsapp_official.sql","utf8"));
  await db.exec(readFileSync("supabase/migrations/0190_meta_whatsapp_archive_index.sql","utf8"));
  await db.exec(readFileSync("supabase/migrations/0191_meta_whatsapp_recipient_identity.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0192_meta_whatsapp_workspace.sql","utf8"));
 },30000);
 afterAll(()=>db.close());
 
@@ -31,7 +32,7 @@ describe("official WhatsApp persistence",()=>{
    expect(contact.rows[0].last_inbound_at).toBeTruthy();
  });
  it("denies token/message/receipt access to authenticated clients",async()=>{
-   for(const table of ["meta_whatsapp_connections","meta_whatsapp_messages","meta_whatsapp_receipts","meta_whatsapp_oauth_attempts","meta_whatsapp_recipient_aliases"]){
+   for(const table of ["meta_whatsapp_connections","meta_whatsapp_messages","meta_whatsapp_receipts","meta_whatsapp_oauth_attempts","meta_whatsapp_recipient_aliases","meta_whatsapp_threads","meta_whatsapp_notes","meta_whatsapp_media","meta_whatsapp_campaigns","meta_whatsapp_campaign_recipients"]){
      const result=await db.query<{allowed:boolean}>(`select has_table_privilege('authenticated',$1,'SELECT') allowed`,[table]);expect(result.rows[0].allowed).toBe(false);
    }
  });
@@ -66,5 +67,61 @@ describe("official WhatsApp persistence",()=>{
  it("rejects an existing UAZAPI number",async()=>{
    await db.query("insert into whatsapp_instances values('+55 (11) 66666-6666')");
    const result=await db.query<{allowed:boolean}>("select meta_whatsapp_number_separate('5511666666666') allowed");expect(result.rows[0].allowed).toBe(false);
+ });
+});
+
+
+describe("official multi-number inbox and campaign queue",()=>{
+ const template={name:'test_campaign',language:'pt_BR',status:'APPROVED',components:[{type:'BODY',text:'Mensagem de teste'}]};
+ async function campaign(key:string,phones=['5511991111111','5511992222222'],company=org,sender='333333') {
+  const result=await db.query<{id:string}>("select create_meta_whatsapp_campaign($1,null,$2,$3,'Teste',$4::jsonb,'[]'::jsonb,'Lista com autorização',$5::jsonb,null) id",[company,key,sender,JSON.stringify(template),JSON.stringify(phones)]);
+  return result.rows[0].id;
+ }
+ it("connects multiple senders atomically without allowing ownership transfer",async()=>{
+  const sql="select connect_meta_whatsapp_sender($1,$2,'123456','15555555555','Teste','encrypted',array['whatsapp_business_messaging'],null)";
+  await db.query(sql,[org,'333333']);await db.query(sql,[org,'444444']);
+  await expect(db.query(sql,[other,'333333'])).rejects.toThrow(/SENDER_ALREADY_OWNED/);
+  const result=await db.query<{organization_id:string}>("select organization_id from meta_whatsapp_connections where phone_number_id='333333'");expect(result.rows[0].organization_id).toBe(org);
+  await db.query("update meta_whatsapp_connections set webhook_subscribed=true where phone_number_id in ('333333','444444')");
+ });
+ it("keeps the same lead's inbox and service window separate by sender",async()=>{
+  const sql="insert into meta_whatsapp_messages(organization_id,phone_number_id,phone,direction,message_type,text_content,status) values($1,$2,'5511981111111',$3,'text','Olá',$4)";
+  await db.query(sql,[org,'333333','inbound','received']);await db.query(sql,[org,'444444','outbound','accepted']);
+  const result=await db.query<{phone_number_id:string;last_inbound_at:string|null;unread_count:number}>("select * from meta_whatsapp_threads where phone='5511981111111' order by phone_number_id");
+  expect(result.rows).toHaveLength(2);expect(result.rows[0].last_inbound_at).toBeTruthy();expect(result.rows[0].unread_count).toBe(1);expect(result.rows[1].last_inbound_at).toBeNull();
+ });
+ it("creates a draft idempotently, rejects key mutation and tenant mismatch",async()=>{
+  const key='10000000-0000-0000-0000-000000000001',id=await campaign(key);
+  expect(await campaign(key)).toBe(id);
+  await expect(campaign(key,['5511993333333'])).rejects.toThrow(/CAMPAIGN_KEY_CONFLICT/);
+  await expect(campaign('10000000-0000-0000-0000-000000000002',undefined,other)).rejects.toThrow(/INVALID_SENDER/);
+  expect((await db.query('select * from claim_meta_whatsapp_campaign_batch(20)')).rows).toHaveLength(0);
+ });
+ it("claims only running due recipients once and reconciles a cancellation",async()=>{
+  const id=await campaign('10000000-0000-0000-0000-000000000003');
+  await db.query("update meta_whatsapp_campaigns set status='running' where id=$1",[id]);
+  const batch=await db.query<{id:string}>('select * from claim_meta_whatsapp_campaign_batch(1)');expect(batch.rows).toHaveLength(1);
+  const next=await db.query<{id:string}>('select * from claim_meta_whatsapp_campaign_batch(1)');expect(next.rows).toHaveLength(1);expect(next.rows[0].id).not.toBe(batch.rows[0].id);
+  expect((await db.query('select * from claim_meta_whatsapp_campaign_batch(20)')).rows).toHaveLength(0);
+  await db.query("update meta_whatsapp_campaigns set status='cancelled' where id=$1",[id]);
+  await db.query("update meta_whatsapp_campaign_recipients set updated_at=now()-interval '11 minutes' where campaign_id=$1",[id]);
+  await db.query('select * from claim_meta_whatsapp_campaign_batch(20)');
+  const result=await db.query<{status:string}>("select status from meta_whatsapp_campaign_recipients where campaign_id=$1",[id]);expect(result.rows.every(r=>r.status==='cancelled')).toBe(true);
+ });
+ it("recovers delivered and uncertain sends without sending them twice",async()=>{
+  const id=await campaign('10000000-0000-0000-0000-000000000004');
+  await db.query("update meta_whatsapp_campaigns set status='running' where id=$1",[id]);
+  const batch=await db.query<{request_key:string;phone:string}>('select * from claim_meta_whatsapp_campaign_batch(20)');expect(batch.rows).toHaveLength(2);
+  for(const [i,r] of batch.rows.entries())await db.query("insert into meta_whatsapp_messages(organization_id,phone_number_id,phone,direction,message_type,text_content,status,request_key) values($1,'333333',$2,'outbound','template','Teste',$3,$4)",[org,r.phone,i?'sending':'delivered',r.request_key]);
+  await db.query("update meta_whatsapp_campaign_recipients set updated_at=now()-interval '11 minutes' where campaign_id=$1",[id]);
+  expect((await db.query('select * from claim_meta_whatsapp_campaign_batch(20)')).rows).toHaveLength(0);
+  const rows=await db.query<{status:string}>("select status from meta_whatsapp_campaign_recipients where campaign_id=$1",[id]);expect(rows.rows.map(r=>r.status).sort()).toEqual(['sent','uncertain']);
+  const summary=await db.query<{value:{id:string;counts:Record<string,number>}}>('select meta_whatsapp_campaign_summaries($1) value',[org]);expect(summary.rows.find(r=>r.value.id===id)?.value.counts).toEqual({delivered:1,uncertain:1});
+  expect((await db.query('select meta_whatsapp_campaign_summaries($1)',[other])).rows).toHaveLength(0);
+ });
+ it("deduplicates only provider-confirmed audience aliases",async()=>{
+  await db.query("insert into meta_whatsapp_recipient_aliases(organization_id,phone_number_id,input_phone,wa_id) values($1,'333333','5511983333333','551183333333')",[org]);
+  const id=await campaign('10000000-0000-0000-0000-000000000005',['5511983333333','551183333333']);
+  const result=await db.query<{phone:string}>("select phone from meta_whatsapp_campaign_recipients where campaign_id=$1",[id]);expect(result.rows).toEqual([{phone:'5511983333333'}]);
  });
 });
