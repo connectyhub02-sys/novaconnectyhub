@@ -330,7 +330,7 @@ function buildActivationResult(input: {
   const ok = summary.ok;
   const detail = input.detail
     ?? (ok
-      ? "Pagina assinada para feed, mencoes, Messenger e postbacks."
+      ? `Eventos confirmados na Página: ${input.requestedFields.join(", ")}.`
       : `Subscription criada, mas campos pendentes: ${summary.missingFields.join(", ")}.`);
 
   return {

@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { sanitizeMetaGraphUrl as sanitizeGraphUrl } from "@/lib/meta/diagnostic-url";
 import { NextResponse } from "next/server";
 import {
   fetchMetaPageAccessToken,
@@ -567,14 +568,6 @@ async function updateIntegrationTestStatus(input: {
     status: input.summary ? "warning" : "success",
     metadata: reviewTest,
   });
-}
-
-function sanitizeGraphUrl(url: URL) {
-  const safe = new URL(url.toString());
-  safe.searchParams.delete("access_token");
-  safe.searchParams.delete("appsecret_proof");
-
-  return `${safe.pathname}${safe.search}`;
 }
 
 function readSuccessDetail(value: unknown) {

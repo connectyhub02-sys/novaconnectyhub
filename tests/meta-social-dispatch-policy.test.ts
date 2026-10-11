@@ -4,9 +4,13 @@ import {
   evaluateMetaSocialDispatchReadiness,
   resolveMetaSocialDispatchMode,
   resolveMetaSocialDispatchTarget,
+  readMetaSocialGrantedPermissions,
 } from "../src/lib/meta/social-dispatch-policy";
 
 describe("Meta social dispatch policy", () => {
+  it("does not treat diagnostic requirements as granted OAuth scopes", () => {
+    expect(readMetaSocialGrantedPermissions({ scopes: ["instagram_basic"], metadata: { review_test: { results: [{ ok: true, permissions: ["pages_messaging", "instagram_manage_messages"] }] } } })).toEqual(["instagram_basic"]);
+  });
   it.each(["instagram_direct", "facebook_messenger", "instagram_comments", "facebook_comments"] as const)("rejects visible URLs before dispatch on %s when not supplied as a structured link button", channel => {
     expect(() => resolveMetaSocialDispatchTarget({ channel, pageId: "page", externalUserId: "person", sourceCommentId: "comment", text: "Acesse https://fixture.invalid/checkout" })).toThrow("botão de link");
   });
@@ -212,7 +216,7 @@ describe("Meta social dispatch policy", () => {
     expect(activation.channels.instagram_comments).toMatchObject({
       enabled: true,
       status: "blocked",
-      missingPermissions: ["instagram_manage_comments", "instagram_manage_messages"],
+      missingPermissions: ["pages_messaging", "instagram_manage_comments", "instagram_manage_messages"],
       missingAssets: ["instagram_business_account"],
     });
   });
@@ -223,6 +227,7 @@ function buildReadyLiveActivation(
   permissions: string[],
 ) {
   return buildMetaSocialDispatchLiveActivation({
+    scopes: permissions,
     appLiveModeConfirmed: true,
     channels: { [channel]: true },
     metadata: {

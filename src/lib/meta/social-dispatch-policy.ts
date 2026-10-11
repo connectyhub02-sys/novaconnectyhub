@@ -429,27 +429,13 @@ export function readMetaSocialGrantedPermissions(input: {
   metadata: Record<string, unknown> | null | undefined;
   scopes?: string[] | null;
 }) {
-  const metadata = readRecord(input.metadata) ?? {};
   const permissions = new Set<string>();
 
   for (const scope of input.scopes ?? []) {
     if (scope.trim()) permissions.add(scope.trim());
   }
 
-  const reviewTest = readRecord(metadata.review_test);
-
-  for (const result of readArray(reviewTest?.results)) {
-    const record = readRecord(result);
-
-    if (record?.ok !== true) {
-      continue;
-    }
-
-    for (const permission of readStringArray(record.permissions)) {
-      permissions.add(permission);
-    }
-  }
-
+  // A diagnostic lists required permissions, not the grants returned by OAuth.
   return Array.from(permissions).sort();
 }
 
