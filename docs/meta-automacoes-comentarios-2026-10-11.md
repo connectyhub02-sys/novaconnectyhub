@@ -1,5 +1,33 @@
 # Agentes unificados e automações de comentários — 11/10/2026
 
+## Acesso isolado para inspeção social — 17h28 BRT
+
+Release `a00de7b4484815cadb903ae8aecffce2e2c1f3e9` publicada no slot b/3131;
+fallback a com `bbda4099`. Builder parado; sem migration. 21 testes dirigidos
+de acesso, isolamento e editor passaram, além de ESLint, TypeScript, build e
+smoke de candidata/domínio (health/SHA, assets, logout, autorização e Inngest).
+
+A conta dedicada de revisão pode acessar `/dashboard/meta/revisao` e somente
+os endpoints sociais exatos necessários. Não há prefixo genérico de acesso;
+admin, cobrança, API geral de agentes e ativação operacional continuam negados.
+O editor verifica grant confiável não expirado, organização correspondente e
+associação antes de ler/gravar; ignora organização enviada pelo navegador,
+revalida canais reais e força revisão humana privada. Não oferece ação de
+ativação de webhook pela API específica da conta de revisão.
+
+Teste na sessão real `meta-review@connectyhub.com.br`: página abriu, agente
+"Assistente de avaliação Meta" salvo pausado, duas regras de exemplo salvas
+como rascunho e zero envios. Tentativa de navegar ao admin foi bloqueada pelo
+navegador; testes de proxy confirmam a resposta 403 esperada. Nenhum histórico
+ou credencial social adicional foi transferido de outra organização.
+Captura `.codex-screens/meta-revisao-social-isolada-20261011.png`.
+
+Instruções gerais da Meta receberam o endereço e a distinção entre inspeção
+da configuração nessa conta e demonstração real nos ativos próprios internos;
+reabertura confirmou persistência. A conta ainda não reproduz envio social
+real: exige conexão elegível e ativação operacional específica. Não contornar
+esse requisito compartilhando acesso admin ou copiando conversas privadas.
+
 ## Piloto completo pelo painel e situação final — 17h BRT
 
 Publicado `bbda4099031abf1b69ac0f2008bbb74dd97c156c`, slot a/3130 às 17h02,
@@ -41,15 +69,17 @@ em inglês; sidebar privada excluída dos trechos de Direct:
   — 50,53 segundos, regra, comentário, revisão e resposta pública visível.
 
 App Review continua **não enviado**. Após o teste, instagram_manage_comments
-segue 0/1 chamada; o portal informa até 24h para atualização. instagram_basic
-também estava 0/1 na consulta anterior. Upload via seletor do Chrome fechou o
-formulário sem anexar; fallback CDP não é suportado. Titular recebeu pedido de
-anexo manual do vídeo de comentários; nenhum desses dois anexos foi confirmado.
-Não considerar vídeos locais como vídeos enviados à Meta.
+e instagram_basic seguem 0/1 chamada; o portal informa até 24h para atualização.
+Upload automatizado fechou o formulário sem anexar; fallback CDP não é suportado.
+O titular anexou manualmente ambos os vídeos. Reabertura confirmou o anexo de
+comentários e a declaração marcada. Mensagens passou a exibir `Edit`, com
+formulário concluído após o aceite autorizado e salvamento. Descrição de Direct
+atualizada para relatar a edição humana e o limite visual do botão. Isso ainda
+não é submissão nem aprovação. Evidência local:
+`.codex-screens/meta-video-comentarios-salvo-20261011.png`.
 
-Pendências de avaliação: anexar vídeos e declarações aplicáveis, contabilização
-dos testes, preparar acesso de avaliação isolado para automações/Direct (conta
-atual libera apenas integrações/chat WhatsApp), validar Messenger e comentários
+Pendências de avaliação: contabilização dos testes, conexão/ativação social
+real na conta isolada para reprodução (inspeção já publicada), validar Messenger e comentários
 Facebook antes de declarar essas permissões demonstradas. Publicação do código
 e piloto próprio não equivalem à aprovação de acesso avançado de clientes.
 

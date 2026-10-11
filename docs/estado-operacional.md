@@ -2,6 +2,18 @@
 
 ## Layout compacto e validação Meta no admin — 11/10/2026
 
+Atualização às 17h28 BRT: `a00de7b4484815cadb903ae8aecffce2e2c1f3e9`
+publicado no slot b/3131, fallback a em `bbda4099`, sem migration, builder
+parado. Conta dedicada abre `/dashboard/meta/revisao`, permite criar/editar
+seu único agente e salvar regras próprias, com inbox/approvals isolados.
+21 testes de acesso/isolamento, TypeScript, ESLint, build e smoke de candidata
+e domínio passaram. Navegador da conta real confirmou agente pausado, dois
+rascunhos persistidos e zero envios. Nenhum ativo social interno ou histórico
+foi transferido para essa conta; envio real nela continua pendente de conexão
+social/ativação operacional. Instruções da Meta atualizadas com essa distinção
+e reabertura confirmou persistência. Não declarar avaliação reproduzível de
+ponta a ponta nessa conta ainda.
+
 Layout `c01806f5` publicado às 16h36 BRT e conferido no navegador: canais
 somente nos modais criar/editar, opções de comentários recolhidas, seção
 Instagram/Facebook em sanfona fechada por padrão. Comentários exigem regra
@@ -23,12 +35,13 @@ Direct às 17h04, continuidade revisada às 17h05 e resposta pública IA às 17h
 As duas regras foram pausadas e o agente interno também, após a demonstração.
 Botão aceito pela API não apareceu no Instagram Web; não homologado visualmente.
 
-App Review **não enviado**. Reconsulta após os testes mantém comentários em
-0/1 chamada contabilizada (portal informa até 24h); instagram_basic também
-estava 0/1 na consulta anterior. Dois vídeos reais renderizados e verificados,
-mas o upload automatizado fechou o formulário sem anexar; solicitado anexo
-manual ao titular. Messenger/Facebook ainda precisam de demonstrações próprias,
-e a conta restrita de avaliação ainda não inclui automações/Direct.
+App Review **não enviado**. Reconsulta após os testes mantém comentários e
+instagram_basic em 0/1 chamada contabilizada (portal informa até 24h).
+Dois vídeos reais renderizados e verificados. O titular anexou ambos após falha
+do seletor automatizado; anexo de comentários conferido ao reabrir, aceite
+persistido. Formulário de Direct concluído após aceite/salvamento. Submit final
+continua desabilitado. Messenger/Facebook precisam de demonstrações próprias;
+a conta isolada já permite inspeção/configuração das automações, conforme acima.
 [Detalhes](meta-automacoes-comentarios-2026-10-11.md).
 
 ## Piloto Instagram — comentário e Direct reais, 11/10/2026

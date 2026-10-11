@@ -1,5 +1,23 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 17h28 BRT
+
+Os registros abaixo descrevem a primeira rodada. A solicitação continua não
+enviada, agora com pedidos adicionais de comentários/Direct e Facebook.
+Vídeos de comentário → Direct e resposta pública IA foram anexados pelo titular
+e os aceites salvos; Direct aparece concluído. instagram_basic e
+instagram_manage_comments continuam 0/1 chamada contabilizada. Facebook e
+Messenger ainda não têm demonstração real completa.
+
+`a00de7b4` publicado adicionou `/dashboard/meta/revisao` para esta conta e APIs
+sociais exatas (agente de revisão, disponibilidade, automações, inbox e
+aprovações). Admin/cobrança/ativação operacional continuam negados. Agente e
+duas regras de exemplo salvos pausados pela sessão real. Esta é uma área de
+inspeção/configuração: reprodução de envio exige ainda conexão social e
+ativação própria. Não foi transferido ativo social ou histórico interno.
+Instruções gerais da Meta atualizadas e reabertas para confirmar essa distinção.
+[Evidências, versões e pendências](meta-automacoes-comentarios-2026-10-11.md).
+
 ## Situação da solicitação
 
 App ConnectyHub Connect `1002348522666389`; solicitação `1078832598351314`.
