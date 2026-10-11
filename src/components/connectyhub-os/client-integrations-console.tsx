@@ -1573,6 +1573,11 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onTogglePaymentMethod={toggleAsaasPreferenceMethod}
           />
 
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-slate-900">
+            <h3 className="font-semibold">WhatsApp oficial · Chat Meta</h3>
+            <p className="mt-2 text-sm">Conecte um número oficial separado, crie modelos e acompanhe mensagens. Recursos sujeitos às permissões da sua conexão Meta.</p>
+            <a className="mt-3 inline-block text-sm font-semibold text-blue-700 underline" href="/dashboard/chat-meta">Abrir conexão e chat oficial</a>
+          </div>
           {metaFeatureLaunchPaused ? (
             <MetaIntegrationComingSoonCard />
           ) : (

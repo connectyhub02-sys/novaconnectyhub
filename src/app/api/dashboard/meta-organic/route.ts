@@ -7,7 +7,7 @@ import {
   publishClientMetaOrganicPost,
 } from "@/lib/meta/organic-publishing";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

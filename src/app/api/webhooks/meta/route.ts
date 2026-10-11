@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadMetaWebhookRuntimeConfig } from "@/lib/meta/runtime-config";
 import { ingestMetaWebhook, verifyMetaWebhookSignature } from "@/lib/meta/webhook";
+import { ingestOfficialWhatsApp } from "@/lib/meta/whatsapp-webhook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,6 +46,11 @@ export async function POST(request: NextRequest) {
     payload = JSON.parse(rawBody) as unknown;
   } catch {
     return NextResponse.json({ error: "Payload Meta invalido." }, { status: 400 });
+  }
+
+  if (payload && typeof payload === "object" && "object" in payload && payload.object === "whatsapp_business_account") {
+    const result = await ingestOfficialWhatsApp(payload);
+    return NextResponse.json({ ok: true, ...result });
   }
 
   const result = await ingestMetaWebhook({

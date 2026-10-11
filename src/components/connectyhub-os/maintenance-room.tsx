@@ -2,6 +2,7 @@ import type { MaintenanceStoredCredential } from "@/lib/maintenance-vault";
 import { getMaintenanceVaultSnapshot } from "@/lib/maintenance-vault";
 import { ConnectyShell } from "./connecty-shell";
 import { CredentialVaultForm } from "./credential-vault-form";
+import Link from "next/link";
 import {
   PageHeader,
   Panel,
@@ -24,6 +25,11 @@ export function MaintenanceRoom({
         description="Credenciais, APIs e webhooks do ambiente ConnectyHub."
       />
 
+      <Panel title="Meta · Configuração e homologação" className="mb-5">
+        <p className="text-sm">Facebook e Instagram disponíveis para conexão nos painéis. WhatsApp oficial tem configuração própria de Embedded Signup, modelos e chat. As permissões efetivas continuam sendo conferidas pela Meta.</p>
+        <div className="mt-3 flex flex-wrap gap-4 text-sm text-blue-700"><Link href="/admin/meta">Abrir laboratório e chat oficial</Link><Link href="/dashboard/integracoes">Integrações do painel do usuário</Link></div>
+        <p className="mt-3 text-xs text-slate-500">Para a revisão WhatsApp: conecte o número de teste, crie um modelo neste painel e registre um envio chegando ao destinatário. A criação do modelo e o envio precisam de demonstrações distintas.</p>
+      </Panel>
       <Panel
         className="mb-5"
         id="credenciais-do-sistema"

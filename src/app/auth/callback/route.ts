@@ -20,11 +20,11 @@ export async function GET(request: NextRequest) {
     nextPath: next,
   });
 
-  return NextResponse.redirect(new URL(target, request.url));
+  return new NextResponse(null, { status: 303, headers: { Location: target, "Cache-Control": "private, no-store" } });
 }
 
 function safeNext(next: string | null) {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || /[\\\r\n]/.test(next)) {
     return null;
   }
 

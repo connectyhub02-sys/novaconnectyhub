@@ -8,7 +8,8 @@ import {
   fetchMetaPageAccessToken,
   loadMetaGuidedOAuthConfig,
 } from "@/lib/client-os/guided-oauth";
-import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
+import type { ClientCompany } from "@/lib/client-os/companies";
+import { requireMetaCompanyAccess as requireClientCompanyAccess } from "./company-access";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";

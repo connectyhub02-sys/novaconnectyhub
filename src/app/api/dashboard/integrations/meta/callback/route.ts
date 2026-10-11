@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess } from "@/lib/billing/trial";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import {
   exchangeMetaAuthorizationCode,
@@ -15,7 +15,7 @@ import {
   upsertGuidedOAuthConnection,
 } from "@/lib/client-os/guided-oauth";
 import { queueGrowthIntegrationSyncJob, syncMetaOAuthAssets } from "@/lib/client-os/growth-integrations";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 import { hashMetaOAuthState, isPendingMetaOAuthState, matchesMetaOAuthCookie, metaOAuthCookie } from "@/lib/meta/oauth-state";
 
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     return response;
   };
   const workspace = await getCurrentWorkspace();
+  if (workspace?.profile.isPlatformAdmin) returnUrl.pathname = "/admin/meta";
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);

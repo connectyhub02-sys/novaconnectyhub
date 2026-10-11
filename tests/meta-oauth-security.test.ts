@@ -51,7 +51,7 @@ function fixture() {
     "@/lib/client-os/guided-oauth": oauth,
     "@/lib/meta/oauth-state": stateHelpers,
     "@/lib/billing/trial": { assertBillableAccess: vi.fn() },
-    "@/lib/client-os/companies": { requireClientCompanyAccess },
+    "@/lib/meta/company-access": { requireMetaCompanyAccess: requireClientCompanyAccess, getMetaWorkspace: async () => ({ user: { id: "user-a" }, profile: { isPlatformAdmin: false } }) },
     "@/lib/client-os/dashboard-route-scope": { resolveDashboardCompanyId: () => row.organization_id },
     "@/lib/supabase/profile": { getCurrentWorkspace: async () => ({ user: { id: "user-a" } }) },
     "@/lib/supabase/service": { createServiceClient: () => ({ from }) },

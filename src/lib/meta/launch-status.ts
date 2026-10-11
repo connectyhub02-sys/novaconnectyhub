@@ -1,4 +1,5 @@
-export const metaFeatureLaunchPaused = true;
+// The interface is open for testing. Each operation still requires its real grants.
+export const metaFeatureLaunchPaused = false;
 
 export const metaFeatureComingSoonTitle = "Meta, Instagram e Facebook em breve";
 

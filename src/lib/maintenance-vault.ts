@@ -243,13 +243,13 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         help: "Status operacional da revisao: teste, em revisao, aprovado ou reprovado.",
       },
       {
-        label: "Permissoes Meta habilitadas",
+        label: "Permissões solicitadas no login Meta",
         env: "META_ENABLED_PERMISSIONS",
         kind: "identifier",
         requirement: "recommended",
         section: "Revisao e permissao",
         multiline: true,
-        help: "Lista de permissoes aprovadas ou solicitadas, como ads_read, ads_management, business_management, pages_manage_posts, pages_messaging, leads_retrieval, instagram_content_publish, instagram_manage_comments e instagram_manage_messages.",
+        help: "Escopos pedidos pelo login. Esta lista não comprova aprovação: o servidor consulta as permissões realmente concedidas pela Meta para cada conexão.",
       },
       {
         label: "Webhook Verify Token",
@@ -307,6 +307,22 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         requirement: "optional",
         section: "Teste interno",
         help: "Opcional: pagina da ConnectyHub para testar leitura organica, leads e webhooks.",
+      },
+      {
+        label: "WhatsApp Embedded Signup Configuration ID", env: "META_WHATSAPP_LOGIN_CONFIG_ID", kind: "identifier", requirement: "recommended", section: "WhatsApp oficial",
+        help: "Configuração própria do Embedded Signup, com WhatsApp Business Management e Messaging. Diferente da configuração do login de Facebook/Instagram.",
+      },
+      {
+        label: "WhatsApp token de teste interno", env: "META_WHATSAPP_ACCESS_TOKEN", kind: "secret", requirement: "optional", section: "WhatsApp oficial",
+        help: "Token do próprio app para o laboratório admin. Nunca é compartilhado com empresas clientes. Tokens temporários exigem renovação.",
+      },
+      {
+        label: "WhatsApp Business Account ID de teste", env: "META_WHATSAPP_WABA_ID", kind: "identifier", requirement: "optional", section: "WhatsApp oficial",
+        help: "WABA da ConnectyHub para testes de modelos e mensagens oficiais.",
+      },
+      {
+        label: "WhatsApp Phone Number ID de teste", env: "META_WHATSAPP_PHONE_NUMBER_ID", kind: "identifier", requirement: "optional", section: "WhatsApp oficial",
+        help: "ID do remetente oficial de teste, não é o telefone com DDI. Mantenha separado do número UAZAPI.",
       },
     ],
   },

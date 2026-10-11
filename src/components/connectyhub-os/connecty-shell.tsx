@@ -196,6 +196,7 @@ const adminSections: NavSection[] = [
     label: "Trafego IA",
     items: [
       { label: "Meta Ads",    href: "/admin/trafego/meta-ads",   icon: Megaphone, tone: "fuchsia" },
+      { label: "Meta e WhatsApp oficial", href: "/admin/meta", icon: MessageCircle, tone: "teal" },
       { label: "Google Ads",  href: "/admin/trafego/google-ads", icon: Search, tone: "blue" },
       { label: "Visao Geral", href: "/admin/trafego",            icon: BarChart3, tone: "sky" },
     ],
@@ -251,6 +252,7 @@ const clientSections: NavSection[] = [
       { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2, tone: "sky" },
       { label: "Agentes",      href: "/dashboard/whatsapp",       icon: Bot, tone: "violet" },
       { label: "Atendimento",  href: "/dashboard/atendimento",    icon: MessageCircle, tone: "blue" },
+      { label: "Chat Meta oficial", href: "/dashboard/chat-meta", icon: MessageCircle, tone: "teal" },
       { label: "Agenda",       href: "/dashboard/agenda",         icon: CalendarDays, tone: "emerald" },
     ],
   },
