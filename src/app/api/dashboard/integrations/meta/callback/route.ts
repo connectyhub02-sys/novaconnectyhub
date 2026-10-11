@@ -7,6 +7,7 @@ import {
   exchangeMetaAuthorizationCode,
   getAppBaseUrl,
   listMetaConnectionAssets,
+  listMetaGrantedPermissions,
   loadMetaGuidedOAuthConfig,
   logIntegrationAction,
   readOAuthReturnReason,
@@ -16,6 +17,7 @@ import {
 import { queueGrowthIntegrationSyncJob, syncMetaOAuthAssets } from "@/lib/client-os/growth-integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { hashMetaOAuthState, isPendingMetaOAuthState, matchesMetaOAuthCookie, metaOAuthCookie } from "@/lib/meta/oauth-state";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +33,12 @@ type IntegrationRow = {
 export async function GET(request: NextRequest) {
   const baseUrl = getAppBaseUrl();
   const returnUrl = new URL("/dashboard/integracoes", baseUrl);
+  const finish = () => {
+    const response = NextResponse.redirect(returnUrl);
+    response.cookies.set({ ...metaOAuthCookie(baseUrl), value: "", maxAge: 0 });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  };
   const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
@@ -45,23 +53,31 @@ export async function GET(request: NextRequest) {
   if (!code || !state) {
     returnUrl.searchParams.set("integration", "meta_error");
     returnUrl.searchParams.set("reason", "missing_code");
-    return NextResponse.redirect(returnUrl);
+    return finish();
   }
 
+  if (!matchesMetaOAuthCookie(state, request.cookies.get(metaOAuthCookie(baseUrl).name)?.value)) {
+    returnUrl.searchParams.set("integration", "meta_error");
+    returnUrl.searchParams.set("reason", "invalid_state");
+    return finish();
+  }
+
+  const stateHash = hashMetaOAuthState(state);
   const client = createServiceClient();
   const { data: integration, error: integrationError } = await client
     .from("organization_integrations")
     .select("id, organization_id, metadata")
     .eq("provider_id", "meta-ads")
-    .contains("metadata", { oauth_state: state })
+    .contains("metadata", { oauth_state_hash: stateHash })
     .maybeSingle<IntegrationRow>();
 
-  if (integrationError || !integration) {
+  if (integrationError || !integration || !isPendingMetaOAuthState(integration.metadata, workspace.user.id)) {
     returnUrl.searchParams.set("integration", "meta_error");
     returnUrl.searchParams.set("reason", "invalid_state");
-    return NextResponse.redirect(returnUrl);
+    return finish();
   }
 
+  let stateConsumed = false;
   try {
     const companyId = resolveDashboardCompanyId({
       workspace,
@@ -77,11 +93,26 @@ export async function GET(request: NextRequest) {
     if (!["owner", "admin"].includes(company.role)) {
       returnUrl.searchParams.set("integration", "meta_error");
       returnUrl.searchParams.set("reason", "permission");
-      return NextResponse.redirect(returnUrl);
+      return finish();
     }
 
     const config = await loadMetaGuidedOAuthConfig({ client });
+    // Compare-and-set: only one callback may exchange this authorization code.
+    const { data: consumed, error: consumeError } = await client
+      .from("organization_integrations")
+      .update({ metadata: { ...readRecord(integration.metadata), oauth_state_hash: null } })
+      .eq("id", integration.id)
+      .contains("metadata", { oauth_state_hash: stateHash })
+      .select("id")
+      .maybeSingle<{ id: string }>();
+    if (consumeError || !consumed) {
+      returnUrl.searchParams.set("integration", "meta_error");
+      returnUrl.searchParams.set("reason", "invalid_state");
+      return finish();
+    }
+    stateConsumed = true;
     const token = await exchangeMetaAuthorizationCode({ code, config });
+    const grantedPermissions = await listMetaGrantedPermissions({ accessToken: token.access_token!, config });
     const assets = await listMetaConnectionAssets({
       accessToken: token.access_token!,
       config,
@@ -144,11 +175,12 @@ export async function GET(request: NextRequest) {
       label: assets.adAccountId ? "Meta conectado" : "Meta autorizado",
       externalAccountId: assets.adAccountId || assets.pageId || assets.instagramBusinessId || null,
       externalAccountLabel: accountLabel,
-      scopes: config.permissions,
+      scopes: grantedPermissions,
       actorId: workspace.user.id,
       metadata: {
         ...readRecord(integration.metadata),
         oauth_state: null,
+        oauth_state_hash: null,
         oauth_connected_at: now,
         token_type: token.token_type ?? null,
         token_expires_in: token.expires_in ?? null,
@@ -189,16 +221,16 @@ export async function GET(request: NextRequest) {
       client,
       companyId: company.id,
       integrationId,
-      permissions: config.permissions,
+      permissions: grantedPermissions,
     });
 
     revalidatePath("/dashboard/integracoes");
     revalidatePath("/dashboard/trafego/meta-ads");
 
     returnUrl.searchParams.set("integration", "meta_connected");
-    return NextResponse.redirect(returnUrl);
+    return finish();
   } catch (error) {
-    await client
+    if (stateConsumed) await client
       .from("organization_integrations")
       .update({
         status: "error",
@@ -209,7 +241,7 @@ export async function GET(request: NextRequest) {
 
     returnUrl.searchParams.set("integration", "meta_error");
     returnUrl.searchParams.set("reason", readOAuthReturnReason(error));
-    return NextResponse.redirect(returnUrl);
+    return finish();
   }
 }
 

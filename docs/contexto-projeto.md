@@ -16,6 +16,25 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ## Arquitetura de referência
 
+### Expansão social e WhatsApp oficial — decisão de 11/10/2026
+
+Ordem definida pelo titular: Meta, YouTube e TikTok, com etapas de conexão,
+calendário/publicação, relacionamento, análise e anúncios por agentes/MCP.
+No lançamento do WhatsApp oficial, manter dois números: o atual UAZAPI para
+atendimento/follow-up e outro conectado à Cloud API para campanhas em massa.
+Anúncios podem encaminhar leads ao número atual. Disparo em massa deve exigir
+o canal oficial no servidor, sem fallback para UAZAPI. Coexistência oficial não
+será presumida como compatibilidade com UAZAPI no mesmo número.
+
+O titular confirmou que hoje a ConnectyHub usa somente o próprio portfólio Meta
+e ainda vai começar a gerenciar clientes. Autorizou o aceite como Tech Provider
+independente após ciência da restrição de revenda nos termos atuais. O desejo de
+cobrar 2× o custo por mensagem entregue fica pendente de acordo comercial que
+permita esse modelo; não habilitar um adicional por mensagem apenas mudando seu
+nome para taxa de serviço. R$ 0,32 foi exemplo, não tarifa universal. Ver o
+[plano](plano-expansao-social-meta-youtube-tiktok-2026-10-11.md) e o
+[registro da primeira etapa](meta-fase-1-conexao-2026-10-11.md).
+
 ### Direção do produto
 
 Meta explicitada pelo titular: entregar uma plataforma sofisticada a custo acessível, com agentes que atendam e vendam com qualidade, e permitir que outros projetos consumam a API de IA pagando em créditos. A migração de banco e orquestração para infraestrutura própria busca reduzir dependência de assinaturas e tornar a operação economicamente viável; não elimina custo de IA, manutenção, VPS e demais provedores. A aplicação também foi migrada para VPS em 28/09; o encerramento da assinatura Vercel está registrado separadamente no estado operacional.

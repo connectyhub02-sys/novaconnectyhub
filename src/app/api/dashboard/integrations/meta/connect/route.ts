@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
@@ -12,6 +11,7 @@ import {
 } from "@/lib/client-os/guided-oauth";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { createMetaOAuthState, hashMetaOAuthState, metaOAuthCookie } from "@/lib/meta/oauth-state";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     const config = await loadMetaGuidedOAuthConfig({ client });
-    const state = `meta_${randomUUID()}`;
+    const state = createMetaOAuthState();
     const now = new Date().toISOString();
 
     await upsertGuidedOAuthConnection({
@@ -54,10 +54,11 @@ export async function GET(request: NextRequest) {
       providerId: "meta-ads",
       status: "pending",
       label: "Aguardando autorizacao Meta",
-      scopes: config.permissions,
+      scopes: [],
       actorId: workspace.user.id,
       metadata: {
-        oauth_state: state,
+        oauth_state_hash: hashMetaOAuthState(state),
+        oauth_requested_permissions: config.permissions,
         oauth_requested_by: workspace.user.id,
         oauth_requested_at: now,
         oauth_redirect_uri: config.redirectUri,
@@ -65,7 +66,10 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.redirect(buildMetaAuthorizationUrl({ config, state }));
+    const response = NextResponse.redirect(buildMetaAuthorizationUrl({ config, state }));
+    response.cookies.set({ ...metaOAuthCookie(baseUrl), value: state });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     returnUrl.searchParams.set("integration", "meta_error");
     returnUrl.searchParams.set("reason", readOAuthReturnReason(error));

@@ -1,5 +1,7 @@
 import "server-only";
 
+export { listMetaGrantedPermissions } from "@/lib/meta/oauth-permissions";
+
 import { createHmac } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getIntegrationProviders } from "@/lib/client-os/integrations";
