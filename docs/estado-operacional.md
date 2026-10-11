@@ -1,5 +1,23 @@
 # Estado operacional da ConnectyHub
 
+## Logout retorna à home — publicado em 11/10/2026
+
+Commit `55f2e6e0` ativado às 02h21 BRT no slot b/3131; slot a preservado com
+`799b20a5` para retorno. O endpoint compartilhado pelos painéis de cliente e
+administrador enviava `Location: https://0.0.0.0:3000/login`, reproduzido por HTTP
+em produção. Agora encerra a sessão e revoga o acesso assistido como antes,
+retornando `303`, `Location: /` e `Cache-Control: private, no-store`.
+O endereço relativo mantém o domínio acessado e leva à home.
+
+Validação: sete testes da rota de logout e acesso assistido, ESLint, TypeScript
+e build Docker aprovados. Candidata e domínio público conferidos: health/SHA,
+home/login/asset 200, logout 303 para `/`, cookie assistido expirado, painéis
+307 e API 401 sem sessão, GET Inngest assinado 200 autenticado. Chromium sem
+sessão percorreu `/auth/signout` e chegou à home pública com HTTP 200.
+Não foi exercitado um login real de cliente/administrador seguido de logout;
+a chamada de encerramento da sessão foi coberta pelos testes com dependências
+simuladas. Sem migration nem alteração de configuração de produção.
+
 ## Estúdio de Voz — fases A a E, publicadas em 02/10/2026
 
 Relatório: [Estúdio de Voz, fases A a E](relatorio-estudio-voz-fases-a-e-2026-10-02.md).
