@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Meta — teste real e resposta oficial confirmados, 11/10/2026
+
+Aplicação `d37153a2fae1c7a71cc07e6472605874d975c41b` publicada às 10h50 BRT
+no slot a/3130; slot b `2426cede` mantido para retorno. Migration `0191`
+aplicada transacionalmente, ACL de service role confirmada. Candidata e domínio
+público passaram em health/SHA, assets, proteção de rotas, logout e Inngest.
+
+Destinatário próprio verificado pelo titular. Modelo enviado pelo admin, entrega
++ leitura confirmadas; resposta do aparelho recebida e arquivada. O teste revelou
+variação real entre telefone informado e `wa_id`; primeiro texto de resposta
+falhou com `131030`. A correção correlaciona somente identidades comprovadas pela
+Meta, mantém a janela real de 24h e consulta opt-out em todos os aliases. Resposta
+pela versão corrigida entregue às 10h51 BRT. Nenhum fallback UAZAPI.
+29 testes relevantes, TypeScript e ESLint passaram; builder parado.
+
+Login social concluído com os ativos próprios autorizados. Página e conta de
+anúncios retornaram; escopos concedidos: `ads_read`, `business_management`,
+`pages_read_engagement`, `pages_show_list`, `public_profile`. Instagram selecionado
+no portal, mas sem `instagram_basic` e sem conta disponível no retorno. Não
+confundir seleção do ativo com liberação de publicação, comentários ou mensagens.
+
+Captura real da resposta salva localmente; App Review ainda depende das demais
+demonstrações e formulários. Não há confirmação de aprovação das novas permissões.
+Sem campanhas de anúncios iniciadas, sem cadastro de pagamento, disparo em lote ou margem
+por mensagem. Relatório: [teste real](meta-teste-real-2026-10-11.md).
+
 ## Meta — laboratório oficial publicado, 11/10/2026
 
 Aplicação `2426cede7deefd7b08df68d8d0ec1aaca2505d80` publicada às 04h20 BRT
