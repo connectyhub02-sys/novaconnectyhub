@@ -1,5 +1,35 @@
 # Estado operacional da ConnectyHub
 
+## Conta de revisão Meta — três entregas reais, 11/10/2026 19h46 BRT
+
+Organização exclusiva `4cd0a6bd-4e3c-4773-a9ef-511c802b48df` agora reproduz
+Messenger, Instagram Direct e resposta pública Facebook com revisão humana.
+Página `839794832549513` inscrita em `messages,messaging_postbacks,feed`;
+tokens, escopos, perfil Instagram e leitura de publicações validados pela API.
+Diagnóstico salvo é parcial e não declara aprovação de App Review.
+
+Allowlist `META_SOCIAL_LIVE_ORGANIZATIONS` expandida apenas para incluir essa
+organização, mantendo a organização própria já existente. Modo global permanece
+dry_run. Mesma imagem `63386ecd2e4eb59d949678f99dd58f61665cc628` preparada e
+ativada no slot **a/3130** para aplicar o ambiente; fallback b tem a mesma imagem
+e allowlist anterior. Health/login/auth da candidata e smoke após troca passaram.
+Sem alteração de código, rebuild ou migration. Backup do ambiente:
+`/opt/connectyhub/app/config/production.before-meta-review-pilot-20261011.env`.
+
+Três envios confirmados HTTP 200, uma tentativa e zero retries; recebimento
+visível no Messenger, Instagram e comentário público da Página. Agente exclusivo
+permanece online exigindo revisão humana. Regra Facebook restrita a palavra/post
+pausada depois do teste; duas regras Instagram e follow-up permanecem pausados.
+Ativos/agente internos preservados. Nenhum gasto/campanha/anúncio criado.
+
+Roteiro dos avaliadores atualizado e reaberto para confirmar persistência,
+indicando os novos ativos, fluxos reproduzíveis e a limitação de zero posts no
+Instagram de teste. App Review **não enviado**: Submit continua desabilitado,
+contadores pendentes e três formulários sem vídeo (`pages_manage_metadata`,
+`pages_read_user_content`, `pages_manage_engagement`). Upload pelo controle do
+navegador continua indisponível; não confundir testes entregues com aprovação.
+[Detalhes e evidências](meta-revisao-conta-dedicada-2026-10-11.md).
+
 ## Reconexão Meta com Magno — 11/10/2026 19h26 BRT
 
 Após autorização do titular, Magno Macedo (`61582521060298`) foi adicionado como

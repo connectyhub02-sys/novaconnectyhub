@@ -1,5 +1,63 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 19h46 BRT — atendimento real na conta isolada
+
+Concluídos três testes reais na organização exclusiva dos avaliadores
+`4cd0a6bd-4e3c-4773-a9ef-511c802b48df`, integração
+`65598413-fd1e-467f-9705-f4287ca6839f`, agente
+`126904ec-60a0-4ff9-ae1c-45e09d5acb85`:
+
+| Canal | Execução | Resultado |
+| --- | --- | --- |
+| Messenger | `643c5dd4-b3fb-49d9-8eec-7c486de5f99e` | Mensagem de Eliane, rascunho revisado e aprovado, resposta recebida às 19h36 |
+| Instagram Direct | `bfdd07ce-689b-4425-b80f-bd6c2e49363d` | Mensagem de lunaesindy, rascunho revisado e aprovado, resposta recebida às 19h38 |
+| Comentário Facebook | `067a1cee-5fd6-b258-b854-93f39a398c20` | Comentário de Eliane, regra e resposta IA aprovada, resposta pública visível às 19h41 |
+
+Os três retornaram HTTP 200, uma tentativa, zero retry. Página de teste
+`buffalomass.life` (`839794832549513`) e Instagram `@buffalomasseliteclub`
+(`17841423784354535`). Webhooks da Página inscritos em messages,
+messaging_postbacks e feed. Diagnóstico parcial honesto registra tokens/escopos,
+leitura real e assinatura; não declara aprovação para clientes externos.
+
+Regra Facebook “Avaliação Facebook · resposta pública revisada”, palavra
+`VALIDACAO REVISAO1110`, restrita ao post
+`839794832549513_122116093569087692`, foi pausada após a entrega. Comentário
+`1638272857913467`, resposta `2222578971621449`, visíveis em
+<https://www.facebook.com/reel/1656021965779644/>. Agente segue online com
+revisão humana obrigatória nos canais privados. Regras Instagram e follow-up
+continuam pausados. Sem envio automático indiscriminado.
+
+Ativação operacional limitada à organização de revisão e à própria já autorizada;
+demais organizações seguem dry_run. Aplicação da allowlist exigiu ativar a mesma
+imagem `63386ecd` no slot a/3130; fallback b permanece na mesma imagem com o
+ambiente anterior. Smoke e health passaram; sem código/migration/build novo.
+
+Roteiro geral da Meta substituído por instruções atuais, salvo e reaberto:
+credenciais existentes mantidas sem alteração; acesso direto a
+`/dashboard/meta/revisao`, reprodução Messenger/Direct/Facebook, ativos atuais,
+e distinção dos vídeos anteriores feitos com connectyhub.ai. O Instagram novo
+tem zero posts: falta uma publicação autorizada para repetir comentário → Direct
+e resposta pública nesse ativo isolado. Os vídeos anteriores desses fluxos seguem
+válidos como demonstração nos ativos próprios; não declarar reprodução no novo
+perfil. Botão de link ainda sem confirmação visual em Instagram Web.
+
+**App Review não enviado**. Submit for review continua desabilitado. Contadores
+Instagram basic/comments e quatro Facebook permanecem pendentes (portal informa
+até 24h). Vídeo Messenger já salvo; anexos restantes:
+
+- `pages_manage_metadata`: `messenger-recebimento-resposta.mp4`.
+- `pages_read_user_content`: `facebook-comentario-resposta-ia.mp4`.
+- `pages_manage_engagement`: `facebook-comentario-resposta-ia.mp4`.
+
+Arquivos em `output/meta-review-20261011/comments/edit/`. O upload pela API de
+filechooser continua falhando, automação nativa não inicializa e CDP não oferece
+setFileInputFiles nesse controle. Formulário metadata deixado aberto para anexo
+manual; não afirmar upload concluído sem link persistente de vídeo.
+
+Evidências locais: `.codex-screens/meta-review-messenger-entregue-20261011.png`,
+`.codex-screens/meta-review-instagram-entregue-20261011.png` e
+`.codex-screens/meta-review-tres-canais-20261011.png`.
+
 ## Atualização às 19h26 BRT — novos ativos conectados
 
 O titular mudou a sessão Facebook e os ativos para Magno Macedo. Após autorização
