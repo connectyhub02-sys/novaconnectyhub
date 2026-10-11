@@ -6,6 +6,7 @@ import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { getClientIntegrationHub } from "@/lib/client-os/integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function DashboardIntegracoesPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <ClientIntegrationsConsole state={hubState} />
+      {organization && <MetaInstagramOverview userId={workspace.user.id} organizationId={organization.id} />}
     </ConnectyShell>
   );
 }

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { MetaWhatsAppConsole } from "@/components/connectyhub-os/meta-whatsapp-console";
+import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
 import { PageHeader, Panel } from "@/components/connectyhub-os/panel-primitives";
 export const metadata = {title:"Meta · Operação e testes | ConnectyHub"};
 export default async function AdminMetaPage() {
@@ -25,6 +26,7 @@ export default async function AdminMetaPage() {
       <div className="mt-3 flex flex-wrap gap-4 text-sm text-blue-400"><a href="/api/dashboard/integrations/meta/connect">Conectar Facebook e Instagram</a><Link href="/admin/trafego/meta-ads">Analisar Meta Ads</Link><Link href="/admin/meta/publicacoes">Publicações e calendário</Link><Link href="/admin/maintenance">Credenciais e manutenção</Link></div>
       <p className="mt-3 text-xs text-slate-500">TikTok e YouTube têm aplicativos e autorizações próprios. A aprovação deste app Meta não libera essas plataformas.</p>
     </Panel>
+    <MetaInstagramOverview userId={workspace.user.id} organizationId={workspace.organization!.id} />
     <MetaWhatsAppConsole admin />
   </ConnectyShell>;
 }
