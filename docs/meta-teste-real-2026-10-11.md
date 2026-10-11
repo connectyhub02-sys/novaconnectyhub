@@ -1,5 +1,9 @@
 # Teste real do WhatsApp oficial e vínculo social — 11/10/2026
 
+> Atualização posterior: Instagram reconectado com leitura real, vídeos anexados
+> e conta dedicada preparada. O App Review continua bloqueado pelo contador de
+> teste Instagram. Ver [estado mais recente](meta-revisao-conta-dedicada-2026-10-11.md).
+
 ## Evidência externa
 
 - Destinatário próprio fornecido pelo titular, verificado no portal da Meta com código de cinco dígitos. Código e telefone particular não são registrados neste relatório.

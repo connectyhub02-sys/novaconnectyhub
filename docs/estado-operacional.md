@@ -1,5 +1,30 @@
 # Estado operacional da ConnectyHub
 
+## Meta — conta de revisão publicada; envio aguardando contador Instagram, 11/10/2026
+
+Aplicação `8fd5203b83aec6487abde824dcad737066a9b546` publicada às 11h59 BRT
+no slot b/3131; slot a com `aa261387` preservado. Builder parado. Nove testes
+de autorização/proxy, ESLint, build e verificações autenticadas/publicadas passaram.
+
+Conta exclusiva `meta-review@connectyhub.com.br`, sem admin e sem integrações
+financeiras, limitada a Instagram/WhatsApp oficial até 12/10/2027. Credenciais
+no cofre de manutenção e no campo próprio do App Review; nunca neste repositório.
+O remetente oficial de teste foi transferido para a empresa de revisão; histórico
+anterior permanece interno. Não reimportar o piloto no admin durante a revisão.
+Envio real pela conta dedicada confirmado como entregue às 12h01 BRT.
+
+Instagram reconectado com `instagram_basic`, perfil próprio e mídias reais
+consultados no admin e no cliente. Três vídeos anexados à Meta. WhatsApp e
+renovações completos; verificação, configurações, dados e instruções completos.
+**App Review ainda não enviado:** `instagram_basic` continua com 0/1 chamada
+contabilizada e `Submit for review` desabilitado. Portal informa até 24h de atraso.
+Não confundir o app publicado ou Access Verification enviada com esta solicitação.
+
+Token WhatsApp expira em 10/12/2026 e precisará ser mantido durante a revisão.
+Sem lote, margem por mensagem, coexistência ou novos recursos sociais homologados.
+Relatório: [demonstrações, conta e pendências](meta-revisao-conta-dedicada-2026-10-11.md).
+
+
 ## Meta — teste real e resposta oficial confirmados, 11/10/2026
 
 Aplicação `d37153a2fae1c7a71cc07e6472605874d975c41b` publicada às 10h50 BRT

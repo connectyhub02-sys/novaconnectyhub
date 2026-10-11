@@ -1,5 +1,10 @@
 # Laboratório WhatsApp oficial — 11/10/2026
 
+> Atualização posterior: o remetente de teste foi transferido para a empresa
+> exclusiva de avaliação; o histórico antigo permanece interno. Ver
+> [conta e revisão](meta-revisao-conta-dedicada-2026-10-11.md) antes de reimportar
+> o piloto ou usar o painel admin para novos envios.
+
 ## Implementação
 
 - Admin: `/admin/meta`, com número técnico interno, modelos, envio individual e histórico. A empresa interna é resolvida no servidor; o administrador não reutiliza uma empresa trial nem escolhe livremente o tenant pela URL.
