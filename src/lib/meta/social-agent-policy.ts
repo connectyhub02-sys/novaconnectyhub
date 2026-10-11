@@ -23,7 +23,7 @@ export type MetaSocialAgentEventName =
 export type MetaSocialQueueDecision =
   | {
       shouldQueue: false;
-      reason: "channel_disabled";
+      reason: "channel_disabled" | "automation_no_match";
       triggerSource: MetaSocialAgentEventName;
       channelConfig: AgentChannelConfigItem;
     }
@@ -97,6 +97,10 @@ export function resolveMetaSocialQueueDecision(input: {
       triggerSource,
       channelConfig,
     };
+  }
+
+  if (isMetaCommentChannel(input.channel) && !input.automation) {
+    return { shouldQueue: false, reason: "automation_no_match", triggerSource, channelConfig };
   }
 
   const publicSurface = channelConfig.mode === "public";

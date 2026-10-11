@@ -148,7 +148,7 @@ export function MetaCommentAutomations({
   return (
     <Panel
       title="Instagram e Facebook · automações de comentários"
-      eyebrow="tráfego orgânico / relacionamento"
+      collapsible
     >
       <div className="space-y-4">
         <p className="text-sm text-slate-600">

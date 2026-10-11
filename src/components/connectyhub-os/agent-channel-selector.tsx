@@ -63,137 +63,64 @@ export function AgentChannelSelector({
         [channel]: { ...current.channels[channel], ...patch },
       },
     });
+  const reasonFor = (id: keyof AgentChannelAvailability) =>
+    internal ? "Configure os canais no agente da empresa." :
+    availability?.[id]?.reason ||
+    (result?.companyId === companyId ? result.error : null) || "Verificando conexão…";
+  const choice = (id: keyof AgentChannelAvailability, label: string) => (
+    <label key={id} title={reasonFor(id)} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs has-[:disabled]:text-slate-400 has-[:checked]:border-blue-300 has-[:checked]:bg-blue-50">
+      <input type="checkbox" checked={current.channels[id].enabled}
+        disabled={disabled || (!availability?.[id]?.available && !current.channels[id].enabled)}
+        onChange={(event) => update(id, { enabled: event.target.checked })} />
+      {label}
+    </label>
+  );
+  const commentCount = ["instagram_comments", "facebook_comments"].filter(
+    (id) => current.channels[id as AgentChannelId].enabled,
+  ).length;
   return (
-    <section
-      aria-label="Canais de atendimento"
-      className="rounded-xl border bg-slate-50/70 p-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900">
-            Onde este agente vai atender?
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Um só agente, com as mesmas instruções, nos canais que você
-            selecionar.
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled={disabled || internal}
-          className="text-xs text-blue-600 disabled:opacity-40"
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          Atualizar conexões
-        </button>
+    <section aria-label="Canais de atendimento" className="rounded-xl border px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h3 className="text-xs font-semibold">Canais de atendimento</h3>
+        <fieldset disabled={disabled} className="flex flex-wrap items-center gap-2">
+          <span title="Conexão por QR Code. Atendimento configurado em Comportamento."
+            className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            WhatsApp · {whatsappConnected ? "conectado" : "conectar por QR"}
+          </span>
+          {choice("instagram_direct", "Instagram Direct")}
+          {choice("facebook_messenger", "Messenger")}
+        </fieldset>
       </div>
-      <fieldset disabled={disabled} className="mt-3 grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg border bg-white p-3">
-          <p className="text-sm font-semibold">WhatsApp</p>
-          <p
-            className={`mt-2 text-xs ${whatsappConnected ? "text-emerald-700" : "text-slate-500"}`}
-          >
-            {whatsappConnected
-              ? "✓ Número conectado"
-              : "Aguardando conexão por QR Code"}
-          </p>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Conecte o número deste agente abaixo para habilitar o canal. O
-            controle de atendimento fica em Comportamento.
-          </p>
+      <details className="mt-2 text-xs">
+        <summary className="cursor-pointer text-slate-500">
+          Comentários e opções{commentCount ? ` · ${commentCount} selecionado(s)` : ""}
+        </summary>
+        <div className="mt-3 space-y-3 border-t pt-3">
+          <p className="text-slate-500">Direct e Messenger usam as instruções deste agente. Comentários só geram respostas quando uma regra ativa em Automações corresponde ao comentário.</p>
+          <fieldset disabled={disabled} className="flex flex-wrap gap-2">
+            {choice("instagram_comments", "Comentários do Instagram")}
+            {choice("facebook_comments", "Comentários do Facebook")}
+          </fieldset>
+          <p className="text-slate-500">Em Automações, escolha publicações, palavras-chave, mensagem no privado ou orientação para a IA responder em público, e se deseja revisar antes do envio.</p>
+          {agentChannelDefinitions.filter((item) => item.mode === "private" && current.channels[item.id].enabled).map((item) => (
+            <fieldset key={item.id} disabled={disabled || !availability?.[item.id as keyof AgentChannelAvailability]?.available} className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="font-medium">{item.label}</span>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={current.channels[item.id].autoReply} onChange={(event) => update(item.id, { autoReply: event.target.checked })} />Resposta automática</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={current.channels[item.id].requiresHumanApproval} onChange={(event) => update(item.id, { requiresHumanApproval: event.target.checked })} />Revisar antes de enviar</label>
+            </fieldset>
+          ))}
+          <ul className="space-y-1 text-slate-500">
+            {agentChannelDefinitions.filter((item) => item.provider === "meta").map((item) => (
+              <li key={item.id}>{item.label}: {reasonFor(item.id as keyof AgentChannelAvailability)}</li>
+            ))}
+          </ul>
+          {!internal && <div className="flex flex-wrap gap-4 text-blue-600">
+            <Link href="/dashboard/integracoes">Integrações</Link>
+            <Link href="/dashboard/automacoes">Automações de comentários</Link>
+            <button type="button" disabled={disabled} className="disabled:opacity-40" onClick={() => setRevision((value) => value + 1)}>Atualizar conexões</button>
+          </div>}
         </div>
-        {(["instagram", "facebook"] as const).map((surface) => (
-          <div key={surface} className="rounded-lg border bg-white p-3">
-            <p className="text-sm font-semibold">
-              {surface === "instagram" ? "Instagram" : "Facebook"}
-            </p>
-            {agentChannelDefinitions
-              .filter((item) => item.surface === surface)
-              .map((item) => {
-                const selected = current.channels[item.id];
-                const status =
-                  availability?.[item.id as keyof AgentChannelAvailability];
-                const reason = internal
-                  ? "Configure o atendimento social no agente do painel da empresa."
-                  : status?.reason ||
-                    (result?.companyId === companyId ? result.error : null) ||
-                    "Verificando conexão…";
-                return (
-                  <div key={item.id} className="mt-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={selected.enabled}
-                        disabled={!status?.available && !selected.enabled}
-                        onChange={(event) =>
-                          update(item.id, { enabled: event.target.checked })
-                        }
-                      />
-                      {item.mode === "public"
-                        ? "Comentários"
-                        : surface === "instagram"
-                          ? "Direct"
-                          : "Messenger"}
-                    </label>
-                    <p className="mt-1 text-[11px] leading-4 text-slate-500">
-                      {reason}
-                    </p>
-                    {selected.enabled && (
-                      <details className="mt-2 text-xs">
-                        <summary className="cursor-pointer text-blue-600">
-                          Opções de resposta
-                        </summary>
-                        <fieldset
-                          disabled={!status?.available}
-                          className="mt-2 space-y-2"
-                        >
-                          <label className="flex gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selected.autoReply}
-                              onChange={(event) =>
-                                update(item.id, {
-                                  autoReply: event.target.checked,
-                                })
-                              }
-                            />
-                            Resposta automática
-                          </label>
-                          <label className="flex gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selected.requiresHumanApproval}
-                              onChange={(event) =>
-                                update(item.id, {
-                                  requiresHumanApproval: event.target.checked,
-                                })
-                              }
-                            />
-                            Revisar antes de enviar
-                          </label>
-                          {item.mode === "public" && (
-                            <p className="text-slate-500">
-                              Regras por palavra-chave e mensagens no Direct
-                              ficam em Automações de comentários.
-                            </p>
-                          )}
-                        </fieldset>
-                      </details>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        ))}
-      </fieldset>
-      {!internal && (
-        <p className="mt-3 text-xs text-slate-500">
-          Instagram e Facebook exigem conexão e permissões de atendimento.{" "}
-          <Link href="/dashboard/integracoes" className="text-blue-600">
-            Abrir Integrações →
-          </Link>
-        </p>
-      )}
+      </details>
     </section>
   );
 }

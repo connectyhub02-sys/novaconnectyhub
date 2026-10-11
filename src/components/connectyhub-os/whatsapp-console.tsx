@@ -1887,7 +1887,6 @@ export function WhatsAppConsole({
           onSave={saveAgentSettings}
         />
 
-        <div className="my-4"><AgentChannelSelector companyId={selectedCompanyId} config={channelConfigDraft} onChange={setChannelConfigDraft} whatsappConnected={isConnected} internal={canManageInternalAgents} disabled={Boolean(running)} /></div>
         <WhatsappConsoleTabs activeTab={activeWhatsappTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
         {activeWhatsappTab === "prompt" ? (
@@ -2941,12 +2940,12 @@ function ClientAgentsManager({
               onChange={onResponsibleHumansChange}
             />
           </div>
+          {newChannels}
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
             <ActionButton icon={Wand2} label="Salvar agente e continuar" disabled={busy || creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
           </div>
         </fieldset>
-        {newChannels}
         <PendingAgentConnection />
         </div>
         </AgentSetupDialog>

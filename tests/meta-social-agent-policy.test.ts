@@ -47,32 +47,13 @@ describe("Meta social agent queue policy", () => {
     expect(decision.autoSendBlocked).toBe(false);
   });
 
-  it("routes social comments through the comment queue with approval safeguards", () => {
+  it.each(["instagram_comments", "facebook_comments"] as const)("does not generate or queue %s without a matching automation", (channel) => {
     const decision = resolveMetaSocialQueueDecision({
-      channel: "facebook_comments",
-      config: {
-        channels: {
-          facebook_comments: {
-            enabled: true,
-            autoReply: false,
-            requiresHumanApproval: true,
-          },
-        },
-      },
+      channel,
+      config: { channels: { [channel]: { enabled: true, autoReply: true, requiresHumanApproval: false } } },
       agentRequiresHumanApproval: false,
     });
-
-    expect(decision.shouldQueue).toBe(true);
-
-    if (!decision.shouldQueue) {
-      throw new Error("Expected Facebook comments to be queued.");
-    }
-
-    expect(decision.triggerSource).toBe(metaSocialCommentReceivedEventName);
-    expect(decision.publicSurface).toBe(true);
-    expect(decision.requiresHumanApproval).toBe(true);
-    expect(decision.approvalReasons).toContain("public_social_surface");
-    expect(decision.approvalReasons).toContain("channel_auto_reply_disabled");
+    expect(decision).toMatchObject({ shouldQueue: false, reason: "automation_no_match", triggerSource: metaSocialCommentReceivedEventName });
   });
 
   it("keeps the agent-level approval rule across social channels", () => {

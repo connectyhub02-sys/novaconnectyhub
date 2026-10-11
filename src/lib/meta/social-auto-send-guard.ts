@@ -52,7 +52,9 @@ export async function assertMetaAutomaticSendAllowed(input: {
       input.followUpMetadata,
       agent.data.metadata?.social_automations,
     );
+  const automation = storedCommentAutomation(input.automation);
   const decision = resolveMetaSocialQueueDecision({
+    automation,
     followUp: input.followUpMetadata
       ? normalizeSocialAutomations(agent.data.metadata?.social_automations)
           .followUp
@@ -61,7 +63,6 @@ export async function assertMetaAutomaticSendAllowed(input: {
     config: agent.data.metadata?.multichannel_config,
     agentRequiresHumanApproval: agent.data.requires_human_approval !== false,
   });
-  const automation = storedCommentAutomation(input.automation);
   let automationConfig = null;
   if (automation) {
     const current = normalizeSocialAutomations(

@@ -151,7 +151,7 @@ describe("comment traffic automations", () => {
     ).toMatchObject({ shouldQueue: false });
     expect(
       resolveMetaSocialQueueDecision({ channel: "instagram_comments", config }),
-    ).toMatchObject({ requiresHumanApproval: true });
+    ).toMatchObject({ shouldQueue: false, reason: "automation_no_match" });
   });
   it("builds a private reply with a real URL button and rejects public buttons", () => {
     const input = {

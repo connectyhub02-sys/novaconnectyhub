@@ -146,8 +146,7 @@ export async function enqueueMetaSocialAgentRun(input: {
   );
   if (
     input.snapshot.channel.endsWith("comments") &&
-    !automation &&
-    normalizeSocialAutomations(agent.metadata?.social_automations).rules.length
+    !automation
   )
     return { status: "skipped", reason: "automation_no_match" };
   const decision = resolveMetaSocialQueueDecision({
