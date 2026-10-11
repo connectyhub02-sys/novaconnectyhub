@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 import { serverModuleHarness } from "./helpers/server-module-harness";
+import { readFileSync } from "node:fs";
 function fixture(admin = true) {
   const scopes: unknown[][] = [];
   const insert = vi.fn();
@@ -29,6 +30,9 @@ describe("own Meta admin agent", () => {
     expect((await f.route.POST(new Request("https://example.test/api", { method: "POST", body: JSON.stringify({ organizationId: "customer", name: "Own agent", prompt: "Help", channelConfig: { channels: {} } }) }))).status).toBe(200);
     expect(f.scopes).toContainEqual(["organization_id", "internal"]);
     expect(f.insert).toHaveBeenCalledWith(expect.objectContaining({ organization_id: "internal", scope: "organization", requires_human_approval: true }));
+    const schema = readFileSync("supabase/migrations/0006_autonomous_company_foundation.sql", "utf8");
+    const statuses = schema.match(/create type public\.agent_status as enum \(([^)]+)\)/)![1];
+    expect(statuses).toContain(`'${f.insert.mock.calls[0][0].status}'`);
     expect(f.validate).toHaveBeenCalledWith(expect.anything(), "internal", { channels: {} }, undefined);
   });
 });

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     if (!name || name.length > 96 || !prompt || prompt.length > 8000) throw new Error("Preencha nome e instruções do agente (até 8.000 caracteres).");
     const channelConfig = await validateAgentChannelSelection(client, organizationId, body.channelConfig, agent?.metadata?.multichannel_config);
     const values = {
-      name, persona_name: name, prompt, status: body.paused === true ? "paused" : "active",
+      name, persona_name: name, prompt, status: body.paused === true ? "paused" : "online",
       requires_human_approval: true,
       metadata: { ...agent?.metadata, client_created: true, agent_kind: "whatsapp", multichannel_config: channelConfig },
     };
