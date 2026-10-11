@@ -1,5 +1,33 @@
 # Estado operacional da ConnectyHub
 
+## Meta — primeira etapa e conexão protegida, 11/10/2026
+
+Commit `ca2849e7` publicado às 03h18 BRT no slot a/3130. Slot b preservado
+com `55f2e6e0` para retorno. OAuth Meta passa a vincular o retorno ao usuário
+e navegador de origem, expirar em dez minutos e consumir o state uma só vez.
+Grava as permissões consultadas na Meta, não presume as permissões pedidas.
+Sem migration, alteração de ambiente ou ativação do lançamento Meta.
+
+Validação: 68 testes Meta, TypeScript, ESLint e build Docker aprovados.
+Candidata e domínio público: health/SHA, home/login/assets 200, logout 303
+para `/`, painéis/API protegidos, GET Inngest assinado autenticado e rotas
+Meta sem sessão recusadas com 401. Login Meta real de cliente e operações
+WhatsApp ainda não homologados; testes OAuth usam dependências simuladas.
+
+No portal, Access Verification enviada e **In review**; oito casos de uso
+adicionados; aceite de Tech Provider independente concluído com autorização
+específica do titular. Business Verification aprovada, onboarding 1/2.
+As novas permissões de WhatsApp, Messenger, leads e Ads MCP estão em rascunho
+**Not submitted** no detalhe de App Review e exigem demonstrações reais.
+Não confundir o resumo genérico In review com aprovação desses escopos.
+
+Decisão: dois números no lançamento (UAZAPI para atendimento/follow-up,
+outro oficial para campanhas em massa). Cobrança de 2× por mensagem pendente
+de acordo compatível com as restrições de revenda dos termos aceitos.
+Sem disparo, gasto em anúncios ou conexão de número nesta entrega.
+[Registro e pendências](meta-fase-1-conexao-2026-10-11.md) e
+[plano completo](plano-expansao-social-meta-youtube-tiktok-2026-10-11.md).
+
 ## Logout retorna à home — publicado em 11/10/2026
 
 Commit `55f2e6e0` ativado às 02h21 BRT no slot b/3131; slot a preservado com

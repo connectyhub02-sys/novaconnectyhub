@@ -19,12 +19,17 @@ navegador autenticado, sem registrar tokens ou segredos neste relatório.
   **1 of 2 steps complete**, Business Verification **Approved**.
 - A tela seguinte exige vídeos distintos de envio/recepção de mensagem
   (`whatsapp_business_messaging`) e criação de template
-  (`whatsapp_business_management`). Exibe App Review **In review**, mas nenhuma
-  demonstração foi enviada nesta execução e isso não comprova aprovação desses
-  escopos. Conferir o detalhe da revisão antes de qualquer liberação comercial.
-- Identificada opção **Meta-hosted embedded signup / Generate link**. A criação
-  e uso do link ainda precisam de confirmação; não há número de cliente
-  integrado ou homologação de Embedded Signup nesta entrega.
+  (`whatsapp_business_management`). O resumo de onboarding exibe **In review**,
+  mas o detalhe de App Review confirma **Not submitted** para os novos pedidos:
+  `whatsapp_business_messaging`, `whatsapp_business_management`,
+  `pages_manage_metadata`, `pages_messaging`, `leads_retrieval`,
+  `instagram_basic` e `ads_mcp_management`. Nenhuma demonstração foi enviada.
+  A verificação de acesso do provedor está em análise; a revisão dessas novas
+  permissões ainda está em rascunho, sem aprovação.
+- Identificada opção **Meta-hosted embedded signup / Generate link**. O modal
+  sugere o callback genérico existente. Não criada nova configuração: primeiro
+  implementar retorno específico que registre WABA e número, depois configurar
+  o link. Não há número de cliente integrado nem homologação de Embedded Signup.
 
 O controle do navegador foi reiniciado durante o trabalho e alterou os IDs
 dos perfis. Houve uma consulta ao perfil secundário que mostrava Testador;
@@ -61,6 +66,21 @@ Validação local: 68 testes Meta em 13 arquivos aprovados, incluindo 14 novos
 testes de OAuth, TypeScript e ESLint aprovados. Dependências externas e banco
 foram simulados nos testes de rota; isso não demonstra envio real, aprovação
 de escopos ou autorização de clientes externos.
+
+Formato de retorno, paginação e estados das permissões conferidos na
+[referência oficial](https://developers.facebook.com/docs/graph-api/reference/user/permissions/)
+via navegador autenticado. A ferramenta de busca recebeu 429 nessa referência.
+
+## Publicação da primeira entrega
+
+Commit `ca2849e74e1accb9caa46bf3bb3f3573141654b9`, enviado ao GitHub e
+publicado às 03h18 BRT, slot a/3130. Build Docker aprovado. Candidata e
+domínio público conferidos com SHA correto: home/login/assets 200, logout
+303 para `/`, cookie assistido expirado, painéis/API protegidos, Inngest GET
+assinado 200 autenticado e rotas OAuth Meta sem sessão recusadas com 401.
+Slot b com `55f2e6e0` preservado para retorno; builder parado após publicação.
+Sem migration nem alteração das credenciais/configuração de produção.
+Não foi exercitado OAuth autenticado real ou envio de mensagem por essa versão.
 
 ## Próxima entrega e limites
 
