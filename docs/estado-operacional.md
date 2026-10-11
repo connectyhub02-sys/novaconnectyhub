@@ -1,5 +1,23 @@
 # Estado operacional da ConnectyHub
 
+## Isolamento Meta e conta de testes — 11/10/2026 18h40 BRT
+
+`63386ecd2e4eb59d949678f99dd58f61665cc628` publicado no slot b/3131;
+fallback a em `304c52df`, sem migration, builder parado. Webhooks agora só
+roteiam por ativos explicitamente selecionados em conexão `connected` e recusam
+associação ambígua. Inventários de descoberta não autorizam recebimento.
+33 testes dirigidos, TypeScript, ESLint, build e smoke candidata/domínio passaram.
+
+Conta exclusiva dos avaliadores conectada por OAuth de Carla Silva à Página
+de teste `522348677619837`, no portfólio `423637757459767`; 13 escopos retornados.
+Instagram de teste ainda não retornado pelo OAuth. O titular confirmou
+`@podcastpeareia` (perfil ativo com painel profissional). A tentativa pela Página
+mostrou erro de associação ao portfólio e a tentativa direta pelo Business Suite,
+após login no Instagram correto, terminou em “Ocorreu um erro desconhecido”. Agente de
+revisão permanece pausado e sem ativação social live. Os ativos internos não
+foram transferidos. App Review ainda não enviado; vídeo Messenger foi confirmado
+salvo, mas metadata e duas permissões de comentários Facebook ainda exigem anexos.
+
 ## Messenger e Facebook — validação real, 11/10/2026 18h10 BRT
 
 `304c52dfa398d3ec5db582ef0512d1d0aafe9a6d` publicado às 18h06 no slot a/3130,

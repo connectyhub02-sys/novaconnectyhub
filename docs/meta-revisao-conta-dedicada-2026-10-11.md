@@ -1,5 +1,33 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 18h43 BRT
+
+Facebook Login concluído na sessão de Carla Silva para a conta exclusiva de
+avaliação. Página selecionada `522348677619837` (Pod Cast Pé na Areia), portfólio
+`423637757459767`; duas Páginas e uma conta de anúncios retornaram no inventário,
+zero Instagram. O titular confirmou que ambas as Páginas são somente de teste.
+Conexão devolveu 13 escopos, incluindo os de mensagens/comentários; isso não
+comprova aprovação de acesso avançado. Agente continua pausado, sem ativação live.
+
+O Instagram ativo confirmado pelo titular é `@podcastpeareia`, com painel
+profissional, zero posts/seguidores. O nome `P0dcastpenaareia` é do portfólio.
+A inclusão pela Página falhou e a inclusão direta em Contas do Instagram também
+falhou após autenticar a conta correta: “Não foi possível adicionar a conta do
+Instagram / Ocorreu um erro desconhecido. Tente novamente”. Não afirmar vínculo
+concluído. Evidência local `.codex-screens/meta-instagram-erro-vinculo-20261011.png`.
+
+Vídeo `pages_messaging` confirmado salvo por link “View uploaded screencast”,
+inclusive após reabrir. Restam anexos em `pages_manage_metadata`,
+`pages_read_user_content` e `pages_manage_engagement`. Tentativa pelo input real
+de arquivo também terminou sem filechooser; automação nativa indisponível nesta
+sessão. IG basic/comments e quatro permissões Facebook ainda exibem 0/1 chamadas;
+solicitação ainda não enviada.
+
+Roteamento de webhooks corrigido e publicado em `63386ecd` (slot b, fallback a
+`304c52df`): somente ativos selecionados em conexão conectada, sem usar inventário
+de descoberta, e recusa de mais de uma organização correspondente. 33 testes,
+TypeScript, ESLint, build e smoke candidata/domínio passaram; sem migration.
+
 ## Atualização às 18h10 BRT
 
 Messenger e resposta pública Facebook agora possuem demonstrações reais completas
