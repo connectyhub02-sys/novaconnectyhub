@@ -5,6 +5,7 @@ import { loadMetaGuidedOAuthConfig } from "@/lib/client-os/guided-oauth";
 import { decryptCredentialValue, encryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { officialAssetId, officialPhone, serviceWindowOpen, templateInput } from "./whatsapp-policy";
 import { collectOutboundLinks } from "@/lib/whatsapp/outbound-links";
+import { recipientAliases, recipientIdentity, recordRecipientIdentity } from "./whatsapp-recipient";
 
 export type OfficialConnection = { organization_id: string; waba_id: string; phone_number_id: string; display_phone: string; verified_name: string; encrypted_token: string; permissions: string[]; status: string; connected_at: string; webhook_at: string | null; webhook_subscribed: boolean };
 export type MetaTemplate = { id: string; name: string; status: string; language: string; category: string; components: Array<{type: string; text?: string}> };
@@ -107,14 +108,17 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
     if (existing.data.request_hash !== hash) throw new Error("Identificador já usado para outra mensagem.");
     return existing.data;
   }
-  const contact = await client.from("meta_whatsapp_contacts").select("*").eq("organization_id",org).eq("phone",phone).maybeSingle();
+  const identity=recipientIdentity(phone,await recipientAliases(client,org,connection.phone_number_id,[phone]));
+  const contact = await client.from("meta_whatsapp_contacts").select("*").eq("organization_id",org).in("phone",identity.phones);
   if (contact.error) throw new Error("Não foi possível conferir o contato.");
-  if (contact.data?.opted_out) throw new Error("Contato pediu para não receber mensagens.");
+  if (contact.data?.some(c=>c.opted_out)) throw new Error("Contato pediu para não receber mensagens.");
   // Respect existing CRM decisions even before the first official message.
-  const leads = await client.rpc("meta_whatsapp_contact_allowed",{p_org:org,p_phone:phone});
-  if (leads.error) throw new Error("Não foi possível conferir as preferências do lead.");
-  if (leads.data !== true) throw new Error("Contato desativado no CRM.");
-  const payload: Record<string,unknown> = {messaging_product:"whatsapp",recipient_type:"individual",to:phone,type};
+  for(const alias of identity.phones) {
+    const leads = await client.rpc("meta_whatsapp_contact_allowed",{p_org:org,p_phone:alias});
+    if (leads.error) throw new Error("Não foi possível conferir as preferências do lead.");
+    if (leads.data !== true) throw new Error("Contato desativado no CRM.");
+  }
+  const payload: Record<string,unknown> = {messaging_product:"whatsapp",recipient_type:"individual",to:identity.phone,type};
   let content = String(body.text ?? "").trim();
   if (type === "template") {
     const consentNote = String(body.consentNote ?? "").trim();
@@ -129,7 +133,7 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
     const consent = await client.from("meta_whatsapp_contacts").update({consent_note:consentNote,consent_at:new Date().toISOString()}).eq("organization_id",org).eq("phone",phone).eq("opted_out",false).select("phone").maybeSingle();
     if (consent.error || !consent.data) throw new Error("Não foi possível registrar o consentimento. Confira se o contato pediu parada.");
   } else {
-    if (!serviceWindowOpen(contact.data?.last_inbound_at ?? null)) throw new Error("Fora da janela de atendimento de 24 horas. Envie um modelo aprovado.");
+    if (!contact.data?.some(c=>serviceWindowOpen(c.last_inbound_at))) throw new Error("Fora da janela de atendimento de 24 horas. Envie um modelo aprovado.");
     if (!content || content.length > 4096) throw new Error("Mensagem deve ter entre 1 e 4.096 caracteres.");
     payload.text = {body:content,preview_url:false};
   }
@@ -139,11 +143,13 @@ export async function sendOfficialMessage(client: SupabaseClient, connection: Of
   if (reserved.error) throw new Error(reserved.error.code === "23505" ? "Este envio já está em processamento. Atualize o chat." : "Não foi possível registrar o envio.");
   const id = reserved.data.id;
   try {
-    const result = await cloudRequest<{messages:Array<{id:string}>}>(await officialSettings(client),decryptCredentialValue(connection.encrypted_token),`${connection.phone_number_id}/messages`,payload);
+    const result = await cloudRequest<{messages:Array<{id:string}>;contacts?:unknown}>(await officialSettings(client),decryptCredentialValue(connection.encrypted_token),`${connection.phone_number_id}/messages`,payload);
     const messageId = result.messages?.[0]?.id;
     if (!messageId) throw new MetaCloudError("sem_recibo",true);
     const saved = await client.from("meta_whatsapp_messages").update({provider_message_id:messageId,status:"accepted",updated_at:new Date().toISOString()}).eq("id",id).eq("status","sending");
     if (saved.error) throw new MetaCloudError("recibo_não_persistido",true);
+    try { await recordRecipientIdentity(client,org,connection.phone_number_id,identity.phone,result.contacts); }
+    catch { return {id,status:"accepted",warning:"Meta aceitou o envio; associação do contato pendente. Não reenvie."}; }
     const receipt = await client.rpc("reconcile_meta_whatsapp_receipt",{p_phone:connection.phone_number_id,p_message:messageId});
     const archive = await client.rpc("archive_meta_whatsapp_message",{p_id:id});
     if (receipt.error || archive.error) return {id,status:"accepted",warning:"Meta aceitou o envio; sincronização do histórico pendente. Não reenvie."};

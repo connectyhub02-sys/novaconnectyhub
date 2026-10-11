@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { officialAccess, OfficialAccessError } from "@/lib/meta/whatsapp-auth";
 import { connectOfficial, createOfficialTemplate, listOfficialTemplates, officialConnection, officialSettings, registerOfficialNumber, sendOfficialMessage } from "@/lib/meta/whatsapp-cloud";
+import { recipientAliases, recipientIdentity } from "@/lib/meta/whatsapp-recipient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,9 @@ export async function GET(request: NextRequest) {
     if (connection) try { templates = await listOfficialTemplates(auth.client,connection); } catch(error) { templateError=error instanceof Error ? error.message : "Falha ao consultar modelos."; }
     const messages = await auth.client.from("meta_whatsapp_messages").select("id,phone,direction,message_type,text_content,status,error_code,occurred_at").eq("organization_id",auth.organizationId).order("occurred_at",{ascending:false}).limit(100);
     if (messages.error) throw new Error("Não foi possível carregar o chat oficial.");
-    return json({connection:connection ? {displayPhone:connection.display_phone,verifiedName:connection.verified_name,wabaId:connection.waba_id,phoneNumberId:connection.phone_number_id,permissions:connection.permissions,connectedAt:connection.connected_at,webhookAt:connection.webhook_at,webhookSubscribed:connection.webhook_subscribed} : null,signupReady:Boolean(config.signupConfigId),pilotReady:auth.admin && Boolean(config.pilotToken && config.pilotPhone && config.pilotWaba),templates,templateError,messages:messages.data,organizationId:auth.organizationId});
+    const aliases=connection ? await recipientAliases(auth.client,auth.organizationId,connection.phone_number_id,messages.data?.map(m=>m.phone) ?? []) : [];
+    const chatMessages=messages.data?.map(message=>({...message,phone:recipientIdentity(message.phone,aliases).phone}));
+    return json({connection:connection ? {displayPhone:connection.display_phone,verifiedName:connection.verified_name,wabaId:connection.waba_id,phoneNumberId:connection.phone_number_id,permissions:connection.permissions,connectedAt:connection.connected_at,webhookAt:connection.webhook_at,webhookSubscribed:connection.webhook_subscribed} : null,signupReady:Boolean(config.signupConfigId),pilotReady:auth.admin && Boolean(config.pilotToken && config.pilotPhone && config.pilotWaba),templates,templateError,messages:chatMessages,organizationId:auth.organizationId});
   } catch(error) { return failure(error); }
 }
 

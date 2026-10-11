@@ -14,12 +14,24 @@ beforeAll(async()=>{
  `);
  await db.exec(readFileSync("supabase/migrations/0189_meta_whatsapp_official.sql","utf8"));
  await db.exec(readFileSync("supabase/migrations/0190_meta_whatsapp_archive_index.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0191_meta_whatsapp_recipient_identity.sql","utf8"));
 },30000);
 afterAll(()=>db.close());
 
 describe("official WhatsApp persistence",()=>{
+ it("archives a provider-confirmed alternate recipient in the original conversation",async()=>{
+   const input='5511944444444',wa='551144444444';
+   await db.query("insert into meta_whatsapp_recipient_aliases(organization_id,phone_number_id,input_phone,wa_id) values($1,'111111',$2,$3)",[org,input,wa]);
+   const outgoing=await db.query<{id:string}>("insert into meta_whatsapp_messages(organization_id,phone_number_id,phone,direction,message_type,text_content,status) values($1,'111111',$2,'outbound','text','Hello','accepted') returning id",[org,input]);
+   const incoming=await db.query<{id:string}>("insert into meta_whatsapp_messages(organization_id,phone_number_id,phone,direction,message_type,text_content,status) values($1,'111111',$2,'inbound','text','Hi','received') returning id",[org,wa]);
+   for(const row of [...outgoing.rows,...incoming.rows]) await db.query('select archive_meta_whatsapp_message($1)',[row.id]);
+   const result=await db.query<{count:number}>("select count(distinct conversation_id)::int count from conversation_messages where provider_chat_id=$1",['111111:'+input]);
+   expect(result.rows[0].count).toBe(1);
+   const contact=await db.query<{last_inbound_at:string}>("select last_inbound_at from meta_whatsapp_contacts where organization_id=$1 and phone=$2",[org,input]);
+   expect(contact.rows[0].last_inbound_at).toBeTruthy();
+ });
  it("denies token/message/receipt access to authenticated clients",async()=>{
-   for(const table of ["meta_whatsapp_connections","meta_whatsapp_messages","meta_whatsapp_receipts","meta_whatsapp_oauth_attempts"]){
+   for(const table of ["meta_whatsapp_connections","meta_whatsapp_messages","meta_whatsapp_receipts","meta_whatsapp_oauth_attempts","meta_whatsapp_recipient_aliases"]){
      const result=await db.query<{allowed:boolean}>(`select has_table_privilege('authenticated',$1,'SELECT') allowed`,[table]);expect(result.rows[0].allowed).toBe(false);
    }
  });
@@ -34,11 +46,11 @@ describe("official WhatsApp persistence",()=>{
  it("reconciles receipts that arrive before the send response and ignores older states",async()=>{
    await db.query("insert into meta_whatsapp_receipts values('111111','wamid.race','read',now(),null)");
    await db.query("select reconcile_meta_whatsapp_receipt('111111','wamid.race')");
-   await db.query("update meta_whatsapp_messages set provider_message_id='wamid.race',status='accepted' where organization_id=$1",[org]);
+   await db.query("update meta_whatsapp_messages set provider_message_id='wamid.race',status='accepted' where organization_id=$1 and request_key='00000000-0000-0000-0000-000000000003'",[org]);
    await db.query("select reconcile_meta_whatsapp_receipt('111111','wamid.race')");
    await db.query("insert into meta_whatsapp_receipts values('111111','wamid.race','sent',now(),null),('111111','wamid.race','failed',now(),'123')");
    await db.query("select reconcile_meta_whatsapp_receipt('111111','wamid.race')");
-   const result=await db.query<{status:string}>("select status from meta_whatsapp_messages where organization_id=$1",[org]);expect(result.rows[0].status).toBe("read");
+   const result=await db.query<{status:string}>("select status from meta_whatsapp_messages where organization_id=$1 and provider_message_id='wamid.race'",[org]);expect(result.rows[0].status).toBe("read");
  });
  it("archives inbound messages once and updates the service window in the correct company",async()=>{
    const {rows}=await db.query<{id:string}>("insert into meta_whatsapp_messages(organization_id,phone_number_id,phone,direction,message_type,text_content,status,provider_message_id) values($1,'111111','5511888888888','inbound','text','Olá','received','wamid.inbound') returning id",[org]);

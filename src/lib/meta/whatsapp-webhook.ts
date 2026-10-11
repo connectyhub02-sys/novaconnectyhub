@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { officialOptOut, officialPhone } from "./whatsapp-policy";
+import { recordRecipientIdentity } from "./whatsapp-recipient";
 
 type RecordValue = Record<string,unknown>;
 const record = (value:unknown):RecordValue => value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
@@ -35,7 +36,7 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
         const archive = await client.rpc("archive_meta_whatsapp_message",{p_id:row.id});
         if (archive.error) throw new Error("Falha ao arquivar mensagem WhatsApp no CRM.");
         if (officialOptOut(text)) {
-          const opt = await client.from("meta_whatsapp_contacts").update({opted_out:true}).eq("organization_id",org).eq("phone",phone);
+          const opt = await client.from("meta_whatsapp_contacts").update({opted_out:true}).eq("organization_id",org).eq("lead_id",archive.data);
           const crm = await client.rpc("opt_out_lead_contact",{p_org:org,p_lead:archive.data,p_source:"meta_whatsapp"});
           if (opt.error || crm.error) throw new Error("Falha ao registrar opt-out WhatsApp.");
         }
@@ -50,8 +51,9 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
         if (receipt.error) throw new Error("Falha ao registrar recibo WhatsApp.");
         const reconciled = await client.rpc("reconcile_meta_whatsapp_receipt",{p_phone:phoneId,p_message:status.id});
         if (reconciled.error) throw new Error("Falha ao atualizar entrega WhatsApp.");
-        const message = await client.from("meta_whatsapp_messages").select("id").eq("phone_number_id",phoneId).eq("provider_message_id",status.id).maybeSingle();
+        const message = await client.from("meta_whatsapp_messages").select("id,phone").eq("organization_id",org).eq("phone_number_id",phoneId).eq("provider_message_id",status.id).eq("direction","outbound").maybeSingle();
         if (message.data) {
+          if(status.status!=="failed" && typeof status.recipient_id==="string") await recordRecipientIdentity(client,org,phoneId,message.data.phone,[{input:message.data.phone,wa_id:status.recipient_id}]);
           const archive = await client.rpc("archive_meta_whatsapp_message",{p_id:message.data.id});
           if (archive.error) throw new Error("Falha ao sincronizar histórico WhatsApp.");
         }
