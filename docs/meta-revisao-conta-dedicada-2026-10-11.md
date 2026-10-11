@@ -1,5 +1,26 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 19h54 BRT — anexos concluídos
+
+Resolvido o bloqueio de upload: `Choose File` é um input de largura anormal
+(19.309 px). O clique fechava o formulário; acionamento por teclado (`Enter`)
+gera corretamente o evento `filechooser`, permitindo `setFiles` com caminho local.
+Usar esse fluxo em novas anexações, sem CDP ou automação nativa.
+
+Anexos salvos e reabertos, com link `View uploaded screencast` confirmado:
+
+| Permissão | Arquivo | ID do vídeo |
+| --- | --- | --- |
+| pages_manage_metadata | messenger-recebimento-resposta.mp4 | 1877464693411401 |
+| pages_read_user_content | facebook-comentario-resposta-ia.mp4 | 1998610317475050 |
+| pages_manage_engagement | facebook-comentario-resposta-ia.mp4 | 1092436693754078 |
+
+Aceites existentes preservados. Não exigir mais upload manual do titular.
+Os três formulários continuam 0/1 chamadas contabilizadas. Retorno à tela geral
+confirmou `Submit for review` desabilitado; solicitação ainda não enviada.
+Limitações da conta Instagram sem post e demais requisitos registrados abaixo
+permanecem. Evidência: `.codex-screens/meta-review-upload-salvo-20261011.png`.
+
 ## Atualização às 19h46 BRT — atendimento real na conta isolada
 
 Concluídos três testes reais na organização exclusiva dos avaliadores

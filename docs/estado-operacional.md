@@ -1,5 +1,16 @@
 # Estado operacional da ConnectyHub
 
+## Anexos Meta concluídos — 11/10/2026 19h54 BRT
+
+Os três vídeos pendentes foram anexados, salvos e confirmados após reabrir cada
+formulário pelo link `View uploaded screencast`: `pages_manage_metadata`,
+`pages_read_user_content` e `pages_manage_engagement`. Resolvido o problema do
+seletor usando Enter no input de arquivo antes de `filechooser.setFiles`; o
+clique atingia um input com geometria excessivamente larga e fechava o diálogo.
+Não há mais ação manual de upload pendente para o titular nesta rodada.
+App Review continua não enviado: os formulários ainda mostram 0/1 chamadas e
+`Submit for review` permanece desabilitado. Sem alteração de aplicação/deploy.
+
 ## Conta de revisão Meta — três entregas reais, 11/10/2026 19h46 BRT
 
 Organização exclusiva `4cd0a6bd-4e3c-4773-a9ef-511c802b48df` agora reproduz
