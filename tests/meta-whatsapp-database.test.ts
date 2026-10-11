@@ -8,10 +8,12 @@ beforeAll(async()=>{
  create table organizations(id uuid primary key);insert into organizations values('${org}'),('${other}');
  create table leads(id uuid primary key default gen_random_uuid(),organization_id uuid,channel text,phone_number text,display_name text,status text,source text,metadata jsonb,created_at timestamptz default now(),last_message_at timestamptz,last_event_summary text);
  create table conversations(id uuid primary key default gen_random_uuid(),organization_id uuid,lead_id uuid,channel text,provider text,provider_chat_id text,status text,metadata jsonb,last_message_at timestamptz,last_message_preview text);
- create table conversation_messages(id uuid primary key default gen_random_uuid(),organization_id uuid,conversation_id uuid,lead_id uuid,provider text,provider_message_id text,provider_chat_id text,direction text,message_type text,text_content text,payload jsonb,occurred_at timestamptz,unique(provider,provider_message_id));
+ create table conversation_messages(id uuid primary key default gen_random_uuid(),organization_id uuid,conversation_id uuid,lead_id uuid,provider text,provider_message_id text,provider_chat_id text,direction text,message_type text,text_content text,payload jsonb,occurred_at timestamptz,whatsapp_instance_id uuid);
+ create unique index fixture_message_index on conversation_messages(provider,whatsapp_instance_id,provider_message_id) nulls not distinct where provider_message_id is not null;
  create table whatsapp_instances(phone_number text);
  `);
  await db.exec(readFileSync("supabase/migrations/0189_meta_whatsapp_official.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0190_meta_whatsapp_archive_index.sql","utf8"));
 },30000);
 afterAll(()=>db.close());
 
