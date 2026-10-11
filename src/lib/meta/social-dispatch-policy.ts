@@ -32,7 +32,8 @@ export type MetaSocialDispatchReadiness = {
     | "dry_run"
     | "live_activation_required"
     | "missing_permissions"
-    | "expired_private_reply_window";
+    | "expired_private_reply_window"
+    | "expired_messaging_window";
   detail: string;
   requiredPermissions: string[];
   missingPermissions: string[];
@@ -205,6 +206,12 @@ export function evaluateMetaSocialDispatchReadiness(input: {
       missingAssets: [],
       warnings,
     };
+  }
+
+  const inboundAt = Date.parse(input.occurredAt ?? "");
+  const now = input.now instanceof Date ? input.now.getTime() : input.now ?? Date.now();
+  if (input.target.kind === "direct_message" && (!Number.isFinite(inboundAt) || inboundAt > now + 60000 || now - inboundAt >= 24 * 60 * 60 * 1000)) {
+    return {ok:false,mode:input.mode,reason:"expired_messaging_window",detail:"A janela de 24 horas para responder pelo Direct ou Messenger está encerrada. Aguarde uma nova mensagem do contato.",requiredPermissions,missingPermissions,missingAssets:[],warnings};
   }
 
   if (input.target.kind === "private_comment_reply" && isPrivateReplyWindowExpired(input.occurredAt, input.now)) {

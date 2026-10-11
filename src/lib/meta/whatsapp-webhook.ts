@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { officialOptOut, officialPhone } from "./whatsapp-policy";
 import { recordRecipientIdentity } from "./whatsapp-recipient";
+import { officialInboundProfileName } from "./whatsapp-contact-profile";
 
 type RecordValue = Record<string,unknown>;
 const record = (value:unknown):RecordValue => value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : {};
@@ -41,6 +42,13 @@ export async function ingestOfficialWhatsApp(payload: unknown, client: SupabaseC
           const opt = await client.from("meta_whatsapp_contacts").update({opted_out:true}).eq("organization_id",org).eq("lead_id",archive.data);
           const crm = await client.rpc("opt_out_lead_contact",{p_org:org,p_lead:archive.data,p_source:"meta_whatsapp"});
           if (opt.error || crm.error) throw new Error("Falha ao registrar opt-out WhatsApp.");
+        }
+        const profileName = officialInboundProfileName(value.contacts, message.from);
+        if (profileName) {
+          // Preserve a name deliberately edited by the operator.
+          const profile = await client.from("meta_whatsapp_threads").update({display_name:profileName})
+            .eq("organization_id",org).eq("phone_number_id",phoneId).eq("phone",phone).is("display_name",null);
+          if (profile.error) throw new Error("Falha ao salvar nome do contato WhatsApp.");
         }
         stored++;
       }

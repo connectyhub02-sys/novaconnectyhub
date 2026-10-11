@@ -12,6 +12,7 @@ import {
 import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { assertMetaAutomaticSendAllowed } from "./social-auto-send-guard";
 import { appendMetaDispatchAudit } from "./social-dispatch-audit";
 import {
   evaluateMetaSocialDispatchReadiness,
@@ -22,7 +23,10 @@ import {
   type MetaSocialDispatchLiveActivationSnapshot,
   type MetaSocialDispatchTarget,
 } from "./social-dispatch-policy";
-import { isMetaSocialChannel, type MetaSocialChannel } from "./social-agent-policy";
+import {
+  isMetaSocialChannel,
+  type MetaSocialChannel,
+} from "./social-agent-policy";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -70,7 +74,8 @@ type GraphSendResult = {
   targetKind: MetaSocialDispatchTarget["kind"];
 };
 
-export const metaSocialDispatchRequestedEventName = "connectyhub/meta.social.dispatch.requested" as const;
+export const metaSocialDispatchRequestedEventName =
+  "connectyhub/meta.social.dispatch.requested" as const;
 
 const dispatchableMetaStatuses = new Set(["pending_adapter", "failed"]);
 
@@ -79,28 +84,36 @@ export async function enqueueApprovedMetaSocialDispatch(input: {
   runId: string;
   metadata: JsonRecord;
 }) {
-  await inngest.send({
-    name: metaSocialDispatchRequestedEventName,
-    data: {
-      runId: input.runId,
-    },
-  }).catch(async (error: unknown) => {
-    const message = error instanceof Error ? error.message : "Falha ao disparar Inngest.";
-    await input.client
-      .from("agent_runs")
-      .update({
-        metadata: appendMetaDispatchAudit({
-          ...input.metadata,
-          meta_dispatch_inngest_error: message,
-          meta_dispatch_inngest_failed_at: new Date().toISOString(),
-        }, {
-          type: "dispatch_enqueue_failed",
-          status: readString(input.metadata.meta_dispatch_status) ?? "pending_adapter",
-          message,
-        }),
-      })
-      .eq("id", input.runId);
-  });
+  await inngest
+    .send({
+      name: metaSocialDispatchRequestedEventName,
+      data: {
+        runId: input.runId,
+      },
+    })
+    .catch(async (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : "Falha ao disparar Inngest.";
+      await input.client
+        .from("agent_runs")
+        .update({
+          metadata: appendMetaDispatchAudit(
+            {
+              ...input.metadata,
+              meta_dispatch_inngest_error: message,
+              meta_dispatch_inngest_failed_at: new Date().toISOString(),
+            },
+            {
+              type: "dispatch_enqueue_failed",
+              status:
+                readString(input.metadata.meta_dispatch_status) ??
+                "pending_adapter",
+              message,
+            },
+          ),
+        })
+        .eq("id", input.runId);
+    });
 }
 
 export async function processApprovedMetaSocialDispatch(input: {
@@ -121,12 +134,19 @@ export async function processApprovedMetaSocialDispatch(input: {
     return { status: "skipped", reason: "already_sent", runId: run.id };
   }
 
-  if (run.run_status !== "completed" || metadata.ready_for_meta_dispatch !== true) {
+  if (
+    run.run_status !== "completed" ||
+    metadata.ready_for_meta_dispatch !== true
+  ) {
     return { status: "skipped", reason: "not_ready", runId: run.id };
   }
 
   if (dispatchStatus && !dispatchableMetaStatuses.has(dispatchStatus)) {
-    return { status: "skipped", reason: `dispatch_${dispatchStatus}`, runId: run.id };
+    return {
+      status: "skipped",
+      reason: `dispatch_${dispatchStatus}`,
+      runId: run.id,
+    };
   }
 
   const channel = readMetaSocialChannel(metadata.channel);
@@ -134,11 +154,22 @@ export async function processApprovedMetaSocialDispatch(input: {
   const approvedText = readString(metadata.social_approved_reply_text);
 
   if (!organizationId || !channel || !approvedText) {
-    await markDispatchFailed(client, run, "Run Meta aprovado sem organizacao, canal ou texto.");
-    return { status: "failed", reason: "missing_dispatch_context", runId: run.id };
+    await markDispatchFailed(
+      client,
+      run,
+      "Run Meta aprovado sem organizacao, canal ou texto.",
+    );
+    return {
+      status: "failed",
+      reason: "missing_dispatch_context",
+      runId: run.id,
+    };
   }
 
-  const entitlement = await loadMetaSocialChannelsEntitlement(client, organizationId);
+  const entitlement = await loadMetaSocialChannelsEntitlement(
+    client,
+    organizationId,
+  );
 
   if (!entitlement.allowed) {
     await markDispatchPlanBlocked(client, run, entitlement.description);
@@ -151,37 +182,73 @@ export async function processApprovedMetaSocialDispatch(input: {
   }
 
   const startedAt = new Date().toISOString();
-  const workingMetadata = appendMetaDispatchAudit({
-    ...metadata,
-    meta_dispatch_status: "sending",
-    meta_dispatch_started_at: startedAt,
-    meta_dispatch_attempt_count: readNumber(metadata.meta_dispatch_attempt_count) + 1,
-  }, {
-    at: startedAt,
-    type: "dispatch_started",
-    status: "sending",
-  });
+  const workingMetadata = appendMetaDispatchAudit(
+    {
+      ...metadata,
+      meta_dispatch_status: "sending",
+      meta_dispatch_started_at: startedAt,
+      meta_dispatch_attempt_count:
+        readNumber(metadata.meta_dispatch_attempt_count) + 1,
+    },
+    {
+      at: startedAt,
+      type: "dispatch_started",
+      status: "sending",
+    },
+  );
 
-  await client
+  let claim = client
     .from("agent_runs")
     .update({ metadata: workingMetadata })
-    .eq("id", run.id);
+    .eq("id", run.id)
+    .eq("run_status", "completed");
+  claim = dispatchStatus
+    ? claim.eq("metadata->>meta_dispatch_status", dispatchStatus)
+    : claim.is("metadata->>meta_dispatch_status", null);
+  const claimed = await claim.select("id").maybeSingle();
+  if (claimed.error) throw new Error("Falha ao reservar envio social.");
+  if (!claimed.data)
+    return { status: "skipped", reason: "already_claimed", runId: run.id };
 
   try {
-    const credentials = await loadMetaDispatchCredentials(client, organizationId);
-    const channelConfig = readRecord(metadata.channel_config) ?? {};
+    const credentials = await loadMetaDispatchCredentials(
+      client,
+      organizationId,
+    );
+    const channelConfig: JsonRecord =
+      metadata.social_approval_source === "agent_channel_configuration"
+        ? {
+            ...(await assertMetaAutomaticSendAllowed({
+              client,
+              organizationId,
+              agentId: run.agent_id,
+              conversationId: readString(metadata.conversationId),
+              channel,
+            })),
+          }
+        : (readRecord(metadata.channel_config) ?? {});
     const fallbackExternalAccountId = readString(metadata.externalAccountId);
-    const fallbackPageId = channel.startsWith("facebook") ? fallbackExternalAccountId : null;
-    const fallbackInstagramBusinessId = channel.startsWith("instagram") ? fallbackExternalAccountId : null;
+    const fallbackPageId = channel.startsWith("facebook")
+      ? fallbackExternalAccountId
+      : null;
+    const fallbackInstagramBusinessId = channel.startsWith("instagram")
+      ? fallbackExternalAccountId
+      : null;
     const target = resolveMetaSocialDispatchTarget({
       channel,
       pageId: credentials.pageId ?? fallbackPageId,
-      instagramBusinessId: credentials.instagramBusinessId ?? fallbackInstagramBusinessId,
+      instagramBusinessId:
+        credentials.instagramBusinessId ?? fallbackInstagramBusinessId,
       externalUserId: readString(metadata.externalUserId),
       sourceCommentId: readString(metadata.sourceCommentId),
       text: approvedText,
-      allowPrivateReplies: readBoolean(channelConfig.allowPrivateReplies ?? channelConfig.allow_private_replies),
-      allowPublicReplies: readBoolean(channelConfig.allowPublicReplies ?? channelConfig.allow_public_replies),
+      allowPrivateReplies: readBoolean(
+        channelConfig.allowPrivateReplies ??
+          channelConfig.allow_private_replies,
+      ),
+      allowPublicReplies: readBoolean(
+        channelConfig.allowPublicReplies ?? channelConfig.allow_public_replies,
+      ),
     });
     const dispatchMode = resolveMetaSocialDispatchMode();
     const readiness = evaluateMetaSocialDispatchReadiness({
@@ -216,7 +283,7 @@ export async function processApprovedMetaSocialDispatch(input: {
       throw new Error("Token Meta ausente para envio social.");
     }
 
-    await assertContractAccess(organizationId,client);
+    await assertContractAccess(organizationId, client);
     const graph = await sendMetaGraphRequest({
       credentials,
       target,
@@ -224,10 +291,14 @@ export async function processApprovedMetaSocialDispatch(input: {
     });
 
     if (!graph.ok) {
-      throw new Error(readGraphError(graph.data) ?? `Meta Graph API retornou HTTP ${graph.httpStatus}.`);
+      throw new Error(
+        readGraphError(graph.data) ??
+          `Meta Graph API retornou HTTP ${graph.httpStatus}.`,
+      );
     }
 
-    const providerMessageId = readProviderMessageId(graph.data) ?? `meta:${target.kind}:${run.id}`;
+    const providerMessageId =
+      readProviderMessageId(graph.data) ?? `meta:${target.kind}:${run.id}`;
     const outboundMessage = await insertOutboundMessage(client, {
       organizationId,
       conversationId: readString(metadata.conversationId),
@@ -251,26 +322,29 @@ export async function processApprovedMetaSocialDispatch(input: {
       .from("agent_runs")
       .update({
         error_message: null,
-        metadata: appendMetaDispatchAudit({
-          ...workingMetadata,
-          meta_dispatch_status: "sent",
-          meta_dispatched_at: sentAt,
-          meta_dispatch_endpoint: graph.endpoint,
-          meta_dispatch_target_kind: target.kind,
-          meta_dispatch_http_status: graph.httpStatus,
-          meta_dispatch_provider_message_id: providerMessageId,
-          meta_dispatch_credential_source: credentials.credentialSource,
-          outbound_conversation_message_id: outboundMessage.id,
-          graph_response: sanitizeGraphResponse(graph.data),
-          ready_for_meta_dispatch: false,
-        }, {
-          at: sentAt,
-          type: "dispatch_sent",
-          status: "sent",
-          httpStatus: graph.httpStatus,
-          providerMessageId,
-          targetKind: target.kind,
-        }),
+        metadata: appendMetaDispatchAudit(
+          {
+            ...workingMetadata,
+            meta_dispatch_status: "sent",
+            meta_dispatched_at: sentAt,
+            meta_dispatch_endpoint: graph.endpoint,
+            meta_dispatch_target_kind: target.kind,
+            meta_dispatch_http_status: graph.httpStatus,
+            meta_dispatch_provider_message_id: providerMessageId,
+            meta_dispatch_credential_source: credentials.credentialSource,
+            outbound_conversation_message_id: outboundMessage.id,
+            graph_response: sanitizeGraphResponse(graph.data),
+            ready_for_meta_dispatch: false,
+          },
+          {
+            at: sentAt,
+            type: "dispatch_sent",
+            status: "sent",
+            httpStatus: graph.httpStatus,
+            providerMessageId,
+            targetKind: target.kind,
+          },
+        ),
       })
       .eq("id", run.id);
 
@@ -283,11 +357,16 @@ export async function processApprovedMetaSocialDispatch(input: {
       outboundMessageId: outboundMessage.id,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha ao enviar resposta Meta.";
-    await markDispatchFailed(client, {
-      ...run,
-      metadata: workingMetadata,
-    }, message);
+    const message =
+      error instanceof Error ? error.message : "Falha ao enviar resposta Meta.";
+    await markDispatchFailed(
+      client,
+      {
+        ...run,
+        metadata: workingMetadata,
+      },
+      message,
+    );
 
     return {
       status: "failed",
@@ -297,10 +376,12 @@ export async function processApprovedMetaSocialDispatch(input: {
   }
 }
 
-export async function processPendingApprovedMetaSocialDispatches(input: {
-  limit?: number;
-  client?: SupabaseClient;
-} = {}) {
+export async function processPendingApprovedMetaSocialDispatches(
+  input: {
+    limit?: number;
+    client?: SupabaseClient;
+  } = {},
+) {
   const client = input.client ?? createServiceClient();
   const limit = Math.max(1, Math.min(input.limit ?? 10, 50));
   const { data, error } = await client
@@ -315,13 +396,17 @@ export async function processPendingApprovedMetaSocialDispatches(input: {
     .limit(limit);
 
   if (error) {
-    throw new Error(`Nao foi possivel consultar envios sociais Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel consultar envios sociais Meta: ${error.message}`,
+    );
   }
 
   const results = [];
 
   for (const row of data ?? []) {
-    results.push(await processApprovedMetaSocialDispatch({ client, runId: row.id }));
+    results.push(
+      await processApprovedMetaSocialDispatch({ client, runId: row.id }),
+    );
   }
 
   return {
@@ -334,12 +419,16 @@ export async function processPendingApprovedMetaSocialDispatches(input: {
 async function loadAgentRun(client: SupabaseClient, runId: string) {
   const { data, error } = await client
     .from("agent_runs")
-    .select("id, agent_id, organization_id, run_status, trigger_source, input_summary, output_summary, metadata, created_at")
+    .select(
+      "id, agent_id, organization_id, run_status, trigger_source, input_summary, output_summary, metadata, created_at",
+    )
     .eq("id", runId)
     .maybeSingle<AgentRunRow>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar envio social Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel carregar envio social Meta: ${error.message}`,
+    );
   }
 
   return data ?? null;
@@ -356,12 +445,14 @@ async function loadMetaDispatchCredentials(
   ]);
   const metadata = readRecord(integration?.metadata) ?? {};
   const accessToken = credentials.get("META_ACCESS_TOKEN") ?? null;
-  const pageId = credentials.get("FACEBOOK_PAGE_ID")
-    ?? readString(metadata.selected_facebook_page_id)
-    ?? readString(metadata.facebook_page_id);
-  const instagramBusinessId = credentials.get("INSTAGRAM_BUSINESS_ACCOUNT_ID")
-    ?? readString(metadata.selected_instagram_business_id)
-    ?? readString(metadata.instagram_business_id);
+  const pageId =
+    credentials.get("FACEBOOK_PAGE_ID") ??
+    readString(metadata.selected_facebook_page_id) ??
+    readString(metadata.facebook_page_id);
+  const instagramBusinessId =
+    credentials.get("INSTAGRAM_BUSINESS_ACCOUNT_ID") ??
+    readString(metadata.selected_instagram_business_id) ??
+    readString(metadata.instagram_business_id);
   let pageAccessToken = credentials.get("FACEBOOK_PAGE_ACCESS_TOKEN") ?? null;
 
   if (!pageAccessToken && accessToken && pageId) {
@@ -380,16 +471,25 @@ async function loadMetaDispatchCredentials(
     graphVersion: config.graphVersion,
     appSecret: config.appSecret,
     integrationId: integration?.id ?? null,
-    credentialSource: pageAccessToken ? "page_token" : accessToken ? "user_token" : "missing",
+    credentialSource: pageAccessToken
+      ? "page_token"
+      : accessToken
+        ? "user_token"
+        : "missing",
     grantedPermissions: readMetaSocialGrantedPermissions({
       metadata,
       scopes: integration?.scopes,
     }),
-    liveActivation: normalizeMetaSocialDispatchLiveActivation(metadata.meta_social_dispatch_activation),
+    liveActivation: normalizeMetaSocialDispatchLiveActivation(
+      metadata.meta_social_dispatch_activation,
+    ),
   };
 }
 
-async function loadMetaIntegration(client: SupabaseClient, organizationId: string) {
+async function loadMetaIntegration(
+  client: SupabaseClient,
+  organizationId: string,
+) {
   const { data, error } = await client
     .from("organization_integrations")
     .select("id, scopes, metadata")
@@ -398,13 +498,18 @@ async function loadMetaIntegration(client: SupabaseClient, organizationId: strin
     .maybeSingle<OrganizationIntegrationRow>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar integracao Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel carregar integracao Meta: ${error.message}`,
+    );
   }
 
   return data ?? null;
 }
 
-async function loadOrganizationMetaCredentialMap(client: SupabaseClient, organizationId: string) {
+async function loadOrganizationMetaCredentialMap(
+  client: SupabaseClient,
+  organizationId: string,
+) {
   const { data, error } = await client
     .from("integration_credentials")
     .select("env_name, encrypted_value")
@@ -419,7 +524,9 @@ async function loadOrganizationMetaCredentialMap(client: SupabaseClient, organiz
     ]);
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar credenciais Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel carregar credenciais Meta: ${error.message}`,
+    );
   }
 
   const credentials = new Map<string, string>();
@@ -440,9 +547,16 @@ async function sendMetaGraphRequest(input: {
   target: MetaSocialDispatchTarget;
   token: string;
 }): Promise<GraphSendResult> {
-  const url = new URL(`https://graph.facebook.com/${input.credentials.graphVersion}${input.target.endpointPath}`);
+  const url = new URL(
+    `https://graph.facebook.com/${input.credentials.graphVersion}${input.target.endpointPath}`,
+  );
   url.searchParams.set("access_token", input.token);
-  url.searchParams.set("appsecret_proof", createHmac("sha256", input.credentials.appSecret).update(input.token).digest("hex"));
+  url.searchParams.set(
+    "appsecret_proof",
+    createHmac("sha256", input.credentials.appSecret)
+      .update(input.token)
+      .digest("hex"),
+  );
 
   const headers = new Headers({ Accept: "application/json" });
   let body: BodyInit;
@@ -461,7 +575,7 @@ async function sendMetaGraphRequest(input: {
     headers,
     method: "POST",
   });
-  const data = await response.json().catch(() => null) as unknown;
+  const data = (await response.json().catch(() => null)) as unknown;
 
   return {
     ok: response.ok,
@@ -534,7 +648,9 @@ async function insertOutboundMessage(
     }
   }
 
-  throw new Error(error?.message ?? "Nao foi possivel registrar mensagem enviada pela Meta.");
+  throw new Error(
+    error?.message ?? "Nao foi possivel registrar mensagem enviada pela Meta.",
+  );
 }
 
 async function updateConversationAfterDispatch(
@@ -570,7 +686,11 @@ async function updateConversationAfterDispatch(
     .eq("id", input.conversationId);
 }
 
-async function markDispatchFailed(client: SupabaseClient, run: AgentRunRow, message: string) {
+async function markDispatchFailed(
+  client: SupabaseClient,
+  run: AgentRunRow,
+  message: string,
+) {
   const metadata = readRecord(run.metadata) ?? {};
   const failedAt = new Date().toISOString();
 
@@ -578,18 +698,21 @@ async function markDispatchFailed(client: SupabaseClient, run: AgentRunRow, mess
     .from("agent_runs")
     .update({
       error_message: message,
-      metadata: appendMetaDispatchAudit({
-        ...metadata,
-        meta_dispatch_status: "failed",
-        meta_dispatch_error: message,
-        meta_dispatch_failed_at: failedAt,
-        ready_for_meta_dispatch: true,
-      }, {
-        at: failedAt,
-        type: "dispatch_failed",
-        status: "failed",
-        message,
-      }),
+      metadata: appendMetaDispatchAudit(
+        {
+          ...metadata,
+          meta_dispatch_status: "failed",
+          meta_dispatch_error: message,
+          meta_dispatch_failed_at: failedAt,
+          ready_for_meta_dispatch: true,
+        },
+        {
+          at: failedAt,
+          type: "dispatch_failed",
+          status: "failed",
+          message,
+        },
+      ),
     })
     .eq("id", run.id);
 }
@@ -609,32 +732,40 @@ async function markDispatchBlocked(
     .from("agent_runs")
     .update({
       error_message: null,
-      metadata: appendMetaDispatchAudit({
-        ...input.metadata,
-        meta_dispatch_status: "blocked_pending_meta",
-        meta_dispatch_blocked_at: blockedAt,
-        meta_dispatch_block_reason: input.readiness.reason,
-        meta_dispatch_block_detail: input.readiness.detail,
-        meta_dispatch_mode: input.readiness.mode,
-        meta_dispatch_required_permissions: input.readiness.requiredPermissions,
-        meta_dispatch_missing_permissions: input.readiness.missingPermissions,
-        meta_dispatch_missing_assets: input.readiness.missingAssets,
-        meta_dispatch_warnings: input.readiness.warnings,
-        meta_dispatch_target_kind: input.target.kind,
-        meta_dispatch_endpoint: input.target.endpointPath,
-        ready_for_meta_dispatch: true,
-      }, {
-        at: blockedAt,
-        type: "dispatch_blocked",
-        status: "blocked_pending_meta",
-        message: input.readiness.detail,
-        targetKind: input.target.kind,
-      }),
+      metadata: appendMetaDispatchAudit(
+        {
+          ...input.metadata,
+          meta_dispatch_status: "blocked_pending_meta",
+          meta_dispatch_blocked_at: blockedAt,
+          meta_dispatch_block_reason: input.readiness.reason,
+          meta_dispatch_block_detail: input.readiness.detail,
+          meta_dispatch_mode: input.readiness.mode,
+          meta_dispatch_required_permissions:
+            input.readiness.requiredPermissions,
+          meta_dispatch_missing_permissions: input.readiness.missingPermissions,
+          meta_dispatch_missing_assets: input.readiness.missingAssets,
+          meta_dispatch_warnings: input.readiness.warnings,
+          meta_dispatch_target_kind: input.target.kind,
+          meta_dispatch_endpoint: input.target.endpointPath,
+          ready_for_meta_dispatch: true,
+        },
+        {
+          at: blockedAt,
+          type: "dispatch_blocked",
+          status: "blocked_pending_meta",
+          message: input.readiness.detail,
+          targetKind: input.target.kind,
+        },
+      ),
     })
     .eq("id", input.run.id);
 }
 
-async function markDispatchPlanBlocked(client: SupabaseClient, run: AgentRunRow, message: string) {
+async function markDispatchPlanBlocked(
+  client: SupabaseClient,
+  run: AgentRunRow,
+  message: string,
+) {
   const metadata = readRecord(run.metadata) ?? {};
   const blockedAt = new Date().toISOString();
 
@@ -642,44 +773,58 @@ async function markDispatchPlanBlocked(client: SupabaseClient, run: AgentRunRow,
     .from("agent_runs")
     .update({
       error_message: null,
-      metadata: appendMetaDispatchAudit({
-        ...metadata,
-        meta_dispatch_status: "blocked_by_plan",
-        meta_dispatch_blocked_at: blockedAt,
-        meta_dispatch_block_reason: "plan_blocked",
-        meta_dispatch_block_detail: message,
-        ready_for_meta_dispatch: false,
-      }, {
-        at: blockedAt,
-        type: "dispatch_blocked",
-        status: "blocked_by_plan",
-        message,
-      }),
+      metadata: appendMetaDispatchAudit(
+        {
+          ...metadata,
+          meta_dispatch_status: "blocked_by_plan",
+          meta_dispatch_blocked_at: blockedAt,
+          meta_dispatch_block_reason: "plan_blocked",
+          meta_dispatch_block_detail: message,
+          ready_for_meta_dispatch: false,
+        },
+        {
+          at: blockedAt,
+          type: "dispatch_blocked",
+          status: "blocked_by_plan",
+          message,
+        },
+      ),
     })
     .eq("id", run.id);
 }
 
-async function loadMetaSocialChannelsEntitlement(client: SupabaseClient, organizationId: string) {
-  const billing = await getOrganizationBillingAccess({ client, organizationId });
+async function loadMetaSocialChannelsEntitlement(
+  client: SupabaseClient,
+  organizationId: string,
+) {
+  const billing = await getOrganizationBillingAccess({
+    client,
+    organizationId,
+  });
   return resolveMetaSocialChannelsEntitlement({
     planCode: billing.planCode,
     organizationStatus: billing.organizationStatus,
-    billingState: billing.state, featureOverrides: billing.featureOverrides,
+    billingState: billing.state,
+    featureOverrides: billing.featureOverrides,
   });
 }
 
 function readProviderMessageId(data: unknown): string | null {
   const record = readRecord(data);
-  return readString(record?.message_id)
-    ?? readString(record?.id)
-    ?? readString(readRecord(record?.data)?.id);
+  return (
+    readString(record?.message_id) ??
+    readString(record?.id) ??
+    readString(readRecord(record?.data)?.id)
+  );
 }
 
 function readGraphError(data: unknown) {
   const error = readRecord(readRecord(data)?.error);
-  return readString(error?.message)
-    ?? readString(error?.error_user_msg)
-    ?? readString(error?.error_user_title);
+  return (
+    readString(error?.message) ??
+    readString(error?.error_user_msg) ??
+    readString(error?.error_user_title)
+  );
 }
 
 function sanitizeGraphResponse(data: unknown): JsonRecord {
@@ -723,7 +868,9 @@ function readMetaSocialChannel(value: unknown): MetaSocialChannel | null {
 }
 
 function readRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
 }
 
 function readString(value: unknown) {

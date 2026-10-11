@@ -1,4 +1,5 @@
 "use client";
+import { whatsappConversationBackgroundUrl } from "@/lib/whatsapp/chat-appearance";
 import { LeadFinancialArchive } from "./lead-financial-archive";
 import { LeadReturnsPanel } from "./lead-returns-panel";
 import { ResetLeadDialog } from "./reset-lead-dialog";
@@ -256,7 +257,7 @@ const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
   },
 };
 
-const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d910a997b.r2.dev/8c98994518b575bfd8c949e91d20548b.jpg";
+
 let attendanceVapidPublicKey: string | null = null;
 let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
 
@@ -3320,7 +3321,7 @@ function previewNotificationText(value: string, maxLength: number) {
   return clean.length > maxLength ? `${clean.slice(0, maxLength - 3)}...` : clean;
 }
 
-function SocialApprovalQueue({
+export function SocialApprovalQueue({
   approvals,
   onReviewed,
   onSelectLead,
@@ -3495,7 +3496,7 @@ function SocialApprovalQueue({
   );
 }
 
-function SocialDispatchMonitorPanel({
+export function SocialDispatchMonitorPanel({
   monitor,
   onRefresh,
   onSelectLead,

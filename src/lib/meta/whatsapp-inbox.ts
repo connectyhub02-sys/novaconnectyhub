@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { officialAssetId, officialPhone } from "./whatsapp-policy";
 import { recipientAliases, recipientIdentity } from "./whatsapp-recipient";
+import { enrichOfficialContacts } from "./whatsapp-contact-profile";
 
 export async function officialInbox(
   client: SupabaseClient,
@@ -89,13 +90,14 @@ export async function officialInbox(
     if (contact)
       contact = { ...contact, opted_out: rows.some((c) => c.opted_out) };
   }
+  const enriched = await enrichOfficialContacts(client, org, [...(threads.data ?? []), ...(selectedThread ? [selectedThread] : [])]);
   return {
-    threads: threads.data ?? [],
+    threads: enriched.slice(0, threads.data?.length ?? 0),
     hasMore: threads.data?.length === 50,
     messages,
     notes,
     contact,
-    selectedThread,
+    selectedThread: selectedThread ? enriched[enriched.length - 1] : null,
     requestedPhone: phone,
   };
 }

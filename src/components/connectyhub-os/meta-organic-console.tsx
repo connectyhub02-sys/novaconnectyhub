@@ -51,7 +51,8 @@ const emptyDraft: DraftState = {
   title: "",
 };
 
-export function MetaOrganicConsole({ overview: initialOverview }: { overview: ClientMetaOrganicOverview }) {
+export function MetaOrganicConsole({ overview: initialOverview, initialView = "compose" }: { overview: ClientMetaOrganicOverview; initialView?: "compose" | "calendar" | "library" }) {
+  const [view, setView] = useState(initialView);
   const [draft, setDraft] = useState<DraftState>(emptyDraft);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [overview, setOverview] = useState(initialOverview);
@@ -194,6 +195,11 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
         }
       />
 
+      <nav aria-label="Planejamento de publicações" className="mb-5 flex flex-wrap gap-2">
+        {([["compose","Criar publicação"],["calendar","Calendário"],["library","Biblioteca de criativos"]] as const).map(([key,label]) => <button key={key} className={`rounded-xl border px-4 py-2 text-sm ${view===key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`} onClick={()=>setView(key)}>{label}</button>)}
+      </nav>
+      {view === "calendar" && <MetaMonthCalendar items={overview.items} onDay={date => {setDraft(current=>({...current,scheduledFor:date+"T09:00"}));setView("compose");}}/>}
+      {view === "library" && <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-2 font-semibold text-slate-900">Biblioteca de criativos</h2><p className="mb-4 text-sm text-slate-500">Selecione uma imagem para compor uma publicação ou envie uma nova imagem pelo editor. A biblioteca mantém as mídias da sua empresa.</p><MediaLibrary media={overview.media} onUse={asset=>{setDraft(current=>({...current,mediaUrl:asset.storageUrl}));setView("compose");}}/>{!overview.media.length && <p className="text-sm text-slate-500">Nenhuma mídia enviada ainda.</p>}<button className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm text-white" onClick={()=>setView("compose")}>Enviar mídia e criar post</button></div>}
       <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-7">
         <KpiStat label="Total" value={String(overview.summary.total)} tone="cyan" />
         <KpiStat label="Rascunhos" value={String(overview.summary.drafts)} tone="zinc" />
@@ -204,7 +210,7 @@ export function MetaOrganicConsole({ overview: initialOverview }: { overview: Cl
         <KpiStat label="Falhas" value={String(overview.summary.failed)} tone="rose" />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className={view === "compose" ? "grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]" : "hidden"}>
         <Panel eyebrow="Composicao" title="Novo rascunho" tone="cyan">
           <div className="grid gap-3">
             {notice ? (
@@ -480,7 +486,7 @@ function MediaLibrary({
   media: ClientMetaOrganicMediaAsset[];
   onUse: (asset: ClientMetaOrganicMediaAsset) => void;
 }) {
-  const recentMedia = media.slice(0, 6);
+  const recentMedia = media;
 
   if (!recentMedia.length) {
     return null;
@@ -725,4 +731,22 @@ function formatBytes(value: number) {
   }
 
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function MetaMonthCalendar({ items, onDay }: {items: ClientMetaOrganicPost[];onDay:(date:string)=>void}) {
+  const [month,setMonth]=useState(()=>getDatetimeLocalMin().slice(0,7));
+  const [network,setNetwork]=useState("all");
+  const [status,setStatus]=useState("all");
+  const [year,m]=month.split("-").map(Number);
+  const days=new Date(year,m,0).getDate();
+  const offset=(new Date(year,m-1,1).getDay()+6)%7;
+  const relevant=items.filter(item=>(network==="all" || item.surfaces.includes(network as MetaOrganicSurface)) && (status==="all" || item.status===status));
+  function dayKey(value:string) { const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+  function shift(delta:number) {const d=new Date(year,m-1+delta,1);setMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);}
+  return <section aria-label="Calendário mensal de publicações" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900">
+    <div className="mb-4 flex flex-wrap items-center gap-3"><button aria-label="Mês anterior" className="rounded-lg border px-3 py-2" onClick={()=>shift(-1)}>←</button><input type="month" aria-label="Mês das publicações" className="rounded-lg border p-2" value={month} onChange={e=>{if(/^\d{4}-\d{2}$/.test(e.target.value))setMonth(e.target.value);}}/><button aria-label="Próximo mês" className="rounded-lg border px-3 py-2" onClick={()=>shift(1)}>→</button><select aria-label="Rede social" className="rounded-lg border p-2 text-sm" value={network} onChange={e=>setNetwork(e.target.value)}><option value="all">Todas as redes</option><option value="facebook_page">Facebook</option><option value="instagram_feed">Instagram</option></select><select aria-label="Status da publicação" className="rounded-lg border p-2 text-sm" value={status} onChange={e=>setStatus(e.target.value)}><option value="all">Todos os status</option><option value="draft">Rascunhos</option><option value="scheduled">Agendadas</option><option value="published">Publicadas</option><option value="approved">Aprovadas</option></select></div>
+    <p className="mb-3 text-xs text-slate-500">Exibe as 40 publicações mais recentes carregadas. Horário local do navegador. Escolha um dia para preparar um post. Salvar rascunho não publica: revise e aprove para ativar o agendamento.</p>
+    <div className="overflow-x-auto"><div className="grid min-w-[600px] grid-cols-7">{["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map(d=><div key={d} className="p-2 text-center text-xs text-slate-500">{d}</div>)}{Array.from({length:offset},(_,i)=><div key={`empty-${i}`} className="border border-slate-100 bg-slate-50"/>)}{Array.from({length:days},(_,i)=>{const key=`${month}-${String(i+1).padStart(2,"0")}`;const entries=relevant.filter(item=>{const at=item.scheduledFor || item.publishedAt;return at && dayKey(at)===key;});return <button key={key} onClick={()=>onDay(key)} className="min-h-28 border border-slate-100 p-2 text-left align-top hover:bg-blue-50" aria-label={`Preparar publicação em ${key}`}><span className="text-xs font-semibold">{i+1}</span>{entries.map(item=><span key={item.id} title={item.caption} className="mt-1 block rounded bg-blue-50 px-2 py-1 text-[10px] text-blue-800"><span className="block truncate font-semibold">{item.title}</span>{item.statusLabel}</span>)}</button>;})}</div></div>
+    <p className="mt-3 text-xs text-slate-500">{relevant.filter(item=>!item.scheduledFor&&!item.publishedAt).length} publicações sem data. Use “Criar publicação” para revisar a lista e as aprovações.</p>
+  </section>;
 }

@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
+import { whatsappChatBackgroundStyle } from "@/lib/whatsapp/chat-appearance";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MessageCircle,
@@ -47,7 +49,7 @@ const stamp = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
-export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
+export function MetaWhatsAppConsole({ admin = false, initialTab = "conversations" }: { admin?: boolean; initialTab?: "conversations" | "campaigns" | "models" | "reports" | "numbers" }) {
   const [older, setOlder] = useState<{
     key: string;
     messages: ChatMessage[];
@@ -56,7 +58,7 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
   const endpoint = `/api/dashboard/integrations/meta/whatsapp${admin ? "?admin=1" : ""}`;
   const [data, setData] = useState<OfficialSnapshot | null>(null),
     [campaigns, setCampaigns] = useState<Campaign[]>([]),
-    [tab, setTab] = useState("conversations");
+    [tab, setTab] = useState<string>(initialTab);
   const [sender, setSender] = useState(""),
     [phone, setPhone] = useState(""),
     [offset, setOffset] = useState(0),
@@ -772,13 +774,7 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                   className={`mb-1 flex w-full gap-3 rounded-xl p-3 text-left ${phone === t.phone && selectedSender === t.phone_number_id ? "bg-blue-50" : "hover:bg-slate-50"}`}
                   onClick={() => choose(t)}
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                    {t.display_name ? (
-                      t.display_name.slice(0, 2).toUpperCase()
-                    ) : (
-                      <UserRound size={18} />
-                    )}
-                  </span>
+                  <OfficialLeadAvatar name={t.display_name || t.phone} url={t.avatar_url} />
                   <span className="min-w-0 flex-1">
                     <span className="flex justify-between gap-2">
                       <strong className="truncate text-sm">
@@ -878,9 +874,7 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                     >
                       <ArrowLeft size={18} />
                     </button>
-                    <span className="rounded-full bg-blue-100 p-3 text-blue-600">
-                      <UserRound size={20} />
-                    </span>
+                    <OfficialLeadAvatar name={thread?.display_name || phone} url={thread?.avatar_url} />
                     <div className="min-w-0">
                       <h2 className="truncate font-semibold">
                         {thread?.display_name || phone}
@@ -931,7 +925,8 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                     nearBottom.current =
                       box.scrollHeight - box.clientHeight - box.scrollTop < 100;
                   }}
-                  className="min-h-0 flex-1 space-y-4 overflow-auto bg-slate-50/40 p-4 lg:p-6"
+                  className="min-h-0 flex-1 space-y-3 overflow-auto bg-[#efeae2] p-4 lg:p-6"
+                  style={whatsappChatBackgroundStyle}
                 >
                   {(currentOlder
                     ? currentOlder.more
@@ -947,7 +942,7 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
                   {messages.map((m) => (
                     <article
                       key={m.id}
-                      className={`max-w-[88%] rounded-2xl border p-3.5 text-sm ${m.direction === "outbound" ? "ml-auto rounded-tr-sm border-blue-100 bg-blue-50" : "mr-auto rounded-tl-sm border-slate-200 bg-white"}`}
+                      className={`max-w-[88%] rounded-2xl border p-3.5 text-sm ${m.direction === "outbound" ? "ml-auto rounded-tr-sm border-[#d2e8be] bg-[#d9fdd3] shadow-sm" : "mr-auto rounded-tl-sm border-slate-200 bg-white shadow-sm"}`}
                     >
                       <p className="whitespace-pre-wrap break-words leading-6">
                         {m.text_content}
@@ -1352,4 +1347,11 @@ export function MetaWhatsAppConsole({ admin = false }: { admin?: boolean }) {
       )}
     </section>
   );
+}
+
+function OfficialLeadAvatar({ name, url }: { name: string; url?: string | null }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  return <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-semibold text-slate-600">
+    {url && url !== failedUrl ? <Image src={url} alt={`Foto de ${name}`} fill sizes="40px" unoptimized referrerPolicy="no-referrer" className="object-cover" onError={() => setFailedUrl(url)} /> : /[a-zÀ-ÿ]/i.test(name) ? name.trim().split(/\s+/).slice(0,2).map(part => part[0]).join("").toUpperCase() : <UserRound size={20} />}
+  </span>;
 }

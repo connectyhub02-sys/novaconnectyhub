@@ -43,8 +43,8 @@ describe("Meta social agent queue policy", () => {
 
     expect(decision.triggerSource).toBe(metaSocialMessageReceivedEventName);
     expect(decision.requiresHumanApproval).toBe(false);
-    expect(decision.finalRunStatus).toBe("needs_approval");
-    expect(decision.autoSendBlocked).toBe(true);
+    expect(decision.finalRunStatus).toBe("completed");
+    expect(decision.autoSendBlocked).toBe(false);
   });
 
   it("routes social comments through the comment queue with approval safeguards", () => {

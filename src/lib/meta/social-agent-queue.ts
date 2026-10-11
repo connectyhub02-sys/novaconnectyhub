@@ -10,7 +10,8 @@ import {
 import { inngest } from "../inngest/client";
 import { createServiceClient } from "../supabase/service";
 import type { MetaCrmSnapshot } from "./event-normalizer";
-import { buildMetaSocialSuggestedReply } from "./social-approval-policy";
+import { generateMetaAgentReply } from "./social-agent-generation";
+import { enqueueApprovedMetaSocialDispatch } from "./social-dispatcher";
 import {
   isMetaSocialChannel,
   metaSocialCommentReceivedEventName,
@@ -78,7 +79,10 @@ export async function enqueueMetaSocialAgentRun(input: {
     return { status: "skipped", reason: "non_inbound" };
   }
 
-  const entitlement = await loadMetaSocialChannelsEntitlement(input.client, input.integration.organization_id);
+  const entitlement = await loadMetaSocialChannelsEntitlement(
+    input.client,
+    input.integration.organization_id,
+  );
 
   if (!entitlement.allowed) {
     return {
@@ -129,29 +133,35 @@ export async function enqueueMetaSocialAgentRun(input: {
       debounced_count: readNumber(recentRun.metadata?.debounced_count) + 1,
     };
 
-    await input.client
+    const merged = await input.client
       .from("agent_runs")
       .update({
         input_summary: inputSummary,
         metadata: mergedMetadata,
       })
-      .eq("id", recentRun.id);
+      .eq("id", recentRun.id)
+      .eq("run_status", "queued")
+      .eq("metadata->>messageId", recentRun.metadata?.messageId)
+      .select("id")
+      .maybeSingle();
+    if (merged.error) throw new Error("Falha ao agrupar mensagens sociais.");
+    if (merged.data) {
+      await dispatchMetaSocialAgentRun(input.client, {
+        runId: recentRun.id,
+        organizationId: input.integration.organization_id,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        channel: input.snapshot.channel,
+        triggerSource: decision.triggerSource,
+        metadata: mergedMetadata,
+      });
 
-    await dispatchMetaSocialAgentRun(input.client, {
-      runId: recentRun.id,
-      organizationId: input.integration.organization_id,
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      channel: input.snapshot.channel,
-      triggerSource: decision.triggerSource,
-      metadata: mergedMetadata,
-    });
-
-    return {
-      status: "debounced",
-      runId: recentRun.id,
-      triggerSource: decision.triggerSource,
-    };
+      return {
+        status: "debounced",
+        runId: recentRun.id,
+        triggerSource: decision.triggerSource,
+      };
+    }
   }
 
   const { data, error } = await input.client
@@ -169,7 +179,9 @@ export async function enqueueMetaSocialAgentRun(input: {
     .single<{ id: string; metadata: JsonRecord | null }>();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Nao foi possivel enfileirar agente social Meta.");
+    throw new Error(
+      error?.message ?? "Nao foi possivel enfileirar agente social Meta.",
+    );
   }
 
   await dispatchMetaSocialAgentRun(input.client, {
@@ -200,24 +212,39 @@ export async function processMetaSocialAgentRun(input: {
     return { status: "skipped", reason: "missing_run", runId: input.runId };
   }
 
-  if (!["queued", "running"].includes(run.run_status)) {
-    return { status: "skipped", reason: `run_${run.run_status}`, runId: run.id };
+  if (run.run_status !== "queued") {
+    return {
+      status: "skipped",
+      reason: `run_${run.run_status}`,
+      runId: run.id,
+    };
   }
 
   const metadata = readRecord(run.metadata) ?? {};
   const channel = readMetaSocialChannel(metadata.channel);
 
   if (!channel) {
-    await failMetaSocialAgentRun(client, run, "Canal Meta ausente nos metadados da fila.");
+    await failMetaSocialAgentRun(
+      client,
+      run,
+      "Canal Meta ausente nos metadados da fila.",
+    );
     return { status: "failed", reason: "missing_channel", runId: run.id };
   }
 
   if (!run.organization_id) {
-    await failMetaSocialAgentRun(client, run, "Organizacao ausente na fila social Meta.");
+    await failMetaSocialAgentRun(
+      client,
+      run,
+      "Organizacao ausente na fila social Meta.",
+    );
     return { status: "failed", reason: "missing_organization", runId: run.id };
   }
 
-  const entitlement = await loadMetaSocialChannelsEntitlement(client, run.organization_id);
+  const entitlement = await loadMetaSocialChannelsEntitlement(
+    client,
+    run.organization_id,
+  );
 
   if (!entitlement.allowed) {
     await cancelMetaSocialAgentRun(client, run, {
@@ -234,14 +261,20 @@ export async function processMetaSocialAgentRun(input: {
     };
   }
 
-  const agent = await loadAgent(client, run.agent_id);
+  const agent = await loadAgent(client, run.agent_id, run.organization_id);
 
   if (!agent) {
-    await failMetaSocialAgentRun(client, run, "Agente multicanal nao encontrado.");
+    await failMetaSocialAgentRun(
+      client,
+      run,
+      "Agente multicanal nao encontrado.",
+    );
     return { status: "failed", reason: "missing_agent", runId: run.id };
   }
 
-  const config = normalizeAgentChannelConfig(readRecord(agent.metadata)?.multichannel_config);
+  const config = normalizeAgentChannelConfig(
+    readRecord(agent.metadata)?.multichannel_config,
+  );
   const decision = resolveMetaSocialQueueDecision({
     channel,
     config,
@@ -271,7 +304,7 @@ export async function processMetaSocialAgentRun(input: {
       social_agent_processing_started_at: processingStartedAt,
     };
 
-    await client
+    const claim = await client
       .from("agent_runs")
       .update({
         run_status: "running",
@@ -279,62 +312,116 @@ export async function processMetaSocialAgentRun(input: {
         metadata: workingMetadata,
       })
       .eq("id", run.id)
-      .eq("run_status", "queued");
+      .eq("run_status", "queued")
+      .eq("metadata->>messageId", metadata.messageId)
+      .select("id")
+      .maybeSingle();
+    if (claim.error) throw new Error("Falha ao reservar execução social.");
+    if (!claim.data)
+      return { status: "skipped", reason: "already_claimed", runId: run.id };
   }
 
   const runtimeInstruction = buildAgentChannelRuntimeInstruction({
     channelId: channel,
     config,
   });
-  const suggestedReplyText = buildMetaSocialSuggestedReply({
-    channel,
-    messageText: asString(metadata.textContentPreview),
-  });
+  let suggestedReplyText: string;
+  try {
+    const generated = await generateMetaAgentReply({
+      client,
+      org: run.organization_id,
+      agentId: run.agent_id,
+      runId: run.id,
+      metadata: workingMetadata,
+      instruction: runtimeInstruction,
+    });
+    suggestedReplyText = generated.text;
+    workingMetadata = generated.metadata;
+  } catch {
+    // Never repeat a provider call whose outcome or billing may be uncertain.
+    // Keep any persisted generation for reconciliation, without dispatching it.
+    await client
+      .from("agent_runs")
+      .update({
+        run_status: "failed",
+        error_message:
+          "Resposta social não concluída. Confira geração e consumo antes de repetir.",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", run.id)
+      .eq("run_status", "running");
+    return {
+      status: "failed",
+      reason: "generation_or_billing_failed",
+      runId: run.id,
+    };
+  }
   const preparedAt = new Date().toISOString();
   const outputSummary = decision.requiresHumanApproval
     ? "Atendimento social Meta preparado e aguardando aprovacao humana."
-    : "Atendimento social Meta preparado; envio automatico segue bloqueado ate o adapter Meta.";
+    : "Resposta preparada pelo agente; envio sujeito às permissões e janela da Meta.";
 
-  await client
+  const finalMetadata = {
+    ...workingMetadata,
+    social_agent_status: "prepared",
+    social_agent_prepared_at: preparedAt,
+    channel_runtime_instruction: runtimeInstruction,
+    channel_config: decision.channelConfig,
+    autoReply: decision.autoReply,
+    requiresHumanApproval: decision.requiresHumanApproval,
+    approvalReasons: decision.approvalReasons,
+    publicSurface: decision.publicSurface,
+    social_suggested_reply_text: suggestedReplyText,
+    social_suggested_reply_source: "agent_ai",
+    autoSendBlocked: decision.autoSendBlocked,
+    autoSendBlockReason: decision.autoSendBlockReason,
+    social_suggested_reply_created_at: preparedAt,
+    ...(decision.requiresHumanApproval
+      ? {}
+      : {
+          social_approved_reply_text: suggestedReplyText,
+          social_approved_at: preparedAt,
+          social_approval_status: "approved",
+          social_approval_source: "agent_channel_configuration",
+          ready_for_meta_dispatch: true,
+          meta_dispatch_status: "pending_adapter",
+        }),
+  };
+  const completed = await client
     .from("agent_runs")
     .update({
-      run_status: decision.finalRunStatus,
+      run_status: decision.requiresHumanApproval
+        ? "needs_approval"
+        : "completed",
       output_summary: outputSummary,
       error_message: null,
       finished_at: preparedAt,
-      metadata: {
-        ...workingMetadata,
-        social_agent_status: "prepared",
-        social_agent_prepared_at: preparedAt,
-        social_agent_phase: "meta_social_agent_queue",
-        channel_runtime_instruction: runtimeInstruction,
-        channel_config: decision.channelConfig,
-        autoReply: decision.autoReply,
-        requiresHumanApproval: decision.requiresHumanApproval,
-        approvalReasons: decision.approvalReasons,
-        publicSurface: decision.publicSurface,
-        autoSendBlocked: decision.autoSendBlocked,
-        autoSendBlockReason: decision.autoSendBlockReason,
-        social_suggested_reply_text: suggestedReplyText,
-        social_suggested_reply_source: "safe_template",
-        social_suggested_reply_created_at: preparedAt,
-        nextStep: "review_social_agent_response",
-      },
+      metadata: finalMetadata,
     })
-    .eq("id", run.id);
+    .eq("id", run.id)
+    .eq("run_status", "running");
+  if (completed.error) throw new Error("Falha ao concluir execução social.");
+  if (!decision.requiresHumanApproval)
+    await enqueueApprovedMetaSocialDispatch({
+      client,
+      runId: run.id,
+      metadata: finalMetadata,
+    });
 
   return {
-    status: decision.finalRunStatus,
+    status: decision.requiresHumanApproval ? "needs_approval" : "completed",
     runId: run.id,
     channel,
     autoSendBlocked: decision.autoSendBlocked,
   };
 }
 
-export async function processQueuedMetaSocialAgentRuns(input: {
-  limit?: number;
-  client?: SupabaseClient;
-} = {}) {
+export async function processQueuedMetaSocialAgentRuns(
+  input: {
+    limit?: number;
+    client?: SupabaseClient;
+  } = {},
+) {
   const client = input.client ?? createServiceClient();
   const limit = Math.max(1, Math.min(input.limit ?? 10, 50));
   const { data, error } = await client
@@ -346,7 +433,9 @@ export async function processQueuedMetaSocialAgentRuns(input: {
     .limit(limit);
 
   if (error) {
-    throw new Error(`Nao foi possivel consultar fila social Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel consultar fila social Meta: ${error.message}`,
+    );
   }
 
   const results = [];
@@ -376,11 +465,14 @@ async function findOrganizationMultichannelAgent(
     .eq("organization_id", input.organizationId)
     .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
     .neq("status", "archived")
+    .neq("status", "paused")
     .order("updated_at", { ascending: false })
     .limit(10);
 
   if (error) {
-    throw new Error(`Nao foi possivel consultar agente multicanal: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel consultar agente multicanal: ${error.message}`,
+    );
   }
 
   const agents = (data ?? []) as AgentRow[];
@@ -412,7 +504,7 @@ async function findRecentMetaSocialAgentRun(
     .select("id, metadata")
     .eq("agent_id", input.agentId)
     .eq("trigger_source", input.triggerSource)
-    .in("run_status", ["queued", "running", "needs_approval"])
+    .eq("run_status", "queued")
     .contains("metadata", {
       conversationId: input.conversationId,
       channel: input.channel,
@@ -437,52 +529,69 @@ async function dispatchMetaSocialAgentRun(
     metadata: JsonRecord;
   },
 ) {
-  await inngest.send({
-    name: input.triggerSource,
-    data: {
-      runId: input.runId,
-      organizationId: input.organizationId,
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      channel: input.channel,
-    },
-  }).catch(async (error: unknown) => {
-    await client
-      .from("agent_runs")
-      .update({
-        metadata: {
-          ...input.metadata,
-          inngest_dispatch_error: error instanceof Error ? error.message : "Falha ao disparar Inngest.",
-          inngest_dispatch_failed_at: new Date().toISOString(),
-        },
-      })
-      .eq("id", input.runId);
-  });
+  await inngest
+    .send({
+      name: input.triggerSource,
+      data: {
+        runId: input.runId,
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        channel: input.channel,
+      },
+    })
+    .catch(async (error: unknown) => {
+      await client
+        .from("agent_runs")
+        .update({
+          metadata: {
+            ...input.metadata,
+            inngest_dispatch_error:
+              error instanceof Error
+                ? error.message
+                : "Falha ao disparar Inngest.",
+            inngest_dispatch_failed_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", input.runId);
+    });
 }
 
 async function loadMetaSocialAgentRun(client: SupabaseClient, runId: string) {
   const { data, error } = await client
     .from("agent_runs")
-    .select("id, agent_id, organization_id, run_status, input_summary, metadata")
+    .select(
+      "id, agent_id, organization_id, run_status, input_summary, metadata",
+    )
     .eq("id", runId)
     .maybeSingle<AgentRunRow>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar execucao social Meta: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel carregar execucao social Meta: ${error.message}`,
+    );
   }
 
   return data ?? null;
 }
 
-async function loadAgent(client: SupabaseClient, agentId: string) {
+async function loadAgent(
+  client: SupabaseClient,
+  agentId: string,
+  organizationId: string,
+) {
   const { data, error } = await client
     .from("agent_registry")
     .select("id, status, requires_human_approval, metadata")
     .eq("id", agentId)
+    .eq("organization_id", organizationId)
+    .eq("scope", "organization")
     .maybeSingle<AgentRow>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar agente multicanal: ${error.message}`);
+    throw new Error(
+      `Nao foi possivel carregar agente multicanal: ${error.message}`,
+    );
   }
 
   return data ?? null;
@@ -521,7 +630,9 @@ async function cancelMetaSocialAgentRun(
     .from("agent_runs")
     .update({
       run_status: "cancelled",
-      output_summary: input.summary ?? "Canal social Meta desabilitado antes do processamento.",
+      output_summary:
+        input.summary ??
+        "Canal social Meta desabilitado antes do processamento.",
       finished_at: new Date().toISOString(),
       metadata: {
         ...(run.metadata ?? {}),
@@ -533,12 +644,19 @@ async function cancelMetaSocialAgentRun(
     .eq("id", run.id);
 }
 
-async function loadMetaSocialChannelsEntitlement(client: SupabaseClient, organizationId: string) {
-  const billing = await getOrganizationBillingAccess({ client, organizationId });
+async function loadMetaSocialChannelsEntitlement(
+  client: SupabaseClient,
+  organizationId: string,
+) {
+  const billing = await getOrganizationBillingAccess({
+    client,
+    organizationId,
+  });
   return resolveMetaSocialChannelsEntitlement({
     planCode: billing.planCode,
     organizationStatus: billing.organizationStatus,
-    billingState: billing.state, featureOverrides: billing.featureOverrides,
+    billingState: billing.state,
+    featureOverrides: billing.featureOverrides,
   });
 }
 
@@ -622,13 +740,11 @@ function preview(value: string | null | undefined, maxLength: number) {
 }
 
 function readRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
 }
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function asString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

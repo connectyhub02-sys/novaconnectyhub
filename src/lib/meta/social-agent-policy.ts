@@ -29,9 +29,9 @@ export type MetaSocialQueueDecision =
       requiresHumanApproval: boolean;
       approvalReasons: string[];
       publicSurface: boolean;
-      finalRunStatus: "needs_approval";
-      autoSendBlocked: true;
-      autoSendBlockReason: "meta_social_response_adapter_pending";
+      finalRunStatus: "needs_approval" | "completed";
+      autoSendBlocked: boolean;
+      autoSendBlockReason: "human_approval_required" | null;
     };
 
 const metaSocialChannels: readonly MetaSocialChannel[] = [
@@ -90,8 +90,8 @@ export function resolveMetaSocialQueueDecision(input: {
     requiresHumanApproval: approvalReasons.length > 0,
     approvalReasons,
     publicSurface,
-    finalRunStatus: "needs_approval",
-    autoSendBlocked: true,
-    autoSendBlockReason: "meta_social_response_adapter_pending",
+    finalRunStatus: approvalReasons.length ? "needs_approval" : "completed",
+    autoSendBlocked: approvalReasons.length > 0,
+    autoSendBlockReason: approvalReasons.length ? "human_approval_required" : null,
   };
 }

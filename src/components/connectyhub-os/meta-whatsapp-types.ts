@@ -9,6 +9,7 @@ export type Sender = {
   webhook_at: string | null;
 };
 export type Thread = {
+  avatar_url?: string | null;
   phone_number_id: string;
   phone: string;
   display_name: string | null;
