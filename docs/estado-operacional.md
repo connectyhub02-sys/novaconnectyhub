@@ -1,5 +1,23 @@
 # Estado operacional da ConnectyHub
 
+## Reconexão Meta com Magno — 11/10/2026 19h26 BRT
+
+Após autorização do titular, Magno Macedo (`61582521060298`) foi adicionado como
+Testador do app `1002348522666389`; convite aceito no portal de desenvolvedor.
+OAuth da conta exclusiva de revisão concluído com 13 escopos, Página
+`buffalomass.life` (`839794832549513`) e Instagram `@buffalomasseliteclub`
+(`17841423784354535`), no portfólio BuffaloMass `1604084310967369`.
+Leitura real pela API oficial exibiu o perfil e zero publicações no navegador.
+
+A configuração de login `1530551425223156` passou a tratar contas de anúncios
+como opcionais, preservando os escopos. Nenhuma conta de anúncios foi selecionada
+na reconexão, nem anúncio/pixel/pagamento criado. Inventário antigo ainda aparece
+na interface; a seleção atual no metadata é a fonte válida para roteamento.
+Agente de revisão segue pausado, sem ativação live/webhooks nessa nova Página.
+Permissões de testador não significam App Review aprovado: solicitação continua
+pendente de requisitos de teste/anexos e reprodução social na conta isolada.
+Sem alteração de código ou deploy nesta reconexão.
+
 ## Isolamento Meta e conta de testes — 11/10/2026 18h40 BRT
 
 `63386ecd2e4eb59d949678f99dd58f61665cc628` publicado no slot b/3131;

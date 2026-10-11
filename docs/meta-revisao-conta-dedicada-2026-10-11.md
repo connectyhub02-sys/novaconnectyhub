@@ -1,5 +1,36 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 19h26 BRT — novos ativos conectados
+
+O titular mudou a sessão Facebook e os ativos para Magno Macedo. Após autorização
+específica, o perfil `61582521060298` foi adicionado como Testador ao app. Foi
+necessário concluir o cadastro de desenvolvedor e reenviar o convite pendente;
+o portal confirmou o aceite. Não foi concedido papel administrativo.
+
+Na configuração de login `1530551425223156`, contas de anúncios passaram a ser
+opcionais: a conta disponível estava desativada e impedia a conexão social.
+Escopos preservados, sem selecionar anúncios/pixels, cadastrar pagamento ou
+criar campanhas. A configuração WhatsApp não foi alterada.
+
+Nova autorização concluída na organização exclusiva de revisão:
+
+- Portfólio BuffaloMass: `1604084310967369`.
+- Página `buffalomass.life`: `839794832549513`.
+- Instagram `@buffalomasseliteclub`: `17841423784354535`.
+- 13 escopos retornados, incluindo comentários e mensagens de Instagram/Facebook.
+- Leitura real do perfil pela API oficial confirmada no painel, zero publicações.
+- Conta de anúncios selecionada: nenhuma (`selected_ad_account_id = null`).
+
+Inventários antigos ainda aparecem no painel e a credencial antiga de Ads ainda
+existe no cofre; não usá-los como evidência de seleção/autorização atual. A seleção
+social atual foi conferida no banco; roteamento usa os ativos selecionados.
+Agente e regras permanecem pausados, sem ativação social live ou assinatura de
+webhooks da nova Página. Falta validar atendimento real nessa conta isolada e
+concluir os requisitos/anexos do App Review. Não confundir 13 escopos concedidos
+ao testador com aprovação para clientes externos.
+
+Evidência: `.codex-screens/meta-reconexao-magno-instagram-20261011.png`.
+
 ## Atualização às 18h43 BRT
 
 Facebook Login concluído na sessão de Carla Silva para a conta exclusiva de
