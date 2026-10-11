@@ -130,6 +130,7 @@ const googleScopeAliases: Record<string, string> = {
 };
 
 const defaultMetaPermissions = [
+  "ads_mcp_management",
   "ads_read",
   "ads_management",
   "business_management",

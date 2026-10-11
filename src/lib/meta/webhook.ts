@@ -7,6 +7,7 @@ import { normalizeMetaEventToCrm } from "./event-normalizer";
 import { extractMetaWebhookEvents } from "./webhook-events";
 import { hydrateFacebookComment } from "./facebook-comment-reader";
 import { findMetaWebhookIntegration } from "./webhook-routing";
+import { enqueueLeadAdsEvent } from "./lead-ads";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -94,6 +95,12 @@ export async function ingestMetaWebhook(input: {
     stored += 1;
 
     try {
+      if (await enqueueLeadAdsEvent(client, integration.organization_id, event)) {
+        const updated = await client.from("integration_events").update({status:"processed",processed_at:new Date().toISOString()}).eq("id",integrationEvent.id);
+        if (updated.error) throw new Error("Não foi possível confirmar evento Lead Ads.");
+        normalized += 1;
+        continue;
+      }
       const resolvedEvent = await hydrateFacebookComment({ client, event, integration });
       const crm = await normalizeMetaEventToCrm({
         client,
