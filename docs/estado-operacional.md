@@ -1,5 +1,37 @@
 # Estado operacional da ConnectyHub
 
+## Chat Meta oficial — publicado para testes, 11/10/2026
+
+Aplicação `9660d8994ade14e76d5db7cc3e1fa4d15865189a` publicada às 13h15 BRT
+no slot b/3131. Fallback a/3130 em `1fad48f5`, compatível com o banco novo.
+Builder parado. [Detalhes, operação e limites](meta-chat-oficial-2026-10-11.md).
+
+- `/admin/meta` e `/dashboard/chat-meta` agora têm atendimento, vários números,
+  quatro sugestões de modelos, campanhas consentidas e relatórios. O admin usa
+  sua organização interna; clientes usam exclusivamente a própria organização.
+- Migration 0192 aplicada com backup privado `meta-before-0192-20261011.sql`
+  (modo 600). Conexão preservada, histórico migrado e RLS/ACL conferidas;
+  tabelas/RPCs de campanha não são acessíveis diretamente por authenticated.
+- 76 testes relevantes, TypeScript, ESLint e build passaram. Candidata/domínio:
+  health com SHA, páginas/assets, logout para home e Inngest assinado passaram.
+- Conta real de revisão: números/modelos, isolamento, histórico, nota interna,
+  atribuição, sugestões, rascunho idempotente, bloqueio de início sem aceite,
+  CSV e cancelamento verificados. Uma campanha/um destinatário cancelados;
+  zero mensagens de saída nos testes desta entrega. Upload real de imagem na
+  Meta verificado sem enviar a imagem por WhatsApp.
+- Interface conferida no desktop/celular; histórico antigo do admin continua
+  visível após transferência do remetente, com envio bloqueado sem conexão.
+- Função `connectyhub-connectyhub-meta-whatsapp-campaigns` registrada no app
+  Inngest existente. Cron real completou com `processed: 0`. Isso verifica a
+  execução da fila vazia, não homologa disparo para público externo.
+- Número de teste permanece exclusivamente na conta de revisão. Não reimportar
+  no admin. Múltiplos números reais e lotes externos ainda precisam de piloto
+  controlado e permissões Meta. Nenhuma aprovação do App Review foi presumida
+  ou alterada; atualizar instruções de navegação da avaliação para as novas abas.
+- Mantidos números separados Cloud API/UAZAPI. Esta versão oferece modelos de
+  texto/respostas rápidas; sem coexistência homologada, resposta autônoma por
+  IA, modelos com mídia/carrossel/URL ou nova margem/débito por mensagem.
+
 ## Meta — conta de revisão publicada; envio aguardando contador Instagram, 11/10/2026
 
 Aplicação `8fd5203b83aec6487abde824dcad737066a9b546` publicada às 11h59 BRT

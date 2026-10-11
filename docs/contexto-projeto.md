@@ -22,6 +22,11 @@ Ordem definida pelo titular: Meta, YouTube e TikTok, com etapas de conexão,
 calendário/publicação, relacionamento, análise e anúncios por agentes/MCP.
 No lançamento do WhatsApp oficial, manter dois números: o atual UAZAPI para
 atendimento/follow-up e outro conectado à Cloud API para campanhas em massa.
+O Chat Meta oficial comporta vários remetentes Cloud API por organização, com
+conversas separadas por número + contato, modelos e campanhas consentidas.
+Cada campanha nasce como rascunho e exige revisão explícita antes de liberar
+envios; não repetir automaticamente resultados incertos. O estado publicado e
+os limites verificados estão em [meta-chat-oficial-2026-10-11.md](meta-chat-oficial-2026-10-11.md).
 Anúncios podem encaminhar leads ao número atual. Disparo em massa deve exigir
 o canal oficial no servidor, sem fallback para UAZAPI. Coexistência oficial não
 será presumida como compatibilidade com UAZAPI no mesmo número.
