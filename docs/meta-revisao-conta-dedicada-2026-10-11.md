@@ -1,5 +1,13 @@
 # Revisão Meta — demonstrações e conta exclusiva, 11/10/2026
 
+## Atualização às 18h10 BRT
+
+Messenger e resposta pública Facebook agora possuem demonstrações reais completas
+nos ativos internos, com revisão humana, HTTP 200 e entrega visível. Vídeos novos
+prontos, ainda sem anexo. Quatro formulários Facebook salvos com justificativas
+e aceites; contadores permanecem 0/1. A conta isolada ainda não reproduz o envio
+social. App Review não enviado. [Registro e publicação](meta-messenger-facebook-validacao-2026-10-11.md).
+
 ## Atualização às 17h28 BRT
 
 Os registros abaixo descrevem a primeira rodada. A solicitação continua não

@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Messenger e Facebook — validação real, 11/10/2026 18h10 BRT
+
+`304c52dfa398d3ec5db582ef0512d1d0aafe9a6d` publicado às 18h06 no slot a/3130,
+fallback b em `a00de7b4`, sem migration, builder parado. Notificações Facebook
+sem texto passam a consultar o comentário pela credencial da Página/organização;
+ativação de webhooks preserva campos já inscritos. 18 testes dirigidos, TypeScript,
+ESLint, build e smoke candidata/domínio passaram.
+
+Callback Page verificado e eventos messages/messaging_postbacks/feed inscritos.
+Messenger recebido e respondido pelo painel às 17h44; Facebook comentário →
+regra → rascunho IA → aprovação → resposta pública às 18h07. Ambos confirmados
+HTTP 200, uma tentativa, zero retry e entrega visível nas interfaces da Meta.
+Piloto só nos ativos próprios; agente e três regras pausados após teste, follow-up
+off, demais organizações continuam dry_run. Dois novos vídeos renderizados e
+conferidos, ainda pendentes de anexo manual.
+
+App Review continua **não enviado**. Quatro formulários Facebook com justificativas
+e aceites salvos, todos 0/1 teste contabilizado; Meta informa até 24h. Instagram
+basic/comments ainda pendentes pelo contador. Reprodução social na conta isolada
+dos avaliadores também pendente; não copiar ativos internos para outro workspace
+sem resolver roteamento exclusivo e isolamento. [Evidências e limites](meta-messenger-facebook-validacao-2026-10-11.md).
+
 ## Layout compacto e validação Meta no admin — 11/10/2026
 
 Atualização às 17h28 BRT: `a00de7b4484815cadb903ae8aecffce2e2c1f3e9`
