@@ -97,6 +97,11 @@ export async function activateClientMetaWebhookSubscription(input: {
     organizationId: input.organizationId,
   });
   const requestedFields = normalizeMetaPageWebhookFields(input.fields);
+  const existing = await fetchMetaPageSubscribedFields({
+    config: context.config, pageAccessToken: context.pageAccessToken, pageId: context.pageId,
+  });
+  if (!existing.ok) throw new Error("Nao foi possivel consultar as assinaturas atuais da Pagina.");
+  const fieldsToSubscribe = Array.from(new Set([...existing.subscribedFields, ...requestedFields]));
   const endpointUrl = new URL(`https://graph.facebook.com/${context.config.graphVersion}/${context.pageId}/subscribed_apps`);
   endpointUrl.searchParams.set("access_token", context.pageAccessToken);
   endpointUrl.searchParams.set("appsecret_proof", buildMetaAppSecretProof(context.pageAccessToken, context.config.appSecret));
@@ -109,7 +114,7 @@ export async function activateClientMetaWebhookSubscription(input: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
-      subscribed_fields: requestedFields.join(","),
+      subscribed_fields: fieldsToSubscribe.join(","),
     }),
   });
   const body = await response.json().catch(() => null) as unknown;

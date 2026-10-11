@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeMetaEventToCrm } from "./event-normalizer";
 import { extractMetaWebhookEvents } from "./webhook-events";
+import { hydrateFacebookComment } from "./facebook-comment-reader";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -92,9 +93,10 @@ export async function ingestMetaWebhook(input: {
     stored += 1;
 
     try {
+      const resolvedEvent = await hydrateFacebookComment({ client, event, integration });
       const crm = await normalizeMetaEventToCrm({
         client,
-        event,
+        event: resolvedEvent,
         integration,
         integrationEventId: integrationEvent?.id ?? null,
       });
