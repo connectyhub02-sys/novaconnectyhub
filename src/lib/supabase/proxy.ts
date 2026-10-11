@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth/route-destinations";
 import { getSupabasePublicEnv } from "./env";
 import { isMissingColumnError } from "./schema-errors";
+import { isMetaReviewPath, readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 
 const protectedPrefixes = ["/admin", "/dashboard"];
 const protectedApiPrefixes = ["/api/dashboard"];
@@ -83,6 +84,19 @@ export async function updateSession(request: NextRequest) {
   const isProtected = protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
   const isProtectedApi = protectedApiPrefixes.some((prefix) => pathname.startsWith(prefix));
   const isAuthPage = authPages.includes(pathname);
+  const review = user ? readMetaReviewAccess(user) : null;
+
+  if (review && (isProtected || isProtectedApi || isAuthPage)) {
+    if (!review.active) return NextResponse.json({ error: "Acesso de avaliação expirado." }, { status: 403 });
+    const { data: membership, error } = await supabase.from("organization_members")
+      .select("organization_id").eq("user_id", user!.id).eq("organization_id", review.organizationId).maybeSingle();
+    if (error || !membership) return NextResponse.json({ error: "Ambiente de avaliação indisponível." }, { status: 403 });
+    if (isAuthPage || pathname === "/dashboard") return NextResponse.redirect(new URL("/dashboard/integracoes", request.url));
+    if (!isMetaReviewPath(pathname)) return NextResponse.json({ error: "Este acesso está limitado à avaliação das integrações Meta." }, { status: 403 });
+    // A dedicated review account needs no fabricated CPF or phone verification.
+    // Tenant authorization and contract checks still run in each page/handler.
+    return response;
+  }
 
   if ((isProtected || isProtectedApi) && !user) {
     if (isProtectedApi) {

@@ -10,6 +10,7 @@ import { createServiceClient } from "./service";
 import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
+import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 
 export type CurrentProfile = {
   id: string;
@@ -95,6 +96,8 @@ export async function getCurrentWorkspace(options: { allowRestricted?: boolean }
 
   const profile = await getOrCreateProfile(user);
   const organization = await getPrimaryOrganization(user.id);
+  const review = readMetaReviewAccess(user);
+  if (review && (!review.active || organization?.id !== review.organizationId || profile.isPlatformAdmin)) return null;
   if (organization && !profile.isPlatformAdmin && !options.allowRestricted) await assertContractAccess(organization.id);
   if(organization&&!options.allowRestricted&&organization.planCode!=="internal"){
     const terms=await loadAcceptedCustomTerms(createServiceClient(),organization.id);
