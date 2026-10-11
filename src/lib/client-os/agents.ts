@@ -1,3 +1,4 @@
+import { validateAgentChannelSelection } from "@/lib/agents/channel-availability-server";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -15,7 +16,7 @@ import {
   serializeAgentResponsibleHumans,
   type AgentResponsibleHuman,
 } from "@/lib/agents/responsible-human";
-import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
+import { normalizeAgentChannelConfig, disableMetaAgentChannels } from "@/lib/agents/multichannel";
 import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
 import { defaultWhatsappAgentPrompt, defaultWhatsappCloneMemory, normalizeWhatsappBehaviorSettings } from "@/lib/whatsapp/agent-behavior";
 import {
@@ -197,6 +198,7 @@ export async function createClientAgent(input: {
   roleTitle?: string;
   prompt?: string;
   promptTemplateConfig?: unknown;
+  channelConfig?: unknown;
   responsibleHumans?: unknown;
   responsibleHumanName?: string;
   responsibleHumanPhone?: string;
@@ -211,6 +213,7 @@ export async function createClientAgent(input: {
 
   await assertClientCanCreateAgent(client, company.id);
 
+  const channelConfig = await validateAgentChannelSelection(client, company.id, input.channelConfig);
   const name = normalizeAgentName(input.name);
   const sectorName = normalizeSectorName(input.sectorName);
   const sectorCode = createSectorCode(sectorName);
@@ -263,7 +266,7 @@ export async function createClientAgent(input: {
       metadata: {
         client_created: true,
         agent_kind: "whatsapp",
-        multichannel_config: defaultAgentChannelConfig,
+        multichannel_config: channelConfig,
         company_id: company.id,
         company_name: company.name,
         sector_code: sectorCode,
@@ -297,6 +300,7 @@ export async function updateClientAgent(input: {
   roleTitle?: string;
   prompt?: string;
   promptTemplateConfig?: unknown;
+  channelConfig?: unknown;
   responsibleHumans?: unknown;
   responsibleHumanName?: string;
   responsibleHumanPhone?: string;
@@ -352,12 +356,15 @@ export async function updateClientAgent(input: {
     cloneProfile: agent.metadata?.whatsapp_clone_profile, qualification: agent.metadata?.[leadQualificationConfigKey], behavior: currentBehavior });
   if (promptTemplateConfig.mode === "automatic") prompt = normalizePrompt(buildAgentPromptFromTemplate({ config: promptTemplateConfig, companyName: targetCompany.name, agentName: name }));
   if (setup.cloneProfile.useAgentName) setup.cloneProfile.displayName = name;
+  const channelConfig = await validateAgentChannelSelection(client, targetCompany.id, input.channelConfig ?? agent.metadata?.multichannel_config, targetCompany.id === agent.organization_id ? agent.metadata?.multichannel_config : undefined);
   const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName, {
     [agentResponsibleHumanMetadataKey]: serializeAgentResponsibleHuman(responsibleHuman),
     [agentResponsibleHumansMetadataKey]: serializeAgentResponsibleHumans(responsibleHumans),
     whatsapp_behavior_config: mergeResponsibleHumansIntoBehaviorConfig(setup.behavior, responsibleHumans),
     ...(promptTemplateConfig.profileVersion ? { whatsapp_clone_profile: setup.cloneProfile, [leadQualificationConfigKey]: setup.qualification } : {}),
     [promptBuilderMetadataKey]: promptTemplateConfig,
+    multichannel_config: channelConfig,
+    ...(targetCompany.id !== agent.organization_id ? { social_automations: { version: 1, rules: [], followUp: { enabled: false } } } : {}),
   });
 
   const { data, error } = await client
@@ -454,6 +461,8 @@ export async function cloneClientAgent(input: {
   if (promptTemplateConfig.mode === "automatic") prompt = normalizePrompt(buildAgentPromptFromTemplate({ config: promptTemplateConfig, companyName: targetCompany.name, agentName: name }));
   if (setup.cloneProfile.useAgentName) setup.cloneProfile.displayName = name;
   const metadata = mergeAgentMetadata(sourceAgent.metadata, targetCompany, sectorCode, sectorName, {
+    multichannel_config: disableMetaAgentChannels(normalizeAgentChannelConfig(sourceAgent.metadata?.multichannel_config)),
+    social_automations: { version: 1, rules: [], followUp: { enabled: false } },
     cloned_from_agent_id: sourceAgent.id,
     cloned_from_agent_name: sourceAgent.name,
     cloned_at: new Date().toISOString(),

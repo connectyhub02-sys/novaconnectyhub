@@ -1,3 +1,4 @@
+import { validateAgentChannelSelection } from "@/lib/agents/channel-availability-server";
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { applyActivityQualification, applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "./activity-setup";
@@ -1222,6 +1223,7 @@ export async function updateClientWhatsappPrompt(input: {
   let nextChannelConfig = hasChannelConfig
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
+  if (hasChannelConfig) nextChannelConfig = await validateAgentChannelSelection(client, input.organization.id, nextChannelConfig, getAgentChannelConfig(agent));
   const hasPromptTemplateConfig = input.promptTemplateConfig !== undefined;
   const nextPromptTemplateConfig = hasPromptTemplateConfig
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })

@@ -1,4 +1,7 @@
-import { isMetaCommentChannel, type MetaSocialChannel } from "./social-agent-policy";
+import {
+  isMetaCommentChannel,
+  type MetaSocialChannel,
+} from "./social-agent-policy";
 
 export type MetaSocialDispatchMode = "dry_run" | "live";
 
@@ -10,9 +13,7 @@ export type MetaSocialDispatchTarget =
       body: {
         messaging_type: "RESPONSE";
         recipient: Record<string, string>;
-        message: {
-          text: string;
-        };
+        message: Record<string, unknown>;
       };
     }
   | {
@@ -41,8 +42,15 @@ export type MetaSocialDispatchReadiness = {
   warnings: string[];
 };
 
-export type MetaSocialDispatchLiveChannelStatus = "disabled" | "ready" | "blocked";
-export type MetaSocialDispatchLiveActivationStatus = "disabled" | "ready" | "blocked" | "partially_ready";
+export type MetaSocialDispatchLiveChannelStatus =
+  | "disabled"
+  | "ready"
+  | "blocked";
+export type MetaSocialDispatchLiveActivationStatus =
+  | "disabled"
+  | "ready"
+  | "blocked"
+  | "partially_ready";
 
 export type MetaSocialDispatchLiveChannelActivation = {
   channel: MetaSocialChannel;
@@ -68,7 +76,9 @@ export type MetaSocialDispatchLiveActivationSnapshot = {
   channels: Record<MetaSocialChannel, MetaSocialDispatchLiveChannelActivation>;
 };
 
-export type MetaSocialDispatchLiveChannelDraft = Partial<Record<MetaSocialChannel, boolean>>;
+export type MetaSocialDispatchLiveChannelDraft = Partial<
+  Record<MetaSocialChannel, boolean>
+>;
 
 const privateReplyWindowMs = 7 * 24 * 60 * 60 * 1000;
 
@@ -86,11 +96,41 @@ export function resolveMetaSocialDispatchTarget(input: {
   externalUserId?: string | null;
   sourceCommentId?: string | null;
   text: string;
+  button?: { title: string; url: string };
   allowPrivateReplies?: boolean;
   allowPublicReplies?: boolean;
 }): MetaSocialDispatchTarget {
   const text = normalizeDispatchText(input.text);
-  if (/https?:\/\//i.test(text)) throw new Error("Este adaptador social ainda não entrega botões de link. A mensagem não foi enviada; use um canal com botões ou revise a resposta sem prometer acesso por link.");
+  if (/https?:\/\//i.test(text))
+    throw new Error(
+      "Coloque o endereço no botão de link da automação, em vez de inseri-lo no texto da mensagem.",
+    );
+  let message: Record<string, unknown> = { text };
+  if (input.button) {
+    const url = new URL(input.button.url);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      !input.button.title.trim() ||
+      input.button.title.length > 20
+    )
+      throw new Error("Botão inválido.");
+    if (text.length > 640)
+      throw new Error("Mensagem com botão deve ter até 640 caracteres.");
+    message = {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text,
+          buttons: [
+            { type: "web_url", title: input.button.title, url: url.href },
+          ],
+        },
+      },
+    };
+  }
   const pageId = normalizeId(input.pageId);
   const instagramBusinessId = normalizeId(input.instagramBusinessId);
   const externalUserId = normalizeId(input.externalUserId);
@@ -112,7 +152,7 @@ export function resolveMetaSocialDispatchTarget(input: {
       body: {
         messaging_type: "RESPONSE",
         recipient: { id: externalUserId },
-        message: { text },
+        message,
       },
     };
   }
@@ -125,31 +165,44 @@ export function resolveMetaSocialDispatchTarget(input: {
       body: {
         messaging_type: "RESPONSE",
         recipient: { comment_id: sourceCommentId },
-        message: { text },
+        message,
       },
     };
   }
 
   if (input.allowPublicReplies === true && sourceCommentId) {
+    if (input.button)
+      throw new Error("Comentários públicos não aceitam botões.");
     return {
       kind: "public_comment_reply",
-      endpointPath: input.channel === "instagram_comments"
-        ? `/${sourceCommentId}/replies`
-        : `/${sourceCommentId}/comments`,
+      endpointPath:
+        input.channel === "instagram_comments"
+          ? `/${sourceCommentId}/replies`
+          : `/${sourceCommentId}/comments`,
       contentType: "form",
       body: { message: text },
     };
   }
 
-  if (input.channel === "instagram_comments" && instagramBusinessId && input.allowPrivateReplies !== false) {
-    throw new Error("Comentario Instagram sem Page ID/source comment suficiente para private reply.");
+  if (
+    input.channel === "instagram_comments" &&
+    instagramBusinessId &&
+    input.allowPrivateReplies !== false
+  ) {
+    throw new Error(
+      "Comentario Instagram sem Page ID/source comment suficiente para private reply.",
+    );
   }
 
   throw new Error("Canal de comentarios Meta sem modo de resposta permitido.");
 }
 
-export function resolveMetaSocialDispatchMode(value: unknown = process.env.META_SOCIAL_DISPATCH_MODE): MetaSocialDispatchMode {
-  return typeof value === "string" && value.trim().toLowerCase() === "live" ? "live" : "dry_run";
+export function resolveMetaSocialDispatchMode(
+  value: unknown = process.env.META_SOCIAL_DISPATCH_MODE,
+): MetaSocialDispatchMode {
+  return typeof value === "string" && value.trim().toLowerCase() === "live"
+    ? "live"
+    : "dry_run";
 }
 
 export function evaluateMetaSocialDispatchReadiness(input: {
@@ -161,20 +214,34 @@ export function evaluateMetaSocialDispatchReadiness(input: {
   occurredAt?: string | null;
   now?: Date;
 }): MetaSocialDispatchReadiness {
-  const requiredPermissions = resolveMetaSocialDispatchPermissions(input.channel, input.target.kind);
-  const granted = new Set(Array.from(input.grantedPermissions).map((permission) => permission.trim()).filter(Boolean));
-  const missingPermissions = requiredPermissions.filter((permission) => !granted.has(permission));
-  const warnings = input.target.kind === "public_comment_reply"
-    ? ["public_comment_reply_visible_to_all"]
-    : [];
-  const liveChannel = resolveMetaSocialDispatchLiveChannelActivation(input.liveActivation, input.channel);
+  const requiredPermissions = resolveMetaSocialDispatchPermissions(
+    input.channel,
+    input.target.kind,
+  );
+  const granted = new Set(
+    Array.from(input.grantedPermissions)
+      .map((permission) => permission.trim())
+      .filter(Boolean),
+  );
+  const missingPermissions = requiredPermissions.filter(
+    (permission) => !granted.has(permission),
+  );
+  const warnings =
+    input.target.kind === "public_comment_reply"
+      ? ["public_comment_reply_visible_to_all"]
+      : [];
+  const liveChannel = resolveMetaSocialDispatchLiveChannelActivation(
+    input.liveActivation,
+    input.channel,
+  );
 
   if (input.mode !== "live") {
     return {
       ok: false,
       mode: input.mode,
       reason: "dry_run",
-      detail: "Adapter Meta em modo dry-run. O envio real so ocorre com META_SOCIAL_DISPATCH_MODE=live.",
+      detail:
+        "Adapter Meta em modo dry-run. O envio real so ocorre com META_SOCIAL_DISPATCH_MODE=live.",
       requiredPermissions,
       missingPermissions,
       missingAssets: [],
@@ -187,9 +254,17 @@ export function evaluateMetaSocialDispatchReadiness(input: {
       ok: false,
       mode: input.mode,
       reason: "live_activation_required",
-      detail: liveChannel.detail || "Ative o envio live deste canal na integracao Meta antes de enviar respostas reais.",
-      requiredPermissions: uniqueStrings([...requiredPermissions, ...liveChannel.requiredPermissions]),
-      missingPermissions: uniqueStrings([...missingPermissions, ...liveChannel.missingPermissions]),
+      detail:
+        liveChannel.detail ||
+        "Ative o envio live deste canal na integracao Meta antes de enviar respostas reais.",
+      requiredPermissions: uniqueStrings([
+        ...requiredPermissions,
+        ...liveChannel.requiredPermissions,
+      ]),
+      missingPermissions: uniqueStrings([
+        ...missingPermissions,
+        ...liveChannel.missingPermissions,
+      ]),
       missingAssets: liveChannel.missingAssets,
       warnings: uniqueStrings([...warnings, ...liveChannel.warnings]),
     };
@@ -209,17 +284,37 @@ export function evaluateMetaSocialDispatchReadiness(input: {
   }
 
   const inboundAt = Date.parse(input.occurredAt ?? "");
-  const now = input.now instanceof Date ? input.now.getTime() : input.now ?? Date.now();
-  if (input.target.kind === "direct_message" && (!Number.isFinite(inboundAt) || inboundAt > now + 60000 || now - inboundAt >= 24 * 60 * 60 * 1000)) {
-    return {ok:false,mode:input.mode,reason:"expired_messaging_window",detail:"A janela de 24 horas para responder pelo Direct ou Messenger está encerrada. Aguarde uma nova mensagem do contato.",requiredPermissions,missingPermissions,missingAssets:[],warnings};
+  const now =
+    input.now instanceof Date ? input.now.getTime() : (input.now ?? Date.now());
+  if (
+    input.target.kind === "direct_message" &&
+    (!Number.isFinite(inboundAt) ||
+      inboundAt > now + 60000 ||
+      now - inboundAt >= 24 * 60 * 60 * 1000)
+  ) {
+    return {
+      ok: false,
+      mode: input.mode,
+      reason: "expired_messaging_window",
+      detail:
+        "A janela de 24 horas para responder pelo Direct ou Messenger está encerrada. Aguarde uma nova mensagem do contato.",
+      requiredPermissions,
+      missingPermissions,
+      missingAssets: [],
+      warnings,
+    };
   }
 
-  if (input.target.kind === "private_comment_reply" && isPrivateReplyWindowExpired(input.occurredAt, input.now)) {
+  if (
+    input.target.kind === "private_comment_reply" &&
+    isPrivateReplyWindowExpired(input.occurredAt, input.now)
+  ) {
     return {
       ok: false,
       mode: input.mode,
       reason: "expired_private_reply_window",
-      detail: "Private reply Meta bloqueado: comentario fora da janela de 7 dias.",
+      detail:
+        "Private reply Meta bloqueado: comentario fora da janela de 7 dias.",
       requiredPermissions,
       missingPermissions,
       missingAssets: [],
@@ -248,37 +343,52 @@ export function buildMetaSocialDispatchLiveActivation(input: {
   updatedBy?: string | null;
 }): MetaSocialDispatchLiveActivationSnapshot {
   const metadata = readRecord(input.metadata) ?? {};
-  const existing = normalizeMetaSocialDispatchLiveActivation(metadata.meta_social_dispatch_activation);
+  const existing = normalizeMetaSocialDispatchLiveActivation(
+    metadata.meta_social_dispatch_activation,
+  );
   const updatedAt = input.updatedAt ?? new Date().toISOString();
-  const appLiveModeConfirmed = typeof input.appLiveModeConfirmed === "boolean"
-    ? input.appLiveModeConfirmed
-    : existing.appLiveModeConfirmed;
+  const appLiveModeConfirmed =
+    typeof input.appLiveModeConfirmed === "boolean"
+      ? input.appLiveModeConfirmed
+      : existing.appLiveModeConfirmed;
   const grantedPermissions = readMetaSocialGrantedPermissions({
     metadata,
     scopes: input.scopes,
   });
-  const pageId = readString(metadata.selected_facebook_page_id) ?? readString(metadata.facebook_page_id);
-  const instagramBusinessId = readString(metadata.selected_instagram_business_id) ?? readString(metadata.instagram_business_id);
+  const pageId =
+    readString(metadata.selected_facebook_page_id) ??
+    readString(metadata.facebook_page_id);
+  const instagramBusinessId =
+    readString(metadata.selected_instagram_business_id) ??
+    readString(metadata.instagram_business_id);
   const reviewReady = isMetaReviewReadyForLive(metadata.review_test);
-  const webhookActivationOk = readRecord(metadata.webhook_activation)?.ok === true;
-  const channels = Object.fromEntries(metaSocialDispatchLiveChannels.map((channel) => {
-    const requested = input.channels && Object.prototype.hasOwnProperty.call(input.channels, channel)
-      ? input.channels[channel] === true
-      : existing.channels[channel].enabled;
+  const webhookActivationOk =
+    readRecord(metadata.webhook_activation)?.ok === true;
+  const channels = Object.fromEntries(
+    metaSocialDispatchLiveChannels.map((channel) => {
+      const requested =
+        input.channels &&
+        Object.prototype.hasOwnProperty.call(input.channels, channel)
+          ? input.channels[channel] === true
+          : existing.channels[channel].enabled;
 
-    return [channel, evaluateMetaSocialDispatchLiveChannel({
-      appLiveModeConfirmed,
-      channel,
-      enabled: requested,
-      grantedPermissions,
-      instagramBusinessId,
-      pageId,
-      reviewReady,
-      updatedAt,
-      updatedBy: input.updatedBy ?? null,
-      webhookActivationOk,
-    })];
-  })) as Record<MetaSocialChannel, MetaSocialDispatchLiveChannelActivation>;
+      return [
+        channel,
+        evaluateMetaSocialDispatchLiveChannel({
+          appLiveModeConfirmed,
+          channel,
+          enabled: requested,
+          grantedPermissions,
+          instagramBusinessId,
+          pageId,
+          reviewReady,
+          updatedAt,
+          updatedBy: input.updatedBy ?? null,
+          webhookActivationOk,
+        }),
+      ];
+    }),
+  ) as Record<MetaSocialChannel, MetaSocialDispatchLiveChannelActivation>;
 
   return summarizeMetaSocialDispatchLiveActivation({
     appLiveModeConfirmed,
@@ -288,16 +398,25 @@ export function buildMetaSocialDispatchLiveActivation(input: {
   });
 }
 
-export function normalizeMetaSocialDispatchLiveActivation(value: unknown): MetaSocialDispatchLiveActivationSnapshot {
+export function normalizeMetaSocialDispatchLiveActivation(
+  value: unknown,
+): MetaSocialDispatchLiveActivationSnapshot {
   const record = readRecord(value);
   const channelRecord = readRecord(record?.channels) ?? {};
-  const channels = Object.fromEntries(metaSocialDispatchLiveChannels.map((channel) => {
-    const raw = readRecord(channelRecord[channel]);
-    return [channel, normalizeMetaSocialDispatchLiveChannelActivation(channel, raw)];
-  })) as Record<MetaSocialChannel, MetaSocialDispatchLiveChannelActivation>;
+  const channels = Object.fromEntries(
+    metaSocialDispatchLiveChannels.map((channel) => {
+      const raw = readRecord(channelRecord[channel]);
+      return [
+        channel,
+        normalizeMetaSocialDispatchLiveChannelActivation(channel, raw),
+      ];
+    }),
+  ) as Record<MetaSocialChannel, MetaSocialDispatchLiveChannelActivation>;
 
   return summarizeMetaSocialDispatchLiveActivation({
-    appLiveModeConfirmed: record?.appLiveModeConfirmed === true || record?.app_live_mode_confirmed === true,
+    appLiveModeConfirmed:
+      record?.appLiveModeConfirmed === true ||
+      record?.app_live_mode_confirmed === true,
     channels,
     updatedAt: readString(record?.updatedAt ?? record?.updated_at) ?? "",
     updatedBy: readString(record?.updatedBy ?? record?.updated_by),
@@ -332,7 +451,9 @@ export function readMetaSocialGrantedPermissions(input: {
   return Array.from(permissions).sort();
 }
 
-export function resolveMetaSocialDispatchLiveChannelPermissions(channel: MetaSocialChannel) {
+export function resolveMetaSocialDispatchLiveChannelPermissions(
+  channel: MetaSocialChannel,
+) {
   return isMetaCommentChannel(channel)
     ? resolveMetaSocialDispatchPermissions(channel, "private_comment_reply")
     : resolveMetaSocialDispatchPermissions(channel, "direct_message");
@@ -350,7 +471,11 @@ export function resolveMetaSocialDispatchPermissions(
 
   if (targetKind === "private_comment_reply") {
     return channel === "instagram_comments"
-      ? ["pages_messaging", "instagram_manage_comments", "instagram_manage_messages"]
+      ? [
+          "pages_messaging",
+          "instagram_manage_comments",
+          "instagram_manage_messages",
+        ]
       : ["pages_messaging", "pages_manage_metadata"];
   }
 
@@ -371,7 +496,9 @@ function evaluateMetaSocialDispatchLiveChannel(input: {
   updatedBy: string | null;
   webhookActivationOk: boolean;
 }): MetaSocialDispatchLiveChannelActivation {
-  const requiredPermissions = resolveMetaSocialDispatchLiveChannelPermissions(input.channel);
+  const requiredPermissions = resolveMetaSocialDispatchLiveChannelPermissions(
+    input.channel,
+  );
 
   if (!input.enabled) {
     return {
@@ -388,11 +515,19 @@ function evaluateMetaSocialDispatchLiveChannel(input: {
     };
   }
 
-  const granted = new Set(Array.from(input.grantedPermissions).map((permission) => permission.trim()).filter(Boolean));
-  const missingPermissions = requiredPermissions.filter((permission) => !granted.has(permission));
+  const granted = new Set(
+    Array.from(input.grantedPermissions)
+      .map((permission) => permission.trim())
+      .filter(Boolean),
+  );
+  const missingPermissions = requiredPermissions.filter(
+    (permission) => !granted.has(permission),
+  );
   const missingAssets = [
     input.pageId ? null : "facebook_page",
-    input.channel.startsWith("instagram") && !input.instagramBusinessId ? "instagram_business_account" : null,
+    input.channel.startsWith("instagram") && !input.instagramBusinessId
+      ? "instagram_business_account"
+      : null,
   ].filter((asset): asset is string => Boolean(asset));
   const blockers = [
     input.appLiveModeConfirmed ? null : "meta_app_live_mode",
@@ -400,7 +535,9 @@ function evaluateMetaSocialDispatchLiveChannel(input: {
     ...missingAssets,
     ...missingPermissions,
   ].filter((item): item is string => Boolean(item));
-  const warnings = input.webhookActivationOk ? [] : ["webhook_activation_not_confirmed"];
+  const warnings = input.webhookActivationOk
+    ? []
+    : ["webhook_activation_not_confirmed"];
 
   if (blockers.length > 0) {
     return {
@@ -421,7 +558,8 @@ function evaluateMetaSocialDispatchLiveChannel(input: {
     channel: input.channel,
     enabled: true,
     status: "ready",
-    detail: "Canal liberado para envio social live quando o servidor estiver em META_SOCIAL_DISPATCH_MODE=live.",
+    detail:
+      "Canal liberado para envio social live quando o servidor estiver em META_SOCIAL_DISPATCH_MODE=live.",
     requiredPermissions,
     missingPermissions: [],
     missingAssets: [],
@@ -437,16 +575,19 @@ function summarizeMetaSocialDispatchLiveActivation(input: {
   updatedAt: string;
   updatedBy: string | null;
 }): MetaSocialDispatchLiveActivationSnapshot {
-  const enabled = Object.values(input.channels).filter((channel) => channel.enabled);
+  const enabled = Object.values(input.channels).filter(
+    (channel) => channel.enabled,
+  );
   const ready = enabled.filter((channel) => channel.status === "ready");
   const blocked = enabled.filter((channel) => channel.status === "blocked");
-  const status: MetaSocialDispatchLiveActivationStatus = enabled.length === 0
-    ? "disabled"
-    : blocked.length > 0 && ready.length > 0
-      ? "partially_ready"
-      : blocked.length > 0
-        ? "blocked"
-        : "ready";
+  const status: MetaSocialDispatchLiveActivationStatus =
+    enabled.length === 0
+      ? "disabled"
+      : blocked.length > 0 && ready.length > 0
+        ? "partially_ready"
+        : blocked.length > 0
+          ? "blocked"
+          : "ready";
 
   return {
     status,
@@ -471,17 +612,30 @@ function normalizeMetaSocialDispatchLiveChannelActivation(
     channel,
     enabled,
     status,
-    detail: readString(record?.detail) ?? (enabled ? "Canal aguardando nova validacao live." : "Canal mantido em dry-run operacional."),
-    requiredPermissions: readStringArray(record?.requiredPermissions ?? record?.required_permissions),
-    missingPermissions: readStringArray(record?.missingPermissions ?? record?.missing_permissions),
-    missingAssets: readStringArray(record?.missingAssets ?? record?.missing_assets),
+    detail:
+      readString(record?.detail) ??
+      (enabled
+        ? "Canal aguardando nova validacao live."
+        : "Canal mantido em dry-run operacional."),
+    requiredPermissions: readStringArray(
+      record?.requiredPermissions ?? record?.required_permissions,
+    ),
+    missingPermissions: readStringArray(
+      record?.missingPermissions ?? record?.missing_permissions,
+    ),
+    missingAssets: readStringArray(
+      record?.missingAssets ?? record?.missing_assets,
+    ),
     warnings: readStringArray(record?.warnings),
     activatedAt: readString(record?.activatedAt ?? record?.activated_at),
     activatedBy: readString(record?.activatedBy ?? record?.activated_by),
   };
 }
 
-function normalizeLiveChannelStatus(value: unknown, enabled: boolean): MetaSocialDispatchLiveChannelStatus {
+function normalizeLiveChannelStatus(
+  value: unknown,
+  enabled: boolean,
+): MetaSocialDispatchLiveChannelStatus {
   if (!enabled) {
     return "disabled";
   }
@@ -497,7 +651,10 @@ function resolveMetaSocialDispatchLiveChannelActivation(
   activation: MetaSocialDispatchLiveActivationSnapshot | null | undefined,
   channel: MetaSocialChannel,
 ) {
-  return activation?.channels[channel] ?? normalizeMetaSocialDispatchLiveChannelActivation(channel, null);
+  return (
+    activation?.channels[channel] ??
+    normalizeMetaSocialDispatchLiveChannelActivation(channel, null)
+  );
 }
 
 function isMetaReviewReadyForLive(value: unknown) {
@@ -535,7 +692,9 @@ function normalizeId(value: string | null | undefined) {
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function readString(value: unknown) {
@@ -556,7 +715,10 @@ function readArray(value: unknown) {
 
 function readStringArray(value: unknown) {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
     : [];
 }
 
@@ -564,7 +726,10 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function isPrivateReplyWindowExpired(value: string | null | undefined, now = new Date()) {
+function isPrivateReplyWindowExpired(
+  value: string | null | undefined,
+  now = new Date(),
+) {
   const text = value?.trim();
 
   if (!text) {

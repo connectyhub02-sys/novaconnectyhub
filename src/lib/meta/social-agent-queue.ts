@@ -1,4 +1,12 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import {
+  matchCommentAutomation,
+  storedCommentAutomation,
+  normalizeSocialAutomations,
+  isSocialOptOut,
+} from "./comment-automations";
+import { assertMetaAutomaticSendAllowed } from "./social-auto-send-guard";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitlements";
@@ -56,7 +64,14 @@ export type MetaSocialAgentQueueResult =
     }
   | {
       status: "skipped";
-      reason: "non_inbound" | "no_agent" | "channel_disabled" | "plan_blocked";
+      reason:
+        | "non_inbound"
+        | "no_agent"
+        | "channel_disabled"
+        | "plan_blocked"
+        | "duplicate_comment"
+        | "automation_no_match"
+        | "automation_ended";
       triggerSource?: MetaSocialAgentEventName;
     };
 
@@ -92,16 +107,51 @@ export async function enqueueMetaSocialAgentRun(input: {
     };
   }
 
-  const agent = await findOrganizationMultichannelAgent(input.client, {
-    organizationId: input.integration.organization_id,
-    channel: input.snapshot.channel,
-  });
+  if (
+    !input.snapshot.channel.endsWith("comments") &&
+    isSocialOptOut(input.snapshot.textContent)
+  )
+    return { status: "skipped", reason: "channel_disabled" };
+  const continuation = await findPrivateCommentContinuation(
+    input.client,
+    input.integration.organization_id,
+    input.snapshot,
+  );
+  if (continuation && !continuation.continueWithAgent)
+    return { status: "skipped", reason: "automation_ended" };
+  const agent = continuation
+    ? await loadAgent(
+        input.client,
+        continuation.agentId,
+        input.integration.organization_id,
+      )
+    : await findOrganizationMultichannelAgent(input.client, {
+        organizationId: input.integration.organization_id,
+        channel: input.snapshot.channel,
+        text: input.snapshot.textContent,
+        postId: input.snapshot.sourcePostId,
+      });
 
   if (!agent) {
     return { status: "skipped", reason: "no_agent" };
   }
 
+  const automation = matchCommentAutomation(
+    agent.metadata?.social_automations,
+    {
+      channel: input.snapshot.channel,
+      text: input.snapshot.textContent,
+      postId: input.snapshot.sourcePostId,
+    },
+  );
+  if (
+    input.snapshot.channel.endsWith("comments") &&
+    !automation &&
+    normalizeSocialAutomations(agent.metadata?.social_automations).rules.length
+  )
+    return { status: "skipped", reason: "automation_no_match" };
   const decision = resolveMetaSocialQueueDecision({
+    automation,
     channel: input.snapshot.channel,
     config: readRecord(agent.metadata)?.multichannel_config,
     agentRequiresHumanApproval: agent.requires_human_approval !== false,
@@ -116,13 +166,18 @@ export async function enqueueMetaSocialAgentRun(input: {
   }
 
   const inputSummary = buildMetaSocialInputSummary(input.snapshot);
-  const metadata = buildMetaSocialRunMetadata(input, decision);
-  const recentRun = await findRecentMetaSocialAgentRun(input.client, {
-    agentId: agent.id,
-    triggerSource: decision.triggerSource,
-    conversationId: input.conversationId,
-    channel: input.snapshot.channel,
-  });
+  const metadata = {
+    ...buildMetaSocialRunMetadata(input, decision),
+    ...(automation ? { comment_automation: automation } : {}),
+  };
+  const recentRun = input.snapshot.channel.endsWith("comments")
+    ? null
+    : await findRecentMetaSocialAgentRun(input.client, {
+        agentId: agent.id,
+        triggerSource: decision.triggerSource,
+        conversationId: input.conversationId,
+        channel: input.snapshot.channel,
+      });
 
   if (recentRun) {
     const mergedMetadata = {
@@ -167,6 +222,14 @@ export async function enqueueMetaSocialAgentRun(input: {
   const { data, error } = await input.client
     .from("agent_runs")
     .insert({
+      ...(input.snapshot.channel.endsWith("comments")
+        ? {
+            id: stableCommentRunId(
+              input.integration.organization_id,
+              input.snapshot.providerMessageId,
+            ),
+          }
+        : {}),
       agent_id: agent.id,
       organization_id: input.integration.organization_id,
       run_status: "queued",
@@ -178,6 +241,8 @@ export async function enqueueMetaSocialAgentRun(input: {
     .select("id, metadata")
     .single<{ id: string; metadata: JsonRecord | null }>();
 
+  if (error?.code === "23505")
+    return { status: "skipped", reason: "duplicate_comment" };
   if (error || !data) {
     throw new Error(
       error?.message ?? "Nao foi possivel enfileirar agente social Meta.",
@@ -275,7 +340,14 @@ export async function processMetaSocialAgentRun(input: {
   const config = normalizeAgentChannelConfig(
     readRecord(agent.metadata)?.multichannel_config,
   );
+  const automation = storedCommentAutomation(metadata.comment_automation);
+  const followUp = metadata.social_follow_up
+    ? normalizeSocialAutomations({ followUp: metadata.social_follow_up })
+        .followUp
+    : undefined;
   const decision = resolveMetaSocialQueueDecision({
+    automation,
+    followUp,
     channel,
     config,
     agentRequiresHumanApproval: agent.requires_human_approval !== false,
@@ -327,16 +399,38 @@ export async function processMetaSocialAgentRun(input: {
   });
   let suggestedReplyText: string;
   try {
-    const generated = await generateMetaAgentReply({
-      client,
-      org: run.organization_id,
-      agentId: run.agent_id,
-      runId: run.id,
-      metadata: workingMetadata,
-      instruction: runtimeInstruction,
-    });
-    suggestedReplyText = generated.text;
-    workingMetadata = generated.metadata;
+    if (automation || followUp)
+      await assertMetaAutomaticSendAllowed({
+        client,
+        organizationId: run.organization_id,
+        agentId: run.agent_id,
+        conversationId:
+          typeof metadata.conversationId === "string"
+            ? metadata.conversationId
+            : null,
+        channel,
+        automation,
+        preparing: true,
+        followUpMetadata: followUp ? metadata : undefined,
+      });
+    if (automation?.action === "private_message") {
+      suggestedReplyText = automation.text;
+    } else {
+      const generated = await generateMetaAgentReply({
+        client,
+        org: run.organization_id,
+        agentId: run.agent_id,
+        runId: run.id,
+        metadata: workingMetadata,
+        instruction: followUp
+          ? `${runtimeInstruction}\nFaça um único follow-up da conversa, sem inventar fatos ou urgência. ${followUp.instruction}`
+          : automation
+            ? `${runtimeInstruction}\nOrientação da automação: ${automation.text}`
+            : runtimeInstruction,
+      });
+      suggestedReplyText = generated.text;
+      workingMetadata = generated.metadata;
+    }
   } catch {
     // Never repeat a provider call whose outcome or billing may be uncertain.
     // Keep any persisted generation for reconciliation, without dispatching it.
@@ -372,7 +466,10 @@ export async function processMetaSocialAgentRun(input: {
     approvalReasons: decision.approvalReasons,
     publicSurface: decision.publicSurface,
     social_suggested_reply_text: suggestedReplyText,
-    social_suggested_reply_source: "agent_ai",
+    social_suggested_reply_source:
+      automation?.action === "private_message"
+        ? "automation_message"
+        : "agent_ai",
     autoSendBlocked: decision.autoSendBlocked,
     autoSendBlockReason: decision.autoSendBlockReason,
     social_suggested_reply_created_at: preparedAt,
@@ -382,7 +479,11 @@ export async function processMetaSocialAgentRun(input: {
           social_approved_reply_text: suggestedReplyText,
           social_approved_at: preparedAt,
           social_approval_status: "approved",
-          social_approval_source: "agent_channel_configuration",
+          social_approval_source: automation
+            ? "comment_automation"
+            : followUp
+              ? "social_follow_up"
+              : "agent_channel_configuration",
           ready_for_meta_dispatch: true,
           meta_dispatch_status: "pending_adapter",
         }),
@@ -456,6 +557,8 @@ async function findOrganizationMultichannelAgent(
   input: {
     organizationId: string;
     channel: MetaSocialChannel;
+    text?: string | null;
+    postId?: string | null;
   },
 ) {
   const { data, error } = await client
@@ -476,6 +579,18 @@ async function findOrganizationMultichannelAgent(
   }
 
   const agents = (data ?? []) as AgentRow[];
+  const matchingAgent = agents.find(
+    (agent) =>
+      normalizeAgentChannelConfig(agent.metadata?.multichannel_config).channels[
+        input.channel
+      ].enabled &&
+      matchCommentAutomation(agent.metadata?.social_automations, {
+        channel: input.channel,
+        text: input.text ?? null,
+        postId: input.postId ?? null,
+      }),
+  );
+  if (matchingAgent) return matchingAgent;
   const enabledAgent = agents.find((agent) => {
     const decision = resolveMetaSocialQueueDecision({
       channel: input.channel,
@@ -505,6 +620,7 @@ async function findRecentMetaSocialAgentRun(
     .eq("agent_id", input.agentId)
     .eq("trigger_source", input.triggerSource)
     .eq("run_status", "queued")
+    .is("metadata->>social_follow_up", null)
     .contains("metadata", {
       conversationId: input.conversationId,
       channel: input.channel,
@@ -747,4 +863,48 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stableCommentRunId(org: string, messageId: string) {
+  const hex = createHash("sha256")
+    .update(`meta-comment:${org}:${messageId}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function findPrivateCommentContinuation(
+  client: SupabaseClient,
+  organizationId: string,
+  snapshot: MetaCrmSnapshot,
+) {
+  if (snapshot.channel.endsWith("comments")) return null;
+  const result = await client
+    .from("agent_runs")
+    .select("agent_id,metadata")
+    .eq("organization_id", organizationId)
+    .eq("metadata->>meta_dispatch_status", "sent")
+    .eq("metadata->>social_private_recipient_id", snapshot.externalUserId)
+    .eq("metadata->>externalAccountId", snapshot.externalAccountId)
+    .eq(
+      "metadata->>channel",
+      snapshot.channel === "instagram_direct"
+        ? "instagram_comments"
+        : "facebook_comments",
+    )
+    .gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (result.error)
+    throw new Error("Não foi possível confirmar a origem da conversa privada.");
+  const rule = storedCommentAutomation(
+    result.data?.metadata?.comment_automation,
+  );
+  return rule && result.data
+    ? {
+        agentId: result.data.agent_id as string,
+        continueWithAgent: rule.continueWithAgent,
+      }
+    : null;
 }

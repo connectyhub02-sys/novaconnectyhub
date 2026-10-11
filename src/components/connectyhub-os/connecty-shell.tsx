@@ -259,7 +259,7 @@ const clientSections: NavSection[] = [
   },
   {
     label: "Meta",
-    items: metaWorkspaceItems.map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "agentes" ? Bot : item.key === "calendario" ? CalendarDays : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
+    items: metaWorkspaceItems.map(item => ({ label: item.label, href: item.href, icon: item.key === "ads" ? Megaphone : ["chat", "atendimento"].includes(item.key) ? MessageCircle : item.key === "calendario" ? CalendarDays : item.key === "analise" ? BarChart3 : Globe2, tone: "blue" })),
   },
   {
     label: "Crescimento",

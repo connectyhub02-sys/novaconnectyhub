@@ -1,4 +1,5 @@
 import "server-only";
+import { isSocialOptOut } from "./comment-automations";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueMetaSocialAgentRun } from "./social-agent-queue";
@@ -560,6 +561,7 @@ function buildChangeSnapshot(input: {
   const channel: MetaSocialChannel = input.object === "instagram" ? "instagram_comments" : "facebook_comments";
   const sourcePostId = readString(value.post_id)
     ?? readString(value.media_id)
+    ?? readString(readRecord(value.media)?.id)
     ?? readString(value.parent_id)
     ?? null;
   const textContent = readString(value.message)
@@ -568,7 +570,7 @@ function buildChangeSnapshot(input: {
     ?? null;
   const occurredAt = parseMetaTimestamp(value.created_time ?? value.createdTime ?? value.timestamp)
     ?? new Date().toISOString();
-  const direction = fromId && fromId === externalAccountId ? "outbound" : "inbound";
+  const direction = fromId && fromId === externalAccountId ? "outbound" : ["remove", "edited", "edit"].includes(String(value.verb)) ? "system" : "inbound";
 
   return {
     channel,
@@ -611,6 +613,7 @@ function buildLeadMetadata(existing: JsonRecord | null | undefined, snapshot: Me
     last_source_post_id: snapshot.sourcePostId,
     last_source_comment_id: snapshot.sourceCommentId,
     last_meta_event_type: snapshot.rawEventType,
+    ...(!snapshot.channel.endsWith("comments") && snapshot.direction === "inbound" && isSocialOptOut(snapshot.textContent) ? { opt_out: { requested_at: snapshot.occurredAt, source: snapshot.channel } } : {}),
   };
 }
 

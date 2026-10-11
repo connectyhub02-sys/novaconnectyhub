@@ -1,4 +1,5 @@
 import "server-only";
+import { storedCommentAutomation } from "./comment-automations";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import { createHmac } from "node:crypto";
@@ -216,7 +217,7 @@ export async function processApprovedMetaSocialDispatch(input: {
       organizationId,
     );
     const channelConfig: JsonRecord =
-      metadata.social_approval_source === "agent_channel_configuration"
+      metadata.social_approval_source === "agent_channel_configuration" || Boolean(metadata.comment_automation) || Boolean(metadata.social_follow_up)
         ? {
             ...(await assertMetaAutomaticSendAllowed({
               client,
@@ -224,6 +225,9 @@ export async function processApprovedMetaSocialDispatch(input: {
               agentId: run.agent_id,
               conversationId: readString(metadata.conversationId),
               channel,
+              automation: metadata.comment_automation,
+              followUpMetadata: metadata.social_follow_up ? metadata : undefined,
+              preparing: !["comment_automation", "social_follow_up"].includes(String(metadata.social_approval_source)) && Boolean(metadata.comment_automation || metadata.social_follow_up),
             })),
           }
         : (readRecord(metadata.channel_config) ?? {});
@@ -242,6 +246,7 @@ export async function processApprovedMetaSocialDispatch(input: {
       externalUserId: readString(metadata.externalUserId),
       sourceCommentId: readString(metadata.sourceCommentId),
       text: approvedText,
+      button: storedCommentAutomation(metadata.comment_automation)?.buttonUrl ? { title: storedCommentAutomation(metadata.comment_automation)!.buttonTitle, url: storedCommentAutomation(metadata.comment_automation)!.buttonUrl } : undefined,
       allowPrivateReplies: readBoolean(
         channelConfig.allowPrivateReplies ??
           channelConfig.allow_private_replies,
@@ -329,6 +334,7 @@ export async function processApprovedMetaSocialDispatch(input: {
             meta_dispatched_at: sentAt,
             meta_dispatch_endpoint: graph.endpoint,
             meta_dispatch_target_kind: target.kind,
+            ...(target.kind === "private_comment_reply" ? { social_private_recipient_id: readString(readRecord(graph.data)?.recipient_id) ?? readString(metadata.externalUserId) } : {}),
             meta_dispatch_http_status: graph.httpStatus,
             meta_dispatch_provider_message_id: providerMessageId,
             meta_dispatch_credential_source: credentials.credentialSource,

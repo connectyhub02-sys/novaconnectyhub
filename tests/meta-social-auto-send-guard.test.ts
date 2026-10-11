@@ -1,7 +1,13 @@
+import * as commentAutomations from "../src/lib/meta/comment-automations";
+import * as multichannel from "../src/lib/agents/multichannel";
 import { describe, it, expect } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 import { resolveMetaSocialQueueDecision } from "../src/lib/meta/social-agent-policy";
-function fixture(block?: "pause" | "optout" | "approval" | "foreign") {
+function fixture(
+  block?: "pause" | "optout" | "approval" | "foreign",
+  automation?: commentAutomations.CommentAutomation,
+  saved = automation,
+) {
   const scopes: Array<[string, string, unknown]> = [];
   const client = {
     from: (table: string) => {
@@ -21,8 +27,10 @@ function fixture(block?: "pause" | "optout" | "approval" | "foreign") {
                     status: "active",
                     requires_human_approval: block === "approval",
                     metadata: {
+                      social_automations: { rules: saved ? [saved] : [] },
                       multichannel_config: {
                         channels: {
+                          instagram_comments: { enabled: true },
                           instagram_direct: {
                             enabled: true,
                             autoReply: true,
@@ -34,7 +42,9 @@ function fixture(block?: "pause" | "optout" | "approval" | "foreign") {
                   }
                 : table === "conversations"
                   ? {
-                      channel: "instagram_direct",
+                      channel: automation
+                        ? "instagram_comments"
+                        : "instagram_direct",
                       lead_id: "lead",
                       metadata:
                         block === "pause"
@@ -60,6 +70,8 @@ function fixture(block?: "pause" | "optout" | "approval" | "foreign") {
     typeof import("../src/lib/meta/social-auto-send-guard")
   >("src/lib/meta/social-auto-send-guard.ts", {
     "./social-agent-policy": { resolveMetaSocialQueueDecision },
+    "./comment-automations": commentAutomations,
+    "@/lib/agents/multichannel": multichannel,
     "@/lib/whatsapp/agent-behavior": {
       normalizeWhatsappBehaviorSettings: () => ({ agentEnabled: true }),
     },
@@ -71,12 +83,38 @@ function fixture(block?: "pause" | "optout" | "approval" | "foreign") {
         organizationId: "org-a",
         agentId: "agent",
         conversationId: "conversation",
-        channel: "instagram_direct",
+        channel: automation ? "instagram_comments" : "instagram_direct",
+        automation,
       }),
     scopes,
   };
 }
 describe("autonomous social send revalidation", () => {
+  it("rechecks a comment rule after generation and refuses changed or paused rules", async () => {
+    const rule = commentAutomations.normalizeSocialAutomations({
+      rules: [
+        {
+          id: "offer",
+          name: "Offer",
+          enabled: true,
+          trigger: "any_comment",
+          action: "private_message",
+          text: "Material",
+          requireApproval: false,
+        },
+      ],
+    }).rules[0];
+    expect(await fixture(undefined, rule).run()).toMatchObject({
+      allowPrivateReplies: true,
+    });
+    await expect(
+      fixture(undefined, rule, { ...rule, enabled: false }).run(),
+    ).rejects.toThrow("Automação alterada");
+    await expect(
+      fixture(undefined, rule, { ...rule, text: "Alterado" }).run(),
+    ).rejects.toThrow("Automação alterada");
+    await expect(fixture("optout", rule).run()).rejects.toThrow();
+  });
   it.each(["pause", "optout", "approval", "foreign"] as const)(
     "blocks when %s changes after generation",
     async (block) => {

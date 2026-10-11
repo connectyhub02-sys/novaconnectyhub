@@ -3,11 +3,18 @@ import {
   type AgentChannelConfigItem,
   type AgentChannelId,
 } from "../agents/multichannel";
+import {
+  commentAutomationChannelConfig,
+  type CommentAutomation,
+  type SocialFollowUp,
+} from "./comment-automations";
 
 export type MetaSocialChannel = Exclude<AgentChannelId, "whatsapp">;
 
-export const metaSocialMessageReceivedEventName = "connectyhub/meta.message.received" as const;
-export const metaSocialCommentReceivedEventName = "connectyhub/meta.comment.received" as const;
+export const metaSocialMessageReceivedEventName =
+  "connectyhub/meta.message.received" as const;
+export const metaSocialCommentReceivedEventName =
+  "connectyhub/meta.comment.received" as const;
 
 export type MetaSocialAgentEventName =
   | typeof metaSocialMessageReceivedEventName
@@ -41,15 +48,22 @@ const metaSocialChannels: readonly MetaSocialChannel[] = [
   "facebook_comments",
 ];
 
-export function isMetaSocialChannel(value: unknown): value is MetaSocialChannel {
-  return typeof value === "string" && metaSocialChannels.includes(value as MetaSocialChannel);
+export function isMetaSocialChannel(
+  value: unknown,
+): value is MetaSocialChannel {
+  return (
+    typeof value === "string" &&
+    metaSocialChannels.includes(value as MetaSocialChannel)
+  );
 }
 
 export function isMetaCommentChannel(channel: MetaSocialChannel) {
   return channel === "instagram_comments" || channel === "facebook_comments";
 }
 
-export function resolveMetaSocialTrigger(channel: MetaSocialChannel): MetaSocialAgentEventName {
+export function resolveMetaSocialTrigger(
+  channel: MetaSocialChannel,
+): MetaSocialAgentEventName {
   return isMetaCommentChannel(channel)
     ? metaSocialCommentReceivedEventName
     : metaSocialMessageReceivedEventName;
@@ -59,9 +73,21 @@ export function resolveMetaSocialQueueDecision(input: {
   channel: MetaSocialChannel;
   config: unknown;
   agentRequiresHumanApproval?: boolean;
+  automation?: CommentAutomation | null;
+  followUp?: SocialFollowUp | null;
 }): MetaSocialQueueDecision {
   const config = normalizeAgentChannelConfig(input.config);
-  const channelConfig = config.channels[input.channel];
+  const baseConfig = config.channels[input.channel];
+  const channelConfig =
+    input.automation && baseConfig.enabled
+      ? commentAutomationChannelConfig(input.automation)
+      : input.followUp && baseConfig.enabled
+        ? {
+            ...baseConfig,
+            autoReply: !input.followUp.requireApproval,
+            requiresHumanApproval: input.followUp.requireApproval,
+          }
+        : baseConfig;
   const triggerSource = resolveMetaSocialTrigger(input.channel);
 
   if (!channelConfig.enabled) {
@@ -75,10 +101,16 @@ export function resolveMetaSocialQueueDecision(input: {
 
   const publicSurface = channelConfig.mode === "public";
   const approvalReasons = [
-    publicSurface ? "public_social_surface" : null,
-    channelConfig.requiresHumanApproval ? "channel_requires_human_approval" : null,
+    publicSurface && !input.automation ? "public_social_surface" : null,
+    channelConfig.requiresHumanApproval
+      ? "channel_requires_human_approval"
+      : null,
     channelConfig.autoReply ? null : "channel_auto_reply_disabled",
-    input.agentRequiresHumanApproval === true ? "agent_requires_human_approval" : null,
+    input.agentRequiresHumanApproval === true &&
+    !input.automation &&
+    !input.followUp
+      ? "agent_requires_human_approval"
+      : null,
   ].filter((reason): reason is string => Boolean(reason));
 
   return {
@@ -92,6 +124,8 @@ export function resolveMetaSocialQueueDecision(input: {
     publicSurface,
     finalRunStatus: approvalReasons.length ? "needs_approval" : "completed",
     autoSendBlocked: approvalReasons.length > 0,
-    autoSendBlockReason: approvalReasons.length ? "human_approval_required" : null,
+    autoSendBlockReason: approvalReasons.length
+      ? "human_approval_required"
+      : null,
   };
 }

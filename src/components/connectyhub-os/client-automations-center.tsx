@@ -8,6 +8,7 @@ import {
   ToggleRight,
 } from "lucide-react";
 import { AgentPhoto } from "./agent-photo";
+import { MetaCommentAutomations } from "./meta-comment-automations";
 import { ClientWhatsappAutomationStudio, type ClientAutomationAgent } from "./client-whatsapp-automation-studio";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
@@ -282,6 +283,8 @@ export function ClientAutomationsCenter({
       </Panel>
 
       <IntelligentFollowUpPanel key={selectedCompanyId} companyId={selectedCompanyId} />
+
+      <MetaCommentAutomations key={`meta-${selectedCompanyId}`} companyId={selectedCompanyId} agents={agents} />
 
       <ClientWhatsappAutomationStudio
         key={`${selectedCompanyId}:${draft.automationSettings.defaultAgentId ?? "conversation"}`}

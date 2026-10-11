@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { MetaInstagramOverview } from "@/components/connectyhub-os/meta-instagram-overview";
 import { MetaOrganicConsole } from "@/components/connectyhub-os/meta-organic-console";
-import { WhatsAppConsole } from "@/components/connectyhub-os/whatsapp-console";
 import { MetaSocialInbox } from "@/components/connectyhub-os/meta-social-inbox";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
@@ -19,9 +18,10 @@ export default async function MetaArea({
   await connection();
   const { area } = await params;
   if (area === "campanhas") redirect("/dashboard/chat-meta?tab=campaigns");
+  if (area === "agentes") redirect("/dashboard/whatsapp");
   if (area === "modelos") redirect("/dashboard/chat-meta?tab=models");
   if (
-    !["analise", "agentes", "atendimento", "calendario", "criativos"].includes(
+    !["analise", "atendimento", "calendario", "criativos"].includes(
       area,
     )
   )
@@ -67,16 +67,6 @@ export default async function MetaArea({
             userId={workspace.user.id}
             organizationId={company.id}
           />
-        </>
-      )}
-      {area === "agentes" && (
-        <>
-          <p className="mb-5 text-sm text-slate-500">
-            Selecione seu agente e configure Instagram Direct, Messenger e
-            comentários. As regras salvas serão usadas nos canais habilitados; a
-            autorização de envio depende da conexão Meta.
-          </p>
-          <WhatsAppConsole initialTab="channels" />
         </>
       )}
       {area === "atendimento" && <MetaSocialInbox />}

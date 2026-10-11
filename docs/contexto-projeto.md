@@ -18,6 +18,8 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
 
+Agentes ficam em uma única área: WhatsApp, Instagram e Facebook são selecionados ao criar/editar o agente da empresa, condicionados à conexão e às permissões reais. Não manter menu duplicado de agentes Meta nem aba separada Redes sociais. Automação de comentários (palavra-chave → privado/botão ou resposta pública com IA) e follow-up Direct/Messenger ficam em Automações, próximos de grupos/canais/status. Campanhas WhatsApp oficiais continuam dentro do Chat Meta. [Implementação e limites](meta-automacoes-comentarios-2026-10-11.md).
+
 A expansão reúne a referência funcional do Metricool e os módulos Meta observados na Vision Home, com navegação própria da ConnectyHub. Calendário, conteúdo, atendimento, anúncios e resultados ficam na seção Meta do cliente. Campanhas de mensagens e modelos ficam dentro do Chat Meta oficial, com números e atendimento, sem entradas separadas no menu. Meta Ads permanece a área de anúncios pagos. Cobertura ampla é objetivo de produto; cada capacidade mantém estado de implementação, permissões e homologação separados. [Entrega da Central Meta e limites](meta-central-social-2026-10-11.md).
 
 Ordem definida pelo titular: Meta, YouTube e TikTok, com etapas de conexão,

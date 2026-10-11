@@ -1,3 +1,4 @@
+import { queueDueSocialFollowUps } from "@/lib/meta/social-follow-up";
 import { pauseSuspendedWhatsappCampaigns } from "@/lib/whatsapp/contract-campaign-guard";
 import { processStoreRenewals } from "@/lib/commerce/store-renewals";
 import { inngest } from "./client";
@@ -299,6 +300,7 @@ export const connectyhubMetaSocialAgentSweep = inngest.createFunction(
     triggers: [{ cron: "*/5 * * * *" }],
   },
   async ({ step }) => {
+    await step.run("queue-due-social-follow-ups", () => queueDueSocialFollowUps(createServiceClient()));
     const summary = await step.run("process-queued-meta-social-agent-runs", () =>
       processQueuedMetaSocialAgentRuns({ limit: 10 }),
     );

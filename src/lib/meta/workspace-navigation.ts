@@ -43,12 +43,6 @@ export const metaWorkspaceItems = [
     description: "Conversas sociais, revisão de respostas e recibos.",
   },
   {
-    key: "agentes",
-    label: "Agentes nos canais",
-    href: "/dashboard/meta/agentes",
-    description: "Use o agente da empresa no Instagram e no Facebook.",
-  },
-  {
     key: "criativos",
     label: "Biblioteca de criativos",
     href: "/dashboard/meta/criativos",

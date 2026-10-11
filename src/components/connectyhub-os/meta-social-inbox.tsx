@@ -93,8 +93,8 @@ export function MetaSocialInbox() {
         acompanhe as respostas que precisam de revisão antes do envio.
       </p>
       <div className="flex flex-wrap gap-3 text-sm">
-        <Link className="text-blue-600" href="/dashboard/meta/agentes">
-          Configurar agente nos canais →
+        <Link className="text-blue-600" href="/dashboard/whatsapp">
+          Configurar agente →
         </Link>
         <Link
           className="text-blue-600"

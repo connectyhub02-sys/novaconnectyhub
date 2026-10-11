@@ -95,6 +95,8 @@ export type ClientSocialApproval = {
   inputSummary: string;
   leadMessage: string;
   suggestedReply: string;
+  responseTarget?: string;
+  button?: { title: string; url: string } | null;
   runtimeInstruction: string | null;
   approvalReasons: string[];
   providerChatId: string | null;
@@ -588,6 +590,8 @@ function mapSocialApproval(
     inputSummary: asString(run.input_summary) ?? leadMessage,
     leadMessage,
     suggestedReply,
+    responseTarget: readRecord(metadata.comment_automation)?.action === "private_message" ? "Mensagem privada" : isMetaCommentChannel(channel) ? "Comentário público / modo configurado" : "Mensagem privada",
+    button: asString(readRecord(metadata.comment_automation)?.buttonUrl) ? { title: asString(readRecord(metadata.comment_automation)?.buttonTitle) || "Abrir", url: asString(readRecord(metadata.comment_automation)?.buttonUrl)! } : null,
     runtimeInstruction: asString(metadata.channel_runtime_instruction),
     approvalReasons: readStringArray(metadata.approvalReasons),
     providerChatId: asString(metadata.providerChatId) ?? related.conversation?.provider_chat_id ?? null,

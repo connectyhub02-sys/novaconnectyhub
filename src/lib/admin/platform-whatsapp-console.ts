@@ -1,3 +1,4 @@
+import { validateAgentChannelSelection } from "@/lib/agents/channel-availability-server";
 import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
 import { applyActivityQualification, applyActivitySetup, resolveWhatsappBehaviorSettings, shouldApplyActivitySetup } from "@/lib/whatsapp/activity-setup";
@@ -363,6 +364,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   const nextChannelConfig = input.channelConfig !== undefined
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
+  if (input.channelConfig !== undefined) await validateAgentChannelSelection(client, null, nextChannelConfig, getAgentChannelConfig(agent));
   const previousConfig = normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]);
   const nextConfig = normalizeAgentPromptBuilderConfig(input.promptTemplateConfig ?? previousConfig);
   if (hasAgentPrompt && input.promptTemplateConfig === undefined && agentPrompt !== agent.prompt?.trim()) nextConfig.mode = "manual";

@@ -3458,6 +3458,8 @@ export function SocialApprovalQueue({
               <div className="grid min-w-0 gap-2">
                 <label className="grid gap-2">
                   <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Rascunho</span>
+                  {item.responseTarget && <span className="text-xs text-slate-500">Destino: {item.responseTarget}</span>}
+                  {item.button && <span className="rounded-lg border bg-blue-50 p-2 text-xs text-blue-700">Botão: {item.button.title} · {item.button.url}</span>}
                   <textarea
                     className="min-h-[126px] resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-[13px] leading-5 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
                     disabled={isReviewing}

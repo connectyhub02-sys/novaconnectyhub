@@ -1,6 +1,7 @@
 "use client";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentChannelSelector } from "./agent-channel-selector";
 import { ActivitySelect } from "./activity-select";
 import { applyActivityCloneProfile, applyActivityQualification, applyActivitySetup } from "@/lib/whatsapp/activity-setup";
 
@@ -108,12 +109,9 @@ import {
 import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import {
-  agentChannelDefinitions,
   defaultAgentChannelConfig,
   normalizeAgentChannelConfig,
   type AgentChannelConfig,
-  type AgentChannelConfigItem,
-  type AgentChannelId,
 } from "@/lib/agents/multichannel";
 import type { PlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import {
@@ -595,6 +593,7 @@ export function WhatsAppConsole({
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
+  const [newAgentChannels, setNewAgentChannels] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
   const [channelConfigDraft, setChannelConfigDraft] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
   const latestDraftSnapshotRef = useRef("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
@@ -915,25 +914,6 @@ export function WhatsAppConsole({
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => ({ ...current, [key]: value, customizedStyleFields: [...new Set([...(current.customizedStyleFields ?? []), key])] }));
-  }
-
-  function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
-    setChannelConfigDraft((current) => {
-      const normalized = normalizeAgentChannelConfig(current);
-      const currentChannel = normalized.channels[channelId];
-
-      return normalizeAgentChannelConfig({
-        ...normalized,
-        channels: {
-          ...normalized.channels,
-          [channelId]: {
-            ...currentChannel,
-            ...patch,
-            enabled: channelId === "whatsapp" ? true : patch.enabled ?? currentChannel.enabled,
-          },
-        },
-      });
-    });
   }
 
   function openMetaChannelsComingSoon(channelLabel: string) {
@@ -1312,13 +1292,14 @@ export function WhatsAppConsole({
         body: JSON.stringify({
           action: "create_agent",
           [variant.entityIdKey]: newAgentCompanyId,
-          name: agentName.trim() || "Agente WhatsApp",
+          name: agentName.trim() || "Assistente",
           sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
           roleTitle: agentRoleTitle.trim() || template.roleTitle || variant.agentRoleTitle,
           responsibleHumans: responsiblePayload,
           responsibleHumanName: firstResponsible.name,
           responsibleHumanPhone: firstResponsible.phone,
           promptTemplateConfig,
+          channelConfig: newAgentChannels,
         }),
       });
       const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
@@ -1418,6 +1399,7 @@ export function WhatsAppConsole({
           sectorName: input.sectorName.trim(),
           roleTitle: input.roleTitle.trim(),
           prompt: input.prompt,
+          channelConfig: channelConfigDraft,
           responsibleHumans: responsiblePayload,
           responsibleHumanName: firstResponsible.name,
           responsibleHumanPhone: firstResponsible.phone,
@@ -1431,6 +1413,7 @@ export function WhatsAppConsole({
 
       const nextState = await fetchWhatsappState(variant, data.agent.id);
       applyWhatsappState(nextState, { preserveDrafts: settingsChanged && agentId === selectedAgentId });
+      setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
       setNotice({ tone: "success", message: "Agente atualizado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao editar agente." });
@@ -1714,6 +1697,7 @@ export function WhatsAppConsole({
   }
 
   function startNewClientAgent() {
+    setNewAgentChannels(normalizeAgentChannelConfig(undefined));
     if (running || knowledgeUploading || creatingAgent || updatingClientAgentId) return;
     if (settingsChanged && !window.confirm("Existem alterações não salvas. Continuar com o cadastro de outro agente?")) return;
     setNewAgentCompanyId(selectedCompanyId || companies[0]?.id || "");
@@ -1790,6 +1774,8 @@ export function WhatsAppConsole({
       <>
         {!canManageInternalAgents ? (
           <ClientAgentsManager
+            newChannels={<AgentChannelSelector companyId={newAgentCompanyId || selectedCompanyId} config={newAgentChannels} onChange={setNewAgentChannels} disabled={creatingAgent} />}
+            editChannels={<AgentChannelSelector companyId={selectedCompanyId} config={channelConfigDraft} onChange={setChannelConfigDraft} whatsappConnected={isConnected} disabled={Boolean(updatingClientAgentId)} />}
             agentName={agentName}
             agentRoleTitle={agentRoleTitle}
             newCompanyId={newAgentCompanyId || selectedCompanyId}
@@ -1901,6 +1887,7 @@ export function WhatsAppConsole({
           onSave={saveAgentSettings}
         />
 
+        <div className="my-4"><AgentChannelSelector companyId={selectedCompanyId} config={channelConfigDraft} onChange={setChannelConfigDraft} whatsappConnected={isConnected} internal={canManageInternalAgents} disabled={Boolean(running)} /></div>
         <WhatsappConsoleTabs activeTab={activeWhatsappTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
         {activeWhatsappTab === "prompt" ? (
@@ -2196,50 +2183,6 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
-      {state?.agent && activeWhatsappTab === "channels" ? (
-      <div className="mt-5">
-        <Panel
-          title="Canais do agente"
-          eyebrow="whatsapp / instagram / facebook"
-          action={<NeonBadge tone={channelConfigChanged ? "amber" : "green"}>{channelConfigChanged ? "alterado" : "salvo"}</NeonBadge>}
-        >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.36fr)]">
-            <AgentChannelSettingsPanel
-              config={channelConfigDraft}
-              changed={channelConfigChanged}
-              entitlement={state.capability.metaSocialChannels}
-              onChange={(channelId, patch) => updateAgentChannelConfig(channelId, patch)}
-              onMetaComingSoonClick={openMetaChannelsComingSoon}
-            />
-            <div className="grid content-start gap-2">
-              <InfoTile label="Canal principal" value="WhatsApp" />
-              <InfoTile label="Meta Social" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
-              <InfoTile label="Meta ativos" value={state.capability.metaSocialChannels.allowed ? `${countEnabledMetaChannels(channelConfigDraft)} / 4` : "0 / 4"} />
-              <InfoTile label="Comentarios" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
-              <InfoTile label="Directs" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
-              <div className="flex flex-wrap gap-2 pt-1">
-                <SecondaryAction
-                  icon={RefreshCcw}
-                  label="Restaurar salvo"
-                  description="Desfaz alteracoes ainda nao salvas nos canais do agente."
-                  disabled={!state || !channelConfigChanged}
-                  onClick={() => setChannelConfigDraft(normalizeAgentChannelConfig(state?.agent?.channelConfig))}
-                />
-                <ActionButton
-                  icon={Wand2}
-                  label="Salvar canais"
-                  description="Grava quais redes o mesmo agente pode atender."
-                  disabled={!state?.capability.schemaReady || !channelConfigChanged}
-                  loading={running === "save_settings"}
-                  onClick={saveAgentSettings}
-                />
-              </div>
-            </div>
-          </div>
-        </Panel>
-      </div>
-      ) : null}
-
         </> : null}
       </>
       )}
@@ -2301,181 +2244,6 @@ function isAgentChannelConfigEqual(left: AgentChannelConfig, right: AgentChannel
 
 function isCloneProfileEqual(left: WhatsappCloneProfile, right: WhatsappCloneProfile) {
   return JSON.stringify(normalizeWhatsappCloneProfile(left)) === JSON.stringify(normalizeWhatsappCloneProfile(right));
-}
-
-function countEnabledMetaChannels(config: AgentChannelConfig) {
-  if (metaFeatureLaunchPaused) {
-    return 0;
-  }
-
-  const normalized = normalizeAgentChannelConfig(config);
-  return agentChannelDefinitions.filter((definition) =>
-    definition.provider === "meta" && normalized.channels[definition.id].enabled
-  ).length;
-}
-
-function countEnabledPublicChannels(config: AgentChannelConfig) {
-  if (metaFeatureLaunchPaused) {
-    return 0;
-  }
-
-  const normalized = normalizeAgentChannelConfig(config);
-  return agentChannelDefinitions.filter((definition) =>
-    definition.provider === "meta" && definition.mode === "public" && normalized.channels[definition.id].enabled
-  ).length;
-}
-
-function countEnabledPrivateMetaChannels(config: AgentChannelConfig) {
-  if (metaFeatureLaunchPaused) {
-    return 0;
-  }
-
-  const normalized = normalizeAgentChannelConfig(config);
-  return agentChannelDefinitions.filter((definition) =>
-    definition.provider === "meta" && definition.mode === "private" && normalized.channels[definition.id].enabled
-  ).length;
-}
-
-function AgentChannelSettingsPanel({
-  config,
-  changed,
-  entitlement,
-  onChange,
-  onMetaComingSoonClick,
-}: {
-  config: AgentChannelConfig;
-  changed: boolean;
-  entitlement: PlanFeatureEntitlement;
-  onChange: (channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) => void;
-  onMetaComingSoonClick: (channelLabel: string) => void;
-}) {
-  const normalized = normalizeAgentChannelConfig(config);
-
-  return (
-    <div className="grid gap-4">
-      <BehaviorSection
-        title="Agente unico"
-        description="O prompt principal continua sendo um so. Cada rede adiciona apenas o contexto operacional do canal antes da IA responder."
-      >
-        <div className="grid gap-2 md:grid-cols-2">
-          {agentChannelDefinitions.map((definition) => {
-            const channel = normalized.channels[definition.id];
-            const comingSoon = metaFeatureLaunchPaused && definition.provider === "meta";
-            const lockedByPlan = definition.provider === "meta" && !entitlement.allowed && !comingSoon;
-            const blocked = comingSoon || lockedByPlan;
-            const enabled = channel.enabled && !blocked;
-            const handleMetaControlClick = () => onMetaComingSoonClick(definition.label);
-
-            return (
-              <div
-                key={definition.id}
-                className={cn("rounded-lg border p-3", comingSoon && "ring-1 ring-cyan-300/10")}
-                style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-[13px] font-semibold leading-5" style={{ color: "var(--ch-text)" }}>{definition.label}</p>
-                      <NeonBadge tone={comingSoon ? "cyan" : lockedByPlan ? "zinc" : enabled ? "green" : "amber"}>{comingSoon ? "em breve" : lockedByPlan ? "plano pro/scale" : enabled ? "ativo" : "pausado"}</NeonBadge>
-                      {definition.primary ? <NeonBadge tone="cyan">principal</NeonBadge> : null}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
-                    {comingSoon ? (
-                      <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] leading-4 text-blue-700">
-                        {metaFeatureComingSoonMessage}
-                      </p>
-                    ) : lockedByPlan ? (
-                      <p className="mt-2 rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 text-[11px] leading-4 text-amber-800">
-                        {entitlement.description}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-2">
-                  {definition.primary ? (
-                    <>
-                      <InfoTile label="Estado" value="Sempre ativo" />
-                      <InfoTile label="Historico" value="Gravado no CRM" />
-                    </>
-                  ) : (
-                    <ToggleTile
-                      icon={Power}
-                      label={`Ativar ${definition.shortLabel}`}
-                      description={comingSoon ? metaFeatureComingSoonMessage : "Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."}
-                      checked={enabled}
-                      disabled={lockedByPlan}
-                      onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { enabled: !enabled })}
-                    />
-                  )}
-
-                  {definition.mode === "public" ? (
-                    <div className="grid gap-2 md:grid-cols-3">
-                      <ToggleTile
-                        icon={MessageCircle}
-                        label="Comentario publico"
-                        description="Permite registrar e preparar resposta publica em comentarios."
-                        checked={channel.allowPublicReplies && !blocked}
-                        disabled={lockedByPlan}
-                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { allowPublicReplies: !channel.allowPublicReplies })}
-                      />
-                      <ToggleTile
-                        icon={Send}
-                        label="Direct privado"
-                        description="Permite continuar a conversa no privado quando a Meta liberar private reply/direct."
-                        checked={channel.allowPrivateReplies && !blocked}
-                        disabled={lockedByPlan}
-                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { allowPrivateReplies: !channel.allowPrivateReplies })}
-                      />
-                      <ToggleTile
-                        icon={ShieldCheck}
-                        label="Aprovacao humana"
-                        description="Segura respostas sensiveis de comentario antes de publicar."
-                        checked={channel.requiresHumanApproval && !blocked}
-                        disabled={lockedByPlan}
-                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
-                      />
-                    </div>
-                  ) : definition.primary ? null : (
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <ToggleTile
-                        icon={Bot}
-                        label="Resposta automatica"
-                        description="Permite que o agente responda no canal privado sem criar outro prompt."
-                        checked={channel.autoReply && !blocked}
-                        disabled={lockedByPlan}
-                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { autoReply: !channel.autoReply })}
-                      />
-                      <ToggleTile
-                        icon={ShieldCheck}
-                        label="Aprovacao humana"
-                        description="Segura conversas privadas quando houver risco ou regra comercial sensivel."
-                        checked={channel.requiresHumanApproval && !blocked}
-                        disabled={lockedByPlan}
-                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </BehaviorSection>
-
-      <BehaviorSection
-        title="Politica de atendimento"
-        description="O historico continua centralizado em leads, conversas e mensagens. Meta entra como novo canal, nao como novo agente."
-      >
-        <div className="grid gap-2 md:grid-cols-4">
-          <InfoTile label="Prompt" value="Unico por agente" />
-          <InfoTile label="Memoria" value="Unificada por lead" />
-          <InfoTile label="Plano" value={metaFeatureLaunchPaused ? "WhatsApp ativo" : entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
-          <InfoTile label="Status" value={metaFeatureLaunchPaused ? "Meta em breve" : changed ? "Alteracoes pendentes" : "Configuracao salva"} />
-        </div>
-      </BehaviorSection>
-    </div>
-  );
 }
 
 function countCloneProfileFields(profile: WhatsappCloneProfile) {
@@ -2658,7 +2426,6 @@ const whatsappConsoleTabs: Array<{
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
-  { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
 ];
 
 function WhatsappConsoleCommandBar({
@@ -2899,6 +2666,7 @@ function getAgentConnectionIndicator(status: string | null | undefined) {
 }
 
 function ClientAgentsManager({
+  newChannels, editChannels,
   agentName,
   agentRoleTitle,
   newCompanyId,
@@ -2936,6 +2704,7 @@ function ClientAgentsManager({
   onUpdate,
   variant,
 }: {
+  newChannels: ReactNode; editChannels: ReactNode;
   agentName: string;
   agentRoleTitle: string;
   newCompanyId: string;
@@ -3015,7 +2784,7 @@ function ClientAgentsManager({
 
   return (
     <Panel
-      title="Agentes WhatsApp"
+      title="Agentes"
       eyebrow="escolher / criar / clonar"
       action={<NeonBadge tone="cyan">{agents.length.toLocaleString("pt-BR")} agentes</NeonBadge>}
       className="mb-3 sm:mb-4"
@@ -3174,9 +2943,10 @@ function ClientAgentsManager({
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
-            <ActionButton icon={Wand2} label="Salvar e conectar WhatsApp" disabled={busy || creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Salvar agente e continuar" disabled={busy || creating || !createFormComplete} loading={creating} tone="ai" onClick={onCreate} />
           </div>
         </fieldset>
+        {newChannels}
         <PendingAgentConnection />
         </div>
         </AgentSetupDialog>
@@ -3185,7 +2955,7 @@ function ClientAgentsManager({
       {editingAgent && editingAgent.id === selectedAgentId ? (
         <ClientAgentSetupModal key={editingAgent.id} agent={editingAgent} companies={companies}
           busy={busy || creating} testing={testingAgentId === editingAgent.id} notice={notice}
-          connection={connection} onClose={onEditClose} onSave={onUpdate} onTest={onTestResponsibles} />
+          channels={editChannels} connection={connection} onClose={onEditClose} onSave={onUpdate} onTest={onTestResponsibles} />
       ) : null}
 
       {cloneSource ? (
@@ -3258,7 +3028,7 @@ function AgentSetupDialog({ title, busy, notice, onClose, children }: {
       style={{ background: "var(--ch-surface, #fff)", borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div><h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-          <p className="mt-1 text-xs text-slate-500">Dados do agente e conexão com o WhatsApp.</p></div>
+          <p className="mt-1 text-xs text-slate-500">Dados do agente, canais de atendimento e conexões.</p></div>
         <button type="button" aria-label="Fechar configuração do agente" disabled={busy} onClick={close}
           className="grid size-9 shrink-0 place-items-center rounded-lg border disabled:opacity-50"><X className="size-4" /></button>
       </div>
@@ -3276,9 +3046,9 @@ function PendingAgentConnection() {
   </div>;
 }
 
-function ClientAgentSetupModal({ agent, companies, busy, testing, notice, connection, onClose, onSave, onTest }: {
+function ClientAgentSetupModal({ agent, companies, busy, testing, notice, connection, channels, onClose, onSave, onTest }: {
   agent: ClientWhatsappAgent; companies: ClientCompany[]; busy: boolean; testing: boolean;
-  notice: Notice | null; connection: ReactNode; onClose: () => void;
+  notice: Notice | null; connection: ReactNode; channels: ReactNode; onClose: () => void;
   onSave: (id: string, input: { companyId: string; name: string; sectorName: string; roleTitle: string; prompt: string; responsibleHumans: ResponsibleHumanDraft[] }) => Promise<void>;
   onTest: (agent: ClientWhatsappAgent, drafts?: ResponsibleHumanDraft[]) => Promise<void>;
 }) {
@@ -3298,7 +3068,7 @@ function ClientAgentSetupModal({ agent, companies, busy, testing, notice, connec
         onTest={() => onTest(agent, responsibles)} />
       <div className="min-w-0">
         {changedCompany ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Salve a alteração da empresa antes de gerenciar a conexão.</p> : null}
-        <fieldset disabled={changedCompany || busy || testing} className="min-w-0 disabled:opacity-60">{connection}</fieldset>
+        <fieldset disabled={changedCompany || busy || testing} className="min-w-0 space-y-4 disabled:opacity-60">{channels}{connection}</fieldset>
       </div>
     </div>
   </AgentSetupDialog>;
@@ -3709,7 +3479,7 @@ function InternalAgentsManager({
             {companies.length > 0 ? (
               <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
             ) : null}
-            <ActionButton icon={Wand2} label="Salvar e conectar WhatsApp" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Salvar agente e continuar" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
           </div>
         </fieldset>
         <PendingAgentConnection />

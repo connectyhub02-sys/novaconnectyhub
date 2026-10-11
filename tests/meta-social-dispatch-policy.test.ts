@@ -7,8 +7,8 @@ import {
 } from "../src/lib/meta/social-dispatch-policy";
 
 describe("Meta social dispatch policy", () => {
-  it.each(["instagram_direct", "facebook_messenger", "instagram_comments", "facebook_comments"] as const)("rejects visible URLs before dispatch on %s until its button adapter is implemented", channel => {
-    expect(() => resolveMetaSocialDispatchTarget({ channel, pageId: "page", externalUserId: "person", sourceCommentId: "comment", text: "Acesse https://fixture.invalid/checkout" })).toThrow("botões de link");
+  it.each(["instagram_direct", "facebook_messenger", "instagram_comments", "facebook_comments"] as const)("rejects visible URLs before dispatch on %s when not supplied as a structured link button", channel => {
+    expect(() => resolveMetaSocialDispatchTarget({ channel, pageId: "page", externalUserId: "person", sourceCommentId: "comment", text: "Acesse https://fixture.invalid/checkout" })).toThrow("botão de link");
   });
   it.each([undefined, "invalid", "2026-10-10T12:00:00Z", "2026-10-11T12:02:00Z"])("blocks direct replies outside a proven 24-hour window (%s)", occurredAt => {
     const target = resolveMetaSocialDispatchTarget({channel:"facebook_messenger",externalUserId:"person",pageId:"page",text:"Olá"});

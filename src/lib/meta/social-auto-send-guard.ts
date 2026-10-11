@@ -1,6 +1,14 @@
 import "server-only";
+import { assertSocialFollowUpCurrent } from "./social-follow-up";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeWhatsappBehaviorSettings } from "@/lib/whatsapp/agent-behavior";
+import { normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
+import {
+  commentAutomationChannel,
+  commentAutomationChannelConfig,
+  normalizeSocialAutomations,
+  storedCommentAutomation,
+} from "./comment-automations";
 import {
   resolveMetaSocialQueueDecision,
   type MetaSocialChannel,
@@ -13,6 +21,9 @@ export async function assertMetaAutomaticSendAllowed(input: {
   agentId: string;
   conversationId: string | null;
   channel: MetaSocialChannel;
+  automation?: unknown;
+  preparing?: boolean;
+  followUpMetadata?: Record<string, unknown>;
 }) {
   const { client, organizationId, agentId, conversationId, channel } = input;
   const agent = await client
@@ -33,12 +44,48 @@ export async function assertMetaAutomaticSendAllowed(input: {
     throw new Error(
       "Envio automático bloqueado: agente indisponível ou pausado.",
     );
+  if (input.followUpMetadata)
+    await assertSocialFollowUpCurrent(
+      client,
+      organizationId,
+      conversationId ?? "",
+      input.followUpMetadata,
+      agent.data.metadata?.social_automations,
+    );
   const decision = resolveMetaSocialQueueDecision({
+    followUp: input.followUpMetadata
+      ? normalizeSocialAutomations(agent.data.metadata?.social_automations)
+          .followUp
+      : undefined,
     channel,
     config: agent.data.metadata?.multichannel_config,
     agentRequiresHumanApproval: agent.data.requires_human_approval !== false,
   });
-  if (!decision.shouldQueue || decision.requiresHumanApproval)
+  const automation = storedCommentAutomation(input.automation);
+  let automationConfig = null;
+  if (automation) {
+    const current = normalizeSocialAutomations(
+      agent.data.metadata?.social_automations,
+    ).rules.find((rule) => rule.id === automation.id);
+    if (
+      !current?.enabled ||
+      JSON.stringify(current) !== JSON.stringify(automation) ||
+      commentAutomationChannel(current) !== channel ||
+      !normalizeAgentChannelConfig(agent.data.metadata?.multichannel_config)
+        .channels[channel].enabled
+    )
+      throw new Error(
+        "Automação alterada, pausada ou canal desativado. Prepare uma nova resposta.",
+      );
+    automationConfig = commentAutomationChannelConfig(current);
+  }
+  if (
+    !decision.shouldQueue ||
+    (!input.preparing &&
+      (automationConfig
+        ? automationConfig.requiresHumanApproval
+        : decision.requiresHumanApproval))
+  )
     throw new Error(
       "Configuração alterada: esta resposta precisa de revisão humana.",
     );
@@ -75,5 +122,5 @@ export async function assertMetaAutomaticSendAllowed(input: {
     )
       throw new Error("Contato com opt-out: envio automático bloqueado.");
   }
-  return decision.channelConfig;
+  return automationConfig ?? decision.channelConfig;
 }
