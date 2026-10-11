@@ -1,5 +1,37 @@
 # Estado operacional da ConnectyHub
 
+## Central Meta e chat integrado — publicado, 11/10/2026
+
+Aplicação `d4dd37363c5457c068fbaaf6f81ce24e98ac4ce3` publicada às 14h09 BRT
+no slot a/3130. Fallback b/3131 em `9660d8994ade14e76d5db7cc3e1fa4d15865189a`.
+Builder parado, sem migration nova. [Entrega e matriz de limites](meta-central-social-2026-10-11.md).
+
+- Nova seção Meta do cliente: anúncios, publicações, calendário, chat oficial,
+  análise, Direct/Messenger, canais do agente e criativos. Conforme alinhamento
+  do titular, campanhas de mensagens e modelos ficam **dentro do Chat Meta**,
+  sem menus separados. Links antigos redirecionam para as abas do chat.
+- Calendário/biblioteca usam o fluxo existente de rascunho, revisão e agendamento;
+  o calendário avisa o limite de 40 publicações recentes. Admin tem acesso direto
+  às publicações e recebe a mesma aparência nova do chat.
+- Chat com papel de parede compartilhado e balões WhatsApp. Foto apenas quando
+  já existe no CRM da própria empresa; não presumir foto via Cloud API.
+- Atendimento social agora prepara respostas com prompt/persona/modelo do agente
+  e histórico próprio, com medição por execução. Controles de pausa, opt-out,
+  aprovação, permissões, contrato e janela padrão de 24h preservados/revalidados.
+- 157 testes Meta/multicanal, TypeScript, ESLint e build passaram. Candidata e
+  domínio passaram health/SHA, assets, logout home, acesso e Inngest assinado.
+  Conta de revisão real: chat/abas 200; Central Meta/API social/admin continuam
+  403 pela allowlist. Arquivo temporário privado removido.
+- UI cliente em acesso assistido: Central, campanhas no chat, calendário → data
+  no formulário, atendimento social e canais do agente conferidos. Desktop e
+  celular verificados; viewport restaurado e acesso assistido encerrado. Chat
+  admin e histórico de teste no IAB conferidos, sem novos envios externos.
+- `META_SOCIAL_DISPATCH_MODE` continua ausente: padrão `dry_run`. Direct/Messenger
+  reais ainda exigem homologação e ativação live. Nenhuma aprovação Meta foi
+  presumida/alterada. Reels/Stories/carrosséis, insights avançados, execução real
+  de Ads/MCP, ferramentas completas do agente social e paridade Metricool são
+  pendências explícitas; acesso a uma tela não comprova essas capacidades.
+
 ## Chat Meta oficial — publicado para testes, 11/10/2026
 
 Aplicação `9660d8994ade14e76d5db7cc3e1fa4d15865189a` publicada às 13h15 BRT

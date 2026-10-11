@@ -18,6 +18,8 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
 
+A expansão reúne a referência funcional do Metricool e os módulos Meta observados na Vision Home, com navegação própria da ConnectyHub. Calendário, conteúdo, atendimento, anúncios e resultados ficam na seção Meta do cliente. Campanhas de mensagens e modelos ficam dentro do Chat Meta oficial, com números e atendimento, sem entradas separadas no menu. Meta Ads permanece a área de anúncios pagos. Cobertura ampla é objetivo de produto; cada capacidade mantém estado de implementação, permissões e homologação separados. [Entrega da Central Meta e limites](meta-central-social-2026-10-11.md).
+
 Ordem definida pelo titular: Meta, YouTube e TikTok, com etapas de conexão,
 calendário/publicação, relacionamento, análise e anúncios por agentes/MCP.
 No lançamento do WhatsApp oficial, manter dois números: o atual UAZAPI para
