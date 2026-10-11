@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { serverModuleHarness } from "./helpers/server-module-harness";
 
 describe("Meta OAuth navigation", () => {
-  it.each([
+  it.each<Record<string, string>>([
     { "next-router-prefetch": "1" },
     { purpose: "prefetch" },
     { "sec-purpose": "prefetch;prerender" },
