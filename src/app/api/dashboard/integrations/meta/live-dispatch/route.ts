@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import {
   resolveDashboardCompanyId,
   statusForDashboardCompanyScopeError,
@@ -11,7 +11,7 @@ import {
   type MetaSocialDispatchLiveChannelDraft,
 } from "@/lib/meta/social-dispatch-policy";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";

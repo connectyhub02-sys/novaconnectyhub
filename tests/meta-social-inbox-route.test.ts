@@ -26,14 +26,12 @@ function fixture(options: { anonymous?: boolean; foreign?: boolean } = {}) {
     typeof import("../src/app/api/dashboard/meta-social/route")
   >("src/app/api/dashboard/meta-social/route.ts", {
     "next/server": { NextResponse },
-    "@/lib/supabase/profile": {
-      getCurrentWorkspace: async () =>
+    "@/lib/meta/company-access": {
+      getMetaWorkspace: async () =>
         options.anonymous
           ? null
           : { user: { id: "user-a" }, organization: { id: "org-a" } },
-    },
-    "@/lib/client-os/companies": {
-      requireClientCompanyAccess: async () => ({ id: "org-a" }),
+      requireMetaCompanyAccess: async () => ({ id: "org-a" }),
     },
     "@/lib/supabase/service": { createServiceClient: () => ({ from }) },
   });

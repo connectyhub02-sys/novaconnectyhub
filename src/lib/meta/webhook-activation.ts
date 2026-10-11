@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import {
   fetchMetaPageAccessToken,
   loadMetaGuidedOAuthConfig,

@@ -55,14 +55,12 @@ function fixture(
     typeof import("../src/app/api/dashboard/social-automations/route")
   >("src/app/api/dashboard/social-automations/route.ts", {
     "next/server": { NextResponse },
-    "@/lib/supabase/profile": {
-      getCurrentWorkspace: async () =>
+    "@/lib/meta/company-access": {
+      getMetaWorkspace: async () =>
         options.anonymous
           ? null
           : { user: { id: "user" }, organization: { id: "org" } },
-    },
-    "@/lib/client-os/companies": {
-      requireClientCompanyAccess: async () => {
+      requireMetaCompanyAccess: async () => {
         if (options.foreignCompany) throw new Error("Forbidden");
         return { id: "org" };
       },

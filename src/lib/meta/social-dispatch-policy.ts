@@ -199,7 +199,10 @@ export function resolveMetaSocialDispatchTarget(input: {
 
 export function resolveMetaSocialDispatchMode(
   value: unknown = process.env.META_SOCIAL_DISPATCH_MODE,
+  organizationId?: string,
+  allowedOrganizations: string = process.env.META_SOCIAL_LIVE_ORGANIZATIONS ?? "",
 ): MetaSocialDispatchMode {
+  if (organizationId && allowedOrganizations.split(",").map((id) => id.trim()).filter(Boolean).includes(organizationId)) return "live";
   return typeof value === "string" && value.trim().toLowerCase() === "live"
     ? "live"
     : "dry_run";
@@ -361,7 +364,6 @@ export function buildMetaSocialDispatchLiveActivation(input: {
   const instagramBusinessId =
     readString(metadata.selected_instagram_business_id) ??
     readString(metadata.instagram_business_id);
-  const reviewReady = isMetaReviewReadyForLive(metadata.review_test);
   const webhookActivationOk =
     readRecord(metadata.webhook_activation)?.ok === true;
   const channels = Object.fromEntries(
@@ -381,7 +383,7 @@ export function buildMetaSocialDispatchLiveActivation(input: {
           grantedPermissions,
           instagramBusinessId,
           pageId,
-          reviewReady,
+          reviewReady: isMetaReviewReadyForLive(metadata.review_test, channel),
           updatedAt,
           updatedBy: input.updatedBy ?? null,
           webhookActivationOk,
@@ -657,12 +659,17 @@ function resolveMetaSocialDispatchLiveChannelActivation(
   );
 }
 
-function isMetaReviewReadyForLive(value: unknown) {
+function isMetaReviewReadyForLive(value: unknown, channel: MetaSocialChannel) {
   const record = readRecord(value);
   const readiness = readRecord(record?.readiness);
   const status = readString(readiness?.status);
 
-  return record?.ok === true && (status === "ready" || status === "warning");
+  if (record?.ok === true && (status === "ready" || status === "warning")) return true;
+  // Ads and publishing diagnostics must not block a separately validated inbox.
+  const required = ["pages_read_engagement", "social_agent_permissions", "webhook_runtime",
+    ...(channel.startsWith("instagram") ? ["instagram_profile"] : [])];
+  const results = readArray(record?.results).map(readRecord);
+  return required.every((id) => results.some((result) => result?.id === id && result.ok === true));
 }
 
 function formatMetaLiveBlocker(value: string) {

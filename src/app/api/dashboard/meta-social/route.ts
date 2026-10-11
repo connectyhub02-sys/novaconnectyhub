@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
+import { requireMetaCompanyAccess as requireClientCompanyAccess } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 const channels = [
   "instagram_direct",

@@ -255,7 +255,7 @@ export async function processApprovedMetaSocialDispatch(input: {
         channelConfig.allowPublicReplies ?? channelConfig.allow_public_replies,
       ),
     });
-    const dispatchMode = resolveMetaSocialDispatchMode();
+    const dispatchMode = resolveMetaSocialDispatchMode(undefined, organizationId);
     const readiness = evaluateMetaSocialDispatchReadiness({
       channel,
       target,

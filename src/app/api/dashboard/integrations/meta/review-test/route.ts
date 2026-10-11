@@ -19,7 +19,7 @@ import { loadMetaWebhookRuntimeConfig } from "@/lib/meta/runtime-config";
 import { metaPageWebhookFields, summarizeMetaPageSubscription } from "@/lib/meta/webhook-activation-policy";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";

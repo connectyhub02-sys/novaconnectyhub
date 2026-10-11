@@ -7,7 +7,7 @@ import {
 } from "@/lib/client-os/social-approvals";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

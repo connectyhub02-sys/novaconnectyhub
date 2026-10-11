@@ -239,3 +239,20 @@ function buildReadyLiveActivation(
     updatedBy: "user-123",
   });
 }
+
+
+describe("isolated social rollout", () => {
+  it("keeps other organizations in dry run when one pilot is allowed", () => {
+    expect(resolveMetaSocialDispatchMode("dry_run", "own", "own,review")).toBe("live");
+    expect(resolveMetaSocialDispatchMode("dry_run", "customer", "own,review")).toBe("dry_run");
+    expect(resolveMetaSocialDispatchMode("dry_run", undefined, "own")).toBe("dry_run");
+    expect(resolveMetaSocialDispatchMode("dry_run", "own", "*")).toBe("dry_run");
+  });
+  it("uses actual social diagnostics without requiring unrelated publishing permissions", () => {
+    const results = ["pages_read_engagement", "social_agent_permissions", "webhook_runtime", "instagram_profile"].map(id => ({id, ok:true}));
+    const input = { appLiveModeConfirmed:true, channels:{instagram_direct:true}, scopes:["pages_messaging", "instagram_manage_messages"], metadata:{ selected_facebook_page_id:"page", selected_instagram_business_id:"ig", review_test:{ok:false,readiness:{status:"blocked"},results} } };
+    expect(buildMetaSocialDispatchLiveActivation(input).channels.instagram_direct.status).toBe("ready");
+    input.metadata.review_test.results[2].ok = false;
+    expect(buildMetaSocialDispatchLiveActivation(input).channels.instagram_direct.status).toBe("blocked");
+  });
+});
