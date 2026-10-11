@@ -7,7 +7,8 @@ import { MetaCommentAutomations } from "./meta-comment-automations";
 import { MetaSocialInbox } from "./meta-social-inbox";
 
 type Agent = { id: string; name: string; prompt: string; status: string; metadata: { multichannel_config?: unknown } };
-export function AdminMetaSocial() {
+export function AdminMetaSocial({ review = false }: { review?: boolean } = {}) {
+  const agentEndpoint = review ? "/api/dashboard/meta-review-agent" : "/api/admin/meta/social-agent";
   const [agent, setAgent] = useState<Agent | null>(null);
   const [diagnostics, setDiagnostics] = useState<{ label: string; ok: boolean; detail: string }[]>([]);
   const [companyId, setCompanyId] = useState("");
@@ -16,19 +17,19 @@ export function AdminMetaSocial() {
   const [paused, setPaused] = useState(false);
   const [channels, setChannels] = useState<AgentChannelConfig>(normalizeAgentChannelConfig(null));
   const load = useCallback(async () => {
-    const response = await fetch("/api/admin/meta/social-agent", { cache: "no-store" });
+    const response = await fetch(agentEndpoint, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     setAgent(data.agent); setCompanyId(data.companyId);
-  }, []);
+  }, [agentEndpoint]);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/admin/meta/social-agent", { cache: "no-store", signal: controller.signal })
+    fetch(agentEndpoint, { cache: "no-store", signal: controller.signal })
       .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); return data; })
       .then((data) => { setAgent(data.agent); setCompanyId(data.companyId); })
       .catch((error) => { if (!controller.signal.aborted) setNotice(error.message); });
     return () => controller.abort();
-  }, []);
+  }, [agentEndpoint]);
   function edit() {
     setName(agent?.name || "Assistente ConnectyHub"); setPrompt(agent?.prompt || "");
     setChannels(normalizeAgentChannelConfig(agent?.metadata.multichannel_config));
@@ -49,11 +50,11 @@ export function AdminMetaSocial() {
   }
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-xl font-semibold">Direct e comentários da ConnectyHub</h1><p className="mt-1 text-sm text-slate-500">Atendimento dos perfis próprios, com revisão antes do envio.</p></div>
+      <div><h1 className="text-xl font-semibold">{review ? "Avaliação · Direct e comentários" : "Direct e comentários da ConnectyHub"}</h1><p className="mt-1 text-sm text-slate-500">{review ? "Ambiente isolado de avaliação. Conecte os ativos em Integrações; permissões e disponibilidade reais continuam obrigatórias." : "Atendimento dos perfis próprios, com revisão antes do envio."}</p></div>
       <button className="rounded-lg border px-3 py-2 text-sm" disabled={busy || !companyId} onClick={edit}>{agent ? "Editar agente" : "Criar agente"}</button>
     </div>
     {notice && <p role="status" className="rounded-xl border p-3 text-sm">{notice}</p>}
-    <details className="rounded-xl border p-3 text-sm"><summary className="cursor-pointer">Conexão e diagnóstico</summary>
+    {!review && <details className="rounded-xl border p-3 text-sm"><summary className="cursor-pointer">Conexão e diagnóstico</summary>
       <div className="mt-3 flex flex-wrap gap-3">
         <button disabled={busy} onClick={() => void action("/api/admin/meta/social-agent", { action: "webhooks" })}>Conferir e ativar eventos de mensagens</button>
         <button disabled={busy} onClick={() => void action("/api/dashboard/integrations/meta/review-test", {})}>Verificar permissões e ativos</button>
@@ -61,9 +62,9 @@ export function AdminMetaSocial() {
       </div>
       <p className="mt-3 text-xs text-slate-500">Diagnóstico técnico não equivale à aprovação da Meta para contas de clientes. O envio também depende da liberação operacional no servidor.</p>
       {diagnostics.length > 0 && <ul className="mt-3 space-y-2">{diagnostics.map((item) => <li key={item.label}><strong>{item.ok ? "✓" : "Pendente"} · {item.label}</strong><p className="text-xs text-slate-500">{item.detail}</p></li>)}</ul>}
-    </details>
+    </details>}
     {agent && <MetaCommentAutomations key={agent.id} companyId={companyId} agents={[{ id: agent.id, companyId, name: agent.name, personaName: agent.name, roleTitle: "Atendimento Meta", status: agent.status }]} />}
-    <MetaSocialInbox admin />
+    <MetaSocialInbox admin={!review} agentHref={review ? "/dashboard/meta/revisao" : undefined} />
     {editing && <DialogFrame aria-label="Configurar agente Meta interno" onClose={() => { if (!busy) setEditing(false); }} className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/30 p-4">
       <div className="w-full max-w-2xl space-y-4 rounded-2xl bg-white p-5">
         <h2 className="font-semibold">Agente da ConnectyHub</h2>
@@ -72,7 +73,7 @@ export function AdminMetaSocial() {
         <AgentChannelSelector companyId={companyId} config={channels} onChange={setChannels} disabled={busy} />
         <label className="flex gap-2 text-sm"><input type="checkbox" checked={paused} disabled={busy} onChange={(event) => setPaused(event.target.checked)} />Pausar agente</label>
         <p className="text-xs text-slate-500">As conversas privadas deste agente interno passam por revisão. Para comentários, vale a revisão escolhida em cada automação.</p>
-        <div className="flex justify-end gap-3"><button disabled={busy} onClick={() => setEditing(false)}>Fechar</button><button disabled={busy || !name.trim() || !prompt.trim()} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" onClick={async () => { if (await action("/api/admin/meta/social-agent", { name, prompt, paused, channelConfig: channels })) setEditing(false); }}>Salvar agente</button></div>
+        <div className="flex justify-end gap-3"><button disabled={busy} onClick={() => setEditing(false)}>Fechar</button><button disabled={busy || !name.trim() || !prompt.trim()} className="rounded-lg bg-blue-600 px-4 py-2 text-white disabled:opacity-50" onClick={async () => { if (await action(agentEndpoint, { name, prompt, paused, channelConfig: channels })) setEditing(false); }}>Salvar agente</button></div>
       </div>
     </DialogFrame>}
   </div>;

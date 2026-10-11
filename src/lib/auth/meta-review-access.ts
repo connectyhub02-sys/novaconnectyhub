@@ -12,5 +12,8 @@ export function readMetaReviewAccess(user: { app_metadata?: Record<string, unkno
 export function isMetaReviewPath(path: string) {
   return ["/dashboard/integracoes", "/dashboard/chat-meta", "/api/dashboard/integrations/meta/connect",
     "/api/dashboard/integrations/meta/callback", "/api/dashboard/integrations/meta/whatsapp",
-    "/api/dashboard/integrations/meta/whatsapp/signup"].includes(path);
+    "/api/dashboard/integrations/meta/whatsapp/signup", "/dashboard/meta/revisao",
+    "/api/dashboard/meta-review-agent", "/api/dashboard/agents/channels",
+    "/api/dashboard/social-automations", "/api/dashboard/meta-social",
+    "/api/dashboard/social-approvals"].includes(path);
 }

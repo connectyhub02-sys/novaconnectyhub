@@ -1,5 +1,81 @@
 # Agentes unificados e automações de comentários — 11/10/2026
 
+## Piloto completo pelo painel e situação final — 17h BRT
+
+Publicado `bbda4099031abf1b69ac0f2008bbb74dd97c156c`, slot a/3130 às 17h02,
+sem migration. Atendimento da organização interna em `/admin/meta/atendimento`
+compartilha automações, inbox, aprovações e fila dos clientes, com autorização
+admin restrita à própria empresa. Status do cadastro corrigido para `online`.
+Diagnósticos removem parâmetros sensíveis de endpoints e grants vêm apenas da
+resposta OAuth. Limpeza de um registro de integração e um log confirmada, sem
+valores secretos neste relatório. Último conjunto: 54 testes/8 arquivos,
+ESLint, TypeScript, build e smoke candidata/domínio passaram; builder parado.
+
+Sessão admin restaurada pelo titular. Perfil participante autorizado:
+`lunaesindy`; destino próprio `connectyhub.ai`, publicação `DWE1hplEbXK`,
+media `17936053611033325`. Piloto live usa apenas organização interna
+`c5b8e371-b60d-4a17-94da-0a93e69a285d`; clientes continuam dry_run.
+
+1. Comentário `18074298824767381`, palavra-chave `VALIDACAO CH1110`:
+   regra específica gerou revisão; operador aprovou no painel. Resposta
+   privada HTTP 200 às 17h04 BRT, recebida no Instagram Web.
+2. O participante respondeu no Direct. Agente gerou rascunho; operador revisou
+   e editou antes de aprovar. Envio HTTP 200 às 17h05, recebido no Instagram.
+   Isso demonstra IA com revisão humana, não resposta autônoma sem edição.
+3. Comentário `17893268277435322`: segunda regra, limitada à mesma publicação,
+   gerou resposta pública IA. Aprovada sem edição; HTTP 200 às 17h07, resposta
+   visível ao expandir a discussão no Instagram. Monitor: três enviados,
+   zero falhas/retries. As duas regras e o agente foram pausados ao encerrar;
+   follow-up permaneceu desligado. Não houve teste de opt-out neste percurso.
+
+O botão web_url foi aceito pela API, porém não apareceu no Instagram Web.
+Não afirmar homologação visual de botões, Messenger, Facebook ou clientes
+externos com base neste piloto próprio.
+
+Vídeos de capturas reais, H.264 1920×1080, sem áudio, cortes de espera e títulos
+em inglês; sidebar privada excluída dos trechos de Direct:
+
+- `output/meta-review-20261011/comments/edit/instagram-comment-to-direct.mp4`
+  — 89 segundos, configuração, comentário, revisão, recebimento e continuidade.
+- `output/meta-review-20261011/comments/edit/instagram-comment-ai-reply.mp4`
+  — 50,53 segundos, regra, comentário, revisão e resposta pública visível.
+
+App Review continua **não enviado**. Após o teste, instagram_manage_comments
+segue 0/1 chamada; o portal informa até 24h para atualização. instagram_basic
+também estava 0/1 na consulta anterior. Upload via seletor do Chrome fechou o
+formulário sem anexar; fallback CDP não é suportado. Titular recebeu pedido de
+anexo manual do vídeo de comentários; nenhum desses dois anexos foi confirmado.
+Não considerar vídeos locais como vídeos enviados à Meta.
+
+Pendências de avaliação: anexar vídeos e declarações aplicáveis, contabilização
+dos testes, preparar acesso de avaliação isolado para automações/Direct (conta
+atual libera apenas integrações/chat WhatsApp), validar Messenger e comentários
+Facebook antes de declarar essas permissões demonstradas. Publicação do código
+e piloto próprio não equivalem à aprovação de acesso avançado de clientes.
+
+## Ajuste de layout e controle explícito — 16h36 BRT
+
+Release `c01806f59dc91494d1e211cee6d6d63ebb0cb0ce` publicada no slot a/3130.
+Removida a seleção de canais do editor principal; criação/edição agora usa uma
+linha compacta, com comentários e opções avançadas recolhidos. O modal foi
+conferido em navegador, sem a rolagem anterior. A seção Instagram/Facebook em
+Automações usa o mesmo Panel sanfona, fechado por padrão; abrir revelou as
+configurações existentes, sem alterar o rascunho salvo do cliente.
+
+Comentários sem correspondência com uma regra ativa não geram execução nem
+envio. Marcar o canal no agente apenas autoriza a automação; conteúdo, gatilho,
+filtro de publicação e revisão continuam explícitos por regra. Guards revalidam
+o estado antes do envio. 104 testes relevantes, ESLint e TypeScript passaram;
+build e smoke na candidata/domínio confirmaram health/SHA, assets, logout para
+a home, autorização e Inngest assinado. Capturas locais:
+`.codex-screens/agente-canais-compactos-20261011.png` e
+`.codex-screens/automacoes-meta-sanfona-20261011.png`.
+
+Reconsulta do App Review após a publicação: instagram_basic e
+instagram_manage_comments permanecem em 0/1 chamada; o primeiro tem vídeo
+anexado, o segundo ainda não. Submit continua bloqueado. A sessão admin foi
+restabelecida pelo titular para prosseguir com a demonstração própria.
+
 ## Implementação
 
 - Removidos o menu redundante **Agentes nos canais** e a aba **Redes sociais**. A rota antiga redireciona para Agentes. Criação/edição de agente da empresa e editor principal exibem WhatsApp, Direct, Messenger e comentários. O servidor exige integração, ativo selecionado, permissões concedidas e ativação de webhook para novas seleções Meta. Desativar continua permitido após desconexão.
@@ -31,6 +107,26 @@ O formulário exige descrição, screencast real de ponta a ponta, chamadas de t
 
 Referências oficiais consultadas: [coleção Instagram da Meta](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api), [templates](https://www.postman.com/meta/instagram/folder/rl2amj3/templates), [Send API Messenger](https://www.postman.com/meta/messenger-platform-api/folder/vilwbh4/send-api). Human Agent não foi usado para estender envio automatizado além da janela padrão.
 
-## Validação local
+## Preparação do piloto com Vision Home — continuação de 11/10
+
+O titular autorizou usar o perfil Instagram `visionhomeoficial`, confirmado na sessão aberta, como participante do teste em `connectyhub.ai`. Localizada publicação própria com chamada “EU QUERO” (`/connectyhub.ai/p/DWE1hplEbXK/`). Nenhum comentário ou Direct foi enviado nesta preparação.
+
+Após autorização específica, foram salvos no Facebook Login for Business do app ConnectyHub Connect, configuração `1530551425223156`, os escopos `instagram_manage_comments`, `instagram_manage_messages`, `pages_manage_metadata` e `pages_messaging`, preservando os seis anteriores. Reabertura do editor confirmou dez selecionados. Isso altera os escopos solicitados pelo login; não concede permissões ao token existente nem aprova App Review.
+
+Auditoria somente de leitura em produção confirmou que a integração da organização ConnectyHub Interno ainda registra apenas ads_read, business_management, instagram_basic, pages_read_engagement, pages_show_list e public_profile; Página e Instagram próprios selecionados. Não há agente vinculado a essa organização na consulta a agent_registry. É necessário reconectar os ativos próprios, verificar grants/eventos, preparar agente da empresa e ativação controlada antes do comentário real. A aba administrativa acessível no Chrome Connecty continuou exibindo acesso restrito como cliente após recarga; solicitado localizar a sessão administrativa informada pelo titular. Não usar a organização BuffaloMass ou o perfil Vision Home como substituto do destino próprio.
+
+## Validação da publicação anterior
+
+### Continuação: entrega real com lunaesindy
+
+O novo login administrativo foi confirmado no Admin OS e o OAuth concluído para os mesmos ativos próprios. O painel mostrou os quatro novos grants efetivamente concedidos. Em seguida, consultas oficiais mostraram apenas assinatura WhatsApp no app e nenhuma inscrição na Página. Foram configuradas e verificadas: assinatura Instagram `comments,messages,messaging_postbacks` no callback existente e inscrição da Página própria em `messages,messaging_postbacks`, preservando WhatsApp. Não foi ativado feed/Messenger de outras empresas.
+
+O perfil ativo no Instagram havia mudado para connectyhub.ai; nenhum comentário foi enviado por ele. Vision Home já não aparecia entre as sessões salvas. O titular autorizou substituir pelo perfil `lunaesindy`, confirmado antes do envio. Comentário `18449498941120368`, na mídia `17936053611033325`, publicado às 19:07:02 UTC / 16h07 BRT: “EU QUERO — teste autorizado da integração ConnectyHub.” A Graph API confirmou autor/texto; evento `f82bdc9e-9aeb-4c48-aba4-24b597423479` chegou às 19:07:07 UTC, status processed e sem erro.
+
+Teste isolado usando o token da Página no servidor enviou uma única resposta privada pelo endpoint Page/messages, recipient.comment_id, com template button e link para a home. Proteção por arquivo exclusivo impediu repetição automática do envio. HTTP 200 às 19:08:52 UTC; mensagem conferida nas solicitações do Instagram de lunaesindy. Aceita a conversa, foi enviada “TESTE ConnectyHub — recebi a mensagem no Direct.” e o evento de retorno `76f4f606-82b6-4c78-84c7-f3a15cec34b8` foi processado às 19:09:59 UTC, sem erro. Capturas locais em `.codex-screens/instagram-comentario-lunaesindy-20261011.png` e `instagram-direct-lunaesindy-20261011.png`.
+
+Limites: foi teste direto e controlado da API/recepção, não execução da regra pelo painel nem resposta de IA. O texto chegou, mas o botão Conhecer plataforma não apareceu no Instagram Web; compatibilidade visual/clique ainda pendente. Não habilitado envio global live, não criado agente interno, não gravado vídeo completo nem concluída submissão. A assinatura da Página contém somente messages e messaging_postbacks; o checklist atual ainda espera outros campos. Esses resultados não devem ser apresentados como homologação de toda a automação.
+
+Após o teste real, os formulários de instagram_manage_comments e instagram_basic foram abertos novamente: ambos ainda mostravam `0 of 1 API call(s) required`, com aviso da Meta de até 24 horas para contabilização. instagram_basic já possui screencast anexado; instagram_manage_comments ainda não. A submissão permanece incompleta e não enviada.
 
 253 testes em 34 arquivos Meta/multicanal/editor passaram (uma asserção de texto antiga foi atualizada para a mensagem atual do botão e reexecutada). Cobertura inclui autorização por empresa, agente estrangeiro, ativação forjada, gravação de rascunho, conflito de atualização, regra pausada/alterada, mensagem pronta sem IA, janela e cancelamento de follow-up. TypeScript e ESLint passaram. Aplicação 8ce71446c7c7f59e5346798560992b6510df9535 publicada no slot b/3131 às 15h37 BRT; fallback a/3130 preservado em d4dd3736. Build, health/SHA, assets, logout, autorização e Inngest assinado passaram na candidata e no domínio. Builder parado. Credenciais temporárias do smoke removidas. Conta de revisão manteve sua allowlist. O modo global continua dry_run. Editor e modais exibiram os canais; em Automações, a simulação e gravação de rascunho pausado funcionaram, com persistência após recarga. A remoção do rascunho de teste ficou em confirmação nativa do Chrome; nenhuma mensagem foi enviada ou regra ativada.

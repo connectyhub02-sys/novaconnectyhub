@@ -30,7 +30,7 @@ const labels: Record<string, string> = {
   instagram_comments: "Comentários Instagram",
   facebook_comments: "Comentários Facebook",
 };
-export function MetaSocialInbox({ admin = false }: { admin?: boolean } = {}) {
+export function MetaSocialInbox({ admin = false, agentHref }: { admin?: boolean; agentHref?: string } = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([]),
     [messages, setMessages] = useState<Message[]>([]);
   const [selected, setSelected] = useState(""),
@@ -93,7 +93,7 @@ export function MetaSocialInbox({ admin = false }: { admin?: boolean } = {}) {
         acompanhe as respostas que precisam de revisão antes do envio.
       </p>
       <div className="flex flex-wrap gap-3 text-sm">
-        <Link className="text-blue-600" href={admin ? "/admin/meta/atendimento" : "/dashboard/whatsapp"}>
+        <Link className="text-blue-600" href={agentHref ?? (admin ? "/admin/meta/atendimento" : "/dashboard/whatsapp")}>
           Configurar agente →
         </Link>
         <Link

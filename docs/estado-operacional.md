@@ -1,5 +1,55 @@
 # Estado operacional da ConnectyHub
 
+## Layout compacto e validação Meta no admin — 11/10/2026
+
+Layout `c01806f5` publicado às 16h36 BRT e conferido no navegador: canais
+somente nos modais criar/editar, opções de comentários recolhidas, seção
+Instagram/Facebook em sanfona fechada por padrão. Comentários exigem regra
+ativa correspondente; habilitar o canal sozinho não gera respostas.
+
+Às 17h02 BRT, `bbda4099031abf1b69ac0f2008bbb74dd97c156c` publicado no
+slot a/3130, fallback b em `00902d34`, builder parado, sem migration. Inclui
+atendimento próprio em `/admin/meta/atendimento`, correção do status online do
+agente interno e sanitização dos diagnósticos. Smoke candidata/domínio, build,
+TypeScript, ESLint e 54 testes dirigidos passaram nesta última correção.
+Valores sensíveis de debug_token removidos de um registro de integração e um
+log; nova auditoria não encontrou resíduos nesses campos. Grants passam a usar
+somente escopos OAuth, sem confundir requisitos diagnósticos com concessões.
+
+Piloto live restrito à organização interna via allowlist do servidor; demais
+organizações continuam dry_run. Com `lunaesindy` como participante, três envios
+pelo painel foram confirmados HTTP 200 e vistos no Instagram: comentário →
+Direct às 17h04, continuidade revisada às 17h05 e resposta pública IA às 17h07.
+As duas regras foram pausadas e o agente interno também, após a demonstração.
+Botão aceito pela API não apareceu no Instagram Web; não homologado visualmente.
+
+App Review **não enviado**. Reconsulta após os testes mantém comentários em
+0/1 chamada contabilizada (portal informa até 24h); instagram_basic também
+estava 0/1 na consulta anterior. Dois vídeos reais renderizados e verificados,
+mas o upload automatizado fechou o formulário sem anexar; solicitado anexo
+manual ao titular. Messenger/Facebook ainda precisam de demonstrações próprias,
+e a conta restrita de avaliação ainda não inclui automações/Direct.
+[Detalhes](meta-automacoes-comentarios-2026-10-11.md).
+
+## Piloto Instagram — comentário e Direct reais, 11/10/2026
+
+Perfil `visionhomeoficial` confirmado e autorizado pelo titular para comentar
+em `connectyhub.ai` e receber o teste. Quatro escopos de comentários, mensagens
+e eventos salvos na configuração Meta `1530551425223156`; reabertura confirmou
+dez opções. Após novo login admin, reconexão própria concluída: grants de
+instagram_manage_comments, instagram_manage_messages, pages_manage_metadata e
+pages_messaging conferidos no Admin OS. Assinatura Instagram comments/messages/
+messaging_postbacks ativa e Página própria inscrita em messages/messaging_postbacks.
+
+O titular substituiu o participante por `lunaesindy`, já conectado. Comentário
+real às 16h07 BRT processado sem erro; resposta privada enviada em teste isolado
+pela Graph API às 16h08, HTTP 200 e recebimento confirmado no Instagram Web.
+Resposta do participante chegou e foi processada às 16h09. Texto do template
+visível; botão web_url aceito pela API, mas não apareceu no Instagram Web.
+Isso não homologou regra automática/continuidade por agente: organização interna
+sem agente e modo global dry_run mantido. Vídeo completo e envio App Review
+permanecem pendentes. [Detalhes](meta-automacoes-comentarios-2026-10-11.md).
+
 ## Agentes unificados e automações Meta — publicado, 11/10/2026
 
 Aplicação `8ce71446c7c7f59e5346798560992b6510df9535` publicada às 15h37 BRT
