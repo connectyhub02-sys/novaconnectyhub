@@ -1,5 +1,37 @@
 # Estado operacional da ConnectyHub
 
+## Meta — laboratório oficial publicado, 11/10/2026
+
+Aplicação `2426cede7deefd7b08df68d8d0ec1aaca2505d80` publicada às 04h20 BRT
+no slot b/3131; slot a com `ca2849e7` preservado. Migrations `0189` e `0190`
+aplicadas; correção do índice real do arquivo versionada em `d9cf92f7`.
+
+Admin `/admin/meta` e cliente `/dashboard/chat-meta` publicados, com cofre,
+Embedded Signup, modelos, envio individual e chat oficial. Facebook/Instagram
+reabertos na interface; admin ganhou escopo interno e publicações próprias.
+Dois números mantidos. Sem lote, margem por mensagem ou coexistência ativados.
+
+Confirmado na Meta: token de teste válido e criptografado, renovado sem ampliar
+escopos até 10/12/2026 07:15:32 UTC; WABA `1077354978498958`, remetente
+`1373711385827414`; configuração de login `1802160894354148`; domínio canônico
+autorizado no SDK; webhook `messages` ativo em Graph v25.0. Modelo criado pela
+UI `connectyhub_demo_oficial_20261011`, ID `2861965057524081`, já APPROVED.
+Aprovação do modelo não equivale à aprovação das permissões do app.
+
+Validação: 93 testes Meta, TypeScript, lint e build; teste transacional real do
+arquivo sem duplicação; ACL de tokens/RPCs negada ao cliente; health/SHA,
+home/login/assets, logout para `/`, rotas protegidas e GET Inngest assinado
+validados na candidata e no domínio. Webhook vazio válido 200, inválido 401.
+UI autenticada: conexão do cofre, criação de modelo, abertura do Embedded
+Signup e rascunho orgânico criado/arquivado. Builder parado após o build.
+
+Pendente: destinatário próprio e código de verificação para testar entrega,
+resposta e gravar demonstrações; confirmação específica do vínculo dos ativos
+sociais próprios/Política de Não Discriminação; App Review/Access Verification;
+onboarding de número real; desautorização/exclusão; recursos comerciais e
+outras redes do plano. Nenhuma mensagem externa ou anúncio foi disparado.
+[Escopo, evidência e roteiro](meta-whatsapp-laboratorio-2026-10-11.md).
+
 ## Meta — primeira etapa e conexão protegida, 11/10/2026
 
 Commit `ca2849e7` publicado às 03h18 BRT no slot a/3130. Slot b preservado
