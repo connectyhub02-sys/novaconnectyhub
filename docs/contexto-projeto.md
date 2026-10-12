@@ -28,11 +28,19 @@ Até nova instrução, os testes Ads permanecem sem ativação de anúncios ou g
 
 Em 12/10 o titular definiu a incorporação dos recursos úteis do ViralCheck: análise
 opcional de imagens/vídeos, diagnóstico editorial com evidências, melhorias,
-legendas e roteiros, seguida de proposta de campanha por prompt ou por criativo.
+legendas, seguida de proposta de campanha por prompt ou por criativo.
 O usuário experiente informa a estrutura; o iniciante recebe hipóteses para revisar.
 Score não é promessa de viralização ou vendas. Verba, destino, ativos e autorização
 de ativação precisam ser explícitos e separados da geração por IA. Histórico e
 consumo pertencem à organização. [Implementação e limites](meta-creative-studio-viralcheck-2026-10-12.md).
+
+Correção de escopo do titular em 12/10: retirar criação, melhoria e análise de
+roteiros do estúdio e da pauta futura. O diagnóstico é de criativos reais (fotos,
+carrosséis e vídeos), para orgânico ou pago. Não oferecer geração textual de
+roteiro como alternativa ao envio do criativo. Preservar registros de consumo
+anteriores, sem repetir chamadas. A execução de campanhas nesta etapa é Meta;
+Google Ads fica para depois. IA usada pelo cliente sempre debita sua carteira
+responsável pelas tarifas vigentes, inclusive no acesso administrativo assistido.
 
 Diretriz posterior do titular em 12/10: todos os recursos desta expansão devem
 chegar ao admin e a todos os planos dos clientes, deixando a segmentação comercial

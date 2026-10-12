@@ -2,6 +2,8 @@
 
 Planejamento de 12/10/2026 para transformar análise de conteúdo, publicação e tráfego pago em uma jornada simples na ConnectyHub. A IA prepara e recomenda; o cliente confere o criativo, entende a proposta e aprova antes da execução. Meta primeiro, Google Ads na sequência, reutilizando a mesma experiência.
 
+> Atualização do titular em 12/10: criação, melhoria e análise de roteiros foram retiradas da pauta. Os registros abaixo sobre o produto de origem são históricos; não autorizam trazer esses recursos para o painel. Foco em criativos reais e campanhas Meta.
+
 ## Decisões do produto
 
 - Todos os recursos desta expansão devem estar disponíveis para todas as organizações e todos os planos. A segmentação comercial será decidida depois de os recursos funcionarem e das aprovações solicitadas à Meta. Não criar novos bloqueios Start, Pro ou Scale durante esta expansão.
@@ -31,8 +33,8 @@ Classificação baseada nos módulos do checkout `C:/Users/conne/Documents/Viral
 | Processamento em segundo plano | `actions/analyze.ts`, função Inngest | Permitir sair da tela e voltar ao resultado; estados persistentes e recuperação sem cobrança duplicada |
 | Score e recomendações | `AnalysisResultView.tsx`, prompts do pipeline | Exibir nota de qualidade, justificativas e até três prioridades; não apresentar a nota como chance de venda ou viralização |
 | Sugestões por rede | `platform_scores` e `social_optimization` | Adaptar linguagem, títulos, legendas, hashtags e formato por rede; separar sugestão editorial de métrica observada |
-| Roteiros curtos, longos e melhoria de texto | Modos `generate_script_short`, `generate_script_long`, `improve_script` | Um comando “Criar ou melhorar roteiro”, com duração e formato opcionais; verificar percurso completo, pois nem todo modo tem entrada evidente na interface atual |
-| Cenas e fala separadas | `script_content`, `script_dialogue` no pipeline | Roteiro visual e fala para gravação; integração futura com o Estúdio de Voz existente |
+| Roteiros curtos, longos e melhoria de texto | Modos `generate_script_short`, `generate_script_long`, `improve_script` | Excluído por decisão do titular |
+| Cenas e fala separadas | `script_content`, `script_dialogue` no pipeline | Excluído por decisão do titular |
 | Histórico pesquisável e detalhes | `HistoryList.tsx`, rotas de histórico e análise | Biblioteca única de criativos, análises e versões, sem o limite funcional de apenas 40 itens recentes |
 | Evolução de notas | `EvolutionChart.tsx`, `PerformanceChart.tsx` | Comparação editorial entre versões; esses gráficos não são alcance, receita ou ROAS |
 | Relação entre análises e referências | `parentAnalysisId`, `sourceType` em `actions/analyze.ts` | Base para “original → versão melhorada”; relacionamento existente não equivale a comparador completo pronto |
@@ -80,7 +82,7 @@ Sites externos exigem um mecanismo de instalação autorizado ou uma orientaçã
 
 ### Etapa 2 Estúdio criativo completo
 
-**Entrega:** consolidar o que veio do Viral Check: imagem, vídeo com áudio disponível, carrossel, análise de texto e roteiros curto/longo; evidências, legendas por rede e sugestões concretas. Acrescentar versões, busca e comparação lado a lado. Nota editorial permanece separada dos resultados publicitários.
+**Entrega:** consolidar o que veio do Viral Check: imagem, vídeo com áudio disponível, carrossel; evidências, legendas por rede e sugestões concretas. Acrescentar versões, busca e comparação lado a lado. Nota editorial permanece separada dos resultados publicitários.
 
 **Base técnica:** fila em segundo plano com estados reais; reserva e liquidação de créditos, limite operacional comum, uso do modelo registrado, consulta de resultado e recuperação assistida de chamadas incertas. Nada de reenviar automaticamente uma geração que pode ter sido cobrada.
 
@@ -114,9 +116,9 @@ Sites externos exigem um mecanismo de instalação autorizado ou uma orientaçã
 
 **Decisão atual do titular em 12/10:** implementar Gemini com Google Search para pesquisa externa, sem contratar AdSpy/Tavily. A menção a Sheets foi esclarecida explicitamente como Search. No checkout examinado, `actions/trends.ts` usa Tavily + Gemini; reaproveitar a experiência, não esse fornecedor.
 
-**Inspirações próprias propostas:** sugestões a partir do catálogo, contexto da empresa, perguntas recorrentes agregadas, criativos e resultados daquela mesma empresa. Transformar uma ideia em roteiro, criativo ou rascunho do calendário. Isso usa IA e tem consumo de inferência, mas não exige assinatura de radar externo. Não consulta históricos privados de outros clientes nem se apresenta como tendência atual do mercado.
+**Inspirações próprias propostas:** sugestões a partir do catálogo, contexto da empresa, perguntas recorrentes agregadas, criativos e resultados daquela mesma empresa. Usar ideias como contexto para avaliar um criativo ou preparar um rascunho do calendário. Isso usa IA e tem consumo de inferência, mas não exige assinatura de radar externo. Não consulta históricos privados de outros clientes nem se apresenta como tendência atual do mercado.
 
-**Implementação autorizada:** Gemini com Google Search pesquisa conteúdo público atual com fontes. Cada consulta e a inferência entram no consumo, com reserva e liquidação idempotente; não presumir franquia gratuita nem equivalência com uma base de inteligência de anúncios. Mostrar data, fontes e limites, em seção recolhível, com passagem para roteiro sujeita à revisão. Referência: [Grounding with Google Search](https://ai.google.dev/gemini-api/docs/generate-content/google-search).
+**Implementação autorizada:** Gemini com Google Search pesquisa conteúdo público atual com fontes. Cada consulta e a inferência entram no consumo, com reserva e liquidação idempotente; não presumir franquia gratuita nem equivalência com uma base de inteligência de anúncios. Mostrar data, fontes e limites, em seção recolhível, com uso como contexto da análise do criativo. Referência: [Grounding with Google Search](https://ai.google.dev/gemini-api/docs/generate-content/google-search).
 
 **Aceite:** fonte indisponível não vira “tendência confirmada”; ideias da IA não se passam por métrica pública. Resultados privados de outras empresas nunca aparecem como inspiração. Custos de busca e IA registrados antes de oferecer o serviço comercialmente.
 
@@ -132,7 +134,7 @@ Começar com um percurso delimitado de Pesquisa para objetivo/destino definidos.
 
 ## Evoluções posteriores do produto de origem
 
-Após a jornada principal: primeira análise em landing page conectada ao CRM; notificações por e-mail; atalhos do roteiro para o Estúdio de Voz; análise de referências autorizadas; exportação PDF/CSV além do Markdown; métricas de qualidade e custo no admin. Preparação editorial para YouTube/TikTok pode reaproveitar o estúdio, mas conexão e publicação nessas redes continuam integrações próprias.
+Após a jornada principal: primeira análise em landing page conectada ao CRM; notificações por e-mail; análise de referências autorizadas; exportação PDF/CSV além do Markdown; métricas de qualidade e custo no admin. Preparação editorial para YouTube/TikTok pode reaproveitar o estúdio, mas conexão e publicação nessas redes continuam integrações próprias.
 
 Não duplicar autenticação, conta, carteira, checkout, CRM ou agentes. Não importar bases ou chaves do Viral Check. Migração de dados históricos do produto de origem, se desejada depois, requer escopo separado.
 

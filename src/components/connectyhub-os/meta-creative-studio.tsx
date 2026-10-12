@@ -29,7 +29,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
     const [r, m] = await Promise.all([fetch(`/api/dashboard/meta-creative${suffix}`, { cache: "no-store" }), fetch(`/api/dashboard/meta-organic${suffix}`, { cache: "no-store" })]);
     const data = await r.json(), assets = await m.json();
     if (!r.ok) throw Error(data.error || "Histórico indisponível.");
-    setJobs(data.jobs); setTariffs(data.tariffs??[]); if (m.ok) setMedia(assets.overview.media);
+    setJobs(data.jobs.filter((j: {mode: string}) => j.mode !== "script")); setTariffs(data.tariffs??[]); if (m.ok) setMedia(assets.overview.media);
   }, [suffix]);
   const current = jobs.find(j => j.id === selected) ?? jobs[0], report = current?.result;
   const selectedMedia = localPreview ?? media.find(m => m.id === mediaId);
@@ -48,7 +48,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
     try { const id = crypto.randomUUID(); setSelected(id); setApprovalCheck(false);
       const r = await fetch(`/api/dashboard/meta-creative${suffix}`, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: id, mode, mediaId: mediaId || null, prompt: automatic ? "" : prompt, goal, audience, destination, budgetMode, dailyBudget: budget || null, currency: proposalCurrency || null, adCount, analyze, assistance }) });
-      const d = await r.json(); if (!r.ok) throw Error(d.error || "Análise indisponível."); setJobs(d.jobs);
+      const d = await r.json(); if (!r.ok) throw Error(d.error || "Análise indisponível."); setJobs(d.jobs.filter((j: {mode: string}) => j.mode !== "script"));
     } catch (e) { setError(e instanceof Error ? e.message : "Confira o histórico antes de repetir."); await load().catch(() => undefined); } finally { setBusy(false); }
   }
   async function approveProposal() {
@@ -79,7 +79,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
       `Score editorial: ${r.score === null ? "Não atribuído" : `${r.score}/100`}`,
       ...r.criteria.map(c => `## ${c.name} · ${c.score ?? "Sem nota"}\n${c.evidence}\n${c.improvement}`),
       `## Pontos fortes\n${r.strengths.map(x => `- ${x}`).join("\n")}`, `## Melhorias\n${r.improvements.map(x => `- ${x}`).join("\n")}`,
-      ...r.captions.map(c => `## Legenda · ${c.platform}\n${c.text}`), `## Roteiro\n${r.script}`, `## Fala\n${r.dialogue}`,
+      ...r.captions.map(c => `## Legenda · ${c.platform}\n${c.text}`),
       ...(r.campaign ? [`## Proposta de campanha\n${JSON.stringify(r.campaign, null, 2)}`] : []),
       `## Limitações\n${r.limitations.join("\n")}`, "Diagnóstico editorial por IA. Não garante resultados nem constitui campanha publicada."].join("\n\n");
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
@@ -89,9 +89,9 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
     <summary className="flex cursor-pointer items-center gap-3 p-5 font-semibold"><Sparkles size={20} className="text-blue-600"/>Criativos e campanhas com IA<span className="ml-auto text-xs font-normal text-slate-500">Analisar · Melhorar · Planejar</span></summary>
     {opened && <div className="space-y-5 border-t border-slate-100 p-5">
       <p className="text-sm text-slate-600">Envie seu criativo e escolha o que deseja preparar. A IA utiliza os créditos da sua conta.</p>
-      <details className="text-xs text-slate-500"><summary className="cursor-pointer">Como os créditos de IA são cobrados</summary><p className="mt-2">Reservamos créditos antes da geração e cobramos o consumo efetivo uma única vez. Imagens, vídeo e áudio entram nos tokens medidos pelo provedor. O total aparece no histórico. Consultar um resultado salvo não gera nova cobrança.</p>{tariffs.map(t=><p key={t.feature}>{t.feature==="media_video_analysis"?"Análise de vídeo":t.feature==="media_image_analysis"?"Análise de imagem":"Propostas e roteiros"}: {t.inputPerThousand.toLocaleString("pt-BR")} créditos / mil tokens de entrada + {t.outputPerThousand.toLocaleString("pt-BR")} / mil de saída.</p>)}{!tariffs.length&&<p>As tarifas serão conferidas no servidor antes de gerar. Sem tarifa válida, a geração é bloqueada.</p>}</details>
-      <MetaTrendResearch companyId={companyId} onUse={text=>{setMode("script");setPrompt(text);setNotice("Pesquisa adicionada às instruções. Revise e clique em Gerar roteiro.");}}/>
-      <div className="flex flex-wrap gap-2">{([["analysis", "Analisar criativo"], ["campaign", "Preparar campanha"], ["script", "Criar ou melhorar roteiro"]] as const).map(([v, text]) => <button key={v} disabled={busy} className={`${button} ${mode === v ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => setMode(v)}>{text}</button>)}</div>
+      <details className="text-xs text-slate-500"><summary className="cursor-pointer">Como os créditos de IA são cobrados</summary><p className="mt-2">Reservamos créditos antes da geração e cobramos o consumo efetivo uma única vez. Imagens, vídeo e áudio entram nos tokens medidos pelo provedor. O total aparece no histórico. Consultar um resultado salvo não gera nova cobrança.</p>{tariffs.map(t=><p key={t.feature}>{t.feature==="media_video_analysis"?"Análise de vídeo":t.feature==="media_image_analysis"?"Análise de imagem":"Propostas de campanha"}: {t.inputPerThousand.toLocaleString("pt-BR")} créditos / mil tokens de entrada + {t.outputPerThousand.toLocaleString("pt-BR")} / mil de saída.</p>)}{!tariffs.length&&<p>As tarifas serão conferidas no servidor antes de gerar. Sem tarifa válida, a geração é bloqueada.</p>}</details>
+      <MetaTrendResearch companyId={companyId} onUse={text=>{setMode("analysis");setPrompt(text);setNotice("Pesquisa adicionada como contexto. Selecione seu criativo para analisar.");}}/>
+      <div className="flex flex-wrap gap-2">{([["analysis", "Analisar criativo"], ["campaign", "Preparar campanha"]] as const).map(([v, text]) => <button key={v} disabled={busy} className={`${button} ${mode === v ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => setMode(v)}>{text}</button>)}</div>
       {mode === "campaign" && <fieldset className="rounded-xl bg-blue-50 p-3">
         <legend className="px-1 text-sm font-medium">Como você quer preparar?</legend>
         <div className="flex flex-wrap gap-2">{([["automatic", "Deixar a IA preparar"], ["guided", "Orientar a IA"]] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={assistance === value} disabled={busy} className={`${button} ${assistance === value ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => setAssistance(value)}>{label}</button>)}</div>
@@ -103,7 +103,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
           <label className={`${button} cursor-pointer`}><Upload size={16}/>Enviar imagem ou vídeo<input aria-label="Enviar criativo para IA" type="file" accept="image/jpeg,image/png,image/webp,video/mp4" className="sr-only" disabled={busy} onChange={e => { upload(e.target.files?.[0]); e.target.value = ""; }}/></label>
           {selectedMedia && <CreativeMediaPreview key={selectedMedia.storageUrl} url={selectedMedia.storageUrl} contentType={selectedMedia.contentType} name={selectedMedia.fileName} pending={Boolean(localPreview)}/>}
           <p className="text-xs text-slate-500">Imagens até 8 MB; vídeo MP4 até 100 MB. O arquivo será analisado pelo provedor de IA somente ao gerar.</p>
-          {!automatic && <label className="block text-sm">Suas instruções<textarea className={field} rows={4} maxLength={6000} value={prompt} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder={mode === "campaign" ? "Ex.: quero uma campanha CBO com três anúncios. Use este vídeo para apresentar meu produto e explique sua estratégia." : "Ex.: avalie o gancho, a clareza da oferta e o que devo melhorar. Ou peça um novo roteiro."}/></label>}
+          {!automatic && <label className="block text-sm">Suas instruções<textarea className={field} rows={4} maxLength={6000} value={prompt} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder={mode === "campaign" ? "Ex.: quero uma campanha CBO com três anúncios. Use este vídeo para apresentar meu produto e explique sua estratégia." : "Ex.: avalie o gancho, a clareza da oferta e o que devo melhorar."}/></label>}
           <label className="block text-sm">Objetivo<input className={field} maxLength={500} value={goal} disabled={busy} onChange={e => setGoal(e.target.value)} placeholder="Ex.: receber pedidos de orçamento pelo site"/></label>
           <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm">Mais contexto (opcional)</summary><label className="mt-3 block text-sm">Público e contexto do negócio<textarea className={field} rows={2} maxLength={1000} value={audience} disabled={busy} onChange={e => setAudience(e.target.value)} placeholder="Descreva seu produto, região e necessidades do público. Sem dados pessoais de leads."/></label></details>
           {mode === "campaign" && <>{!automatic && <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm">Ajustar estrutura (CBO / ABO)</summary><div className="mt-3 grid grid-cols-2 gap-3"><label className="text-sm">Distribuição da verba<select className={field} value={budgetMode} disabled={busy} onChange={e => setBudgetMode(e.target.value)}><option>CBO</option><option>ABO</option></select></label><label className="text-sm">Número de anúncios<input className={field} type="number" min={1} max={10} value={adCount} disabled={busy} onChange={e => setAdCount(Number(e.target.value))}/></label></div><p className="mt-2 text-xs text-slate-500">CBO: verba na campanha. ABO: verba dividida entre conjuntos. Esses campos prevalecem sobre as instruções.</p></details>}
@@ -112,7 +112,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
             <label className="block text-sm">Para onde levar as pessoas? (opcional)<input className={field} type="url" value={destination} disabled={busy} onChange={e => setDestination(e.target.value)} placeholder="https://..."/></label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={analyze} disabled={busy} onChange={e => setAnalyze(e.target.checked)}/>Incluir diagnóstico e score do criativo</label>
 </>}
-          <button className={`${button} bg-blue-600 font-semibold text-white`} disabled={busy || (mode === "analysis" || automatic ? !mediaId : !mediaId && !prompt.trim())} onClick={generate}>{busy ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} {busy ? "Processando…" : mode === "campaign" ? "Gerar proposta de campanha" : mode === "script" ? "Gerar roteiro" : "Analisar criativo"}</button>
+          <button className={`${button} bg-blue-600 font-semibold text-white`} disabled={busy || (mode === "analysis" || automatic ? !mediaId : !mediaId && !prompt.trim())} onClick={generate}>{busy ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} {busy ? "Processando…" : mode === "campaign" ? "Gerar proposta de campanha" : "Analisar criativo"}</button>
           <p className="text-xs text-slate-500">A nota avalia o conteúdo; não garante viralização, vendas ou aprovação de anúncios. Propostas ficam no histórico e não ativam anúncios.</p>
         </div>
         <div className="space-y-4">
@@ -143,8 +143,6 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
             </div>}
             {current?.proposal_approval && report.campaign && <MetaCampaignLaunch key={current.id} companyId={companyId} proposalId={current.id} brief={current.brief}/>}
             {report.captions.map((c, i) => <details key={i}><summary className="cursor-pointer text-sm font-medium">Legenda · {c.platform}</summary><p className="mt-2 whitespace-pre-wrap text-sm">{c.text}</p></details>)}
-            {report.script && <details><summary className="cursor-pointer text-sm font-medium">Roteiro e cenas</summary><p className="mt-2 whitespace-pre-wrap text-sm">{report.script}</p></details>}
-            {report.dialogue && <details><summary className="cursor-pointer text-sm font-medium">Fala para gravação</summary><p className="mt-2 whitespace-pre-wrap text-sm">{report.dialogue}</p></details>}
             <div className="flex flex-wrap gap-2"><button className={button} onClick={download}><Download size={15}/>Exportar relatório</button>{current?.brief.mediaId && <button className={button} disabled={busy || drafted.includes(current.id)} onClick={organicDraft}>{drafted.includes(current.id) ? "Rascunho preparado" : "Preparar publicação orgânica"}</button>}</div>
             <p className="text-xs text-slate-500">Créditos utilizados: {current?.charge_credits ?? "Em conferência"}</p>
           </article>}

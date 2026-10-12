@@ -4,7 +4,7 @@ const mediaId = "11111111-1111-4111-8111-111111111111";
 const brief = (extras = {}) => parseCreativeBrief({ mode: "campaign", prompt: "Crie minha campanha", adCount: 3, currency: "USD", ...extras });
 const generated = { title: "Proposta", summary: "Diagnóstico", score: 99, criteria: creativeCriteria.map(name => ({ name, score: 60, evidence: "Texto visível no criativo", improvement: "Melhorar contraste" })), campaign: { dailyBudget: 9999, budgetMode: "ABO", destination: "https://malicioso.test", adSets: [{name:"A"},{name:"B"},{name:"C"}], ads: [1,2,3].map(i => ({name:`Anúncio ${i}`,primaryText:"Texto da oferta"})) } };
 describe("creative studio policies", () => {
-  it("does not score unseen media or a draft script", () => expect(parseCreativeReport(generated, brief()).score).toBeNull());
+  it("does not score unseen media", () => expect(parseCreativeReport(generated, brief()).score).toBeNull());
   it("calculates score from evidence instead of accepting the free-form total", () => expect(parseCreativeReport(generated, brief({mediaId})).score).toBe(60));
   it("does not label missing evidence as a score", () => expect(parseCreativeReport({...generated,criteria:[]}, brief({mediaId})).score).toBeNull());
   it("respects the option to skip scoring", () => expect(parseCreativeReport(generated, brief({mediaId,analyze:false})).score).toBeNull());
@@ -15,8 +15,8 @@ describe("creative studio policies", () => {
   it("requires actual media for media analysis", () => expect(()=>parseCreativeBrief({mode:"analysis",prompt:"analise"})).toThrow());
   it("requires explicit currency when there is a budget",()=>expect(()=>brief({dailyBudget:50,currency:null})).toThrow(/moeda/));
   it("does not accept the model's currency",()=>expect(parseCreativeReport({...generated,campaign:{...generated.campaign,currency:"BRL"}},brief({dailyBudget:50})).campaign?.currency).toBe("USD"));
-  it("does not carry hidden campaign fields into a script or media diagnosis",()=>{
-    for(const mode of ["script","analysis"]){
+  it("does not carry hidden campaign fields into media diagnosis",()=>{
+    for(const mode of ["analysis"]){
       const b=brief({mode,mediaId,dailyBudget:50,currency:"USD",destination:"https://example.com",budgetMode:"ABO",adCount:8});
       expect(b.dailyBudget).toBeNull();expect(b.currency).toBeNull();expect(b.destination).toBe("");expect(b.budgetMode).toBe("CBO");expect(b.adCount).toBe(3);
     }
@@ -35,3 +35,5 @@ it("rejects empty automatic campaigns and unknown strategies",()=>{
  expect(()=>brief({assistance:"unlimited"})).toThrow();
  expect(()=>parseCreativeReport({...generated,campaign:{...generated.campaign,ads:[]}},brief({assistance:"automatic"}))).toThrow();
 });
+
+it("rejects removed script generation",()=>expect(()=>parseCreativeBrief({mode:"script",prompt:"roteiro"})).toThrow());
