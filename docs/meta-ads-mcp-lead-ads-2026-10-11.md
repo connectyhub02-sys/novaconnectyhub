@@ -348,3 +348,19 @@ Management mostra Completed. Vídeos não estão mais pendentes nesta rodada.
 Aguardar contabilização e revalidar requisitos antes de enviar; não marcar
 submetido/aprovado. Evidências e auditoria em `edit/final-review/upload-audit.json`,
 `mcp-anexado-meta.png` e `review-pronto-aguarda-contadores.png`.
+
+## Acompanhamento — 12/10/2026, 00h58 BRT
+
+Portal confirmado no Chrome Connecty: pedido 1078832598351314 ainda não enviado;
+Submit for review desabilitado. Verification, App settings, Data handling e
+Reviewer instructions em 100%; Allowed usage em 50%, renovação concluída.
+Reabertos ads_mcp_management, ads_management, pages_manage_ads e
+pages_manage_metadata: todos ainda em 0/1, com View uploaded screencast e textos
+preservados. Declaração de uso permitida permanece marcada nos formulários
+inspecionados visualmente. Nenhum anexo substituído ou permissão removida.
+Os demais cinco contadores não foram reabertos nesta checagem; os nove pedidos
+continuam com requisitos incompletos na listagem. Ainda dentro de 24h dos
+últimos testes; não foram realizadas novas chamadas para aumentar contadores.
+Acompanhamento permanece ativo a cada 2h. Corrigidas referências antigas no
+lembrete: produção 1d6b9d9b/fallback d7f21f9e, Pixels agora com eventos de teste,
+conforme entrega de Pixel/CAPI de 12/10. Sem mudanças na solicitação.
