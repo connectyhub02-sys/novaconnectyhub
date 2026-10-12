@@ -9,7 +9,7 @@ create table public.asaas_account_webhooks (
   primary key (mode, provider_webhook_id)
 );
 alter table public.asaas_account_webhooks enable row level security;
-revoke all on public.asaas_account_webhooks from public, anon, authenticated;
+revoke all on public.asaas_account_webhooks from public, anon, authenticated, service_role;
 grant select, insert on public.asaas_account_webhooks to service_role;
 comment on table public.asaas_account_webhooks is 'Canonical Asaas webhook secret; no tenant API credentials or payment ownership. Server-only. Reconnect must not rotate.';
 
