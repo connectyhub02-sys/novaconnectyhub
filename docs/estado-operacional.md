@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Vídeos Meta finalizados e anexados — 11/10/2026 23h25 BRT
+
+Concluídos vídeos reais de autorização + Ads MCP (109,13 s) e autorização +
+formulário + importação Lead Ads (115,00 s). Anexados e confirmados por reabertura
+em ads_mcp_management, ads_management e pages_manage_ads; ambos também na lista
+geral de Reviewer instructions. Roteiro atualizado, com persistência confirmada
+após recarga. Anexos anteriores sociais/WhatsApp conferidos e preservados.
+
+Formulário isolado final `2070453256920538`: lead `29220146710903277` importado
+no CRM como `d994ca9e-da6c-4c56-ba8e-e82e3cdf2c25`, resultado 1 importado/0 falhas.
+Não houve anúncio, gasto, pagamento ou nova publicação de código nesta etapa.
+Produção permanece `abfaf197` no slot b; fallback a em `b807ffc2`.
+
+Portal: Verification, App settings, Data handling e Reviewer instructions
+concluídos. Allowed usage pendente: contadores de nove escopos ainda 0/1;
+Submit for review desabilitado. **Pedido não enviado, vídeos não estão mais
+pendentes.** Acompanhamento a cada 2h atualizado para enviar assim que os requisitos
+forem completos, conforme autorização do titular. Não confundir contabilização
+com Advanced Access nem liberação geral para clientes. Ver a última seção de
+[Ads MCP e Lead Ads](meta-ads-mcp-lead-ads-2026-10-11.md) para evidências e limites.
+
+
 ## Conta de anúncios isolada, pixel e Lead Ads validados — 11/10/2026 22h56 BRT
 
 Produção `abfaf1978007ac7cb146f6b3b9e195b97d5a0e42` no slot b/3131;

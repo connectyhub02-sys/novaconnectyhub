@@ -304,3 +304,47 @@ para /dashboard/meta/revisao, Página 839794832549513 e os dois formulários iso
 validados. Sem substituir anexos. Evidência em output/meta-ads-leads-20261011/validated/lead-ads-instrucoes-revisao-atualizadas.png.
 Gravação integral continua explicitamente pendente no texto; nenhuma aprovação declarada.
 
+
+## Vídeos finais e anexos concluídos — 11/10/2026, 23h25 BRT
+
+Pedido explícito do titular: terminar/anexar independentemente dos contadores e
+enviar quando os testes forem contabilizados. Gravados fluxos reais com reconexão
+Facebook Login for Business, seleção dos mesmos ativos de teste, retorno ao painel,
+consultas MCP e nova submissão/importação Lead Ads. Nenhum gasto ou anúncio.
+
+- `output/meta-ads-leads-20261011/edit/final-review/ads-mcp-login-consultas-final.mp4`:
+  109,13 s, 1920x1080 H.264/15fps, sem áudio. Anexado em `ads_mcp_management` e
+  `ads_management`; reabertura confirmou View uploaded screencast nos dois.
+- `output/meta-ads-leads-20261011/edit/final-review/lead-ads-login-formulario-importacao-final.mp4`:
+  115,00 s, mesmos parâmetros. Anexado em `pages_manage_ads`; reabertura confirmou
+  View uploaded screencast. `leads_retrieval` não possui campo próprio de vídeo;
+  descrição aponta para esse anexo e para as instruções gerais.
+- Ambos também anexados na lista geral Reviewer instructions, junto aos cinco
+  arquivos anteriores; nomes conferidos no formulário. Roteiro atualizado com
+  URL do laboratório, ativos, botões, resultados esperados e deduplicação.
+- Anexos anteriores confirmados e preservados: instagram_basic,
+  instagram_manage_comments, instagram_manage_messages, pages_manage_metadata,
+  pages_messaging, pages_read_user_content, pages_manage_engagement,
+  whatsapp_business_messaging e whatsapp_business_management.
+
+QA: contact sheets e quadros finais renderizados conferidos, ffprobe válido. Fontes,
+script de renderização e manifesto preservados; legendas em inglês, intervalos
+estáticos limitados a 5 s, codificação por segmento e concatenação sem perdas.
+Um screenshot real do resultado MCP foi incluído ao final para legibilidade,
+explicitamente declarado na descrição. Não se apresenta montagem como captura
+contínua. O vídeo Lead Ads termina na confirmação persistida Importado no CRM,
+sem mostrar uma ficha detalhada do contato.
+
+Formulário final `2070453256920538`, lead `29220146710903277`, registro CRM
+`d994ca9e-da6c-4c56-ba8e-e82e3cdf2c25`: cadastro sintético pela prévia oficial Meta,
+retorno queued 1/imported 1/failed 0, status imported confirmado também no banco.
+A organização isolada agora tem quatro leads de teste importados.
+
+Tela geral confirmou Verification, App settings, Data handling e Reviewer
+instructions concluídos. **Allowed usage continua pendente e Submit for review
+continua desabilitado.** Os nove campos com contadores observados ainda mostram
+0/1, incluindo MCP, ads_management, pages_manage_ads e escopos sociais; WhatsApp
+Management mostra Completed. Vídeos não estão mais pendentes nesta rodada.
+Aguardar contabilização e revalidar requisitos antes de enviar; não marcar
+submetido/aprovado. Evidências e auditoria em `edit/final-review/upload-audit.json`,
+`mcp-anexado-meta.png` e `review-pronto-aguarda-contadores.png`.
