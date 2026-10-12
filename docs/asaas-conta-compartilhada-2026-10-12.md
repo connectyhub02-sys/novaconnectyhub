@@ -80,3 +80,22 @@ não foi homologada nesta etapa porque o titular proibiu criar cobranças reais.
 
 Referências: https://docs.asaas.com/docs/sobre-os-webhooks e
 https://docs.asaas.com/reference/atualizar-webhook-existente.
+
+## Reconexão feita pelo titular — 12/10/2026 19h45 BRT
+
+Titular informou ter conectado a mesma conta nas duas empresas. Leitura real
+confirmou BuffaloMass e Pizzaria connected em produção, IDs de integração e
+organização distintos, mesmo ID/URL de webhook e mesmo segredo canônico local.
+GET /webhooks realizado separadamente com a credencial de cada empresa confirmou
+um único webhook correspondente, enabled=true e interrupted=false; ambas as
+credenciais funcionaram e o registro compartilhado correspondeu às duas.
+O token remoto continua não exposto pelo Asaas; a comparação do segredo foi local.
+
+Auditoria somente leitura de cinco sessões Asaas (quatro BuffaloMass, uma Pizzaria)
+e nove pedidos não encontrou vínculos entre organizações diferentes nem colisão
+de ID de pagamento/referência entre as duas empresas. Nenhuma cobrança criada,
+nenhum pagamento alterado e nenhuma configuração externa modificada.
+A reconexão está confirmada; entrega e conciliação de um novo pagamento real após
+ela ainda não foram homologadas. Não houve eventos webhook dessas organizações
+nas últimas 24 horas consultadas. Não confundir configuração correta com teste
+financeiro ponta a ponta. Sem necessidade de nova publicação da aplicação.

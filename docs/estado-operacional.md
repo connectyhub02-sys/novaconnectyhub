@@ -1,5 +1,16 @@
 # Estado operacional da ConnectyHub
 
+## Asaas nas duas empresas confirmado — 12/10/2026 19h45 BRT
+
+Após reconexão pelo titular, BuffaloMass e Pizzaria Macedo&Dias estão connected
+em produção, com registros isolados e mesmo ID/URL/segredo canônico de webhook.
+GET Asaas com cada credencial confirmou webhook único, ativo e sem interrupção.
+Cinco sessões Asaas e nove pedidos auditados sem vínculos de organização incorretos
+nem IDs/referências cruzados. Sem eventos webhook dessas empresas nas últimas 24h;
+conciliação de novo pagamento real permanece não homologada. Nenhuma cobrança ou
+mutação externa. Aplicação permanece `53592f11` slot b.
+[Resultado e limites](asaas-conta-compartilhada-2026-10-12.md).
+
 ## Exclusão de responsáveis dos agentes — 12/10/2026 19h40 BRT
 
 Produção `53592f1116feac2ed36f9c7b4c7a2a401c06e502`, slot b/3131;
