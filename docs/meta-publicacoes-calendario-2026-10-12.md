@@ -236,3 +236,7 @@ Evidência do painel: publicacoes-confirmadas.png. Formulário novo segue bloque
 na última checagem externa descrita acima; vídeos prontos localmente, NÃO anexados.
 Revisão anterior preservada. Acompanhamento deve verificar desbloqueio e anexar
 estes vídeos quando disponível, sem repetir publicações só para contadores.
+
+## Acompanhamento — 12/10/2026 18h44 BRT
+
+Review → A testar no Chrome Connecty: instagram_content_publish e pages_manage_posts permanecem em 0 of 1 API call(s) required. Ainda dentro das 24h informadas pela Meta; revisão anterior continua Review in progress. Vídeos finais permanecem locais, não anexados. Sem novas chamadas/publicações, alteração do pedido, implantação ou gastos. Nenhuma mudança relevante a notificar.

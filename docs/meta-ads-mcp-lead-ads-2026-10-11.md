@@ -426,3 +426,7 @@ podendo levar mais tempo se houver pedidos de informação/correção. Isso não
 2h atualizado para decisões por permissão, sem reenviar a solicitação.
 Evidência: output/meta-review-20261012/em-analise.png. Nenhum anúncio,
 pagamento, gasto, envio social ou liberação global realizado nesta etapa.
+
+## Acompanhamento — 12/10/2026 18h44 BRT
+
+Portal Chrome Connecty confirmado: pedido 1078832598351314 permanece Review in progress, com 13 novos pedidos e cinco renovações. Sem decisão ou solicitação adicional exibida; painel inicial sem ações obrigatórias. Pedido preservado. URL direta /apps/1002348522666389/app-review/ funcionou após menu do dashboard não reagir. Nenhuma alteração externa, envio ou gasto.
