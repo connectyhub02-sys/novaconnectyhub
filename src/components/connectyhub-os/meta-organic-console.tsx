@@ -1,7 +1,8 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- previews use user-uploaded public media URLs */
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   CalendarDays,
@@ -13,7 +14,6 @@ import {
   Loader2,
   RefreshCcw,
   Send,
-  UploadCloud,
   XCircle,
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel } from "@/components/connectyhub-os/panel-primitives";
@@ -24,7 +24,7 @@ import type {
   ClientMetaOrganicPost,
   ClientMetaOrganicPostStatus,
 } from "@/lib/meta/organic-publishing";
-import type { MetaOrganicSurface } from "@/lib/meta/organic-publishing-policy";
+import { metaOrganicFormats, type MetaOrganicFormat, type MetaOrganicMedia, type MetaOrganicSurface } from "@/lib/meta/organic-publishing-policy";
 
 type Notice = {
   message: string;
@@ -37,6 +37,9 @@ type DraftState = {
   instagram: boolean;
   linkUrl: string;
   mediaUrl: string;
+  mediaType: "image" | "video";
+  media: MetaOrganicMedia[];
+  format: MetaOrganicFormat;
   scheduledFor: string;
   title: string;
 };
@@ -47,18 +50,23 @@ const emptyDraft: DraftState = {
   instagram: true,
   linkUrl: "",
   mediaUrl: "",
+  mediaType: "image",
+  media: [],
+  format: "feed",
   scheduledFor: "",
   title: "",
 };
 
-export function MetaOrganicConsole({ overview: initialOverview, initialView = "compose" }: { overview: ClientMetaOrganicOverview; initialView?: "compose" | "calendar" | "library" }) {
+export function MetaOrganicConsole({ overview: initialOverview, initialView = "compose", companyId }: { companyId: string; overview: ClientMetaOrganicOverview; initialView?: "compose" | "calendar" | "library" }) {
   const [view, setView] = useState(initialView);
   const [draft, setDraft] = useState<DraftState>(emptyDraft);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [overview, setOverview] = useState(initialOverview);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [workingAction, setWorkingAction] = useState<string | null>(null);
-  const visibleItems = useMemo(() => overview.items.slice(0, 12), [overview.items]);
+  const visibleItems = overview.items;
+  const apiUrl = `/api/dashboard/meta-organic?companyId=${encodeURIComponent(companyId)}`;
+  function addAsset(asset: ClientMetaOrganicMediaAsset) { setDraft(current => ({ ...current, media: [...current.media, { url: asset.storageUrl, type: asset.contentType.startsWith("video/") ? "video" : "image" }].slice(0, 10) as MetaOrganicMedia[] })); }
 
   async function submitDraft() {
     const surfaces: MetaOrganicSurface[] = [
@@ -69,7 +77,8 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
     await runAction("create_draft", {
       caption: draft.caption,
       linkUrl: draft.linkUrl,
-      mediaUrl: draft.mediaUrl,
+      media: draft.media,
+      format: draft.format,
       scheduledFor: toApiScheduledFor(draft.scheduledFor),
       surfaces,
       title: draft.title,
@@ -84,7 +93,7 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/meta-organic", { cache: "no-store" });
+      const response = await fetch(apiUrl, { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as { error?: string; overview?: ClientMetaOrganicOverview };
 
       if (!response.ok || !payload.overview) {
@@ -113,7 +122,7 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
     try {
       const formData = new FormData();
       formData.set("file", file);
-      const response = await fetch("/api/dashboard/meta-organic/media", {
+      const response = await fetch(`/api/dashboard/meta-organic/media?companyId=${encodeURIComponent(companyId)}`, {
         body: formData,
         method: "POST",
       });
@@ -128,7 +137,7 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
       }
 
       setOverview(payload.overview);
-      setDraft((current) => ({ ...current, mediaUrl: payload.media?.storageUrl ?? current.mediaUrl }));
+      addAsset(payload.media);
       setNotice({ message: "Midia enviada para biblioteca Meta.", tone: "success" });
     } catch (error) {
       setNotice({
@@ -149,7 +158,7 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/meta-organic", {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...payload }),
@@ -180,8 +189,8 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
     <section>
       <PageHeader
         eyebrow="Meta / Organico"
-        title="Publicacao organica"
-        description="Rascunhos, aprovacao e envio para Instagram e Facebook."
+        title="Publicações e calendário"
+        description="Planeje posts, Reels, Stories, carrosséis e vídeos para Instagram e Facebook."
         actions={
           <button
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
@@ -198,8 +207,8 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
       <nav aria-label="Planejamento de publicações" className="mb-5 flex flex-wrap gap-2">
         {([["compose","Criar publicação"],["calendar","Calendário"],["library","Biblioteca de criativos"]] as const).map(([key,label]) => <button key={key} className={`rounded-xl border px-4 py-2 text-sm ${view===key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`} onClick={()=>setView(key)}>{label}</button>)}
       </nav>
-      {view === "calendar" && <MetaMonthCalendar items={overview.items} onDay={date => {setDraft(current=>({...current,scheduledFor:date+"T09:00"}));setView("compose");}}/>}
-      {view === "library" && <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-2 font-semibold text-slate-900">Biblioteca de criativos</h2><p className="mb-4 text-sm text-slate-500">Selecione uma imagem para compor uma publicação ou envie uma nova imagem pelo editor. A biblioteca mantém as mídias da sua empresa.</p><MediaLibrary media={overview.media} onUse={asset=>{setDraft(current=>({...current,mediaUrl:asset.storageUrl}));setView("compose");}}/>{!overview.media.length && <p className="text-sm text-slate-500">Nenhuma mídia enviada ainda.</p>}<button className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm text-white" onClick={()=>setView("compose")}>Enviar mídia e criar post</button></div>}
+      {view === "calendar" && <MetaMonthCalendar apiUrl={apiUrl} items={overview.items} onDay={date => {setDraft(current=>({...current,scheduledFor:date+"T09:00"}));setView("compose");}}/>}
+      {view === "library" && <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-2 font-semibold text-slate-900">Biblioteca de criativos</h2><p className="mb-4 text-sm text-slate-500">Selecione imagens e vídeos para compor uma publicação ou envie novos arquivos pelo editor. A biblioteca mantém as mídias da sua empresa.</p><MediaLibrary media={overview.media} onUse={asset=>{addAsset(asset);setView("compose");}}/>{!overview.media.length && <p className="text-sm text-slate-500">Nenhuma mídia enviada ainda.</p>}<button className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm text-white" onClick={()=>setView("compose")}>Enviar mídia e criar post</button></div>}
       <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-7">
         <KpiStat label="Total" value={String(overview.summary.total)} tone="cyan" />
         <KpiStat label="Rascunhos" value={String(overview.summary.drafts)} tone="zinc" />
@@ -246,41 +255,31 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Midia publica</span>
-              <input
-                className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
-                onChange={(event) => setDraft((current) => ({ ...current, mediaUrl: event.target.value }))}
-                placeholder="https://..."
-                value={draft.mediaUrl}
-              />
+            <label className="grid gap-2 text-sm">Formato
+              <select className="rounded-xl border border-slate-200 bg-white p-3 text-slate-900" value={draft.format} onChange={e=>setDraft(current=>({...current,format:e.target.value as MetaOrganicFormat}))}>
+                {Object.entries(metaOrganicFormats).map(([key,label])=><option value={key} key={key}>{label}</option>)}
+              </select>
             </label>
-
-            <label className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Upload de imagem</span>
-              <span className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15">
-                {uploadingMedia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
-                {uploadingMedia ? "Enviando" : "Selecionar imagem"}
-              </span>
-              <input
-                accept="image/jpeg,image/png,image/webp"
-                className="sr-only"
-                disabled={uploadingMedia}
-                onChange={(event) => {
-                  void uploadMedia(event.target.files?.[0] ?? null);
-                  event.target.value = "";
-                }}
-                type="file"
-              />
+            <p className="text-xs leading-5 text-slate-500">{draft.format === "carousel" ? "De 2 a 10 mídias, na ordem abaixo. No Facebook, será um álbum de fotos; vídeos no carrossel são exclusivos do Instagram." : draft.format === "story" ? "Uma imagem ou vídeo vertical. Stories do Instagram exigem conta empresarial. O texto deve estar na própria mídia; não há legenda ou stickers nesta versão." : draft.format === "reel" || draft.format === "video" ? "Um vídeo MP4. Instagram e Facebook distribuem os vídeos como Reels. Prefira 9:16, H.264 e áudio AAC. A Meta valida duração e proporção no processamento." : "Imagem com legenda ou texto com link para o Facebook."}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {draft.media.map((media,index)=><div key={`${index}:${media.url}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white p-2 text-slate-900">
+                {media.type === "video" ? <video src={media.url} controls preload="metadata" className="h-32 w-full rounded-lg object-contain"/> : <img src={media.url} alt={`Mídia ${index+1}`} className="h-32 w-full rounded-lg object-contain"/>}
+                <div className="mt-2 flex items-center justify-between gap-1 text-xs"><span>{index+1}</span><button type="button" disabled={index===0} aria-label={`Mover mídia ${index+1} para antes`} onClick={()=>setDraft(current=>{const media=[...current.media];[media[index-1],media[index]]=[media[index],media[index-1]];return {...current,media};})}>← Mover</button><button type="button" onClick={()=>setDraft(current=>({...current,media:current.media.filter((_,i)=>i!==index)}))}>Remover</button></div>
+              </div>)}
+            </div>
+            <label className="grid gap-2 rounded-xl border border-slate-200 p-3 text-sm">
+              <span>{uploadingMedia ? "Enviando mídia…" : `Adicionar mídia (${draft.media.length}/10)`}</span>
+              <input accept="image/jpeg,image/png,image/webp,video/mp4" disabled={uploadingMedia || draft.media.length>=10} type="file" onChange={event=>{void uploadMedia(event.target.files?.[0] ?? null);event.target.value="";}} />
+              <span className="text-xs text-slate-500">Imagens até 8 MB, convertidas para JPEG. Vídeo MP4 até 100 MB.</span>
             </label>
+            <details className="rounded-xl border border-slate-200 p-3 text-sm"><summary className="cursor-pointer">Usar URL pública</summary>
+              <input aria-label="URL pública da mídia" className="mt-2 w-full rounded-lg border p-2" placeholder="https://..." value={draft.mediaUrl} onChange={e=>setDraft(current=>({...current,mediaUrl:e.target.value}))}/>
+              <div className="mt-2 flex gap-2"><select aria-label="Tipo da mídia" value={draft.mediaType} onChange={e=>setDraft(current=>({...current,mediaType:e.target.value as "image"|"video"}))}><option value="image">JPEG</option><option value="video">MP4</option></select><button type="button" disabled={!draft.mediaUrl || draft.media.length>=10} onClick={()=>setDraft(current=>({...current,media:[...current.media,{url:current.mediaUrl,type:current.mediaType}],mediaUrl:""}))}>Adicionar à publicação</button></div>
+            </details>
+            <details className="rounded-xl border border-slate-200 p-3 text-sm"><summary className="cursor-pointer">Escolher da biblioteca</summary><MediaLibrary media={overview.media} onUse={addAsset}/></details>
 
-            <MediaLibrary
-              media={overview.media}
-              onUse={(asset) => setDraft((current) => ({ ...current, mediaUrl: asset.storageUrl }))}
-            />
-
-            <label className="grid gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Link</span>
+            <label className={draft.format === "feed" ? "grid gap-2" : "hidden"}>
+              <span className="font-mono text-[11px] uppercase tracking-widest text-slate-500">Link (Facebook)</span>
               <input
                 className="h-10 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
                 onChange={(event) => setDraft((current) => ({ ...current, linkUrl: event.target.value }))}
@@ -317,13 +316,14 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
 
             <button
               className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={workingAction === "create_draft:new"}
+              disabled={Boolean(workingAction) || uploadingMedia}
               onClick={() => void submitDraft()}
               type="button"
             >
               {workingAction === "create_draft:new" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Salvar rascunho
             </button>
+            <p className="text-xs leading-5 text-slate-500">Horário local do navegador. Salvar não publica. Revise e aprove para ativar o agendamento. A publicação exige a conexão e as permissões de publicação concedidas pela Meta.</p>
           </div>
         </Panel>
 
@@ -376,7 +376,7 @@ function OrganicPostItem({
   const approveKey = `approve:${item.id}`;
   const archiveKey = `archive:${item.id}`;
   const publishKey = `publish:${item.id}`;
-  const canApprove = item.status === "draft" || item.status === "review";
+  const canApprove = item.status === "draft";
   const canPublish = item.status === "approved" || item.status === "scheduled" || item.retryable;
   const canArchive = item.status !== "published" && item.status !== "archived" && item.status !== "publishing";
 
@@ -385,6 +385,7 @@ function OrganicPostItem({
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status={item.status} text={item.statusLabel} warning={Boolean(item.lastError)} />
+          <NeonBadge tone="violet">{metaOrganicFormats[item.format]}</NeonBadge>
           {item.surfaceLabels.map((label) => (
             <span key={label} className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-slate-400">
               {label}
@@ -414,6 +415,7 @@ function OrganicPostItem({
           </div>
         ) : null}
 
+        {item.deliveryStatus?.length ? <div className="flex flex-wrap gap-2 text-xs text-slate-500">{item.deliveryStatus.map(d=><span key={d.surface}>{d.surface === "facebook_page" ? "Facebook" : "Instagram"}: {d.phase === "published" ? "Publicado" : d.phase === "sending" ? "A confirmar" : "Processando"}</span>)}</div> : null}
         {item.lastError ? (
           <p className="line-clamp-2 rounded-xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-[12px] leading-5 text-rose-100">
             {item.lastError}
@@ -508,13 +510,12 @@ function MediaLibrary({
             type="button"
           >
             <span className="aspect-square overflow-hidden rounded-lg border border-white/10 bg-slate-950/60">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              {asset.contentType.startsWith("video/") ? <video src={asset.storageUrl} preload="metadata" className="h-full w-full object-cover"/> : <img
                 alt=""
                 className="h-full w-full object-cover"
                 loading="lazy"
                 src={asset.storageUrl}
-              />
+              />}
             </span>
             <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wide text-slate-500 group-hover:text-violet-100">
               {formatBytes(asset.bytesSize)}
@@ -733,20 +734,33 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function MetaMonthCalendar({ items, onDay }: {items: ClientMetaOrganicPost[];onDay:(date:string)=>void}) {
+function MetaMonthCalendar({ items, onDay, apiUrl }: {apiUrl: string; items: ClientMetaOrganicPost[];onDay:(date:string)=>void}) {
   const [month,setMonth]=useState(()=>getDatetimeLocalMin().slice(0,7));
+  const [calendarItems,setCalendarItems]=useState(items);
+  const [calendarError,setCalendarError]=useState("");
+  const [loadedMonth,setLoadedMonth]=useState("");
+  const loading=loadedMonth!==month;
+  useEffect(()=>{
+    const controller=new AbortController();
+    const [y,m]=month.split("-").map(Number);
+    const from=new Date(y,m-1,1).toISOString(),until=new Date(y,m,1).toISOString();
+
+    fetch(`${apiUrl}&from=${encodeURIComponent(from)}&until=${encodeURIComponent(until)}`,{signal:controller.signal,cache:"no-store"}).then(async response=>{const body=await response.json();if(!response.ok || !body.overview)throw new Error(body.error ?? "Não foi possível carregar o calendário.");setCalendarItems(body.overview.items);setCalendarError("");}).catch(error=>{if(!controller.signal.aborted){setCalendarItems([]);setCalendarError(error.message);}}).finally(()=>{if(!controller.signal.aborted)setLoadedMonth(month);});
+    return ()=>controller.abort();
+  },[month,apiUrl]);
   const [network,setNetwork]=useState("all");
   const [status,setStatus]=useState("all");
   const [year,m]=month.split("-").map(Number);
   const days=new Date(year,m,0).getDate();
   const offset=(new Date(year,m-1,1).getDay()+6)%7;
-  const relevant=items.filter(item=>(network==="all" || item.surfaces.includes(network as MetaOrganicSurface)) && (status==="all" || item.status===status));
+  const relevant=calendarItems.filter(item=>(network==="all" || item.surfaces.includes(network as MetaOrganicSurface)) && (status==="all" || item.status===status));
   function dayKey(value:string) { const date=new Date(value);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
   function shift(delta:number) {const d=new Date(year,m-1+delta,1);setMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);}
   return <section aria-label="Calendário mensal de publicações" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900">
     <div className="mb-4 flex flex-wrap items-center gap-3"><button aria-label="Mês anterior" className="rounded-lg border px-3 py-2" onClick={()=>shift(-1)}>←</button><input type="month" aria-label="Mês das publicações" className="rounded-lg border p-2" value={month} onChange={e=>{if(/^\d{4}-\d{2}$/.test(e.target.value))setMonth(e.target.value);}}/><button aria-label="Próximo mês" className="rounded-lg border px-3 py-2" onClick={()=>shift(1)}>→</button><select aria-label="Rede social" className="rounded-lg border p-2 text-sm" value={network} onChange={e=>setNetwork(e.target.value)}><option value="all">Todas as redes</option><option value="facebook_page">Facebook</option><option value="instagram_feed">Instagram</option></select><select aria-label="Status da publicação" className="rounded-lg border p-2 text-sm" value={status} onChange={e=>setStatus(e.target.value)}><option value="all">Todos os status</option><option value="draft">Rascunhos</option><option value="scheduled">Agendadas</option><option value="published">Publicadas</option><option value="approved">Aprovadas</option></select></div>
-    <p className="mb-3 text-xs text-slate-500">Exibe as 40 publicações mais recentes carregadas. Horário local do navegador. Escolha um dia para preparar um post. Salvar rascunho não publica: revise e aprove para ativar o agendamento.</p>
-    <div className="overflow-x-auto"><div className="grid min-w-[600px] grid-cols-7">{["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map(d=><div key={d} className="p-2 text-center text-xs text-slate-500">{d}</div>)}{Array.from({length:offset},(_,i)=><div key={`empty-${i}`} className="border border-slate-100 bg-slate-50"/>)}{Array.from({length:days},(_,i)=>{const key=`${month}-${String(i+1).padStart(2,"0")}`;const entries=relevant.filter(item=>{const at=item.scheduledFor || item.publishedAt;return at && dayKey(at)===key;});return <button key={key} onClick={()=>onDay(key)} className="min-h-28 border border-slate-100 p-2 text-left align-top hover:bg-blue-50" aria-label={`Preparar publicação em ${key}`}><span className="text-xs font-semibold">{i+1}</span>{entries.map(item=><span key={item.id} title={item.caption} className="mt-1 block rounded bg-blue-50 px-2 py-1 text-[10px] text-blue-800"><span className="block truncate font-semibold">{item.title}</span>{item.statusLabel}</span>)}</button>;})}</div></div>
+    <p className="mb-3 text-xs text-slate-500">Publicações do mês selecionado. Horário local do navegador. Escolha um dia para preparar um post. Salvar rascunho não publica: revise e aprove para ativar o agendamento.</p>
+    {loading && <p className="mb-3 text-sm text-blue-600">Carregando mês…</p>}{calendarError && <p role="alert" className="mb-3 text-sm text-red-600">{calendarError}</p>}
+    <div className="overflow-x-auto"><div className="grid min-w-[600px] grid-cols-7">{["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map(d=><div key={d} className="p-2 text-center text-xs text-slate-500">{d}</div>)}{Array.from({length:offset},(_,i)=><div key={`empty-${i}`} className="border border-slate-100 bg-slate-50"/>)}{Array.from({length:days},(_,i)=>{const key=`${month}-${String(i+1).padStart(2,"0")}`;const entries=relevant.filter(item=>{const at=item.scheduledFor || item.publishedAt;return at && dayKey(at)===key;});return <button key={key} onClick={()=>onDay(key)} className="min-h-28 border border-slate-100 p-2 text-left align-top hover:bg-blue-50" aria-label={`Preparar publicação em ${key}`}><span className="text-xs font-semibold">{i+1}</span>{entries.map(item=><span key={item.id} title={item.caption} className="mt-1 block rounded bg-blue-50 px-2 py-1 text-[10px] text-blue-800"><span className="block truncate font-semibold">{item.title}</span>{metaOrganicFormats[item.format]} · {item.statusLabel}</span>)}</button>;})}</div></div>
     <p className="mt-3 text-xs text-slate-500">{relevant.filter(item=>!item.scheduledFor&&!item.publishedAt).length} publicações sem data. Use “Criar publicação” para revisar a lista e as aprovações.</p>
   </section>;
 }

@@ -81,7 +81,7 @@ export default async function OrganicTrafficPage() {
 
   return (
     <ConnectyShell {...shellProps}>
-      <MetaOrganicConsole overview={overview} />
+      <MetaOrganicConsole overview={overview} companyId={workspace.organization.id} />
     </ConnectyShell>
   );
 }

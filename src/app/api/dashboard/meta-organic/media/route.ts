@@ -5,41 +5,39 @@ import {
 } from "@/lib/meta/organic-publishing";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { isStorageQuotaError } from "@/lib/storage/quotas";
-import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
+import { metaOrganicAccess, OrganicAccessError } from "@/lib/meta/organic-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  let access: Awaited<ReturnType<typeof metaOrganicAccess>>;
+  try { access = await metaOrganicAccess(request); }
+  catch (error) { return NextResponse.json(formatError(error), { status: error instanceof OrganicAccessError ? error.status : error instanceof BillingAccessError ? 402 : 403 }); }
+  const { workspace, organizationId } = access;
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
-  }
 
-  if (!workspace.organization?.id) {
-    return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
-  }
-
+  if (Number(request.headers.get("content-length")) > 101 * 1024 * 1024) return NextResponse.json({ error: "Envie até 100 MB por arquivo." }, { status: 413 });
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Envie uma imagem valida." }, { status: 400 });
+    return NextResponse.json({ error: "Envie uma imagem ou vídeo MP4 válido." }, { status: 400 });
   }
 
+  if (file.size > 100 * 1024 * 1024) return NextResponse.json({ error: "Envie até 100 MB por arquivo." }, { status: 413 });
   try {
-    await assertBillableAccess({ organizationId: workspace.organization.id });
+    await assertBillableAccess({ organizationId: organizationId });
 
     const media = await uploadClientMetaOrganicMedia({
       bytes: new Uint8Array(await file.arrayBuffer()),
       contentType: file.type,
       fileName: file.name || "meta-organic.jpg",
-      organizationId: workspace.organization.id,
+      organizationId: organizationId,
       userId: workspace.user.id,
     });
     const overview = await getClientMetaOrganicOverview({
-      organizationId: workspace.organization.id,
+      organizationId: organizationId,
       userId: workspace.user.id,
     });
 

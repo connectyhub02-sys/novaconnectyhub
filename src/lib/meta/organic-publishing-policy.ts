@@ -1,4 +1,34 @@
 export type MetaOrganicSurface = "facebook_page" | "instagram_feed";
+export type MetaOrganicFormat = "feed" | "reel" | "story" | "carousel" | "video";
+export type MetaOrganicMedia = { url: string; type: "image" | "video" };
+export const metaOrganicFormats: Record<MetaOrganicFormat, string> = { feed: "Post", reel: "Reel", story: "Story", carousel: "Carrossel", video: "Vídeo" };
+
+export function normalizeOrganicMedia(value: unknown, legacyUrl?: unknown): MetaOrganicMedia[] {
+  const entries = Array.isArray(value) ? value : typeof legacyUrl === "string" && legacyUrl.trim() ? [{ url: legacyUrl, type: "image" }] : [];
+  if (entries.length > 10) throw new Error("Use no máximo 10 mídias por publicação.");
+  return entries.map(entry => {
+    if (!entry || typeof entry !== "object" || !["image", "video"].includes(entry.type)) throw new Error("Tipo de mídia inválido.");
+    const url = normalizeOptionalUrl(entry.url, "URL da mídia inválida.");
+    if (!url) throw new Error("Informe a URL pública da mídia.");
+    return { url, type: entry.type };
+  });
+}
+
+export function normalizeOrganicFormat(value: unknown): MetaOrganicFormat {
+  if (value === undefined || value === null) return "feed";
+  if (typeof value === "string" && Object.hasOwn(metaOrganicFormats, value)) return value as MetaOrganicFormat;
+  throw new Error("Formato de publicação inválido.");
+}
+
+export function validateOrganicComposition(format: MetaOrganicFormat, media: MetaOrganicMedia[], surfaces: MetaOrganicSurface[]) {
+  if (format === "carousel") {
+    if (media.length < 2 || media.length > 10) throw new Error("Carrossel exige de 2 a 10 mídias.");
+    if (surfaces.includes("facebook_page") && media.some(m => m.type === "video")) throw new Error("No Facebook, o álbum aceita fotos. Para carrossel com vídeos, selecione somente Instagram.");
+  } else if (media.length > 1) throw new Error("Selecione Carrossel para publicar várias mídias.");
+  if ((format !== "feed" || surfaces.includes("instagram_feed")) && !media.length) throw new Error("Adicione uma mídia para este formato.");
+  if (["reel", "video"].includes(format) && media[0]?.type !== "video") throw new Error("Reels e vídeos exigem um arquivo de vídeo.");
+  if (format === "feed" && media.some(m => m.type === "video")) throw new Error("Selecione Vídeo ou Reel para publicar vídeo.");
+}
 
 export type NormalizedMetaOrganicDraft = {
   title: string;
@@ -7,6 +37,8 @@ export type NormalizedMetaOrganicDraft = {
   mediaUrl: string | null;
   scheduledFor: string | null;
   surfaces: MetaOrganicSurface[];
+  format: MetaOrganicFormat;
+  media: MetaOrganicMedia[];
 };
 
 export type MetaOrganicPublishTarget =
@@ -34,6 +66,8 @@ export function normalizeMetaOrganicDraft(input: {
   mediaUrl?: unknown;
   scheduledFor?: unknown;
   surfaces?: unknown;
+  format?: unknown;
+  media?: unknown;
 }): NormalizedMetaOrganicDraft {
   const caption = normalizeText(input.caption, "Escreva a legenda da publicacao.", maxCaptionLength);
   const title = normalizeOptionalText(input.title, maxTitleLength)
@@ -43,6 +77,9 @@ export function normalizeMetaOrganicDraft(input: {
   const mediaUrl = normalizeOptionalUrl(input.mediaUrl, "URL da midia invalida.");
   const scheduledFor = normalizeMetaOrganicScheduledFor(input.scheduledFor);
   const surfaces = normalizeSurfaces(input.surfaces);
+  const format = normalizeOrganicFormat(input.format);
+  const media = normalizeOrganicMedia(input.media, mediaUrl);
+  validateOrganicComposition(format, media, surfaces);
 
   return {
     title,
@@ -51,6 +88,8 @@ export function normalizeMetaOrganicDraft(input: {
     mediaUrl,
     scheduledFor,
     surfaces,
+    format,
+    media,
   };
 }
 
@@ -147,7 +186,7 @@ export function getMetaOrganicSurfaceLabel(surface: MetaOrganicSurface) {
     case "facebook_page":
       return "Facebook Page";
     case "instagram_feed":
-      return "Instagram Feed";
+      return "Instagram";
   }
 }
 
@@ -200,7 +239,8 @@ function normalizeOptionalUrl(value: unknown, errorMessage: string) {
   try {
     const url = new URL(text);
 
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
+    const host = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || url.username || url.password || host === "localhost" || host.endsWith(".local") || host.startsWith("[") || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
       throw new Error(errorMessage);
     }
 

@@ -73,6 +73,7 @@ export default async function MetaArea({
       {organic && (
         <MetaOrganicConsole
           overview={organic}
+          companyId={company.id}
           initialView={area === "calendario" ? "calendar" : "library"}
         />
       )}

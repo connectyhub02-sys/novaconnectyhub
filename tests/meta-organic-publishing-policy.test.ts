@@ -20,6 +20,8 @@ describe("Meta organic publishing policy", () => {
       scheduledFor: null,
       surfaces: ["facebook_page", "instagram_feed"],
       title: "Campanha Meta",
+      format: "feed",
+      media: [{ url: "https://cdn.connectyhub.com/post.jpg", type: "image" }],
     });
   });
 

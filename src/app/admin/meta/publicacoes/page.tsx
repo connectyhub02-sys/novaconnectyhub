@@ -12,6 +12,6 @@ export default async function AdminMetaPosts() {
   if (!workspace?.profile.isPlatformAdmin || !workspace.organization) return <AccessDenied />;
   const overview = await getClientMetaOrganicOverview({ userId: workspace.user.id, organizationId: workspace.organization.id });
   return <ConnectyShell mode="admin" activeHref="/admin/meta" isPlatformAdmin userLabel={workspace.profile.email ?? undefined}>
-    <MetaOrganicConsole overview={overview} />
+    <MetaOrganicConsole overview={overview} companyId={workspace.organization.id} />
   </ConnectyShell>;
 }

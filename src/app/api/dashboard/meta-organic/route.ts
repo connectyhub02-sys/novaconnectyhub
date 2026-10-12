@@ -7,26 +7,24 @@ import {
   publishClientMetaOrganicPost,
 } from "@/lib/meta/organic-publishing";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
-import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
+import { metaOrganicAccess, OrganicAccessError } from "@/lib/meta/organic-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  const workspace = await getCurrentWorkspace();
+export async function GET(request: NextRequest) {
+  let access: Awaited<ReturnType<typeof metaOrganicAccess>>;
+  try { access = await metaOrganicAccess(request); }
+  catch (error) { return NextResponse.json(formatError(error), { status: error instanceof OrganicAccessError ? error.status : error instanceof BillingAccessError ? 402 : 403 }); }
+  const { workspace, organizationId } = access;
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
-  }
-
-  if (!workspace.organization?.id) {
-    return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
-  }
 
   try {
     const overview = await getClientMetaOrganicOverview({
-      organizationId: workspace.organization.id,
+      organizationId,
       userId: workspace.user.id,
+      from: request.nextUrl.searchParams.get("from") ?? undefined,
+      until: request.nextUrl.searchParams.get("until") ?? undefined,
     });
 
     return NextResponse.json({ overview });
@@ -36,15 +34,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  let access: Awaited<ReturnType<typeof metaOrganicAccess>>;
+  try { access = await metaOrganicAccess(request); }
+  catch (error) { return NextResponse.json(formatError(error), { status: error instanceof OrganicAccessError ? error.status : error instanceof BillingAccessError ? 402 : 403 }); }
+  const { workspace, organizationId } = access;
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
-  }
-
-  if (!workspace.organization?.id) {
-    return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
-  }
 
   const body = await readJson<{
     action?: unknown;
@@ -52,6 +46,8 @@ export async function POST(request: NextRequest) {
     itemId?: unknown;
     linkUrl?: unknown;
     mediaUrl?: unknown;
+    media?: unknown;
+    format?: unknown;
     scheduledFor?: unknown;
     surfaces?: unknown;
     title?: unknown;
@@ -63,7 +59,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await assertBillableAccess({ organizationId: workspace.organization.id });
+    await assertBillableAccess({ organizationId: organizationId });
 
     let result: unknown;
 
@@ -72,7 +68,9 @@ export async function POST(request: NextRequest) {
         caption: body?.caption,
         linkUrl: body?.linkUrl,
         mediaUrl: body?.mediaUrl,
-        organizationId: workspace.organization.id,
+        media: body?.media,
+        format: body?.format,
+        organizationId: organizationId,
         scheduledFor: body?.scheduledFor,
         surfaces: body?.surfaces,
         title: body?.title,
@@ -81,26 +79,28 @@ export async function POST(request: NextRequest) {
     } else if (action === "approve") {
       result = await approveClientMetaOrganicPost({
         itemId: readItemId(body?.itemId),
-        organizationId: workspace.organization.id,
+        organizationId: organizationId,
         userId: workspace.user.id,
       });
     } else if (action === "publish") {
       result = await publishClientMetaOrganicPost({
         itemId: readItemId(body?.itemId),
-        organizationId: workspace.organization.id,
+        organizationId: organizationId,
         userId: workspace.user.id,
       });
     } else {
       result = await archiveClientMetaOrganicPost({
         itemId: readItemId(body?.itemId),
-        organizationId: workspace.organization.id,
+        organizationId: organizationId,
         userId: workspace.user.id,
       });
     }
 
     const overview = await getClientMetaOrganicOverview({
-      organizationId: workspace.organization.id,
+      organizationId,
       userId: workspace.user.id,
+      from: request.nextUrl.searchParams.get("from") ?? undefined,
+      until: request.nextUrl.searchParams.get("until") ?? undefined,
     });
 
     return NextResponse.json({ overview, result });
