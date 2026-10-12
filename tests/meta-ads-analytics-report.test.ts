@@ -57,4 +57,12 @@ describe("unified report sources", () => {
     await expect(getMetaAdsAnalytics(database().client, "org-a", { accountId: "act_999" })).rejects.toThrow("autorizada");
     expect(mocks.graph).not.toHaveBeenCalled(); expect(mocks.pixel).not.toHaveBeenCalled();
   });
+  it("limits reviewers to the selected test account despite broader USER OAuth inventory", async () => {
+    const db = database();
+    const r = await getMetaAdsAnalytics(db.client, "org-a", { selectedAccountOnly: true });
+    expect(r.accounts).toEqual([{ id: "act_1", label: "Own" }]);
+    mocks.graph.mockClear();
+    await expect(getMetaAdsAnalytics(db.client, "org-a", { selectedAccountOnly: true, accountId: "act_2" })).rejects.toThrow("autorizada");
+    expect(mocks.graph).not.toHaveBeenCalled();
+  });
 });

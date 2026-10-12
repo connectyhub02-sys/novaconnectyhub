@@ -4,7 +4,7 @@ import { adsLeadsGraph, loadAdsLeadsContext, metaRecord, type AdsLeadsContext } 
 import { analyticsAccounts, analyticsPeriod, selectAnalyticsAccount, insightMetrics, sumInsights, type AdsCampaignMetrics, type AdsMetrics } from "./ads-analytics-model";
 import { pixelConfiguration } from "./pixel-conversions";
 
-export type AnalyticsInput = { accountId?: string | null; days?: string | null; since?: string | null; until?: string | null };
+export type AnalyticsInput = { accountId?: string | null; days?: string | null; since?: string | null; until?: string | null; selectedAccountOnly?: boolean };
 export async function readInsights(ctx: AdsLeadsContext, params: Record<string, string>) {
   const rows: Record<string, unknown>[] = [];
   let after = "";
@@ -24,7 +24,11 @@ export async function getMetaAdsAnalytics(client: SupabaseClient, organizationId
   const ctx = await loadAdsLeadsContext(client, organizationId);
   const integration = await client.from("organization_integrations").select("metadata").eq("id", ctx.integrationId).eq("organization_id", organizationId).single();
   if (integration.error) throw new Error("Não foi possível consultar os ativos desta empresa.");
-  const accounts = analyticsAccounts(metaRecord(integration.data.metadata), ctx.adAccountId);
+  const authorizedAccounts = analyticsAccounts(metaRecord(integration.data.metadata), ctx.adAccountId);
+  // A USER grant used for App Review may enumerate personal/production assets.
+  // Reviewers can read only the expressly selected test account, including
+  // after reconnection; the server derives this restriction from app_metadata.
+  const accounts = input.selectedAccountOnly ? authorizedAccounts.filter(a => a.id === ctx.adAccountId) : authorizedAccounts;
   const accountId = selectAnalyticsAccount(accounts, ctx.adAccountId, input.accountId);
   const reportCtx = { ...ctx, adAccountId: accountId };
   if (!ctx.scopes.some(s => s === "ads_read" || s === "ads_management")) throw new Error("Reconecte a Meta com acesso de leitura de anúncios.");

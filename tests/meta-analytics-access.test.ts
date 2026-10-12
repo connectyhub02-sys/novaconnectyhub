@@ -43,4 +43,11 @@ describe("Meta analytics API authorization", () => {
     expect((await GET(new Request("https://app.test/api/dashboard/meta-analytics?companyId=org-a"))).status).toBe(403);
     expect(mocks.report).not.toHaveBeenCalled();
   });
+  it("derives review restrictions from the trusted grant, ignoring browser overrides", async () => {
+    const org = "4cd0a6bd-4e3c-4773-a9ef-511c802b48df";
+    mocks.workspace.mockResolvedValue({ user: { id: "reviewer", app_metadata: { meta_review: { organization_id: org, expires_at: "2099-01-01T00:00:00Z" } } }, profile: { isPlatformAdmin: false }, organization: { id: org } });
+    const response = await GET(new Request(`https://app.test/api/dashboard/meta-analytics?companyId=${org}&selectedAccountOnly=false`));
+    expect(response.status).toBe(200);
+    expect(mocks.report.mock.calls[0][2].selectedAccountOnly).toBe(true);
+  });
 });

@@ -6,6 +6,7 @@ import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { metaFeatureLaunchPaused } from "./launch-status";
+import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 
 export class AnalyticsAccessError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -23,5 +24,5 @@ export async function metaAnalyticsAccess(request: Request) {
     organizationStatus: company.status, planCode: company.planCode, featureOverrides: company.featureOverrides });
   if (!entitlement.allowed) throw new AnalyticsAccessError(entitlement.description, 403);
   await assertBillableAccess({ client, organizationId });
-  return { client, organizationId, company, workspace };
+  return { client, organizationId, company, workspace, selectedAccountOnly: Boolean(readMetaReviewAccess(workspace.user)) };
 }

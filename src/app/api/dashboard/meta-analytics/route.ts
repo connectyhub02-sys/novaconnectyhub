@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
-    const { client, organizationId } = await metaAnalyticsAccess(request);
+    const { client, organizationId, selectedAccountOnly } = await metaAnalyticsAccess(request);
     const p = new URL(request.url).searchParams;
-    const report = await getMetaAdsAnalytics(client, organizationId, { accountId: p.get("accountId"), days: p.get("days"), since: p.get("since"), until: p.get("until") });
+    const report = await getMetaAdsAnalytics(client, organizationId, { accountId: p.get("accountId"), days: p.get("days"), since: p.get("since"), until: p.get("until"), ...(selectedAccountOnly ? { selectedAccountOnly: true } : {}) });
     return NextResponse.json(report, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Relatório indisponível." }, {
