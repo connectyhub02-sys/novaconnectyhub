@@ -1,5 +1,24 @@
 # Estado operacional da ConnectyHub
 
+## Exclusão de responsáveis dos agentes — 12/10/2026 19h40 BRT
+
+Produção `53592f1116feac2ed36f9c7b4c7a2a401c06e502`, slot b/3131;
+fallback `fa3d4781990c629fe45b0f282dad97889576089b`, slot a/3130.
+Lista explícita de responsáveis prevalece sobre campos antigos. Salvar substitui
+os destinatários do comportamento, sem repor excluídos; múltiplos responsáveis
+continuam disponíveis. Regra central para admin/clientes, sem migração SQL.
+
+50 testes dirigidos, TypeScript, lint e build aprovados. Smoke público/candidato:
+health/SHA, login/JS 200, GET/PATCH agents sem sessão 401; Inngest assinado 200,
+58 funções/autenticado. Builder parado. Um teste textual ampliado preexistente
+falhou por procurar a antiga aba channels; detalhes no relatório.
+
+Max/Pizzaria tinha somente Eliane Dias na lista salva e três números no campo
+antigo. Sincronização pontual com backup privado e proteção de concorrência;
+releitura após publicação confirmou um responsável, um destinatário, zero extras.
+Editor real também mostrou somente Eliane, com Adicionar disponível. Nenhum aviso
+ou mensagem enviado. [Causa, testes e evidência](agentes-exclusao-responsaveis-2026-10-12.md).
+
 ## Conta Asaas compartilhada entre empresas — 12/10/2026 19h16 BRT
 
 Produção aplicação `fa3d4781990c629fe45b0f282dad97889576089b`, slot a/3130;
