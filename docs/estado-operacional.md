@@ -1,5 +1,32 @@
 # Estado operacional da ConnectyHub
 
+## Criativos e propostas de campanha com IA — 12/10/2026 15h18 BRT
+
+Produção `b4bc49e1e0b9ea22bb5eaccd805d9d08a6b27bec`, slot a/3130;
+fallback `c554b5faf59d415ba3e5926bed19b08feea3905a`, slot b/3131.
+Primeira incorporação do ViralCheck publicada em Publicações/Calendário e Meta Ads,
+no admin e cliente: análise opcional real de imagem/vídeo, score editorial com
+critérios/evidências, melhorias, legendas, roteiro/fala, histórico por empresa,
+relatório exportável e rascunho orgânico. Proposta de campanha por prompt ou mídia,
+com CBO/ABO, moeda explícita, verba total e quantidade de anúncios.
+
+29 testes dirigidos, TypeScript, ESLint, build, smoke público/candidato e Inngest
+assinado passaram (58 funções). Migration 0195 aplicada e registrada; backup de
+esquema privado before-0195-schema.sql. Builder parado. Original ViralCheck intacto.
+Quatro inferências reais internas concluídas: vídeo, campanha por prompt, imagem
+com campanha USD 50/3 anúncios e roteiro. Consumos internal_shadow registrados,
+sem débito de cliente. Exportação baixada e lida; rascunho Reel criado sem aprovação
+ou envio. Cliente BuffaloMass exibiu histórico separado em sessão administrativa
+assistida; não equivale a validação real de sessão não administrativa.
+
+Ainda NÃO cria/ativa anúncios na Meta. Não tratar a proposta como campanha lançada.
+Faltam executor oficial com aprovação de verba, comparação com métricas orgânicas
+reais, radar de tendências, reserva específica de créditos e recuperação assistida
+dos resultados incertos. Saldo é pré-conferido; resultado só é entregue após metering
+central. Nenhum anúncio, gasto publicitário ou envio social neste trabalho.
+Revisões Meta não foram alteradas. Detalhes e evidências em
+[Incorporação do Viral Check](meta-creative-studio-viralcheck-2026-10-12.md).
+
 ## Publicação orgânica validada nas duas redes — 12/10/2026 13h55 BRT
 
 Produção `3915c1f1eded02c2545eff3056e6b591223142a4`, slot b/3131;
