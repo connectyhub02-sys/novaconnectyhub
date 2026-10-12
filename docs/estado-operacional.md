@@ -1,5 +1,18 @@
 # Estado operacional da ConnectyHub
 
+## App Review enviado; em análise — 12/10/2026 11h09 BRT
+
+Após confirmação expressa do titular, aceite jurídico final marcado e Submit
+concluído. Portal Meta confirmou Review in progress para 1078832598351314
+(app 1002348522666389). Inclui 13 novos pedidos de WhatsApp, Instagram,
+Messenger/Pages, Ads MCP, ads_management e Lead Ads, mais cinco renovações.
+Demonstrações e declarações preservadas. Não há mais pendência de contadores,
+vídeos ou aceite para esse envio. Aprovação por permissão ainda pendente.
+Evidência: output/meta-review-20261012/em-analise.png. Acompanhamento ativo
+atualizado para decisão/solicitações dos avaliadores. Sem anúncios, gastos,
+pagamentos, liberação global ou publicação de código nesta etapa.
+Ver [solicitação e escopos enviados](meta-ads-mcp-lead-ads-2026-10-11.md).
+
 ## App Review pronto; confirmação jurídica final pendente — 12/10/2026 07h08 BRT
 
 Meta contabilizou requisitos: cinco etapas 100%, Requests/Renewal completed e

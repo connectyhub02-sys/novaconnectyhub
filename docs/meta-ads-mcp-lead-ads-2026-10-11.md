@@ -403,3 +403,26 @@ Após resposta afirmativa, concluir sem repetir pergunta e verificar em análise
 Evidência: output/meta-review-20261012/aceite-final.png. Aba 1614700014
 preservada no Chrome Connecty. Acompanhamento atualizado para este estado.
 Nenhum anúncio, gasto, pagamento ou mudança de produção neste acompanhamento.
+
+## Pedido enviado e em análise — 12/10/2026, 11h09 BRT
+
+Titular respondeu Autorizar aceite final e envio à confirmação específica.
+Marcado o checkbox final dos Meta Platform Terms e Developer Policies e
+acionado Submit. Portal retornou **Review in progress**, confirmando envio
+real da solicitação 1078832598351314. Não permanece em rascunho.
+
+13 novos pedidos aparecem na solicitação em análise: ads_management,
+pages_manage_ads, ads_mcp_management, leads_retrieval, pages_manage_metadata,
+pages_messaging, pages_read_user_content, pages_manage_engagement,
+instagram_manage_messages, instagram_manage_comments,
+whatsapp_business_messaging, whatsapp_business_management e instagram_basic.
+Cinco renovações: pages_show_list, business_management, ads_read,
+pages_read_engagement e public_profile. Vídeos e declarações preparados
+anteriormente foram preservados; nenhuma permissão removida.
+
+Meta informa que a maioria das solicitações é revisada dentro de 20 dias,
+podendo levar mais tempo se houver pedidos de informação/correção. Isso não
+é promessa de prazo nem aprovação de Advanced Access. Acompanhamento a cada
+2h atualizado para decisões por permissão, sem reenviar a solicitação.
+Evidência: output/meta-review-20261012/em-analise.png. Nenhum anúncio,
+pagamento, gasto, envio social ou liberação global realizado nesta etapa.
