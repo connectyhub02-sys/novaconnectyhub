@@ -21,11 +21,19 @@ export function parseTrendResult(data: unknown): TrendResult {
   if (!text || !queries.length || !sources.length || sources.some(s => !/^https:\/\//i.test(s.url))) throw Error("A pesquisa não trouxe fontes verificáveis. O consumo foi preservado; não houve uma nova tentativa automática.");
   // Add citations only from provider grounding, never from URLs invented in model text.
   let cited = text;
-  const supports = list(grounding.groundingSupports).map(obj).sort((a,b) => Number(obj(b.segment).endIndex) - Number(obj(a.segment).endIndex));
+  const supports = list(grounding.groundingSupports).map(obj).map(s => {
+    const segment = obj(s.segment), bytes = Number(segment.endIndex);
+    // Grounding offsets are UTF-8 bytes, while JavaScript slices UTF-16 strings.
+    const end = Number.isInteger(bytes) && bytes >= 0 ? new TextDecoder().decode(new TextEncoder().encode(text).slice(0,bytes)).length : NaN;
+    const excerpt = typeof segment.text === "string" ? segment.text : "";
+    const matched = !excerpt || text.slice(0,end).endsWith(excerpt);
+    const uniqueAt = excerpt ? text.indexOf(excerpt) : -1;
+    return {groundingChunkIndices:s.groundingChunkIndices,end:matched ? end : uniqueAt >= 0 && text.indexOf(excerpt,uniqueAt+1) === -1 ? uniqueAt+excerpt.length : NaN};
+  }).sort((a,b) => b.end-a.end);
   for (const support of supports) {
-    const end = Number(obj(support.segment).endIndex);
+    const end = support.end;
     const indices = list(support.groundingChunkIndices).filter((i): i is number => Number.isInteger(i) && Number(i) >= 0 && Number(i) < sources.length);
     if (Number.isInteger(end) && end > 0 && end <= text.length && indices.length) cited = cited.slice(0,end) + indices.map(i => ` [${i+1}]`).join("") + cited.slice(end);
   }
-  return { text: cited, sources, queries, attribution: String(obj(grounding.searchEntryPoint).renderedContent || "") };
+  return { text: cited.replace(/tend[eê]ncia comprovada/gi,"Sinal em fontes públicas"), sources, queries, attribution: String(obj(grounding.searchEntryPoint).renderedContent || "") };
 }

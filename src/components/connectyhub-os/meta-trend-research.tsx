@@ -31,7 +31,8 @@ export function MetaTrendResearch({companyId,onUse}:{companyId?:string;onUse:(te
       {current?.error_message&&<p className="text-sm text-amber-800">{current.error_message}</p>}
       {current&&!current.result&&!current.error_message&&<p className="text-sm">Pesquisa em processamento. Atualize o histórico; não é necessário repetir.</p>}
       {current?.result&&<>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">{current.result.text}</p>
+        <p className="rounded-lg bg-blue-50 p-2 text-xs text-slate-600">Ideias apoiadas em fontes públicas, sem medição independente de popularidade. Confira as fontes antes de usar.</p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">{current.result.text.replace(/^#{1,6}\s+/gm,"").replace(/\*\*/g,"").replace(/^---\s*$/gm,"")}</p>
         <ol className="list-decimal space-y-1 pl-5 text-xs">{current.result.sources.map((s,i)=><li key={i}><a className="text-blue-600 underline" href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a></li>)}</ol>
         {current.result.attribution&&<iframe title="Sugestões de pesquisa do Google" className="h-40 w-full border-0" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={current.result.attribution}/>}
         <button className="rounded-xl border border-blue-200 px-3 py-2 text-sm text-blue-700" onClick={()=>onUse(`Crie um roteiro original a partir desta pesquisa. Escolha uma oportunidade e adapte ao meu negócio; não apresente hipóteses como fatos.\nPesquisa de ${current.created_at}:\n${current.result!.text}\nFontes:\n${current.result!.sources.map(s=>s.url).join("\n")}`.slice(0,6000))}>Usar no roteiro</button>

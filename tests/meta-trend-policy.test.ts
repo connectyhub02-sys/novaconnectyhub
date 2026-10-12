@@ -5,6 +5,11 @@ it("accepts only supported platform and bounded public context",()=>{
  expect(()=>parseTrendBrief({niche:"x",country:"Brasil",platform:"Instagram"})).toThrow();
  expect(()=>parseTrendBrief({niche:"Academias",country:"Brasil",platform:"Unknown"})).toThrow();
 });
+it("places citations after accented text using UTF-8 offsets",()=>{
+ const excerpt="Ação no verão.",text=excerpt+" Próxima frase.";
+ const r=parseTrendResult({candidates:[{content:{parts:[{text}]},groundingMetadata:{webSearchQueries:["verão"],groundingChunks:[{web:{uri:"https://example.com",title:"Fonte"}}],groundingSupports:[{segment:{text:excerpt,endIndex:new TextEncoder().encode(excerpt).length},groundingChunkIndices:[0]}]}}]});
+ expect(r.text).toBe("Ação no verão. [1] Próxima frase.");
+});
 it("requires real grounding and retains sources and required attribution",()=>{
  const candidate={content:{parts:[{text:"Uma ideia."}]},groundingMetadata:{webSearchQueries:["fitness","fitness",""],groundingChunks:[{web:{uri:"https://example.com/a",title:"Fonte"}}],groundingSupports:[{segment:{endIndex:10},groundingChunkIndices:[0,7]}],searchEntryPoint:{renderedContent:"<div>Google</div>"}}};
  const r=parseTrendResult({candidates:[candidate]});expect(r.queries).toEqual(["fitness"]);expect(r.text).toBe("Uma ideia. [1]");expect(r.attribution).toContain("Google");
