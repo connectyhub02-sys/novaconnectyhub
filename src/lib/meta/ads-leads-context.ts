@@ -29,6 +29,9 @@ export async function loadAdsLeadsContext(client: SupabaseClient, organizationId
     token: tokens.get("META_ACCESS_TOKEN") ?? "", pageToken: tokens.get("FACEBOOK_PAGE_ACCESS_TOKEN") ?? "" };
 }
 export type AdsLeadsContext = Awaited<ReturnType<typeof loadAdsLeadsContext>>;
+export class MetaGraphError extends Error {
+  constructor(message:string,public definitive:boolean){super(message);}
+}
 export function requireMetaScopes(ctx: AdsLeadsContext, scopes: string[]) {
   const missing = scopes.filter(s => !ctx.scopes.includes(s));
   if (missing.length) throw new Error(`Reconecte a Meta com as permissões: ${missing.join(", ")}.`);
@@ -44,8 +47,9 @@ export async function adsLeadsGraph(ctx: AdsLeadsContext, path: string, params: 
     ...(method === "POST" ? {body:new URLSearchParams(params)} : {})});
   const body = metaRecord(await response.json().catch(() => null));
   if (!response.ok || body.error) {
-    const code = metaRecord(body.error).code;
-    throw new Error(`Meta recusou a operação (HTTP ${response.status}${typeof code === "number" ? `, código ${code}` : ""}). Confira permissões e acesso ao ativo.`);
+    const error=metaRecord(body.error),code=error.code;
+    const hint=typeof error.error_user_msg==="string"?error.error_user_msg.slice(0,600):"Confira permissões e acesso ao ativo.";
+    throw new MetaGraphError(`Meta recusou a operação (HTTP ${response.status}${typeof code === "number" ? `, código ${code}` : ""}). ${hint}`,response.status>=400&&response.status<500&&error.is_transient!==true&&typeof code==="number");
   }
   return body;
 }

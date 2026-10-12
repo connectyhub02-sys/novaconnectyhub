@@ -34,7 +34,7 @@ export async function runMeteredMetaGeneration(i:Input) {
    if(!data) {
      const quote=calculateMeteredUsageCharge({rates,units:{inputTokens:i.inputTokens,outputTokens:i.maxOutput}});
      const held=await client.rpc("reserve_meta_ai",{p_id:id,p_amount:quote.chargeCredits});
-     if(held.error)throw Error("Saldo ou limite insuficiente para reservar esta análise. Recarregue os créditos.");
+     if(held.error){const reason=String(held.error.message||"");throw Error(reason.includes("monthly_limit")?"Seu limite mensal de consumo de IA foi atingido. Confira os limites em Créditos e recargas; não houve geração.":reason.includes("daily_limit")?"Seu limite diário de consumo de IA foi atingido. Confira os limites em Créditos e recargas; não houve geração.":"Saldo ou acesso insuficiente para reservar esta análise. Confira créditos e contrato.");}
      dispatched=true;
      const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(i.model)}:generateContent`,{method:"POST",redirect:"error",signal:AbortSignal.timeout(120000),headers:{"Content-Type":"application/json","x-goog-api-key":i.apiKey},body:JSON.stringify(i.body)});
      if(!response.ok){if([400,401,403,404,429].includes(response.status))dispatched=false;throw Error(`A IA recusou a geração (HTTP ${response.status}).`);}
@@ -51,7 +51,7 @@ export async function runMeteredMetaGeneration(i:Input) {
    return {data,chargeCredits:Number(receipt.data.charge_credits),usageEventId:String(receipt.data.usage_event_id)};
  }catch(e){
    if(dispatched)await update({status:"uncertain",error_message:e instanceof Error?e.message:"Consumo em conferência."});
-   else {const released=await client.rpc("finish_meta_ai",{p_id:id,p_failed:true});if(released.error)throw Error("Reserva de créditos em conferência.");}
+   else {await update({error_message:e instanceof Error?e.message:"Geração não iniciada."});const released=await client.rpc("finish_meta_ai",{p_id:id,p_failed:true});if(released.error)throw Error("Reserva de créditos em conferência.");}
    throw e;
  }
 }

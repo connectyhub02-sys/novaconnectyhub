@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adsLeadsGraph, loadAdsLeadsContext, requireMetaScopes, metaRecord, selectedMetaAsset, type AdsLeadsContext } from "./ads-leads-context";
+import { adsLeadsGraph, loadAdsLeadsContext, requireMetaScopes, metaRecord, selectedMetaAsset, MetaGraphError, type AdsLeadsContext } from "./ads-leads-context";
 import { campaignSettings, executionSnapshot, campaignPayload, adSetPayload, assertBudgetApproval, type CampaignSnapshot } from "./campaign-policy";
 import { loadR2Config, buildPublicObjectUrl } from "@/lib/storage/r2";
 import { assertContractAccess } from "@/lib/billing/contract-access";
@@ -73,7 +73,7 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
   const e=await readExecution(client,org,id),s=e.snapshot;
   const {ctx}=await context(client,org,action==="pause");
   if(ctx.adAccountId!==s.accountId || ctx.pageId!==s.pageId) throw Error("A conexão foi alterada. Reconecte os ativos originais antes de operar esta campanha.");
-  const allowed=action==="create_paused"?["draft","awaiting_media"]:action==="activate"?["paused"]:["active","paused","uncertain"];
+  const allowed=action==="create_paused"?["draft","awaiting_media","blocked"]:action==="activate"?["paused"]:["active","paused","blocked","uncertain"];
   if(!allowed.includes(e.status)) throw Error("Operação em andamento ou estado incompatível. Atualize o histórico; não recrie a campanha.");
   if(action==="activate") assertBudgetApproval(s,e.snapshot_hash,approval);
   const status=action==="create_paused"?"creating":action==="activate"?"activating":"pausing";
@@ -81,6 +81,7 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
   if(locked.error || !locked.data) throw Error("Outra operação está em andamento.");
   const update=async(values:Record<string,unknown>)=>{const r=await client.from("meta_campaign_executions").update({...values,updated_at:new Date().toISOString()}).eq("id",id).eq("organization_id",org);if(r.error) throw Error("Não foi possível registrar a confirmação da Meta. Não repita a operação.");};
   const write=async(key:string,path:string,params:Record<string,string>)=>{
+    if(e.remote_ids[key]) return {id:e.remote_ids[key]};
     await update({pending_step:key});
     const r=await adsLeadsGraph(ctx,path,params,false,"POST");
     if(typeof r.id!=="string" || !/^\d+$/.test(r.id)) throw Error("A Meta não confirmou o identificador criado.");
@@ -93,8 +94,9 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
       const r=await adsLeadsGraph(ctx,e.remote_ids.campaign,{fields:"status"},false);
       if(r.status!=="PAUSED") throw Error("Pausa ainda não confirmada pela Meta.");
       // Incomplete creation remains uncertain; never unlock activation accidentally.
-      await update({status:e.remote_fingerprint?"paused":"uncertain",pending_step:null});
+      await update({status:e.remote_fingerprint?"paused":e.status==="blocked"?"blocked":"uncertain",pending_step:null});
     } else if(action==="create_paused") {
+      if(e.remote_ids.campaign && (await adsLeadsGraph(ctx,e.remote_ids.campaign,{fields:"status"},false)).status!=="PAUSED") throw Error("Pause a campanha na Meta antes de continuar sua criação.");
       let imageUrl="",imageHash=e.remote_ids.image;
       if(s.media.contentType==="video/mp4") {
         if(!e.remote_ids.video) await write("video",`${s.accountId}/advideos`,{file_url:s.media.url,title:s.name});
@@ -112,7 +114,8 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
         if(!imageHash) throw Error("A Meta não confirmou a imagem.");
         e.remote_ids.image=imageHash;await update({remote_ids:e.remote_ids,pending_step:null});
       }
-      const start=new Date(Date.now()+5*60000).toISOString(),end=new Date(Date.now()+5*60000+s.settings.days*86400000).toISOString();
+      const start=e.start_at||new Date(Date.now()+5*60000).toISOString(),end=e.end_at||new Date(Date.now()+5*60000+s.settings.days*86400000).toISOString();
+      if(Date.parse(end)<=Date.now()) throw Error("O período terminou. Prepare uma nova proposta.");
       e.start_at=start;e.end_at=end;await update({start_at:start,end_at:end});
       await write("campaign",`${s.accountId}/campaigns`,campaignPayload(s));
       for(let i=0;i<s.adSets.length;i++) await write(`set_${i}`,`${s.accountId}/adsets`,adSetPayload(s,e.remote_ids.campaign,i,start,end));
@@ -147,7 +150,8 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
     let paused=false;
     if(e.remote_ids.campaign) try {await adsLeadsGraph(ctx,e.remote_ids.campaign,{status:"PAUSED"},false,"POST");paused=(await adsLeadsGraph(ctx,e.remote_ids.campaign,{fields:"status"},false)).status==="PAUSED";}catch{}
     const message=error instanceof Error?error.message:"Operação Meta em conferência.";
-    await update({status:"uncertain",error_message:`${message}${paused?" Campanha confirmada pausada.":" Confira o estado no Gerenciador da Meta."}`});
+    const blocked=action==="create_paused" && error instanceof MetaGraphError && error.definitive && (!e.remote_ids.campaign||paused);
+    await update({status:blocked?"blocked":"uncertain",...(blocked?{pending_step:null}:{}),error_message:`${message}${paused?" Campanha confirmada pausada.":" Confira o estado no Gerenciador da Meta."}`});
     throw Error(`${message} A operação não será repetida automaticamente.`);
   }
   return campaignHistory(client,org);

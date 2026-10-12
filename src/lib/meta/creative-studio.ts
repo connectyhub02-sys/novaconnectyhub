@@ -141,7 +141,8 @@ export async function runCreativeJob(client: SupabaseClient, org: string, userId
     await update({ status: "completed", result, usage_event_id: receipt.usageEventId, charge_credits: receipt.chargeCredits });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível concluir a análise.";
-    await update({ status: dispatched ? "uncertain" : "failed", error_message: saved ? "O resultado foi recebido, mas precisa de conferência antes de uma nova tentativa." : message });
+    const charge=await client.from("meta_ai_charges").select("status").eq("organization_id",org).eq("id",id).maybeSingle();
+    await update({ status: dispatched && charge.data?.status!=="failed" ? "uncertain" : "failed", error_message: saved ? "O resultado foi recebido, mas precisa de conferência antes de uma nova tentativa." : message });
     throw Error(message);
   } finally {
     if (fileName) await fetch(`${host}/v1beta/${fileName}`, { method: "DELETE", headers: { "x-goog-api-key": credentials.apiKey }, signal: AbortSignal.timeout(10000) }).catch(() => undefined);
