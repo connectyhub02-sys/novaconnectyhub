@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { AdminAdsPlatformDashboard } from "@/components/connectyhub-os/admin-ads-platform-dashboard";
+import { MetaAdsAnalyticsPanel } from "@/components/connectyhub-os/meta-ads-analytics-panel";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { FeatureUpgradePanel } from "@/components/connectyhub-os/feature-upgrade-panel";
 import { MetaComingSoonPanel } from "@/components/connectyhub-os/meta-coming-soon-panel";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { metaFeatureLaunchPaused } from "@/lib/meta/launch-status";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
-import { getClientTrafficOverview } from "@/lib/traffic/admin-traffic";
 
 export const metadata: Metadata = {
   title: "Meta Ads | ConnectyHub",
@@ -62,22 +61,7 @@ export default async function ClientMetaAdsPage() {
     );
   }
 
-  const overview = await getClientTrafficOverview(workspace.organization.id);
-
   return (
-    <AdminAdsPlatformDashboard
-      activeHref={shellProps.activeHref}
-      credentialHref="/dashboard/integracoes#meta-ads-guiado"
-      credentialPrimaryLabel="Abrir integracoes"
-      credentialSecondaryLabel="Salvar em integracoes"
-      isPlatformAdmin={shellProps.isPlatformAdmin}
-      organizationId={workspace.organization.id}
-      overview={overview}
-      platform="meta"
-      shellMode="client"
-      userAvatarUrl={shellProps.userAvatarUrl}
-      userLabel={shellProps.userLabel}
-      workspaceName={shellProps.workspaceName}
-    />
+    <ConnectyShell {...shellProps}><MetaAdsAnalyticsPanel companyId={workspace.organization.id}/></ConnectyShell>
   );
 }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
-import { AdminAdsPlatformDashboard } from "@/components/connectyhub-os/admin-ads-platform-dashboard";
+import { MetaAdsAnalyticsPanel } from "@/components/connectyhub-os/meta-ads-analytics-panel";
+import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
-import { getAdminTrafficOverview } from "@/lib/traffic/admin-traffic";
 
 export const metadata: Metadata = {
   title: "Meta Ads | Trafego IA",
@@ -18,13 +18,9 @@ export default async function AdminMetaAdsPage() {
     return <AccessDenied />;
   }
 
-  const overview = await getAdminTrafficOverview();
-
   return (
-    <AdminAdsPlatformDashboard
-      overview={overview}
-      platform="meta"
-      userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
-    />
+    <ConnectyShell mode="admin" isPlatformAdmin activeHref="/admin/trafego/meta-ads" userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}>
+      <MetaAdsAnalyticsPanel admin/>
+    </ConnectyShell>
   );
 }

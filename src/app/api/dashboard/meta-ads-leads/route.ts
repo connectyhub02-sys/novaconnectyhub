@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getMetaWorkspace, requireMetaCompanyAccess } from "@/lib/meta/company-access";
+import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import { createServiceClient } from "@/lib/supabase/service";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { loadAdsLeadsContext } from "@/lib/meta/ads-leads-context";
@@ -8,19 +10,21 @@ import { importRecentLeadAds, listLeadForms, setLeadForm } from "@/lib/meta/lead
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-async function access(write=false) {
-  const workspace=await getMetaWorkspace();
+async function access(request:Request,write=false) {
+  const requested=new URL(request.url).searchParams.get("companyId");
+  const workspace=requested?await getCurrentWorkspace():await getMetaWorkspace();
   if(!workspace?.organization)throw new Error("Sessão e empresa obrigatórias.");
+  const companyId=requested?resolveDashboardCompanyId({workspace,requestedCompanyId:requested}):workspace.organization.id;
   const client=createServiceClient();
-  const company=await requireMetaCompanyAccess({client,userId:workspace.user.id,companyId:workspace.organization.id});
+  const company=await requireMetaCompanyAccess({client,userId:workspace.user.id,companyId});
   await assertBillableAccess({client,organizationId:company.id});
   if(write&&!["owner","admin"].includes(company.role))throw new Error("Somente administradores podem configurar a conexão.");
   return {client,organizationId:company.id};
 }
 const json=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{"Cache-Control":"private, no-store"}});
-export async function GET() {
+export async function GET(request:Request) {
   try {
-    const {client,organizationId}=await access();
+    const {client,organizationId}=await access(request);
     const ctx=await loadAdsLeadsContext(client,organizationId);
     const [forms,deliveries]=await Promise.all([
       client.from("meta_lead_forms").select("form_id,page_id,name,enabled").eq("organization_id",organizationId).eq("page_id",ctx.pageId),
@@ -36,7 +40,7 @@ export async function POST(request:Request) {
     if(origin&&origin!==new URL(request.url).origin&&origin!==process.env.NEXT_PUBLIC_APP_URL)
       return json({error:"Origem não autorizada."},403);
     if(!request.headers.get("content-type")?.startsWith("application/json"))return json({error:"JSON obrigatório."},415);
-    const {client,organizationId}=await access(true);
+    const {client,organizationId}=await access(request,true);
     const body=await request.json();
     const ctx=await loadAdsLeadsContext(client,organizationId);
     switch(body.action) {

@@ -2,20 +2,21 @@
 import { useEffect, useState } from "react";
 type State={pageId:string;adAccountId:string;scopes:string[];forms:{form_id:string;name:string;enabled:boolean}[];deliveries:{id:string;leadgen_id:string;status:string;error_message:string|null;created_at:string}[]};
 const button="rounded-lg border border-blue-200 px-3 py-2 text-sm text-blue-700 disabled:opacity-40";
-export function MetaAdsLeadsPanel() {
+export function MetaAdsLeadsPanel({companyId}:{companyId?:string}) {
+  const endpoint=`/api/dashboard/meta-ads-leads${companyId?`?companyId=${encodeURIComponent(companyId)}`:""}`;
   const [state,setState]=useState<State|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [forms,setForms]=useState<{id:string;name:string;status:string}[]>([]),[result,setResult]=useState<unknown>(null);
-  async function refresh(){const r=await fetch("/api/dashboard/meta-ads-leads",{cache:"no-store"});const data=await r.json();if(r.ok)setState(data);else setError(data.error);}
+  async function refresh(){const r=await fetch(endpoint,{cache:"no-store"});const data=await r.json();if(r.ok)setState(data);else setError(data.error);}
   useEffect(()=>{
     const controller=new AbortController();
-    fetch("/api/dashboard/meta-ads-leads",{cache:"no-store",signal:controller.signal}).then(async r=>{
+    fetch(endpoint,{cache:"no-store",signal:controller.signal}).then(async r=>{
       const data=await r.json();if(!controller.signal.aborted){if(r.ok)setState(data);else setError(data.error);}
     }).catch(()=>{if(!controller.signal.aborted)setError("Não foi possível carregar a conexão Meta.");});
     return ()=>controller.abort();
-  },[]);
+  },[endpoint]);
   async function run(action:string,extra:Record<string,unknown>={}) {
     setBusy(true);setError("");setResult(null);
-    try{const r=await fetch("/api/dashboard/meta-ads-leads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...extra})});
+    try{const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...extra})});
       const data=await r.json();if(!r.ok)throw new Error(data.error);if(action==="forms")setForms(data.forms);else setResult(data);await refresh();
     }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a Meta.");}finally{setBusy(false);}
   }
