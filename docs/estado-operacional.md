@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Publicações e calendário publicados — 12/10/2026 12h10 BRT
+
+Produção `26a84311d6149f863b9ae8433104c8a59f67393b` no slot b/3131;
+fallback `a46a0a607473633c75049641cdc555cefc30a0cb` no slot a/3130.
+Editor compartilhado por admin/cliente com Post, Reel, Story, Carrossel e Vídeo,
+upload de imagens/MP4, mídias ordenadas e calendário mensal por organização.
+Fila existente retoma processamento assíncrono com progresso persistido por
+rede, reserva condicional e bloqueio de repetição quando o resultado é incerto.
+24 testes, TypeScript, ESLint e build passaram; smoke público e consulta
+Inngest assinada confirmaram saúde/autorização e 58 funções. Builder parado.
+Nenhum novo registro explícito Inngest; rota/configuração preservadas.
+
+Conta isolada meta-review: editor abriu, dois rascunhos salvos, seleção do dia
+20/10 às 09h persistiu e apareceu no calendário. Nenhum rascunho aprovado,
+publicação social, anúncio ou gasto. Admin usa o mesmo editor, mas a sessão
+Chrome disponível era cliente; validação visual de admin ainda pendente.
+Evidências em output/meta-publicacoes-20261012.
+
+Ainda faltam autorização pontual para acrescentar pages_manage_posts e
+instagram_content_publish, reconexão e testes de postagem real. Upload local
+foi bloqueado pela extensão no perfil connectyhub02; habilitação solicitada.
+Roteiros, justificativas e mídias de teste preparados; vídeos integrais novos
+não concluídos. Pedido anterior 1078832598351314 permanece em análise e não foi
+alterado. Não confundir painel publicado com Advanced Access ou entrega real.
+Ver [implementação, limites e pendências](meta-publicacoes-calendario-2026-10-12.md).
+
 ## App Review enviado; em análise — 12/10/2026 11h09 BRT
 
 Após confirmação expressa do titular, aceite jurídico final marcado e Submit

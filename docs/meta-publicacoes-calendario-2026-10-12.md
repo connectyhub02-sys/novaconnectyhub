@@ -87,5 +87,39 @@ editorial calendar. No access to unrelated accounts is requested.
 24 testes dirigidos passaram: formatos, ordem e retomada de containers,
 resultado incerto, persistência anterior ao envio, processamento assíncrono,
 host de upload, isolamento, admin assistido, plano e grant de revisão.
-TypeScript e ESLint dirigidos passaram. Publicação em produção, provas visuais,
-envios reais e situação das permissões serão registrados após verificação.
+TypeScript e ESLint dirigidos passaram. Produção publicada no commit
+`26a84311d6149f863b9ae8433104c8a59f67393b`, slot b/3131; fallback
+`a46a0a607473633c75049641cdc555cefc30a0cb`, slot a/3130. Build de produção,
+health/SHA, login/asset/loja e bloqueio das APIs sem sessão passaram. Consulta
+Inngest assinada no candidato confirmou 58 funções e autenticação. Não foi
+executado um novo registro explícito; rota e configuração foram preservadas.
+Builder parado após a publicação. Nenhuma migration necessária.
+
+No navegador da conta isolada meta-review, confirmados editor com os cinco
+formatos, criação de dois rascunhos e calendário mensal. Selecionar 20/10/2026
+preencheu 09:00; o segundo rascunho persistiu com essa data e apareceu na grade
+mensal após consulta ao servidor. Ambos permanecem em rascunho: nenhum envio
+ou agendamento aprovado. A tentativa anterior de preencher datetime-local
+pelo controle do navegador não persistiu; seleção visual do dia funcionou.
+Evidências: `output/meta-publicacoes-20261012/rascunho-com-data.png` e
+`output/meta-publicacoes-20261012/calendario-com-rascunho.png`.
+
+O admin usa o mesmo editor e sua autorização foi coberta pelos testes; a sessão
+Chrome disponível estava como cliente e mostrou acesso restrito na rota admin.
+Não contar isso como validação visual de uma sessão administradora.
+
+### Pendências verificadas
+
+- Upload pelo Chrome connectyhub02 bloqueado pela falta de “Permitir acesso a
+  URLs de arquivo” na extensão. Solicitada habilitação ao titular; imagens de
+  teste e MP4 próprio de seis segundos estão em output/meta-publicacoes-20261012.
+- `pages_manage_posts` e `instagram_content_publish` ainda não foram acrescentados
+  no portal/configurações nem concedidos na reconexão. Confirmação específica
+  para ampliar o acesso foi solicitada e segue pendente nesta etapa.
+- Pedido anterior 1078832598351314 preservado em análise. Não houve envio de
+  solicitação complementar nem modificação dos anexos anteriores.
+- Justificativas e roteiro de demonstração estão preparados neste documento.
+  Vídeos integrais novos, upload real, publicação de cada formato e execução
+  agendada na Meta ainda não foram validados. Não apresentar os testes internos
+  ou as capturas do editor como demonstração integral de publicação.
+- Sem anúncios, impulsionamentos, pagamentos ou gastos de mídia.
