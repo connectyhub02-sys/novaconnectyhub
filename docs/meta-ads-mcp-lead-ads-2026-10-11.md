@@ -364,3 +364,16 @@ continuam com requisitos incompletos na listagem. Ainda dentro de 24h dos
 Acompanhamento permanece ativo a cada 2h. Corrigidas referências antigas no
 lembrete: produção 1d6b9d9b/fallback d7f21f9e, Pixels agora com eventos de teste,
 conforme entrega de Pixel/CAPI de 12/10. Sem mudanças na solicitação.
+
+## Acompanhamento — 12/10/2026, 03h02 BRT
+
+Portal conferido no Chrome Connecty, pedido 1078832598351314: continua
+Not submitted, Submit for review desabilitado. As quatro etapas gerais seguem
+100%; Allowed usage 50%, renovação concluída e nove solicitações incompletas.
+Reaberto somente ads_mcp_management: contador permanece 0/1, texto preservado,
+View uploaded screencast presente e declaração marcada. Não reabertos os
+outros anexos porque o bloqueio principal persiste. Ainda dentro de 24 horas
+dos testes finais. Nenhuma permissão removida, nenhuma chamada repetida para
+contadores, nenhum anúncio ou gasto. Acompanhamento continua ativo.
+Produção de referência atualizada em estado-operacional: a46a0a60 no slot a,
+fallback 693917f9 no b; não houve publicação neste acompanhamento.
