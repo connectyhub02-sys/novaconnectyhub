@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { metaOrganicAccess, OrganicAccessError } from "@/lib/meta/organic-access";
-import { creativeHistory, runCreativeJob, approveCreativeProposal } from "@/lib/meta/creative-studio";
+import { creativeHistory, runCreativeJob, approveCreativeProposal, creativeTariffs } from "@/lib/meta/creative-studio";
 import { parseCreativeBrief } from "@/lib/meta/creative-policy";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
@@ -16,7 +16,7 @@ async function access(request: Request) {
 }
 function failure(e: unknown) { return NextResponse.json({ error: e instanceof Error ? e.message : "Operação indisponível." }, { status: e instanceof OrganicAccessError ? e.status : 400 }); }
 export async function GET(request: Request) {
-  try { const a = await access(request); return NextResponse.json({ jobs: await creativeHistory(a.client, a.organizationId) }); } catch (e) { return failure(e); }
+  try { const a = await access(request); return NextResponse.json({ jobs: await creativeHistory(a.client, a.organizationId), tariffs: await creativeTariffs(a.client,a.organizationId).catch(()=>[]) }); } catch (e) { return failure(e); }
 }
 export async function POST(request: Request) {
   const guard = validatePublicWriteRequest({ headers: request.headers, requestUrl: request.url, routeKey: "meta-creative", maxPayloadBytes: 16000, rateLimit: { limit: 8, windowMs: 60000 } });

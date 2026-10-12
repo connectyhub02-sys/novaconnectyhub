@@ -1,0 +1,13 @@
+import {beforeEach,expect,it,vi} from "vitest";
+vi.mock("server-only",()=>({}));
+const m=vi.hoisted(()=>({access:vi.fn(),history:vi.fn(),prepare:vi.fn(),execute:vi.fn()}));
+vi.mock("@/lib/meta/organic-access",()=>({metaOrganicAccess:m.access,OrganicAccessError:class extends Error{constructor(message:string,public status:number){super(message);}}}));
+vi.mock("@/lib/meta/campaign-execution",()=>({campaignHistory:m.history,prepareCampaign:m.prepare,executeCampaign:m.execute}));
+import {GET,POST} from "../src/app/api/dashboard/meta-campaigns/route";
+import {OrganicAccessError} from "../src/lib/meta/organic-access";
+const url="https://www.connectyhub.com.br/api/dashboard/meta-campaigns",id="11111111-1111-4111-8111-111111111111";
+const request=(b:unknown,origin="https://www.connectyhub.com.br")=>new Request(url,{method:"POST",headers:{origin,"Content-Type":"application/json"},body:JSON.stringify(b)});
+beforeEach(()=>{vi.clearAllMocks();m.access.mockResolvedValue({client:{},organizationId:"owned",workspace:{user:{id:"user"},profile:{isPlatformAdmin:false}},company:{role:"owner",status:"active",planCode:"starter"}});m.prepare.mockResolvedValue([]);m.execute.mockResolvedValue([]);});
+it("rejects missing sessions, members and cross-origin writes",async()=>{m.access.mockRejectedValueOnce(new OrganicAccessError("Sessão",401));expect((await GET(new Request(url))).status).toBe(401);const a=await m.access();a.company.role="member";expect((await POST(request({action:"activate",id}))).status).toBe(403);expect((await POST(request({action:"prepare",id},"https://evil.test"))).status).toBe(403);expect(m.execute).not.toHaveBeenCalled();});
+it("all active plans share the same tenant-scoped execution",async()=>{for(const plan of ["starter","pro","scale"]){const a=await m.access();a.company.planCode=plan;expect((await POST(request({action:"create_paused",id,organizationId:"victim"}))).status).toBe(200);expect(m.execute.mock.lastCall?.slice(1,5)).toEqual(["owned","user",id,"create_paused"]);}});
+it("unknown actions never enter the executor",async()=>{expect((await POST(request({action:"spend",id}))).status).toBe(400);expect(m.execute).not.toHaveBeenCalled();});

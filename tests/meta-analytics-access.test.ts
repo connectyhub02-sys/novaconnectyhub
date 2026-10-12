@@ -38,8 +38,8 @@ describe("Meta analytics API authorization", () => {
     expect(mocks.access).toHaveBeenCalledWith({ client: {}, userId: "admin", companyId: "internal-org" });
     expect(mocks.report.mock.calls[0][1]).toBe("internal-org");
   });
-  it("enforces the plan at the API, not only in the page", async () => {
-    mocks.access.mockResolvedValue({ id: "org-a", role: "owner", planCode: "starter", status: "active" });
+  it("enforces explicit feature restrictions at the API even on all-plan rollout", async () => {
+    mocks.access.mockResolvedValue({ id: "org-a", role: "owner", planCode: "starter", status: "active", featureOverrides:{meta_ads_analytics:false} });
     expect((await GET(new Request("https://app.test/api/dashboard/meta-analytics?companyId=org-a"))).status).toBe(403);
     expect(mocks.report).not.toHaveBeenCalled();
   });

@@ -41,9 +41,9 @@ export function MetaAdsAnalyticsPanel({ companyId, admin = false }: { companyId?
     setAiBusy(true); setAi("");
     try {
       const r = await fetch("/api/dashboard/traffic/ai-analysis", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform: "meta", ...(companyId ? { companyId } : {}), accountId: report.selectedAccountId, since: report.period.since, until: report.period.until }) });
+        body: JSON.stringify({ requestId:crypto.randomUUID(), platform: "meta", ...(companyId ? { companyId } : {}), accountId: report.selectedAccountId, since: report.period.since, until: report.period.until }) });
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "Análise indisponível.");
-      setAi(data.analysis.text);
+      setAi(`${data.analysis.text}\n\nCréditos utilizados: ${data.analysis.usage?.chargeCredits ?? "Em conferência"}`);
     } catch (e) { setAi(e instanceof Error ? e.message : "Análise indisponível."); } finally { setAiBusy(false); }
   }
   const money = (n: number | null | undefined) => n == null ? "—" : report?.account.currency

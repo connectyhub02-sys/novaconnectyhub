@@ -4,6 +4,7 @@ import { Sparkles, Upload, Download, Loader2, RefreshCw } from "lucide-react";
 import type { CreativeMode, CreativeReport, CreativeBrief } from "@/lib/meta/creative-policy";
 import { CreativeMediaPreview } from "./creative-media-preview";
 import { MetaTrendResearch } from "./meta-trend-research";
+import { MetaCampaignLaunch } from "./meta-campaign-launch";
 type Media = { id: string; fileName: string; storageUrl: string; contentType: string };
 type Job = { proposal_approval?: { approvedAt: string; scope: string } | null; id: string; mode: CreativeMode; status: string; brief: CreativeBrief; result: CreativeReport | null; charge_credits: number | null; created_at: string; error_message: string | null };
 const field = "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900";
@@ -19,6 +20,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
   const [assistance, setAssistance] = useState<"automatic" | "guided">("automatic");
   const [localPreview, setLocalPreview] = useState<Media | null>(null);
   const [approvalCheck, setApprovalCheck] = useState(false);
+  const [tariffs,setTariffs]=useState<{feature:string;inputPerThousand:number;outputPerThousand:number}[]>([]);
   useEffect(() => () => { if (localPreview) URL.revokeObjectURL(localPreview.storageUrl); }, [localPreview]);
   const automatic = mode === "campaign" && assistance === "automatic";
   const proposalCurrency = currency || (["BRL", "USD", "EUR"].includes(accountCurrency || "") ? accountCurrency! : "");
@@ -27,7 +29,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
     const [r, m] = await Promise.all([fetch(`/api/dashboard/meta-creative${suffix}`, { cache: "no-store" }), fetch(`/api/dashboard/meta-organic${suffix}`, { cache: "no-store" })]);
     const data = await r.json(), assets = await m.json();
     if (!r.ok) throw Error(data.error || "Histórico indisponível.");
-    setJobs(data.jobs); if (m.ok) setMedia(assets.overview.media);
+    setJobs(data.jobs); setTariffs(data.tariffs??[]); if (m.ok) setMedia(assets.overview.media);
   }, [suffix]);
   const current = jobs.find(j => j.id === selected) ?? jobs[0], report = current?.result;
   const selectedMedia = localPreview ?? media.find(m => m.id === mediaId);
@@ -87,6 +89,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
     <summary className="flex cursor-pointer items-center gap-3 p-5 font-semibold"><Sparkles size={20} className="text-blue-600"/>Criativos e campanhas com IA<span className="ml-auto text-xs font-normal text-slate-500">Analisar · Melhorar · Planejar</span></summary>
     {opened && <div className="space-y-5 border-t border-slate-100 p-5">
       <p className="text-sm text-slate-600">Envie seu criativo e escolha o que deseja preparar. A IA utiliza os créditos da sua conta.</p>
+      <details className="text-xs text-slate-500"><summary className="cursor-pointer">Como os créditos de IA são cobrados</summary><p className="mt-2">Reservamos créditos antes da geração e cobramos o consumo efetivo uma única vez. Imagens, vídeo e áudio entram nos tokens medidos pelo provedor. O total aparece no histórico. Consultar um resultado salvo não gera nova cobrança.</p>{tariffs.map(t=><p key={t.feature}>{t.feature==="media_video_analysis"?"Análise de vídeo":t.feature==="media_image_analysis"?"Análise de imagem":"Propostas e roteiros"}: {t.inputPerThousand.toLocaleString("pt-BR")} créditos / mil tokens de entrada + {t.outputPerThousand.toLocaleString("pt-BR")} / mil de saída.</p>)}{!tariffs.length&&<p>As tarifas serão conferidas no servidor antes de gerar. Sem tarifa válida, a geração é bloqueada.</p>}</details>
       <MetaTrendResearch companyId={companyId} onUse={text=>{setMode("script");setPrompt(text);setNotice("Pesquisa adicionada às instruções. Revise e clique em Gerar roteiro.");}}/>
       <div className="flex flex-wrap gap-2">{([["analysis", "Analisar criativo"], ["campaign", "Preparar campanha"], ["script", "Criar ou melhorar roteiro"]] as const).map(([v, text]) => <button key={v} disabled={busy} className={`${button} ${mode === v ? "bg-blue-600 text-white" : "bg-white"}`} onClick={() => setMode(v)}>{text}</button>)}</div>
       {mode === "campaign" && <fieldset className="rounded-xl bg-blue-50 p-3">
@@ -129,7 +132,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
               {report.campaign.ads.map((a, i) => <details key={i} className="rounded-lg bg-white p-3"><summary className="cursor-pointer font-medium">{a.name}</summary><p className="mt-2 font-semibold">{a.headline}</p><p className="mt-2 whitespace-pre-wrap">{a.primaryText}</p><p className="mt-2">CTA: {a.cta}</p><p className="mt-2 text-slate-600">{a.creativeGuidance}</p></details>)}
               {report.campaign.assumptions.map((a, i) => <p key={i}>{a}</p>)}
               </div></details>
-              <p className="font-medium">Proposta salva na ConnectyHub. A criação e a ativação na Meta ainda não estão disponíveis aqui.</p></div>}
+              <p className="font-medium">Aprove a proposta para revisar as escolhas finais e criar a campanha pausada na Meta.</p></div>}
             {report.campaign && <div className="space-y-3 rounded-xl border border-blue-200 p-3 text-sm">
               {current?.proposal_approval ? <p role="status" className="font-medium text-emerald-700">Proposta aprovada em {new Date(current.proposal_approval.approvedAt).toLocaleString("pt-BR")} · sem veiculação.</p> : <>
                 <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={approvalCheck} disabled={busy} onChange={e => setApprovalCheck(e.target.checked)}/>Revisei o criativo, os textos, a estratégia e a verba desta proposta.</label>
@@ -138,6 +141,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis", accoun
               </>}
               <p className="text-xs text-slate-500">Aprova somente esta versão. Criação na Meta, posicionamentos finais e autorização de veiculação serão conferidos na próxima etapa.</p>
             </div>}
+            {current?.proposal_approval && report.campaign && <MetaCampaignLaunch key={current.id} companyId={companyId} proposalId={current.id} brief={current.brief}/>}
             {report.captions.map((c, i) => <details key={i}><summary className="cursor-pointer text-sm font-medium">Legenda · {c.platform}</summary><p className="mt-2 whitespace-pre-wrap text-sm">{c.text}</p></details>)}
             {report.script && <details><summary className="cursor-pointer text-sm font-medium">Roteiro e cenas</summary><p className="mt-2 whitespace-pre-wrap text-sm">{report.script}</p></details>}
             {report.dialogue && <details><summary className="cursor-pointer text-sm font-medium">Fala para gravação</summary><p className="mt-2 whitespace-pre-wrap text-sm">{report.dialogue}</p></details>}

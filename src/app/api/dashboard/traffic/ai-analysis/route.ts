@@ -1,3 +1,6 @@
+import { runMeteredMetaGeneration } from "@/lib/meta/ai-generation";
+import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
@@ -26,6 +29,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type TrafficAnalysisBody = {
+  requestId?: unknown;
   companyId?: unknown;
   platform?: unknown;
   accountId?: unknown;
@@ -79,8 +83,10 @@ export async function POST(request: NextRequest) {
 
     await assertBillableAccess({ organizationId: company.id, client });
 
+    const requestId=readString(body?.requestId);
+    if(platform==="meta"&&(!requestId||!/^[a-f0-9-]{36}$/i.test(requestId)))return NextResponse.json({error:"Identificador da análise obrigatório."},{status:400});
     const plan = platform === "meta"
-      ? analyticsPlan(await getMetaAdsAnalytics(client, company.id, { accountId: readString(body?.accountId), since: readString(body?.since), until: readString(body?.until) }))
+      ? analyticsPlan(await getMetaAdsAnalytics(client, company.id, { accountId: readString(body?.accountId), since: readString(body?.since), until: readString(body?.until), selectedAccountOnly:Boolean(readMetaReviewAccess(workspace.user)) }))
       : buildTrafficManagerPlan(await getClientTrafficOverview(company.id), platform);
     const credentials = await loadGeminiCredentials(client);
     const generated = await generateTrafficAnalysis({
@@ -88,8 +94,9 @@ export async function POST(request: NextRequest) {
       credentials,
       plan,
       platform,
+      billing:platform==="meta"?{client,org:company.id,user:workspace.user.id,id:requestId!}:undefined,
     });
-    const usage = await meterGeminiGenerationUsage({
+    const usage = generated.receipt ? {usageEventId:generated.receipt.usageEventId,chargeCredits:generated.receipt.chargeCredits,debited:generated.receipt.chargeCredits>0} : await meterGeminiGenerationUsage({
       client,
       organizationId: company.id,
       userId: workspace.user.id,
@@ -146,6 +153,7 @@ async function generateTrafficAnalysis(input: {
   credentials: GeminiCredentials;
   plan: TrafficManagerPlan;
   platform: TrafficManagerPlatform;
+  billing?:{client:SupabaseClient;org:string;user:string;id:string};
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
@@ -170,33 +178,15 @@ async function generateTrafficAnalysis(input: {
     "Foco de verba:",
     ...input.plan.budgetFocus.map((item) => `- ${item.label}: ${item.value}`),
   ].join("\n");
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
-  url.searchParams.set("key", input.credentials.apiKey);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: systemInstruction }],
-      },
-      contents: [{
-        role: "user",
-        parts: [{ text: prompt }],
-      }],
-      generationConfig: {
-        maxOutputTokens: 900,
-        temperature: 0.35,
-        topP: 0.9,
-      },
-    }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(45000),
-  });
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
+  const body={systemInstruction:{parts:[{text:systemInstruction}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:900,temperature:.35,topP:.9}};
+  let data:unknown;
+  let receipt:{usageEventId:string;chargeCredits:number}|undefined;
+  if(input.billing){
+    const generated=await runMeteredMetaGeneration({...input.billing,feature:"ai_traffic_manager",model:modelId,apiKey:input.credentials.apiKey,body,inputTokens:Math.ceil((prompt.length+systemInstruction.length)/2)+1024,maxOutput:900,identity:{platform:input.platform,prompt}});
+    data=generated.data;receipt=generated;
+  }else{
+    const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":input.credentials.apiKey},body:JSON.stringify(body),cache:"no-store",signal:AbortSignal.timeout(45000)});
+    data=await response.json().catch(()=>null);if(!response.ok)throw Error(readGeminiError(data)??`Gemini respondeu status ${response.status}.`);
   }
 
   const text = extractGeminiText(data).trim();
@@ -209,6 +199,7 @@ async function generateTrafficAnalysis(input: {
     modelId,
     prompt,
     responseData: data,
+    receipt,
     systemInstruction,
     text: text.slice(0, 2600),
   };

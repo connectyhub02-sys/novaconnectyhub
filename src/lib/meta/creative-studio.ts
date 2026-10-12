@@ -4,13 +4,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { loadR2Config, buildPublicObjectUrl } from "@/lib/storage/r2";
-import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
-import { resolveActiveBillingRates, calculateMeteredUsageCharge } from "@/lib/billing/metered-usage";
+import { runMeteredMetaGeneration, metaAiTariffs } from "./ai-generation";
+import { calculateMeteredUsageCharge } from "@/lib/billing/metered-usage";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 import { creativePrompt, parseCreativeReport, type CreativeBrief } from "./creative-policy";
 
 const host = "https://generativelanguage.googleapis.com";
 const publicFields = "id,mode,status,brief,result,model,usage_event_id,charge_credits,error_message,created_at,proposal_approval";
+export async function creativeTariffs(client:SupabaseClient,org:string) {
+ const credentials=await loadGeminiCredentials(client);
+ return Promise.all(["ai_traffic_manager","media_image_analysis","media_video_analysis"].map(async feature=>{
+   const {rates}=await metaAiTariffs(client,org,credentials.model,feature);
+   return {feature,inputPerThousand:calculateMeteredUsageCharge({rates,units:{inputTokens:1000}}).chargeCredits,outputPerThousand:calculateMeteredUsageCharge({rates,units:{outputTokens:1000}}).chargeCredits};
+ }));
+}
 export async function approveCreativeProposal(client: SupabaseClient, org: string, userId: string, id: string) {
   await assertContractAccess(org, client);
   const row = await client.from("meta_creative_jobs").select("id,mode,status,brief,result,input_hash,proposal_approval").eq("organization_id", org).eq("id", id).single();
@@ -27,6 +34,19 @@ export async function approveCreativeProposal(client: SupabaseClient, org: strin
   return creativeHistory(client, org);
 }
 export async function creativeHistory(client: SupabaseClient, org: string) {
+  const unfinished=await client.from("meta_creative_jobs").select("id,brief").eq("organization_id",org).in("status",["running","generated","uncertain"]).limit(10);
+  for(const job of unfinished.data??[]) {
+    const bill=await client.from("meta_ai_charges").select("status,settlement,provider_response,charge_credits,usage_event_id").eq("organization_id",org).eq("id",job.id).maybeSingle();
+    if(bill.error||!bill.data)continue;
+    if(bill.data.settlement&&bill.data.status!=="completed")await client.rpc("finish_meta_ai",{p_id:job.id});
+    const receipt=await client.from("meta_ai_charges").select("status,provider_response,charge_credits,usage_event_id").eq("organization_id",org).eq("id",job.id).single();
+    if(receipt.data?.status!=="completed")continue;
+    try {
+      const text=(receipt.data.provider_response?.candidates?.[0]?.content?.parts??[]).filter((p:{thought?:boolean})=>!p.thought).map((p:{text?:string})=>p.text??"").join("");
+      const result=parseCreativeReport(JSON.parse(text),job.brief);
+      await client.from("meta_creative_jobs").update({status:"completed",result,error_message:null,usage_event_id:receipt.data.usage_event_id,charge_credits:receipt.data.charge_credits}).eq("organization_id",org).eq("id",job.id);
+    }catch{await client.from("meta_creative_jobs").update({error_message:"A IA retornou formato incompleto. O consumo efetivo está registrado; o suporte pode conferir o resultado.",usage_event_id:receipt.data.usage_event_id,charge_credits:receipt.data.charge_credits}).eq("organization_id",org).eq("id",job.id);}
+  }
   // Interrupted processes must be reconciled, not automatically regenerated or charged twice.
   await client.from("meta_creative_jobs").update({ status: "uncertain", error_message: "A execução foi interrompida. O suporte precisa conferir resultado e consumo antes de repetir." })
     .eq("organization_id", org).in("status", ["running", "generated"]).lt("updated_at", new Date(Date.now() - 10 * 60000).toISOString());
@@ -108,29 +128,17 @@ export async function runCreativeJob(client: SupabaseClient, org: string, userId
     const contents = [{ role: "user", parts }];
     const counted = await jsonCall(credentials.apiKey, `/v1beta/models/${encodeURIComponent(credentials.model)}:countTokens`, { contents });
     if (!Number.isFinite(counted.totalTokens) || counted.totalTokens <= 0 || counted.totalTokens > 180000) throw Error("Criativo longo demais para esta análise. Envie uma versão mais curta.");
-    const access = await assertContractAccess(org, client);
-    const rates = await resolveActiveBillingRates(client, { provider: "gemini", featureCode: feature, modelId: credentials.model, planCode: access.plan_code });
-    if (!["input_token", "output_token"].every(unit => rates.some(r => r.unit === unit && r.connectyPricePerUnit > 0))) throw Error("A tarifa de análise ainda não está configurada.");
-    const quote = calculateMeteredUsageCharge({ rates, units: { inputTokens: counted.totalTokens, outputTokens: 8192 } });
-    if (access.plan_code !== "internal") {
-      const wallet = await client.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id", access.billing_organization_id).single();
-      if (wallet.error || Number(wallet.data?.balance_credits) - Number(wallet.data?.reserved_credits) < quote.chargeCredits) throw Error("Saldo insuficiente para analisar este criativo. Recarregue os créditos.");
-    }
     dispatched = true;
-    const data = await jsonCall(credentials.apiKey, `/v1beta/models/${encodeURIComponent(credentials.model)}:generateContent`, {
-      contents, generationConfig: { ...geminiLowThinkingConfig(credentials.model), temperature: 0.35, maxOutputTokens: 8192, responseMimeType: "application/json" } });
-    const text = (data.candidates?.[0]?.content?.parts ?? []).filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? "").join("");
-    // Persist generated output and usage before settlement; never regenerate on an uncertain retry.
-    await update({ status: "generated", provider_response: data }); saved = true;
-    if (!Number.isFinite(data.usageMetadata?.promptTokenCount)) throw Error("Consumo da IA em conferência; nenhuma nova geração foi iniciada.");
-    const usage = await meterGeminiGenerationUsage({ client, organizationId: org, userId, requestId: id, featureCode: feature,
-      modelId: credentials.model, responseData: data, promptText: prompt, outputText: text,
-      debitDescription: brief.mode === "campaign" ? "Proposta de campanha com IA" : "Análise de criativo e roteiro",
-      metadata: { source: "meta_creative_studio", jobId: id, mode: brief.mode, mediaId: brief.mediaId } });
+    const receipt = await runMeteredMetaGeneration({client,org,user:userId,id,feature,model:credentials.model,apiKey:credentials.apiKey,
+      inputTokens:counted.totalTokens,maxOutput:8192,identity:brief,
+      body:{contents,generationConfig:{...geminiLowThinkingConfig(credentials.model),temperature:0.35,maxOutputTokens:8192,responseMimeType:"application/json"}}});
+    const data = receipt.data as { candidates?: {content?: {parts?: {thought?:boolean;text?:string}[]}}[] };
+    const text = (data.candidates?.[0]?.content?.parts ?? []).filter(p=>!p.thought).map(p=>p.text??"").join("");
+    await update({status:"generated",provider_response:data}); saved=true;
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { throw Error("A IA retornou um formato incompleto. O resultado e o consumo foram preservados para conferência."); }
     const result = parseCreativeReport(parsed, brief);
-    await update({ status: "completed", result, usage_event_id: usage.usageEventId, charge_credits: usage.debited ? usage.chargeCredits : 0 });
+    await update({ status: "completed", result, usage_event_id: receipt.usageEventId, charge_credits: receipt.chargeCredits });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível concluir a análise.";
     await update({ status: dispatched ? "uncertain" : "failed", error_message: saved ? "O resultado foi recebido, mas precisa de conferência antes de uma nova tentativa." : message });

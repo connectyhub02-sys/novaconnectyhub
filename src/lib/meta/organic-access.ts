@@ -11,7 +11,7 @@ import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 export class OrganicAccessError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
-export async function metaOrganicAccess(request: Request) {
+export async function metaOrganicAccess(request: Request, options: { pauseCampaignOnly?: boolean } = {}) {
   const requested = new URL(request.url).searchParams.get("companyId");
   let workspace = requested ? await getCurrentWorkspace() : await getMetaWorkspace();
   if (!workspace) throw new OrganicAccessError("Sessão obrigatória.", 401);
@@ -23,6 +23,7 @@ export async function metaOrganicAccess(request: Request) {
   if (!organizationId) throw new OrganicAccessError("Selecione a empresa.", 422);
   const client = createServiceClient();
   const company = await requireMetaCompanyAccess({ client, userId: workspace.user.id, companyId: organizationId });
+  if (options.pauseCampaignOnly) return {client,organizationId,company,workspace,selectedAccountOnly:Boolean(readMetaReviewAccess(workspace.user))};
   if (metaFeatureLaunchPaused) throw new OrganicAccessError("Publicações Meta temporariamente indisponível.", 403);
   const entitlement = resolvePlanFeatureEntitlement("meta_organic_insights", { isPlatformAdmin: workspace.profile.isPlatformAdmin,
     organizationStatus: company.status, planCode: company.planCode, featureOverrides: company.featureOverrides });
