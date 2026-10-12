@@ -97,7 +97,13 @@ export async function advanceOrganicDelivery(input: {
     const status = response.status as { video_status?: string; uploading_phase?: { status?: string }; processing_phase?: { status?: string }; publishing_phase?: { status?: string } } | undefined;
     if (status?.video_status === "error" || [status?.uploading_phase?.status, status?.processing_phase?.status, status?.publishing_phase?.status].includes("error")) throw new Error("A Meta recusou o processamento do vídeo. Confira formato, duração e proporção.");
     if (!d.finished) {
-      if (status?.processing_phase?.status !== "complete" && status?.video_status !== "ready") return false;
+      // Processing can remain not_started until finish is submitted. Wait for
+      // transfer completion, then let Meta process and publish asynchronously.
+      const transferred = status?.uploading_phase?.status === "complete"
+        || status?.video_status === "upload_complete"
+        || status?.processing_phase?.status === "complete"
+        || status?.video_status === "ready";
+      if (!transferred) return false;
       await write("video-finish", () => graph(`${base}/${edge}`, { video_id: d.videoId!, upload_phase: "finish", video_state: "PUBLISHED", description: caption }), data => {
         if (data.success !== true) throw new Error("A Meta não confirmou a finalização do vídeo.");
         d.finished = true;

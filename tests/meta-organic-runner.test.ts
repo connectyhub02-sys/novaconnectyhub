@@ -80,6 +80,26 @@ describe("resumable organic delivery", () => {
     await expect(advanceOrganicDelivery({ delivery: delivery("facebook_page"), format: "reel", media: [video], caption: "Demo", graph: vi.fn().mockResolvedValue({ video_id: "video", upload_url: "https://evil.example/upload" }), save: vi.fn(), upload })).rejects.toThrow("inválido");
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it.each(["reel", "story", "video"] as const)("finalizes uploaded Facebook %s before processing starts, only once", async format => {
+    const d = { ...delivery("facebook_page"), videoId: "existing", uploaded: true };
+    const graph = vi.fn().mockResolvedValueOnce({ status: { video_status: "upload_complete", uploading_phase: { status: "complete" }, processing_phase: { status: "not_started" }, publishing_phase: { status: "not_started" } } }).mockResolvedValueOnce({ success: true });
+    const input = { delivery: d, format, media: [video], caption: "Demo", graph, save: vi.fn(), upload: vi.fn() };
+    expect(await advanceOrganicDelivery(input)).toBe(false);
+    expect(graph.mock.calls[1][2]).toMatchObject({ upload_phase: "finish", video_id: "existing" });
+    expect(d.phase).toBe("processing");
+    graph.mockResolvedValueOnce({ status: { publishing_phase: { status: "complete" } } });
+    expect(await advanceOrganicDelivery(input)).toBe(true);
+    expect(graph.mock.calls.filter(c => c[2]?.upload_phase === "finish")).toHaveLength(1);
+    expect(input.upload).not.toHaveBeenCalled();
+  });
+
+  it("does not finalize while the Facebook upload is incomplete", async () => {
+    const graph = vi.fn().mockResolvedValue({ status: { uploading_phase: { status: "in_progress" }, processing_phase: { status: "not_started" } } });
+    const d = { ...delivery("facebook_page"), videoId: "existing", uploaded: true };
+    expect(await advanceOrganicDelivery({ delivery: d, format: "reel", media: [video], caption: "Demo", graph, save: vi.fn(), upload: vi.fn() })).toBe(false);
+    expect(graph).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("organic formats", () => {
