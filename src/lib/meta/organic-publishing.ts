@@ -518,6 +518,7 @@ export async function publishClientMetaOrganicPost(input: {
       metadata: appendMetaOrganicAudit({
         ...metadata,
         publish_status: "publishing",
+        publish_error: null,
         publish_started_at: startedAt,
         publish_lease: randomUUID(),
         publish_lease_until: new Date(Date.now() + 10 * 60000).toISOString(),
@@ -732,10 +733,8 @@ async function publishClaimedMetaOrganicPost(
     if (delivery && delivery.accountId !== accountId) throw new Error("A conta conectada mudou. Reconecte o ativo original para concluir esta publicação.");
     if (!delivery) { delivery = { surface, accountId, phase: "preparing", children: [] }; deliveries.push(delivery); }
     if (delivery.phase === "published") continue;
-    if (format === "story" && surface === "instagram_feed") {
-      const profile = await graph(surface, `/${accountId}`, { fields: "account_type" }, "GET");
-      if (profile.account_type !== "BUSINESS") throw new Error("Stories no Instagram exigem uma conta empresarial.");
-    }
+    // Facebook Login's IGUser does not expose account_type. The official media
+    // endpoint validates Stories eligibility (business accounts only).
     if (Date.now() - Date.parse(String(metadata.processing_started_at ?? metadata.publish_started_at)) > 24 * 60 * 60000) throw new Error("O processamento excedeu 24 horas. Confira o resultado na Meta antes de reenviar.");
     const done = await advanceOrganicDelivery({ delivery, format, media, caption: item.body ?? "", linkUrl: readString(metadata.link_url), graph,
       save: async () => { await persist(); },
