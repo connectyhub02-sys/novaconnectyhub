@@ -377,3 +377,12 @@ dos testes finais. Nenhuma permissão removida, nenhuma chamada repetida para
 contadores, nenhum anúncio ou gasto. Acompanhamento continua ativo.
 Produção de referência atualizada em estado-operacional: a46a0a60 no slot a,
 fallback 693917f9 no b; não houve publicação neste acompanhamento.
+
+## Acompanhamento — 12/10/2026, 05h05 BRT
+
+Após recarga no Chrome Connecty, Submit for review continua desabilitado.
+Quatro etapas gerais em 100%, Allowed usage 50% e nove pedidos incompletos.
+ads_mcp_management reaberto confirmou 0/1, texto e vídeo anexado preservados,
+declaração marcada. Demais anexos não reabertos. Sem mudança relevante; ainda
+na janela de até 24h dos testes finais, sem chamadas adicionais ou gastos.
+Acompanhamento mantido; pedido não enviado.
