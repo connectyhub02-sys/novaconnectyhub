@@ -518,6 +518,14 @@ export async function getAdminLeadCrmWorkspace(input: {
     }
 
     organizationRows = (organizationsResult.data ?? []) as OrganizationRow[];
+    // The platform's own operation can be older than the recent customer window.
+    if (scope === "all" && !organizationRows.some(row => row.slug === platformWhatsappOrganizationSlug)) {
+      const internalResult = await client.from("organizations")
+        .select("id, name, slug, plan_code, status, created_at")
+        .eq("slug", platformWhatsappOrganizationSlug).eq("plan_code", "internal").limit(1);
+      if (internalResult.error) throw internalResult.error;
+      organizationRows.push(...((internalResult.data ?? []) as OrganizationRow[]));
+    }
   } catch (error) {
     return buildEmptyWorkspace([], [toLoadWarning("organizacoes", error)]);
   }

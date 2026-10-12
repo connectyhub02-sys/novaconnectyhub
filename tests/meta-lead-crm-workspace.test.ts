@@ -7,10 +7,12 @@ import type { ClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 
 const crm = serverModuleHarness<{
   getLeadCrmWorkspaceForCompanies(input: Record<string, unknown>): Promise<ClientLeadCrmWorkspace>;
+  getAdminLeadCrmWorkspace(input: Record<string, unknown>): Promise<ClientLeadCrmWorkspace>;
 }>("src/lib/client-os/leads-crm.ts", {
   "./lead-technical-profile": technical,
   "@/lib/whatsapp/lead-names": names,
   "@/lib/whatsapp/lead-avatar-sync": { readLeadProfileImageUrl: () => null },
+  "@/lib/whatsapp/conversation-panel-scope": { platformWhatsappOrganizationSlug: "connectyhub-platform-whatsapp" },
 }, ["getLeadCrmWorkspaceForCompanies"]);
 const company = (n: number) => ({ id: `org-${n}`, name: `Empresa ${n}`, planCode: "internal", status: "active" });
 const lead = (n: number) => ({
@@ -44,5 +46,17 @@ describe("Meta instant forms in CRM", () => {
     const db = historyDatabase({}, "leads");
     const result = await crm.getLeadCrmWorkspaceForCompanies({ client: db.client, companies: [company(1)], syncAvatars: false });
     expect(result.warnings?.[0]).toContain("formularios Meta");
+  });
+
+  it("includes the platform's operation even beyond the 500 most recent companies", async () => {
+    const organizations = Array.from({ length: 501 }, (_, n) => ({
+      ...company(n), slug: n === 0 ? "connectyhub-platform-whatsapp" : `customer-${n}`,
+      plan_code: n === 0 ? "internal" : "scale", created_at: new Date(2026, 0, 1, 0, n).toISOString(),
+    }));
+    const db = historyDatabase({ organizations, leads: [lead(0)] });
+    const result = await crm.getAdminLeadCrmWorkspace({ client: db.client, syncAvatars: false });
+    expect(result.warnings).toBeUndefined();
+    expect(result.companies).toHaveLength(501);
+    expect(result.leads.map(item => item.id)).toEqual(["lead-0"]);
   });
 });
