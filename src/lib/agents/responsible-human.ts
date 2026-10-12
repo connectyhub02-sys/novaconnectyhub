@@ -19,10 +19,14 @@ export function readAgentResponsibleHuman(metadata: unknown): AgentResponsibleHu
 
 export function readAgentResponsibleHumans(metadata: unknown): AgentResponsibleHuman[] {
   const record = readRecord(metadata);
+  const storedList = record[agentResponsibleHumansMetadataKey] ?? record.responsibleHumans;
   const storedResponsibles = normalizeAgentResponsibleHumans(
-    record[agentResponsibleHumansMetadataKey] ?? record.responsibleHumans,
+    storedList,
     { requireAtLeastOne: false },
   );
+  // An explicit list is authoritative, including an empty list. Legacy fields
+  // are only a migration fallback, never extra recipients after an edit.
+  if (Array.isArray(storedList)) return storedResponsibles;
   const legacyResponsible = readLegacyAgentResponsibleHuman(record);
   const legacyBehaviorNumbers = listResponsibleWhatsappPhones(
     readRecord(record.whatsapp_behavior_config).humanHandoffNotificationNumbers,
@@ -140,17 +144,10 @@ export function mergeResponsibleHumansIntoBehaviorConfig<T extends object>(
 ) {
   const responsibleNumbers = dedupeResponsibleHumans(responsibles).map((responsible) => responsible.phone);
 
-  if (responsibleNumbers.length === 0) {
-    return behavior;
-  }
-
-  const existingNumbers = listResponsibleWhatsappPhones((behavior as { humanHandoffNotificationNumbers?: unknown }).humanHandoffNotificationNumbers);
-  const numbers = Array.from(new Set([...responsibleNumbers, ...existingNumbers]));
-
   return {
     ...behavior,
-    humanHandoffNotifications: true,
-    humanHandoffNotificationNumbers: numbers.join("\n"),
+    humanHandoffNotifications: responsibleNumbers.length > 0,
+    humanHandoffNotificationNumbers: responsibleNumbers.join("\n"),
   };
 }
 
