@@ -17,7 +17,7 @@ const crm = serverModuleHarness<{
 const company = (n: number) => ({ id: `org-${n}`, name: `Empresa ${n}`, planCode: "internal", status: "active" });
 const lead = (n: number) => ({
   id: `lead-${n}`, organization_id: `org-${n}`, channel: "meta_lead_ads", source: "meta_lead_ads",
-  display_name: `Teste ${n}`, status: "new", metadata: { email: `test${n}@example.com`, outreach_authorized: false },
+  display_name: `Teste CRM ConnectyHub ${n}`, status: "new", metadata: { email: `test${n}@example.com`, outreach_authorized: false },
   created_at: new Date(2026, 0, 1, 0, n).toISOString(), updated_at: new Date(2026, 0, 1, 0, n).toISOString(),
 });
 
@@ -28,6 +28,7 @@ describe("Meta instant forms in CRM", () => {
     expect(result.warnings).toBeUndefined();
     expect(result.leads.map(item => item.id)).toEqual(["lead-1"]);
     expect(result.leads[0].email).toBe("test1@example.com");
+    expect(result.leads[0].name).toBe("Teste CRM ConnectyHub 1");
     expect(result.leads[0].conversation.id).toBeNull();
     expect(db.calls).not.toContain("conversation_messages");
   });

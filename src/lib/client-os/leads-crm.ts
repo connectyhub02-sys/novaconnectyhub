@@ -1272,7 +1272,9 @@ function mapLeadRecord(input: {
   const avatarUrl = readLeadProfileImageUrl(metadata)
     ?? readLeadProfileImageUrl(eventMetadata)
     ?? readLeadProfileImageUrl(input.conversations.map((conversation) => conversation.metadata));
-  const name = resolveLeadDisplayName({
+  const formName = input.lead.channel === "meta_lead_ads" && input.lead.source === "meta_lead_ads"
+    ? readString(input.lead.display_name) : null;
+  const name = formName ?? resolveLeadDisplayName({
     displayName: input.lead.display_name,
     metadata,
   }) ?? fallbackLeadName(input.lead.phone_number);
