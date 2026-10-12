@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { commerceDatabase } from "./helpers/commerce-database";
 
 vi.mock("server-only", () => ({}));
 
 type Sent = { endpoint: string; email: unknown };
 
 describe("Asaas webhook contact e-mail", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
   async function connect(ownerEmail: string, rejectEmails: string[]) {
+    vi.stubEnv("CREDENTIAL_ENCRYPTION_KEY", "unit-test-only");
     const sent: Sent[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       const endpoint = new URL(url).pathname.replace(/^\/v3/, "");
@@ -24,16 +26,10 @@ describe("Asaas webhook contact e-mail", () => {
       }
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
     });
-    const saved: Array<Record<string, unknown>> = [];
-    const chain = {
-      upsert: (row: Record<string, unknown>) => { saved.push(row); return chain; },
-      select: () => chain, single: async () => ({ data: saved.at(-1), error: null }),
-      eq: () => chain, maybeSingle: async () => ({ data: null, error: null }),
-    };
-    const client = { from: () => chain };
+    const { client, tables } = commerceDatabase();
     const { saveAsaasPaymentIntegration } = await import("@/lib/sales-catalog/asaas");
-    await saveAsaasPaymentIntegration({ client: client as never, organizationId: "org-1", accessToken: "$aact_test_key", mode: "sandbox", webhookEmail: ownerEmail }).catch(() => null);
-    return { sent, saved };
+    await saveAsaasPaymentIntegration({ client: client as never, organizationId: "org-1", accessToken: "$aact_test_key", mode: "sandbox", webhookEmail: ownerEmail });
+    return { sent, saved: tables.sales_catalog_payment_integrations };
   }
 
   it("never sends an address Asaas refuses and falls back to the platform contact", async () => {

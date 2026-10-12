@@ -1,6 +1,7 @@
 import "server-only";
 import { parseCheckoutAddress } from "./checkout-customer";
 import { compactPlatformBillingReference } from "@/lib/billing/payment-reference";
+import { ensureSharedAsaasWebhook, loadSharedAsaasWebhook } from "./asaas-shared-webhook";
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -407,31 +408,38 @@ export async function saveAsaasPaymentIntegration(input: {
   const mode = input.mode === "sandbox" ? "sandbox" : "production";
   const account = await validateAsaasAccessToken({ accessToken, mode });
   const now = new Date().toISOString();
-  const webhookSecret = createAsaasWebhookSecret();
   const webhookUrl = buildAsaasWebhookUrl();
-  const webhookProvisioning = await ensureAsaasPaymentWebhook({
+  const proposedSecret = createAsaasWebhookSecret();
+  const webhookInput: Parameters<typeof createAsaasPaymentWebhook>[0] = {
     accessToken,
     mode,
     url: webhookUrl,
-    authToken: webhookSecret,
+    authToken: proposedSecret,
     email: input.webhookEmail,
-  })
-    .then((webhook) => ({
-      ok: true,
-      id: webhook.id ?? null,
-      name: webhook.name ?? null,
-      events: webhook.events ?? null,
-      reused: Boolean(webhook.reused),
-      error: null,
-    }))
-    .catch((error: unknown) => ({
-      ok: false,
-      id: null,
-      name: null,
-      events: null,
-      reused: false,
-      error: error instanceof Error ? error.message : "Nao foi possivel criar webhook Asaas automaticamente.",
-    }));
+  };
+  let webhook = await findAsaasPaymentWebhook(webhookInput);
+  const reused = Boolean(webhook);
+  if (!webhook) {
+    try { webhook = await createAsaasPaymentWebhookWithEmailFallback(webhookInput); }
+    catch (error) {
+      if (!isAsaasDuplicateWebhookError(error)) throw error;
+      webhook = await findAsaasPaymentWebhook(webhookInput);
+      if (!webhook) throw error;
+    }
+  }
+  if (!webhook.id) throw new Error("Asaas não retornou o identificador do webhook.");
+  const webhookSecret = await ensureSharedAsaasWebhook(input.client,
+    { mode, webhookId: webhook.id, url: webhookUrl }, proposedSecret);
+  // Publish only the persisted canonical token, including during concurrent
+  // connects. A provisioning failure must not replace a working tenant record.
+  let configured: AsaasWebhookResponse;
+  try { configured = await updateAsaasPaymentWebhook({ ...webhookInput, authToken: webhookSecret, webhookId: webhook.id }); }
+  catch (error) {
+    if (!webhookInput.email || !isAsaasInvalidEmailError(error)) throw error;
+    configured = await updateAsaasPaymentWebhook({ ...webhookInput, email: null, authToken: webhookSecret, webhookId: webhook.id });
+  }
+  const webhookProvisioning = { ok: true, id: webhook.id, reused, error: null,
+    events: configured.events ?? webhook.events ?? null };
   const accountLabel = account.label ?? previewCredentialValue(accessToken);
   const providerAccountId = account.id ?? account.walletId ?? null;
   const { data, error } = await input.client
@@ -549,6 +557,10 @@ export async function loadAsaasIntegrationSecrets(
     return null;
   }
 
+  const webhookId = readString(data.metadata?.webhook_provider_id);
+  const sharedSecret = webhookId && data.webhook_url
+    ? await loadSharedAsaasWebhook(client, { mode: data.mode === "sandbox" ? "sandbox" : "production", webhookId, url: data.webhook_url })
+    : null;
   return {
     id: data.id,
     organizationId: data.organization_id,
@@ -556,7 +568,7 @@ export async function loadAsaasIntegrationSecrets(
     mode: data.mode === "sandbox" ? "sandbox" : "production",
     accountLabel: data.account_label,
     providerAccountId: data.provider_account_id,
-    webhookSecret: data.webhook_secret_encrypted ? decryptCredentialValue(data.webhook_secret_encrypted) : null,
+    webhookSecret: sharedSecret ?? (data.webhook_secret_encrypted ? decryptCredentialValue(data.webhook_secret_encrypted) : null),
     webhookUrl: data.webhook_url,
     metadata: data.metadata ?? {},
   };
@@ -865,6 +877,14 @@ async function ensureAsaasPaymentWebhook(input: {
   }
 }
 
+async function createAsaasPaymentWebhookWithEmailFallback(input: Parameters<typeof createAsaasPaymentWebhook>[0]) {
+  try { return await createAsaasPaymentWebhook(input); }
+  catch (error) {
+    if (!input.email || !isAsaasInvalidEmailError(error)) throw error;
+    return createAsaasPaymentWebhook({ ...input, email: null });
+  }
+}
+
 async function updateAsaasPaymentWebhook(input: {
   accessToken: string;
   mode: AsaasMode;
@@ -895,7 +915,6 @@ async function findAsaasPaymentWebhook(input: {
   name?: string | null;
 }) {
   const expectedUrl = normalizeAsaasWebhookUrl(input.url);
-  const expectedName = (input.name?.trim() || "ConnectyHub - Pagamentos").toLowerCase();
   let offset = 0;
 
   for (let page = 0; page < 5; page += 1) {
@@ -910,9 +929,6 @@ async function findAsaasPaymentWebhook(input: {
     const entries = webhooks.data ?? [];
     const matchingByUrl = entries.find((webhook) => normalizeAsaasWebhookUrl(webhook.url) === expectedUrl);
     if (matchingByUrl) return matchingByUrl;
-
-    const matchingByName = entries.find((webhook) => webhook.name?.trim().toLowerCase() === expectedName);
-    if (matchingByName) return matchingByName;
 
     if (!webhooks.hasMore || entries.length === 0) break;
     offset += 100;

@@ -104,6 +104,32 @@ function fixture(superseded = true) {
 
 describe("Asaas deleted payments: real normalization, webhook and retirement with I/O replaced", () => {
   it.each([
+    ["3f473c21-55aa-425a-a818-a5fa6d826748", "a90c4ce6-b66c-47c4-a3f3-660af7bb178d"],
+    ["a90c4ce6-b66c-47c4-a3f3-660af7bb178d", "3f473c21-55aa-425a-a818-a5fa6d826748"],
+  ])("routes a shared-account webhook only to its company %s", async (owner, other) => {
+    const f = fixture(false);
+    f.order.organization_id = owner; f.session.organization_id = owner;
+    f.db.tables.sales_catalog_order_items[0].organization_id = owner;
+    const otherOrder: Row = { ...structuredClone(f.order), id: "other-order", organization_id: other, latest_payment_session_id: "other-session" };
+    const otherSession: Row = { ...structuredClone(f.session), id: "other-session", organization_id: other, order_id: "other-order", provider_payment_id: "pay_other", external_reference: "other-reference" };
+    f.db.tables.sales_catalog_orders.push(otherOrder); f.db.tables.sales_catalog_payment_sessions.push(otherSession);
+    f.setRemote({ status: "CONFIRMED" });
+    // Even a contradictory untrusted payload reference cannot change the owner
+    // determined by the payment ID and independently fetched provider record.
+    expect((await f.event("PAYMENT_RECEIVED", { externalReference: "other-reference" })).status).toBe(200);
+    expect(f.order.payment_status).toBe("confirmed"); expect(f.session.status).toBe("approved");
+    expect(otherOrder.payment_status).toBe("pending"); expect(otherSession.status).toBe("pending");
+    expect(f.effects).toHaveBeenCalledWith(expect.objectContaining({ organizationId: owner, orderId: f.order.id }));
+  });
+
+  it("rejects contradictory provider ownership even with the shared valid token", async () => {
+    const f = fixture(false); f.setRemote({ status: "CONFIRMED", externalReference: "belongs-to-another-company" });
+    expect((await f.event("PAYMENT_RECEIVED")).status).toBe(503);
+    expect(f.order.payment_status).toBe("pending"); expect(f.session.status).toBe("pending");
+    expect(f.effects).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["PENDING", true, undefined, "cancelled"], ["OVERDUE", true, undefined, "cancelled"],
     ["PENDING", undefined, "PAYMENT_DELETED", "cancelled"], ["PENDING", false, "PAYMENT_DELETED", "pending"],
     ["CONFIRMED", true, "PAYMENT_DELETED", "approved"], ["REFUNDED", true, "PAYMENT_DELETED", "refunded"],

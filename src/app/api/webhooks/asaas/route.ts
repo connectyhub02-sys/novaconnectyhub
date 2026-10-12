@@ -30,6 +30,7 @@ type PaymentSessionRow = {
   status: string;
   provider_status: string | null;
   provider_payment_id: string | null;
+  external_reference: string | null;
   updated_at: string | null;
   amount: string | number | null;
   payment_owner_type: string | null;
@@ -191,6 +192,16 @@ export async function POST(request: NextRequest) {
       } else {
         paymentResponse = payments[0] as AsaasPaymentResponse;
         if (!["approved", "refunded"].includes(extractAsaasPaymentData(paymentResponse).status)) hostedReview = "hosted_checkout_payment_not_confirmed";
+      }
+    }
+    if (paymentResponse) {
+      const storedCheckout = readString(readRecord(session.metadata).asaas_checkout_id);
+      const matchesId = paymentResponse.id === session.provider_payment_id;
+      const matchesReference = Boolean(session.external_reference && paymentResponse.externalReference === session.external_reference);
+      const matchesCheckout = Boolean(storedCheckout && paymentResponse.checkoutSession === storedCheckout);
+      if ((!matchesId && !matchesReference && !matchesCheckout)
+        || (session.external_reference && paymentResponse.externalReference && !matchesReference)) {
+        throw new Error("O pagamento conferido no Asaas não pertence à referência deste pedido.");
       }
     }
     const paymentData = paymentResponse
@@ -431,7 +442,7 @@ async function findAsaasPaymentSession(
   if (ids.length > 0) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, external_reference, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .in("provider_payment_id", ids)
       .order("created_at", { ascending: false })
@@ -446,7 +457,7 @@ async function findAsaasPaymentSession(
   if (input.checkoutId) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, external_reference, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .contains("metadata", { asaas_checkout_id: input.checkoutId })
       .order("created_at", { ascending: false })
@@ -461,7 +472,7 @@ async function findAsaasPaymentSession(
   if (input.externalReference) {
     const { data } = await client
       .from("sales_catalog_payment_sessions")
-      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .select("id, organization_id, order_id, integration_id, method, status, provider_status, provider_payment_id, external_reference, updated_at, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
       .eq("provider", "asaas")
       .eq("external_reference", input.externalReference)
       .order("created_at", { ascending: false })
