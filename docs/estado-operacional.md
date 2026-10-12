@@ -1,5 +1,33 @@
 # Estado operacional da ConnectyHub
 
+## Ads MCP publicado e expansão Pixel planejada — 11/10/2026 21h15 BRT
+
+`08f151331967e52dd733c16cf7b1957a9d491147` ativo no slot b/3131, fallback a/3130
+em `63386ecd`. Migration `0193_meta_lead_ads.sql` aplicada. Build, testes dirigidos,
+TypeScript, ESLint e smoke público de health/login/asset/auth/Inngest passaram;
+57 funções expostas e PUT da URL pública confirmou registro no mesmo app.
+Builder parado. MCP oficial testado também pelos botões do painel: ferramentas,
+campanhas vazias e oportunidades (score 100, sem recomendações). Execução é somente
+leitura; nenhuma campanha/anúncio foi ativado ou gasto iniciado.
+
+Correção de prefetch OAuth publicada após rollback preventivo: navegação
+especulativa não pode colocar a conexão em pending. Credenciais preservadas e
+conexão própria restaurada/conferida. `ads_management` solicitado no login ainda
+não retornou concedido ao token; os três novos escopos MCP/leads retornaram.
+
+Lead Ads: formulário próprio disponível no painel, webhook real recebido e
+confirmado como Success na ferramenta oficial. Importação ainda bloqueada pela
+Meta com código 3 (autor do lead precisa de papel de teste/admin/desenvolvedor).
+Entrega fica registrada como falha, sem cadastro artificial no CRM. Reprodução
+na conta isolada dos avaliadores e anexos completos novos ainda pendentes;
+App Review não enviado e acesso externo não aprovado nesta etapa.
+
+Titular ampliou o objetivo para gestor de tráfego IA com Pixel/Dataset e CAPI
+por cliente. Auditoria encontrou campo legado de Pixel, sem instrumentação nas
+lojas. [Mapa completo de serviços e permissões](meta-servicos-permissoes-pixel-2026-10-11.md)
+inclui conexão guiada, catálogo, conteúdo/insights, conversões de mensagens e
+expansões elegíveis. [Implementação, incidente e testes desta entrega](meta-ads-mcp-lead-ads-2026-10-11.md).
+
 ## Anexos Meta concluídos — 11/10/2026 19h54 BRT
 
 Os três vídeos pendentes foram anexados, salvos e confirmados após reabrir cada

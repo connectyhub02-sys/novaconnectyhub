@@ -18,6 +18,14 @@ O titular quer vender os recursos de IA em créditos, contabilizando o custo do 
 
 ### Expansão social e WhatsApp oficial — decisão de 11/10/2026
 
+Direção ampliada pelo titular em 11/10: gestor de tráfego por IA usando os dados
+autorizados de cada empresa, com conexão guiada de Página, Instagram, anúncios,
+Pixel/Dataset e catálogo. A loja e as páginas de cada cliente devem alimentar
+medição de leads e vendas via Pixel/CAPI com isolamento e deduplicação. Central
+única não significa permissão universal nem dispensa etapas específicas de
+WhatsApp/Threads. [Mapa de serviços, permissões e implementação](meta-servicos-permissoes-pixel-2026-10-11.md).
+Até nova instrução, os testes Ads permanecem sem ativação de anúncios ou gastos.
+
 Agentes ficam em uma única área: WhatsApp, Instagram e Facebook são selecionados ao criar/editar o agente da empresa, condicionados à conexão e às permissões reais. Não manter menu duplicado de agentes Meta nem aba separada Redes sociais. Automação de comentários (palavra-chave → privado/botão ou resposta pública com IA) e follow-up Direct/Messenger ficam em Automações, próximos de grupos/canais/status. Campanhas WhatsApp oficiais continuam dentro do Chat Meta. [Implementação e limites](meta-automacoes-comentarios-2026-10-11.md).
 
 A expansão reúne a referência funcional do Metricool e os módulos Meta observados na Vision Home, com navegação própria da ConnectyHub. Calendário, conteúdo, atendimento, anúncios e resultados ficam na seção Meta do cliente. Campanhas de mensagens e modelos ficam dentro do Chat Meta oficial, com números e atendimento, sem entradas separadas no menu. Meta Ads permanece a área de anúncios pagos. Cobertura ampla é objetivo de produto; cada capacidade mantém estado de implementação, permissões e homologação separados. [Entrega da Central Meta e limites](meta-central-social-2026-10-11.md).
