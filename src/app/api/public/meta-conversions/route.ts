@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { verifyOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { isPublicCommerceAvailable } from "@/lib/sales-catalog/public-commerce-access";
-import { conversionUserData,isUuid } from "@/lib/meta/conversion-policy";
+import { conversionUserData,isUuid,conversionOrigin } from "@/lib/meta/conversion-policy";
 import { pixelConfiguration,queueConversion } from "@/lib/meta/pixel-conversions";
 import { metaRecord,selectedMetaAsset } from "@/lib/meta/ads-leads-context";
 export const runtime="nodejs";
@@ -35,7 +35,7 @@ export async function POST(request:Request) {
     if(!isUuid(b.eventId)||!["PageView","ViewContent","AddToCart","InitiateCheckout"].includes(b.eventName))return json({},422);
     const organization=await client.from("organizations").select("slug").eq("id",org).single();
     if(organization.error)throw new Error("organization");
-    const base=new URL(process.env.NEXT_PUBLIC_APP_URL||request.url).origin;
+    const base=conversionOrigin();
     const storePath=`/loja/${encodeURIComponent(organization.data.slug||org)}`;
     let sourceUrl=base+storePath;
     let customData:Record<string,unknown>|undefined;

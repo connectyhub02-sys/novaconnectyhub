@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
 
+export function conversionOrigin(env: {NEXT_PUBLIC_APP_URL?:string;APP_URL?:string}=process.env) {
+  for(const value of [env.NEXT_PUBLIC_APP_URL,env.APP_URL]) {
+    try { const url=new URL(value||""); if(url.protocol==="https:"&&!/^(0\.0\.0\.0|localhost|127\.0\.0\.1)$/.test(url.hostname))return url.origin; } catch {}
+  }
+  return "https://www.connectyhub.com.br";
+}
+
 export const isUuid = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 export const conversionHash = (value: string) => createHash("sha256").update(value).digest("hex");
 export function conversionUserData(organizationId: string, visitorId: string, userAgent: string, fbp?: unknown, fbc?: unknown) {

@@ -1,14 +1,27 @@
 import { describe,it,expect,vi,afterEach } from "vitest";
 vi.mock("server-only",()=>({}));
 vi.mock("@/lib/client-os/guided-oauth",()=>({loadMetaGuidedOAuthConfig:vi.fn()}));
-import { canDeliverConversion,conversionUserData,purchaseData } from "../src/lib/meta/conversion-policy";
+import { canDeliverConversion,conversionUserData,purchaseData,conversionOrigin } from "../src/lib/meta/conversion-policy";
 import { listMetaPixels,savePixelConfiguration,queueConversion } from "../src/lib/meta/pixel-conversions";
 import type { AdsLeadsContext } from "../src/lib/meta/ads-leads-context";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { metaClickAttribution } from "../src/lib/meta/click-attribution";
 afterEach(()=>vi.unstubAllGlobals());
 const config={pixel_id:"123",revision:"v1",enabled:true,ad_account_id:"act_456"};
 const event={pixel_id:"123",revision:"v1",event_time:Math.floor(Date.now()/1000)};
 describe("Meta conversion privacy and accounting",()=>{
+  it("captures an authorized ad click without retaining unrelated URL data",()=>{
+    const now=1791770000000;
+    expect(metaClickAttribution("?fbclid=CLICK_ID&email=private",null,now)).toBe(`fb.1.${now}.CLICK_ID`);
+    expect(metaClickAttribution("?fbclid=https://private",null,now)).toBeUndefined();
+    expect(metaClickAttribution("",`fb.1.${now-91*86400000}.OLD`,now)).toBeUndefined();
+    expect(metaClickAttribution("",`fb.1.${now}.CLICK_ID`,now)).toBe(`fb.1.${now}.CLICK_ID`);
+  });
+  it("never exposes an internal container origin to Meta",()=>{
+    expect(conversionOrigin({})).toBe("https://www.connectyhub.com.br");
+    expect(conversionOrigin({NEXT_PUBLIC_APP_URL:"https://0.0.0.0:3000"})).toBe("https://www.connectyhub.com.br");
+    expect(conversionOrigin({APP_URL:"https://shop.example/path?private=1"})).toBe("https://shop.example");
+  });
   it("blocks cross-account, changed pixel, revoked consent, disabled settings and old events",()=>{
     expect(canDeliverConversion(event,config,"act_456",true)).toBe(true);
     expect(canDeliverConversion(event,config,"act_other",true)).toBe(false);

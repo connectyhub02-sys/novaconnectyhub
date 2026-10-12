@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { loadAdsLeadsContext } from "@/lib/meta/ads-leads-context";
 import { listMetaPixels,pixelConfiguration,savePixelConfiguration,queueConversion,processConversions } from "@/lib/meta/pixel-conversions";
-import { conversionUserData } from "@/lib/meta/conversion-policy";
+import { conversionUserData,conversionOrigin } from "@/lib/meta/conversion-policy";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -59,7 +59,7 @@ export async function POST(request:Request) {
       const consent=await client.from("meta_pixel_consents").insert({organization_id:organizationId,visitor_id:visitorId,granted:true});
       if(consent.error)throw new Error("Falha ao registrar teste autorizado.");
       await queueConversion(client,{organizationId,visitorId,config,name:"PageView",eventId:`test_${randomUUID()}`,
-        sourceUrl:`${new URL(request.url).origin}/meta-pixel-test`,userData:conversionUserData(organizationId,visitorId,request.headers.get("user-agent")||"ConnectyHub test")});
+        sourceUrl:`${conversionOrigin()}/meta-pixel-test`,userData:conversionUserData(organizationId,visitorId,request.headers.get("user-agent")||"ConnectyHub test")});
       return json(await processConversions(client,organizationId));
     }
     return json({error:"Operação inválida."},422);
