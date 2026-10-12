@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Publicação orgânica validada nas duas redes — 12/10/2026 13h55 BRT
+
+Produção `3915c1f1eded02c2545eff3056e6b591223142a4`, slot b/3131;
+fallback `3842f3d129a7012b06cca68023e5383ad2a4bf8a`, slot a/3130.
+Editor Post/Reel/Story/Carrossel/Vídeo e calendário disponíveis no admin e cliente.
+Correções de acesso restrito à revisão, elegibilidade de Story e finalização de
+upload Facebook publicadas. 27 testes dirigidos, tsc, ESLint, build, smoke público
+e GET Inngest assinado (58 funções) passaram. Builder parado; sem migração.
+
+Cinco publicações isoladas concluídas em Facebook e Instagram: imagem, carrossel,
+Reel, Story e imagem agendada. Agendamento 13h43 entregue pela fila às 13h45;
+Story/Reel terminaram às 13h50. Posts e vídeos conferidos nas redes; Story
+Instagram reproduzido e gravado. Sem anúncios, pagamentos ou gastos.
+Reconexão dos ativos próprios e dos ativos isolados concluída separadamente,
+com pages_manage_posts e instagram_content_publish nas configurações USER e BUSU.
+Vídeos finais completos em output/meta-publicacoes-20261012/edit, incluindo
+login, upload, aprovação, entrega real e calendário. Ainda NÃO ANEXADOS/NÃO
+ENVIADOS para os dois novos escopos: última checagem do portal 13h40 mostra
+0/1 e Add to App Review desabilitado. Pedido anterior 1078832598351314 continua
+em análise e foi preservado. Não confundir escopos de teste com Advanced Access.
+Detalhes, IDs, vídeos e limitações em
+[Publicações e Calendário](meta-publicacoes-calendario-2026-10-12.md).
+
 ## Publicações e calendário publicados — 12/10/2026 12h10 BRT
 
 Produção `26a84311d6149f863b9ae8433104c8a59f67393b` no slot b/3131;

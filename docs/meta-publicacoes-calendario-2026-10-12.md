@@ -9,7 +9,8 @@ Calendário consulta o intervalo do mês no servidor com paginação, em vez de
 filtrar somente os últimos quarenta registros. Datas exibidas no fuso do navegador.
 
 Instagram: imagens, Reels/vídeos, Stories e carrossel com imagens/vídeos.
-Stories exigem account_type BUSINESS; não incluem stickers ou legenda sobreposta.
+Stories exigem conta empresarial; elegibilidade validada pela Meta ao criar a mídia.
+O IGUser do Facebook Login não expõe account_type. Não incluem stickers ou legenda sobreposta.
 Facebook: texto/link, foto, álbum de fotos, Reels/vídeos e Stories de foto/vídeo.
 Carrossel misto é exclusivo do Instagram; o equivalente do Facebook é um álbum
 de fotos, não um anúncio em carrossel. A Meta valida duração, proporção e codecs;
@@ -144,3 +145,94 @@ seis segundos. Após recuperar o navegador, retomar adição dos dois escopos,
 configurações de login, reconexão isolada e demonstrações reais. O pedido já
 em análise deve ser preservado; não afirmar envio complementar sem confirmação
 do portal.
+
+## Conexão e primeiras entregas reais — 12/10/2026 13h40 BRT
+
+As autorizações pendentes acima foram recebidas. `pages_manage_posts` e
+`instagram_content_publish` acrescentados ao app e às duas configurações de login:
+USER 1581800719812884 e BUSU 1530551425223156, ambas com 17 escopos selecionados.
+Não foram incluídos email ou catalog_management no consentimento. Configuração
+WhatsApp separada preservada. Reconexão real concluída nos ativos isolados
+buffalomass.life / buffalomasseliteclub e, separadamente, na operação própria
+ConnectyHub / connectyhub.ai. O admin confirmou os dois novos grants na conexão.
+Painel /admin/meta/publicacoes abriu com sessão Platform Admin e os cinco formatos.
+
+Uploads JPEG e MP4 funcionaram pela extensão. As entregas abaixo foram feitas
+somente na conta isolada meta-review, nunca nos ativos internos da operação:
+
+| Conteúdo | Facebook | Instagram |
+|---|---|---|
+| Imagem com legenda | 839794832549513_122154131553087692 | 18153412630486587 |
+| Álbum/carrossel | 839794832549513_122154131727087692 | 17999902107007166 |
+| Reel | Upload 1116816004063224, ainda não finalizado nesta checagem | 18151742440543008 |
+| Story | Upload 1085258137759287, ainda não finalizado | Bloqueado pela consulta account_type; correção preparada |
+
+Links confirmados visualmente: Instagram /buffalomasseliteclub/p/DeZprDgDbA0/,
+/p/DeZpvtdDc9o/ e /reel/DeZpzfcErbx/. Facebook: post
+839794832549513/posts/122154131553087692. Não confundir upload com publicação.
+
+Testes reais revelaram três correções: conta de avaliação sem documento era
+barrada no worker; consulta account_type não existe no IGUser via Facebook Login;
+Facebook deixa processamento not_started até receber finish após upload_complete.
+Grant confiável é conferido no dono da organização e só dispensa cadastro da conta
+isolada ativa, mantendo plano, contrato e grants Meta. Correção de vídeo preserva
+os IDs e só confirma entrega depois de publishing_phase complete.
+
+Vídeos principais renderizados e inspecionados em
+output/meta-publicacoes-20261012/edit: facebook-publicacao-login-final.mp4 (137,53 s)
+e instagram-publicacao-login-final.mp4 (167,73 s). Percurso real: reconexão, escolha
+dos ativos de teste, upload, rascunho, aprovação, processamento, IDs e post externo.
+O vídeo Instagram também mostra carrossel e Reel. Não incluem ainda Story validado
+nem conclusão do agendamento. Captura Facebook recortada ao diálogo do post para
+não expor contatos pessoais na lateral. Os vídeos antigos da revisão foram preservados.
+
+Agendamento aprovado pela UI para 12/10 às 13h43 BRT, título “Demonstração —
+calendário com entrega”, nas duas redes; falta observar execução da fila. A entrada
+datetime-local via fill da extensão só persistiu após interação de teclado nativa;
+não foi necessário alterar o componente. O rascunho desta tentativa sem data foi arquivado; os dois rascunhos antigos
+de demonstração continuam sem aprovação e não serão publicados.
+
+Portal nesta checagem: os dois escopos novos ainda em 0/1, Ready for testing;
+Meta avisa até 24h para contabilizar. Menu pages_manage_posts → Actions → Add to
+App Review está desabilitado. Nenhum formulário novo disponível para anexar ou
+enviar agora. Pedido anterior 1078832598351314 continua Review in progress,
+sem alteração dos anexos. Não afirmar que os novos vídeos foram anexados ou que
+esses dois escopos já foram enviados. Sem anúncios, impulsionamentos ou gastos.
+
+
+## Correções publicadas e agendamento entregue — 12/10/2026 13h47 BRT
+
+Produção `3915c1f1eded02c2545eff3056e6b591223142a4`, slot b/3131;
+fallback `3842f3d129a7012b06cca68023e5383ad2a4bf8a`, slot a/3130.
+A candidata intermediária 2cb3c6e4 não foi ativada. As correções de cadastro
+restritas à avaliação, elegibilidade de Stories e finalização do upload Facebook
+estão no release ativo. 27 testes dirigidos, TypeScript, ESLint, build e smoke
+público passaram; GET Inngest assinado confirmou 58 funções. Builder parado.
+
+Agendamento de 13h43 foi processado pela fila às 13h45 nas duas redes:
+Facebook `839794832549513_122154133269087692` e Instagram `18144975910587329`.
+Não houve clique em Publicar nesse item após a aprovação. A fila é de cinco
+minutos, portanto a interface deve comunicar que não há precisão de minuto exato.
+Story retomado pela UI preservando vídeo Facebook 1085258137759287 e criando
+container Instagram; ambas as redes em processamento nesta checagem. Reel
+Facebook recebeu finish para o vídeo existente 1116816004063224, sem novo upload.
+
+## Entrega final e vídeos completos — 12/10/2026 13h55 BRT
+
+UI confirmou Story e Reel publicados nas duas redes às 13h50, sem erros pendentes.
+Story: Facebook 1085258137759287, Instagram 17919810927243658.
+Reel: Facebook 1116816004063224, Instagram 18151742440543008.
+Story Instagram reproduzido no perfil isolado, capturado no segmento
+21-instagram-story-final. Reel Facebook visualmente confirmado. Cinco itens
+publicados no total, dois rascunhos antigos não aprovados e uma tentativa arquivada.
+O formato Vídeo usa o pipeline implementado e testes dirigidos; nesta rodada a
+validação real de vídeo foi feita por Reel e Story, não por um novo post Vídeo.
+
+Vídeos finais substituem a montagem anterior, incorporando a conclusão dos
+Stories/Reels e do agendamento. Facebook: edit/facebook-publicacao-login-final.mp4;
+Instagram: edit/instagram-publicacao-login-final.mp4. Render H264 1920x1080,
+manifesto e folhas de contato revisados; capturas reais, sem simular entrega.
+Evidência do painel: publicacoes-confirmadas.png. Formulário novo segue bloqueado
+na última checagem externa descrita acima; vídeos prontos localmente, NÃO anexados.
+Revisão anterior preservada. Acompanhamento deve verificar desbloqueio e anexar
+estes vídeos quando disponível, sem repetir publicações só para contadores.
