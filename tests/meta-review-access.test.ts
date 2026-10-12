@@ -13,6 +13,9 @@ describe("dedicated Meta review access", () => {
   it("permits only exact review paths, excluding billing, admin and unrelated integrations", () => {
     for (const path of ["/admin", "/api/dashboard/integrations/asaas", "/api/dashboard/integrations/meta/whatsapp/evil", "/dashboard/planos"]) expect(isMetaReviewPath(path)).toBe(false);
     expect(isMetaReviewPath("/dashboard/chat-meta")).toBe(true);
+    expect(isMetaReviewPath("/api/auth/assisted-access/end")).toBe(true);
+    expect(isMetaReviewPath("/api/auth/assisted-access/start")).toBe(false);
+    expect(isMetaReviewPath("/api/dashboard/meta-creative")).toBe(false);
     expect(isMetaReviewPath("/dashboard/trafego/meta-ads")).toBe(true);
     expect(isMetaReviewPath("/api/dashboard/meta-analytics")).toBe(true);
     expect(isMetaReviewPath("/api/dashboard/meta-analytics/evil")).toBe(false);

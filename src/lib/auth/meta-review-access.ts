@@ -10,7 +10,7 @@ export function readMetaReviewAccess(user: { app_metadata?: Record<string, unkno
 }
 
 export function isMetaReviewPath(path: string) {
-  return ["/dashboard/integracoes", "/dashboard/chat-meta", "/api/dashboard/integrations/meta/connect",
+  return ["/api/auth/assisted-access/end", "/dashboard/integracoes", "/dashboard/chat-meta", "/api/dashboard/integrations/meta/connect",
     "/api/dashboard/integrations/meta/callback", "/api/dashboard/integrations/meta/whatsapp",
     "/api/dashboard/integrations/meta/whatsapp/signup", "/dashboard/meta/revisao",
     "/api/dashboard/meta-review-agent", "/api/dashboard/agents/channels",
