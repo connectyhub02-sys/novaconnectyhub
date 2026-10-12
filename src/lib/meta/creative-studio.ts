@@ -1,0 +1,126 @@
+import "server-only";
+import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadGeminiCredentials } from "@/lib/gemini/credentials";
+import { geminiLowThinkingConfig } from "@/lib/gemini/models";
+import { loadR2Config, buildPublicObjectUrl } from "@/lib/storage/r2";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { resolveActiveBillingRates, calculateMeteredUsageCharge } from "@/lib/billing/metered-usage";
+import { assertContractAccess } from "@/lib/billing/contract-access";
+import { creativePrompt, parseCreativeReport, type CreativeBrief } from "./creative-policy";
+
+const host = "https://generativelanguage.googleapis.com";
+const publicFields = "id,mode,status,brief,result,model,usage_event_id,charge_credits,error_message,created_at";
+export async function creativeHistory(client: SupabaseClient, org: string) {
+  // Interrupted processes must be reconciled, not automatically regenerated or charged twice.
+  await client.from("meta_creative_jobs").update({ status: "uncertain", error_message: "A execução foi interrompida. O suporte precisa conferir resultado e consumo antes de repetir." })
+    .eq("organization_id", org).in("status", ["running", "generated"]).lt("updated_at", new Date(Date.now() - 10 * 60000).toISOString());
+  const r = await client.from("meta_creative_jobs").select(publicFields).eq("organization_id", org).order("created_at", { ascending: false }).limit(40);
+  if (r.error) throw Error("Não foi possível carregar o histórico de criativos.");
+  return (r.data ?? []).map(j => ({ ...j, result: j.status === "completed" ? j.result : null }));
+}
+async function ownedMedia(client: SupabaseClient, org: string, id: string) {
+  const r = await client.from("content_pipeline_items").select("id,title,metadata").eq("organization_id", org)
+    .eq("scope", "organization").eq("content_type", "meta_organic_media").eq("id", id).single();
+  if (r.error || !r.data) throw Error("Selecione uma mídia da biblioteca desta empresa.");
+  const m = r.data.metadata;
+  if (!m || !["image/jpeg", "video/mp4"].includes(m.content_type) || !Number.isFinite(m.size) || m.size <= 0 || m.size > 100 * 1024 * 1024
+    || typeof m.storage_key !== "string" || !m.storage_key.startsWith(`meta/organic/${org}/`) || m.storage_key.includes("..")) throw Error("Mídia não compatível. Envie JPG ou MP4 pela biblioteca.");
+  const config = await loadR2Config(client);
+  if (!config.ok) throw Error("Armazenamento indisponível.");
+  // Never fetch a caller-provided URL, a remote caption URL or redirects.
+  const url = buildPublicObjectUrl(config.config.publicUrl, m.storage_key);
+  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60000) });
+  if (!response.ok || !response.body) throw Error("Não foi possível ler o arquivo do criativo.");
+  const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
+  while (true) { const c = await reader.read(); if (c.done) break; size += c.value.length;
+    if (size > 100 * 1024 * 1024 || size > m.size) { await reader.cancel(); throw Error("Arquivo acima do limite registrado."); } chunks.push(c.value); }
+  if (size !== m.size) throw Error("O arquivo mudou. Envie o criativo novamente.");
+  return { bytes: Buffer.concat(chunks), mime: m.content_type as string };
+}
+async function jsonCall(key: string, path: string, body?: unknown) {
+  const r = await fetch(`${host}${path}`, { method: body === undefined ? "GET" : "POST", redirect: "error",
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(120000) });
+  if (!r.ok) throw Error(`O provedor de IA não concluiu a operação (HTTP ${r.status}).`);
+  return r.json();
+}
+async function uploadFile(key: string, media: { bytes: Buffer; mime: string }) {
+  const start = await fetch(`${host}/upload/v1beta/files`, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30000),
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json", "X-Goog-Upload-Protocol": "resumable", "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(media.bytes.length), "X-Goog-Upload-Header-Content-Type": media.mime }, body: JSON.stringify({ file: { display_name: "ConnectyHub creative" } }) });
+  const location = start.headers.get("x-goog-upload-url");
+  if (!start.ok || !location || new URL(location).origin !== host) throw Error("Não foi possível preparar a análise do arquivo.");
+  const upload = await fetch(location, { method: "POST", redirect: "error", signal: AbortSignal.timeout(60000),
+    headers: { "x-goog-api-key": key, "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize" }, body: new Uint8Array(media.bytes) });
+  if (!upload.ok) throw Error("Não foi possível enviar o criativo à IA.");
+  const { file } = await upload.json();
+  if (!file?.name || !/^files\/[a-zA-Z0-9_-]+$/.test(file.name)) throw Error("Arquivo da IA inválido.");
+  return file as { name: string; uri: string; state: string };
+}
+export async function runCreativeJob(client: SupabaseClient, org: string, userId: string, id: string, brief: CreativeBrief) {
+  await assertContractAccess(org, client);
+  const hash = createHash("sha256").update(JSON.stringify(brief)).digest("hex");
+  const existing = await client.from("meta_creative_jobs").select("id,input_hash,status").eq("organization_id", org).eq("id", id).maybeSingle();
+  if (existing.error) throw Error("Histórico indisponível.");
+  if (existing.data) {
+    if (existing.data.input_hash !== hash) throw Error("Esta solicitação já foi usada com outro conteúdo.");
+    return creativeHistory(client, org);
+  }
+  const credentials = await loadGeminiCredentials(client), prompt = creativePrompt(brief);
+  let feature = "ai_traffic_manager";
+  const inserted = await client.from("meta_creative_jobs").insert({ id, organization_id: org, user_id: userId, input_hash: hash, mode: brief.mode, brief, model: credentials.model });
+  if (inserted.error) throw Error("Já existe uma análise em andamento. Atualize o histórico antes de repetir.");
+  let fileName: string | null = null, dispatched = false, saved = false;
+  const update = async (values: Record<string, unknown>) => {
+    const r = await client.from("meta_creative_jobs").update({ ...values, updated_at: new Date().toISOString() }).eq("id", id).eq("organization_id", org);
+    if (r.error) throw Error("Não foi possível registrar esta operação. Confira o histórico antes de repetir.");
+  };
+  try {
+    const parts: Record<string, unknown>[] = [{ text: prompt }];
+    if (brief.mediaId) {
+      const media = await ownedMedia(client, org, brief.mediaId);
+      if (brief.mode === "analysis") feature = media.mime.startsWith("video/") ? "media_video_analysis" : "media_image_analysis";
+      let file = await uploadFile(credentials.apiKey, media); fileName = file.name;
+      const deadline = Date.now() + 90000;
+      while (file.state === "PROCESSING" && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2000));
+        file = await jsonCall(credentials.apiKey, `/v1beta/${fileName}`);
+      }
+      if (file.state !== "ACTIVE" || !file.uri?.startsWith(`${host}/v1beta/files/`)) throw Error("A mídia não ficou disponível para análise. Tente novamente mais tarde.");
+      parts.push({ fileData: { mimeType: media.mime, fileUri: file.uri } });
+    }
+    const contents = [{ role: "user", parts }];
+    const counted = await jsonCall(credentials.apiKey, `/v1beta/models/${encodeURIComponent(credentials.model)}:countTokens`, { contents });
+    if (!Number.isFinite(counted.totalTokens) || counted.totalTokens <= 0 || counted.totalTokens > 180000) throw Error("Criativo longo demais para esta análise. Envie uma versão mais curta.");
+    const access = await assertContractAccess(org, client);
+    const rates = await resolveActiveBillingRates(client, { provider: "gemini", featureCode: feature, modelId: credentials.model, planCode: access.plan_code });
+    if (!["input_token", "output_token"].every(unit => rates.some(r => r.unit === unit && r.connectyPricePerUnit > 0))) throw Error("A tarifa de análise ainda não está configurada.");
+    const quote = calculateMeteredUsageCharge({ rates, units: { inputTokens: counted.totalTokens, outputTokens: 8192 } });
+    if (access.plan_code !== "internal") {
+      const wallet = await client.from("credit_wallets").select("balance_credits,reserved_credits").eq("organization_id", access.billing_organization_id).single();
+      if (wallet.error || Number(wallet.data?.balance_credits) - Number(wallet.data?.reserved_credits) < quote.chargeCredits) throw Error("Saldo insuficiente para analisar este criativo. Recarregue os créditos.");
+    }
+    dispatched = true;
+    const data = await jsonCall(credentials.apiKey, `/v1beta/models/${encodeURIComponent(credentials.model)}:generateContent`, {
+      contents, generationConfig: { ...geminiLowThinkingConfig(credentials.model), temperature: 0.35, maxOutputTokens: 8192, responseMimeType: "application/json" } });
+    const text = (data.candidates?.[0]?.content?.parts ?? []).filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text ?? "").join("");
+    // Persist generated output and usage before settlement; never regenerate on an uncertain retry.
+    await update({ status: "generated", provider_response: data }); saved = true;
+    if (!Number.isFinite(data.usageMetadata?.promptTokenCount)) throw Error("Consumo da IA em conferência; nenhuma nova geração foi iniciada.");
+    const usage = await meterGeminiGenerationUsage({ client, organizationId: org, userId, requestId: id, featureCode: feature,
+      modelId: credentials.model, responseData: data, promptText: prompt, outputText: text,
+      debitDescription: brief.mode === "campaign" ? "Proposta de campanha com IA" : "Análise de criativo e roteiro",
+      metadata: { source: "meta_creative_studio", jobId: id, mode: brief.mode, mediaId: brief.mediaId } });
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch { throw Error("A IA retornou um formato incompleto. O resultado e o consumo foram preservados para conferência."); }
+    const result = parseCreativeReport(parsed, brief);
+    await update({ status: "completed", result, usage_event_id: usage.usageEventId, charge_credits: usage.debited ? usage.chargeCredits : 0 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível concluir a análise.";
+    await update({ status: dispatched ? "uncertain" : "failed", error_message: saved ? "O resultado foi recebido, mas precisa de conferência antes de uma nova tentativa." : message });
+    throw Error(message);
+  } finally {
+    if (fileName) await fetch(`${host}/v1beta/${fileName}`, { method: "DELETE", headers: { "x-goog-api-key": credentials.apiKey }, signal: AbortSignal.timeout(10000) }).catch(() => undefined);
+  }
+  return creativeHistory(client, org);
+}

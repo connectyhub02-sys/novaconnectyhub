@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
+import { MetaCreativeStudio } from "./meta-creative-studio";
 import type {
   ClientMetaOrganicMediaAsset,
   ClientMetaOrganicOverview,
@@ -204,6 +205,7 @@ export function MetaOrganicConsole({ overview: initialOverview, initialView = "c
         }
       />
 
+      <div className="mb-5"><MetaCreativeStudio companyId={companyId}/></div>
       <nav aria-label="Planejamento de publicações" className="mb-5 flex flex-wrap gap-2">
         {([["compose","Criar publicação"],["calendar","Calendário"],["library","Biblioteca de criativos"]] as const).map(([key,label]) => <button key={key} className={`rounded-xl border px-4 py-2 text-sm ${view===key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600"}`} onClick={()=>setView(key)}>{label}</button>)}
       </nav>
