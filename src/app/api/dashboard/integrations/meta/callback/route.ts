@@ -117,6 +117,8 @@ export async function GET(request: NextRequest) {
     const assets = await listMetaConnectionAssets({
       accessToken: token.access_token!,
       config,
+      preferredAdAccountId: readRecord(integration.metadata).selected_ad_account_id as string | undefined,
+      preferredPageId: readRecord(integration.metadata).selected_facebook_page_id as string | undefined,
     });
     const credentials = [
       {

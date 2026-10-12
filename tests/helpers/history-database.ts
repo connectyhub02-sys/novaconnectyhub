@@ -3,6 +3,7 @@ type Row = Record<string, unknown>;
 /** Read-only PostgREST boundary, including compound cursors and deterministic ordering. */
 export function historyDatabase(tables: Record<string, Row[]>, failTable?: string) {
   const calls: string[] = [];
+  const inFilters: Array<{ table: string; column: string; size: number }> = [];
   const client = { from(table: string) {
     calls.push(table);
     const filters: Array<(row: Row) => boolean> = [];
@@ -11,7 +12,10 @@ export function historyDatabase(tables: Record<string, Row[]>, failTable?: strin
     const query = {
       select: () => query,
       eq(column: string, value: unknown) { filters.push(row => row[column] === value); return query; },
-      in(column: string, values: unknown[]) { filters.push(row => values.includes(row[column])); return query; },
+      in(column: string, values: unknown[]) { inFilters.push({ table, column, size: values.length }); filters.push(row => values.includes(row[column])); return query; },
+      neq(column: string, value: unknown) { filters.push(row => row[column] !== value); return query; },
+      contains(column: string, value: Row) { filters.push(row => Object.entries(value).every(([key, expected]) => (row[column] as Row | undefined)?.[key] === expected)); return query; },
+      not(column: string, operator: string, value: unknown) { if (operator !== "is" || value !== null) throw new Error("Unsupported not filter"); filters.push(row => row[column] != null); return query; },
       or(expression: string) { filters.push(row => splitTerms(expression).some(term => matches(row, term))); return query; },
       order(column: string, options: { ascending: boolean }) { orders.push({ column, ...options }); return query; },
       limit(value: number) { limit = value; return query; },
@@ -30,7 +34,7 @@ export function historyDatabase(tables: Record<string, Row[]>, failTable?: strin
     }
     return query;
   } };
-  return { client, calls };
+  return { client, calls, inFilters };
 }
 
 function matches(row: Row, term: string): boolean {

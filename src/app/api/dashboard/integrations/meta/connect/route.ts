@@ -12,6 +12,7 @@ import {
 import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-access";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createMetaOAuthState, hashMetaOAuthState, metaOAuthCookie } from "@/lib/meta/oauth-state";
+import { resolveInternalMetaLoginConfig } from "@/lib/meta/internal-login-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -51,6 +52,14 @@ export async function GET(request: NextRequest) {
     }
 
     const config = await loadMetaGuidedOAuthConfig({ client });
+    const previous = await client.from("organization_integrations").select("metadata")
+      .eq("organization_id", company.id).eq("provider_id", "meta-ads").maybeSingle();
+    if (previous.error) throw previous.error;
+    const previousMetadata = (previous.data?.metadata ?? {}) as Record<string, unknown>;
+    config.loginConfigId = resolveInternalMetaLoginConfig({
+      isPlatformAdmin: workspace.profile.isPlatformAdmin, slug: company.slug, planCode: company.planCode,
+      metadata: previousMetadata, defaultConfigId: config.loginConfigId,
+    });
     const state = createMetaOAuthState();
     const now = new Date().toISOString();
 
@@ -63,6 +72,7 @@ export async function GET(request: NextRequest) {
       scopes: [],
       actorId: workspace.user.id,
       metadata: {
+        ...previousMetadata,
         oauth_state_hash: hashMetaOAuthState(state),
         oauth_requested_permissions: config.permissions,
         oauth_requested_by: workspace.user.id,

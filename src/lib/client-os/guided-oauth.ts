@@ -340,6 +340,8 @@ export async function listGoogleAdsAccessibleCustomers(input: {
 export async function listMetaConnectionAssets(input: {
   accessToken: string;
   config: MetaGuidedOAuthConfig;
+  preferredAdAccountId?: string;
+  preferredPageId?: string;
 }) {
   const appsecretProof = buildMetaAppSecretProof(input.accessToken, input.config.appSecret);
   const accountUrl = new URL(`https://graph.facebook.com/${input.config.graphVersion}/me/adaccounts`);
@@ -360,8 +362,12 @@ export async function listMetaConnectionAssets(input: {
   ]);
   const adAccounts = readMetaDataArray(accountsResult.data);
   const pages = pagesResult.ok ? readMetaDataArray(pagesResult.data) : [];
-  const firstAdAccount = adAccounts.find((account) => readNumber(account.account_status) === 1) ?? adAccounts[0] ?? null;
-  const firstPage = pages[0] ?? null;
+  const firstAdAccount = input.preferredAdAccountId
+    ? adAccounts.find(account => readString(account.id) === input.preferredAdAccountId) ?? null
+    : adAccounts.find((account) => readNumber(account.account_status) === 1) ?? adAccounts[0] ?? null;
+  const firstPage = input.preferredPageId
+    ? pages.find(page => readString(page.id) === input.preferredPageId) ?? null
+    : pages[0] ?? null;
   const instagramAccount = firstPage?.instagram_business_account && typeof firstPage.instagram_business_account === "object"
     ? firstPage.instagram_business_account as Record<string, unknown>
     : null;

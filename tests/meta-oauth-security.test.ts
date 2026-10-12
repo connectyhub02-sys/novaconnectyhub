@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 import { serverModuleHarness } from "./helpers/server-module-harness";
+import * as internalConfig from "@/lib/meta/internal-login-config";
 
 const stateHelpers = serverModuleHarness<typeof import("../src/lib/meta/oauth-state")>(
   "src/lib/meta/oauth-state.ts", { "node:crypto": crypto },
@@ -47,6 +48,7 @@ function fixture() {
   const syncMetaOAuthAssets = vi.fn(async () => ({}));
   const requireClientCompanyAccess = vi.fn(async () => ({ id: row.organization_id, role: "owner" }));
   const imports = {
+    "@/lib/meta/internal-login-config": internalConfig,
     "next/server": { NextResponse }, "next/cache": { revalidatePath: vi.fn() },
     "@/lib/client-os/guided-oauth": oauth,
     "@/lib/meta/oauth-state": stateHelpers,

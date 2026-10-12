@@ -623,6 +623,27 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     return buildEmptyWorkspace(input.companies);
   }
 
+  // Bound PostgREST URLs (also returned in response headers) for the admin workspace.
+  if (input.companies.length > 50) {
+    const workspaces: ClientLeadCrmWorkspace[] = [];
+    for (const batch of chunkArray(chunkArray(input.companies, 50), 2)) {
+      workspaces.push(...await Promise.all(batch.map(companies => (
+        getLeadCrmWorkspaceForCompanies({ ...input, companies })
+      ))));
+    }
+    const leads = workspaces.flatMap(workspace => workspace.leads)
+      .sort((a, b) => compareDateDesc(a.updatedAt, b.updatedAt))
+      .slice(0, input.leadLimit ?? 160);
+    const warnings = uniqueStrings(workspaces.flatMap(workspace => workspace.warnings ?? []));
+    return {
+      companies: input.companies,
+      attendanceQueues: workspaces.flatMap(workspace => workspace.attendanceQueues),
+      leads,
+      stats: buildStats(leads),
+      ...(warnings.length ? { warnings } : {}),
+    };
+  }
+
   const warnings: string[] = [];
   let leadRows: LeadRow[] = [];
   let conversationRows: ConversationRow[] = [];
@@ -728,6 +749,27 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     }
   } catch (error) {
     warnings.push(toLoadWarning("leads", error));
+  }
+
+  // Instant forms create CRM records before any conversation or outreach exists.
+  try {
+    const result = await input.client.from("leads")
+      .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
+      .in("organization_id", companyIds)
+      .eq("source", "meta_lead_ads")
+      .eq("channel", "meta_lead_ads")
+      .order("updated_at", { ascending: false })
+      .limit(input.leadLimit ?? 160);
+    if (result.error) {
+      warnings.push(toLoadWarning("leads dos formularios Meta", result.error));
+    } else {
+      leadRows = [...new Map([...leadRows, ...((result.data ?? []) as LeadRow[])]
+        .map(lead => [lead.id, lead])).values()]
+        .sort((a, b) => compareDateDesc(a.updated_at, b.updated_at))
+        .slice(0, input.leadLimit ?? 160);
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("leads dos formularios Meta", error));
   }
 
   const loadedLeadIds = new Set(leadRows.map((lead) => lead.id));
