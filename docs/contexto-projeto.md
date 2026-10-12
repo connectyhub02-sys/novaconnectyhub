@@ -26,6 +26,14 @@ medição de leads e vendas via Pixel/CAPI com isolamento e deduplicação. Cent
 WhatsApp/Threads. [Mapa de serviços, permissões e implementação](meta-servicos-permissoes-pixel-2026-10-11.md).
 Até nova instrução, os testes Ads permanecem sem ativação de anúncios ou gastos.
 
+Em 12/10 o titular definiu a incorporação dos recursos úteis do ViralCheck: análise
+opcional de imagens/vídeos, diagnóstico editorial com evidências, melhorias,
+legendas e roteiros, seguida de proposta de campanha por prompt ou por criativo.
+O usuário experiente informa a estrutura; o iniciante recebe hipóteses para revisar.
+Score não é promessa de viralização ou vendas. Verba, destino, ativos e autorização
+de ativação precisam ser explícitos e separados da geração por IA. Histórico e
+consumo pertencem à organização. [Implementação e limites](meta-creative-studio-viralcheck-2026-10-12.md).
+
 Agentes ficam em uma única área: WhatsApp, Instagram e Facebook são selecionados ao criar/editar o agente da empresa, condicionados à conexão e às permissões reais. Não manter menu duplicado de agentes Meta nem aba separada Redes sociais. Automação de comentários (palavra-chave → privado/botão ou resposta pública com IA) e follow-up Direct/Messenger ficam em Automações, próximos de grupos/canais/status. Campanhas WhatsApp oficiais continuam dentro do Chat Meta. [Implementação e limites](meta-automacoes-comentarios-2026-10-11.md).
 
 A expansão reúne a referência funcional do Metricool e os módulos Meta observados na Vision Home, com navegação própria da ConnectyHub. Calendário, conteúdo, atendimento, anúncios e resultados ficam na seção Meta do cliente. Campanhas de mensagens e modelos ficam dentro do Chat Meta oficial, com números e atendimento, sem entradas separadas no menu. Meta Ads permanece a área de anúncios pagos. Cobertura ampla é objetivo de produto; cada capacidade mantém estado de implementação, permissões e homologação separados. [Entrega da Central Meta e limites](meta-central-social-2026-10-11.md).
