@@ -1,7 +1,8 @@
 import type { CreativeReport } from "./creative-policy";
 
 export type CampaignSettings = { country: string; ageMin: number; ageMax: number; days: number; dailyBudget: number; currency: string; destination: string; placement: "facebook_feed" | "feeds"; category: "NONE" };
-export type CampaignSnapshot = { name: string; accountId: string; accountName: string; pageId: string; instagramId: string; settings: CampaignSettings; budgetMode: "CBO" | "ABO"; totalMinor: number; dailyMinor: number; adSets: { name: string; dailyMinor: number }[]; ads: { name: string; headline: string; primaryText: string }[]; media: { id: string; url: string; contentType: string }; targeting: Record<string, unknown> };
+export type CampaignMedia = { id: string; url: string; contentType: string };
+export type CampaignSnapshot = { name: string; accountId: string; accountName: string; pageId: string; instagramId: string; settings: CampaignSettings; budgetMode: "CBO" | "ABO"; totalMinor: number; dailyMinor: number; adSets: { name: string; dailyMinor: number }[]; ads: { name: string; headline: string; primaryText: string }[]; media: CampaignMedia; additionalMedia?: CampaignMedia[]; targeting: Record<string, unknown> };
 const record = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function campaignSettings(raw: unknown): CampaignSettings {
   const r = record(raw), country = String(r.country || "").toUpperCase();
@@ -15,10 +16,11 @@ export function campaignSettings(raw: unknown): CampaignSettings {
   if (!["facebook_feed", "feeds"].includes(String(r.placement))) throw Error("Selecione os posicionamentos.");
   return { country, ageMin, ageMax, days, dailyBudget, currency: String(r.currency), destination: url.href, placement: r.placement as CampaignSettings["placement"], category: "NONE" };
 }
-export function executionSnapshot(report: CreativeReport, settings: CampaignSettings, assets: Pick<CampaignSnapshot, "accountId" | "accountName" | "pageId" | "instagramId" | "media">): CampaignSnapshot {
+export function executionSnapshot(report: CreativeReport, settings: CampaignSettings, assets: Pick<CampaignSnapshot, "accountId" | "accountName" | "pageId" | "instagramId" | "media" | "additionalMedia">): CampaignSnapshot {
   const c = report.campaign;
   if (!c || !c.ads.length || c.ads.length > 10 || !c.adSets.length || c.adSets.length > c.ads.length) throw Error("A proposta precisa de pelo menos um anúncio por conjunto, até 10 anúncios.");
   if (!assets.pageId || !/^act_\d+$/.test(assets.accountId) || (settings.placement === "feeds" && !assets.instagramId)) throw Error("Conecte os ativos de publicação e anúncios desta empresa.");
+  const media=[assets.media,...(assets.additionalMedia??[])];if(media.length>10 || (media.length>1&&media.some(m=>m.contentType!=="image/jpeg")))throw Error("Carrossel pago aceita de 2 a 10 imagens JPG.");
   const dailyMinor = Math.round(settings.dailyBudget * 100), share = Math.floor(dailyMinor / c.adSets.length);
   if (!share) throw Error("A verba é insuficiente para dividir entre os conjuntos.");
   return { ...assets, name: c.name, settings, budgetMode: c.budgetMode, dailyMinor, totalMinor: dailyMinor * settings.days,

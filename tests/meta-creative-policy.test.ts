@@ -37,3 +37,14 @@ it("rejects empty automatic campaigns and unknown strategies",()=>{
 });
 
 it("rejects removed script generation",()=>expect(()=>parseCreativeBrief({mode:"script",prompt:"roteiro"})).toThrow());
+
+it("preserves slide order and rejects duplicates or more than ten media",()=>{
+ const second="22222222-2222-4222-8222-222222222222";
+ const b=parseCreativeBrief({mode:"analysis",mediaIds:[second,mediaId]});expect(b.mediaId).toBe(second);expect(b.mediaIds).toEqual([second,mediaId]);
+ expect(()=>parseCreativeBrief({mode:"analysis",mediaIds:[mediaId,mediaId]})).toThrow();
+ expect(()=>parseCreativeBrief({mode:"analysis",mediaIds:Array(11).fill(mediaId)})).toThrow();
+});
+it("retains a low score without blocking either path and sanitizes hashtags",()=>{
+ const r=parseCreativeReport({...generated,criteria:generated.criteria.map(c=>({...c,score:10})),suitability:{organic:{verdict:"ajustar",reason:"Oferta pouco clara"},paid:{verdict:"impossible",reason:"Falta contexto"},productFit:"Produto pouco visível",audience:"Público amplo"},hashtags:["#Produto","not a tag","#Oferta"]},brief({mode:"analysis",mediaId}));
+ expect(r.score).toBe(10);expect(r.suitability?.organic.verdict).toBe("ajustar");expect(r.suitability?.paid.verdict).toBe("insuficiente");expect(r.hashtags).toEqual(["#Produto","#Oferta"]);
+});

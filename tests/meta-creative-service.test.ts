@@ -44,3 +44,12 @@ it("checks file ownership and type before accessing the provider",async()=>{
  expect(mocks.meter).not.toHaveBeenCalled();
  expect(calls.some(c=>c[0]==="meta_creative_jobs"&&c[1]==="update"&&(c[2] as {status:string}).status==="failed")).toBe(true);
 });
+
+it("rejects a product outside the organization before reading provider credentials",async()=>{
+ const {db,calls}=client();
+ await expect(runCreativeJob(db,"org","user","request",{...brief,productId:"22222222-2222-4222-8222-222222222222"})).rejects.toThrow(/produto desta empresa/);
+ expect(calls).toContainEqual(["intelligence_memory","eq","organization_id","org"]);expect(mocks.credentials).not.toHaveBeenCalled();
+});
+it("rejects an unrelated diagnosis before generating a paid proposal",async()=>{
+ const {db}=client();await expect(runCreativeJob(db,"org","user","request",{...brief,sourceAnalysisId:"22222222-2222-4222-8222-222222222222"})).rejects.toThrow(/diagnóstico/);expect(mocks.credentials).not.toHaveBeenCalled();
+});

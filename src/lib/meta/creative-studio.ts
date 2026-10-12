@@ -5,17 +5,20 @@ import { loadGeminiCredentials } from "@/lib/gemini/credentials";
 import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { loadR2Config, buildPublicObjectUrl } from "@/lib/storage/r2";
 import { runMeteredMetaGeneration, metaAiTariffs } from "./ai-generation";
-import { calculateMeteredUsageCharge } from "@/lib/billing/metered-usage";
 import { assertContractAccess } from "@/lib/billing/contract-access";
-import { creativePrompt, parseCreativeReport, type CreativeBrief } from "./creative-policy";
+import { creativePrompt, creativeMediaIds, parseCreativeReport, type CreativeBrief } from "./creative-policy";
 
 const host = "https://generativelanguage.googleapis.com";
 const publicFields = "id,mode,status,brief,result,model,usage_event_id,charge_credits,error_message,created_at,proposal_approval";
+export async function creativeProducts(client:SupabaseClient,org:string) {
+  const r=await client.from("intelligence_memory").select("id,title").eq("organization_id",org).eq("memory_type","sales_catalog_item").order("updated_at",{ascending:false}).limit(100);
+  if(r.error)throw Error("Catálogo indisponível.");return r.data??[];
+}
 export async function creativeTariffs(client:SupabaseClient,org:string) {
  const credentials=await loadGeminiCredentials(client);
  return Promise.all(["ai_traffic_manager","media_image_analysis","media_video_analysis"].map(async feature=>{
    const {rates}=await metaAiTariffs(client,org,credentials.model,feature);
-   return {feature,inputPerThousand:calculateMeteredUsageCharge({rates,units:{inputTokens:1000}}).chargeCredits,outputPerThousand:calculateMeteredUsageCharge({rates,units:{outputTokens:1000}}).chargeCredits};
+   return {feature,inputPerThousand:rates.filter(r=>r.unit==="input_token").reduce((n,r)=>n+r.connectyPricePerUnit*1000,0),outputPerThousand:rates.filter(r=>r.unit==="output_token").reduce((n,r)=>n+r.connectyPricePerUnit*1000,0),perMedia:rates.filter(r=>r.unit==="media").reduce((n,r)=>n+r.connectyPricePerUnit,0),minimum:Math.max(0,...rates.map(r=>r.minimumChargeCredits))};
  }));
 }
 export async function approveCreativeProposal(client: SupabaseClient, org: string, userId: string, id: string) {
@@ -50,7 +53,7 @@ export async function creativeHistory(client: SupabaseClient, org: string) {
   // Interrupted processes must be reconciled, not automatically regenerated or charged twice.
   await client.from("meta_creative_jobs").update({ status: "uncertain", error_message: "A execução foi interrompida. O suporte precisa conferir resultado e consumo antes de repetir." })
     .eq("organization_id", org).in("status", ["running", "generated"]).lt("updated_at", new Date(Date.now() - 10 * 60000).toISOString());
-  const r = await client.from("meta_creative_jobs").select(publicFields).eq("organization_id", org).order("created_at", { ascending: false }).limit(40);
+  const r = await client.from("meta_creative_jobs").select(publicFields).eq("organization_id", org).in("mode",["analysis","campaign"]).order("created_at", { ascending: false }).limit(40);
   if (r.error) throw Error("Não foi possível carregar o histórico de criativos.");
   return (r.data ?? []).map(j => ({ ...j, result: j.status === "completed" ? j.result : null,
     proposal_approval: j.proposal_approval ? { approvedAt: j.proposal_approval.approvedAt, scope: j.proposal_approval.scope } : null }));
@@ -94,6 +97,7 @@ async function uploadFile(key: string, media: { bytes: Buffer; mime: string }) {
   return file as { name: string; uri: string; state: string };
 }
 export async function runCreativeJob(client: SupabaseClient, org: string, userId: string, id: string, brief: CreativeBrief) {
+  if(!["analysis","campaign"].includes(brief.mode))throw Error("Escolha análise de criativo ou campanha.");
   await assertContractAccess(org, client);
   const hash = createHash("sha256").update(JSON.stringify(brief)).digest("hex");
   const existing = await client.from("meta_creative_jobs").select("id,input_hash,status").eq("organization_id", org).eq("id", id).maybeSingle();
@@ -102,35 +106,39 @@ export async function runCreativeJob(client: SupabaseClient, org: string, userId
     if (existing.data.input_hash !== hash) throw Error("Esta solicitação já foi usada com outro conteúdo.");
     return creativeHistory(client, org);
   }
-  const credentials = await loadGeminiCredentials(client), prompt = creativePrompt(brief);
+  let productContext:unknown=null, priorAnalysis:unknown=null;
+  if(brief.productId){const p=await client.from("intelligence_memory").select("title,content").eq("organization_id",org).eq("memory_type","sales_catalog_item").eq("id",brief.productId).single();if(p.error||!p.data)throw Error("Selecione um produto desta empresa.");productContext={title:p.data.title,description:String(p.data.content||"").slice(0,4000)};}
+  if(brief.sourceAnalysisId){const p=await client.from("meta_creative_jobs").select("brief,result,status,mode").eq("organization_id",org).eq("id",brief.sourceAnalysisId).single();if(p.error||!p.data||p.data.status!=="completed"||p.data.mode!=="analysis"||JSON.stringify(creativeMediaIds(p.data.brief))!==JSON.stringify(creativeMediaIds(brief)))throw Error("O diagnóstico não corresponde ao criativo desta empresa.");priorAnalysis=p.data.result;}
+  const credentials = await loadGeminiCredentials(client), prompt = creativePrompt(brief,productContext,priorAnalysis);
   let feature = "ai_traffic_manager";
   const inserted = await client.from("meta_creative_jobs").insert({ id, organization_id: org, user_id: userId, input_hash: hash, mode: brief.mode, brief, model: credentials.model });
   if (inserted.error) throw Error("Já existe uma análise em andamento. Atualize o histórico antes de repetir.");
-  let fileName: string | null = null, dispatched = false, saved = false;
+  const fileNames:string[]=[]; let dispatched = false, saved = false;
   const update = async (values: Record<string, unknown>) => {
     const r = await client.from("meta_creative_jobs").update({ ...values, updated_at: new Date().toISOString() }).eq("id", id).eq("organization_id", org);
     if (r.error) throw Error("Não foi possível registrar esta operação. Confira o histórico antes de repetir.");
   };
   try {
     const parts: Record<string, unknown>[] = [{ text: prompt }];
-    if (brief.mediaId) {
-      const media = await ownedMedia(client, org, brief.mediaId);
+    const assets=[];for(const id of creativeMediaIds(brief)) assets.push(await ownedMedia(client,org,id));
+    if(assets.length>1 && assets.some(m=>m.mime!=="image/jpeg"))throw Error("Carrossel de análise aceita de 2 a 10 imagens. Analise vídeos individualmente.");
+    for (const [index,media] of assets.entries()) {
       if (brief.mode === "analysis") feature = media.mime.startsWith("video/") ? "media_video_analysis" : "media_image_analysis";
-      let file = await uploadFile(credentials.apiKey, media); fileName = file.name;
+      let file = await uploadFile(credentials.apiKey, media); const fileName = file.name; fileNames.push(fileName);
       const deadline = Date.now() + 90000;
       while (file.state === "PROCESSING" && Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 2000));
         file = await jsonCall(credentials.apiKey, `/v1beta/${fileName}`);
       }
       if (file.state !== "ACTIVE" || !file.uri?.startsWith(`${host}/v1beta/files/`)) throw Error("A mídia não ficou disponível para análise. Tente novamente mais tarde.");
-      parts.push({ fileData: { mimeType: media.mime, fileUri: file.uri } });
+      parts.push({text:`Mídia ${index+1} de ${assets.length}, preserve esta ordem.`},{ fileData: { mimeType: media.mime, fileUri: file.uri } });
     }
     const contents = [{ role: "user", parts }];
     const counted = await jsonCall(credentials.apiKey, `/v1beta/models/${encodeURIComponent(credentials.model)}:countTokens`, { contents });
     if (!Number.isFinite(counted.totalTokens) || counted.totalTokens <= 0 || counted.totalTokens > 180000) throw Error("Criativo longo demais para esta análise. Envie uma versão mais curta.");
     dispatched = true;
     const receipt = await runMeteredMetaGeneration({client,org,user:userId,id,feature,model:credentials.model,apiKey:credentials.apiKey,
-      inputTokens:counted.totalTokens,maxOutput:8192,identity:brief,
+      inputTokens:counted.totalTokens,maxOutput:8192,mediaCount:assets.length,identity:brief,
       body:{contents,generationConfig:{...geminiLowThinkingConfig(credentials.model),temperature:0.35,maxOutputTokens:8192,responseMimeType:"application/json"}}});
     const data = receipt.data as { candidates?: {content?: {parts?: {thought?:boolean;text?:string}[]}}[] };
     const text = (data.candidates?.[0]?.content?.parts ?? []).filter(p=>!p.thought).map(p=>p.text??"").join("");
@@ -145,7 +153,7 @@ export async function runCreativeJob(client: SupabaseClient, org: string, userId
     await update({ status: dispatched && charge.data?.status!=="failed" ? "uncertain" : "failed", error_message: saved ? "O resultado foi recebido, mas precisa de conferência antes de uma nova tentativa." : message });
     throw Error(message);
   } finally {
-    if (fileName) await fetch(`${host}/v1beta/${fileName}`, { method: "DELETE", headers: { "x-goog-api-key": credentials.apiKey }, signal: AbortSignal.timeout(10000) }).catch(() => undefined);
+    await Promise.allSettled(fileNames.map(fileName=>fetch(`${host}/v1beta/${fileName}`, { method: "DELETE", headers: { "x-goog-api-key": credentials.apiKey }, signal: AbortSignal.timeout(10000) })));
   }
   return creativeHistory(client, org);
 }

@@ -32,3 +32,11 @@ it("blocks changed remote budgets before any activation and confirms compensatin
 it("never repeats an ambiguous creation or allows another tenant to use it",async()=>{failCampaign=true;await expect(executeCampaign(client(),"org","u","job","create_paused",{})).rejects.toThrow(/Timeout/);expect(row.status).toBe("uncertain");const count=writes.length;await expect(executeCampaign(client(),"org","u","job","create_paused",{})).rejects.toThrow();await expect(executeCampaign(client(),"victim","u","job","pause",{})).rejects.toThrow(/encontrada/);expect(writes).toHaveLength(count);});
 
 it("resumes a definitive rejected ad without duplicating the paused parent or creative",async()=>{failAd=true;await expect(executeCampaign(client(),"org","u","job","create_paused",{})).rejects.toThrow(/pagamento/);expect(row.status).toBe("blocked");const campaign=row.remote_ids.campaign,creative=row.remote_ids.creative_0;failAd=false;await executeCampaign(client(),"org","u","job","create_paused",{});expect(row.status).toBe("paused");expect(row.remote_ids.campaign).toBe(campaign);expect(row.remote_ids.creative_0).toBe(creative);expect(writes.filter(w=>w.path.endsWith('/campaigns'))).toHaveLength(1);expect(writes.some(w=>w.params.status==='ACTIVE')).toBe(false);});
+
+it("creates ordered carousel attachments with each image uploaded once and all ads paused",async()=>{
+ row.snapshot.additionalMedia=[{id:"slide2",url:"https://cdn.example.com/b.jpg",contentType:"image/jpeg"}];
+ await executeCampaign(client(),"org","u","job","create_paused",{});
+ const spec=JSON.parse(writes.find(w=>w.path.endsWith('/adcreatives'))!.params.object_story_spec);
+ expect(spec.link_data.child_attachments).toHaveLength(2);expect(spec.link_data.multi_share_optimized).toBe(false);
+ expect(writes.filter(w=>w.path.endsWith('/adimages'))).toHaveLength(2);expect(row.status).toBe("paused");expect(writes.some(w=>w.params.status==='ACTIVE')).toBe(false);
+});

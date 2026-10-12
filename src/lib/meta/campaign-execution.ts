@@ -5,7 +5,7 @@ import { adsLeadsGraph, loadAdsLeadsContext, requireMetaScopes, metaRecord, sele
 import { campaignSettings, executionSnapshot, campaignPayload, adSetPayload, assertBudgetApproval, type CampaignSnapshot } from "./campaign-policy";
 import { loadR2Config, buildPublicObjectUrl } from "@/lib/storage/r2";
 import { assertContractAccess } from "@/lib/billing/contract-access";
-import type { CreativeReport } from "./creative-policy";
+import { creativeMediaIds, type CreativeReport } from "./creative-policy";
 
 type Execution = { id: string; proposal_id: string; status: string; snapshot: CampaignSnapshot; snapshot_hash: string; remote_ids: Record<string, string>; remote_fingerprint: string | null; start_at: string | null; end_at: string | null; error_message: string | null; activation_approval: unknown };
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -33,15 +33,20 @@ export async function prepareCampaign(client: SupabaseClient, org: string, user:
   if(settings.currency!==account.currency) throw Error(`Use a moeda da conta Meta: ${String(account.currency)}.`);
   const job=await client.from("meta_creative_jobs").select("brief,result,proposal_approval,status").eq("organization_id",org).eq("id",proposalId).eq("mode","campaign").single();
   if(job.error || job.data.status!=="completed" || !job.data.proposal_approval) throw Error("Aprove primeiro uma proposta concluída desta empresa.");
-  const media=await client.from("content_pipeline_items").select("id,metadata").eq("organization_id",org).eq("scope","organization").eq("content_type","meta_organic_media").eq("id",job.data.brief.mediaId).single();
-  const m=metaRecord(media.data?.metadata);
-  if(media.error || !["image/jpeg","video/mp4"].includes(String(m.content_type)) || typeof m.storage_key!=="string" || !m.storage_key.startsWith(`meta/organic/${org}/`) || m.storage_key.includes("..")) throw Error("O criativo original não está disponível nesta empresa.");
   const storage=await loadR2Config(client); if(!storage.ok) throw Error("Biblioteca indisponível.");
+  const mediaAssets=[];
+  for(const mediaId of creativeMediaIds(job.data.brief)) {
+    const media=await client.from("content_pipeline_items").select("id,metadata").eq("organization_id",org).eq("scope","organization").eq("content_type","meta_organic_media").eq("id",mediaId).single();
+    const m=metaRecord(media.data?.metadata);
+    if(media.error || !["image/jpeg","video/mp4"].includes(String(m.content_type)) || typeof m.storage_key!=="string" || !m.storage_key.startsWith(`meta/organic/${org}/`) || m.storage_key.includes("..")) throw Error("O criativo original não está disponível nesta empresa.");
+    mediaAssets.push({id:media.data!.id,url:buildPublicObjectUrl(storage.config.publicUrl,m.storage_key),contentType:String(m.content_type)});
+  }
+  if(!mediaAssets.length)throw Error("Selecione um criativo para a campanha.");
   const integration=await client.from("organization_integrations").select("metadata").eq("id",ctx.integrationId).eq("organization_id",org).single();
   if(integration.error) throw Error("Não foi possível conferir o Instagram selecionado.");
   const snapshot=executionSnapshot(job.data.result as CreativeReport,settings,{accountId:ctx.adAccountId,accountName:String(account.name),pageId:ctx.pageId,
     instagramId:selectedMetaAsset(metaRecord(integration.data.metadata),"instagram_business_id"),
-    media:{id:media.data!.id,url:buildPublicObjectUrl(storage.config.publicUrl,m.storage_key),contentType:String(m.content_type)}});
+    media:mediaAssets[0],...(mediaAssets.length>1?{additionalMedia:mediaAssets.slice(1)}:{})});
   const saved=await client.from("meta_campaign_executions").insert({organization_id:org,proposal_id:proposalId,user_id:user,snapshot,snapshot_hash:digest(snapshot)});
   if(saved.error) throw Error("A preparação já existe ou não pôde ser salva. Atualize o histórico.");
   return campaignHistory(client,org);
@@ -114,6 +119,15 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
         if(!imageHash) throw Error("A Meta não confirmou a imagem.");
         e.remote_ids.image=imageHash;await update({remote_ids:e.remote_ids,pending_step:null});
       }
+      for(const [index,media] of (s.additionalMedia??[]).entries()) {
+        const key=`image_${index+1}`;if(e.remote_ids[key])continue;
+        const response=await fetch(media.url,{redirect:"error",signal:AbortSignal.timeout(30000)});
+        if(!response.ok||Number(response.headers.get("content-length"))>8*1024*1024)throw Error("Slide indisponível ou acima de 8 MB.");
+        const bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>8*1024*1024)throw Error("Slide acima de 8 MB.");
+        await update({pending_step:key});const uploaded=await adsLeadsGraph(ctx,`${s.accountId}/adimages`,{bytes:bytes.toString("base64")},false,"POST");
+        const hash=String(metaRecord(Object.values(metaRecord(uploaded.images))[0]).hash||"");if(!hash)throw Error("A Meta não confirmou o slide.");
+        e.remote_ids[key]=hash;await update({remote_ids:e.remote_ids,pending_step:null});
+      }
       const start=e.start_at||new Date(Date.now()+5*60000).toISOString(),end=e.end_at||new Date(Date.now()+5*60000+s.settings.days*86400000).toISOString();
       if(Date.parse(end)<=Date.now()) throw Error("O período terminou. Prepare uma nova proposta.");
       e.start_at=start;e.end_at=end;await update({start_at:start,end_at:end});
@@ -122,7 +136,7 @@ export async function executeCampaign(client:SupabaseClient,org:string,user:stri
       for(let i=0;i<s.ads.length;i++) {
         const a=s.ads[i],cta={type:"LEARN_MORE",value:{link:s.settings.destination}};
         const spec={page_id:s.pageId,...(s.settings.placement==="feeds"?{instagram_user_id:s.instagramId}:{}),
-          ...(e.remote_ids.video?{video_data:{video_id:e.remote_ids.video,image_url:imageUrl,title:a.headline,message:a.primaryText,call_to_action:cta}}:{link_data:{image_hash:imageHash,link:s.settings.destination,name:a.headline,message:a.primaryText,call_to_action:cta}})};
+          ...(e.remote_ids.video?{video_data:{video_id:e.remote_ids.video,image_url:imageUrl,title:a.headline,message:a.primaryText,call_to_action:cta}}:{link_data:{...(s.additionalMedia?.length?{child_attachments:[s.media,...s.additionalMedia].map((_,n)=>({image_hash:n?e.remote_ids[`image_${n}`]:imageHash,link:s.settings.destination,name:a.headline,call_to_action:cta})),multi_share_optimized:false,multi_share_end_card:false}:{image_hash:imageHash}),link:s.settings.destination,name:a.headline,message:a.primaryText,call_to_action:cta}})};
         await write(`creative_${i}`,`${s.accountId}/adcreatives`,{name:a.name,object_story_spec:JSON.stringify(spec)});
         await write(`ad_${i}`,`${s.accountId}/ads`,{name:a.name,adset_id:e.remote_ids[`set_${i%s.adSets.length}`],creative:JSON.stringify({creative_id:e.remote_ids[`creative_${i}`]}),status:"PAUSED"});
       }

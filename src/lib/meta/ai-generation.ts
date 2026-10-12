@@ -5,7 +5,7 @@ import {assertContractAccess} from "@/lib/billing/contract-access";
 import {resolveActiveBillingRates,calculateMeteredUsageCharge,extractGeminiUsageMetadata,billableGeminiUnits,type MeteredRate} from "@/lib/billing/metered-usage";
 import {GEMINI_CACHED_INPUT_PRICE_RATIO} from "@/lib/billing/credit-economics";
 
-type Input={client:SupabaseClient;org:string;user:string;id:string;feature:string;model:string;apiKey:string;body:Record<string,unknown>;inputTokens:number;maxOutput:number;identity:unknown};
+type Input={client:SupabaseClient;org:string;user:string;id:string;feature:string;model:string;apiKey:string;body:Record<string,unknown>;inputTokens:number;maxOutput:number;identity:unknown;mediaCount?:number};
 export async function metaAiTariffs(client:SupabaseClient,org:string,model:string,feature="ai_traffic_manager") {
  const access=await assertContractAccess(org,client);
  const rates=await resolveActiveBillingRates(client,{provider:"gemini",featureCode:feature,modelId:model,planCode:access.plan_code});
@@ -32,7 +32,7 @@ export async function runMeteredMetaGeneration(i:Input) {
  let dispatched=Boolean(data);
  try {
    if(!data) {
-     const quote=calculateMeteredUsageCharge({rates,units:{inputTokens:i.inputTokens,outputTokens:i.maxOutput}});
+     const quote=calculateMeteredUsageCharge({rates,units:{inputTokens:i.inputTokens,outputTokens:i.maxOutput,media:i.mediaCount??0}});
      const held=await client.rpc("reserve_meta_ai",{p_id:id,p_amount:quote.chargeCredits});
      if(held.error){const reason=String(held.error.message||"");throw Error(reason.includes("monthly_limit")?"Seu limite mensal de consumo de IA foi atingido. Confira os limites em Créditos e recargas; não houve geração.":reason.includes("daily_limit")?"Seu limite diário de consumo de IA foi atingido. Confira os limites em Créditos e recargas; não houve geração.":"Saldo ou acesso insuficiente para reservar esta análise. Confira créditos e contrato.");}
      dispatched=true;
@@ -42,7 +42,7 @@ export async function runMeteredMetaGeneration(i:Input) {
    }
    const usage=extractGeminiUsageMetadata(data);if(!usage)throw Error("Resposta recebida; consumo do provedor em conferência.");
    const units=billableGeminiUnits(usage),billableInput=Math.max(0,units.inputTokens-usage.cachedTokens)+usage.cachedTokens*GEMINI_CACHED_INPUT_PRICE_RATIO;
-   const price=calculateMeteredUsageCharge({rates:priceRates,units:{inputTokens:billableInput,outputTokens:units.outputTokens}});
+   const price=calculateMeteredUsageCharge({rates:priceRates,units:{inputTokens:billableInput,outputTokens:units.outputTokens,media:i.mediaCount??0}});
    const charge=access.plan_code==="internal"?0:price.chargeCredits;
    await update({settlement:{input:units.inputTokens,output:units.outputTokens,cost:price.providerCost,charge,billingMode:access.plan_code==="internal"?"internal_shadow":access.plan_code==="trial"?"trial_billable":"customer_billable",metering:{usage,rates:price.matchedRates}},result:{received:true}});
    const finished=await client.rpc("finish_meta_ai",{p_id:id});if(finished.error)throw Error("Consumo em conferência. O resultado está preservado e não será gerado novamente.");
