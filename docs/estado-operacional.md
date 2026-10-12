@@ -1,5 +1,16 @@
 # Estado operacional da ConnectyHub
 
+## App Review pronto; confirmação jurídica final pendente — 12/10/2026 07h08 BRT
+
+Meta contabilizou requisitos: cinco etapas 100%, Requests/Renewal completed e
+Submit for review habilitado. MCP e pages_manage_ads mostram Completed, anexos
+e declarações preservados. Clique inicial abriu modal final dos Meta Platform
+Terms e Developer Policies. Aceite final solicitado ao titular nesta conversa;
+checkbox desmarcado, pedido 1078832598351314 ainda NÃO enviado. Após autorização
+pontual, concluir envio e confirmar em análise. Não repetir testes ou vídeos.
+Acompanhamento ativo atualizado. Sem anúncios/gastos ou publicação de código.
+Ver [registro da revisão](meta-ads-mcp-lead-ads-2026-10-11.md).
+
 ## Meta Ads por empresa publicado e validado — 12/10/2026 01h50 BRT
 
 Produção `a46a0a607473633c75049641cdc555cefc30a0cb` no slot a/3130;

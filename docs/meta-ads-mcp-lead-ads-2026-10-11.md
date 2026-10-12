@@ -386,3 +386,20 @@ ads_mcp_management reaberto confirmou 0/1, texto e vídeo anexado preservados,
 declaração marcada. Demais anexos não reabertos. Sem mudança relevante; ainda
 na janela de até 24h dos testes finais, sem chamadas adicionais ou gastos.
 Acompanhamento mantido; pedido não enviado.
+
+## Requisitos contabilizados; aceite final pendente — 12/10/2026, 07h08 BRT
+
+Após recarga no Chrome Connecty, todas as cinco etapas atingiram 100%; Requests
+e Renewal completed. Submit for review habilitado. Reabertos MCP e
+pages_manage_ads: testes Completed, textos e vídeos preservados, declarações
+marcadas. Nenhum anexo substituído ou permissão removida.
+
+Clique inicial em Submit for review abriu modal separado de aceite dos Meta
+Platform Terms e Developer Policies. Checkbox permanece desmarcado; Submit
+final não foi acionado. **Pedido ainda NÃO enviado.** Solicitada confirmação
+pontual ao titular, exigida pelas regras do controle do navegador para acordo
+jurídico no momento da ação, apesar da autorização anterior para enviar.
+Após resposta afirmativa, concluir sem repetir pergunta e verificar em análise.
+Evidência: output/meta-review-20261012/aceite-final.png. Aba 1614700014
+preservada no Chrome Connecty. Acompanhamento atualizado para este estado.
+Nenhum anúncio, gasto, pagamento ou mudança de produção neste acompanhamento.
