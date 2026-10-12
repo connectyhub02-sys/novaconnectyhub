@@ -41,8 +41,8 @@ da mídia e resumo antes da aprovação; IA prepara ou segue instruções, mas o
 aprova a versão e a verba. Acesso por empresa, papéis, créditos e permissões oficiais
 continuam necessários. Antes de retomar implementação, seguir o
 [plano completo Viral Check e campanhas IA](plano-viralcheck-trafego-ia-2026-10-12.md).
-Os rascunhos locais de acesso comum, prévia e aprovação ainda não foram publicados;
-a migration 0196 não foi aplicada nesta etapa de planejamento.
+Acesso comum, prévia e aprovação da proposta foram publicados em 12/10;
+estado, testes e limites estão no [registro do estúdio e pesquisa](meta-tendencias-revisao-2026-10-12.md).
 Após adiar AdSpy/Tavily, o titular autorizou em 12/10 a pesquisa externa com
 Gemini + Google Search (confirmou Search, não Sheets), com consumo explícito de IA.
 Não contratar outro serviço de busca. Mostrar fontes, data e limites da evidência;

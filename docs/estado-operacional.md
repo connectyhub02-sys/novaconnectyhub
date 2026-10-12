@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Estúdio, pesquisa com Google Search e aprovação de proposta — 12/10/2026 17h14 BRT
+
+Produção `843231c3a9523af676b27196706f0508b6cf5153`, slot a/3130;
+fallback `160e6f12fe33621be075eb6de37ebbf9c95eb68d`, slot b/3131.
+Gemini + Google Search publicado no estúdio compartilhado de Meta Ads e Publicações:
+pesquisa recolhível por nicho/país/plataforma, fontes/data/histórico por empresa e uso
+no roteiro. Sem Tavily/AdSpy. Recursos disponíveis em todos os planos ativos,
+preservando papéis, créditos e bloqueios explícitos da organização.
+
+Prévia real de imagem/vídeo, simulação de posicionamento, modos IA automática/guiada
+e aprovação da proposta com versão/hash/snapshot. Ainda NÃO cria/ativa anúncios.
+Aprovação é proposal_only; execução Meta/Google e validação final dos posicionamentos
+continuam pendentes. Pesquisa representa sinais públicos, não popularidade medida.
+
+Migrations 0196/0197 aplicadas com backup; tabelas/RPCs restritas ao servidor.
+46 testes em oito arquivos mais regressão UTF-8 passaram; TypeScript, lint,
+build, smoke público/candidato e Inngest assinado (58 funções) passaram. Builder parado.
+Pesquisa real interna: quatro buscas, oito fontes, custo R$ 0,359211 registrado como
+internal_shadow, sem débito de cliente. Recuperação do histórico não repetiu consumo.
+Prévia JPG/MP4 e aprovação de proposta interna verificadas. Painel BuffaloMass foi
+validado em sessão administrativa assistida; testes cobrem owner comum e demais planos,
+mas não houve login manual de cliente não administrativo. Nenhum anúncio criado/ativado.
+
+Registro completo e limites: [estúdio e pesquisa](meta-tendencias-revisao-2026-10-12.md).
+Esta publicação não altera os pedidos Meta em análise nem comprova Advanced Access.
+
 ## Criativos e propostas de campanha com IA — 12/10/2026 15h18 BRT
 
 Produção `b4bc49e1e0b9ea22bb5eaccd805d9d08a6b27bec`, slot a/3130;
