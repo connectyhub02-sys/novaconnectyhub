@@ -123,3 +123,24 @@ Não contar isso como validação visual de uma sessão administradora.
   agendada na Meta ainda não foram validados. Não apresentar os testes internos
   ou as capturas do editor como demonstração integral de publicação.
 - Sem anúncios, impulsionamentos, pagamentos ou gastos de mídia.
+
+## Retomada autorizada — 12/10/2026
+
+O titular autorizou expressamente acrescentar `pages_manage_posts` e
+`instagram_content_publish` ao app/configurações e reconectar apenas os ativos
+próprios e isolados já escolhidos. Também informou ter habilitado acesso a
+arquivos locais na extensão do perfil connectyhub02. Não pedir essas mesmas
+autorizações novamente; o upload ainda precisa ser confirmado na prática.
+
+Nesta retomada, o inventário encontrou apenas Chrome Connecty (perfil 4), com
+a aba Meta 1614700014 no caso de uso Pages. connectyhub02 não apareceu.
+A aba foi localizada/reivindicada, mas leitura e screenshot falharam por
+timeouts de controle; a última tentativa reiniciou a sessão da ferramenta.
+Nenhuma permissão foi alterada, reconexão feita ou publicação enviada nesta
+tentativa. Solicitada reabertura dos dois perfis com extensão conectada.
+
+Mídias locais conferidas: dois JPEGs próprios e MP4 H.264/AAC, 1080x1920,
+seis segundos. Após recuperar o navegador, retomar adição dos dois escopos,
+configurações de login, reconexão isolada e demonstrações reais. O pedido já
+em análise deve ser preservado; não afirmar envio complementar sem confirmação
+do portal.
