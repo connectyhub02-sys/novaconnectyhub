@@ -133,6 +133,13 @@ para a ConnectyHub; não prometer que um ajuste no OAuth atual resolve tudo.
 
 ## Pixel e conversões por empresa
 
+**Atualização de 12/10/2026:** seleção por empresa, consentimento, fila CAPI e
+integração nas lojas/páginas próprias implementados. PageView, ViewContent e
+AddToCart confirmados em Eventos de teste da Meta; dois Pixels isolados usados.
+Compra real, deduplicação em modo normal e sites externos permanecem fora da
+validação desta rodada. Ver [entrega e evidências](meta-pixel-conversoes-2026-10-12.md).
+As observações de ausência de implementação acima retratam a auditoria de 11/10.
+
 - Persistir seleção e vínculo de loja/domínio por organização. Tokens no cofre
   do servidor, nunca em HTML, JavaScript público ou parâmetros visíveis.
 - Reutilizar Pixel/Dataset existente quando autorizado; criação é uma etapa

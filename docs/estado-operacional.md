@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Pixel e CAPI por cliente publicados e testados — 12/10/2026 00h24 BRT
+
+Produção `1d6b9d9bf035fb51b6fbcb27ac2f503e1a012e9b` no slot b/3131;
+fallback a/3130 `d7f21f9e`. Migration 0194 aplicada com RLS e isolamento por
+organização. Build/TypeScript, ESLint, 32 testes e smoke de health/SHA,
+login/assets/loja/autorização passaram. Inngest assinado confirmou 58 funções;
+registro confirmado e builder parado.
+
+Seleção do Pixel nas Integrações e no Meta Ads do admin/cliente, consentimento,
+revogação, eventos de loja/produto/carrinho/checkout e Purchase após confirmação
+financeira implementados. Fila CAPI automática, idempotência, retentativas,
+diagnóstico e event_id compartilhado com o Pixel do navegador.
+
+Validação externa: Pixel isolado `3238629089675785` recebeu PageView,
+ViewContent e AddToCart via loja; Pixel próprio `2723052154518590` recebeu
+PageView. Todos com recibo 1 e status Processado no portal da Meta. Recusar ou
+revogar consentimento interrompeu a medição. Ambos permanecem em modo de teste.
+Nenhum anúncio, pedido, pagamento ou gasto foi iniciado. Compra real,
+deduplicação navegador/servidor em modo normal e sites externos ainda não
+foram validados. Painel antigo de métricas do admin ainda requer unificação
+com a conexão por empresa; não confundir com o novo componente Pixel.
+
+App Review não alterado nesta entrega; disponibilidade para clientes externos
+continua sujeita ao Advanced Access e aos ativos/permissões de cada conexão.
+Ver [implementação, evidências e limites](meta-pixel-conversoes-2026-10-12.md).
+
 ## Vídeos Meta finalizados e anexados — 11/10/2026 23h25 BRT
 
 Concluídos vídeos reais de autorização + Ads MCP (109,13 s) e autorização +
