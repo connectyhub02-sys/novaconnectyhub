@@ -6,7 +6,7 @@ import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
+import { assertOrganicPublishingAccess } from "./organic-publishing-access";
 import {
   fetchMetaPageAccessToken,
   loadMetaGuidedOAuthConfig,
@@ -652,14 +652,6 @@ async function processScheduledMetaOrganicItem(client: SupabaseClient, item: Con
   }
 
   try {
-    if (claimed.organization_id) {
-      await assertOrganizationFeatureAccess({
-        organizationId: claimed.organization_id,
-        featureCode: "meta_organic_insights",
-        client,
-      });
-    }
-
     const result = await publishClaimedMetaOrganicPost(client, claimed, actorId);
     return { id: item.id, status: result.status === "published" ? "published" : "processing" };
   } catch (error) {
@@ -700,7 +692,7 @@ async function publishClaimedMetaOrganicPost(
   let metadata = readRecord(item.metadata) ?? {};
   const lease = metadata.publish_lease;
   const organizationId = item.organization_id!;
-  await assertOrganizationFeatureAccess({ organizationId, featureCode: "meta_organic_insights", client });
+  await assertOrganicPublishingAccess(client, organizationId);
   const credentials = await loadMetaOrganicCredentials(client, organizationId);
   if (!credentials.accessToken) throw new Error("Conecte sua conta Meta em Integrações.");
   const grants = await listMetaGrantedPermissions({ accessToken: credentials.accessToken, config: credentials });
