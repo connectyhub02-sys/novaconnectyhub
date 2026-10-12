@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const m=vi.hoisted(()=>({access:vi.fn(),history:vi.fn(),run:vi.fn()}));
+const m=vi.hoisted(()=>({access:vi.fn(),history:vi.fn(),run:vi.fn(),approve:vi.fn()}));
 vi.mock("@/lib/meta/organic-access",()=>({metaOrganicAccess:m.access,OrganicAccessError:class extends Error {constructor(message:string,public status:number){super(message);}}}));
-vi.mock("@/lib/meta/creative-studio",()=>({creativeHistory:m.history,runCreativeJob:m.run}));
+vi.mock("@/lib/meta/creative-studio",()=>({creativeHistory:m.history,runCreativeJob:m.run,approveCreativeProposal:m.approve}));
 import { GET, POST } from "../src/app/api/dashboard/meta-creative/route";
 import { OrganicAccessError } from "../src/lib/meta/organic-access";
 const url="https://www.connectyhub.com.br/api/dashboard/meta-creative";
@@ -16,4 +16,14 @@ describe("creative endpoint authorization",()=>{
   it("requires a manager role",async()=>{const a=await m.access();a.company.role="member";expect((await POST(request())).status).toBe(403);expect(m.run).not.toHaveBeenCalled();});
   it("does not send invalid budgets to the model",async()=>{expect((await POST(request({...body,dailyBudget:-100}))).status).toBe(400);expect(m.run).not.toHaveBeenCalled();});
   it("enforces identity keys before generating",async()=>{expect((await POST(request({...body,requestId:"bad"}))).status).toBe(400);expect(m.run).not.toHaveBeenCalled();});
+});
+
+it("approves only the saved tenant proposal without invoking generation",async()=>{
+ m.approve.mockResolvedValue([]);
+ expect((await POST(request({action:"approve_proposal",requestId:body.requestId,companyId:"victim",result:{campaign:{dailyBudget:1}}}))).status).toBe(200);
+ expect(m.approve).toHaveBeenCalledWith({},"owned","u",body.requestId);expect(m.run).not.toHaveBeenCalled();
+});
+it("allows a normal starter owner to generate",async()=>{
+ const a=await m.access();a.company.planCode="starter";
+ expect((await POST(request())).status).toBe(200);expect(m.run).toHaveBeenCalled();
 });

@@ -23,3 +23,15 @@ describe("creative studio policies", () => {
   });
   it("rejects invalid numbers and insecure destinations", () => { for(const x of [{dailyBudget:-1},{dailyBudget:"abc"},{adCount:50},{destination:"http://example.com"}])expect(()=>brief(x)).toThrow(); });
 });
+
+it("lets automatic assistance propose a structure without choosing money or destination",()=>{
+ const b=brief({assistance:"automatic",adCount:9,budgetMode:"ABO",dailyBudget:10});
+ const result=parseCreativeReport({...generated,campaign:{...generated.campaign,ads:[{name:"Uma opção",primaryText:"Oferta"}]}},b);
+ expect(result.campaign?.ads).toHaveLength(1);expect(result.campaign?.budgetMode).toBe("ABO");
+ expect(result.campaign?.adSets.map(a=>a.dailyBudget)).toEqual([3.34,3.33,3.33]);
+ expect(result.campaign?.dailyBudget).toBe(10);expect(result.campaign?.currency).toBe("USD");expect(result.campaign?.destination).toBe("");
+});
+it("rejects empty automatic campaigns and unknown strategies",()=>{
+ expect(()=>brief({assistance:"unlimited"})).toThrow();
+ expect(()=>parseCreativeReport({...generated,campaign:{...generated.campaign,ads:[]}},brief({assistance:"automatic"}))).toThrow();
+});

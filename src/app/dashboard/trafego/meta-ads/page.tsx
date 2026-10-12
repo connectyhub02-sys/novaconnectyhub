@@ -55,7 +55,7 @@ export default async function ClientMetaAdsPage() {
         <FeatureUpgradePanel
           entitlement={entitlement}
           title="Meta Ads"
-          description="Analise de campanhas Meta, pixel, anuncios e recomendacoes de trafego pago ficam reservadas para operacoes Scale. O teste gratis continua liberando a validacao completa."
+          description="Disponível em todos os planos ativos, conforme conexão, permissões e créditos da sua conta."
         />
       </ConnectyShell>
     );

@@ -52,7 +52,7 @@ export function MetaAdsAnalyticsPanel({ companyId, admin = false }: { companyId?
   const maxSpend = Math.max(1, ...(report?.daily.map(d => d.spend) || []));
   return <div className="space-y-5">
     <PageHeader eyebrow="Meta / Resultados" title="Meta Ads" description="Campanhas, conversões e leads da empresa, com origem e período de cada informação."
-      actions={<a href={integrationHref} className={`${field} flex items-center gap-2 text-blue-700`}>Gerenciar conexão <ArrowUpRight size={15}/></a>} />
+      actions={<a href={integrationHref} className={`${field} flex items-center gap-2 text-blue-700`}>Conectar Facebook <ArrowUpRight size={15}/></a>} />
     <MetaCreativeStudio companyId={companyId} initialMode="campaign" accountCurrency={report?.account.currency}/>
     <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-blue-100 bg-white p-4" onSubmit={e => { e.preventDefault(); refresh(); }}>
       <label className="min-w-52 flex-1 text-xs text-slate-500">Conta de anúncios<select aria-label="Conta de anúncios" className={`${field} mt-1 w-full`} value={account} disabled={loading || aiBusy} onChange={e => setAccount(e.target.value)}>
@@ -112,7 +112,7 @@ export function MetaAdsAnalyticsPanel({ companyId, admin = false }: { companyId?
         {ai && <p role="status" className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm">{ai}</p>}
       </Panel>
     </>}
-    <MetaPixelPanel companyId={companyId}/>
+    <details className="rounded-2xl border border-blue-100 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">Medição de resultados · configurações avançadas</summary><div className="mt-4"><MetaPixelPanel companyId={companyId}/></div></details>
     <details className="rounded-2xl border border-blue-100 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">Ads MCP e formulários Lead Ads · conexão e testes</summary><div className="mt-4"><MetaAdsLeadsPanel companyId={companyId}/></div></details>
   </div>;
 }

@@ -10,14 +10,30 @@ import { assertContractAccess } from "@/lib/billing/contract-access";
 import { creativePrompt, parseCreativeReport, type CreativeBrief } from "./creative-policy";
 
 const host = "https://generativelanguage.googleapis.com";
-const publicFields = "id,mode,status,brief,result,model,usage_event_id,charge_credits,error_message,created_at";
+const publicFields = "id,mode,status,brief,result,model,usage_event_id,charge_credits,error_message,created_at,proposal_approval";
+export async function approveCreativeProposal(client: SupabaseClient, org: string, userId: string, id: string) {
+  await assertContractAccess(org, client);
+  const row = await client.from("meta_creative_jobs").select("id,mode,status,brief,result,input_hash,proposal_approval").eq("organization_id", org).eq("id", id).single();
+  const job = row.data;
+  if (row.error || !job || job.status !== "completed" || job.mode !== "campaign" || !job.result?.campaign) throw Error("Selecione uma proposta concluída desta empresa.");
+  if (job.proposal_approval) return creativeHistory(client, org);
+  if (!job.brief?.mediaId || !job.brief?.currency || !Number.isFinite(job.brief?.dailyBudget) || job.brief.dailyBudget <= 0) throw Error("Prepare uma proposta com criativo, moeda e verba diária antes de aprovar.");
+  const media = await client.from("content_pipeline_items").select("id,metadata").eq("organization_id", org).eq("scope", "organization").eq("content_type", "meta_organic_media").eq("id", job.brief.mediaId).single();
+  if (media.error || !media.data) throw Error("O criativo original não está mais disponível nesta empresa.");
+  const snapshot = { brief: job.brief, result: job.result, media: media.data };
+  const approval = { approvedAt: new Date().toISOString(), approvedBy: userId, scope: "proposal_only", contentHash: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"), snapshot };
+  const updated = await client.from("meta_creative_jobs").update({ proposal_approval: approval }).eq("organization_id", org).eq("id", id).eq("status", "completed").eq("input_hash", job.input_hash).is("proposal_approval", null);
+  if (updated.error) throw Error("Não foi possível registrar a aprovação. Atualize e confira antes de repetir.");
+  return creativeHistory(client, org);
+}
 export async function creativeHistory(client: SupabaseClient, org: string) {
   // Interrupted processes must be reconciled, not automatically regenerated or charged twice.
   await client.from("meta_creative_jobs").update({ status: "uncertain", error_message: "A execução foi interrompida. O suporte precisa conferir resultado e consumo antes de repetir." })
     .eq("organization_id", org).in("status", ["running", "generated"]).lt("updated_at", new Date(Date.now() - 10 * 60000).toISOString());
   const r = await client.from("meta_creative_jobs").select(publicFields).eq("organization_id", org).order("created_at", { ascending: false }).limit(40);
   if (r.error) throw Error("Não foi possível carregar o histórico de criativos.");
-  return (r.data ?? []).map(j => ({ ...j, result: j.status === "completed" ? j.result : null }));
+  return (r.data ?? []).map(j => ({ ...j, result: j.status === "completed" ? j.result : null,
+    proposal_approval: j.proposal_approval ? { approvedAt: j.proposal_approval.approvedAt, scope: j.proposal_approval.scope } : null }));
 }
 async function ownedMedia(client: SupabaseClient, org: string, id: string) {
   const r = await client.from("content_pipeline_items").select("id,title,metadata").eq("organization_id", org)

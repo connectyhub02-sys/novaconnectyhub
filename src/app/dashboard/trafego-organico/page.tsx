@@ -56,7 +56,7 @@ export default async function OrganicTrafficPage() {
         <FeatureUpgradePanel
           entitlement={entitlement}
           title="Organico Meta"
-          description="Publicacoes, leitura organica e preparacao de campanhas para Instagram e Facebook ficam liberadas no Pro e Scale. O teste gratis continua com acesso completo por 7 dias."
+          description="Disponível em todos os planos ativos, conforme conexão, permissões e créditos da sua conta."
         />
       </ConnectyShell>
     );

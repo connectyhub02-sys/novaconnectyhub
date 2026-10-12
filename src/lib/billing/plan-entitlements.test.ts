@@ -21,100 +21,24 @@ describe("resolvePlanFeatureEntitlement", () => {
     }
   });
 
-  it("allows only Start-tier features on starter", () => {
-    expect(resolvePlanFeatureEntitlement("whatsapp_core", {
-      planCode: "starter",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("whatsapp_campaigns", {
-      planCode: "starter",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("whatsapp_groups_channels", {
-      planCode: "starter",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("meta_social_inbox", {
-      planCode: "starter",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(false);
-
-    expect(resolvePlanFeatureEntitlement("connectyhub_api", {
-      planCode: "starter",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(false);
+  it("allows every feature on every active commercial plan with and without billing context", () => {
+    for (const planCode of ["start", "starter", "pro", "scale"]) {
+      for (const featureCode of allFeatureCodes) {
+        for (const billingState of [undefined, "paid_active"] as const) {
+          const access = resolvePlanFeatureEntitlement(featureCode, {planCode, organizationStatus: "active", billingState});
+          expect(access.allowed, `${planCode}/${featureCode}`).toBe(true);
+          expect(access.requiredPlanCodes).toEqual(["starter", "pro", "scale"]);
+        }
+      }
+    }
   });
-
-  it("allows Pro-tier Meta features on pro and blocks Scale traffic analytics", () => {
-    expect(resolvePlanFeatureEntitlement("meta_social_inbox", {
-      planCode: "pro",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("meta_comment_to_direct", {
-      planCode: "pro",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("meta_organic_insights", {
-      planCode: "pro",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    const trafficEntitlement = resolvePlanFeatureEntitlement("meta_ads_analytics", {
-      planCode: "pro",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    });
-
-    expect(trafficEntitlement.allowed).toBe(false);
-    expect(trafficEntitlement.reason).toBe("plan_required");
-
-    const apiEntitlement = resolvePlanFeatureEntitlement("connectyhub_api", {
-      planCode: "pro",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    });
-
-    expect(apiEntitlement.allowed).toBe(false);
-    expect(apiEntitlement.reason).toBe("plan_required");
-  });
-
-  it("allows Scale-tier traffic features on scale", () => {
-    expect(resolvePlanFeatureEntitlement("meta_ads_analytics", {
-      planCode: "scale",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("google_ads_analytics", {
-      planCode: "scale",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("ai_traffic_manager", {
-      planCode: "scale",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
-
-    expect(resolvePlanFeatureEntitlement("connectyhub_api", {
-      planCode: "scale",
-      organizationStatus: "active",
-      billingState: "paid_active",
-    }).allowed).toBe(true);
+  it("preserves inactive accounts, exhausted AI credits and explicit restrictions", () => {
+    for (const planCode of ["starter", "pro", "scale"]) {
+      expect(resolvePlanFeatureEntitlement("ai_traffic_manager", {planCode, billingState: "paid_no_credits"}).allowed).toBe(false);
+      expect(resolvePlanFeatureEntitlement("meta_ads_analytics", {planCode, organizationStatus: "suspended"}).allowed).toBe(false);
+      expect(resolvePlanFeatureEntitlement("meta_ads_analytics", {planCode, organizationStatus: "active", featureOverrides: {meta_ads_analytics: false}}).allowed).toBe(false);
+    }
+    expect(resolvePlanFeatureEntitlement("ai_traffic_manager", {planCode: "trial", organizationStatus: "trial_expired"}).allowed).toBe(false);
   });
 
   it("blocks paid plans when billing access is inactive", () => {
@@ -141,15 +65,15 @@ describe("resolveMetaSocialChannelsEntitlement", () => {
     expect(entitlement.reason).toBe("trial_active");
   });
 
-  it("blocks Meta social channels on starter after trial", () => {
+  it("allows Meta social channels on starter after trial", () => {
     const entitlement = resolveMetaSocialChannelsEntitlement({
       planCode: "starter",
       organizationStatus: "active",
       billingState: "paid_active",
     });
 
-    expect(entitlement.allowed).toBe(false);
-    expect(entitlement.reason).toBe("plan_required");
+    expect(entitlement.allowed).toBe(true);
+    expect(entitlement.reason).toBe("allowed");
   });
 
   it("allows Meta social channels on pro and scale", () => {

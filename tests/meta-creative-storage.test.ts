@@ -9,6 +9,7 @@ beforeAll(async()=>{
  create table auth.users(id uuid primary key); create table organizations(id uuid primary key);
  insert into auth.users values('${user}'); insert into organizations values('${org}');`);
  await db.exec(readFileSync("supabase/migrations/0195_meta_creative_studio.sql","utf8"));
+ await db.exec(readFileSync("supabase/migrations/0196_meta_creative_approval.sql","utf8"));
 },30000);
 afterAll(async()=>{await db.close();});
 it("keeps provider output inaccessible to browser roles",async()=>{
@@ -23,4 +24,10 @@ it("allows only one active generation per organization and reuses no request IDs
  await db.query("update meta_creative_jobs set status='completed' where id=$1",[first.rows[0].id]);
  await expect(db.query(insert)).resolves.toBeDefined();
  await expect(db.query(`insert into meta_creative_jobs select * from meta_creative_jobs where id=$1`,[first.rows[0].id])).rejects.toThrow(/unique/);
+});
+
+it("invalidates approval when the saved proposal changes",async()=>{
+ const {rows}=await db.query<{id:string}>(`insert into meta_creative_jobs(id,organization_id,user_id,input_hash,mode,status,brief,result,proposal_approval) values(gen_random_uuid(),'${org}','${user}','review','campaign','completed','{}','{"campaign":{}}','{"scope":"proposal_only"}') returning id`);
+ await db.query("update meta_creative_jobs set result=$1 where id=$2",[{campaign:{dailyBudget:20}},rows[0].id]);
+ const r=await db.query<{proposal_approval:unknown}>("select proposal_approval from meta_creative_jobs where id=$1",[rows[0].id]);expect(r.rows[0].proposal_approval).toBeNull();
 });

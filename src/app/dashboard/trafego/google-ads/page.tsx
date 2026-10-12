@@ -45,7 +45,7 @@ export default async function ClientGoogleAdsPage() {
         <FeatureUpgradePanel
           entitlement={entitlement}
           title="Google Ads"
-          description="Analise de campanhas Google, tags, conversoes e recomendacoes de trafego pago ficam reservadas para operacoes Scale. O teste gratis continua liberando a validacao completa."
+          description="Disponível em todos os planos ativos, conforme conexão, permissões e créditos da sua conta."
         />
       </ConnectyShell>
     );

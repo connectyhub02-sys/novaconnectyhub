@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { metaOrganicAccess, OrganicAccessError } from "@/lib/meta/organic-access";
-import { creativeHistory, runCreativeJob } from "@/lib/meta/creative-studio";
+import { creativeHistory, runCreativeJob, approveCreativeProposal } from "@/lib/meta/creative-studio";
 import { parseCreativeBrief } from "@/lib/meta/creative-policy";
 import { validatePublicWriteRequest } from "@/lib/security/public-request-guard";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
@@ -24,8 +24,11 @@ export async function POST(request: Request) {
   try {
     const a = await access(request);
     const raw = await request.text(); if (raw.length > 16000) throw Error("Instruções muito longas.");
-    const b = JSON.parse(raw), brief = parseCreativeBrief(b);
+    const b = JSON.parse(raw);
     if (typeof b.requestId !== "string" || !/^[a-f0-9-]{36}$/i.test(b.requestId)) throw Error("Identificador da solicitação inválido.");
+    if (b.action === "approve_proposal") return NextResponse.json({ jobs: await approveCreativeProposal(a.client, a.organizationId, a.workspace.user.id, b.requestId) });
+    if (b.action !== undefined) throw Error("Ação inválida.");
+    const brief = parseCreativeBrief(b);
     return NextResponse.json({ jobs: await runCreativeJob(a.client, a.organizationId, a.workspace.user.id, b.requestId, brief) });
   } catch (e) { return failure(e); }
 }
