@@ -1,5 +1,35 @@
 # Estado operacional da ConnectyHub
 
+## Meta Ads por empresa publicado e validado — 12/10/2026 01h50 BRT
+
+Produção `a46a0a607473633c75049641cdc555cefc30a0cb` no slot a/3130;
+fallback b/3131 `693917f9c66e6c57b25a91f9be6d775f39a08469`. Build,
+TypeScript, ESLint e 41 testes dirigidos passaram. Smoke público confirmou
+health/SHA, login/asset/loja e 401 nas APIs sem sessão. Inngest assinado
+confirmou 58 funções, registro confirmado e builder parado.
+
+Admin e cliente usam o mesmo relatório por organização em Meta Ads, com
+conta autorizada, período e fuso/moeda da Meta. Insights, importações CRM e
+recibos Pixel/CAPI aparecem no mesmo painel, sem confundir atribuição com
+importações ou eventos de teste. A análise opcional por IA usa esse relatório
+e permanece desabilitada sem métricas de campanhas. MCP/Lead Ads preservam
+companyId na sessão assistida. O consolidado multicanal antigo permanece
+fora desta alteração.
+
+Verificação no navegador após publicação: operação interna com 3 leads e 2
+eventos CAPI de teste; usuário isolado de avaliação com 4 leads e 7 eventos,
+sem mistura entre empresas. Consultas de 7/30 dias e período personalizado
+validadas. As duas contas não têm métricas de campanhas no período: resultados
+pagos reais e geração da análise por IA ainda não foram validados externamente.
+Nenhum anúncio, pagamento, mensagem ou novo evento de conversão foi criado.
+
+Grant de revisão recebeu somente as rotas exatas do relatório de leitura.
+Inventário da revisão reduzido à conta de testes act_38906178892358750;
+servidor também aplica essa restrição pelo app_metadata confiável, inclusive
+após reconexão. Não houve mudança de permissões no portal Meta nesta entrega.
+A disponibilidade externa continua sujeita ao Advanced Access e ao acesso
+da conexão. Ver [fontes, testes e limites](meta-analytics-por-cliente-2026-10-12.md).
+
 ## Pixel e CAPI por cliente publicados e testados — 12/10/2026 00h24 BRT
 
 Produção `1d6b9d9bf035fb51b6fbcb27ac2f503e1a012e9b` no slot b/3131;
