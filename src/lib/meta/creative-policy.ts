@@ -23,23 +23,24 @@ const note = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >=
 export function parseCreativeBrief(raw: unknown): CreativeBrief {
   const b = obj(raw);
   if (!["analysis", "campaign", "script"].includes(String(b.mode))) throw Error("Escolha análise, campanha ou roteiro.");
+  const campaignMode = b.mode === "campaign";
   const mediaId = txt(b.mediaId, 40) || null;
   if (mediaId && !/^[a-f0-9-]{36}$/i.test(mediaId)) throw Error("Criativo inválido.");
   const prompt = txt(b.prompt, 6000), goal = txt(b.goal, 500), audience = txt(b.audience, 1000);
   if (b.mode === "analysis" && !mediaId) throw Error("Envie ou selecione uma imagem ou vídeo para analisar.");
   if (!mediaId && !prompt) throw Error("Informe suas instruções ou selecione um criativo.");
-  const dailyBudget = b.dailyBudget === null || b.dailyBudget === "" || b.dailyBudget === undefined ? null : Number(b.dailyBudget);
+  const dailyBudget = !campaignMode || b.dailyBudget === null || b.dailyBudget === "" || b.dailyBudget === undefined ? null : Number(b.dailyBudget);
   if (dailyBudget !== null && (!Number.isFinite(dailyBudget) || dailyBudget < 0.01 || dailyBudget > 100000)) throw Error("Informe um orçamento diário válido.");
-  const currency = txt(b.currency, 10) || null;
+  const currency = campaignMode ? txt(b.currency, 10) || null : null;
   if (currency !== null && !["BRL", "USD", "EUR"].includes(currency)) throw Error("Selecione uma moeda válida para a proposta.");
   if (b.mode === "campaign" && dailyBudget !== null && !currency) throw Error("Informe a moeda do orçamento proposto.");
-  const adCount = Number(b.adCount ?? 3);
+  const adCount = campaignMode ? Number(b.adCount ?? 3) : 3;
   if (!Number.isInteger(adCount) || adCount < 1 || adCount > 10) throw Error("Escolha de 1 a 10 anúncios.");
-  if (b.budgetMode !== undefined && !["CBO", "ABO"].includes(String(b.budgetMode))) throw Error("Escolha CBO ou ABO.");
-  const destination = txt(b.destination, 2000);
+  if (campaignMode && b.budgetMode !== undefined && !["CBO", "ABO"].includes(String(b.budgetMode))) throw Error("Escolha CBO ou ABO.");
+  const destination = campaignMode ? txt(b.destination, 2000) : "";
   if (destination) { const u = new URL(destination); if (u.protocol !== "https:" || u.username || u.password) throw Error("Use um destino HTTPS válido."); }
   return { mode: b.mode as CreativeMode, mediaId, prompt, goal, audience, destination,
-    budgetMode: b.budgetMode === "ABO" ? "ABO" : "CBO", dailyBudget, currency, adCount,
+    budgetMode: campaignMode && b.budgetMode === "ABO" ? "ABO" : "CBO", dailyBudget, currency, adCount,
     analyze: b.mode === "analysis" || b.analyze !== false };
 }
 export function parseCreativeReport(raw: unknown, brief: CreativeBrief): CreativeReport {

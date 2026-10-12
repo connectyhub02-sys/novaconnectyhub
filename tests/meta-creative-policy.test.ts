@@ -15,5 +15,11 @@ describe("creative studio policies", () => {
   it("requires actual media for media analysis", () => expect(()=>parseCreativeBrief({mode:"analysis",prompt:"analise"})).toThrow());
   it("requires explicit currency when there is a budget",()=>expect(()=>brief({dailyBudget:50,currency:null})).toThrow(/moeda/));
   it("does not accept the model's currency",()=>expect(parseCreativeReport({...generated,campaign:{...generated.campaign,currency:"BRL"}},brief({dailyBudget:50})).campaign?.currency).toBe("USD"));
+  it("does not carry hidden campaign fields into a script or media diagnosis",()=>{
+    for(const mode of ["script","analysis"]){
+      const b=brief({mode,mediaId,dailyBudget:50,currency:"USD",destination:"https://example.com",budgetMode:"ABO",adCount:8});
+      expect(b.dailyBudget).toBeNull();expect(b.currency).toBeNull();expect(b.destination).toBe("");expect(b.budgetMode).toBe("CBO");expect(b.adCount).toBe(3);
+    }
+  });
   it("rejects invalid numbers and insecure destinations", () => { for(const x of [{dailyBudget:-1},{dailyBudget:"abc"},{adCount:50},{destination:"http://example.com"}])expect(()=>brief(x)).toThrow(); });
 });
