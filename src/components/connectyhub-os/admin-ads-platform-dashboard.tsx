@@ -39,6 +39,7 @@ import { ConnectyShell } from "./connecty-shell";
 import { GoogleReviewTestButton, MetaReviewTestButton } from "./meta-review-test-button";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge, toneClass } from "./panel-primitives";
 import { TrafficAiManagerPanel } from "./traffic-ai-manager-panel";
+import { MetaPixelPanel } from "./meta-pixel-panel";
 import { MetaAdsLeadsPanel } from "./meta-ads-leads-panel";
 
 export type AdsDashboardPlatform = "meta" | "google";
@@ -163,7 +164,7 @@ export function AdminAdsPlatformDashboard({
         }
       />
 
-      {platform === "meta" && <MetaAdsLeadsPanel />}
+      {platform === "meta" && <><MetaPixelPanel companyId={shellMode === "client" ? organizationId ?? undefined : undefined} /><MetaAdsLeadsPanel /></>}
       <Panel
         title={config.trackingTitle}
         eyebrow={config.trackingEyebrow}

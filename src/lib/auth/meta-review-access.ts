@@ -15,5 +15,5 @@ export function isMetaReviewPath(path: string) {
     "/api/dashboard/integrations/meta/whatsapp/signup", "/dashboard/meta/revisao",
     "/api/dashboard/meta-review-agent", "/api/dashboard/agents/channels",
     "/api/dashboard/social-automations", "/api/dashboard/meta-social",
-    "/api/dashboard/social-approvals", "/api/dashboard/meta-ads-leads"].includes(path);
+    "/api/dashboard/social-approvals", "/api/dashboard/meta-ads-leads", "/api/dashboard/meta-pixel"].includes(path);
 }

@@ -1,4 +1,5 @@
 "use client";
+import { MetaPixelPanel } from "./meta-pixel-panel";
 
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
@@ -2761,6 +2762,8 @@ function GuidedOAuthCard({
             </button>
           </div>
         ) : null}
+
+        {kind === "meta" && connected ? <MetaPixelPanel key={`${selectedCompanyId}:${connection?.metadata?.selected_ad_account_id}`} companyId={selectedCompanyId} /> : null}
 
         {connected && assets.length > 0 ? (
           <GrowthAssetsPanel
