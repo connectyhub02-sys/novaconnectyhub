@@ -1,5 +1,28 @@
 # Estado operacional da ConnectyHub
 
+## Conta Asaas compartilhada entre empresas — 12/10/2026 19h16 BRT
+
+Produção aplicação `fa3d4781990c629fe45b0f282dad97889576089b`, slot a/3130;
+fallback `d01a8d6e7608fb410e8f6bff74ee527a2c01ee5c`, slot b/3131.
+Migration 0201 aplicada/registrada; hardening SQL `d602c225` também aplicado.
+Empresas de usuários distintos podem usar a mesma conta Asaas: registro canônico
+criptografado por ambiente/ID remoto mantém o token do webhook nas reconexões.
+Chaves, sessões e pedidos continuam isolados por organização; falhas preservam
+conexão anterior e desconexão local não remove o webhook das outras empresas.
+
+135 testes passaram (duas empresas/chaves, concorrência, desconexão/reconexão,
+isolamento da conciliação, Pix/checkout/cartão), TypeScript, ESLint e build.
+Smoke candidato/público: health/SHA, login/JS, conexão sem sessão 401, webhook GET
+405; Inngest assinado 200/58 funções/autenticado. Consulta real somente GET após
+ativação confirmou webhook BuffaloMass habilitado, não interrompido e único na
+URL esperada. Registro canônico preserva segredo legado local; Asaas não expôs
+segredo remoto. Pizzaria Macedo&Dias permanece disabled, sem chamada ao provedor.
+
+Não criamos cobranças, pagamentos, cancelamentos ou estornos. Cenários das duas
+empresas são testes isolados/simulados. O titular reconectará a pizzaria usando a
+mesma conta; reconexão real e entrega financeira ponta a ponta ainda pendentes.
+[Relatório, migração e limites](asaas-conta-compartilhada-2026-10-12.md).
+
 ## Criativo → orgânico/pago, campanhas Meta e carteira — 12/10/2026 18h39 BRT
 
 Produção `d01a8d6e7608fb410e8f6bff74ee527a2c01ee5c`, slot b/3131;

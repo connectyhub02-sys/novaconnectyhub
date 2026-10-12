@@ -141,6 +141,8 @@ O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infra
 
 ## Regras de negócio a preservar
 
+- Empresas de usuários distintos podem conectar a mesma conta Asaas. Cada organização mantém sua chave e seus pedidos; o webhook compartilhado usa um token canônico criptografado por ambiente e ID remoto, descoberto pelo servidor com a chave validada. Reconexões não rotacionam esse token; desconectar uma empresa não remove o webhook das demais. Conciliação identifica a organização pela sessão/pedido e confirma o pagamento no provedor. Não inferir o dono pelo token compartilhado, e-mail ou última empresa conectada. [Implementação e limites da validação](asaas-conta-compartilhada-2026-10-12.md).
+
 - Qualificação usa perguntas com respostas configuráveis e pontos por resposta.
   A IA identifica a opção e cita a fala do lead; o servidor calcula soma e nota
   normalizada de 0 a 100, sem pontuar apenas porque um campo CRM foi preenchido.
