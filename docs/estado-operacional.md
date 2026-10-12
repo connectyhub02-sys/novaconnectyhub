@@ -1,5 +1,33 @@
 # Estado operacional da ConnectyHub
 
+## Conta de anúncios isolada, pixel e Lead Ads validados — 11/10/2026 22h56 BRT
+
+Produção `abfaf1978007ac7cb146f6b3b9e195b97d5a0e42` no slot b/3131;
+fallback a/3130 em `b807ffc292738876d7fd455066e2b864311b25af`. Build, 20 testes
+dirigidos de reconexão/segurança, TypeScript, ESLint e smoke público/candidato
+passaram. Inngest assinado confirmou 57 funções; builder parado.
+
+Criada conta `38906178892358750` (ConnectyHub - Revisao Meta - Testes), em BRL e
+America/Sao_Paulo, no portfólio BuffaloMass `1604084310967369`, acessado como Magno
+no Chrome connectyhub02. Pixel `3238629089675785` criado e associado à conta;
+associação confirmada no portal e Graph. Sem pagamento, anúncios ou gastos.
+Pixel ainda sem instalação/eventos; CAPI por cliente pendente.
+
+Conta de avaliação isolada `4cd0a6bd-4e3c-4773-a9ef-511c802b48df` reconectada com
+Página `839794832549513`, Instagram buffalomasseliteclub e nova conta de anúncios.
+A exceção USER `1581800719812884`, limitada ao grant confiável de revisão,
+resolveu a restrição Graph #3 de leads em modo de desenvolvimento; clientes comuns
+permanecem BUSU. Três leads da revisão foram importados com sucesso e consulta
+MCP posterior retornou campanhas vazias sem erro. Também corrigida a listagem CRM
+para leads Meta sem conversas e preservação dos nomes enviados no formulário.
+
+**App Review `1078832598351314` não enviado.** MCP ainda mostra 0/1 chamadas no
+portal (até 24h para contabilização); gravações integrais, anexos e demais
+requisitos continuam pendentes. Acesso testador não comprova liberação externa.
+Automação de acompanhamento atualizada; detalhes e evidências em
+[Ads MCP e Lead Ads](meta-ads-mcp-lead-ads-2026-10-11.md).
+
+
 ## Ads MCP publicado e expansão Pixel planejada — 11/10/2026 21h15 BRT
 
 `08f151331967e52dd733c16cf7b1957a9d491147` ativo no slot b/3131, fallback a/3130
