@@ -1,5 +1,42 @@
 # Estado operacional da ConnectyHub
 
+## Criativo → orgânico/pago, campanhas Meta e carteira — 12/10/2026 18h39 BRT
+
+Produção `d01a8d6e7608fb410e8f6bff74ee527a2c01ee5c`, slot b/3131;
+fallback `8f24904b4f5cd39a7c33f594647af56fe3d37644`, slot a/3130.
+Análise primeiro em Publicações e Meta Ads, admin e todos os planos ativos:
+foto/carrossel/vídeo com prévia, produto da própria empresa, nota e adequação
+orgânico/pago. Nota baixa não bloqueia as vias. Orgânico gera rascunho com legenda
+e hashtags; pago reaproveita diagnóstico e prepara proposta, prévia e aprovação.
+Roteiros removidos da interface/API/prompt e pauta. Histórico financeiro preservado.
+
+Executor inicial de tráfego para site, feeds Facebook/Instagram, JPG/carrossel JPG/
+MP4, CBO/ABO e público amplo por país/idade. Criar pausado, conferir estrutura e
+obter aprovação explícita de verba antes de ativar. Interesses/públicos personalizados,
+outros objetivos e posicionamentos ainda não implementados neste executor.
+
+Teste externo PARCIAL: campanha/conjunto/criativo próprios criados, mas Meta recusou
+primeiro anúncio por ausência de pagamento válido (100/1359188). Zero anúncios,
+campanha PAUSED, sem ativação nem gasto. UI informa bloqueio e permite retomada
+explícita preservando IDs; timeout continua incerto sem repetição automática.
+Não apresentar criação de anúncio ou ativação como homologada com entrega real.
+
+IA do cliente reserva/liquida na carteira responsável pelas tarifas centrais,
+inclusive trial/acesso assistido; operação própria internal usa internal_shadow.
+Piloto real de carrossel: 20,7526 créditos, duas mídias, débito único, reserva zero.
+Cliente com limite mensal atingido bloqueado antes de gerar, sem débito.
+Migrations 0198/0199/0200 aplicadas; RPC/tabelas financeiras restritas ao servidor.
+93 testes dirigidos, TypeScript e ESLint aprovados. Smoke candidato/público:
+health SHA correto, login/assets 200, APIs privadas 401, Inngest assinado 200/58 funções.
+Builder parado após release. Saída do acesso assistido da revisão corrigida sem
+ampliar acesso do avaliador ao admin/estúdio.
+
+UI real: análise própria concluída e rascunho orgânico confirmado draft; caminho
+pago abriu proposta com mídia/contexto reaproveitados. Sem publicação social.
+Evidência `output/meta-campaigns-20261012/analise-duas-vias.png`; relatório e limites
+em [meta-campanhas-execucao-2026-10-12.md](meta-campanhas-execucao-2026-10-12.md).
+Aprovações externas do App Review permanecem independentes deste release.
+
 ## Estúdio, pesquisa com Google Search e aprovação de proposta — 12/10/2026 17h14 BRT
 
 Produção `843231c3a9523af676b27196706f0508b6cf5153`, slot a/3130;

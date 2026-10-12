@@ -6,6 +6,12 @@ Planejamento de 12/10/2026 para transformar análise de conteúdo, publicação 
 
 ## Decisões do produto
 
+Atualização de jornada em 12/10: entrada única pelo criativo, diagnóstico primeiro,
+depois escolha orgânico/pago. Score não bloqueia nenhuma via. Análise considera
+produto selecionado do catálogo e instruções, com recomendação específica para
+orgânico e pago. Orgânico recebe legenda/hashtags e segue ao calendário com revisão;
+pago recebe estratégia/público sugerido, com prévia e autorização da verba.
+
 - Todos os recursos desta expansão devem estar disponíveis para todas as organizações e todos os planos. A segmentação comercial será decidida depois de os recursos funcionarem e das aprovações solicitadas à Meta. Não criar novos bloqueios Start, Pro ou Scale durante esta expansão.
 - Admin e cliente usam o mesmo produto. Ativos, arquivos, histórico, aprovações, consumo e resultados pertencem à empresa selecionada. O admin não deve ser o único ambiente homologado.
 - Todos os planos não significa acesso a dados de outras empresas, remoção de papéis da equipe, consumo gratuito ou operação sem as permissões oficiais. Créditos, conta válida e autorizações continuam sendo necessários.

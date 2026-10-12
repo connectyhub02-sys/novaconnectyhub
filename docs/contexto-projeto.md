@@ -42,6 +42,13 @@ anteriores, sem repetir chamadas. A execução de campanhas nesta etapa é Meta;
 Google Ads fica para depois. IA usada pelo cliente sempre debita sua carteira
 responsável pelas tarifas vigentes, inclusive no acesso administrativo assistido.
 
+Jornada definida pelo titular em seguida: enviar criativo → diagnóstico e nota →
+escolher orgânico ou pago. A avaliação relaciona mídia ao produto do cliente e
+mostra adequação separada para os dois usos. Nota baixa não bloqueia publicação
+nem comprova ausência de resultado. Orgânico prepara legenda/hashtags e rascunho
+para revisão/agendamento; pago sugere público e estratégia, sujeitos à revisão,
+prévia e aprovação explícita da verba.
+
 Diretriz posterior do titular em 12/10: todos os recursos desta expansão devem
 chegar ao admin e a todos os planos dos clientes, deixando a segmentação comercial
 para depois do funcionamento e das aprovações Meta. Interface simples, prévia real
