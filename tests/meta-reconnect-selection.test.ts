@@ -28,4 +28,13 @@ describe("Meta reconnect selection", () => {
     expect(revoked.adAccountId).toBe("");
     expect(revoked.pageId).toBeNull();
   });
+  it("allows user-token review only for a matching active trusted grant", () => {
+    const reviewer = { ...input, isPlatformAdmin: false, slug: "review", planCode: "trial",
+      organizationId: "review-org", metadata: { review_validation_config_id: "789" },
+      reviewAccess: { organizationId: "review-org", active: true } };
+    expect(resolveInternalMetaLoginConfig(reviewer)).toBe("789");
+    expect(resolveInternalMetaLoginConfig({ ...reviewer, reviewAccess: null })).toBe("456");
+    expect(resolveInternalMetaLoginConfig({ ...reviewer, reviewAccess: { organizationId: "other", active: true } })).toBe("456");
+    expect(resolveInternalMetaLoginConfig({ ...reviewer, reviewAccess: { organizationId: "review-org", active: false } })).toBe("456");
+  });
 });

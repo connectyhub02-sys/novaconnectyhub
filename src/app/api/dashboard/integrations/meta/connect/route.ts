@@ -13,6 +13,7 @@ import { getMetaWorkspace as getCurrentWorkspace } from "@/lib/meta/company-acce
 import { createServiceClient } from "@/lib/supabase/service";
 import { createMetaOAuthState, hashMetaOAuthState, metaOAuthCookie } from "@/lib/meta/oauth-state";
 import { resolveInternalMetaLoginConfig } from "@/lib/meta/internal-login-config";
+import { readMetaReviewAccess } from "@/lib/auth/meta-review-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -59,6 +60,7 @@ export async function GET(request: NextRequest) {
     config.loginConfigId = resolveInternalMetaLoginConfig({
       isPlatformAdmin: workspace.profile.isPlatformAdmin, slug: company.slug, planCode: company.planCode,
       metadata: previousMetadata, defaultConfigId: config.loginConfigId,
+      organizationId: company.id, reviewAccess: readMetaReviewAccess(workspace.user),
     });
     const state = createMetaOAuthState();
     const now = new Date().toISOString();
