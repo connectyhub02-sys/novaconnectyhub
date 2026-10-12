@@ -6,13 +6,14 @@ type Media = { id: string; fileName: string; storageUrl: string; contentType: st
 type Job = { id: string; mode: CreativeMode; status: string; brief: CreativeBrief; result: CreativeReport | null; charge_credits: number | null; created_at: string; error_message: string | null };
 const field = "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900";
 const button = "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:opacity-50";
-export function MetaCreativeStudio({ companyId, initialMode = "analysis" }: { companyId?: string; initialMode?: CreativeMode }) {
+export function MetaCreativeStudio({ companyId, initialMode = "analysis", accountCurrency }: { companyId?: string; initialMode?: CreativeMode; accountCurrency?: string | null }) {
   const [opened, setOpened] = useState(false), [mode, setMode] = useState<CreativeMode>(initialMode);
   const [media, setMedia] = useState<Media[]>([]), [mediaId, setMediaId] = useState("");
   const [prompt, setPrompt] = useState(""), [goal, setGoal] = useState(""), [audience, setAudience] = useState(""), [destination, setDestination] = useState("");
   const [budgetMode, setBudgetMode] = useState("CBO"), [budget, setBudget] = useState(""), [adCount, setAdCount] = useState(3), [analyze, setAnalyze] = useState(true);
   const [jobs, setJobs] = useState<Job[]>([]), [selected, setSelected] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [drafted, setDrafted] = useState<string[]>([]);
+  const [currency, setCurrency] = useState("");
   const suffix = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const load = useCallback(async () => {
     const [r, m] = await Promise.all([fetch(`/api/dashboard/meta-creative${suffix}`, { cache: "no-store" }), fetch(`/api/dashboard/meta-organic${suffix}`, { cache: "no-store" })]);
@@ -33,7 +34,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis" }: { co
     setBusy(true); setError(""); setNotice("");
     try { const id = crypto.randomUUID(); setSelected(id);
       const r = await fetch(`/api/dashboard/meta-creative${suffix}`, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId: id, mode, mediaId: mediaId || null, prompt, goal, audience, destination, budgetMode, dailyBudget: budget || null, adCount, analyze }) });
+        body: JSON.stringify({ requestId: id, mode, mediaId: mediaId || null, prompt, goal, audience, destination, budgetMode, dailyBudget: budget || null, currency: currency || null, adCount, analyze }) });
       const d = await r.json(); if (!r.ok) throw Error(d.error || "Análise indisponível."); setJobs(d.jobs);
     } catch (e) { setError(e instanceof Error ? e.message : "Confira o histórico antes de repetir."); await load().catch(() => undefined); } finally { setBusy(false); }
   }
@@ -76,7 +77,8 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis" }: { co
           <label className="block text-sm">Objetivo<input className={field} maxLength={500} value={goal} disabled={busy} onChange={e => setGoal(e.target.value)} placeholder="Ex.: receber pedidos de orçamento pelo site"/></label>
           <label className="block text-sm">Público e contexto do negócio<textarea className={field} rows={2} maxLength={1000} value={audience} disabled={busy} onChange={e => setAudience(e.target.value)} placeholder="Descreva seu produto, região e necessidades do público. Sem dados pessoais de leads."/></label>
           {mode === "campaign" && <><div className="grid grid-cols-2 gap-3"><label className="text-sm">Distribuição da verba<select className={field} value={budgetMode} disabled={busy} onChange={e => setBudgetMode(e.target.value)}><option>CBO</option><option>ABO</option></select></label><label className="text-sm">Número de anúncios<input className={field} type="number" min={1} max={10} value={adCount} disabled={busy} onChange={e => setAdCount(Number(e.target.value))}/></label></div>
-            <label className="block text-sm">Orçamento diário total proposto<input className={field} type="number" min="0.01" step="0.01" value={budget} disabled={busy} onChange={e => setBudget(e.target.value)} placeholder="Opcional; na moeda da sua conta Meta"/></label>
+            <div className="grid grid-cols-2 gap-3"><label className="block text-sm">Orçamento diário total proposto<input className={field} type="number" min="0.01" step="0.01" value={budget} disabled={busy} onChange={e => setBudget(e.target.value)} placeholder="Opcional"/></label><label className="block text-sm">Moeda da proposta<select className={field} value={currency} disabled={busy} onChange={e => setCurrency(e.target.value)}><option value="">Selecione</option><option value="BRL">BRL · Real</option><option value="USD">USD · Dólar</option><option value="EUR">EUR · Euro</option></select></label></div>
+            <p className="text-xs text-slate-500">{accountCurrency ? `Conta Meta consultada: ${accountCurrency}. ` : ""}A proposta não altera a moeda da conta. Confira a compatibilidade antes de criar a campanha.</p>
             <label className="block text-sm">Página de destino<input className={field} type="url" value={destination} disabled={busy} onChange={e => setDestination(e.target.value)} placeholder="https://..."/></label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={analyze} disabled={busy} onChange={e => setAnalyze(e.target.checked)}/>Incluir diagnóstico e score do criativo</label>
             <p className="text-xs text-slate-500">CBO: verba na campanha. ABO: verba dividida entre conjuntos. Os campos acima definem a estrutura; use o prompt para orientar a estratégia.</p></>}
@@ -93,6 +95,7 @@ export function MetaCreativeStudio({ companyId, initialMode = "analysis" }: { co
             {report.criteria.map(c => <div key={c.name} className="border-t pt-2 text-sm"><strong>{c.name} · {c.score ?? "Sem evidência"}{c.score !== null ? "/100" : ""}</strong><p className="mt-1 text-slate-600">{c.evidence}</p><p className="mt-1">{c.improvement}</p></div>)}
             {([["Pontos fortes", report.strengths], ["O que melhorar", report.improvements], ["Limites da análise", report.limitations]] as const).map(([title, values]) => values.length > 0 && <div key={title}><h4 className="text-sm font-semibold">{title}</h4><ul className="mt-1 list-disc space-y-1 pl-5 text-sm">{values.map((s, i) => <li key={i}>{s}</li>)}</ul></div>)}
             {report.campaign && <div className="space-y-3 rounded-xl bg-blue-50 p-3 text-sm"><h4 className="font-semibold">Proposta: {report.campaign.name}</h4><p>{report.campaign.objective}</p><p>{report.campaign.budgetMode} · Total diário: {report.campaign.dailyBudget ?? "A definir"} · {report.campaign.ads.length} anúncios</p><p>Público: {report.campaign.audience}</p>
+              <p>Moeda da proposta: {report.campaign.currency || "Não definida — confira antes de executar"}</p>
               {report.campaign.adSets.map((s, i) => <p key={i}><strong>{s.name}</strong> · {s.audience}{s.dailyBudget !== null ? ` · ${s.dailyBudget}/dia` : ""}</p>)}
               {report.campaign.ads.map((a, i) => <details key={i} className="rounded-lg bg-white p-3"><summary className="cursor-pointer font-medium">{a.name}</summary><p className="mt-2 font-semibold">{a.headline}</p><p className="mt-2 whitespace-pre-wrap">{a.primaryText}</p><p className="mt-2">CTA: {a.cta}</p><p className="mt-2 text-slate-600">{a.creativeGuidance}</p></details>)}
               {report.campaign.assumptions.map((a, i) => <p key={i}>{a}</p>)}

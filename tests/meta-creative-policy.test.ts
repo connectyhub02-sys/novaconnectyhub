@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCreativeBrief, parseCreativeReport, creativeCriteria } from "../src/lib/meta/creative-policy";
 const mediaId = "11111111-1111-4111-8111-111111111111";
-const brief = (extras = {}) => parseCreativeBrief({ mode: "campaign", prompt: "Crie minha campanha", adCount: 3, ...extras });
+const brief = (extras = {}) => parseCreativeBrief({ mode: "campaign", prompt: "Crie minha campanha", adCount: 3, currency: "USD", ...extras });
 const generated = { title: "Proposta", summary: "Diagnóstico", score: 99, criteria: creativeCriteria.map(name => ({ name, score: 60, evidence: "Texto visível no criativo", improvement: "Melhorar contraste" })), campaign: { dailyBudget: 9999, budgetMode: "ABO", destination: "https://malicioso.test", adSets: [{name:"A"},{name:"B"},{name:"C"}], ads: [1,2,3].map(i => ({name:`Anúncio ${i}`,primaryText:"Texto da oferta"})) } };
 describe("creative studio policies", () => {
   it("does not score unseen media or a draft script", () => expect(parseCreativeReport(generated, brief()).score).toBeNull());
@@ -13,5 +13,7 @@ describe("creative studio policies", () => {
   it("keeps CBO budget only at campaign level", () => expect(parseCreativeReport(generated,brief({dailyBudget:50})).campaign?.adSets.every(a=>a.dailyBudget===null)).toBe(true));
   it("requires all requested ads", () => expect(()=>parseCreativeReport({...generated,campaign:{...generated.campaign,ads:[]}},brief())).toThrow());
   it("requires actual media for media analysis", () => expect(()=>parseCreativeBrief({mode:"analysis",prompt:"analise"})).toThrow());
+  it("requires explicit currency when there is a budget",()=>expect(()=>brief({dailyBudget:50,currency:null})).toThrow(/moeda/));
+  it("does not accept the model's currency",()=>expect(parseCreativeReport({...generated,campaign:{...generated.campaign,currency:"BRL"}},brief({dailyBudget:50})).campaign?.currency).toBe("USD"));
   it("rejects invalid numbers and insecure destinations", () => { for(const x of [{dailyBudget:-1},{dailyBudget:"abc"},{adCount:50},{destination:"http://example.com"}])expect(()=>brief(x)).toThrow(); });
 });

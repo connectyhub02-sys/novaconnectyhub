@@ -53,7 +53,7 @@ export function MetaAdsAnalyticsPanel({ companyId, admin = false }: { companyId?
   return <div className="space-y-5">
     <PageHeader eyebrow="Meta / Resultados" title="Meta Ads" description="Campanhas, conversões e leads da empresa, com origem e período de cada informação."
       actions={<a href={integrationHref} className={`${field} flex items-center gap-2 text-blue-700`}>Gerenciar conexão <ArrowUpRight size={15}/></a>} />
-    <MetaCreativeStudio companyId={companyId} initialMode="campaign"/>
+    <MetaCreativeStudio companyId={companyId} initialMode="campaign" accountCurrency={report?.account.currency}/>
     <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-blue-100 bg-white p-4" onSubmit={e => { e.preventDefault(); refresh(); }}>
       <label className="min-w-52 flex-1 text-xs text-slate-500">Conta de anúncios<select aria-label="Conta de anúncios" className={`${field} mt-1 w-full`} value={account} disabled={loading || aiBusy} onChange={e => setAccount(e.target.value)}>
         {!report?.accounts.length && <option value={account}>{account || "Conta da conexão Meta"}</option>}
