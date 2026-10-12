@@ -295,3 +295,12 @@ ads_mcp_management após esses testes ainda mostra 0/1 chamadas, prazo informado
 pelo portal de até 24 horas, e nenhum vídeo nesse campo. Permanecem demonstrações
 integrais, anexos e demais requisitos da rodada. Não anunciar todas as permissões
 aprovadas nem confundir app publicado com Advanced Access.
+
+## Acompanhamento — 11/10/2026, 23h BRT
+
+Pedido ainda não enviado: Submit for review desabilitado após recarga. Justificativa
+leads_retrieval atualizada e reaberta para confirmar persistência: aponta agora
+para /dashboard/meta/revisao, Página 839794832549513 e os dois formulários isolados
+validados. Sem substituir anexos. Evidência em output/meta-ads-leads-20261011/validated/lead-ads-instrucoes-revisao-atualizadas.png.
+Gravação integral continua explicitamente pendente no texto; nenhuma aprovação declarada.
+
