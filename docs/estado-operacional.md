@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Exclusão da hospedagem local do Immov.ai — 13/10/2026, 12h43 BRT
+
+Exclusão autorizada explicitamente pelo titular no chat, após ele colocar o
+projeto em quarentena no painel. Executor confirmou os 15 containers parados,
+quatro volumes exclusivos e somente `/opt/immov-ai`; operação executada pelo
+socket privado com revisão atual, sem comandos genéricos de limpeza. Recibo
+`62b2fb44-e6a5-465e-8934-48d4f0ba4822`: `delete/completed`; estado `deleted`.
+Confirmados zero containers/volumes remanescentes do inventário e ausência do
+diretório. Solicitação e conclusão registradas em `infra_audit` como manutenção
+`codex:host-maintenance`, com autorização explícita e vínculo ao recibo.
+
+Disco usado antes: 295.844.343.808 bytes (96%); depois: 258.143.776.768 (84%).
+Diferença observada: 37.700.567.040 bytes, aproximadamente 35,11 GB em base 1024.
+Disponível após: 52.750.860.288 bytes, aproximadamente 49,13 GB. Valores variam
+com a atividade dos demais serviços. R2, DNS, recursos externos, imagens Docker
+compartilhadas, cadastro e contratos preservados. Não foi feita limpeza geral.
+
+`hosting.json` confirmou hospedagem excluída e Vision ativa com 18 serviços.
+Nova medição exclusiva do Immov.ai retornou zero bytes locais. ConnectyHub
+respondeu saúde `ok` em HTTPS, versão `0972dc2b`; fontes R2 da Vision permaneceram
+válidas. Ajuste `a1ab6379` instalado no coletor ignora as fontes de credenciais de
+hospedagens excluídas, evitando invalidar o R2 de outros projetos. Sete testes
+Python passaram. O R2 preservado do Immov.ai não será mais remedido usando seu
+container removido; a última leitura tem data histórica e futuras coletas o
+mostrarão indisponível, sem afirmar que os arquivos externos foram apagados.
+
 ## Armazenamento por projeto publicado — 13/10/2026
 
 Produção `0972dc2b` no slot a/3130; fallback `f36b370b` no b/3131. Relógios
