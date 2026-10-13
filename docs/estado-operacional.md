@@ -1,5 +1,61 @@
 # Estado operacional da ConnectyHub
 
+## Vínculo manual de infraestrutura publicado — 13/10/2026, 09h15 BRT
+
+Implementado o cadastro de projetos, vínculo manual a empresas e liberação de
+Minha infraestrutura no painel do cliente. O administrador escolhe o vínculo;
+nenhuma organização foi vinculada automaticamente. Contrato/cobrança continuam
+no fluxo existente, sem suspensão por `past_due` nem retomada automática.
+
+Migration 0204 aplicada e registrada com backup privado; cinco projetos sem
+vínculo e com acesso cliente desabilitado. Executor privado instalado e ativo,
+com inventário exclusivo de Vision (18 containers ativos) e Immov.ai (15).
+Pausa/retomada/quarentena/exclusão verificadas somente em recursos descartáveis;
+nenhum cliente real desligado ou excluído. Recibos persistidos e duplicidade de
+propriedade bloqueada. Exclusão é local, preserva R2/DNS/backups externos e cadastro
+comercial; a da Vision permanece bloqueada para revisão adicional.
+
+86 testes infra e 9 Python passaram; prévia em computador/celular conferida com
+dados simulados. Aplicação `a4760fd4` publicada no slot b/3131, fallback `504f191a`
+no a/3130; executor do host em `78a47de9`. Build de 120 páginas, TypeScript e
+ESLint passaram. Candidato e HTTPS público passaram em health/home/login,
+proteção das novas rotas, Inngest assinado (58 funções), métricas atuais e socket
+consultado como UID 1000. Builder parado ao fim, sem limpeza de dados de clientes.
+Não houve validação com sessão real de cliente nem vínculo real para homologar;
+essa escolha cabe ao administrador. Disco por projeto e remoção de recursos
+externos continuam fora desta entrega. [Registro e limites](infraestrutura-clientes-2026-10-13.md).
+
+## Mostradores da VPS no Admin publicados — 13/10/2026, 08h11 BRT
+
+Produção `504f191a`, slot a/3130, fallback `0fb345fe` no b/3131. Admin →
+Infraestrutura mostra disco, RAM e CPU com ponteiros/faixas de atenção, histórico
+de até uma hora, consumo por serviço e filtros/ordenação por sistema, CPU e RAM.
+Coletor somente leitura com timer de 30 s; app recebe apenas JSON sanitizado
+montado read-only. Endpoint exclusivo de administrador; dados antigos ficam
+desconhecidos e falha preserva última leitura com aviso. Disco é total do host,
+sem atribuição por pasta/cliente. Não mede créditos financeiros.
+
+71 testes infra + 4 Python, TypeScript, ESLint e build de 119 páginas passaram.
+Prévia desktop/mobile sem overflow; candidato e produção com health/home/login
+200, Admin anônimo 307, API capacidade 401/no-store e Inngest assinado
+200/58 funções. JSON real lido dentro do app: 67 serviços, timer ativo.
+Navegador de produção sem sessão; conferência autenticada pelo titular pendente.
+Nenhuma limpeza ou ajuste dos limites dos serviços. [Entrega e evidências](painel-capacidade-vps-2026-10-13.md).
+
+## Diagnóstico de lentidão e capacidade da VPS — 13/10/2026
+
+Inspeção somente leitura após relato de lentidão desde 12/10 na ConnectyHub e
+Vision Home: disco **95% ocupado, 16 GiB livres de 290 GiB**. RAM disponível
+9,4 GiB na primeira amostra; histórico de CPU ainda com folga média. Docker
+aponta 24,11 GB de imagens potencialmente recuperáveis, sem exclusão autorizada
+ou executada. Volumes Inngest Vision/ConnectyHub somam aproximadamente 79 GiB,
+principalmente histórico/telemetria. Banco Inngest Vision limitado a 0,25 CPU e
+512 MiB, com throttling em 99/100 períodos na amostra de 10 s; gargalo observado
+nesse serviço, sem comprovar causa integral da lentidão nos painéis/home.
+HTTP público respondeu 200; navegação autenticada e carregamento completo de
+mídia/JS não auditados. Nenhuma mudança em produção, limpeza ou upgrade.
+[Evidências, limites e próximos passos](diagnostico-capacidade-vps-2026-10-13.md).
+
 ## Controle manual da Vision e contratos personalizados — 12/10/2026
 
 Produção **0fb345fe**, slot b/3131, fallback 5e61d212 no slot a/3130.

@@ -64,7 +64,7 @@ para servir recibo persistido enquanto a ação está em andamento.
 
 Ensaio descartável concluído: pausa, retomada com marcador do volume preservado e
 política `always` restaurada, quarentena e exclusão do container, volume e diretório
-de teste. Configuração temporária retirada, recibos preservados. Oito testes Python
+de teste. Configuração temporária retirada, recibos preservados. Nove testes Python
 passaram, incluindo consulta rápida ao recibo enquanto Docker desliga o container
 e rejeição de propriedade duplicada entre projetos. Na conferência final, dois
 containers de QA da Vision foram retirados do mapeamento de Immov.ai antes da
@@ -72,4 +72,15 @@ liberação da tela: Vision ficou com 394 containers (18 ativos) e Immov.ai com 
 (todos ativos). Nenhum vínculo de cliente estava habilitado durante essa revisão.
 Nenhum serviço de cliente foi desligado ou excluído para homologar.
 
-Publicação da aplicação será registrada após a validação do candidato.
+Em 13/10 às 09h15 BRT, aplicação `a4760fd4` publicada no slot b/3131; fallback
+`504f191a` preservado no a/3130. Executor nativo atualizado para `78a47de9`, com
+proteção adicional dos diretórios da plataforma mesmo sob outro nome de projeto.
+Build de 120 páginas passou. Candidato e domínio público passaram: health/home/login
+200, páginas protegidas 307 anônimo, APIs administrativas e de cliente 401 sem
+sessão, Inngest exigindo assinatura e GET assinado 200 com 58 funções. Métricas
+montadas read-only atuais, socket consultado com UID 1000 retornando 15 serviços
+exclusivos de Immov.ai. Builder parado após a publicação.
+
+O teste visual usou dados simulados localmente. Não houve sessão real de cliente
+nem vínculo real para homologar; o titular determinou que essa escolha seja feita
+pelo próprio administrador. Nenhum pagamento, mensagem ou job foi disparado.

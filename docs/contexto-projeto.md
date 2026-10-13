@@ -137,7 +137,18 @@ Desde 28/09, aplicação e handlers também rodam na VPS; Inngest mantém os mes
 | Infraestrutura e retorno | configurações privadas da VPS e ambiente de implantação | [Supabase](migracao-supabase-vps-2026-09-11.md), [Inngest](migracao-inngest-vps-2026-09-11.md) |
 | Cockpit de infraestrutura por empresa/projeto | `src/app/admin/infrastructure`, `src/lib/infrastructure`, migration `0150`, receptor `api/infrastructure/[project]/events` | [MVP local, permissões, telemetria e integração dos deploys VPS](infraestrutura-cockpit-2026-09-16.md) |
 
-O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infrastructure`. A camada operacional de 16/09 acrescenta coleta HTTP no servidor, preparação imutável de SQL e executor PostgreSQL transacional condicionado à configuração por projeto. Inventário inclui ConnectyHub, Betel, Vision e Hora Space. Deploys VPS continuam por eventos autenticados e polling; não substituem os scripts de publicação. Betel declara app na VPS (`app-production`) e Vercel como proxy; push GitHub, deploy Vercel e deploy VPS são fatos distintos. Leitura exige admin da plataforma; preparação/execução de SQL também exigem admin infra explícito. O vínculo `organization_id` e `client_access_enabled=false` preparam o modelo futuro, sem abrir acesso a clientes. [Estado, requisitos e limites da operação](infraestrutura-operacional-2026-09-16.md).
+O cockpit oficial fica em **Admin OS > Sistema > Infraestrutura**, `/admin/infrastructure`. A camada operacional de 16/09 acrescenta coleta HTTP no servidor, preparação imutável de SQL e executor PostgreSQL transacional condicionado à configuração por projeto. Inventário inclui ConnectyHub, Betel, Vision e Hora Space. Deploys VPS continuam por eventos autenticados e polling; não substituem os scripts de publicação. Betel declara app na VPS (`app-production`) e Vercel como proxy; push GitHub, deploy Vercel e deploy VPS são fatos distintos. Leitura exige admin da plataforma; preparação/execução de SQL também exigem admin infra explícito. O vínculo `organization_id` permanece opcional e `client_access_enabled=false` é o padrão. [Estado, requisitos e limites da operação](infraestrutura-operacional-2026-09-16.md).
+
+Decisão do titular em 13/10: a infraestrutura é acordada comercialmente fora de uma
+contratação automática. O administrador cadastra cliente/contrato pelo fluxo atual,
+cadastra ou seleciona o projeto em Infraestrutura, escolhe manualmente a organização
+e libera a visualização em Minha infraestrutura. Não vincular Vision/André por
+inferência. Não vender/provisionar VPS nem suspender hospedagem por `past_due`
+automaticamente. Pausa, quarentena, retomada e exclusão local são comandos
+administrativos com prévia e confirmação; cadastro comercial e recursos externos
+não se confundem com hospedagem local. Isolamento depende de vínculo explícito e
+inventário exclusivo revisado, nunca do nome de agrupamento dos containers.
+[Implementação, verificação e limites](infraestrutura-clientes-2026-10-13.md).
 
 ## Regras de negócio a preservar
 
