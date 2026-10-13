@@ -50,6 +50,16 @@ describe("calendar periods and company timezone", () => {
     db.tables.customer_agenda_settings[0].enabled = false;
     await expect(availableAppointments(db.client as never, "a", "r", new Date(`${day}T04:00:00Z`), 1, undefined, day)).rejects.toThrow("Agenda indisponível");
   });
+  it("offers quarter-hour times whatever the minute of the query (Renata, 12/10: 9:05, 9:20...)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T00:05:37Z"));
+    try {
+      const db = commerceDatabase({ customer_agenda_settings: [{ organization_id: "a", enabled: true, timezone: "America/Sao_Paulo" }], customer_agenda_resources: [{ id: "r", organization_id: "a", enabled: true, kind: "service", duration_minutes: 30, capacity: 1, blocked_dates: [], weekly_hours: [{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }] }] });
+      const slots = await availableAppointments(db.client as never, "a", "r", new Date("2026-10-13T03:00:00Z"), 1, undefined, "2026-10-13");
+      expect(slots[0].starts_at).toBe("2026-10-13T12:00:00.000Z");
+      expect(slots.slice(0, 3).map(slot => slot.starts_at.slice(11, 16))).toEqual(["12:00", "12:15", "12:30"]);
+    } finally { vi.useRealTimers(); }
+  });
   it("keeps session, company scope and write permissions on the calendar API", async () => {
     const db = commerceDatabase({ customer_agenda_bookings: [{ id: "history", organization_id: "a", starts_at: "2020-02-01T12:00:00Z", ends_at: "2020-02-01T13:00:00Z" }] });
     let workspace: unknown = { organization: { id: "a", role: "viewer" }, profile: { isPlatformAdmin: false } };

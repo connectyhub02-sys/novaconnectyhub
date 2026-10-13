@@ -221,7 +221,8 @@ export async function availableAppointments(
     throw new Error("Não foi possível consultar a disponibilidade.");
   const slots: Array<{ starts_at: string; ends_at: string }> = [];
   for (
-    let start = Math.ceil(lower / 60000) * 60000;
+    // Quarter-hour grid (9:00, 9:15...), never the minute of the query (9:05, 9:20...).
+    let start = Math.ceil(lower / (15 * 60000)) * 15 * 60000;
     start < upper && slots.length < (calendarDay ? 100 : 12);
     start += 15 * 60000
   ) {
