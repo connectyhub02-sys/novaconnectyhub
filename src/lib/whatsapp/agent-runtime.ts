@@ -16141,8 +16141,8 @@ function withGroupMentionPrefix(text: string, mentions: string | undefined, dest
 
 /**
  * "Me manda o cardápio": one short line and the store button, never the whole menu as text (owner, 12/10:
- * nobody reads a pizzeria menu in WhatsApp on a phone). Food stores and large catalogs only; recommendations
- * ("o que você recomenda?") still go to the agent, which suggests a few items and builds the order here.
+ * nobody reads a pizzeria menu in WhatsApp on a phone). Food stores only: consultative stores (clothing,
+ * real estate) keep the conversation. Recommendations still go to the agent, which builds the order here.
  */
 async function maybeSendSalesCatalogMenu(input: {
   client: SupabaseClient;
@@ -16153,8 +16153,7 @@ async function maybeSendSalesCatalogMenu(input: {
 }): Promise<{ sent: OutboundMessage[]; duplicate: boolean } | null> {
   const { context } = input;
   const foodStore = context.salesCatalogSettings?.businessType === "food" || context.salesCatalog.some(item => item.foodComposition?.enabled);
-  const largeCatalog = context.salesCatalog.filter(item => item.status === "active").length >= 8;
-  if (!(foodStore || largeCatalog) || !isMenuRequest(input.latestInbound.text_content ?? "")) return null;
+  if (!foodStore || !isMenuRequest(input.latestInbound.text_content ?? "")) return null;
   const storeUrl = context.organization.slug ? buildLeadAwareSalesCatalogStoreUrl({ storeSlug: context.organization.slug, organizationId: context.organization.id,
     leadId: context.lead?.id ?? null, conversationId: context.conversationId, agentId: context.agent.id }) : null;
   // Without a store page the agent answers with a few suggestions instead.
@@ -16172,12 +16171,10 @@ async function maybeSendSalesCatalogMenu(input: {
   });
   if (claimError?.code === "23505") return { sent: [], duplicate: true };
 
-  const text = foodStore
-    ? "Claro! Nosso cardápio completo, com fotos e preços, está no botão abaixo. Se preferir, me diz o que você gosta ou para quantas pessoas é, que eu te indico e monto o pedido por aqui mesmo."
-    : "Claro! Todos os produtos, com fotos e preços, estão no botão abaixo. Se preferir, me diz o que você procura que eu te indico por aqui mesmo.";
+  const text = "Claro! Nosso cardápio completo, com fotos e preços, está no botão abaixo. Se preferir, me diz o que você gosta ou para quantas pessoas é, que eu te indico e monto o pedido por aqui mesmo.";
   const buttonResponse = await callUazapi(context.credentials, "/send/menu", {
     method: "POST", token: input.token, timeoutMs: outboundTextDeliveryTimeoutMs,
-    body: { number: input.phone, type: "button", text, choices: [`${foodStore ? "Ver cardápio" : "Ver produtos"}|${storeUrl}`],
+    body: { number: input.phone, type: "button", text, choices: [`Ver cardápio|${storeUrl}`],
       footerText: context.organization.name.slice(0, 60), track_source: "connectyhub", track_id: `catalog_menu_${context.run.id}_button` },
   }).catch(() => null);
   if (buttonResponse) {

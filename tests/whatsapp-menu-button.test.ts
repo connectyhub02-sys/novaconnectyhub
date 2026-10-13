@@ -52,3 +52,11 @@ describe("menu request in WhatsApp", () => {
     expect(await noPage.send()).toBeNull();
   });
 });
+
+describe("consultative stores", () => {
+  it("keep answering a catalog request in the conversation (Buffalo, 12/10)", async () => {
+    const t = menuRequest("manda o catálogo");
+    t.ctx.salesCatalogSettings = { businessType: "retail", categories: [] } as never;
+    expect(await t.send()).toBeNull();
+  });
+});
