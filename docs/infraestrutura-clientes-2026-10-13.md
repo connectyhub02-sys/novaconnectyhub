@@ -64,8 +64,12 @@ para servir recibo persistido enquanto a ação está em andamento.
 
 Ensaio descartável concluído: pausa, retomada com marcador do volume preservado e
 política `always` restaurada, quarentena e exclusão do container, volume e diretório
-de teste. Configuração temporária retirada, recibos preservados. Sete testes Python
-passaram, incluindo consulta rápida ao recibo enquanto Docker desliga o container.
+de teste. Configuração temporária retirada, recibos preservados. Oito testes Python
+passaram, incluindo consulta rápida ao recibo enquanto Docker desliga o container
+e rejeição de propriedade duplicada entre projetos. Na conferência final, dois
+containers de QA da Vision foram retirados do mapeamento de Immov.ai antes da
+liberação da tela: Vision ficou com 394 containers (18 ativos) e Immov.ai com 15
+(todos ativos). Nenhum vínculo de cliente estava habilitado durante essa revisão.
 Nenhum serviço de cliente foi desligado ou excluído para homologar.
 
 Publicação da aplicação será registrada após a validação do candidato.

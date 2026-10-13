@@ -65,6 +65,23 @@ def config(project):
     return PROJECTS[project]
 
 
+def validate_config(projects):
+    seen_names, seen_compose, seen_volumes, roots = set(), set(), set(), []
+    for cfg in projects.values():
+        names, compose, volumes = set(cfg['standalone']), set(cfg['compose']), set(cfg['volumes'])
+        if names & seen_names or compose & seen_compose or volumes & seen_volumes:
+            raise Rejected('Um recurso aparece em mais de um projeto.')
+        seen_names.update(names)
+        seen_compose.update(compose)
+        seen_volumes.update(volumes)
+        for root in cfg['directories']:
+            if any(inside(root, other) or inside(other, root) for other in roots):
+                raise Rejected('Diretórios de projetos se sobrepõem.')
+            roots.append(root)
+        if any(not any(inside(directory, root) for root in cfg['directories']) for directory in cfg['compose'].values()):
+            raise Rejected('Compose está fora dos diretórios do projeto.')
+
+
 def inside(path, root):
     return path == root or path.startswith(root + '/')
 
@@ -89,6 +106,8 @@ def inventory(project, all_containers=None):
     cfg = config(project)
     all_containers = containers() if all_containers is None else all_containers
     selected = [c for c in all_containers if belongs(c, cfg)]
+    if any(belongs(c, other) for c in selected for key, other in PROJECTS.items() if key != project):
+        raise Rejected('Um serviço pertence a mais de um projeto no inventário.')
     ids = {c['Id'] for c in selected}
     roots = cfg['directories']
     # All bind sources must be inside this reviewed project root. No nested mount escape.
@@ -236,6 +255,8 @@ def publish():
     for project, cfg in PROJECTS.items():
         s = state(project)
         selected = [c for c in all_containers if belongs(c, cfg)]
+        if any(belongs(c, other) for c in selected for key, other in PROJECTS.items() if key != project):
+            raise Rejected('Propriedade ambígua de serviço.')
         # Unexpected restarts invalidate a stopped status. Do not claim that everything stopped.
         actual = s['state']
         if actual in ['paused', 'quarantined', 'deleted'] and any(c['State']['Running'] for c in selected):
@@ -289,6 +310,7 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 def main():
     global PROJECTS
     PROJECTS = json.loads((ROOT / 'projects.json').read_text())
+    validate_config(PROJECTS)
     (ROOT / 'state').mkdir(mode=0o700, exist_ok=True)
     SOCKET.parent.mkdir(mode=0o750, exist_ok=True)
     os.chown(SOCKET.parent, 0, 1000)

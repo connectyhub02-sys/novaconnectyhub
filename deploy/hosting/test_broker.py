@@ -36,6 +36,17 @@ class BrokerTests(unittest.TestCase):
         with self.assertRaises(b.Rejected):
             b.config('connectyhub')
 
+    def test_config_rejects_cross_project_ownership(self):
+        cfg = b.PROJECTS['demo']
+        b.validate_config({'demo': cfg})
+        for key in ['standalone', 'compose', 'volumes']:
+            other = {'standalone': {}, 'compose': {}, 'volumes': [], 'directories': ['/opt/other']}
+            other[key] = copy.deepcopy(cfg[key])
+            with self.assertRaises(b.Rejected):
+                b.validate_config({'demo': cfg, 'other': other})
+        with self.assertRaises(b.Rejected):
+            b.validate_config({'a': cfg, 'b': {'standalone': {}, 'compose': {}, 'volumes': [], 'directories': ['/opt/demo/subdir']}})
+
     def test_shared_and_unreviewed_mounts_block(self):
         other = container('another-customer')
         other['Id'] = 'b' * 64

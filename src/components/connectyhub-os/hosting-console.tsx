@@ -37,7 +37,7 @@ export function HostingAdmin({ projectId }: { projectId: string }) {
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
     const read = async () => {
-      try { const r = await fetch(url, { cache: "no-store", signal: controller.signal }); const b = await r.json(); if (!r.ok) throw new Error(b.error); setData(b); setError(""); }
+      try { const r = await fetch(url, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) }); const b = await r.json(); if (!r.ok) throw new Error(b.error); setData(b); setError(""); }
       catch (e) { if (!controller.signal.aborted) { setError(e instanceof Error ? e.message : "Leitura indisponível."); setData(null); } }
       finally { if (!controller.signal.aborted) timer = setTimeout(read, 15000); }
     }; void read(); return () => { controller.abort(); clearTimeout(timer); };
@@ -81,7 +81,7 @@ export function CustomerInfrastructure() {
   const [projects, setProjects] = useState<CustomerHosting[] | null>(null), [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
-    const read = async () => { try { const r = await fetch("/api/dashboard/infrastructure", { cache: "no-store", signal: controller.signal }); const b = await r.json(); if (!r.ok) throw new Error(b.error); setProjects(b.projects); setError(""); } catch (e) { if (!controller.signal.aborted) { setProjects(null); setError(e instanceof Error ? e.message : "Consulta indisponível."); } } finally { if (!controller.signal.aborted) timer = setTimeout(read, 15000); } }; void read(); return () => { controller.abort(); clearTimeout(timer); };
+    const read = async () => { try { const r = await fetch("/api/dashboard/infrastructure", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) }); const b = await r.json(); if (!r.ok) throw new Error(b.error); setProjects(b.projects); setError(""); } catch (e) { if (!controller.signal.aborted) { setProjects(null); setError(e instanceof Error ? e.message : "Consulta indisponível."); } } finally { if (!controller.signal.aborted) timer = setTimeout(read, 15000); } }; void read(); return () => { controller.abort(); clearTimeout(timer); };
   }, []);
   return <main className="space-y-6"><div><h1 className="flex items-center gap-3 text-2xl font-bold"><Server />Minha infraestrutura</h1><p className="mt-2 text-sm text-slate-600">Serviços vinculados à sua empresa e liberados pela equipe ConnectyHub.</p></div>{error && <p role="alert" className={`${panel} text-rose-700`}>{error}</p>}{!projects && !error && <p>Carregando infraestrutura…</p>}{projects?.length === 0 && <p className={panel}>Nenhuma infraestrutura liberada para sua conta. O vínculo é feito pela equipe ConnectyHub após o acordo de serviço.</p>}{projects?.map(p => <section key={p.id} className={`${panel} space-y-4`}><div><p className="text-xs text-slate-500">{p.company}</p><h2 className="text-xl font-bold">{p.name}</h2></div><HostingUsageView usage={p.usage} /></section>)}</main>;
 }

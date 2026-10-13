@@ -20,6 +20,8 @@ Nunca gerar essa configuração a partir de pedidos do navegador, grupos de exib
 ou prefixos genéricos. Conferir serviços ativos **e parados**, diretórios, volumes,
 cron e serviços externos antes de habilitar as operações. Recursos novos/recriados
 podem exigir revisão desse inventário antes de retomar uma hospedagem.
+O executor recusa nomes/volumes/Compose duplicados e diretórios sobrepostos entre
+projetos, e volta a conferir propriedade exclusiva na operação e na coleta.
 
 O serviço systemd expõe exclusivamente um Unix socket em `socket/control.sock`
 (root:1000, 660), montado em `/var/run/connectyhub-hosting` no app. Não expor o socket
