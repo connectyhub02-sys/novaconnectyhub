@@ -84,3 +84,34 @@ exclusivos de Immov.ai. Builder parado após a publicação.
 O teste visual usou dados simulados localmente. Não houve sessão real de cliente
 nem vínculo real para homologar; o titular determinou que essa escolha seja feita
 pelo próprio administrador. Nenhum pagamento, mensagem ou job foi disparado.
+
+## Correção da seleção e da origem — 13/10/2026
+
+O titular encontrou empresas repetidas no seletor e `Origem inválida.` ao salvar
+o vínculo da Vision. A consulta anterior listava 579 organizações não arquivadas
+e não internas para apenas 26 titulares, incluindo 103 organizações para alguns
+usuários. O seletor agora usa a primeira associação de titular por ordem de criação,
+mantendo a conta principal, e pagina todas as associações antes de reduzi-las.
+Não mescla pessoas pelo nome, não exclui empresas e não altera contratos ou dados.
+Busca por empresa/titular/e-mail ignora acentos e exibe uma lista com altura limitada,
+identificação do selecionado e rolagem do modal em telas pequenas.
+
+A origem usava `request.url`, que no standalone reflete HTTP/endereço interno.
+Passou a usar `isSameOriginRequest`, com a URL pública configurada pelo operador,
+sem confiar em Host ou cabeçalhos de proxy enviados pelo chamador. A proteção
+continua rejeitando origem ausente, externa, malformada ou configuração inválida.
+
+Revisão `716243b9`: 114 testes (infra e origem) passaram, incluindo regressão de
+PATCH com origem pública HTTPS/endereço interno HTTP, recusa de origem forjada,
+paginação além de 1000 associações, homônimos e busca. TypeScript e ESLint passaram.
+Consulta REST real retornou 581 associações e 26 clientes; Vision/André e Samuel
+apareceram uma vez cada. Prévia com dados fictícios conferida em desktop e 390 px;
+rota temporária removida antes do build. Vínculo real não foi criado para testar.
+
+Publicada a revisão `716243b95382a0b723f81995c249186decca0281` no slot a/3130;
+fallback `a4760fd4` preservado no b/3131. Candidato e HTTPS público passaram nos
+checks de saúde/versão, páginas, assets, autorização, Inngest assinado (58 funções),
+métricas atuais e socket consultado como UID 1000. Build de 120 páginas passou.
+Nenhuma migration ou alteração de cadastro/vínculo foi executada nesta correção.
+A validação autenticada do salvamento foi feita por teste de regressão com RPC
+simulada; a confirmação de um vínculo real pelo administrador continua pendente.

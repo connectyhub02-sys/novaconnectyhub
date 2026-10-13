@@ -1,5 +1,21 @@
 # Estado operacional da ConnectyHub
 
+## Correção do vínculo de infraestrutura publicada — 13/10/2026, 10h05 BRT
+
+Produção `716243b9` no slot a/3130; fallback `a4760fd4` no b/3131. Seletor agora
+mostra uma conta principal por titular, com busca por empresa/nome/e-mail e lista
+limitada em altura. Consulta REST real confirmou 26 clientes a partir de 581
+associações (579 organizações elegíveis), incluindo André e Samuel uma vez cada.
+Dados duplicados históricos foram preservados; nenhum cadastro ou vínculo alterado.
+
+Erro `Origem inválida.` corrigido usando a origem pública configurada em vez do
+endereço HTTP interno do standalone; cabeçalhos de proxy não autorizam a requisição.
+114 testes infra/origem, TypeScript, ESLint e build de 120 páginas passaram. Prévia
+local desktop/mobile conferida com dados fictícios. Candidato e HTTPS público
+passaram em saúde/versão, páginas/assets, autorização, Inngest assinado e métricas.
+Builder parado. Salvamento autenticado coberto por regressão com RPC simulada;
+vínculo real pelo administrador ainda pendente. [Evidências](infraestrutura-clientes-2026-10-13.md).
+
 ## Vínculo manual de infraestrutura publicado — 13/10/2026, 09h15 BRT
 
 Implementado o cadastro de projetos, vínculo manual a empresas e liberação de
