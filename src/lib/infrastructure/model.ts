@@ -37,8 +37,8 @@ export type Audit = { id: string; actor: string; action: string; target: string 
 export type HealthCheck = { service: string; health: Health; reason: string; checkedAt: string; configuration: "ready" | "missing" | "invalid" | "unauthorized"; missing: string[] };
 export type ProjectConfiguration = { status: "ready" | "incomplete" | "blocked"; checked: number; total: number; missing: string[]; sql: MigrationExecution; reporter: { deploy: boolean; telemetry: boolean } };
 export const configurationLabels = { ready: "Configuração pronta", incomplete: "Configuração incompleta", blocked: "Bloqueado por configuração" };
-export type Overview = { projects: Project[]; configuration: Record<string, ProjectConfiguration>; telemetry: (Telemetry & { project_id: string })[]; canOperate: boolean; permissionReason?: string };
-export type Detail = { project: Project; configuration: ProjectConfiguration; jobs: JobsObservation; telemetry: Telemetry | null; live?: { checks: HealthCheck[]; telemetry: Telemetry | null }; deployments: Deployment[]; events: DeployEvent[]; selectedDeployId: string | null; audit: Audit[]; canOperate: boolean; truncated: boolean; permissionReason?: string };
+export type Overview = { projects: Project[]; deletedProjects?: Project[]; configuration: Record<string, ProjectConfiguration>; telemetry: (Telemetry & { project_id: string })[]; canOperate: boolean; permissionReason?: string };
+export type Detail = { project: Project; hostingDeleted?: boolean; configuration: ProjectConfiguration; jobs: JobsObservation; telemetry: Telemetry | null; live?: { checks: HealthCheck[]; telemetry: Telemetry | null }; deployments: Deployment[]; events: DeployEvent[]; selectedDeployId: string | null; audit: Audit[]; canOperate: boolean; truncated: boolean; permissionReason?: string };
 
 export function stale(telemetry: Telemetry | null | undefined, now = Date.now()) {
   return !telemetry || now - Date.parse(telemetry.observed_at) > 120_000;

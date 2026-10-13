@@ -73,6 +73,7 @@ export function InfrastructureInventory() {
         <Configuration config={data.configuration?.[project.id]} /><Freshness telemetry={telemetry} /><Link className="flex min-h-11 items-center justify-between rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white" href={`/admin/infrastructure/${project.id}`}>Abrir operação <ArrowUpRight size={17} /></Link>
       </article>;
     })}</div>}
+    {!!data?.deletedProjects?.length && <details className={panel}><summary className="cursor-pointer text-sm font-semibold text-slate-600">Hospedagens excluídas · {data.deletedProjects.length}</summary><p className="mt-3 text-sm text-slate-500">Recursos locais removidos. Cadastros e auditoria preservados para consulta.</p><div className="mt-4 space-y-3">{data.deletedProjects.map(project => <div key={project.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4"><div><h2 className="font-semibold">{project.name}</h2><p className="mt-1 text-xs text-slate-500">{project.company} · Hospedagem excluída</p></div><Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline" href={`/admin/infrastructure/${project.id}`}>Consultar histórico</Link></div>)}</div></details>}
     <p className="text-xs leading-6 text-slate-500">Saúde coletada no servidor a cada 30 s enquanto o painel está aberto. Cada projeto tem configuração e permissões próprias; execução SQL depende dos requisitos mostrados na aba Migrations. <Link className="font-semibold text-blue-700 underline" href="/admin/maintenance">Configurar administradores e coletores no cofre de Infraestrutura</Link>.</p>
   </main>;
 }
@@ -96,11 +97,13 @@ export function InfrastructureProject({ projectId }: { projectId: string }) {
   const [sending, setSending] = useState(false);
   const base = `/api/admin/infrastructure/${encodeURIComponent(projectId)}`;
   const { data, error, updated, refresh } = usePolling<Detail>(`${base}${selected ? `?deploy=${encodeURIComponent(selected)}` : ""}`);
+  const catalogEnabled = !!data && !data.hostingDeleted;
   useEffect(() => {
+    if (!catalogEnabled) return;
     const controller = new AbortController();
     fetch(`${base}/migrations`, { signal: controller.signal, cache: "no-store" }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setCatalog(d.migrations); setExecution(d.execution); setHistory(d.history); setCatalogError(""); }).catch(e => { if (!controller.signal.aborted) setCatalogError(e.message); });
     return () => controller.abort();
-  }, [base, catalogRevision]);
+  }, [base, catalogRevision, catalogEnabled]);
   function prepare(action: InfraAction, target: string, checksum?: string) { setPending({ action, target, checksum, ...(jobActions.includes(action as JobAction) ? { revision: data?.jobs.revision } : {}) }); setConfirmation(""); setResult(""); setReviewed(false); }
   async function submit() {
     if (!pending) return;
@@ -124,6 +127,7 @@ export function InfrastructureProject({ projectId }: { projectId: string }) {
     const available = action === "migration_apply" ? execution?.status === "ready" : isJob && data?.jobs.status === "ready" && data.jobs.actions.includes(action as JobAction);
     return <button className={button} disabled={!data?.canOperate || !available} title={!data?.canOperate ? "Configure INFRA_ADMIN_USER_IDS para operar." : !available ? isJob ? data?.jobs.reason : action === "migration_apply" ? execution?.missing.join("; ") : blockedReason : "Revisar alvo e confirmar execução auditada"} onClick={() => prepare(action, target, checksum)}>{actionLabels[action]}{!available ? " · bloqueado" : ""}</button>;
   };
+  if (data?.hostingDeleted) return <main className="mx-auto max-w-7xl space-y-6 text-slate-900"><Link href="/admin/infrastructure" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700"><ArrowLeft size={16} />Voltar à infraestrutura</Link><header className={panel}><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Hospedagem excluída</span><h1 className="mt-4 text-3xl font-bold">{data.project.name}</h1><p className="mt-3 text-sm leading-6 text-slate-600">Os recursos locais desta hospedagem foram removidos. Este cadastro permanece para consultar o histórico. Arquivos externos, domínio e contrato não são apagados por essa operação.</p></header>{error && <p role="alert" className="text-sm text-amber-800">{error} Exibindo a última consulta.</p>}<Section title="Histórico e auditoria"><p className="text-xs text-slate-500">Últimos 100 registros. A exclusão da hospedagem não representa falha dos serviços.</p>{!data.audit.length && <p className="text-sm text-slate-500">Nenhum registro disponível.</p>}{data.audit.map(a => <details key={a.id} className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer break-words text-sm"><strong>{a.action}</strong> · {a.result} · {date(a.created_at)}</summary><p className="mt-3 break-words text-xs text-slate-600">Motivo: {a.reason} · Recibo: {a.target ?? "Não informado"}</p></details>)}</Section></main>;
   return <main className="mx-auto max-w-7xl space-y-6 text-slate-900">
     <Link href="/admin/infrastructure" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700"><ArrowLeft size={16} />Todos os projetos</Link>
     <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-widest text-blue-700">{data?.project.company ?? projectId} / {data?.project.environment ?? "Operações"}</p><h1 className="mt-2 text-3xl font-bold">{data?.project.name ?? "Operação do projeto"}</h1><p className="mt-2 text-sm text-slate-600">{data?.project.topology && data.project.topology !== "unknown" ? originLabels[data.project.topology] : "Origem a confirmar"} · {data?.canOperate ? "Admin infra" : "Leitura administrativa"}</p></div><div className="flex flex-wrap items-center gap-3"><Badge health={observedHealth(projectHealth(telemetry))} /><button className={button} onClick={refresh}>Atualizar</button></div></header>
