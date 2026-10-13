@@ -53,6 +53,7 @@ def operation(action):
 def main():
     assert str(DIRECTORY) == '/opt/connectyhub-hosting-smoke-20261013'
     cfg = json.loads(CONFIG.read_text())
+    assert not Path('/opt/connectyhub/hosting/state/' + PROJECT + '.json').exists(), 'This one-shot test already has a receipt; review it instead of recreating resources.'
     assert PROJECT not in cfg and not DIRECTORY.exists()
     assert NAME not in run('docker', 'ps', '-a', '--format', '{{.Names}}').splitlines()
     assert VOLUME not in run('docker', 'volume', 'ls', '-q').splitlines()

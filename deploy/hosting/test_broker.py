@@ -57,6 +57,11 @@ class BrokerTests(unittest.TestCase):
         with self.assertRaises(b.Rejected):
             b.inventory('demo', [self.c])
 
+    def test_platform_directories_cannot_be_deleted_under_another_project_name(self):
+        b.PROJECTS['demo']['directories'] = ['/opt/connectyhub/app']
+        with self.assertRaises(b.Rejected):
+            b.inventory('demo', [self.c])
+
     def test_delete_requires_quarantine_and_current_revision(self):
         with patch.object(b, 'inventory', return_value=([self.c], [])):
             p = b.preview('demo')

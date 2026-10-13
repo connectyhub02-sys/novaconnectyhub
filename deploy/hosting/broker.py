@@ -112,7 +112,7 @@ def inventory(project, all_containers=None):
     roots = cfg['directories']
     # All bind sources must be inside this reviewed project root. No nested mount escape.
     for root in roots:
-        if not root.startswith('/opt/') or root in ['/opt/connectyhub', '/opt'] or str(Path(root).resolve()) != root:
+        if not root.startswith('/opt/') or inside(root, '/opt/connectyhub') or str(Path(root).resolve()) != root:
             raise Rejected('Diretório não exclusivo ou redirecionado; revisão necessária.')
     volumes = set(cfg['volumes'])
     for c in selected:
