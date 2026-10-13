@@ -146,3 +146,11 @@ describe("radius zones saved without their own base", () => {
     expect(quoteLocalDelivery({ zones: settings!.localDeliveryZones, subtotal: 60, coordinates: pin })).toMatchObject({ reason: "available", zone: { id: "raio-4km" } });
   });
 });
+
+describe("address cleanup", () => {
+  it("drops the whole payment phrase from the delivery address (Max, 12/10)", () => {
+    const s = scenario();
+    expect(s.call("extractRuntimeAddress", null, "rua 1131 numero 61, 88330786, vou pagar no pix")).toBe("rua 1131 numero 61, 88330786");
+    expect(s.call("extractRuntimeAddress", null, "Rua das Flores, 42, Centro, pagamento no cartão de crédito")).toBe("Rua das Flores, 42, Centro");
+  });
+});

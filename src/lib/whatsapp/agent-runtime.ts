@@ -3787,7 +3787,9 @@ function cleanRuntimeDeliveryAddressLine(value: string) {
   }
 
   return cleaned
-    .replace(/\b(?:pagamento|pagar|vou pagar|cart[aã]o|pix|boleto)\b/gi, " ")
+    // The whole payment phrase goes: "vou pagar no pix" must not leave "no" inside the address.
+    .replace(/\b(?:(?:vou|quero|prefiro)\s+)?(?:pagar|pagamento)?\s*(?:(?:no|na|via|pelo|pela|com|em)\s+)?(?:pix|cart[aã]o(?:\s+de\s+cr[eé]dito)?|boleto)\b/gi, " ")
+    .replace(/\b(?:pagamento|pagar|vou pagar)\b/gi, " ")
     .replace(/\s+/g, " ")
     .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, "")
     .trim();
