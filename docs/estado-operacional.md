@@ -1,5 +1,22 @@
 # Estado operacional da ConnectyHub
 
+## Relógios por cliente publicados — 13/10/2026, 11h33 BRT
+
+Produção `f36b370b` no slot b/3131; fallback `716243b9` no a/3130. Minha infraestrutura
+agora exibe relógios de CPU, memória e limitação de CPU dos serviços do projeto.
+CPU/RAM destacam o maior uso de cota conhecida, com nome do serviço e cobertura;
+não representam cota global do cliente. Totais, maiores consumidores, barras,
+explicação dos alertas e ordenação complementam a leitura. Dados ausentes ficam
+neutros. Disco por projeto continua sem medição. Isolamento das APIs preservado.
+
+Titular confirmou o vínculo da Vision por captura do acesso administrativo assistido;
+consulta confirmou vínculo/liberação ativos. 102 testes infra, TypeScript, ESLint e
+build de 120 páginas passaram. Prévia fictícia desktop/mobile e estado sem leitura
+conferidos; proteção, saúde/versão, Inngest e métricas passaram no candidato e HTTPS
+público. Builder parado. Nova visualização autenticada pelo titular ainda pendente.
+Nenhum limite, serviço, contrato ou vínculo alterado nesta entrega.
+[Evidências e interpretação dos relógios](infraestrutura-clientes-2026-10-13.md).
+
 ## Correção do vínculo de infraestrutura publicada — 13/10/2026, 10h05 BRT
 
 Produção `716243b9` no slot a/3130; fallback `a4760fd4` no b/3131. Seletor agora

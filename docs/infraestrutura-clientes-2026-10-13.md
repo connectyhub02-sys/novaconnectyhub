@@ -115,3 +115,40 @@ métricas atuais e socket consultado como UID 1000. Build de 120 páginas passou
 Nenhuma migration ou alteração de cadastro/vínculo foi executada nesta correção.
 A validação autenticada do salvamento foi feita por teste de regressão com RPC
 simulada; a confirmação de um vínculo real pelo administrador continua pendente.
+
+## Relógios na infraestrutura do cliente — 13/10/2026
+
+O titular confirmou que vinculou a Vision e enviou captura de Minha infraestrutura
+no acesso administrativo assistido a André. Consulta somente leitura confirmou
+`organization_id` preenchido e `client_access_enabled=true`; isso não equivale a
+teste independente com uma sessão direta do cliente.
+
+A visualização por projeto agora usa relógios de CPU, memória e limitação de CPU,
+com o mesmo componente visual do Admin. CPU/RAM mostram o maior percentual entre
+os serviços com limite conhecido, com nome do serviço e cobertura da medição.
+Não representam percentual de uma cota global contratada: essa cota não existe
+no modelo atual. Nunca dividir o consumo total por uma soma parcial de limites.
+O terceiro relógio mostra a maior proporção de intervalos com CPU limitada, para
+explicar alertas mesmo quando a média de CPU está baixa. Totais do projeto e
+maiores consumidores aparecem em cards separados; detalhes têm barras, motivos
+dos alertas, ordenação por atenção/CPU/memória e expansão de seis para todos.
+
+Sem leitura, os relógios ficam neutros e sem percentual; serviços sem limite
+permanecem fora do percentual de cota. Disco exclusivo continua não medido e é
+apresentado como indisponível. APIs e autorização não foram ampliadas: todos os
+indicadores são derivados do inventário já filtrado por projeto e associação.
+
+Revisão `f36b370b`: 102 testes infra passaram, incluindo isolamento existente e
+novos casos de gargalos independentes, limites parciais/ausentes, consumo zero,
+percentual acima de 100%, leitura antiga e motivos da limitação. TypeScript e
+ESLint passaram. Prévia local fictícia conferida em desktop/celular, ordenação,
+expansão e estado indisponível; sem overflow horizontal em 390 px. Prévia removida
+antes do build; nenhum vínculo, serviço ou limite de cliente alterado.
+
+Publicação concluída no slot b/3131, revisão
+`f36b370b3c945d93320b4651560d54c198aa0ef7`, com fallback `716243b9` no a/3130.
+Build de 120 páginas passou. Candidato e HTTPS público passaram em saúde/versão,
+páginas/assets, proteção das APIs, Inngest assinado (58 funções), métricas atuais
+e acesso ao socket como UID 1000. Builder parado ao fim. Não houve alteração no
+coletor, executor da hospedagem, banco, contratos ou permissões. A visualização
+autenticada da nova versão pelo titular ainda não foi confirmada.
