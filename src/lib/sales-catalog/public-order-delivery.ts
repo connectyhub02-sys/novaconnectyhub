@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOrganizationSalesCatalogShippingSettings, getOrganizationSalesCatalogSettings } from "@/lib/client-os/sales-catalog";
 import { hasCheckoutBillingAddress, resolveCheckoutCustomer, type CheckoutCustomerOrder } from "./checkout-customer";
 import { chooseOrderDeliveryQuote, quoteOrderDelivery, type OrderShippingEntry } from "./order-shipping";
+import { prefetchCepPlaces } from "./cep-lookup";
 
 /** Resolve customer and freight before creating a public order or requesting a payment. */
 export async function preparePublicOrderDelivery(input: {
@@ -15,6 +16,7 @@ export async function preparePublicOrderDelivery(input: {
   const customer = resolveCheckoutCustomer(input.customer, input.lead);
   const settings = await getOrganizationSalesCatalogShippingSettings(input.client, input.organizationId);
   const coordinates = boundDeliveryCoordinates(input.lead?.metadata?.delivery_location, customer.destination_address, customer.destination_cep);
+  await prefetchCepPlaces(input.client, [customer.destination_cep]);
   const result = quoteOrderDelivery({ entries: input.entries, settings, subtotal: input.subtotal, cep: customer.destination_cep ?? "", address: customer.destination_address ?? "", coordinates });
   const selected = hasCheckoutBillingAddress(customer) ? chooseOrderDeliveryQuote(result.quotes) : null;
   const catalogSettings = await getOrganizationSalesCatalogSettings(input.client, input.organizationId);

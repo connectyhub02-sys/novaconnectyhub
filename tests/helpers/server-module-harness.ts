@@ -4,6 +4,7 @@ import * as foodOrder from "../../src/lib/sales-catalog/food-order";
 import * as foodConversation from "../../src/lib/sales-catalog/food-conversation";
 import * as operationHours from "../../src/lib/sales-catalog/operation-hours";
 import * as localDelivery from "../../src/lib/sales-catalog/local-delivery";
+import * as cepPlace from "../../src/lib/sales-catalog/cep-place";
 import * as geminiModels from "../../src/lib/gemini/models";
 import * as costOptimizations from "../../src/lib/billing/cost-optimizations";
 import { readFileSync } from "node:fs";
@@ -31,6 +32,9 @@ export function serverModuleHarness<T>(path: string, imports: Record<string, unk
       if (name === "./food-conversation" || name === "@/lib/sales-catalog/food-conversation") return foodConversation;
       if (name === "./operation-hours" || name === "@/lib/sales-catalog/operation-hours") return operationHours;
       if (name === "./local-delivery" || name === "@/lib/sales-catalog/local-delivery") return localDelivery;
+      // Tests never reach the postal directory; a test that needs a district seeds cep-place directly.
+      if (name === "./cep-lookup" || name === "@/lib/sales-catalog/cep-lookup") return { prefetchCepPlaces: async () => undefined };
+      if (name === "./cep-place" || name === "@/lib/sales-catalog/cep-place") return cepPlace;
       if (name.endsWith("/outbound-delivery")) return { fetchWhatsappOutbound: (url: unknown, init: unknown) => {
         if (typeof globals.fetch !== "function") throw new Error("HTTP mock required for outbound transport");
         return globals.fetch(url, init);

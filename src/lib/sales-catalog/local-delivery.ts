@@ -1,4 +1,5 @@
 import type { SalesCatalogGeoPoint, SalesCatalogLocalDeliveryAuthority, SalesCatalogLocalDeliveryZone } from "./shared";
+import { readCepPlace, samePlaceName } from "./cep-place";
 
 export function deliveryMoneyCents(value: string | number | null | undefined): number | null {
   if (value == null || value === "") return null;
@@ -63,15 +64,20 @@ export function quoteLocalDelivery(input: {
   const fail=(reason:LocalDeliveryResult["reason"],error:string,zone:SalesCatalogLocalDeliveryZone|null=null):LocalDeliveryResult=>({zone,amount:null,source,reason,error});
   if (source==="coordinates" && !validDeliveryPoint(input.coordinates)) return fail("missing_location","Envie a localização para conferir a área de entrega.");
   if (source==="cep" && !/^\d{8}$/.test(cep)) return fail("missing_location","Informe o CEP completo para conferir a área de entrega.");
-  if (source==="address" && !input.address?.trim()) return fail("missing_location","Informe o bairro e a cidade para conferir a área de entrega.");
+  // The postal directory knows the district and city of a CEP better than the customer's typing
+  // ("centro de balneario camboruiu"); a CEP without a district falls back to the text.
+  const cepPlace=readCepPlace(cep), place=cepPlace?.neighborhood && cepPlace.city ? cepPlace : null;
+  if (source==="address" && !input.address?.trim() && !place) return fail("missing_location","Informe o bairro e a cidade para conferir a área de entrega.");
   const address=` ${normalized(input.address ?? "")} `;
   const includes=(part:string)=>Boolean(normalized(part)) && address.includes(` ${normalized(part)} `);
   const matches=zones.filter(zone=>{
     if(source==="coordinates") return deliveryZoneContainsPoint(zone,input.coordinates!);
     if(source==="cep") return zone.shape==="cep" && /^\d{8}$/.test(zone.cepStart ?? "") && /^\d{8}$/.test(zone.cepEnd ?? "") && cep>=zone.cepStart! && cep<=zone.cepEnd!;
-    return zone.shape==="neighborhoods" && zone.neighborhoods.length>0 && zone.neighborhoods.some(includes) && (!zone.cities.length || zone.cities.some(includes));
+    if(zone.shape!=="neighborhoods" || !zone.neighborhoods.length) return false;
+    if(place) return zone.neighborhoods.some(name=>samePlaceName(name,place.neighborhood)) && (!zone.cities.length || zone.cities.some(name=>samePlaceName(name,place.city)));
+    return zone.neighborhoods.some(includes) && (!zone.cities.length || zone.cities.some(includes));
   }).sort((a,b)=>(b.priority??0)-(a.priority??0));
-  if(!matches.length) return fail("outside_area","Este endereço não está na área de entrega configurada.");
+  if(!matches.length) return fail("outside_area",place && source==="address" ? `Pelo CEP, o endereço fica em ${place.neighborhood}, ${place.city}, fora da área de entrega configurada.` : "Este endereço não está na área de entrega configurada.");
   if(matches.length>1 && (matches[0].priority??0)===(matches[1].priority??0)) return fail("overlap","A loja precisa conferir as zonas sobrepostas antes de confirmar a taxa de entrega.");
   const zone=matches[0], subtotal=Math.round(input.subtotal*100), minimum=deliveryMoneyCents(zone.orderMinimum), threshold=deliveryMoneyCents(zone.freeDeliveryThreshold), price=deliveryMoneyCents(zone.price);
   if(!Number.isSafeInteger(subtotal) || subtotal<0 || price===null || zone.orderMinimum!=null && minimum===null || zone.freeDeliveryThreshold!=null && threshold===null) return fail("invalid_price","A loja precisa cadastrar uma taxa de entrega válida para esta área.",zone);

@@ -5,6 +5,7 @@ import { readFoodOrderSnapshot, type FoodOrderRow } from "./food-order";
 import { boundDeliveryCoordinates, deliveryMoneyCents } from "./local-delivery";
 import { record } from "./card-input";
 import { quoteOrderDelivery } from "./order-shipping";
+import { prefetchCepPlaces } from "./cep-lookup";
 
 /** Regional coverage, fees and minimums must still match before a new charge. */
 export async function assertFoodOrderDelivery(client: SupabaseClient, organizationId: string, order: { destination_cep?: string | null; destination_address?: string | null; shipping_method?: string | null; shipping_total?: string | number | null; metadata?: unknown }, rows: FoodOrderRow[]) {
@@ -20,6 +21,7 @@ export async function assertFoodOrderDelivery(client: SupabaseClient, organizati
   });
   const settings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
   const metadata = record(order.metadata);
+  await prefetchCepPlaces(client, [order.destination_cep]);
   const result = quoteOrderDelivery({ entries, settings, subtotal: rows.reduce((sum, row) => sum + (deliveryMoneyCents(row.total) ?? 0), 0) / 100,
     cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: boundDeliveryCoordinates(metadata.shipping_quote ?? metadata.initial_shipping, order.destination_address, order.destination_cep) });
   const selected = result.quotes.find(quote => quote.name === order.shipping_method && Math.round(quote.amount * 100) === deliveryMoneyCents(order.shipping_total));

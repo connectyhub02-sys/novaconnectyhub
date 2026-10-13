@@ -5,6 +5,7 @@ import { readFoodOrderSnapshot } from "./food-order";
 import { record } from "./card-input";
 import { boundDeliveryCoordinates, deliveryMoneyCents } from "./local-delivery";
 import { chooseOrderDeliveryQuote, quoteOrderDelivery } from "./order-shipping";
+import { prefetchCepPlaces } from "./cep-lookup";
 import { evaluateOrderOperation, orderOperationMode } from "./operation-hours";
 import { applySalesCatalogOrderRevision } from "./order-revision";
 import type { loadTransparentCheckout } from "./transparent-checkout";
@@ -54,6 +55,7 @@ export async function prepareFoodCheckoutRevision(client: SupabaseClient, snapsh
   });
   const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, session.organization_id);
   const point = boundDeliveryCoordinates(record(order.metadata).shipping_quote ?? record(order.metadata).initial_shipping, order.destination_address, order.destination_cep);
+  await prefetchCepPlaces(client, [order.destination_cep]);
   const delivery = quoteOrderDelivery({ entries, settings: shippingSettings, cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: point, subtotal: subtotalCents / 100 });
   const quote = chooseOrderDeliveryQuote(delivery.quotes, order.shipping_method);
   if (delivery.physical && !quote) throw new Error(delivery.error ?? "Confirme os dados e a entrega antes de alterar a montagem.");

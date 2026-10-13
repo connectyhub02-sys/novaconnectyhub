@@ -6,6 +6,7 @@ import { getOrganizationSalesCatalogSettings, getOrganizationSalesCatalogShippin
 import { buildCheckoutOrderBumpRows, loadValidatedOrderBumpItems } from "./checkout-order-bumps";
 import { normalizeCurrencyAmount } from "./mercado-pago";
 import { chooseOrderDeliveryQuote, quoteOrderDelivery } from "./order-shipping";
+import { prefetchCepPlaces } from "./cep-lookup";
 import { record } from "./card-input";
 import { retireCheckoutPaymentsBeforeCartChange } from "./transparent-checkout";
 
@@ -47,6 +48,7 @@ export async function setSalesCatalogCheckoutOrderBumps(input: { client: Supabas
       });
       const shippingSettings = await getOrganizationSalesCatalogShippingSettings(client, organizationId);
       const subtotal = nextItems.reduce((sum, row) => sum + (normalizeCurrencyAmount(row.total) ?? 0), 0);
+      await prefetchCepPlaces(client, [order.destination_cep]);
       const result = quoteOrderDelivery({ entries, settings: shippingSettings, subtotal, cep: order.destination_cep ?? "", address: order.destination_address ?? "", coordinates: boundDeliveryCoordinates(record(order.metadata).shipping_quote ?? record(order.metadata).initial_shipping, order.destination_address, order.destination_cep) });
       const quote = chooseOrderDeliveryQuote(result.quotes, shippingMethod);
       if (!quote) throw new Error(result.error ?? "Confira as opções em Seus dados e entrega antes de adicionar a oferta.");

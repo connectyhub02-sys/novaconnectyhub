@@ -15,6 +15,7 @@ import * as returnRules from "@/lib/automations/return-rules";
 import * as catalogShared from "@/lib/sales-catalog/shared";
 import * as shipping from "@/lib/sales-catalog/shipping-calculator";
 import * as localDelivery from "@/lib/sales-catalog/local-delivery";
+import * as cepPlace from "@/lib/sales-catalog/cep-place";
 import * as language from "@/lib/whatsapp/outbound-language";
 import * as templates from "@/lib/whatsapp/agent-prompt-templates";
 import * as activitySetup from "@/lib/whatsapp/activity-setup";
@@ -69,7 +70,7 @@ const exposed = [
   "resolveSalesCatalogCartBoundaryMs", "buildSalesCatalogShippingIntentText",
   "maybeAttachSalesCatalogShippingQuoteToOrder", "maybeAttachSalesCatalogDeliveryAddressToOrder",
   "maybeAttachSalesCatalogLocalDeliveryToOrder", "maybeAttachSalesCatalogPickupToOrder",
-  "buildSalesCatalogLines", "stripRuntimeNotes", "resolveOrderToolScope", "resolveCartToolScope", "orderToolFallbackText", "normalizeRuntimeCustomerDocument", "extractRuntimeAddress", "hasRuntimeCompleteDeliveryAddress", "extractRuntimeCustomerName", "selectCartComplements", "buildCartComplementSuggestionLines", "missingCheckoutBillingLabels", "dropRepeatedCatalogMentionLines", "buildCustomerCheckoutDataLines", "executeOrderTool", "runOrderToolTurn", "sendOrderToolTurn", "claimsUnexecutedOrderAction", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
+  "buildSalesCatalogLines", "stripRuntimeNotes", "resolveOrderToolScope", "resolveCartToolScope", "orderToolFallbackText", "normalizeRuntimeCustomerDocument", "extractRuntimeAddress", "extractRuntimeCoordinates", "hasRuntimeCompleteDeliveryAddress", "extractRuntimeCustomerName", "selectCartComplements", "buildCartComplementSuggestionLines", "missingCheckoutBillingLabels", "dropRepeatedCatalogMentionLines", "buildCustomerCheckoutDataLines", "executeOrderTool", "runOrderToolTurn", "sendOrderToolTurn", "claimsUnexecutedOrderAction", "formatSalesCatalogCustomerMention", "runtimeAllowsCheckout", "effectiveRuntimeDestination", "resolveCatalogAgendaFocus",
 ];
 const source = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const compiled = transpileModule(`${source}\nexports.audit = {${exposed.join(",")}, maybeHandleSalesCatalogOrderRevision: typeof maybeHandleSalesCatalogOrderRevision === "function" ? maybeHandleSalesCatalogOrderRevision : undefined};`, {
@@ -105,6 +106,9 @@ export function runtimeHarness(dependencies: Record<string, unknown> = {}, globa
     "@/lib/sales-catalog/shared": catalogShared,
     "@/lib/sales-catalog/shipping-calculator": shipping,
     "@/lib/sales-catalog/local-delivery": localDelivery,
+    "@/lib/sales-catalog/cep-place": cepPlace,
+    // No postal directory in tests: a scenario that needs a district seeds cep-place directly.
+    "@/lib/sales-catalog/cep-lookup": { prefetchCepPlaces: async () => undefined },
     "@/lib/sales-catalog/operation-hours": operationHours,
     "@/lib/sales-catalog/mercado-pago": money.exports,
     "@/lib/sales-catalog/order-shipping": serverModuleHarness("src/lib/sales-catalog/order-shipping.ts", {

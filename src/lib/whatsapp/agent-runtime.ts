@@ -8,6 +8,8 @@ import { extractFoodConversationProposal, foodConversationInstructions } from "@
 import { quoteFoodComposition, foodCompositionStartingCents, foodSnapshotForUnit, foodSnapshotsEqual, type FoodUnitSelection, type FoodCompositionSnapshot } from "@/lib/sales-catalog/food-composition";
 import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
 import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
+import { prefetchCepPlaces } from "@/lib/sales-catalog/cep-lookup";
+import { completeAddressWithCepPlace, readCepPlace } from "@/lib/sales-catalog/cep-place";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { activityDefaultDestination, activityRepresentation, buildActivityProfileInstruction } from "./activity-profile";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
@@ -1559,6 +1561,15 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
         currentWhatsappInstanceId: whatsappInstanceId,
       })
     : null;
+  // District and city of every CEP in play (customer messages, saved address, open orders): the
+  // delivery quote then matches neighborhood zones by the CEP, not by how the customer typed it.
+  if (salesCatalogShippingSettings?.localDeliveryEnabled) {
+    await prefetchCepPlaces(client, [
+      ...messages.filter(message => message.direction === "inbound").slice(-30).flatMap(message => (message.text_content ?? "").match(/\b\d{5}-?\d{3}\b/g) ?? []),
+      readLeadSavedDeliveryAddress(lead?.metadata)?.cep,
+      ...salesCatalogOrders.map(order => order.destinationCep),
+    ]).catch(() => undefined);
+  }
   const commerceStoreContext = !isPlatformWhatsapp
     ? await loadLeadCommerceStoreContext(client, {
         organizationId: run.organization_id,
@@ -3411,6 +3422,10 @@ function buildSalesCatalogShippingIntentText(
     // A CEP sent alone just before the address (e.g. "CEP + e-mail", then the
     // street) belongs to it. A CEP tied to another address is never inherited.
     const previous = deliveryTexts.find(text => text !== latest);
+    // "bairro centro de balneario" right after "rua 1131 numero 61, 88330786" completes that address.
+    // A message with a street, a number or a CEP is a destination of its own and never merges.
+    if (previous && !/\d/.test(latest) && !/\b(?:rua|r|avenida|av|alameda|travessa|estrada|rodovia|praca|largo)\b/.test(normalizeSearch(latest))
+      && extractRuntimeAddress(null, previous) && !hasSalesCatalogPickupSignal(previous)) return `${previous}\n${latest}`;
     const previousCep = !extractFirstBrazilianCep(latest) && previous && !extractRuntimeAddress(null, previous)
       && !hasSalesCatalogPickupSignal(previous) ? extractFirstBrazilianCep(previous) : null;
     return previousCep ? `${latest}\nCEP ${previousCep}` : latest;
@@ -3546,8 +3561,11 @@ function resolveRuntimeLocalDeliveryMatch(input: {
 }): RuntimeLocalDeliveryMatch | null {
   if (!input.zones.length || input.customShipping) return null;
   const coordinates = input.coordinates ?? extractRuntimeCoordinates(input.latestInbound, input.text);
-  const destinationAddress = extractRuntimeAddress(input.latestInbound, input.text);
-  const quote = quoteLocalDelivery({ ...input, coordinates, address: destinationAddress ?? input.text, cep: input.cep ?? extractFirstBrazilianCep(input.text) });
+  const cep = input.cep ?? extractFirstBrazilianCep(input.text);
+  const typedAddress = extractRuntimeAddress(input.latestInbound, input.text);
+  // "rua 1131 numero 61, 88330786" is saved as "..., Centro, Balneário Camboriú - SC" for the order and the courier.
+  const destinationAddress = typedAddress ? completeAddressWithCepPlace(typedAddress, readCepPlace(cep)) : null;
+  const quote = quoteLocalDelivery({ ...input, coordinates, address: destinationAddress ?? input.text, cep });
   if (quote.reason !== "available" || !quote.zone || quote.amount === null) return null;
   return { zone: { ...quote.zone, price: quote.amount.toFixed(2) }, source: quote.source === "address" ? "text" : quote.source, coordinates, destinationAddress };
 }
@@ -3562,7 +3580,9 @@ function extractRuntimeCoordinates(latestInbound: ConversationMessageRow | null,
     return payloadPoint;
   }
 
-  const textMatch = text.match(/(-?\d{1,2}(?:[.,]\d{3,})?)\s*,\s*(-?\d{1,3}(?:[.,]\d{3,})?)/);
+  // Only a typed coordinate pair with decimals ("-26.99056, -48.63472"). Street and house numbers
+  // ("rua 1131, 61") are not a location: they once became lat 31, lng 61 and sent the order to Asia.
+  const textMatch = text.match(/(?<![\d.,])(-?\d{1,2}[.,]\d{3,})\s*[,;]\s*(-?\d{1,3}[.,]\d{3,})(?!\d)/);
   if (!textMatch) return null;
 
   const lat = Number(textMatch[1].replace(",", "."));
@@ -6566,6 +6586,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 2 itens do catalogo e inclua a tag de cada um.",
     "- Excecao ao limite de 2 itens: se o lead pedir o cardapio, o catalogo, todas as opcoes, mais opcoes ou os sabores, liste as opcoes cadastradas organizadas por categoria, com nome e preco (ou 'a partir de' nos produtos de montagem), sem tags nem ficha tecnica.",
+    `- ${billingDataReasonInstruction}`,
     "- Nunca diga que outra pessoa, atendente ou equipe vai enviar cardapio, fotos, link, preco ou informacao. Voce mesmo envia o que esta cadastrado; se algo nao estiver cadastrado, diga isso com naturalidade e ofereca o que existe.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
     "- Se algum item legado aparecer como revisar destino da venda, confirme a intencao com o lead e acione o dono antes de prometer checkout.",
@@ -13731,11 +13752,15 @@ const cartToolDeclarations = [
   showProductToolDeclaration,
 ];
 
+// Owner decision (12/10): every store keeps asking name, e-mail and CPF; the customer who asks why hears the real reason.
+const billingDataReasonInstruction = "Se o cliente perguntar por que precisa do nome completo, e-mail ou CPF, explique com naturalidade que são os dados para o faturamento do pedido e a emissão do pagamento, pedidos uma única vez e guardados para as próximas compras. Não invente outro motivo (entrega, segurança, sorteio) nem exponha dados já informados.";
+
 const cartToolInstructionLines = [
   "FERRAMENTAS DE PEDIDO (NOVA COMPRA)",
   "Valores, taxa de entrega, frete e total vêm sempre das ferramentas; não calcule nem prometa um total por conta própria.",
   "Quando o cliente escolher o que quer comprar, chame montar_pedido com a lista completa de itens usando o produto_id exato (do catálogo ou de buscar_produtos). Em produtos com versões informe versao_id; em produtos com montagem (pizza) informe tamanho, sabores e opções de cada unidade. Se houver dois produtos ou versões parecidos, pergunte qual antes de montar.",
   "Se montar_pedido disser que falta endereço ou dados, peça ao cliente tudo o que falta em UMA mensagem, incluindo a forma de pagamento (Pix ou cartão) quando ainda não foi escolhida.",
+  billingDataReasonInstruction,
   "Quando o cliente aceitar o resumo já enviado ('pode', 'sim', 'fechado', 'pode fechar'), chame fechar_pedido direto com o codigo_resumo (consulte ver_carrinho se precisar). Não chame montar_pedido de novo para o mesmo pedido.",
   "Se uma ferramenta recusar, leia o motivo: corrija o produto ou a versão uma vez (usando buscar_produtos) ou pergunte ao cliente. Não repita a mesma chamada sem mudar nada.",
   "Depois que montar_pedido retornar ok, escreva só uma frase curta de transição. O sistema envia o resumo oficial; não repita itens nem valores.",
@@ -13799,8 +13824,13 @@ function quoteCartToolSelections(context: RunContext, selections: RuntimeSalesCa
     const billing = missingCheckoutBillingLabels(context.lead);
     if (!address && !cep) return { ok: false, motivo: "Falta o endereço de entrega.", faltam: ["endereço completo com rua, número, bairro, cidade e CEP", ...billing] };
     const quote = quoteOrderDelivery({ entries: selections.map(selection => ({ item: selection.item, quantity: selection.quantity })),
-      settings: context.salesCatalogShippingSettings, cep: cep ?? "", address: address ?? shippingText, subtotal: normalizeCurrencyAmount(subtotal) ?? 0 });
-    return { ok: false, motivo: quote.error ?? "Não há entrega disponível para esse endereço. Ofereça retirada, se existir, ou outro endereço." };
+      settings: context.salesCatalogShippingSettings, cep: cep ?? "", address: address ?? shippingText, subtotal: normalizeCurrencyAmount(subtotal) ?? 0,
+      coordinates: resolveRuntimeCurrentDeliveryCoordinates(context) });
+    // The customer needs the real reason and one clear next step, never "a reference point" or a promised exception.
+    const nextStep = cep
+      ? "Diga isso ao cliente com sinceridade e ofereça a retirada na loja, se existir. Se ele disser que está perto, peça para confirmar o CEP ou enviar a localização pelo WhatsApp (anexo > Localização). Não peça ponto de referência e não prometa exceção da equipe."
+      : "Peça o CEP do endereço (ou a localização pelo WhatsApp, anexo > Localização) para conferir a área. Não peça ponto de referência e não prometa exceção da equipe.";
+    return { ok: false, motivo: `${quote.error ?? "Não há entrega disponível para esse endereço."} ${nextStep}` };
   }
   // A CEP prices the freight, but a delivery needs street, number, district and city.
   if (shipping && !/retirada/i.test(shipping.shippingMethod ?? "")

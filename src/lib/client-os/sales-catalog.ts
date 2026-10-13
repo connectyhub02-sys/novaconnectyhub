@@ -962,7 +962,25 @@ export async function getOrganizationSalesCatalogShippingSettings(
     throw new Error(`Nao foi possivel carregar o frete do catalogo de vendas: ${error.message}`);
   }
 
-  return data ? mapSalesCatalogShippingSettings(data) : null;
+  return data ? withRadiusBaseFromPrimaryLocation(client, organizationId, mapSalesCatalogShippingSettings(data)) : null;
+}
+
+/**
+ * A radius zone saved without its own base is measured from the company's primary address
+ * (Catálogo de Vendas > Entrega e Frete > Localização da empresa). Applied only when quoting:
+ * the panel keeps showing what the merchant saved.
+ */
+async function withRadiusBaseFromPrimaryLocation(client: SupabaseClient, organizationId: string, settings: ClientSalesCatalogShippingSettings) {
+  const needsBase = settings.localDeliveryZones.some((zone) => zone.active && zone.shape === "radius" && (zone.baseLatitude == null || zone.baseLongitude == null));
+  if (!needsBase) return settings;
+  const { data } = await client.from("organization_locations").select("address, latitude, longitude")
+    .eq("organization_id", organizationId).eq("status", "active").not("latitude", "is", null).not("longitude", "is", null)
+    .order("is_primary", { ascending: false }).order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const latitude = Number(data?.latitude), longitude = Number(data?.longitude);
+  if (!data || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return settings;
+  return { ...settings, localDeliveryZones: settings.localDeliveryZones.map((zone) => zone.shape === "radius" && (zone.baseLatitude == null || zone.baseLongitude == null)
+    ? { ...zone, baseLatitude: latitude, baseLongitude: longitude, baseAddress: zone.baseAddress ?? readString(data.address) }
+    : zone) };
 }
 
 export async function attachSalesCatalogSkus(client: SupabaseClient, items: ClientSalesCatalogItem[], options: { strict?: boolean } = {}) {

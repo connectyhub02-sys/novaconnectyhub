@@ -7,6 +7,7 @@ import { getOrganizationSalesCatalogShippingSettings, mapSalesCatalogItem } from
 import { CheckoutError, loadTransparentCheckout, retireCheckoutPaymentsBeforeCartChange } from "./transparent-checkout";
 import { getCheckoutCustomerMissingFields, parseCheckoutAddress, type CheckoutCustomerOrder } from "./checkout-customer";
 import { chooseOrderDeliveryQuote, quoteOrderDelivery } from "./order-shipping";
+import { prefetchCepPlaces } from "./cep-lookup";
 import { normalizeCurrencyAmount } from "./mercado-pago";
 import { record, text } from "./card-input";
 
@@ -27,6 +28,7 @@ export async function loadCheckoutDelivery(client: SupabaseClient, sessionId: st
   });
   const settings = await getOrganizationSalesCatalogShippingSettings(client, session.organization_id);
   const subtotal = normalizeCurrencyAmount(order.subtotal) ?? 0;
+  await prefetchCepPlaces(client, [customer.destination_cep]);
   const delivery = quoteOrderDelivery({ entries, settings, subtotal, cep: customer.destination_cep ?? "", address: customer.destination_address ?? "", coordinates: customer.coordinates });
   const operationFor = (pickup: boolean) => evaluateOrderOperation(snapshot.settings?.orderPolicy?.operations, delivery.physical ? pickup ? "pickup" : "delivery" : "none");
   const quotes = delivery.quotes.filter(quote => operationFor(quote.pickup).allowed);
