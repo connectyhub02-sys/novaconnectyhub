@@ -115,7 +115,7 @@ import { buildSalesCatalogCheckoutUrl, normalizeCurrencyAmount } from "@/lib/sal
 import { loadTransparentCheckout } from "@/lib/sales-catalog/transparent-checkout";
 import { searchRuntimeCatalog } from "@/lib/sales-catalog/runtime-search";
 import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
-import { buildSalesCatalogMenuMessages, isMenuRequest } from "@/lib/sales-catalog/menu-text";
+import { isMenuRequest } from "@/lib/sales-catalog/menu-text";
 import {
   formatSalesCatalogBillingCycleWithInterval,
   formatSalesCatalogFulfillmentMode,
@@ -824,9 +824,12 @@ async function processWhatsappAgentRunWithScope(input: {
     if (!isGroupChat) await captureLeadReturnAndBirthday(client, context, latestInbound).catch(() => {});
 
     // "Me manda o cardápio": the menu goes out organized by category, straight from the catalog, with no model call.
-    const menuMessages = !isGroupChat && latestInbound ? await maybeSendSalesCatalogMenu({ client, context, token, phone, latestInbound }) : null;
-    if (menuMessages?.length) {
-      return await completeRun(client, run.id, "Cardápio enviado.", { sent: true, reason: "sales_catalog_menu", messages: menuMessages.length, mode: "text" });
+    const menu = !isGroupChat && latestInbound ? await maybeSendSalesCatalogMenu({ client, context, token, phone, latestInbound }) : null;
+    if (menu?.duplicate) {
+      return await completeRun(client, run.id, "Cardápio já enviado por outra execução.", { skipped: true, reason: "sales_catalog_menu_duplicate" });
+    }
+    if (menu?.sent.length) {
+      return await completeRun(client, run.id, "Cardápio enviado.", { sent: true, reason: "sales_catalog_menu", messages: menu.sent.length, mode: "text" });
     }
 
     const behaviorSignals = detectBehaviorSignals({
@@ -6587,7 +6590,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[], journey: Activ
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 2 itens do catalogo e inclua a tag de cada um.",
-    "- Excecao ao limite de 2 itens: se o lead pedir o cardapio, o catalogo, todas as opcoes, mais opcoes ou os sabores, liste as opcoes cadastradas organizadas por categoria, com nome e preco (ou 'a partir de' nos produtos de montagem), sem tags nem ficha tecnica.",
+    "- Nunca envie o cardapio ou o catalogo inteiro por escrito: ninguem le uma lista longa no celular. O pedido de cardapio e respondido pelo sistema com o botao da loja. Se o lead pedir mais opcoes ou os sabores, indique no maximo 5 (os mais pedidos ou os que combinam com o que ele disse), com nome e preco (ou 'a partir de' nos produtos de montagem), diga que o cardapio completo esta no botao da loja e pergunte do que ele gosta.",
     `- ${billingDataReasonInstruction}`,
     "- Nunca diga que outra pessoa, atendente ou equipe vai enviar cardapio, fotos, link, preco ou informacao. Voce mesmo envia o que esta cadastrado; se algo nao estiver cadastrado, diga isso com naturalidade e ofereca o que existe.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
@@ -16136,53 +16139,55 @@ function withGroupMentionPrefix(text: string, mentions: string | undefined, dest
   return missing.length ? `${missing.map(value => `@${value}`).join(" ")} ${text}` : text;
 }
 
-/** Food stores answer a menu request with the whole menu in WhatsApp, plus a button to see it with photos. */
+/**
+ * "Me manda o cardápio": one short line and the store button, never the whole menu as text (owner, 12/10:
+ * nobody reads a pizzeria menu in WhatsApp on a phone). Food stores and large catalogs only; recommendations
+ * ("o que você recomenda?") still go to the agent, which suggests a few items and builds the order here.
+ */
 async function maybeSendSalesCatalogMenu(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   token: string;
   phone: string;
   latestInbound: ConversationMessageRow;
-}) {
+}): Promise<{ sent: OutboundMessage[]; duplicate: boolean } | null> {
   const { context } = input;
   const foodStore = context.salesCatalogSettings?.businessType === "food" || context.salesCatalog.some(item => item.foodComposition?.enabled);
-  if (!foodStore || !isMenuRequest(input.latestInbound.text_content ?? "")) return null;
-  const menu = buildSalesCatalogMenuMessages(context.salesCatalog, context.salesCatalogSettings?.categories ?? []);
-  if (!menu.length) return null;
-
-  await assertRunStillTargetsLatestInbound(input.client, context, input.latestInbound);
-  const texts = ["Claro! Segue o nosso cardápio:", ...menu];
-  const sent: OutboundMessage[] = [];
-  for (let index = 0; index < texts.length; index++) {
-    if (index > 0) {
-      const delayMs = Math.min(resolveChunkDelayMs(texts[index], context.behavior), 2500);
-      await setChatPresence(context.credentials, input.token, input.phone, "composing", delayMs + 4000);
-      await sleep(delayMs);
-    }
-    const message = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone, text: texts[index],
-      chunkIndex: index, chunksTotal: texts.length + 1, trackIdPrefix: "catalog_menu" });
-    if (message) sent.push(message);
-  }
-
-  const closing = "Se quiser ver com fotos, é só tocar no botão. Ou me diz o que vai querer que eu monto seu pedido por aqui mesmo.";
+  const largeCatalog = context.salesCatalog.filter(item => item.status === "active").length >= 8;
+  if (!(foodStore || largeCatalog) || !isMenuRequest(input.latestInbound.text_content ?? "")) return null;
   const storeUrl = context.organization.slug ? buildLeadAwareSalesCatalogStoreUrl({ storeSlug: context.organization.slug, organizationId: context.organization.id,
     leadId: context.lead?.id ?? null, conversationId: context.conversationId, agentId: context.agent.id }) : null;
-  const buttonResponse = storeUrl ? await callUazapi(context.credentials, "/send/menu", {
+  // Without a store page the agent answers with a few suggestions instead.
+  if (!storeUrl) return null;
+
+  await assertRunStillTargetsLatestInbound(input.client, context, input.latestInbound);
+  // Two runs can pick the same request at the same moment (debounced messages); the unique
+  // tracking key lets only one of them send the button. Any other insert error never blocks the reply.
+  const { error: claimError } = await input.client.from("intelligence_events").insert({
+    scope: "organization", organization_id: context.organization.id, source_type: "sales_catalog", source_id: context.conversationId,
+    producer_agent_id: context.agent.id, event_type: "sales_catalog.menu_link_sent", title: "Cardápio enviado no WhatsApp",
+    summary: "Botão da loja enviado em resposta ao pedido de cardápio.", confidence: 1, visibility: "organization",
+    tags: ["sales_catalog", "whatsapp", "lead_tracking"], tracking_event_key: `catalog_menu:${context.conversationId}:${input.latestInbound.id}`,
+    payload: { leadId: context.lead?.id ?? null, conversationId: context.conversationId, agentRunId: context.run.id, messageId: input.latestInbound.id },
+  });
+  if (claimError?.code === "23505") return { sent: [], duplicate: true };
+
+  const text = foodStore
+    ? "Claro! Nosso cardápio completo, com fotos e preços, está no botão abaixo. Se preferir, me diz o que você gosta ou para quantas pessoas é, que eu te indico e monto o pedido por aqui mesmo."
+    : "Claro! Todos os produtos, com fotos e preços, estão no botão abaixo. Se preferir, me diz o que você procura que eu te indico por aqui mesmo.";
+  const buttonResponse = await callUazapi(context.credentials, "/send/menu", {
     method: "POST", token: input.token, timeoutMs: outboundTextDeliveryTimeoutMs,
-    body: { number: input.phone, type: "button", text: closing, choices: [`Ver cardápio com fotos|${storeUrl}`],
+    body: { number: input.phone, type: "button", text, choices: [`${foodStore ? "Ver cardápio" : "Ver produtos"}|${storeUrl}`],
       footerText: context.organization.name.slice(0, 60), track_source: "connectyhub", track_id: `catalog_menu_${context.run.id}_button` },
-  }).catch(() => null) : null;
+  }).catch(() => null);
   if (buttonResponse) {
-    const message: OutboundMessage = { text: closing, mode: "text", providerResponse: buttonResponse, interactiveButton: true, chunkIndex: texts.length, chunksTotal: texts.length + 1 };
+    const message: OutboundMessage = { text, mode: "text", providerResponse: buttonResponse, interactiveButton: true, chunkIndex: 0, chunksTotal: 1 };
     await saveOutboundMessage(input.client, context, message);
-    sent.push({ ...message, persisted: true });
-  } else {
-    const message = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone,
-      text: storeUrl ? `${closing}\n${storeUrl}` : "Me diz o que vai querer que eu monto seu pedido por aqui mesmo.",
-      chunkIndex: texts.length, chunksTotal: texts.length + 1, trackIdPrefix: "catalog_menu" });
-    if (message) sent.push(message);
+    return { sent: [{ ...message, persisted: true }], duplicate: false };
   }
-  return sent;
+  const message = await sendTextOutboundChunk({ client: input.client, context, token: input.token, phone: input.phone,
+    text: `${text}\n${storeUrl}`, chunkIndex: 0, chunksTotal: 1, trackIdPrefix: "catalog_menu" });
+  return { sent: message ? [message] : [], duplicate: false };
 }
 
 /** Assembled products show "a partir de" the cheapest assembly; a stored "0" is never shown as the price. */

@@ -89,6 +89,10 @@ export function scenario(options: { quantities?: [string, number][]; freightAvai
     "@/lib/sales-catalog/payment-sessions": { createSalesCatalogPixPaymentSession: createPayment },
     "@/lib/gemini/credentials": { normalizeGeminiModel: (model: string) => model },
     "@/lib/billing/metered-usage": { extractGeminiUsageMetadata: () => null },
+    "@/lib/sales-catalog/public-urls": {
+      buildLeadAwareSalesCatalogStoreUrl: (input: { storeSlug: string }) => `https://loja.example/loja/${input.storeSlug}`,
+      buildLeadAwareSalesCatalogProductUrl: (input: { productId: string }) => `https://loja.example/produto/${input.productId}`,
+    },
   }, { fetch: async (target: string | URL, init: { body: string }) => {
     const url = String(target);
     if (url.includes("generativelanguage.googleapis.com")) {
@@ -137,4 +141,4 @@ export function scenario(options: { quantities?: [string, number][]; freightAvai
   }
   return { ctx, db, call, requests, modelReplies, modelRequests, message, transport, persistence, createPayment, turn, assistant, customer, draft, metadata, legacyCart, corruptedRevision };
 }
-
+
