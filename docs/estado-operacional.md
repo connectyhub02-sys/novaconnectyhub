@@ -1,5 +1,24 @@
 # Estado operacional da ConnectyHub
 
+## Armazenamento por projeto publicado — 13/10/2026
+
+Produção `0972dc2b` no slot a/3130; fallback `f36b370b` no b/3131. Relógios
+separados de Cloudflare R2 e disco local mostram quantidade e maiores categorias,
+com escala azul adaptativa e sem cota/cobrança inventada. Fontes exclusivas
+revisadas: Vision e Immov.ai. Demais projetos ficam sem leitura até revisão.
+
+Vision: aproximadamente 83,65 GB locais (53,80 GB automações e 28,70 GB aplicações/
+versões), mais 6,59 GB R2. Immov.ai: 35,12 GB locais (34,46 GB aplicações/versões),
+mais 314,11 MB R2. Leituras de 12h08–12h17 BRT. Disco geral observado em 96%.
+Coletor root restrito ao inventário revisado, local horário/R2 seis horas; agregado
+sanitizado chega ao app pela montagem somente leitura. Timer ativo e repetição
+completa observada. Nenhuma exclusão, cobrança ou alteração de vínculo executada.
+
+106 testes infra e seis Python, TypeScript, ESLint, build e prévia desktop/mobile
+passaram. Candidato e HTTPS público passaram nos checks de saúde/versão, proteção,
+Inngest, métricas e leitura de armazenamento como UID 1000. Builder parado.
+Visual autenticado pelo titular ainda pendente. [Escopo, números e limites](infraestrutura-armazenamento-2026-10-13.md).
+
 ## Relógios por cliente publicados — 13/10/2026, 11h33 BRT
 
 Produção `f36b370b` no slot b/3131; fallback `716243b9` no a/3130. Minha infraestrutura
