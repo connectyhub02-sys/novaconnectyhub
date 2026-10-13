@@ -16,6 +16,10 @@ services:
         source: /opt/connectyhub/monitoring/public
         target: /var/run/connectyhub-metrics
         read_only: true
+      - type: bind
+        source: /opt/connectyhub/hosting/socket
+        target: /var/run/connectyhub-hosting
+        read_only: true
     init: true
     restart: unless-stopped
     stop_grace_period: 360s

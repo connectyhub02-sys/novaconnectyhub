@@ -1,0 +1,18 @@
+[Unit]
+Description=ConnectyHub scoped hosting controller
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/connectyhub/hosting/broker.py
+Restart=on-failure
+RestartSec=10
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStopSec=600
+
+[Install]
+WantedBy=multi-user.target

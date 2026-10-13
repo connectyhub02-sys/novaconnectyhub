@@ -35,6 +35,7 @@ import {
   MessageCircle,
   PlugZap,
   Search,
+  Server,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
@@ -242,6 +243,7 @@ const adminSections: NavSection[] = [
 
 const restrictedClientSections: NavSection[] = [{ label: "Sua conta", items: [
   { label: "Minha Conta", href: "/dashboard/minha-conta", icon: CreditCard, tone: "blue" },
+  { label: "Minha infraestrutura", href: "/dashboard/infraestrutura", icon: Server, tone: "teal" },
   { label: "Meus produtos", href: "/dashboard/meus-produtos", icon: ShoppingBag, tone: "sky" },
   { label: "Pagamento do plano", href: "/dashboard/planos", icon: Coins, tone: "amber" },
 ]}];
@@ -269,6 +271,7 @@ const clientSections: NavSection[] = [
       { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
+      { label: "Minha infraestrutura", href: "/dashboard/infraestrutura", icon: Server, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "API de AI",        href: "/dashboard/api-ia",           icon: PlugZap, tone: "emerald" },
       { label: "Estúdio de Voz e Áudio AI",              href: "/dashboard/voz",              icon: Megaphone, tone: "violet" },

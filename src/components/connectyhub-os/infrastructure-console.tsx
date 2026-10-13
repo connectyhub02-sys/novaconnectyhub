@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Activity, ArrowLeft, ArrowUpRight, Database, GitBranch, LockKeyhole, Server } from "lucide-react";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { InfrastructureCapacity } from "@/components/connectyhub-os/infrastructure-capacity";
+import { HostingAdmin, RegisterInfrastructure } from "@/components/connectyhub-os/hosting-console";
 import { actionLabels, blockedReason, eventLabels, healthLabels, jobActions, migrationRiskLabels, originLabels, projectHealth, stageLabels, stages, stale, type Detail, type Health, type InfraAction, type JobAction, type Migration, type MigrationExecution, type Overview, type ProjectConfiguration, type Telemetry } from "@/lib/infrastructure/model";
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -63,6 +64,7 @@ export function InfrastructureInventory() {
     {error && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error} {data && "Exibindo a última leitura; conexão interrompida."}</p>}
     <div className="grid gap-4 md:grid-cols-3">{[[Server, "Inventário", "Empresa, projeto e ambiente"], [GitBranch, "Deploy VPS", "Etapas, container e healthcheck"], [LockKeyhole, "Controle protegido", "Confirmação e auditoria"]].map(([Icon, title, text]) => { const I = Icon as typeof Server; return <div key={String(title)} className={`${panel} flex items-center gap-4`}><I className="shrink-0 text-blue-700" size={24} /><div><p className="font-semibold">{String(title)}</p><p className="mt-1 text-xs text-slate-500">{String(text)}</p></div></div>; })}</div>
     {!data && !error && <p role="status">Carregando inventário…</p>}
+    <RegisterInfrastructure />
     {data && <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">{data.projects.map(project => {
       const telemetry = data.telemetry.find(t => t.project_id === project.id);
       return <article key={project.id} className={`${panel} space-y-5`}><div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500">{project.company} · {project.environment}</p><h2 className="mt-1 text-xl font-bold">{project.name}</h2></div>{telemetry ? <Badge health={error ? "unknown" : projectHealth(telemetry)} /> : <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">Leitura bloqueada</span>}</div>
@@ -131,7 +133,7 @@ export function InfrastructureProject({ projectId }: { projectId: string }) {
     {data && <>
       <Configuration config={data.configuration} />
       <Link className="inline-flex min-h-11 items-center text-sm font-semibold text-blue-700 underline" href="/admin/maintenance">Configurar administradores e coletores no cofre de Infraestrutura</Link>
-      <p className="text-xs leading-6 text-slate-500">Controle interno do Admin OS. Organização: {data.project.organization_id ?? "vínculo ainda não cadastrado"}. A camada cliente permanece indisponível nesta entrega; comandos exigem administrador da plataforma e allowlist infra.</p>
+      <HostingAdmin projectId={projectId} />
       {data.permissionReason && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{data.permissionReason}</p>}
       <Section title="Verificação ao vivo dos serviços"><p className="text-xs text-slate-500">Coleta no servidor a cada 30 s com o painel aberto. Storage verifica a API Supabase; R2, deploy/container e execução de workers requerem observação específica do host.</p><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{data.live?.checks.map(check => <div key={check.service} className="min-w-0 rounded-xl bg-slate-50 p-3"><p className="mb-2 text-sm font-semibold">{check.service}</p><Badge health={error || Date.parse(updated ?? "") - Date.parse(check.checkedAt) > 120000 ? "unknown" : check.health} /><p className="mt-2 break-words text-xs leading-5 text-slate-600">{check.reason.replace("<projeto>", projectId)}</p><p className="mt-2 text-xs text-slate-400">{date(check.checkedAt)}</p></div>)}</div></Section>
       {projectId === "betel" && <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">Betel: o app é publicado na VPS em <strong>app-production</strong>. A Vercel atua como proxy. Push GitHub e deploy do proxy não comprovam atualização do app.</p>}
