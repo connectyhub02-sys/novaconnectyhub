@@ -48,6 +48,38 @@ antes do comando. Recebimento HTTP não equivale a conclusão. Repetir o mesmo r
 não repete a operação. Falha ou reinício do executor durante uma ação bloqueia novas
 ações até revisão privada; não apagar recibos para forçar uma repetição.
 
+## Armazenamento por projeto
+
+`storage.py` publica `storage.json` no mesmo diretório de métricas somente leitura.
+Instalar o script junto de `broker.py` e as unidades `connectyhub-storage.*` no
+systemd; habilitar o timer somente após uma coleta manual conferida. Coleta local
+a cada hora, com prioridade baixa e CPU limitada; listagem R2 completa a cada seis
+horas. Abrir o painel não dispara varreduras. Falhas ficam indisponíveis, sem zero
+fictício. A aplicação rejeita leituras locais após três horas e R2 após doze horas.
+
+O inventário local reutiliza a propriedade exclusiva revisada de `projects.json`:
+diretórios, volumes, logs e camadas graváveis dos containers, inclusive parados.
+Conta blocos locais sem seguir symlinks e deduplica hardlinks; camadas graváveis
+usam a estimativa lógica do Docker. Não soma imagens compartilhadas. Mudança de
+inventário durante a coleta invalida o resultado. O total é estimativa operacional,
+não quota ou base de faturamento, nem pretende reconciliar todo o disco da VPS.
+
+Configuração privada `/opt/connectyhub/hosting/storage-r2.json` (root, modo 600):
+objeto por slug de projeto, com uma lista contendo `container`, `accountEnv`,
+`bucketEnv`, `accessEnv`, `secretEnv`, `bucket` e `accountHash` (SHA256 da conta).
+São referências aos nomes de variáveis existentes e escopos revisados; não copiar
+credenciais para esse arquivo ou Git. O container deve pertencer ao projeto; conta
+e bucket precisam coincidir com a revisão, sem bucket atribuído a dois projetos.
+Novos projetos exigem revisão manual antes da medição. Nenhum vínculo comercial
+ou acesso é criado pelo coletor.
+
+R2 usa apenas ListObjectsV2 paginado, agrega bytes e contagem por extensão e nunca
+publica nomes de objetos, buckets, credenciais ou caminhos. Cada bucket tem limite
+operacional de 200 páginas e quatro minutos de listagem; exceder isso invalida a
+leitura inteira. Uploads multipart incompletos não entram no total. Métricas do
+fornecedor podem ter outra periodicidade/base de cobrança. Interface apresenta
+quantidade e escala adaptativa azul, explicitamente sem limite contratado.
+
 ## Verificação
 
 `python3 -m unittest discover -s deploy/hosting -p 'test_*.py'` (Linux).

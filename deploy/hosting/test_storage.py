@@ -1,0 +1,78 @@
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import xml.etree.ElementTree as ET
+import storage
+
+
+def page(objects, truncated=False, token='next'):
+    root = ET.Element('ListBucketResult', xmlns='http://s3.amazonaws.com/doc/2006-03-01/')
+    for key, size in objects:
+        obj = ET.SubElement(root, 'Contents')
+        ET.SubElement(obj, 'Key').text = key
+        ET.SubElement(obj, 'Size').text = str(size)
+    ET.SubElement(root, 'IsTruncated').text = str(truncated).lower()
+    if truncated:
+        ET.SubElement(root, 'NextContinuationToken').text = token
+    return ET.fromstring(ET.tostring(root))
+
+
+class StorageTests(unittest.TestCase):
+    def test_pagination_and_safe_aggregate_only(self):
+        with patch.object(storage, 'list_page', side_effect=[page([('private/person%20one.JPG', 10)], True), page([('private/voice.opus', 20)])]) as fetch:
+            totals, count = storage.measure_bucket('account', 'bucket', 'access', 'secret')
+        self.assertEqual(totals, {'images': 10, 'audio': 20})
+        self.assertEqual(count, 2)
+        self.assertEqual(fetch.call_args.args[-1], 'next')
+        self.assertNotIn('person', json.dumps(storage.components(totals)))
+
+    def test_incomplete_listing_is_not_reported_as_total(self):
+        with patch.object(storage, 'list_page', return_value=page([('x.png', 10)], True)):
+            with self.assertRaisesRegex(ValueError, 'incomplete_listing'):
+                storage.measure_bucket('a', 'b', 'c', 'd')
+
+    def test_empty_bucket_is_real_zero(self):
+        with patch.object(storage, 'list_page', return_value=page([])):
+            self.assertEqual(storage.measure_bucket('a', 'b', 'c', 'd'), ({}, 0))
+
+    def test_deadline_rejects_partial_total(self):
+        with patch.object(storage.time, 'monotonic', side_effect=[0, 0, 241]), patch.object(storage, 'list_page', return_value=page([('x.png', 10)], True)):
+            with self.assertRaisesRegex(ValueError, 'listing_timeout'):
+                storage.measure_bucket('a', 'b', 'c', 'd')
+
+    def test_bucket_or_owner_change_rejects_mapping(self):
+        item = dict(container='app', accountEnv='A', bucketEnv='B', accessEnv='K', secretEnv='S', accountHash=storage.hashlib.sha256(b'account').hexdigest(), bucket='bucket')
+        container = {'Name': '/app', 'Config': {'Env': ['A=account', 'B=bucket', 'K=access', 'S=secret']}}
+        with patch.object(storage.broker, 'config', return_value={}), patch.object(storage.broker, 'belongs', return_value=True):
+            self.assertEqual(len(storage.r2_sources({'vision': [item]}, [container])['vision']), 1)
+            with self.assertRaisesRegex(ValueError, 'shared_bucket'):
+                storage.r2_sources({'vision': [item], 'other': [item]}, [container])
+            with self.assertRaisesRegex(ValueError, 'r2_scope_changed'):
+                storage.r2_sources({'vision': [dict(item, bucket='other')]}, [container])
+        with patch.object(storage.broker, 'config', return_value={}), patch.object(storage.broker, 'belongs', return_value=False):
+            with self.assertRaisesRegex(ValueError, 'foreign_credentials'):
+                storage.r2_sources({'vision': [item]}, [container])
+
+    @unittest.skipUnless(os.name == 'posix', 'GNU du and inode accounting on host')
+    def test_disjoint_disk_categories_hardlinks_and_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'project'; root.mkdir()
+            (root / 'app').mkdir(); (root / 'demo/db').mkdir(parents=True)
+            (root / 'app/file').write_bytes(b'x' * 8192)
+            os.link(root / 'app/file', root / 'app/linked')
+            (root / 'demo/db/file').write_bytes(b'x' * 16384)
+            outside = Path(temporary) / 'foreign'; outside.mkdir()
+            (outside / 'secret').write_bytes(b'x' * 1048576)
+            (root / 'outside').symlink_to(outside, target_is_directory=True)
+            totals = storage.measure_paths(storage.partition(root, {'app': 'applications', 'demo/db': 'database'}))
+            actual = int(storage.subprocess.check_output(['du', '-P', '-x', '-B1', '-s', str(root)]).split()[0])
+            self.assertEqual(sum(totals.values()), actual)
+            self.assertLess(actual, 1048576)
+            self.assertGreater(totals['database'], totals['applications'])
+
+
+if __name__ == '__main__':
+    unittest.main()

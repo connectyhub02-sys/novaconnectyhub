@@ -5,19 +5,24 @@ import { readCapacity } from "./capacity-server";
 import { projectUsage, type HostingInventory, type HostingPreview } from "./hosting";
 import { InvalidInput } from "./validation";
 import { isSameOriginRequest } from "@/lib/security/same-origin-request";
+import { projectStorage } from "./storage";
 
 export function sameOrigin(req: Request) {
   if (!isSameOriginRequest(req)) throw new InvalidInput("Origem inválida.");
 }
 export async function usageSources() {
-  const [capacity, inventory] = await Promise.all([
+  const [capacity, inventory, storage] = await Promise.all([
     readCapacity().catch(() => null),
     readFile("/var/run/connectyhub-metrics/hosting.json", "utf8").then(raw => {
       if (raw.length > 256_000) throw new Error("INVENTORY_INVALID");
       return JSON.parse(raw) as HostingInventory;
     }).catch(() => null),
+    readFile("/var/run/connectyhub-metrics/storage.json", "utf8").then(raw => {
+      if (raw.length > 256_000) throw new Error("STORAGE_INVALID");
+      return JSON.parse(raw) as unknown;
+    }).catch(() => null),
   ]);
-  return (project: string) => projectUsage(project, capacity, inventory);
+  return (project: string) => ({ ...projectUsage(project, capacity, inventory), storage: projectStorage(project, storage) });
 }
 // Dedicated finite-operation broker; the web process has no Docker socket, SSH or arbitrary command API.
 export async function hostingBroker(project: string, payload?: Record<string, unknown>): Promise<HostingPreview> {

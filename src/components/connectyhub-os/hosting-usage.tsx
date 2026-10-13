@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Activity, Gauge, HardDrive } from "lucide-react";
+import { Activity, Gauge } from "lucide-react";
+import { HostingStorage } from "./hosting-storage";
 import { CapacityDial } from "./capacity-dial";
 import { hostingStateLabels, type HostingUsage } from "@/lib/infrastructure/hosting";
 import { hostingIndicators, hostingServiceReasons, type HostingIndicator } from "@/lib/infrastructure/hosting-indicators";
@@ -54,6 +55,9 @@ export function HostingUsageView({ usage }: { usage: HostingUsage }) {
         <div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Memória total do projeto</p><p className="mt-1 text-2xl font-bold">{memory(usage.memoryUsed)}</p><p className="mt-2 text-xs text-slate-600">Maior consumo: {topMemory ? `${topMemory.name} (${memory(topMemory.memoryUsed)})` : "sem leitura"}</p></div>
         <div className={`rounded-xl p-4 ${attention ? "bg-amber-50 text-amber-950" : "bg-slate-50"}`}><p className="text-xs">Serviços que pedem atenção</p><p className="mt-1 text-2xl font-bold">{attention} <span className="text-sm font-normal">de {services.length}</span></p><p className="mt-2 text-xs">{attention ? "Veja o motivo nos serviços destacados abaixo." : "Nenhum alerta observado nesta coleta."}</p></div>
       </div>
+    </>}
+    <HostingStorage storage={usage.storage} />
+    {!usage.stale && <>
       <div className="overflow-hidden rounded-2xl border border-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-4"><h3 className="flex items-center gap-2 font-semibold"><Activity size={17} />O que está consumindo</h3><label className="flex items-center gap-2 text-xs">Ordenar por<select value={sort} onChange={e => { setSort(e.target.value); setAll(false); }} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="attention">Mais atenção</option><option value="cpu">Maior CPU</option><option value="memory">Maior memória</option></select></label></div>
         <div className="divide-y divide-slate-100">{(all ? services : services.slice(0, 6)).map(s => { const level = serviceLevel(s), reasons = hostingServiceReasons(s), partial = !s.cpuLimit || !s.memoryLimit, badgeLevel = !reasons.length && partial ? "unknown" : level; return <div key={s.name} className="space-y-3 p-4">
@@ -64,6 +68,5 @@ export function HostingUsageView({ usage }: { usage: HostingUsage }) {
         {services.length > 6 && <button onClick={() => setAll(v => !v)} className="min-h-11 w-full border-t border-slate-200 p-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">{all ? "Mostrar menos" : `Ver todos os ${services.length} serviços`}</button>}
       </div>
     </>}
-    <p className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500"><HardDrive size={16} className="mt-0.5 shrink-0" />Armazenamento: a medição de disco exclusiva deste projeto ainda não está disponível.</p>
   </div>;
 }

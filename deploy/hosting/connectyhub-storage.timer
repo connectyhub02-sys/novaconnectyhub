@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh customer storage usage hourly
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=1h
+RandomizedDelaySec=30
+Unit=connectyhub-storage.service
+
+[Install]
+WantedBy=timers.target

@@ -1,7 +1,8 @@
 import { capacityStale, serviceDisplayName, type CapacitySnapshot, type CapacityService } from "./capacity";
+import type { ProjectStorage } from "./storage";
 
 export type HostingInventory = { observedAt: string; projects: Record<string, { state: string; services: string[] }> };
-export type HostingUsage = { observedAt: string | null; stale: boolean; state: string; services: CapacityService[]; cpuCores: number | null; memoryUsed: number | null };
+export type HostingUsage = { observedAt: string | null; stale: boolean; state: string; services: CapacityService[]; cpuCores: number | null; memoryUsed: number | null; storage?: ProjectStorage };
 export type CustomerHosting = { id: string; name: string; company: string; organizationId: string; usage: HostingUsage };
 export type HostingPreview = { project: string; revision: string; state: string; services: { name: string; running: boolean }[]; volumes: string[]; directories: string[]; actions: string[]; exclusions: string[]; operation?: { id: string; action: string; status: string } };
 export const hostingActionLabels: Record<string, string> = { pause: "Pausar", quarantine: "Colocar em quarentena", resume: "Retomar", delete: "Excluir hospedagem" };
