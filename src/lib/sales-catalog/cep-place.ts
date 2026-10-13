@@ -48,3 +48,31 @@ export function completeAddressWithCepPlace(address: string, place: CepPlace | n
     .filter((part): part is string => Boolean(part) && !text.includes(` ${normalized(part!.replace(/ - [A-Z]{2}$/, ""))} `));
   return missing.length ? `${address.replace(/[,;\s]+$/, "")}, ${missing.join(", ")}` : address;
 }
+
+const formatCep = (cep: string) => `${cep.slice(0, 5)}-${cep.slice(5)}`;
+
+/**
+ * "88330786, 61" or "cep 88330-786 número 61": the CEP gives street, district and city, so the customer
+ * only types the house number. Needs an explicit number next to the CEP or after "número"/"nº"; a city-wide
+ * CEP (no street) is never turned into an address.
+ */
+export function addressFromCepAndNumber(text: string, place: CepPlace | null | undefined) {
+  if (!place?.street) return null;
+  const cep = String.raw`\d{5}-?\d{3}`;
+  const number = new RegExp(String.raw`\b(?:n[uú]mero|num\.?|n[º°o]\.?)\s*[:\-]?\s*(\d{1,6})\b`, "i").exec(text)?.[1]
+    ?? new RegExp(String.raw`\b${cep}\s*[,;\-]\s*(\d{1,6})(?![\d-])`).exec(text)?.[1]
+    ?? new RegExp(String.raw`(?<![\d-])(\d{1,5})\s*[,;\-]\s*${cep}\b`).exec(text)?.[1];
+  if (!number) return null;
+  const complement = /\b(?:ap(?:to|artamento)?\.?|bloco|sala|casa|fundos)\s*[:\-]?\s*[\w-]+/i.exec(text)?.[0];
+  const city = place.city && place.uf ? `${place.city} - ${place.uf}` : place.city;
+  return [place.street, number, complement, place.neighborhood, city, `CEP ${formatCep(place.cep)}`].filter(Boolean).join(", ");
+}
+
+/** One line per CEP for the agent: the official address it should confirm instead of asking again. */
+export function describeCepPlaceForAgent(cep: string, place: CepPlace | null) {
+  if (!place) return `CEP ${formatCep(cep)}: não encontrado na consulta. Peça para o cliente conferir o CEP (ou informar rua, bairro e cidade).`;
+  const where = [place.neighborhood, place.city && place.uf ? `${place.city}/${place.uf}` : place.city].filter(Boolean).join(", ");
+  return place.street
+    ? `CEP ${formatCep(cep)}: ${place.street}, ${where}. Não pergunte rua, bairro nem cidade; peça só o número (e complemento, se houver) e confirme o endereço com o cliente.`
+    : `CEP ${formatCep(cep)}: CEP geral de ${where}, sem rua. Peça rua, número e bairro.`;
+}

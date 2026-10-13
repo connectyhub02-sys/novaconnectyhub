@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { prefetchCepPlaces } from "@/lib/sales-catalog/cep-lookup";
-import { completeAddressWithCepPlace, readCepPlace, rememberCepPlace } from "@/lib/sales-catalog/cep-place";
+import { addressFromCepAndNumber, completeAddressWithCepPlace, describeCepPlaceForAgent, readCepPlace, rememberCepPlace } from "@/lib/sales-catalog/cep-place";
 import { quoteLocalDelivery } from "@/lib/sales-catalog/local-delivery";
 import type { SalesCatalogLocalDeliveryZone } from "@/lib/sales-catalog/shared";
 import { scenario, type Row } from "./helpers/order-revision-scenario";
@@ -152,5 +152,55 @@ describe("address cleanup", () => {
     const s = scenario();
     expect(s.call("extractRuntimeAddress", null, "rua 1131 numero 61, 88330786, vou pagar no pix")).toBe("rua 1131 numero 61, 88330786");
     expect(s.call("extractRuntimeAddress", null, "Rua das Flores, 42, Centro, pagamento no cartão de crédito")).toBe("Rua das Flores, 42, Centro");
+  });
+});
+
+describe("CEP for every store that ships products (nationwide included, 13/10)", () => {
+  it("turns CEP + house number into the full address, and never a city-wide CEP or a bare number", () => {
+    expect(addressFromCepAndNumber("88330786, 61", centro)).toBe("Rua 1131, 61, Centro, Balneário Camboriú - SC, CEP 88330-786");
+    expect(addressFromCepAndNumber("cep 88330-786 número 61 apto 302", centro)).toBe("Rua 1131, 61, apto 302, Centro, Balneário Camboriú - SC, CEP 88330-786");
+    expect(addressFromCepAndNumber("88330786", centro)).toBeNull();
+    expect(addressFromCepAndNumber("47988577996, 88330786", centro)).toBeNull();
+    expect(addressFromCepAndNumber("88330786, 61", { ...centro, street: null })).toBeNull();
+  });
+
+  it("tells the agent the official address so it asks only for the number", () => {
+    expect(describeCepPlaceForAgent("88330786", centro)).toContain("CEP 88330-786: Rua 1131, Centro, Balneário Camboriú/SC. Não pergunte rua, bairro nem cidade");
+    expect(describeCepPlaceForAgent("88330000", { ...centro, street: null, neighborhood: null })).toContain("CEP geral de Balneário Camboriú/SC, sem rua. Peça rua, número e bairro");
+    expect(describeCepPlaceForAgent("99999999", null)).toContain("não encontrado");
+  });
+
+  it("closes a nationwide order (freight table) with only CEP and number in the message", async () => {
+    rememberCepPlace("88330786", centro);
+    const s = scenario();
+    s.ctx.instance.metadata = { order_tools: true };
+    s.ctx.salesCatalogOrders = [];
+    s.db.tables.sales_catalog_orders = [];
+    s.ctx.lead.metadata = { person_name: "Maria Oliveira", email: "cliente@example.com", cpf: "52998224725" };
+    s.db.tables.leads[0].metadata = structuredClone(s.ctx.lead.metadata);
+    const latest = s.message("inbound", "88330786, 61, no pix");
+    s.ctx.messages = [latest];
+    s.db.tables.conversation_messages = [latest];
+    const result = await s.call<Promise<Row & { ok: boolean; resumo?: string }>>("executeOrderTool", { client: s.db.client, context: s.ctx, scope: { kind: "cart" },
+      latestInbound: latest, token: "fake", phone: "5500000000000", deferred: [], name: "montar_pedido", args: { itens: [{ produto_id: "pizza", quantidade: 1 }], forma_pagamento: "pix" } });
+    expect(result).toMatchObject({ ok: true });
+    expect(result.resumo).toContain("Rua 1131, 61, Centro, Balneário Camboriú - SC");
+  });
+
+  it("asks only for the house number when the CEP has a street", async () => {
+    rememberCepPlace("88330786", centro);
+    const s = scenario();
+    s.ctx.instance.metadata = { order_tools: true };
+    s.ctx.salesCatalogOrders = [];
+    s.db.tables.sales_catalog_orders = [];
+    s.ctx.lead.metadata = { person_name: "Maria Oliveira", email: "cliente@example.com", cpf: "52998224725" };
+    s.db.tables.leads[0].metadata = structuredClone(s.ctx.lead.metadata);
+    const latest = s.message("inbound", "meu cep é 88330786");
+    s.ctx.messages = [latest];
+    s.db.tables.conversation_messages = [latest];
+    const result = await s.call<Promise<Row & { ok: boolean; faltam?: string[] }>>("executeOrderTool", { client: s.db.client, context: s.ctx, scope: { kind: "cart" },
+      latestInbound: latest, token: "fake", phone: "5500000000000", deferred: [], name: "montar_pedido", args: { itens: [{ produto_id: "pizza", quantidade: 1 }], forma_pagamento: "pix" } });
+    expect(result.ok).toBe(false);
+    expect(result.faltam?.[0]).toBe("número do endereço na Rua 1131 (e complemento, se houver)");
   });
 });

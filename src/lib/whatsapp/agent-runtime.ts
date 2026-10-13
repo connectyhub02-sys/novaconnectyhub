@@ -9,7 +9,7 @@ import { quoteFoodComposition, foodCompositionStartingCents, foodSnapshotForUnit
 import { evaluateOrderOperation, orderOperationMode, operationHoursSummary } from "@/lib/sales-catalog/operation-hours";
 import { quoteLocalDelivery, boundDeliveryCoordinates } from "@/lib/sales-catalog/local-delivery";
 import { prefetchCepPlaces } from "@/lib/sales-catalog/cep-lookup";
-import { completeAddressWithCepPlace, readCepPlace } from "@/lib/sales-catalog/cep-place";
+import { addressFromCepAndNumber, completeAddressWithCepPlace, describeCepPlaceForAgent, normalizeCep, peekCepPlace, readCepPlace } from "@/lib/sales-catalog/cep-place";
 import { customerCatalogHighlight } from "@/lib/sales-catalog/shared";
 import { activityDefaultDestination, activityRepresentation, buildActivityProfileInstruction } from "./activity-profile";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
@@ -1564,14 +1564,18 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
         currentWhatsappInstanceId: whatsappInstanceId,
       })
     : null;
-  // District and city of every CEP in play (customer messages, saved address, open orders): the
-  // delivery quote then matches neighborhood zones by the CEP, not by how the customer typed it.
-  if (salesCatalogShippingSettings?.localDeliveryEnabled) {
-    await prefetchCepPlaces(client, [
-      ...messages.filter(message => message.direction === "inbound").slice(-30).flatMap(message => (message.text_content ?? "").match(/\b\d{5}-?\d{3}\b/g) ?? []),
-      readLeadSavedDeliveryAddress(lead?.metadata)?.cep,
-      ...salesCatalogOrders.map(order => order.destinationCep),
-    ]).catch(() => undefined);
+  // Every store that sells physical products resolves the CEPs in play (customer messages, saved address,
+  // open orders): local delivery matches zones by the CEP's district, nationwide shipping gets street,
+  // district and city from it, and the agent asks only for the house number.
+  if (!isPlatformWhatsapp && (salesCatalogShippingSettings?.configured || salesCatalog.some(item => item.fulfillment?.mode === "physical"))) {
+    const messageCeps = messages.filter(message => message.direction === "inbound").slice(-30)
+      .flatMap(message => (message.text_content ?? "").match(/\b\d{5}-?\d{3}\b/g) ?? [])
+      .map(normalizeCep).filter((cep): cep is string => Boolean(cep));
+    await prefetchCepPlaces(client, [...messageCeps.slice(-5), readLeadSavedDeliveryAddress(lead?.metadata)?.cep,
+      ...salesCatalogOrders.map(order => order.destinationCep)]).catch(() => undefined);
+    const recentCeps = [...new Set(messageCeps.reverse())].slice(0, 3).filter(cep => peekCepPlace(cep) !== undefined);
+    if (recentCeps.length) knowledge.unshift({ id: "cep-lookup-live", title: "ENDEREÇO PELO CEP (consulta oficial)", created_at: new Date().toISOString(),
+      metadata: { extracted_text: true }, content: recentCeps.map(cep => describeCepPlaceForAgent(cep, readCepPlace(cep))).join("\n") });
   }
   const commerceStoreContext = !isPlatformWhatsapp
     ? await loadLeadCommerceStoreContext(client, {
@@ -3599,7 +3603,11 @@ function extractRuntimeAddress(latestInbound: ConversationMessageRow | null, tex
     findString(latestInbound?.payload, ["address", "endereco", "formattedAddress", "formatted_address"]),
   );
 
-  return payloadAddress ?? sanitizeRuntimeDeliveryAddress(text);
+  // The CEP (already looked up while loading the run) completes district and city, and "CEP + número"
+  // alone becomes the full address, for local delivery and nationwide shipping alike.
+  const typed = payloadAddress ?? sanitizeRuntimeDeliveryAddress(text);
+  const place = readCepPlace(extractFirstBrazilianCep(typed ?? text));
+  return typed ? completeAddressWithCepPlace(typed, place) : addressFromCepAndNumber(text, place);
 }
 
 function extractRuntimeCustomerName(text: string) {
@@ -4799,7 +4807,7 @@ function buildCustomerCheckoutDataLines(lead: LeadRow | null, messages: Conversa
   const payment = detectRecentSalesCatalogPaymentPreference(messages, findLatestInbound(messages));
   const known = [fullName ? `nome completo (${fullName})` : null, email ? "e-mail" : null, document ? "CPF" : null, address ? "endereço de entrega com CEP" : null,
     payment ? `forma de pagamento (${payment === "card" ? "cartão" : "Pix"})` : null].filter(Boolean);
-  const missing = [fullName ? null : "nome completo", email ? null : "e-mail", document ? null : "CPF", address ? null : "endereço completo com CEP",
+  const missing = [fullName ? null : "nome completo", email ? null : "e-mail", document ? null : "CPF", address ? null : "CEP e número do endereço (e complemento, se houver)",
     payment ? null : "forma de pagamento (Pix ou cartão)"].filter(Boolean);
   // A CPF that fails its check digits was typed wrong: say so instead of asking as if it never came.
   // Only replies to a CPF request (or mentioning CPF) count, so a phone number is never flagged.
@@ -6838,7 +6846,7 @@ function buildSalesCatalogCommerceLines(
     "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
     "- Use estas regras para conduzir orçamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
     "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e próximo passo; o sistema registra a intenção de pedido no painel.",
-    "- Dados de cobrança e entrega devem ser coletados com pouco atrito: primeiro nome completo, CPF/CNPJ e e-mail; depois endereço completo com CEP quando entrega/frete for necessário. Não repita pergunta por dados que já apareceram claramente na conversa.",
+    "- Dados de cobrança e entrega devem ser coletados com pouco atrito: primeiro nome completo, CPF/CNPJ e e-mail; depois o CEP e o número do endereço quando entrega/frete for necessário (rua, bairro e cidade vêm da consulta do CEP; só confirme com o cliente). Não repita pergunta por dados que já apareceram claramente na conversa.",
     `- Métodos de pagamento automático habilitados no Asaas: ${asaasMethods}.`,
     "- O agente só pode oferecer formas de pagamento habilitadas no gateway Asaas desta empresa. Se Pix, cartão de crédito ou boleto estiver desativado, não ofereça essa forma ao lead.",
     getEnabledSalesCatalogRuntimePaymentChoices(settings).length > 1
@@ -6942,10 +6950,10 @@ function buildSalesCatalogShippingPolicyLines(settings: ClientSalesCatalogShippi
     `- Retirada local: ${settings.localPickup ? "habilitada" : "desativada"}.`,
     "- Se o arquivo do lead ja tiver endereco/CEP salvos e o lead fizer novo pedido, primeiro pergunte se pode entregar no mesmo endereco. Se ele confirmar, use o endereco salvo; se ele corrigir, grave o novo endereco.",
     settings.shippingEnabled
-      ? "- Quando a loja tiver entrega por frete, peça direto o endereço completo com CEP, rua, número, bairro, cidade e complemento/ponto de referência se houver; não use pergunta condicional como \"se for entrega por frete\" quando o frete já estiver habilitado; use somente estados/faixas cadastrados; se o estado não estiver ativo, diga que a loja não entrega naquela região e chame humano se necessário."
+      ? "- Quando a loja tiver entrega por frete, peça direto o CEP e o número do endereço (e complemento, se houver); rua, bairro e cidade vêm da consulta do CEP (bloco ENDEREÇO PELO CEP) e você só confirma com o cliente — peça a rua apenas se o CEP for geral da cidade ou não for encontrado; não use pergunta condicional como \"se for entrega por frete\" quando o frete já estiver habilitado; use somente estados/faixas cadastrados; se o estado não estiver ativo, diga que a loja não entrega naquela região e chame humano se necessário."
       : "- Nao peca CEP para calcular frete e nao ofereca entrega por frete automatico.",
     settings.localDeliveryEnabled
-      ? "- Para entrega local, peça endereço completo com rua, número, bairro, cidade e complemento/ponto de referência se houver; bairro ou localização do WhatsApp servem para conferir a zona, mas o endereço completo ainda precisa ficar registrado. Fora dessas zonas, diga que a loja não entrega naquela área e chame humano se necessário."
+      ? "- Para entrega local, peça o CEP e o número do endereço (e complemento, se houver); rua, bairro e cidade vêm da consulta do CEP e definem a zona — só confirme com o cliente. Sem CEP, peça rua, número, bairro e cidade; a localização do WhatsApp também serve para conferir a zona. Fora dessas zonas, diga que a loja não entrega naquela área e chame humano se necessário."
       : "- Nao ofereca entrega local, motoboy, bairro atendido ou taxa por regiao.",
     settings.localPickup
       ? "- Retirada local pode ser oferecida quando fizer sentido e libera o pagamento com frete zero depois da confirmacao do lead."
@@ -13827,7 +13835,7 @@ function quoteCartToolSelections(context: RunContext, selections: RuntimeSalesCa
     const address = extractRuntimeAddress(null, shippingText);
     const cep = extractFirstBrazilianCep(shippingText);
     const billing = missingCheckoutBillingLabels(context.lead);
-    if (!address && !cep) return { ok: false, motivo: "Falta o endereço de entrega.", faltam: ["endereço completo com rua, número, bairro, cidade e CEP", ...billing] };
+    if (!address && !cep) return { ok: false, motivo: "Falta o endereço de entrega.", faltam: ["CEP e número do endereço (e complemento, se houver)", ...billing] };
     const quote = quoteOrderDelivery({ entries: selections.map(selection => ({ item: selection.item, quantity: selection.quantity })),
       settings: context.salesCatalogShippingSettings, cep: cep ?? "", address: address ?? shippingText, subtotal: normalizeCurrencyAmount(subtotal) ?? 0,
       coordinates: resolveRuntimeCurrentDeliveryCoordinates(context) });
@@ -13840,8 +13848,10 @@ function quoteCartToolSelections(context: RunContext, selections: RuntimeSalesCa
   // A CEP prices the freight, but a delivery needs street, number, district and city.
   if (shipping && !/retirada/i.test(shipping.shippingMethod ?? "")
     && !(shipping.destinationAddress && hasRuntimeCompleteDeliveryAddress(shipping.destinationAddress))) {
+    // With a street-level CEP only the house number is missing; a city-wide CEP still needs the street.
+    const cepStreet = readCepPlace(shipping.destinationCep ?? extractFirstBrazilianCep(buildSalesCatalogShippingIntentText(context, latestText)))?.street;
     return { ok: false, motivo: "Falta o endereço completo de entrega.",
-      faltam: ["endereço completo com rua, número, bairro e cidade", ...missingCheckoutBillingLabels(context.lead)] };
+      faltam: [cepStreet ? `número do endereço na ${cepStreet} (e complemento, se houver)` : "rua, número e bairro do endereço", ...missingCheckoutBillingLabels(context.lead)] };
   }
   const operation = evaluateOrderOperation(context.salesCatalogSettings?.orderPolicy?.operations, orderOperationMode(priced.map(selection => selection.item), shipping?.shippingMethod));
   if (!operation.allowed) return { ok: false, motivo: operation.message ?? "A loja não está recebendo pedidos agora." };
@@ -15077,7 +15087,7 @@ async function sendSalesCatalogPaymentDeferredWhatsapp(input: {
   const needsCustomerPhone = input.payment.paymentDeferredReason === "customer_phone_required";
   const needsHumanForDelivery = needsDeliveryAddress && !canResolveDelivery;
   const savedDeliveryAddress = readLeadSavedDeliveryAddress(input.context.lead?.metadata);
-  const deliveryDataLabel = "endereço completo com rua, número, bairro, cidade, CEP e complemento ou ponto de referência se tiver";
+  const deliveryDataLabel = "CEP e número do endereço (e complemento, se houver)";
   const savedDeliveryLines = needsDeliveryAddress && savedDeliveryAddress && (canShip || canLocalDelivery)
     ? [
         `Tenho um endereço de entrega salvo: ${formatLeadSavedDeliveryAddress(savedDeliveryAddress)}.`,

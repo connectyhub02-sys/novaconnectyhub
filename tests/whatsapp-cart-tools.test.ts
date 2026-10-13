@@ -54,7 +54,7 @@ describe("first purchase with cart tools", () => {
     t.say("quero uma pizza de queijo e uma limonada");
     const result = await t.tool("montar_pedido", pizzaAndLemonade);
     expect(result).toMatchObject({ ok: false, motivo: "Falta o endereço de entrega." });
-    expect(result.faltam).toEqual(["endereço completo com rua, número, bairro, cidade e CEP", "CPF", "forma de pagamento (Pix ou cartão)"]);
+    expect(result.faltam).toEqual(["CEP e número do endereço (e complemento, se houver)", "CPF", "forma de pagamento (Pix ou cartão)"]);
     expect(t.deferred).toHaveLength(0);
   });
 
@@ -189,7 +189,7 @@ describe("first purchase with cart tools", () => {
     t.say("cliente@example.com\n52998224725\n88330786");
     const result = await t.tool("montar_pedido", pizzaAndLemonade);
     expect(result).toMatchObject({ ok: false, motivo: "Falta o endereço completo de entrega." });
-    expect(result.faltam?.[0]).toBe("endereço completo com rua, número, bairro e cidade");
+    expect(result.faltam?.[0]).toBe("rua, número e bairro do endereço");
     expect(t.deferred).toHaveLength(0);
   });
 

@@ -213,7 +213,7 @@ describe("fewer repetitions in the sales conversation", () => {
     const s = scenario();
     const lines = s.call<string[]>("buildCustomerCheckoutDataLines", { id: "lead", display_name: "Magno", metadata: { email: "cliente@example.com", cpf: "529.982.247-25" } }).join("\n");
     expect(lines).toContain("Já informados: e-mail, CPF");
-    expect(lines).toContain("Faltam: nome completo, endereço completo com CEP");
+    expect(lines).toContain("Faltam: nome completo, CEP e número do endereço (e complemento, se houver)");
     expect(lines).toContain("UMA única mensagem");
   });
 });

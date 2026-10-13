@@ -314,7 +314,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(paymentSender).toContain("nome completo");
     expect(paymentSender).toContain("e-mail");
     expect(paymentSender).toContain("CPF ou CNPJ");
-    expect(paymentSender).toContain("endereço completo com rua, número, bairro, cidade, CEP");
+    expect(paymentSender).toContain("CEP e número do endereço (e complemento, se houver)");
     expect(paymentSender).toContain("missingDataLabels.length === 0 && savedDeliveryLines.length === 0");
     expect(paymentSender).not.toContain("Depois disso, eu confirmo o endereco completo para calcular a entrega.");
     expect(paymentSender).not.toContain("Se for entrega por frete");
