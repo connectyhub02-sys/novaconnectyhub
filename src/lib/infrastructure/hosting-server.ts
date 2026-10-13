@@ -4,9 +4,10 @@ import { request } from "node:http";
 import { readCapacity } from "./capacity-server";
 import { projectUsage, type HostingInventory, type HostingPreview } from "./hosting";
 import { InvalidInput } from "./validation";
+import { isSameOriginRequest } from "@/lib/security/same-origin-request";
 
 export function sameOrigin(req: Request) {
-  if (req.headers.get("origin") !== new URL(req.url).origin) throw new InvalidInput("Origem inválida.");
+  if (!isSameOriginRequest(req)) throw new InvalidInput("Origem inválida.");
 }
 export async function usageSources() {
   const [capacity, inventory] = await Promise.all([
