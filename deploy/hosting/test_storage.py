@@ -56,6 +56,15 @@ class StorageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'foreign_credentials'):
                 storage.r2_sources({'vision': [item]}, [container])
 
+    def test_deleted_hosting_does_not_invalidate_other_r2_sources(self):
+        item = dict(container='app', accountEnv='A', bucketEnv='B', accessEnv='K', secretEnv='S', accountHash=storage.hashlib.sha256(b'account').hexdigest(), bucket='bucket')
+        container = {'Name': '/app', 'Config': {'Env': ['A=account', 'B=bucket', 'K=access', 'S=secret']}}
+        settings = {'deleted': [dict(item, container='removed')], 'vision': [item]}
+        with patch.object(storage.broker, 'state', side_effect=lambda project: {'state': 'deleted' if project == 'deleted' else 'active'}), patch.object(storage.broker, 'config', return_value={}), patch.object(storage.broker, 'belongs', return_value=True):
+            sources = storage.r2_sources(settings, [container])
+        self.assertEqual(list(sources), ['vision'])
+        self.assertEqual(len(sources['vision']), 1)
+
     @unittest.skipUnless(os.name == 'posix', 'GNU du and inode accounting on host')
     def test_disjoint_disk_categories_hardlinks_and_symlink(self):
         with tempfile.TemporaryDirectory() as temporary:

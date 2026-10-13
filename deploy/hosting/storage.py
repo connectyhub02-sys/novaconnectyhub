@@ -190,6 +190,10 @@ def r2_sources(settings, containers):
     output, claimed = {}, set()
     by_name = {c['Name'].lstrip('/'): c for c in containers}
     for project, entries in settings.items():
+        # Deleted hosting no longer has credential containers. Do not let its
+        # retained R2 mapping invalidate measurements for the remaining projects.
+        if broker.state(project)['state'] == 'deleted':
+            continue
         output[project] = []
         for item in entries:
             c = by_name[item['container']]
