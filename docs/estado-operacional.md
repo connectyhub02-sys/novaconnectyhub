@@ -1,5 +1,23 @@
 # Estado operacional da ConnectyHub
 
+## Controle manual da Vision e contratos personalizados — 12/10/2026
+
+Produção **0fb345fe**, slot b/3131, fallback 5e61d212 no slot a/3130.
+Migration 0203 aplicada/registrada. Corrigido o bloqueio "Contrato já vinculado":
+admin pode liberar acesso ao contrato vigente por prazo explícito, sem quitar
+faturas ou repetir franquia. Start/Pro/Scale selecionáveis e troca transacional;
+modo catálogo impede reaplicação do contrato antigo no checkout/renovação.
+
+Vision Business Group ativada no **mesmo contrato v1 até 11/11/2026 às 22h21 BRT**,
+sem mudança em carteira/cobranças (comparação no banco). Resolver allowed=true,
+admin_manual_access; UI confirmou Ativo/Personalizado e saldo 127.001. Assinatura
+financeira past_due preservada: liberação de acesso não significa pagamento.
+Troca para Start ensaiada com ROLLBACK; não foi aplicada à Vision.
+
+53 testes passaram, TypeScript/build sem erros, health 200, Inngest assinado
+200/58 funções e endpoints admin negando anônimos. Detalhes, regras de conciliação
+e evidências: [controle manual](controle-manual-contratos-2026-10-12.md).
+
 ## Asaas nas duas empresas confirmado — 12/10/2026 19h45 BRT
 
 Após reconexão pelo titular, BuffaloMass e Pizzaria Macedo&Dias estão connected
