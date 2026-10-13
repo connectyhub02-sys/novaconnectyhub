@@ -5,27 +5,13 @@ import { useEffect, useState } from "react";
 import { Server, Link2, Plus } from "lucide-react";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 import { hostingActionLabels, hostingStateLabels, type CustomerHosting, type HostingPreview, type HostingUsage } from "@/lib/infrastructure/hosting";
-import { capacityLabels, serviceLevel, servicePercent } from "@/lib/infrastructure/capacity";
+import { HostingUsageView } from "./hosting-usage";
+export { HostingUsageView } from "./hosting-usage";
 import { InfrastructureCustomerPicker } from "./infrastructure-customer-picker";
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 const field = "min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
 const button = "min-h-11 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
-const memory = (n: number | null) => n === null ? "Sem leitura" : `${(n / 1024 ** 2).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
-const percent = (n: number | null) => n === null ? "Limite não definido" : `${n.toFixed(0)}% do limite`;
-
-export function HostingUsageView({ usage }: { usage: HostingUsage }) {
-  return <div className="space-y-4">
-    <p className="text-sm font-semibold">{hostingStateLabels[usage.state] ?? "Estado não confirmado"}</p>
-    {usage.stale ? <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Métricas aguardando uma leitura atual dos serviços deste projeto.</p> : <>
-      <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Processamento em uso</p><p className="mt-1 text-xl font-bold">{usage.cpuCores === null ? "Sem leitura" : `${usage.cpuCores.toFixed(2)} núcleo(s)`}</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Memória em uso</p><p className="mt-1 text-xl font-bold">{memory(usage.memoryUsed)}</p></div></div>
-      <div className="space-y-2">{usage.services.map(s => { const level = serviceLevel(s); return <div key={s.name} className="rounded-xl border border-slate-200 p-3"><div className="flex flex-wrap justify-between gap-2 text-sm"><strong>{s.name}</strong><span className={level === "critical" ? "text-rose-700" : level === "attention" ? "text-amber-800" : "text-slate-600"}>{capacityLabels[level]}</span></div><p className="mt-2 text-xs text-slate-600">CPU: {s.cpuCores?.toFixed(2) ?? "—"} núcleo(s) · {percent(servicePercent(s.cpuCores, s.cpuLimit))}</p><p className="mt-1 text-xs text-slate-600">Memória: {memory(s.memoryUsed)} · {percent(servicePercent(s.memoryUsed, s.memoryLimit))}</p></div>; })}</div>
-      {!usage.services.length && <p className="text-sm text-slate-600">Nenhum serviço em execução observado nesta coleta.</p>}
-      <p className="text-xs text-slate-500">Leitura: {usage.observedAt ? new Date(usage.observedAt).toLocaleString("pt-BR") : "—"}. O espaço em disco exclusivo deste projeto ainda não é medido.</p>
-    </>}
-  </div>;
-}
-
 type HostingData = { customerName: string | null; project: { organization_id: string | null; client_access_enabled: boolean; binding_revision: number }; usage: HostingUsage; broker: HostingPreview | null; canOperate: boolean };
 type Customer = { id: string; name: string; owner: string; email: string };
 export function HostingAdmin({ projectId }: { projectId: string }) {
