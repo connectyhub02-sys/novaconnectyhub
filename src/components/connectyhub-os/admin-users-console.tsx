@@ -60,6 +60,7 @@ type ControlAction =
   | "update_limits";
 
 type ControlDraft = {
+  requestId: string;
   action: ControlAction;
   planCode: string;
   amountCredits: string;
@@ -291,17 +292,18 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
   }
 
   function openCustomerControl(user: PlatformUser) {
-    const defaultPlan = user.customPlan ? `custom:${user.customPlan.id}` : user.customContracts?.length ? `custom:${user.customContracts[0].id}` : user.planCode && plans.some((plan) => plan.planCode === user.planCode)
+    const defaultPlan = user.customPlan ? `custom:${user.customPlan.id}` : user.planCode && plans.some((plan) => plan.planCode === user.planCode)
       ? user.planCode
       : plans.find((plan) => plan.planCode !== "trial")?.planCode ?? plans[0]?.planCode ?? "";
 
     setControlUser(user);
     setControlDraft({
+      requestId: crypto.randomUUID(),
       action: "activate_plan",
       planCode: defaultPlan,
       amountCredits: "1000",
-      days: "7",
-      grantIncludedCredits: true,
+      days: user.customPlan ? "30" : "7",
+      grantIncludedCredits: !user.customPlan && !user.customContracts?.length,
       reason: "Ajuste comercial manual",
       monthlyCreditLimit: user.monthlyCreditLimit === null ? "" : String(user.monthlyCreditLimit),
       dailyCreditLimit: user.dailyCreditLimit === null ? "" : String(user.dailyCreditLimit),
@@ -380,7 +382,12 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
       const response = await fetch(activateCustom ? "/api/admin/custom-contracts/activate" : "/api/admin/billing/customer-control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(activateCustom ? { organizationId: controlUser.organizationId, contractId: customId } : {
+        body: JSON.stringify(activateCustom ? {
+          organizationId: controlUser.organizationId, contractId: customId,
+          mode: customId === controlUser.customPlan?.id ? "release_access" : "activate",
+          days: Number(controlDraft.days), reason: controlDraft.reason,
+        } : {
+          requestId: controlDraft.requestId,
           action: controlDraft.action,
           organizationId: controlUser.organizationId,
           planCode: controlDraft.planCode,
@@ -930,7 +937,7 @@ function CustomerControlModal({
                     </option>)}
                     {user.customPlan && !availableContracts.some(c => c.id === user.customPlan?.id) && <option value={`custom:${user.customPlan.id}`}>Personalizado · {user.customPlan.name} · vigente na conta</option>}
                     {plans.map((plan) => (
-                      <option key={plan.id} value={plan.planCode} disabled={availableContracts.length > 0 || Boolean(user.customPlan)}>
+                      <option key={plan.id} value={plan.planCode} disabled={(availableContracts.length > 0 || Boolean(user.customPlan)) && !["starter", "pro", "scale"].includes(plan.planCode)}>
                         {plan.name} / {formatMoney(plan.monthlyPriceBrl)} / {formatCredits(plan.includedCredits)} creditos
                       </option>
                     ))}
@@ -946,7 +953,7 @@ function CustomerControlModal({
                 )}
 
                 {contractAction ? <div className="rounded-xl border border-blue-300 bg-blue-50 p-3 text-sm text-slate-900">
-                  {isCurrentContract ? <>Esta versão já está vinculada à conta. A franquia mensal é de {formatCredits(selectedPlan?.includedCredits ?? 0)} créditos; o saldo disponível aparece separadamente. A renovação segue a cobrança e o vencimento de {user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toLocaleDateString("pt-BR") : "seu contrato"}. Para alterar condições, configure uma nova versão.</> : <>Ao confirmar, esta versão libera o acesso e aplica os recursos contratados. A franquia já concedida no ciclo não será duplicada. O pagamento permanece pendente, sem débito automático. Primeiro vencimento: {selectedContract ? new Date(selectedContract.first_period_end).toLocaleDateString("pt-BR") : "—"}.</>}
+                  {isCurrentContract ? <>Libere o acesso mantendo este contrato e o saldo atual. Esta ação não renova créditos, não altera o vencimento financeiro e não dá baixa em cobranças. Uma liberação ainda vigente não será prorrogada ao confirmar novamente.</> : <>Ao confirmar, esta versão libera o acesso e aplica os recursos contratados. A franquia já concedida no ciclo não será duplicada. O pagamento permanece pendente, sem débito automático. Primeiro vencimento: {selectedContract ? new Date(selectedContract.first_period_end).toLocaleDateString("pt-BR") : "—"}.</>}
                   {contractUnavailable && !isCurrentContract && <p className="mt-2">Escolha a versão mais recente com vigência iniciada.</p>}
                 </div> : <label className="flex items-start gap-2 rounded-xl border p-3 text-[12px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
                   <input
@@ -957,6 +964,11 @@ function CustomerControlModal({
                   />
                   <span>Conceder os creditos inclusos do plano ao confirmar esta acao.</span>
                 </label>}
+                {contractAction && isCurrentContract && <ControlField label="Liberar acesso por quantos dias?">
+                  <input type="number" min="1" max="365" step="1" required value={draft.days} onChange={(event) => update({ days: event.target.value })} className={controlInputClass} />
+                </ControlField>}
+                {contractAction && isCurrentContract && user.adminAccessUntil && new Date(user.adminAccessUntil).getTime() > checkedAt && <p className="text-xs text-emerald-600">Acesso já liberado até {new Date(user.adminAccessUntil).toLocaleDateString("pt-BR")}.</p>}
+                {!customId && availableContracts.length > 0 && <p className="text-xs text-slate-400">O plano escolhido passa a definir preço e recursos. O contrato personalizado fica no histórico. Cobranças em aberto no provedor precisam ser conciliadas antes da troca.</p>}
               </div>
             )}
 
@@ -1042,11 +1054,11 @@ function CustomerControlModal({
 
             <button
               type="submit"
-              disabled={loading || !user.organizationId || (contractAction && (isCurrentContract || contractUnavailable))}
+              disabled={loading || !user.organizationId || (contractAction && !isCurrentContract && contractUnavailable)}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {contractAction ? isCurrentContract ? "Contrato já vinculado" : "Ativar plano personalizado" : "Confirmar acao"}
+              {contractAction ? isCurrentContract ? "Liberar acesso do contrato" : "Ativar plano personalizado" : "Confirmar acao"}
             </button>
           </div>
         </div>

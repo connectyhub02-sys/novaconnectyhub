@@ -8,6 +8,8 @@ const admin = randomUUID();
 beforeAll(async () => {
   db = await commercialDb();
   await db.exec(`alter table profiles add column is_platform_admin boolean default false;
+    alter table organization_subscriptions add column provider_plan_id text;
+    create table maintenance_audit_logs(actor_id uuid,event_type text,target_table text,target_id uuid,metadata jsonb);
     create table organization_billing_limits(organization_id uuid primary key,allow_overage boolean,overage_limit_credits numeric,hard_block_when_empty boolean,alert_threshold_percent integer);
     create table billing_pix_authorizations(subscription_id uuid,state text);
     create table connectyhub_api_clients(id uuid primary key,organization_id uuid,status text,metadata jsonb);
@@ -16,9 +18,57 @@ beforeAll(async () => {
     insert into billing_plans(plan_code,name,status,monthly_price_brl,included_credits) values('scale','Scale','active',497,1000);`);
   await db.query("insert into auth.users(id) values($1)", [admin]);
   await db.query("insert into profiles(id,is_platform_admin) values($1,true)", [admin]);
-  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation", "0177_custom_contract_provider_guard", "0178_custom_contract_api_restore"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
+  for (const file of ["0107_custom_contracts", "0175_custom_contract_development", "0176_custom_contract_activation", "0177_custom_contract_provider_guard", "0178_custom_contract_api_restore", "0203_admin_contract_controls"]) await db.exec(readFileSync(`supabase/migrations/${file}.sql`, "utf8"));
 }, 60000);
 afterAll(async () => { await db?.close(); });
+it("releases expired custom access without settling debt or duplicating credits, and expires the override", async () => {
+  const a=await account(), id=await contract(a); await activate(a.org,id);
+  await db.query("update organization_subscriptions set status='past_due',current_period_end=now()-interval '10 days' where id=$1",[a.sub]);
+  await db.query("update organizations set status='past_due' where id=$1",[a.org]);
+  const payments=(await db.query("select * from billing_payments where organization_id=$1",[a.org])).rows;
+  const api=randomUUID(), manual=randomUUID();
+  await db.query("insert into connectyhub_api_clients values($1,$2,'paused',$3),($4,$2,'paused','{}')",[api,a.org,JSON.stringify({connectyhub_api_access_guard:{paused_by:'connectyhub_api_access_guard',allowed:false}}),manual]);
+  const release=async(actor=admin, contractId=id)=> (await db.query<{r: {access_until:string;already_applied?:boolean}}>("select admin_release_contract_access($1,$2,$3,30,'Liberação comercial') r",[a.org,contractId,actor])).rows[0].r;
+  await expect(release(a.owner)).rejects.toThrow("ADMIN_REQUIRED");
+  await expect(release(admin,randomUUID())).rejects.toThrow("CONTRACT_NOT_CURRENT");
+  const first=await release(), second=await release();
+  expect(second.already_applied).toBe(true);expect(second.access_until).toBe(first.access_until);
+  const access=(await db.query<{r:{allowed:boolean;reason:string}}>("select resolve_organization_contract_access($1) r",[a.org])).rows[0].r;
+  expect(access).toMatchObject({allowed:true,reason:'admin_manual_access'});
+  expect((await db.query("select status from connectyhub_api_clients where id=$1",[api])).rows[0]).toEqual({status:'active'});
+  expect((await db.query("select status from connectyhub_api_clients where id=$1",[manual])).rows[0]).toEqual({status:'paused'});
+  expect((await db.query<{r:{allowed:boolean}}>("select resolve_organization_contract_access($1,now()+interval '31 days') r",[a.org])).rows[0].r.allowed).toBe(false);
+  expect((await db.query("select * from billing_payments where organization_id=$1",[a.org])).rows).toEqual(payments);
+  expect((await db.query("select * from test_credit_grants where organization_id=$1",[a.org])).rows).toHaveLength(1);
+  await db.query("update organizations set status='suspended' where id=$1",[a.org]);
+  await expect(release()).rejects.toThrow('ACCOUNT_SUSPENDED');
+  expect((await db.query<{r:{allowed:boolean}}>("select resolve_organization_contract_access($1) r",[a.org])).rows[0].r.allowed).toBe(false);
+});
+it("switches to a catalog plan atomically and keeps catalog pricing on renewals despite contract history", async()=>{
+  const a=await account(), id=await contract(a);const initial=await activate(a.org,id);const request=randomUUID();
+  const old=randomUUID();
+  await db.query("insert into billing_payments(id,organization_id,subscription_id,status,provider_payment_id,created_at,payload) values($1,$2,$3,'rejected','pay_old',now()-interval '40 days','{}')",[old,a.org,a.sub]);
+  const change=async()=> (await db.query<{r:{credits_granted:number;already_applied?:boolean}}>("select admin_switch_to_catalog_plan($1,$2,'scale',true,'Plano de catálogo',$3) r",[a.org,admin,request])).rows[0].r;
+  expect((await change()).credits_granted).toBe(1000);expect((await change()).already_applied).toBe(true);
+  expect((await db.query("select * from test_credit_grants where organization_id=$1",[a.org])).rows).toHaveLength(2);
+  expect((await db.query("select status,provider_payment_id from billing_payments where id=$1",[old])).rows[0]).toEqual({status:'rejected',provider_payment_id:'pay_old'});
+  expect((await db.query("select status,amount_brl from billing_payments where id=$1",[initial.payment_id])).rows[0]).toEqual({status:'canceled',amount_brl:'10000.00'});
+  const renewed=(await db.query<{r:{payment_id:string}}>("select prepare_contract_renewal(id,current_period_end,current_period_end,current_period_end+interval '1 month','asaas','{}') r from organization_subscriptions where id=$1",[a.sub])).rows[0].r.payment_id;
+  expect((await db.query<{amount_brl:string;payload:{commercial_terms:Record<string,unknown>}}>("select amount_brl,payload from billing_payments where id=$1",[renewed])).rows[0]).toMatchObject({amount_brl:'497.00',payload:{commercial_terms:{price_brl:497}}});
+  await expect(activate(a.org,id)).rejects.toThrow('CONTRACT_ALREADY_REPLACED');
+});
+it("does not switch plans around provider invoices, Pix mandates, processing payments or non-admins",async()=>{
+  const a=await account(),id=await contract(a); const initial=await activate(a.org,id);
+  const change=(actor=admin)=>db.query("select admin_switch_to_catalog_plan($1,$2,'scale',false,'Troca manual',$3)",[a.org,actor,randomUUID()]);
+  await expect(change(a.owner)).rejects.toThrow('ADMIN_REQUIRED');
+  await db.query("update billing_payments set provider_payment_id='pay_open' where id=$1",[initial.payment_id]);
+  await expect(change()).rejects.toThrow('PENDING_INVOICE_REVIEW_REQUIRED');
+  await db.query("update billing_payments set provider_payment_id=null where id=$1",[initial.payment_id]);
+  await db.query("insert into billing_pix_authorizations values($1,'ACTIVE')",[a.sub]);
+  await expect(change()).rejects.toThrow('PROVIDER_SUBSCRIPTION_REVIEW_REQUIRED');
+  expect((await db.query<{v:string}>("select metadata#>>'{commercial_terms,custom_contract_id}' v from organization_subscriptions where id=$1",[a.sub])).rows[0].v).toBe(id);
+  for(const signature of ['admin_release_contract_access(uuid,uuid,uuid,integer,text)','admin_switch_to_catalog_plan(uuid,uuid,text,boolean,text,uuid)']) expect((await db.query("select has_function_privilege('authenticated',$1,'EXECUTE') allowed",[signature])).rows[0]).toEqual({allowed:false});
+});
 it("restores billing-paused API resources atomically while retaining manual and revoked access states", async () => {
   const a=await account(), b=await account(), api=randomUUID(), manual=randomUUID(), other=randomUUID();
   const guard=JSON.stringify({connectyhub_api_access_guard:{paused_by:'connectyhub_api_access_guard',allowed:false}});

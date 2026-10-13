@@ -5,6 +5,11 @@ import type { ContractDevelopmentScope } from "./contract-development";
 export type CustomContract = { id: string; organization_id: string; version: number; name: string; base_plan_code: string; monthly_price_brl: number; included_credits: number; effective_at: string; first_period_end: string; resource_limits: Record<string, number>; features: Record<string, boolean>; development_scope?: ContractDevelopmentScope | null };
 export async function loadCustomContract(client: SupabaseClient, organizationId: string, when = new Date()) {
   const access = await getContractAccess(organizationId, client);
+  if (access.subscription_id) {
+    const subscription = await client.from("organization_subscriptions").select("metadata").eq("id", access.subscription_id).single();
+    if (subscription.error) throw new Error("Não foi possível conferir o plano vigente.");
+    if (subscription.data?.metadata?.billing_terms_mode === "catalog") return null;
+  }
   const { data, error } = await client.from("organization_custom_contracts").select("*").eq("organization_id", access.billing_organization_id).lte("effective_at", when.toISOString()).order("effective_at", { ascending: false }).order("version", { ascending: false }).limit(1).maybeSingle<CustomContract>();
   if (error) throw new Error("Não foi possível conferir o contrato personalizado.");
   return data;

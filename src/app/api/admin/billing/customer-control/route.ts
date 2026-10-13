@@ -24,6 +24,7 @@ type BillingControlAction =
   | "update_limits";
 
 type ParsedControlPayload = {
+  requestId: string | null;
   action: BillingControlAction;
   organizationId: string;
   planCode: string | null;
@@ -172,7 +173,25 @@ async function applyControlAction(
   if (action === "activate_plan" || action === "renew_plan") {
     const custom = await client.from("organization_custom_contracts").select("id").eq("organization_id", input.organization.id).limit(1);
     if (custom.error) throw new Error("Não foi possível conferir as condições individuais.");
-    if (custom.data?.length) throw new Error("Esta conta possui contrato personalizado. Use Contratos personalizados para ativar a versão e preservar seus recursos, créditos e vencimento.");
+    if (custom.data?.length) {
+      if (!input.payload.requestId) throw new Error("Reabra o controle do cliente antes de confirmar.");
+      const { data, error } = await client.rpc("admin_switch_to_catalog_plan", {
+        p_organization: input.organization.id, p_actor: input.actorId,
+        p_plan: input.payload.planCode, p_grant: input.payload.grantIncludedCredits,
+        p_reason: input.payload.reason, p_request: input.payload.requestId,
+      });
+      if (error) {
+        const messages: Record<string, string> = {
+          PENDING_INVOICE_REVIEW_REQUIRED: "Há uma cobrança em aberto no provedor. Concilie ou encerre essa cobrança antes de trocar o plano. Para liberar o acesso mantendo o contrato, selecione Personalizado.",
+          PROVIDER_SUBSCRIPTION_REVIEW_REQUIRED: "Existe uma assinatura recorrente no provedor. Revise-a antes de trocar o plano.",
+          PAYMENT_IN_PROGRESS: "Há um pagamento em processamento. Aguarde a conciliação.",
+          ACCOUNT_SUSPENDED: "Desbloqueie a conta antes de alterar o plano.",
+          PLAN_UNAVAILABLE: "Escolha um plano Start, Pro ou Scale ativo.",
+        };
+        throw new Error(messages[error.message] ?? "Não foi possível alterar o plano. Nenhuma mudança parcial foi aplicada.");
+      }
+      return { message: "Plano atualizado. Nenhuma cobrança foi criada. O contrato anterior permanece no histórico.", auditMetadata: data as JsonRecord, publicMetadata: data as JsonRecord };
+    }
     return activateOrRenewPlan(client, input);
   }
 
@@ -943,6 +962,7 @@ function parseControlPayload(body: unknown):
   return {
     ok: true,
     payload: {
+      requestId: readUuid(record.requestId),
       action,
       organizationId,
       planCode: readPlanCode(record.planCode),

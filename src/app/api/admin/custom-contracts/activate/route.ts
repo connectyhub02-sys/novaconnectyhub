@@ -4,6 +4,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 const errors: Record<string, string> = {
   CONTRACT_NOT_FOUND: "Contrato não encontrado nesta conta.",
+  CONTRACT_NOT_CURRENT: "Este contrato não está ativo na assinatura atual. Atualize a página.",
+  CONTRACT_ALREADY_REPLACED: "Esta versão pertence ao histórico. Configure uma nova versão para voltar ao personalizado.",
+  INVALID_MANUAL_RELEASE: "Informe de 1 a 365 dias e um motivo para a liberação.",
   CONTRACT_NOT_EFFECTIVE: "A vigência desta versão ainda não começou.",
   CONTRACT_VERSION_CHANGED: "Existe uma versão mais recente. Atualize a página e revise as condições.",
   CONTRACT_DEADLINE_EXPIRED: "O primeiro vencimento já passou. Crie uma versão com a nova data antes de ativar.",
@@ -23,7 +26,14 @@ export async function POST(request: Request) {
   if (!body || ![body.organizationId, body.contractId].every(value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))) {
     return NextResponse.json({ error: "Informe a conta e a versão do contrato." }, { status: 422 });
   }
-  const { data, error } = await createServiceClient().rpc("activate_custom_contract", { p_organization: body.organizationId, p_contract: body.contractId, p_actor: auth.userId });
+  const release = body.mode === "release_access";
+  if (release && (!Number.isInteger(body.days) || body.days < 1 || body.days > 365 || typeof body.reason !== "string" || body.reason.trim().length < 3)) {
+    return NextResponse.json({ error: errors.INVALID_MANUAL_RELEASE }, { status: 422 });
+  }
+  const { data, error } = await createServiceClient().rpc(release ? "admin_release_contract_access" : "activate_custom_contract", {
+    p_organization: body.organizationId, p_contract: body.contractId, p_actor: auth.userId,
+    ...(release ? { p_days: body.days, p_reason: body.reason.trim() } : {}),
+  });
   if (error) return NextResponse.json({ error: errors[error.message] ?? "Não foi possível ativar o contrato. Nenhuma alteração parcial foi aplicada." }, { status: 409 });
-  return NextResponse.json({ activation: data });
+  return NextResponse.json({ activation: data, message: release ? `Acesso liberado até ${new Date(data.access_until).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Contrato, saldo e cobranças preservados.` : "Contrato ativado." });
 }

@@ -23,3 +23,12 @@ it("rejects unauthorized access, external origins and malformed identifiers befo
   const h=setup();expect((await h.route.POST(request(undefined,"https://attacker.test"))).status).toBe(403);
   expect((await h.route.POST(request({organizationId:org,contractId:"bad"}))).status).toBe(422);expect(h.rpc).not.toHaveBeenCalled();
 });
+it("releases existing access with bounded duration and trusted actor, without calling activation again",async()=>{
+  const h=setup();
+  const body={organizationId:org,contractId:contract,mode:"release_access",days:30,reason:"Prazo comercial",actorId:"attacker"};
+  expect((await h.route.POST(request(body))).status).toBe(200);
+  expect(h.rpc).toHaveBeenCalledWith("admin_release_contract_access",{p_organization:org,p_contract:contract,p_actor:"trusted-admin",p_days:30,p_reason:"Prazo comercial"});
+  for(const days of [0,366,2.5,"30"]) expect((await h.route.POST(request({...body,days}))).status).toBe(422);
+  expect((await h.route.POST(request({...body,reason:""}))).status).toBe(422);
+  expect(h.rpc).toHaveBeenCalledTimes(1);
+});

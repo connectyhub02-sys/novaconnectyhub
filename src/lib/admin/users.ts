@@ -41,6 +41,7 @@ export type AdminPlatformUser = {
   subscriptionStatus: string | null;
   subscriptionPlanCode: string | null;
   currentPeriodEnd: string | null;
+  adminAccessUntil?: string | null;
   nextBillingAt: string | null;
   trialEndsAt: string | null;
   trialDaysRemaining: number | null;
@@ -360,6 +361,7 @@ export async function getAdminPlatformUsers(
         subscriptionStatus: subscription?.status ?? null,
         subscriptionPlanCode: subscription?.plan_code ?? null,
         currentPeriodEnd: subscription?.current_period_end ?? null,
+        adminAccessUntil: typeof subscription?.metadata?.admin_access_until === "string" ? subscription.metadata.admin_access_until : null,
         nextBillingAt: subscription?.next_billing_at ?? null,
         trialEndsAt: trialCycle?.cycle_end ?? null,
         trialDaysRemaining: trialCycle?.cycle_end ? daysRemaining(trialCycle.cycle_end) : null,
