@@ -47,7 +47,30 @@ preservando valores e 403 apagando dados. Sem overflow horizontal ou erro JS.
 
 Coletor real confirmou 30 s entre amostras, 67 serviços, CPU/RAM/disco e formação
 de histórico; isso ainda não comprova publicação da nova página administrativa.
-Build e smoke do candidato/produção devem ser registrados após conclusão.
+Build e smoke do candidato/produção estão registrados abaixo.
+
+### Publicado — 13/10/2026, 08h11 BRT
+
+Commit `504f191a8424fcafbbdb6fe2993788776e45e7fa`, slot a/3130, confirmado
+no health público após ativação pelo publicador. Slot b preservado com
+`0fb345fe38f6f26cbf7489c5af95b73d5279f72c` para retorno. Build Linux completo
+com webpack, TypeScript e 119 páginas concluído; TypeScript local e ESLint
+também sem erros.
+
+Candidato e produção: home/login/asset JS/health 200, Admin sem sessão 307,
+endpoint de capacidade e API de conta sem sessão 401, Cache-Control no-store
+no novo endpoint, Inngest sem assinatura 401 e assinado 200, autenticação
+confirmada e 58 funções. App como usuário sem privilégios lê JSON do host;
+montagem conferida `RW=false`. Snapshot em produção com 4 s de idade, 67
+serviços, disco 94,67% e CPU 46,13% na amostra de ativação. Esses percentuais
+mudam continuamente. Timer confirmado ativo; nenhum banco/cota/dado de cliente
+foi alterado e nenhuma limpeza foi executada.
+
+Conferência visual feita na prévia local com shell real, snapshot real e
+transporte simulado. Navegador disponível para a verificação de produção estava
+sem sessão, portanto a página autenticada real ainda requer conferência pelo
+titular. Não foi criado login administrativo nem relaxada a autorização para
+essa validação. A versão publicada preserva o acesso exclusivo ao Admin.
 
 Instruções de instalação, interpretação e rollback em
 [deploy/monitoring/README.md](../deploy/monitoring/README.md).
