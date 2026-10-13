@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Hospedagens excluídas fora da lista principal — 13/10/2026
+
+Publicada a correção `d7c403cc` no slot b/3131, fallback `0972dc2b` no a/3130.
+A lista administrativa antes consultava somente `infra_projects` e healthchecks;
+por isso o cadastro preservado do Immov.ai continuava aparecendo com erro após a
+exclusão real. Agora a API consulta o estado recente do coletor do host e separa
+somente projetos explicitamente `deleted` e sem serviços. Pausa/quarentena e
+leitura ausente, inválida ou antiga não ocultam projetos.
+
+Lista principal exclui essas hospedagens; seção recolhida "Hospedagens excluídas"
+permite consultar cadastro e auditoria. A página de um projeto excluído mostra
+esse estado e o histórico, sem diagnóstico de erro nem comandos de operação.
+Overview e detalhe deixam de consultar saúde/jobs dos serviços já removidos.
+Cadastro, contratos e auditoria continuam preservados; nenhuma nova exclusão.
+
+111 testes infra, TypeScript, ESLint e build passaram. Candidato e HTTPS público
+passaram em saúde/versão, páginas/assets, proteção das rotas, Inngest assinado,
+métricas e socket privado. Leitura pelo aplicativo confirmou Immov.ai excluído
+com zero serviços e Vision ativa com 18, em snapshot recente. Builder parado.
+Isolamento/filtragem e ausência de healthchecks após exclusão conferidos por
+testes de rotas. Nova conferência visual autenticada pelo titular pendente.
+
 ## Exclusão da hospedagem local do Immov.ai — 13/10/2026, 12h43 BRT
 
 Exclusão autorizada explicitamente pelo titular no chat, após ele colocar o
