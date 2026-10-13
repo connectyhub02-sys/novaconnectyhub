@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Activity, ArrowLeft, ArrowUpRight, Database, GitBranch, LockKeyhole, Server } from "lucide-react";
 import { DialogFrame } from "@/components/ui/dialog-frame";
+import { InfrastructureCapacity } from "@/components/connectyhub-os/infrastructure-capacity";
 import { actionLabels, blockedReason, eventLabels, healthLabels, jobActions, migrationRiskLabels, originLabels, projectHealth, stageLabels, stages, stale, type Detail, type Health, type InfraAction, type JobAction, type Migration, type MigrationExecution, type Overview, type ProjectConfiguration, type Telemetry } from "@/lib/infrastructure/model";
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -57,7 +58,8 @@ export function InfrastructureInventory() {
   const { data, error, updated, refresh } = usePolling<Overview>("/api/admin/infrastructure");
   return <main className="mx-auto max-w-7xl space-y-6 text-slate-900">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-700">Admin OS / Sistema</p><h1 className="mt-2 text-3xl font-bold">Infraestrutura</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Aplicações, dados e deploys em um cockpit por empresa. Acompanhe a publicação real na VPS e a saúde dos serviços.</p></div><button className={button} onClick={refresh}>Atualizar</button></header>
-    <div className="flex flex-wrap gap-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Activity size={14} />Polling a cada 5 segundos</span><span>Última consulta: {date(updated)}</span><span>Horários no fuso do navegador</span></div>
+    <InfrastructureCapacity />
+    <div className="flex flex-wrap gap-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Activity size={14} />Projetos · atualização a cada 5 segundos</span><span>Última consulta: {date(updated)}</span><span>Horários no fuso do navegador</span></div>
     {error && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{error} {data && "Exibindo a última leitura; conexão interrompida."}</p>}
     <div className="grid gap-4 md:grid-cols-3">{[[Server, "Inventário", "Empresa, projeto e ambiente"], [GitBranch, "Deploy VPS", "Etapas, container e healthcheck"], [LockKeyhole, "Controle protegido", "Confirmação e auditoria"]].map(([Icon, title, text]) => { const I = Icon as typeof Server; return <div key={String(title)} className={`${panel} flex items-center gap-4`}><I className="shrink-0 text-blue-700" size={24} /><div><p className="font-semibold">{String(title)}</p><p className="mt-1 text-xs text-slate-500">{String(text)}</p></div></div>; })}</div>
     {!data && !error && <p role="status">Carregando inventário…</p>}

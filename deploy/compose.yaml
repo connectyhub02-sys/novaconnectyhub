@@ -11,6 +11,11 @@ services:
       VERCEL_GIT_COMMIT_SHA: ${APP_SHA:?Set APP_SHA to the release commit}
     ports:
       - "127.0.0.1:${APP_PORT:?Set APP_PORT}:3000"
+    volumes:
+      - type: bind
+        source: /opt/connectyhub/monitoring/public
+        target: /var/run/connectyhub-metrics
+        read_only: true
     init: true
     restart: unless-stopped
     stop_grace_period: 360s

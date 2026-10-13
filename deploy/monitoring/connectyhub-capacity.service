@@ -1,0 +1,16 @@
+[Unit]
+Description=ConnectyHub read-only VPS capacity metrics
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/connectyhub/monitoring/collect.py
+TimeoutStartSec=25
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/connectyhub/monitoring
+UMask=0022
