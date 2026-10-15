@@ -45,6 +45,7 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
   let sequence = 0;
   const push = () => { const id = `item-${++sequence}`; db.tables.content_pipeline_items.push({ id, organization_id: "org", status: "scheduled", tags: ["whatsapp"] }); return { id }; };
   const channel = {
+    listWhatsappCarouselProductIds: async (_c: unknown, _ctx: unknown, ids: string[]) => ids.filter(id => db.tables.intelligence_memory.some(row => row.id === id && row.organization_id === "org" && (row.metadata as Record<string, unknown>).status === "active" && (row.metadata as Record<string, unknown>).hasMedia !== false)),
     resolveClientWhatsappOperationalContext: async () => ({ instance: { id: "inst", status: options.connected === false ? "disconnected" : "connected" },
       behavior: { agentEnabled: options.agentEnabled !== false, statusBroadcasts: true, campaignBroadcasts: true, newsletterBroadcasts: false, interactiveMessages: true, allowGroupChats: true } }),
     isOperationalAgentEnabled: (context: { behavior: { agentEnabled?: boolean } }) => context.behavior.agentEnabled !== false,
@@ -95,6 +96,36 @@ describe("planning dates", () => {
 });
 
 describe("campaigns", () => {
+  it("honors an explicit size and audio setting for generated and manual carousels", async () => {
+    const { db, traffic, queuedPlans, direct } = setup();
+    const config = { post_status: false, post_format: "carousel", carousel_size: 2, include_audio: true, product_mode: "selected", catalog_item_ids: ["p1", "p2"] };
+    await traffic.runTrafficCampaign(db.client as never, campaignRow(config) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(queuedPlans[0]).toMatchObject({ carouselSize: 2, includeAudio: true });
+    expect((queuedPlans[0].planItems as Array<{productIds: string[]}>).every(p => p.productIds.join() === "p1,p2")).toBe(true);
+    db.tables.whatsapp_traffic_campaigns[0].last_run_at = null;
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ ...config, schedule_mode: "once", manual_text: "Confira" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(direct[0]).toMatchObject({ carouselSize: 2, includeAudio: true, catalogItemIds: ["p1", "p2"] });
+  });
+
+  it("rejects one-product mode, wrong selection size and insufficient media before saving", async () => {
+    const { db, traffic } = setup();
+    const save = (extra: Record<string, unknown>) => traffic.saveTrafficCampaign(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { post_status: false, target_ids: ["g1"], post_format: "carousel", product_mode: "selected", carousel_size: 2, catalog_item_ids: ["p1", "p2"], ...extra } as never });
+    await expect(save({ product_mode: "single" })).rejects.toThrow("vários produtos");
+    await expect(save({ carousel_size: 1 })).rejects.toThrow("2, 3 ou 4");
+    await expect(save({ catalog_item_ids: ["p1", "p1"] })).rejects.toThrow("exatamente 2");
+    await expect(save({ product_mode: "featured", carousel_size: 3 })).rejects.toThrow("Há 2");
+    await expect(save({ catalog_item_ids: ["p1", "foreign"] })).rejects.toThrow("Há 1");
+    expect(await save({ include_audio: true })).toMatchObject({ carousel_size: 2, include_audio: true });
+  });
+
+  it("does not generate or enqueue a smaller carousel if catalog media disappears", async () => {
+    const { db, traffic, plans, direct } = setup();
+    (db.tables.intelligence_memory[0].metadata as Record<string, unknown>).hasMedia = false;
+    const result = await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, post_format: "carousel", carousel_size: 2 }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(result).toMatchObject({ error: expect.stringContaining("Há 1") });
+    expect(plans).toHaveLength(0);
+    expect(direct).toHaveLength(0);
+  });
   it("uses carousel for every planned group post even if the model suggests another type", async () => {
     const { db, traffic, plans, queuedPlans } = setup();
     await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, post_format: "carousel" }) as never, new Date("2026-09-27T10:00:00Z"));

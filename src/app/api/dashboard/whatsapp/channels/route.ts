@@ -74,6 +74,8 @@ type ChannelActionBody = {
   currentTitle?: unknown;
   currentText?: unknown;
   deliveryMode?: unknown;
+  includeAudio?: unknown;
+  carouselSize?: unknown;
   mediaUrl?: unknown;
   mediaKind?: unknown;
   mediaCaption?: unknown;
@@ -193,6 +195,7 @@ function toClientCampaign(campaign: TrafficCampaign, counts: { sent: number; sch
   return {
     id: campaign.id, name: campaign.name, status: campaign.status, postStatus: campaign.post_status, targetIds: campaign.target_ids,
     productMode: campaign.product_mode, catalogItemIds: campaign.catalog_item_ids, idea: campaign.idea ?? "", manualText: campaign.manual_text ?? "",
+    carouselSize: campaign.carousel_size ?? null, includeAudio: campaign.include_audio ?? false,
     postFormat: campaign.post_format, intensity: campaign.intensity, startHour: campaign.start_hour, scheduleMode: campaign.schedule_mode,
     startsAt: campaign.starts_at, endsAt: campaign.ends_at, plannedUntil: campaign.planned_until, lastError: campaign.last_error, sent: counts.sent, scheduled: counts.scheduled,
     statusAudience: campaign.status_audience ?? "all", statusStyle: campaign.status_style ?? "single", statusColor: campaign.status_color ?? 13,
@@ -219,6 +222,11 @@ function readRoutineChanges(value: unknown): TrafficRoutineInput {
 function readCampaignChanges(value: unknown): TrafficCampaignInput {
   const record = readRecordValue(value);
   const changes: TrafficCampaignInput = {};
+  if ("carouselSize" in record && record.carouselSize != null) {
+    if (typeof record.carouselSize !== "number" || !Number.isInteger(record.carouselSize) || record.carouselSize < 2 || record.carouselSize > 4) throw new Error("Escolha 2, 3 ou 4 produtos por carrossel.");
+    changes.carousel_size = record.carouselSize;
+  }
+  if (typeof record.includeAudio === "boolean") changes.include_audio = record.includeAudio;
   if (typeof record.name === "string") changes.name = record.name.slice(0, 80);
   if (typeof record.postStatus === "boolean") changes.post_status = record.postStatus;
   if ("targetIds" in record) changes.target_ids = uuidList(record.targetIds);
@@ -464,6 +472,8 @@ export async function POST(request: NextRequest) {
       notice = "Campanha para grupos/canais agendada pelo Inngest.";
     } else if (action === "send_target_carousel") {
       const item = await queueWhatsappTargetCarouselCampaign(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
+        carouselSize: asNumber(body?.carouselSize),
         title: asString(body?.title) ?? "",
         text: asString(body?.text),
         targetIds: readStringList(body?.targetIds),
@@ -478,6 +488,8 @@ export async function POST(request: NextRequest) {
       notice = "Carrossel de produtos agendado pelo Inngest.";
     } else if (action === "schedule_growth_plan") {
       const queued = await queueWhatsappGrowthCampaignPlan(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
+        carouselSize: asNumber(body?.carouselSize),
         planItems: body?.planItems,
         targetIds: readStringList(body?.targetIds),
         catalogItemIds: readStringList(body?.catalogItemIds),
@@ -492,6 +504,7 @@ export async function POST(request: NextRequest) {
       notice = `${queued.count} post(s) da rotina IA foram agendados.`;
     } else if (action === "send_target_poll") {
       const item = await queueWhatsappTargetPollCampaign(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
         title: asString(body?.pollTitle) ?? "",
         question: asString(body?.pollQuestion) ?? "",
         choices: readStringList(body?.pollChoices),

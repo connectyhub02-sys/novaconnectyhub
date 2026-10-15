@@ -42,11 +42,15 @@ export function CampaignEditor(props: {
   const isMixed = destination === "mixed";
   const targets = destination === "groups" ? props.groups : destination === "channels" ? props.channels : [...props.groups, ...props.channels];
   const activeProducts = props.products.filter(p => p.status === "active");
-  const hasMedia = (p: ClientSalesCatalogItem) => p.media.some(m => ["image", "video", "document"].includes(m.kind));
+  const hasMedia = (p: ClientSalesCatalogItem) => p.media.some(m => ["image", "video", "document"].includes(m.kind) && /^https?:\/\//i.test(m.storageUrl ?? ""));
   const carousel = !isStatus && draft.postFormat === "carousel";
+  const carouselSize = draft.carouselSize ?? 4;
+  const manualProducts = draft.productMode === "selected" || (carousel && draft.productMode === "single");
+  const audioOption = !isStatus && ["carousel", "poll", "text"].includes(draft.postFormat);
+  const productLimit = carousel ? carouselSize : 12;
   const destinationReady = draft.postStatus || draft.targetIds.length > 0;
-  const productReady = draft.productMode === "featured" ? !carousel || activeProducts.some(hasMedia)
-    : draft.catalogItemIds.length > 0 && draft.catalogItemIds.every(id => activeProducts.some(p => p.id === id && (!carousel || hasMedia(p))));
+  const productReady = draft.productMode === "featured" ? !carousel || activeProducts.filter(hasMedia).length >= carouselSize
+    : (carousel ? new Set(draft.catalogItemIds).size === carouselSize : draft.catalogItemIds.length > 0) && draft.catalogItemIds.every(id => activeProducts.some(p => p.id === id && (!carousel || hasMedia(p))));
   const ready = destinationReady && productReady && draft.catalogItemIds.length <= 12 && draft.targetIds.length <= 50;
   const set = <K extends keyof CampaignDraft>(key: K, value: CampaignDraft[K]) => props.setDraft({ ...draft, [key]: value });
   const toggle = (key: "targetIds" | "catalogItemIds", id: string) => set(key, draft[key].includes(id) ? draft[key].filter(v => v !== id) : [...draft[key], id]);
@@ -97,23 +101,25 @@ export function CampaignEditor(props: {
           <fieldset disabled={!destinationReady} className={cn("min-w-0", !destinationReady && "opacity-50")}>
             <Panel title={`2. O que publicar ${isStatus ? "no Status" : destination === "channels" ? "nos canais" : "nos grupos"}`}>
               {!isStatus && <label className="text-xs font-medium text-slate-700">Formato da publicação
-                <select className={field} value={draft.postFormat} onChange={e => set("postFormat", e.target.value as CampaignDraft["postFormat"])}>{formats.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
+                <select className={field} value={draft.postFormat} onChange={e => props.setDraft({ ...draft, postFormat: e.target.value as CampaignDraft["postFormat"], includeAudio: false, ...(e.target.value === "carousel" && draft.productMode === "single" ? { productMode: "selected" } : {}) })}>{formats.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
                 <span className="mt-1 block font-normal text-slate-500">{postFormats.find(([id]) => id === draft.postFormat)?.[2]}</span>
               </label>}
+              {audioOption && <label className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><span className="flex gap-2"><input type="checkbox" checked={draft.includeAudio ?? false} onChange={e => set("includeAudio", e.target.checked)} />Adicionar áudio do agente</span><span className="mt-1 block text-xs text-slate-600">{draft.postFormat === "carousel" ? "Após o carrossel com botões, um áudio apresenta os mesmos produtos." : draft.postFormat === "poll" ? "Após a enquete, um áudio apresenta a pergunta e as opções, convidando a votar." : "Após o texto, o agente envia a mensagem também em áudio."} Usa a voz configurada e consome créditos de geração de áudio. Desmarcado: envia somente a publicação.</span></label>}
+              {carousel && <label className="text-xs font-medium text-slate-700">Produtos por carrossel<select aria-label="Produtos por carrossel" className={field} value={carouselSize} onChange={e => set("carouselSize", Number(e.target.value))}>{[2, 3, 4].map(n => <option key={n} value={n}>{n} produtos · {n} cartões</option>)}</select><span className="mt-1 block font-normal text-slate-500">Nesta rotina, você pode usar de 2 a 4 produtos por publicação. Um cartão para cada produto.</span></label>}
               <label className="text-xs font-medium text-slate-700">Produtos desta rotina
-                <select className={field} value={draft.productMode} onChange={e => props.setDraft({ ...draft, productMode: e.target.value as CampaignDraft["productMode"], catalogItemIds: e.target.value === "single" ? draft.catalogItemIds.slice(0, 1) : draft.catalogItemIds })}><option value="featured">IA escolhe entre os produtos ativos</option><option value="single">Um produto específico</option><option value="selected">Selecionar alguns produtos</option></select>
+                <select className={field} value={carousel && draft.productMode === "single" ? "selected" : draft.productMode} onChange={e => props.setDraft({ ...draft, productMode: e.target.value as CampaignDraft["productMode"], catalogItemIds: e.target.value === "single" ? draft.catalogItemIds.slice(0, 1) : draft.catalogItemIds })}><option value="featured">{carousel ? `Seleção automática de ${carouselSize} produtos ativos com mídia` : "IA escolhe entre os produtos ativos"}</option>{!carousel && <option value="single">Um produto específico</option>}<option value="selected">{carousel ? `Escolher os ${carouselSize} produtos` : "Selecionar alguns produtos"}</option></select>
               </label>
-              {draft.productMode === "single" && <label className="text-xs font-medium text-slate-700">Qual produto?
+              {draft.productMode === "single" && !carousel && <label className="text-xs font-medium text-slate-700">Qual produto?
                 <select className={field} value={draft.catalogItemIds[0] ?? ""} onChange={e => set("catalogItemIds", e.target.value ? [e.target.value] : [])}><option value="">Selecione um produto</option>{activeProducts.map(p => <option key={p.id} value={p.id} disabled={carousel && !hasMedia(p)}>{p.title}{carousel && !hasMedia(p) ? " — sem mídia" : ""}</option>)}</select>
               </label>}
-              {draft.productMode === "selected" && <div>
+              {manualProducts && <div>
                 <label className="text-xs font-medium text-slate-700">Buscar produtos<input className={field} value={search} placeholder="Digite o nome" onChange={e => setSearch(e.target.value)} /></label>
-                <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto">{activeProducts.filter(p => p.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(p => <label key={p.id} className="flex gap-2 rounded-md px-2 py-1.5 text-sm"><input type="checkbox" disabled={carousel && !hasMedia(p)} checked={draft.catalogItemIds.includes(p.id)} onChange={() => toggle("catalogItemIds", p.id)} className="accent-emerald-700" />{p.title}{carousel && !hasMedia(p) ? " (sem mídia)" : ""}</label>)}</div>
-                <p className="mt-1 text-xs text-slate-500">{draft.catalogItemIds.length} selecionado(s). Até 12 produtos por rotina.</p>
+                <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto">{activeProducts.filter(p => p.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(p => <label key={p.id} className="flex gap-2 rounded-md px-2 py-1.5 text-sm"><input type="checkbox" disabled={(carousel && !hasMedia(p)) || (!draft.catalogItemIds.includes(p.id) && draft.catalogItemIds.length >= productLimit)} checked={draft.catalogItemIds.includes(p.id)} onChange={() => toggle("catalogItemIds", p.id)} className="accent-emerald-700" />{p.title}{carousel && !hasMedia(p) ? " (sem mídia)" : ""}</label>)}</div>
+                <p className="mt-1 text-xs text-slate-500">{carousel ? `${draft.catalogItemIds.length} de ${carouselSize} produtos selecionados. Escolha exatamente ${carouselSize}.` : `${draft.catalogItemIds.length} selecionado(s). Até 12 produtos por rotina.`}</p>
                 {draft.catalogItemIds.length > 12 && <p role="alert" className="text-xs text-amber-800">Reduza a seleção para até 12 produtos antes de ativar.</p>}
               </div>}
-              {carousel && <p className="rounded-lg bg-emerald-50 p-2 text-xs text-emerald-900">Selecione produtos com imagem, vídeo ou documento. Com vários produtos, cada publicação mostra até 4 cartões; com um produto, mostra um cartão.</p>}
-              {!productReady && <p role="status" className="text-xs text-amber-800">{carousel ? "Escolha produtos ativos com mídia para montar o carrossel." : "Selecione pelo menos um produto ativo."}</p>}
+              {carousel && <p className="rounded-lg bg-emerald-50 p-2 text-xs text-emerald-900">Cada publicação terá {carouselSize} produtos com mídia e botão. {draft.productMode === "featured" ? `A seleção automática alterna os produtos elegíveis do catálogo; há ${activeProducts.filter(hasMedia).length} com mídia. A IA escreve a apresentação.` : "Serão usados os produtos que você marcar."} Se faltarem produtos válidos, a publicação será interrompida e a rotina mostrará o motivo.</p>}
+              {!productReady && <p role="status" className="text-xs text-amber-800">{carousel ? `São necessários ${carouselSize} produtos ativos com mídia válida. ${manualProducts ? "Complete ou ajuste a seleção." : "Cadastre mais produtos com mídia ou reduza a quantidade."}` : "Selecione pelo menos um produto ativo."}</p>}
               <label className="text-xs font-medium text-slate-700">Ideia ou oferta para orientar a IA (opcional)
                 <textarea className={field} rows={2} maxLength={600} value={draft.idea} onChange={e => set("idea", e.target.value)} placeholder="Ex.: apresentar os benefícios, sem oferecer desconto" />
                 <span className="mt-1 block font-normal text-slate-500">A ideia orienta o texto; os produtos são os escolhidos acima.</span>
@@ -128,7 +134,7 @@ export function CampaignEditor(props: {
             </label>
             {draft.scheduleMode === "once" ? <>
               <p className="text-xs text-slate-500">Uma publicação por destino selecionado, em instantes após confirmar.</p>
-              <label className="text-xs font-medium text-slate-700">Legenda pronta (opcional)<textarea className={field} rows={3} value={draft.manualText} maxLength={1500} onChange={e => set("manualText", e.target.value)} placeholder="Deixe vazio para a IA escrever" /></label>
+              {draft.postFormat !== "poll" && <label className="text-xs font-medium text-slate-700">Legenda pronta (opcional)<textarea className={field} rows={3} value={draft.manualText} maxLength={1500} onChange={e => set("manualText", e.target.value)} placeholder="Deixe vazio para a IA escrever" /></label>}
             </> : <>
               <p className="text-xs text-slate-500">Publica diariamente durante o período escolhido. Não é uma publicação semanal ou mensal.</p>
               <label className="text-xs font-medium text-slate-700">Quantidade por dia
@@ -140,7 +146,7 @@ export function CampaignEditor(props: {
               </label>
               <p className="text-xs text-slate-500">As publicações são distribuídas nas 10 horas seguintes ao início. Se o horário de hoje já passou, o sistema usa o próximo horário disponível.</p>
             </>}
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === draft.postFormat)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === draft.postFormat)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p><p className="mt-1">{carousel ? `${carouselSize} produtos por carrossel · ` : ""}{draft.includeAudio || draft.postFormat === "product_audio" ? "Com áudio do agente" : "Sem áudio adicional"}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
             {draft.id && <p className="text-xs text-slate-500">Salvar substitui as publicações ainda agendadas desta rotina. Envios já realizados ficam no histórico.</p>}
           </Panel>
         </fieldset>

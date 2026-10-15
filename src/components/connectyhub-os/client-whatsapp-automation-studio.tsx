@@ -323,6 +323,9 @@ export function ClientWhatsappAutomationStudio({
   const [campaignText, setCampaignText] = useState("");
   const [campaignChecklist, setCampaignChecklist] = useState<string[]>([]);
   const [campaignScheduledFor, setCampaignScheduledFor] = useState(() => buildLocalDateTime(45));
+  const [carouselSize, setCarouselSize] = useState(4);
+  const [growthIncludeAudio, setGrowthIncludeAudio] = useState(false);
+  const [pollIncludeAudio, setPollIncludeAudio] = useState(false);
   const [campaignFormat, setCampaignFormat] = useState<"single" | "carousel">("single");
   const [campaignDeliveryMode, setCampaignDeliveryMode] = useState<"text" | "audio" | "text_audio">("text");
   const [campaignMentionAll, setCampaignMentionAll] = useState(false);
@@ -384,9 +387,10 @@ export function ClientWhatsappAutomationStudio({
   const effectiveCampaignTargetFocusId = focusedCampaignTarget?.id ?? "";
   const selectedPollTargetIds = selectedGroupTargets.map((target) => target.id);
   const selectedCampaignProducts = products.filter((product) => selectedCampaignProductIds.includes(product.id));
+  const carouselProductEligible = (product: ClientSalesCatalogItem) => product.status === "active" && product.media.some(media => ["image", "video", "document"].includes(media.kind) && /^https?:\/\//i.test(media.storageUrl ?? ""));
   const automaticCampaignProductIds = selectedCampaignProductIds.length > 0
     ? selectedCampaignProductIds
-    : products.slice(0, 6).map((product) => product.id);
+    : (growthFormatPreference === "carousel" ? products.filter(carouselProductEligible).slice(0, carouselSize) : products.slice(0, 6)).map((product) => product.id);
   const automaticCampaignProducts = products.filter((product) => automaticCampaignProductIds.includes(product.id));
   const effectiveGrowthFormatPreference = campaignDestinationMode === "status" ? "status" : growthFormatPreference === "status" ? "mixed" : growthFormatPreference;
   const preferredGrowthFormats = resolveGrowthPreferredFormats(effectiveGrowthFormatPreference);
@@ -406,12 +410,13 @@ export function ClientWhatsappAutomationStudio({
   const campaignReady = !operationsLocked
     && campaignDestinationMode !== "status"
     && selectedCampaignTargetIds.length > 0
-    && (campaignFormat === "carousel" ? selectedCampaignProducts.length > 0 : campaignText.trim().length > 0)
+    && (campaignFormat === "carousel" ? selectedCampaignProducts.length === carouselSize && selectedCampaignProducts.every(carouselProductEligible) : campaignText.trim().length > 0)
     && targetCampaignCapabilityReady;
   const growthPlanReady = !operationsLocked
     && automaticCampaignDestinationReady
+    && (effectiveGrowthFormatPreference !== "carousel" || automaticCampaignProducts.length === carouselSize && automaticCampaignProducts.every(carouselProductEligible))
     && (automaticCampaignProducts.length > 0 || campaignBrief.trim().length > 0 || growthObjective.trim().length > 0);
-  const scheduleGrowthPlanReady = !operationsLocked && Boolean(growthPlan?.items.length);
+  const scheduleGrowthPlanReady = growthPlanReady && Boolean(growthPlan?.items.length);
   const statusReady = !operationsLocked
     && Boolean(behavior?.statusBroadcasts)
     && (statusText.trim().length > 0 || statusHasMediaSource);
@@ -613,6 +618,8 @@ export function ClientWhatsappAutomationStudio({
       recurrenceFrequency: campaignRecurrence === "none" ? null : campaignRecurrence,
       recurrenceOccurrences: campaignRecurrence === "none" ? null : campaignOccurrences,
       deliveryMode: campaignDeliveryMode,
+      includeAudio: campaignFormat === "carousel" && campaignDeliveryMode !== "text",
+      carouselSize: campaignFormat === "carousel" ? carouselSize : null,
       catalogItemIds: selectedCampaignProductIds,
       interactiveMode: campaignButtonEnabled ? "button" : "none",
       buttonLabel: campaignButtonLabel,
@@ -648,9 +655,11 @@ export function ClientWhatsappAutomationStudio({
       targetIds: selectedCampaignTargetIds,
       catalogItemIds: automaticCampaignProductIds,
       mentionAll: campaignMentionAll,
-      buttonEnabled: campaignButtonEnabled,
+      includeAudio: campaignDestinationMode !== "status" && ["carousel", "poll", "text"].includes(effectiveGrowthFormatPreference) && growthIncludeAudio,
+      carouselSize: effectiveGrowthFormatPreference === "carousel" ? carouselSize : null,
+      buttonEnabled: effectiveGrowthFormatPreference === "carousel" || campaignButtonEnabled,
       buttonLabel: campaignButtonEnabled ? campaignButtonLabel : null,
-      planItems: campaignButtonEnabled
+      planItems: effectiveGrowthFormatPreference === "carousel" ? growthPlan.items.map(item => ({ ...item, type: "carousel", productIds: automaticCampaignProductIds })) : campaignButtonEnabled
         ? growthPlan.items
         : growthPlan.items.map((item) => ({ ...item, buttonLabel: null })),
     });
@@ -688,6 +697,7 @@ export function ClientWhatsappAutomationStudio({
       pollQuestion,
       pollChoices: parseLines(pollChoices),
       pollSelectableCount,
+      includeAudio: pollIncludeAudio,
       targetIds: selectedPollTargetIds,
       scheduledFor: localDatetimeToIso(pollScheduledFor),
       mentionAll: campaignMentionAll,
@@ -1067,11 +1077,13 @@ export function ClientWhatsappAutomationStudio({
                         ) : null}
                         <Input label="Texto do botao de compra" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
                         <div className="self-end">
-                          <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
+                          {effectiveGrowthFormatPreference === "carousel" ? <span className="text-xs">Botões incluídos no carrossel</span> : <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />}
                         </div>
                       </>
                     ) : null}
                   </div>
+                  {effectiveGrowthFormatPreference === "carousel" && <div className="grid gap-2"><SelectField label="Produtos por carrossel" value={String(carouselSize)} onChange={value => { setCarouselSize(Number(value)); setGrowthPlan(null); }} options={[["2", "2 produtos"], ["3", "3 produtos"], ["4", "4 produtos"]]} /><p className="text-xs text-slate-600">Cada publicação terá {carouselSize} cartões com botões. {selectedCampaignProductIds.length ? `Marque exatamente ${carouselSize} produtos ativos com mídia; ${selectedCampaignProducts.length} selecionados.` : `Seleção automática de ${carouselSize} produtos ativos com mídia.`}</p></div>}
+                  {campaignDestinationMode !== "status" && ["carousel", "poll", "text"].includes(effectiveGrowthFormatPreference) && <div className="grid gap-1"><MiniToggle checked={growthIncludeAudio} label="Adicionar áudio do agente" onClick={() => setGrowthIncludeAudio(value => !value)} /><p className="text-xs text-slate-600">Um áudio após cada publicação, com a voz do agente e consumo de créditos. No carrossel, apresenta os mesmos produtos; na enquete, a pergunta e as opções.</p></div>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <DateInput label="Inicio" value={growthStartFrom} onChange={(value) => { setGrowthStartFrom(value); setGrowthPlan(null); }} />
                     <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={(value) => { setGrowthDurationDays(value); setGrowthPlan(null); }} />
@@ -1142,18 +1154,20 @@ export function ClientWhatsappAutomationStudio({
                           </div>
                         ) : null}
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                          <SelectField label="Formato" value={campaignFormat} onChange={(value) => setCampaignFormat(value as typeof campaignFormat)} options={[
+                          <SelectField label="Formato" value={campaignFormat} onChange={(value) => { setCampaignFormat(value as typeof campaignFormat); setCampaignDeliveryMode("text"); }} options={[
                             ["single", "Post unico"],
                             ["carousel", "Carrossel"],
                           ]} />
-                          <SelectField label="Entrega" value={campaignDeliveryMode} onChange={(value) => setCampaignDeliveryMode(value as typeof campaignDeliveryMode)} options={[
+                          <SelectField label="Entrega" value={campaignDeliveryMode} onChange={(value) => setCampaignDeliveryMode(value as typeof campaignDeliveryMode)} options={campaignFormat === "carousel" ? [["text", "Carrossel com botões"], ["text_audio", "Carrossel com botões + áudio"]] : [
                             ["text", "Texto"],
                             ["audio", "Audio"],
                             ["text_audio", "Texto + audio"],
                           ]} />
+                          {campaignFormat === "carousel" && <SelectField label="Produtos por carrossel manual" value={String(carouselSize)} onChange={value => setCarouselSize(Number(value))} options={[["2", "2 produtos"], ["3", "3 produtos"], ["4", "4 produtos"]]} />}
                           <DateInput label="Quando" value={campaignScheduledFor} onChange={setCampaignScheduledFor} />
                           <NumberInput label="Repeticoes" value={campaignOccurrences} min={2} max={365} onChange={setCampaignOccurrences} />
                         </div>
+                        {campaignFormat === "carousel" && <p className="text-xs text-slate-600">Marque exatamente {carouselSize} produtos ativos com mídia na seleção acima. {selectedCampaignProducts.length} selecionados. O áudio é enviado depois do carrossel e consome créditos.</p>}
                         <div className="grid gap-2 sm:grid-cols-2">
                           <SelectField label="Recorrencia" value={campaignRecurrence} onChange={(value) => setCampaignRecurrence(value as typeof campaignRecurrence)} options={[
                             ["none", "Unico"],
@@ -1163,7 +1177,7 @@ export function ClientWhatsappAutomationStudio({
                           <Input label="Texto do botao de compra" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
+                          {campaignFormat === "carousel" ? <span className="text-xs">Botões incluídos no carrossel</span> : <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />}
                           <MiniToggle checked={campaignMentionAll} label="Mencionar todos nos grupos" onClick={() => setCampaignMentionAll((current) => !current)} />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -1197,6 +1211,8 @@ export function ClientWhatsappAutomationStudio({
 
                     <SubSection title="Enquete manual">
                       <div className="grid gap-3">
+                        <MiniToggle checked={pollIncludeAudio} label="Enquete com áudio do agente" onClick={() => setPollIncludeAudio(value => !value)} />
+                        <p className="text-xs text-slate-600">Com áudio: apresenta a pergunta e as opções após a enquete, usando a voz do agente e créditos de áudio.</p>
                         <Textarea label="Pergunta" value={pollQuestion} onChange={setPollQuestion} rows={2} />
                         <Textarea label="Opcoes" value={pollChoices} onChange={setPollChoices} rows={4} />
                         <div className="grid gap-2 sm:grid-cols-2">

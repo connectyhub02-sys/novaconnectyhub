@@ -18,6 +18,7 @@ export type TrafficCampaignView = {
   postFormat: "auto" | "product_audio" | "product_button" | "text" | "poll" | "carousel"; intensity: "light" | "normal" | "intense"; startHour: number;
   scheduleMode: "once" | "week" | "month" | "continuous"; endsAt: string | null; plannedUntil: string | null; lastError: string | null; sent: number; scheduled: number;
   startsAt?: string;
+  carouselSize?: number | null; includeAudio?: boolean;
   statusAudience: "all" | "interested" | "customers" | "hot"; statusStyle: "single" | "story"; statusColor: number;
 };
 export type TrafficPayload = {
@@ -37,7 +38,7 @@ const numberDefaults: TrafficNumberSettings = {
 };
 const newCampaign: CampaignDraft = {
   id: null, name: "", postStatus: true, targetIds: [], productMode: "featured", catalogItemIds: [], idea: "", manualText: "",
-  postFormat: "auto", intensity: "normal", startHour: 9, scheduleMode: "week", statusAudience: "all", statusStyle: "single", statusColor: 13,
+  postFormat: "auto", intensity: "normal", startHour: 9, scheduleMode: "week", statusAudience: "all", statusStyle: "single", statusColor: 13, carouselSize: 4, includeAudio: false,
 };
 const scheduleModes = [
   ["once", "Uma vez agora", "Um post só, em instantes"],
@@ -125,7 +126,7 @@ export function WhatsappTrafficRoutineCard(props: {
           discovering={props.discovering} onDiscover={props.onDiscover}
           onSave={async () => {
             const { id, ...campaign } = editor;
-            const result = await run("save", "save_traffic_campaign", { campaignId: id, campaign });
+            const result = await run("save", "save_traffic_campaign", { campaignId: id, campaign: { ...campaign, ...(campaign.postFormat === "carousel" ? { carouselSize: campaign.carouselSize ?? 4, productMode: campaign.productMode === "single" ? "selected" : campaign.productMode } : {}) } });
             if (result) setEditor(null);
           }} />
       ) : null}
@@ -146,6 +147,8 @@ export function WhatsappTrafficRoutineCard(props: {
                   <div className="min-w-0">
                     <p className="flex items-center gap-2 font-semibold text-slate-900">{campaign.name}<span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", statusClass)}>{statusText}</span></p>
                     <p className="mt-0.5 truncate text-xs text-slate-600">{where.join(" · ")}</p>
+                    {campaign.postFormat === "carousel" && <p className="text-xs font-medium text-emerald-800">{campaign.carouselSize ? `${campaign.carouselSize} produtos por carrossel` : "Até 4 produtos (rotina antiga; edite para definir a quantidade)"}</p>}
+                    {campaign.includeAudio && <p className="text-xs text-emerald-800">Com áudio do agente após a publicação</p>}
                     <p className="text-xs text-slate-500">{what} · {campaign.postStatus && !campaign.targetIds.length ? campaign.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : formatLabel[campaign.postFormat]} · {scheduleLabel[campaign.scheduleMode]}{campaign.scheduleMode !== "once" ? ` · ${intensities.find(item => item[0] === campaign.intensity)?.[2]}` : ""}{campaign.endsAt ? ` · até ${new Date(campaign.endsAt).toLocaleDateString("pt-BR")}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1">

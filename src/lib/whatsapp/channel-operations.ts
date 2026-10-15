@@ -953,7 +953,7 @@ export async function queueWhatsappTargetTextCampaign(
   }
 
   const deliveryMode = normalizeCampaignDeliveryMode(input.deliveryMode);
-  if ((deliveryMode === "audio" || deliveryMode === "text_audio") && !context.organizationId) {
+  if ((deliveryMode === "audio" || deliveryMode === "text_audio") && !(context.organizationId ?? (context.scope === "platform" ? context.instance.organization_id : null))) {
     throw new Error("Campanhas em audio exigem uma organizacao para salvar e medir a voz gerada.");
   }
 
@@ -1027,6 +1027,8 @@ export async function queueWhatsappTargetCarouselCampaign(
     catalogItemIds?: string[];
     buttonLabel?: string | null;
     buttonUrl?: string | null;
+    carouselSize?: number | null;
+    includeAudio?: boolean;
   },
 ) {
   assertWhatsappConnected(context);
@@ -1056,6 +1058,9 @@ export async function queueWhatsappTargetCarouselCampaign(
 
   const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
   const carouselCards = buildCampaignCarouselCards(catalogItems, input.buttonLabel, input.buttonUrl);
+  if (input.carouselSize != null && (!Number.isInteger(input.carouselSize) || input.carouselSize < 2 || input.carouselSize > 4 || carouselCards.length !== input.carouselSize)) {
+    throw new Error(`O carrossel precisa de exatamente ${input.carouselSize} produtos ativos com mídia válida.`);
+  }
   if (carouselCards.length === 0) {
     throw new Error("Selecione produtos ativos com imagem, video ou documento publico para montar o carrossel.");
   }
@@ -1081,6 +1086,8 @@ export async function queueWhatsappTargetCarouselCampaign(
       })),
       mentions: mentionAll ? "all" : undefined,
       carousel: carouselCards,
+      include_audio: input.includeAudio === true,
+      audio_text: input.includeAudio ? buildCarouselAudioText(carouselCards) : undefined,
       media_attachments: buildCatalogCampaignAttachments(catalogItems).slice(0, 6),
       catalog_items: catalogItems.map((item) => ({
         id: item.id,
@@ -1388,6 +1395,8 @@ export async function queueWhatsappGrowthCampaignPlan(
     mentionAll?: boolean;
     buttonEnabled?: boolean | null;
     buttonLabel?: string | null;
+    includeAudio?: boolean;
+    carouselSize?: number | null;
   },
 ) {
   assertWhatsappConnected(context);
@@ -1444,6 +1453,7 @@ export async function queueWhatsappGrowthCampaignPlan(
           scheduledFor: planItem.scheduledFor,
           mentionAll: input.mentionAll,
           selectableCount: 1,
+          includeAudio: input.includeAudio,
         }));
       }
     } else if (planItem.type === "carousel") {
@@ -1456,6 +1466,8 @@ export async function queueWhatsappGrowthCampaignPlan(
           mentionAll: input.mentionAll,
           catalogItemIds: productIds,
           buttonLabel: userButtonLabel,
+          includeAudio: input.includeAudio,
+          carouselSize: input.carouselSize,
         }));
       } else {
         queued.push(await queueWhatsappTargetTextCampaign(client, context, {
@@ -1477,7 +1489,7 @@ export async function queueWhatsappGrowthCampaignPlan(
         targetIds,
         scheduledFor: planItem.scheduledFor,
         mentionAll: input.mentionAll,
-        deliveryMode: planItem.type === "audio" || planItem.type === "text_audio" ? planItem.type : "text",
+        deliveryMode: planItem.type === "audio" || planItem.type === "text_audio" ? planItem.type : input.includeAudio ? "text_audio" : "text",
         audioText: planItem.audioText ?? null,
         catalogItemIds: productIds,
         interactiveMode: itemButtonLabel ? "button" : "none",
@@ -1505,6 +1517,7 @@ export async function queueWhatsappTargetPollCampaign(
     recurrenceOccurrences?: number | null;
     selectableCount?: number | null;
     mentionAll?: boolean;
+    includeAudio?: boolean;
   },
 ) {
   assertWhatsappConnected(context);
@@ -1550,6 +1563,8 @@ export async function queueWhatsappTargetPollCampaign(
       type: "poll",
       text: question,
       choices,
+      include_audio: input.includeAudio === true,
+      audio_text: input.includeAudio ? buildPollAudioText(question, choices) : undefined,
       selectable_count: clamp(Math.round(input.selectableCount ?? 1), 1, Math.max(1, choices.length)),
       target_mode: "whatsapp_targets",
       targets: targets.map((target) => ({
@@ -2082,6 +2097,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
   if (!claimed) return { id: item.id, status: "skipped", reason: "already_claimed" };
 
   const metadata = readRecord(claimed.metadata) ?? readRecord(item.metadata) ?? {};
+  item.metadata = metadata;
 
   try {
     if (claimed.scope === "organization" && claimed.organization_id) {
@@ -2165,7 +2181,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
 
       const responses = [];
       for (const recipient of targetRecipients) {
-        const sent = await sendTargetPollPayloadToRecipient(context, item, payload, recipient);
+        const sent = await sendInteractiveCampaignToRecipient(client, context, item, payload, recipient, "target_poll");
         responses.push({ recipient, responses: sanitizeProviderData(sent) });
       }
       providerResponse = { target_mode: "whatsapp_targets", sent: responses };
@@ -2178,7 +2194,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
 
       const responses = [];
       for (const recipient of targetRecipients) {
-        const sent = await sendTargetCarouselPayloadToRecipient(context, item, payload, recipient);
+        const sent = await sendInteractiveCampaignToRecipient(client, context, item, payload, recipient, "target_carousel");
         responses.push({ recipient, responses: sanitizeProviderData(sent) });
       }
       providerResponse = { target_mode: "whatsapp_targets", sent: responses };
@@ -2528,20 +2544,43 @@ async function sendGroupWindowPayload(
   };
 }
 
-async function sendCampaignAudioToRecipient(
+async function sendInteractiveCampaignToRecipient(
+  client: SupabaseClient, context: WhatsappOperationalContext, item: ContentPipelineRow,
+  payload: JsonRecord, recipient: string, operation: "target_poll" | "target_carousel",
+) {
+  const audioText = payload.include_audio === true ? asString(payload.audio_text) : null;
+  if (payload.include_audio === true && !audioText) throw new Error("A publicação com áudio está sem texto para a voz do agente.");
+  if (audioText) await prepareCampaignAudio(client, context, item, audioText);
+  const responses = operation === "target_poll"
+    ? await sendTargetPollPayloadToRecipient(context, item, payload, recipient)
+    : await sendTargetCarouselPayloadToRecipient(context, item, payload, recipient);
+  // Stable transport IDs keep confirmed sends from repeating after a partial failure.
+  if (audioText) responses.push(await sendCampaignAudioToRecipient(client, context, item, recipient, audioText, payload.mentions));
+  return responses;
+}
+
+async function prepareCampaignAudio(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
   item: ContentPipelineRow,
-  recipient: string,
   text: string,
-  mentions: unknown,
 ) {
-  if (!context.organizationId) {
+  const metadata = item.metadata ?? (item.metadata = {});
+  const cached = readRecord(metadata.campaign_audio);
+  if (cached?.state === "ready" && asString(readRecord(cached.audio)?.audioUrl)) return cached.audio as Awaited<ReturnType<typeof generateConnectyVoiceAudio>>;
+  if (cached) throw new Error("Geração de áudio anterior sem confirmação. Revise o envio antes de tentar novamente.");
+  const organizationId = context.organizationId ?? (context.scope === "platform" ? context.instance.organization_id : null);
+  if (!organizationId) {
     throw new Error("Campanhas em audio exigem uma organizacao vinculada.");
   }
-
+  const checkpoint = async (value: JsonRecord) => {
+    metadata.campaign_audio = value;
+    const saved = await client.from("content_pipeline_items").update({ metadata }).eq("id", item.id);
+    if (saved.error) throw new Error("Não foi possível registrar a geração do áudio. Envio interrompido.");
+  };
+  await checkpoint({ state: "generating" });
   const generatedAudio = await generateConnectyVoiceAudio({
-    organizationId: context.organizationId,
+    organizationId,
     userId: null,
     text,
     voiceId: context.behavior.audioVoiceId || null,
@@ -2553,12 +2592,21 @@ async function sendCampaignAudioToRecipient(
     metadata: {
       whatsappInstanceId: context.instance.id,
       contentPipelineItemId: item.id,
-      recipient,
-      agentScope: "customer",
+      agentScope: context.scope === "platform" ? "platform" : "customer",
+      agentId: asString(readRecord(context.instance.metadata)?.agent_id),
       deliveryMode: "campaign_audio",
     },
     client,
   });
+  await checkpoint({ state: "ready", audio: generatedAudio });
+  return generatedAudio;
+}
+
+async function sendCampaignAudioToRecipient(
+  client: SupabaseClient, context: WhatsappOperationalContext, item: ContentPipelineRow,
+  recipient: string, text: string, mentions: unknown,
+) {
+  const generatedAudio = await prepareCampaignAudio(client, context, item, text);
   const providerResponse = await callUazapi(context, "/send/media", {
     method: "POST",
     timeoutMs: outboundAudioDeliveryTimeoutMs,
@@ -2819,6 +2867,7 @@ async function scheduleNextRecurringWhatsappOutbound(
     "processed_at",
     "failed_at",
     "processing_started_at",
+    "campaign_audio",
   ]) {
     delete nextMetadata[key];
   }
@@ -2935,8 +2984,9 @@ async function listSalesCatalogCampaignItems(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
   ids: string[],
+  maxItems = 6,
 ): Promise<ClientSalesCatalogItem[]> {
-  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 6);
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, maxItems);
   if (uniqueIds.length === 0) return [];
 
   if (context.scope === "platform") {
@@ -2957,9 +3007,28 @@ async function listSalesCatalogCampaignItems(
     throw new Error(`Nao foi possivel carregar produtos da campanha: ${error.message}`);
   }
 
-  return ((data ?? []) as SalesCatalogMemoryRow[])
+  const items = ((data ?? []) as SalesCatalogMemoryRow[])
+    .filter(row => readRecord(row.metadata)?.whatsapp_visible !== false)
     .map((row) => mapSalesCatalogItem(row as SalesCatalogItemMapperInput))
     .filter((item) => item.status === "active");
+  const byId = new Map(items.map(item => [item.id, item]));
+  return uniqueIds.flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
+}
+
+export async function listWhatsappCarouselProductIds(client: SupabaseClient, context: WhatsappOperationalContext, ids: string[]) {
+  const products = await listSalesCatalogCampaignItems(client, context, ids, 60);
+  return products.filter(product => buildCampaignCarouselCards([product], null, null).length === 1).map(product => product.id);
+}
+
+function buildCarouselAudioText(cards: JsonRecord[]) {
+  const budget = Math.floor((campaignAudioMaxChars - 180) / Math.max(cards.length, 1));
+  return `Pessoal, confiram os produtos no carrossel acima. ${cards.map((card, index) => `${index + 1}: ${shortenAtSentence(asString(card.text) ?? "", budget)}`).join(" ")} Toquem no botão de cada produto para conferir os detalhes.`;
+}
+
+function buildPollAudioText(question: string, choices: string[]) {
+  const briefQuestion = shortenAtSentence(question, 240);
+  const perChoice = Math.floor((campaignAudioMaxChars - briefQuestion.length - 130) / choices.length);
+  return `Pessoal, a enquete acima é: ${briefQuestion} As opções são: ${choices.map(choice => shortenAtSentence(choice, perChoice)).join("; ")}. Toquem na enquete para votar.`;
 }
 
 async function listPlatformProductCampaignItems(
@@ -3133,7 +3202,7 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     if (row.status === "review" || providerStatus === "failed") summary.failed += 1;
     if (readStoredRecurrence(metadata.recurrence)) summary.recurring += 1;
     if (attachmentCount > 0 || asString(payload.file)) summary.withMedia += 1;
-    if (deliveryMode === "audio" || deliveryMode === "text_audio" || ["audio", "myaudio", "ptt"].includes(asString(payload.type) ?? "")) summary.withAudio += 1;
+    if (payload.include_audio === true || deliveryMode === "audio" || deliveryMode === "text_audio" || ["audio", "myaudio", "ptt"].includes(asString(payload.type) ?? "")) summary.withAudio += 1;
     if (operation === "target_carousel") summary.carouselPosts += 1;
     if (operation === "target_poll") summary.pollPosts += 1;
     if (operation === "status") summary.statusPosts += 1;
@@ -4153,6 +4222,7 @@ function buildOutboundTrackIds(row: ContentPipelineRow, operation: string, paylo
   const targets = readOutboundTargetRefs(payload);
   const hasNewsletter = targets.some((target) => target.type === "newsletter");
 
+  if (payload.include_audio === true) trackIds.push(`campaign_${row.id}_audio`);
   if (operation === "newsletter_text") trackIds.push(`newsletter_${row.id}`);
   if (operation === "target_poll") trackIds.push(`poll_${row.id}`);
   if (operation === "target_carousel") {
@@ -5155,7 +5225,7 @@ function resolveAllowedGrowthPlanFormats(
 
   if (context.behavior.campaignBroadcasts || context.behavior.newsletterBroadcasts) {
     formats.push("text");
-    if (context.organizationId) {
+    if (context.organizationId || (context.scope === "platform" && context.instance.organization_id)) {
       formats.push("audio", "text_audio");
     }
     if (context.behavior.interactiveMessages && catalogItems.filter((item) => item.media.some((media) => normalizeCampaignMediaKind(media.kind))).length >= 1) {

@@ -16,6 +16,7 @@ import {
   queueWhatsappStatusBroadcast,
   queueWhatsappTargetTextCampaign,
   queueWhatsappTargetCarouselCampaign,
+  listWhatsappCarouselProductIds,
   resolveClientWhatsappOperationalContext,
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
@@ -41,10 +42,11 @@ export type TrafficCampaign = {
   schedule_mode: TrafficScheduleMode; starts_at: string; ends_at: string | null; planned_until: string | null;
   last_run_at: string | null; last_error: string | null; created_at: string;
   status_audience: TrafficStatusAudience; status_style: "single" | "story"; status_color: number | null;
+  carousel_size?: number | null; include_audio?: boolean;
 };
 export type TrafficStatusAudience = "all" | "interested" | "customers" | "hot";
 export type TrafficCampaignInput = Partial<Pick<TrafficCampaign, "name" | "post_status" | "target_ids" | "product_mode" | "catalog_item_ids"
-  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "starts_at" | "status_audience" | "status_style" | "status_color">>;
+  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "starts_at" | "status_audience" | "status_style" | "status_color" | "carousel_size" | "include_audio">>;
 
 const brtOffsetMs = 3 * 3600_000;
 const dayMs = 24 * 3600_000;
@@ -204,7 +206,13 @@ export async function saveTrafficCampaign(client: SupabaseClient, input: { organ
   if (merged.post_format === "carousel") {
     const targets = await client.from("whatsapp_channel_targets").select("id, target_type").eq("organization_id", input.organizationId).eq("whatsapp_instance_id", agentContext.instance.id).in("id", merged.target_ids!);
     if (targets.error || targets.data?.length !== new Set(merged.target_ids).size || targets.data.some(row => row.target_type !== "group")) throw new Error("Carrossel nesta rotina está disponível somente para grupos da sua empresa.");
+    const size = merged.carousel_size ?? 4;
+    if (!Number.isInteger(size) || size < 2 || size > 4) throw new Error("Escolha 2, 3 ou 4 produtos por carrossel.");
+    if (merged.product_mode === "single") throw new Error("Carrossel precisa de vários produtos. Use a seleção automática ou escolha os produtos.");
+    changes.carousel_size = size;
+    await carouselProductsFor(client, agentContext, { product_mode: "featured", catalog_item_ids: [], ...merged, organization_id: input.organizationId, carousel_size: size } as TrafficCampaign);
   }
+  if (merged.include_audio && (merged.post_status || !["carousel", "poll", "text", "product_button", "product_audio"].includes(merged.post_format ?? ""))) throw new Error("Escolha um formato de grupo ou canal para adicionar áudio.");
   const now = new Date();
   const periodChanged = !current || (changes.schedule_mode !== undefined && changes.schedule_mode !== current.schedule_mode)
     || (changes.starts_at !== undefined && new Date(changes.starts_at).getTime() !== new Date(current.starts_at).getTime());
@@ -315,6 +323,18 @@ async function productsFor(client: SupabaseClient, campaign: TrafficCampaign) {
   return loadFeaturedProductIds(client, campaign.organization_id);
 }
 
+async function carouselProductsFor(client: SupabaseClient, context: Context, campaign: TrafficCampaign) {
+  const pool = await productsFor(client, campaign);
+  const eligible = await listWhatsappCarouselProductIds(client, context, pool);
+  // Null retains the historical 'up to four' rule until the owner edits the routine.
+  const size = campaign.carousel_size;
+  if (size != null) {
+    if (campaign.product_mode !== "featured" && new Set(campaign.catalog_item_ids).size !== size) throw new Error(`Selecione exatamente ${size} produtos para este carrossel.`);
+    if (eligible.length < size) throw new Error(`Este carrossel precisa de ${size} produtos ativos com mídia válida. Há ${eligible.length} disponível(is); revise a seleção ou o catálogo.`);
+  }
+  return eligible;
+}
+
 /** Plans what is due for one campaign: a single post ("uma vez agora") or the next day of posts. */
 export async function runTrafficCampaign(client: SupabaseClient, campaign: TrafficCampaign, now = new Date()) {
   if (!await claim(client, "whatsapp_traffic_campaigns", campaign.id, now)) return { skipped: "busy" as const };
@@ -372,11 +392,11 @@ async function countGroupTargets(client: SupabaseClient, campaign: TrafficCampai
 }
 
 async function planDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsOverride?: number) {
-  const pool = await productsFor(client, campaign);
+  const pool = campaign.post_format === "carousel" ? await carouselProductsFor(client, context, campaign) : await productsFor(client, campaign);
   const { format, list } = destinationsFor(campaign, await countGroupTargets(client, campaign));
   const postsPerDay = postsOverride ?? trafficPostsPerDay[campaign.intensity] ?? 2;
   const oneProductPerPost = format === "product_audio" || format === "product_button";
-  const catalogItemIds = pickRoutineProducts(pool, dayStart, oneProductPerPost ? Math.max(postsPerDay, 1) : 4);
+  const catalogItemIds = pickRoutineProducts(pool, dayStart, format === "carousel" ? campaign.carousel_size ?? 4 : oneProductPerPost ? Math.max(postsPerDay, 1) : 4);
   if (format === "carousel" && (!catalogItemIds.length || !context.behavior.interactiveMessages)) throw new Error("Carrossel precisa de produtos ativos com mídia e mensagens interativas habilitadas.");
   const brief = [campaign.idea, formatBriefs[format],
     campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post (benefício, uso, prova, oferta)." : "",
@@ -402,10 +422,11 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
       debitDescription: "Campanha de tráfego no WhatsApp", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, agentId: campaign.agent_id, itemCount: plan.items.length },
     });
     // With one product per post, each post carries its own product (photo and button to its page).
-    const planItems = format === "carousel" ? plan.items.map(item => ({ ...item, type: "carousel" as const, productIds: catalogItemIds })) : !oneProductPerPost ? plan.items : plan.items.map((item, index) => ({ ...item,
+    const planItems = format === "poll" ? plan.items.map(item => ({ ...item, type: "poll" as const })) : format === "carousel" ? plan.items.map(item => ({ ...item, type: "carousel" as const, productIds: catalogItemIds })) : !oneProductPerPost ? plan.items : plan.items.map((item, index) => ({ ...item,
       productIds: item.productIds?.length ? item.productIds.slice(0, 1) : catalogItemIds.length ? [catalogItemIds[index % catalogItemIds.length]] : [] }));
     const queued = await queueWhatsappGrowthCampaignPlan(client, context, {
       planItems, targetIds: destination.targetIds, catalogItemIds, buttonEnabled: buttonFormats.has(format), buttonLabel: oneProductPerPost ? "Ver produto" : null,
+      includeAudio: campaign.include_audio, carouselSize: format === "carousel" ? campaign.carousel_size : undefined,
     });
     scheduled += queued.count;
     await tagItems(client, queued.items.map(item => item.id), ["traffic_campaign", campaignTag(campaign.id)]);
@@ -568,11 +589,11 @@ async function planStatusDay(client: SupabaseClient, context: Context, campaign:
 async function planOnce(client: SupabaseClient, context: Context, campaign: TrafficCampaign, now: Date) {
   const when = new Date(now.getTime() + 60_000).toISOString();
   const text = campaign.manual_text?.trim();
-  if (!text) return (await planDay(client, context, campaign, new Date(now.getTime() + 2 * 60_000), 1)).scheduled;
+  if (!text || campaign.post_format === "poll") return (await planDay(client, context, campaign, new Date(now.getTime() + 2 * 60_000), 1)).scheduled;
   if (campaign.post_format === "carousel") {
-    const products = (await productsFor(client, campaign)).slice(0, 4);
+    const products = (await carouselProductsFor(client, context, campaign)).slice(0, campaign.carousel_size ?? 4);
     if (!products.length) throw new Error("Escolha produtos ativos com mídia para o carrossel.");
-    const item = await queueWhatsappTargetCarouselCampaign(client, context, { title: campaign.name, text, targetIds: campaign.target_ids, scheduledFor: when, catalogItemIds: products });
+    const item = await queueWhatsappTargetCarouselCampaign(client, context, { title: campaign.name, text, targetIds: campaign.target_ids, scheduledFor: when, catalogItemIds: products, carouselSize: campaign.carousel_size, includeAudio: campaign.include_audio });
     await tagItems(client, [item.id], ["traffic_campaign", campaignTag(campaign.id)]);
     return 1;
   }
@@ -587,7 +608,7 @@ async function planOnce(client: SupabaseClient, context: Context, campaign: Traf
   if (campaign.target_ids.length) {
     ids.push((await queueWhatsappTargetTextCampaign(client, context, {
       title: campaign.name, text, targetIds: campaign.target_ids, scheduledFor: when, catalogItemIds: products,
-      deliveryMode: campaign.post_format === "product_audio" ? "text_audio" : "text",
+      deliveryMode: campaign.post_format === "product_audio" || campaign.include_audio ? "text_audio" : "text",
       interactiveMode: products.length && buttonFormats.has(campaign.post_format) ? "button" : "none", buttonLabel: products.length ? "Ver produto" : null,
     })).id);
   }
@@ -734,6 +755,7 @@ export async function copyTrafficRoutine(client: SupabaseClient, input: { organi
       organization_id: input.organizationId, agent_id: input.toAgentId, name: campaign.name, status: "paused", post_status: campaign.post_status,
       target_ids: targetIds, product_mode: campaign.product_mode, catalog_item_ids: campaign.catalog_item_ids, idea: campaign.idea,
       post_format: campaign.post_format, intensity: campaign.intensity, start_hour: campaign.start_hour, schedule_mode: campaign.schedule_mode,
+      carousel_size: campaign.carousel_size ?? null, include_audio: campaign.include_audio ?? false,
       status_audience: campaign.status_audience, status_style: campaign.status_style, status_color: campaign.status_color,
       ends_at: campaign.ends_at, updated_by: input.userId,
     });

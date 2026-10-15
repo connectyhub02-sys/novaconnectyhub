@@ -18,10 +18,17 @@ it("edits carousel routines and replaces only their scheduled posts atomically",
         ('other-routine','org','scheduled',array['traffic_campaign:another'],now()),
         ('other-org','another','scheduled',array['traffic_campaign:routine'],now());`);
     await db.exec(readFileSync("supabase/migrations/0205_traffic_explicit_carousel.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/0206_traffic_carousel_size_audio.sql", "utf8"));
+    expect((await db.query("select carousel_size,include_audio from whatsapp_traffic_campaigns")).rows).toEqual([{carousel_size:null,include_audio:false}]);
     await db.exec("update whatsapp_traffic_campaigns set last_run_at=now()");
     expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
+    await db.exec("begin; update whatsapp_traffic_campaigns set carousel_size=3,include_audio=true; rollback;");
+    expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
+    await expect(db.exec("update whatsapp_traffic_campaigns set carousel_size=1")).rejects.toThrow();
     await db.exec("begin; update whatsapp_traffic_campaigns set post_format='carousel'; rollback;");
     expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
+    await db.exec("update whatsapp_traffic_campaigns set carousel_size=3,include_audio=true");
+    expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"archived"}]);
     await expect(db.exec("update whatsapp_traffic_campaigns set post_format='invalid'")).rejects.toThrow();
     await db.exec("update whatsapp_traffic_campaigns set post_format='carousel'");
     expect((await db.query("select post_format,planned_until from whatsapp_traffic_campaigns")).rows).toEqual([{post_format:"carousel",planned_until:null}]);

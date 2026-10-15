@@ -55,6 +55,8 @@ type ChannelActionBody = {
   currentTitle?: unknown;
   currentText?: unknown;
   deliveryMode?: unknown;
+  includeAudio?: unknown;
+  carouselSize?: unknown;
   mediaUrl?: unknown;
   mediaKind?: unknown;
   mediaCaption?: unknown;
@@ -305,6 +307,8 @@ export async function POST(request: NextRequest) {
       notice = "Campanha interna para grupos/canais agendada pelo Inngest.";
     } else if (action === "send_target_carousel") {
       const item = await queueWhatsappTargetCarouselCampaign(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
+        carouselSize: asNumber(body?.carouselSize),
         title: asString(body?.title) ?? "",
         text: asString(body?.text),
         targetIds: readStringList(body?.targetIds),
@@ -319,6 +323,8 @@ export async function POST(request: NextRequest) {
       notice = "Carrossel interno de produtos agendado pelo Inngest.";
     } else if (action === "schedule_growth_plan") {
       const queued = await queueWhatsappGrowthCampaignPlan(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
+        carouselSize: asNumber(body?.carouselSize),
         planItems: body?.planItems,
         targetIds: readStringList(body?.targetIds),
         catalogItemIds: readStringList(body?.catalogItemIds),
@@ -333,6 +339,7 @@ export async function POST(request: NextRequest) {
       notice = `${queued.count} post(s) da rotina IA interna foram agendados.`;
     } else if (action === "send_target_poll") {
       const item = await queueWhatsappTargetPollCampaign(client, whatsapp, {
+        includeAudio: asBoolean(body?.includeAudio),
         title: asString(body?.pollTitle) ?? "",
         question: asString(body?.pollQuestion) ?? "",
         choices: readStringList(body?.pollChoices),

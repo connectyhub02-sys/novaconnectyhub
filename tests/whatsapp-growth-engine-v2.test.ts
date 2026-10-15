@@ -92,7 +92,7 @@ describe("WhatsApp growth engine v2", () => {
     expect(operationsSource).toContain("const userButtonLabel = input.buttonLabel?.trim().slice(0, 24) || null");
     expect(operationsSource).toContain("userButtonLabel ?? productButtonDefaultLabel");
     expect(operationsSource).toContain('interactiveMode: itemButtonLabel ? "button" : "none"');
-    expect(studioSource).toContain("buttonEnabled: campaignButtonEnabled");
+    expect(studioSource).toContain('buttonEnabled: effectiveGrowthFormatPreference === "carousel" || campaignButtonEnabled');
     expect(studioSource).toContain('useState<GrowthFormatPreference>("text")');
   });
 });
