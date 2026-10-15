@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## API WhatsApp da Vision após liberação de contrato — 15/10/2026
+
+Contrato da Vision permitido até 11/11 às 22h21 BRT, mas cliente API seguia
+pausado sem marcador de cobrança. Chave/webhook já estavam ativos e a instância
+conectada. Com a credencial existente da Vision, consumo e instâncias retornavam
+403 `api_client_inactive`. Reparo transacional autorizado às 11h45 BRT reativou
+somente o cliente API e registrou auditoria; contrato, faturas, carteira e
+vínculo de infraestrutura preservados. As mesmas consultas passaram a 200.
+
+Identificado/reproduzido healthcheck capaz de apagar o marcador de suspensão ao
+gravar metadados antigos. A sequência histórica exata não foi comprovada por
+auditoria. Correção `174e10c1` lê metadados atuais após a consulta e usa a versão
+da linha para impedir sobrescrita concorrente; contempla cliente, webhook e
+instância. Regras de pausas administrativas e chaves revogadas preservadas.
+
+Publicada às 12h02 BRT no slot a/3130, fallback `d7c403cc` no b/3131. 27 testes,
+TypeScript, ESLint e build passaram. Candidato e HTTPS público validados em
+saúde/versão, autorização, Inngest, métricas e consultas reais autenticadas da
+Vision: consumo/instâncias 200, WhatsApp conectado. Builder parado. Sem envio de
+mensagens; envio/recebimento real e confirmação pelo titular ainda pendentes.
+[Evidências e limites](correcao-api-vision-contrato-2026-10-15.md).
+
 ## Hospedagens excluídas fora da lista principal — 13/10/2026
 
 Publicada a correção `d7c403cc` no slot b/3131, fallback `0972dc2b` no a/3130.
