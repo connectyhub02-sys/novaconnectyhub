@@ -194,7 +194,7 @@ function toClientCampaign(campaign: TrafficCampaign, counts: { sent: number; sch
     id: campaign.id, name: campaign.name, status: campaign.status, postStatus: campaign.post_status, targetIds: campaign.target_ids,
     productMode: campaign.product_mode, catalogItemIds: campaign.catalog_item_ids, idea: campaign.idea ?? "", manualText: campaign.manual_text ?? "",
     postFormat: campaign.post_format, intensity: campaign.intensity, startHour: campaign.start_hour, scheduleMode: campaign.schedule_mode,
-    endsAt: campaign.ends_at, plannedUntil: campaign.planned_until, lastError: campaign.last_error, sent: counts.sent, scheduled: counts.scheduled,
+    startsAt: campaign.starts_at, endsAt: campaign.ends_at, plannedUntil: campaign.planned_until, lastError: campaign.last_error, sent: counts.sent, scheduled: counts.scheduled,
     statusAudience: campaign.status_audience ?? "all", statusStyle: campaign.status_style ?? "single", statusColor: campaign.status_color ?? 13,
   };
 }
@@ -226,9 +226,15 @@ function readCampaignChanges(value: unknown): TrafficCampaignInput {
   if (record.productMode === "featured" || record.productMode === "selected" || record.productMode === "single") changes.product_mode = record.productMode;
   if (typeof record.idea === "string") changes.idea = record.idea.slice(0, 600);
   if (typeof record.manualText === "string") changes.manual_text = record.manualText.slice(0, 1500);
-  if (["auto", "product_audio", "product_button", "text", "poll"].includes(String(record.postFormat))) changes.post_format = record.postFormat as TrafficCampaignInput["post_format"];
+  if (["auto", "product_audio", "product_button", "text", "poll", "carousel"].includes(String(record.postFormat))) changes.post_format = record.postFormat as TrafficCampaignInput["post_format"];
   if (record.intensity === "light" || record.intensity === "normal" || record.intensity === "intense") changes.intensity = record.intensity;
   if (typeof record.startHour === "number" && Number.isInteger(record.startHour) && record.startHour >= 6 && record.startHour <= 20) changes.start_hour = record.startHour;
+  if (typeof record.startDate === "string" && record.startDate) {
+    const value = `${record.startDate}T${String(changes.start_hour ?? 9).padStart(2, "0")}:00:00-03:00`;
+    const parsed = new Date(value);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(record.startDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== record.startDate) throw new Error("Escolha uma data de início válida.");
+    changes.starts_at = parsed.toISOString();
+  }
   if (["once", "week", "month", "continuous"].includes(String(record.scheduleMode))) changes.schedule_mode = record.scheduleMode as TrafficCampaignInput["schedule_mode"];
   if (["all", "interested", "customers", "hot"].includes(String(record.statusAudience))) changes.status_audience = record.statusAudience as TrafficCampaignInput["status_audience"];
   if (record.statusStyle === "single" || record.statusStyle === "story") changes.status_style = record.statusStyle;

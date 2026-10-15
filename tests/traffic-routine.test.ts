@@ -63,6 +63,7 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
     },
     queueWhatsappStatusBroadcast: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { direct.push({ kind: "status", ...input }); return push(); },
     queueWhatsappTargetTextCampaign: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { direct.push({ kind: "targets", ...input }); return push(); },
+    queueWhatsappTargetCarouselCampaign: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { direct.push({ kind: "carousel", ...input }); return push(); },
     generateWhatsappShortText: async () => ({ modelId: "gemini", responseData: {},
       text: '[{"foto":"Enantato 10ml por R$ 269,99","beneficio":"Base clássica para ganho de força","oferta":"Responde este status e garanta o seu hoje!"},{"foto":"Deca 10ml","beneficio":"Volume com qualidade","oferta":"Me chama aqui!"}]' }),
     queueWhatsappGroupWindow: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => { windows.push(input); return { items: [push(), push()] }; },
@@ -94,6 +95,43 @@ describe("planning dates", () => {
 });
 
 describe("campaigns", () => {
+  it("uses carousel for every planned group post even if the model suggests another type", async () => {
+    const { db, traffic, plans, queuedPlans } = setup();
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, post_format: "carousel" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(plans[0].preferredFormats).toEqual(["carousel"]);
+    expect(queuedPlans[0]).toMatchObject({ buttonEnabled: true, targetIds: ["g1"] });
+    expect((queuedPlans[0].planItems as Array<{type:string; productIds:string[]}>).every(p => p.type === "carousel" && p.productIds.length === 2)).toBe(true);
+  });
+
+  it("keeps a manual one-time carousel as carousel without using AI or downgrading to text", async () => {
+    const { db, traffic, plans, direct } = setup();
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, post_format: "carousel", schedule_mode: "once", manual_text: "Conheça nossos produtos" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(plans).toHaveLength(0);
+    expect(direct).toEqual([expect.objectContaining({ kind: "carousel", text: "Conheça nossos produtos", catalogItemIds: ["p2", "p1"] })]);
+  });
+
+  it("plans the selected future date instead of posting today", async () => {
+    const { db, traffic, plans } = setup();
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ starts_at: "2026-10-02T15:00:00Z", start_hour: 12 }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(plans.every(p => p.startFrom === "2026-10-02T15:00:00.000Z")).toBe(true);
+  });
+
+  it("saves the selected start date and exactly seven calendar days of recurrence", async () => {
+    const { db, traffic } = setup();
+    const saved = await traffic.saveTrafficCampaign(db.client as never, { organizationId:"org", agentId:"agent", userId:"u", changes:{post_status:true, schedule_mode:"week", starts_at:"2030-01-02T12:00:00Z"} });
+    expect(saved.starts_at).toBe("2030-01-02T12:00:00Z");
+    expect(saved.ends_at).toBe("2030-01-09T03:00:00.000Z");
+  });
+
+  it("rejects carousel for Status and foreign or channel destinations before saving", async () => {
+    const { db, traffic } = setup();
+    const save = (changes: Record<string,unknown>) => traffic.saveTrafficCampaign(db.client as never, { organizationId: "org", agentId: "agent", userId: "u", changes: { post_format: "carousel", ...changes } as never });
+    await expect(save({ post_status:true, target_ids:["g1"] })).rejects.toThrow("grupos separada");
+    await expect(save({ post_status:false, target_ids:["unknown"] })).rejects.toThrow("grupos da sua empresa");
+    db.tables.whatsapp_channel_targets.push({ id:"channel", target_type:"newsletter", organization_id:"org" });
+    await expect(save({ post_status:false, target_ids:["channel"] })).rejects.toThrow("grupos da sua empresa");
+  });
+
   it("plans status and groups separately, bills the AI, tags the posts and remembers the planned day", async () => {
     const { db, traffic, plans, meter, campaign } = setup();
     const result = await traffic.runTrafficCampaign(db.client as never, campaignRow() as never, new Date("2026-09-27T10:00:00Z"));

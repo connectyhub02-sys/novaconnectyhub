@@ -15,12 +15,13 @@ import {
   queueWhatsappGrowthCampaignPlan,
   queueWhatsappStatusBroadcast,
   queueWhatsappTargetTextCampaign,
+  queueWhatsappTargetCarouselCampaign,
   resolveClientWhatsappOperationalContext,
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
 
 export type TrafficIntensity = "light" | "normal" | "intense";
-export type TrafficPostFormat = "auto" | "product_audio" | "product_button" | "text" | "poll";
+export type TrafficPostFormat = "auto" | "product_audio" | "product_button" | "text" | "poll" | "carousel";
 export type TrafficScheduleMode = "once" | "week" | "month" | "continuous";
 
 /** Per-number settings: the question room and the interaction with the leads' status. */
@@ -43,7 +44,7 @@ export type TrafficCampaign = {
 };
 export type TrafficStatusAudience = "all" | "interested" | "customers" | "hot";
 export type TrafficCampaignInput = Partial<Pick<TrafficCampaign, "name" | "post_status" | "target_ids" | "product_mode" | "catalog_item_ids"
-  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "status_audience" | "status_style" | "status_color">>;
+  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "starts_at" | "status_audience" | "status_style" | "status_color">>;
 
 const brtOffsetMs = 3 * 3600_000;
 const dayMs = 24 * 3600_000;
@@ -58,6 +59,7 @@ const targetFormats: Record<TrafficPostFormat, string[]> = {
   product_button: ["text"],
   text: ["text"],
   poll: ["poll"],
+  carousel: ["carousel"],
 };
 const formatBriefs: Record<TrafficPostFormat, string> = {
   auto: "",
@@ -65,8 +67,9 @@ const formatBriefs: Record<TrafficPostFormat, string> = {
   product_button: "Cada post apresenta UM produto com uma legenda curta (1 ou 2 frases): nome, valor e o convite para tocar no botão e ver o produto.",
   text: "Posts só de texto, curtos e conversados, que puxam resposta no privado.",
   poll: "Cada post é uma enquete que gera conversa sobre os produtos.",
+  carousel: "Todos os posts devem ser carrosséis de produtos com mídia e botão para ver cada produto. Não substitua por texto, enquete ou áudio.",
 };
-const buttonFormats = new Set<TrafficPostFormat>(["auto", "product_audio", "product_button"]);
+const buttonFormats = new Set<TrafficPostFormat>(["auto", "product_audio", "product_button", "carousel"]);
 
 const localMidnight = (time: number) => Math.floor((time - brtOffsetMs) / dayMs) * dayMs + brtOffsetMs;
 
@@ -193,12 +196,20 @@ export async function saveTrafficCampaign(client: SupabaseClient, input: { organ
     ? ((await client.from("whatsapp_traffic_campaigns").select("*").eq("id", input.campaignId).eq("organization_id", input.organizationId).eq("agent_id", input.agentId).maybeSingle()).data as TrafficCampaign | null)
     : null;
   if (input.campaignId && !current) throw new Error("Campanha não encontrada.");
-  await assertAgentEnabled(client, input.organizationId, input.agentId);
+  const agentContext = await assertAgentEnabled(client, input.organizationId, input.agentId);
   const merged = { ...(current ?? {}), ...changes } as Partial<TrafficCampaign>;
   if (!merged.post_status && !(merged.target_ids ?? []).length) throw new Error("Escolha onde divulgar: status, grupos ou canais.");
-  if (merged.product_mode === "single" && !(merged.catalog_item_ids ?? []).length) throw new Error("Escolha o produto da campanha.");
+  if ((merged.product_mode === "single" || merged.product_mode === "selected") && !(merged.catalog_item_ids ?? []).length) throw new Error("Escolha os produtos da rotina.");
+  if (merged.post_format === "carousel" && (merged.post_status || !(merged.target_ids ?? []).length)) throw new Error("Crie uma rotina de grupos separada para o carrossel.");
+  if (merged.post_format === "carousel") {
+    const targets = await client.from("whatsapp_channel_targets").select("id, target_type").eq("organization_id", input.organizationId).eq("whatsapp_instance_id", agentContext.instance.id).in("id", merged.target_ids!);
+    if (targets.error || targets.data?.length !== new Set(merged.target_ids).size || targets.data.some(row => row.target_type !== "group")) throw new Error("Carrossel nesta rotina está disponível somente para grupos da sua empresa.");
+  }
   const now = new Date();
-  const periodChanged = !current || (changes.schedule_mode !== undefined && changes.schedule_mode !== current.schedule_mode);
+  const periodChanged = !current || (changes.schedule_mode !== undefined && changes.schedule_mode !== current.schedule_mode)
+    || (changes.starts_at !== undefined && new Date(changes.starts_at).getTime() !== new Date(current.starts_at).getTime());
+  const startsAt = changes.starts_at ?? (periodChanged ? now.toISOString() : current?.starts_at ?? now.toISOString());
+  if (!Number.isFinite(new Date(startsAt).getTime())) throw new Error("Data de início inválida.");
   const mode = merged.schedule_mode ?? "continuous";
   const days = scheduleDays[mode];
   const row = {
@@ -208,8 +219,8 @@ export async function saveTrafficCampaign(client: SupabaseClient, input: { organ
     name: (merged.name ?? "").trim().slice(0, 80) || "Campanha de tráfego",
     ...(changes.idea !== undefined ? { idea: changes.idea?.trim().slice(0, 600) || null } : {}),
     ...(changes.manual_text !== undefined ? { manual_text: changes.manual_text?.trim().slice(0, 1500) || null } : {}),
-    ...(periodChanged ? { status: "active", starts_at: now.toISOString(), planned_until: null, last_run_at: null, last_error: null,
-      ends_at: days ? new Date(localMidnight(now.getTime()) + (days + 1) * dayMs).toISOString() : null } : {}),
+    ...(periodChanged ? { status: "active", starts_at: startsAt, planned_until: null, last_run_at: null, last_error: null,
+      ends_at: days ? new Date(localMidnight(new Date(startsAt).getTime()) + days * dayMs).toISOString() : null } : {}),
   };
   const query = current
     ? client.from("whatsapp_traffic_campaigns").update(row).eq("id", current.id).select("*").single()
@@ -244,6 +255,7 @@ export async function setTrafficCampaignStatus(client: SupabaseClient, input: { 
 async function assertAgentEnabled(client: SupabaseClient, organizationId: string, agentId: string) {
   const context = await resolveClientWhatsappOperationalContext(client, organizationId, agentId);
   if (!isOperationalAgentEnabled(context)) throw new Error(agentDisabledMessage);
+  return context;
 }
 
 async function enableCapabilities(client: SupabaseClient, organizationId: string, agentId: string, needs: { status?: boolean; groups?: boolean; campaigns?: boolean; newsletters?: boolean; interactive?: boolean }, userId: string | null) {
@@ -321,7 +333,7 @@ export async function runTrafficCampaign(client: SupabaseClient, campaign: Traff
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", planned_until: now.toISOString(), last_error: null }).eq("id", campaign.id);
       return { scheduled };
     }
-    const dayStart = nextRoutineDayStart(now, campaign.start_hour, campaign.planned_until);
+    const dayStart = nextRoutineDayStart(new Date(Math.max(now.getTime(), new Date(campaign.starts_at).getTime())), campaign.start_hour, campaign.planned_until);
     if (campaign.ends_at && dayStart.getTime() >= new Date(campaign.ends_at).getTime()) {
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", last_error: null }).eq("id", campaign.id);
       return { ended: true };
@@ -365,6 +377,7 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
   const postsPerDay = postsOverride ?? trafficPostsPerDay[campaign.intensity] ?? 2;
   const oneProductPerPost = format === "product_audio" || format === "product_button";
   const catalogItemIds = pickRoutineProducts(pool, dayStart, oneProductPerPost ? Math.max(postsPerDay, 1) : 4);
+  if (format === "carousel" && (!catalogItemIds.length || !context.behavior.interactiveMessages)) throw new Error("Carrossel precisa de produtos ativos com mídia e mensagens interativas habilitadas.");
   const brief = [campaign.idea, formatBriefs[format],
     campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post (benefício, uso, prova, oferta)." : "",
     "Campanha de tráfego: cada post puxa conversa no privado ou compra. Varie o ângulo em relação aos dias anteriores."].filter(Boolean).join("\n");
@@ -389,7 +402,7 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
       debitDescription: "Campanha de tráfego no WhatsApp", metadata: { source: "whatsapp_traffic_campaign", campaignId: campaign.id, agentId: campaign.agent_id, itemCount: plan.items.length },
     });
     // With one product per post, each post carries its own product (photo and button to its page).
-    const planItems = !oneProductPerPost ? plan.items : plan.items.map((item, index) => ({ ...item,
+    const planItems = format === "carousel" ? plan.items.map(item => ({ ...item, type: "carousel" as const, productIds: catalogItemIds })) : !oneProductPerPost ? plan.items : plan.items.map((item, index) => ({ ...item,
       productIds: item.productIds?.length ? item.productIds.slice(0, 1) : catalogItemIds.length ? [catalogItemIds[index % catalogItemIds.length]] : [] }));
     const queued = await queueWhatsappGrowthCampaignPlan(client, context, {
       planItems, targetIds: destination.targetIds, catalogItemIds, buttonEnabled: buttonFormats.has(format), buttonLabel: oneProductPerPost ? "Ver produto" : null,
@@ -556,6 +569,13 @@ async function planOnce(client: SupabaseClient, context: Context, campaign: Traf
   const when = new Date(now.getTime() + 60_000).toISOString();
   const text = campaign.manual_text?.trim();
   if (!text) return (await planDay(client, context, campaign, new Date(now.getTime() + 2 * 60_000), 1)).scheduled;
+  if (campaign.post_format === "carousel") {
+    const products = (await productsFor(client, campaign)).slice(0, 4);
+    if (!products.length) throw new Error("Escolha produtos ativos com mídia para o carrossel.");
+    const item = await queueWhatsappTargetCarouselCampaign(client, context, { title: campaign.name, text, targetIds: campaign.target_ids, scheduledFor: when, catalogItemIds: products });
+    await tagItems(client, [item.id], ["traffic_campaign", campaignTag(campaign.id)]);
+    return 1;
+  }
   const products = campaign.product_mode === "featured" ? [] : (await productsFor(client, campaign)).slice(0, 1);
   const ids: string[] = [];
   if (campaign.post_status) {

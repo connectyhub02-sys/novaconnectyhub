@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, RefreshCcw, Trash2, Users, X } from "lucide-react";
+import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import { CampaignEditor, campaignDestination, destinationLabels, postFormats, trafficToday } from "./whatsapp-traffic-campaign-editor";
 import { cn } from "@/lib/utils";
 import { describeHolder, holderConflicts, type GroupHolder } from "@/lib/whatsapp/group-schedule";
 
@@ -14,8 +15,9 @@ export type TrafficNumberSettings = {
 export type TrafficCampaignView = {
   id: string; name: string; status: "active" | "paused" | "ended"; postStatus: boolean; targetIds: string[];
   productMode: "featured" | "selected" | "single"; catalogItemIds: string[]; idea: string; manualText: string;
-  postFormat: "auto" | "product_audio" | "product_button" | "text" | "poll"; intensity: "light" | "normal" | "intense"; startHour: number;
+  postFormat: "auto" | "product_audio" | "product_button" | "text" | "poll" | "carousel"; intensity: "light" | "normal" | "intense"; startHour: number;
   scheduleMode: "once" | "week" | "month" | "continuous"; endsAt: string | null; plannedUntil: string | null; lastError: string | null; sent: number; scheduled: number;
+  startsAt?: string;
   statusAudience: "all" | "interested" | "customers" | "hot"; statusStyle: "single" | "story"; statusColor: number;
 };
 export type TrafficPayload = {
@@ -26,8 +28,8 @@ export type TrafficPayload = {
   groupHolders?: Record<string, GroupHolder>;
   agentEnabled?: boolean;
 };
-type Target = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
-type CampaignDraft = Omit<TrafficCampaignView, "id" | "status" | "endsAt" | "plannedUntil" | "lastError" | "sent" | "scheduled"> & { id: string | null };
+export type TrafficTarget = { id: string; type: "group" | "newsletter"; name: string; participantCount: number | null; isAnnouncement: boolean | null; isAdmin: boolean | null };
+export type CampaignDraft = Omit<TrafficCampaignView, "id" | "status" | "endsAt" | "plannedUntil" | "lastError" | "sent" | "scheduled"> & { id: string | null; destination?: keyof typeof destinationLabels; startDate?: string };
 
 const numberDefaults: TrafficNumberSettings = {
   leadStatusView: false, leadStatusReact: false, leadStatusComment: false, roomEnabled: false, roomTargetIds: [], roomOpenHour: 19, roomCloseHour: 20,
@@ -37,22 +39,10 @@ const newCampaign: CampaignDraft = {
   id: null, name: "", postStatus: true, targetIds: [], productMode: "featured", catalogItemIds: [], idea: "", manualText: "",
   postFormat: "auto", intensity: "normal", startHour: 9, scheduleMode: "week", statusAudience: "all", statusStyle: "single", statusColor: 13,
 };
-const productModes = [
-  ["featured", "IA escolhe", "Os destaques da loja, variando a cada dia"],
-  ["single", "Um produto só", "A campanha inteira sobre um produto"],
-  ["selected", "Alguns produtos", "Só os que você marcar"],
-] as const;
-const postFormats = [
-  ["auto", "Automático", "A IA varia: texto, carrossel, enquete e áudio"],
-  ["product_audio", "Produto com botão + áudio", "Foto, botão para ver e comprar e um áudio do agente explicando o produto"],
-  ["product_button", "Produto com botão", "Foto e botão para ver e comprar, sem áudio"],
-  ["text", "Só texto", "Mensagens curtas que puxam conversa"],
-  ["poll", "Enquete", "Pergunta com opções (só em grupos)"],
-] as const;
 const scheduleModes = [
   ["once", "Uma vez agora", "Um post só, em instantes"],
-  ["week", "Por 1 semana", "Posts todos os dias por 7 dias"],
-  ["month", "Por 1 mês", "Posts todos os dias por 30 dias"],
+  ["week", "Diária por 7 dias", "Posts todos os dias por 7 dias"],
+  ["month", "Diária por 30 dias", "Posts todos os dias por 30 dias"],
   ["continuous", "Contínua", "Até você pausar"],
 ] as const;
 const statusAudiences = [
@@ -60,10 +50,6 @@ const statusAudiences = [
   ["interested", "Só interessados nos produtos da campanha"],
   ["customers", "Só clientes que já compraram"],
   ["hot", "Só leads quentes"],
-] as const;
-const statusColors = [
-  [13, "Magenta", "#a3176a"], [8, "Azul intenso", "#1f5fbf"], [4, "Verde vibrante", "#1ea55a"], [3, "Laranja", "#f29a1d"],
-  [12, "Roxo", "#5b4bb5"], [7, "Azul piscina", "#28a9c9"], [15, "Salmão", "#e8826f"], [19, "Cinza escuro", "#3b4550"],
 ] as const;
 const intensities = [["light", "Leve", "1 por dia"], ["normal", "Normal", "2 por dia"], ["intense", "Intenso", "3 por dia"]] as const;
 const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -77,7 +63,7 @@ const shortDate = (value: string) => new Date(value).toLocaleString("pt-BR", { w
  * and the interaction with the leads' status. The AI writes the posts and plans each day by itself.
  */
 export function WhatsappTrafficRoutineCard(props: {
-  traffic: TrafficPayload | null; targets: Target[]; products: ClientSalesCatalogItem[]; connected: boolean; disabled: boolean;
+  traffic: TrafficPayload | null; targets: TrafficTarget[]; products: ClientSalesCatalogItem[]; connected: boolean; disabled: boolean;
   onSave: (action: string, payload: Record<string, unknown>) => Promise<TrafficPayload | null>; onDiscover: () => void; discovering: boolean;
   copySources?: Array<{ agentId: string; label: string }>;
 }) {
@@ -108,11 +94,19 @@ export function WhatsappTrafficRoutineCard(props: {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Megaphone className="h-4 w-4 text-emerald-700" />Tráfego com IA</h3>
-          <p className="mt-0.5 text-sm text-slate-600">Crie campanhas para o status, grupos e canais. O agente escreve os posts e planeja cada dia sozinho.</p>
+          <p className="mt-0.5 text-sm text-slate-600">Crie rotinas independentes para Status, Grupos e Canais. Cada uma tem seus produtos, horários e controle de pausa.</p>
         </div>
-        <button type="button" disabled={props.disabled} onClick={() => setEditor({ ...newCampaign })} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          <Plus className="h-4 w-4" />Nova campanha
-        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {(["status", "groups", "channels"] as const).map(destination => (
+          <button key={destination} type="button" disabled={props.disabled || Boolean(busy)}
+            onClick={() => setEditor({ ...newCampaign, destination, postStatus: destination === "status", startDate: trafficToday() })}
+            className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-left hover:border-emerald-600 disabled:opacity-50">
+            <span className="flex items-center justify-between font-semibold text-emerald-900">{destinationLabels[destination]}<Plus className="h-4 w-4" /></span>
+            <span className="mt-1 block text-xs text-slate-600">{destination === "status" ? "Visibilidade, sequência, cores e produtos do seu Status." : destination === "groups" ? "Escolha grupos, produtos e formato, incluindo carrossel." : "Publicações para os seguidores dos seus canais."}</span>
+            <span className="mt-3 block text-xs font-semibold text-emerald-700">Criar rotina de {destinationLabels[destination]}</span>
+          </button>
+        ))}
       </div>
       {!props.connected ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">Conecte o WhatsApp deste agente para as campanhas postarem.</p> : null}
       {props.copySources?.length ? (
@@ -143,7 +137,7 @@ export function WhatsappTrafficRoutineCard(props: {
             const statusLabel = campaign.postStatus
               ? `Status${campaign.statusStyle === "story" ? " em sequência" : ""}${campaign.statusAudience !== "all" ? ` (${statusAudiences.find(([id]) => id === campaign.statusAudience)?.[1].replace("Só ", "") ?? ""})` : ""}`
               : null;
-            const where = [statusLabel, ...campaign.targetIds.map(id => targetName.get(id) ?? "grupo/canal")].filter(Boolean);
+            const where = [destinationLabels[campaignDestination(campaign, props.targets)], statusLabel, ...campaign.targetIds.map(id => targetName.get(id) ?? "grupo/canal")].filter(Boolean);
             const what = campaign.productMode === "featured" ? "IA escolhe os produtos"
               : campaign.catalogItemIds.map(id => productName.get(id) ?? "produto").slice(0, 3).join(", ");
             return (
@@ -152,7 +146,7 @@ export function WhatsappTrafficRoutineCard(props: {
                   <div className="min-w-0">
                     <p className="flex items-center gap-2 font-semibold text-slate-900">{campaign.name}<span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", statusClass)}>{statusText}</span></p>
                     <p className="mt-0.5 truncate text-xs text-slate-600">{where.join(" · ")}</p>
-                    <p className="text-xs text-slate-500">{what} · {formatLabel[campaign.postFormat]} · {scheduleLabel[campaign.scheduleMode]}{campaign.scheduleMode !== "once" ? ` · ${intensities.find(item => item[0] === campaign.intensity)?.[2]}` : ""}{campaign.endsAt ? ` · até ${new Date(campaign.endsAt).toLocaleDateString("pt-BR")}` : ""}</p>
+                    <p className="text-xs text-slate-500">{what} · {campaign.postStatus && !campaign.targetIds.length ? campaign.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : formatLabel[campaign.postFormat]} · {scheduleLabel[campaign.scheduleMode]}{campaign.scheduleMode !== "once" ? ` · ${intensities.find(item => item[0] === campaign.intensity)?.[2]}` : ""}{campaign.endsAt ? ` · até ${new Date(campaign.endsAt).toLocaleDateString("pt-BR")}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="mr-2 text-xs text-slate-500">{campaign.sent} enviados · {campaign.scheduled} agendados</span>
@@ -162,7 +156,7 @@ export function WhatsappTrafficRoutineCard(props: {
                         {campaign.status === "active" ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                       </IconButton>
                     ) : null}
-                    <IconButton label="Editar" disabled={props.disabled || Boolean(busy)} onClick={() => setEditor({ ...campaign })}><Pencil className="h-4 w-4" /></IconButton>
+                    <IconButton label="Editar" disabled={props.disabled || Boolean(busy)} onClick={() => setEditor({ ...campaign, destination: campaignDestination(campaign, props.targets) })}><Pencil className="h-4 w-4" /></IconButton>
                     <IconButton label="Excluir" busy={busy === `${campaign.id}:delete`} disabled={props.disabled || Boolean(busy)}
                       onClick={() => { if (window.confirm(`Excluir a campanha "${campaign.name}"? Os posts agendados dela serão cancelados.`)) void run(`${campaign.id}:delete`, "campaign_status", { campaignId: campaign.id, campaignAction: "delete" }); }}>
                       <Trash2 className="h-4 w-4" />
@@ -174,7 +168,7 @@ export function WhatsappTrafficRoutineCard(props: {
             );
           })}
         </div>
-      ) : !editor ? <p className="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">Nenhuma campanha ainda. Clique em &quot;Nova campanha&quot; para começar.</p> : null}
+      ) : !editor ? <p className="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">Escolha Status, Grupos ou Canais acima para criar sua primeira rotina.</p> : null}
 
       <NumberSettings key={JSON.stringify(props.traffic?.routine ?? null)} saved={props.traffic?.routine ?? numberDefaults} groups={groups} holders={props.traffic?.groupHolders ?? {}} disabled={props.disabled}
         busy={busy} onSave={(settings, key) => run(key, "save_traffic_routine", { routine: settings })} />
@@ -200,113 +194,7 @@ export function WhatsappTrafficRoutineCard(props: {
   );
 }
 
-function CampaignEditor(props: {
-  draft: CampaignDraft; setDraft: (value: CampaignDraft | null) => void; groups: Target[]; channels: Target[]; products: ClientSalesCatalogItem[];
-  busy: boolean; discovering: boolean; onDiscover: () => void; onSave: () => void;
-}) {
-  const { draft } = props;
-  const set = <K extends keyof CampaignDraft>(key: K, value: CampaignDraft[K]) => props.setDraft({ ...draft, [key]: value });
-  const toggle = (key: "targetIds" | "catalogItemIds", id: string) => set(key, draft[key].includes(id) ? draft[key].filter(value => value !== id) : [...draft[key], id]);
-  const activeProducts = props.products.filter(product => product.status === "active");
-  const ready = (draft.postStatus || draft.targetIds.length > 0) && (draft.productMode === "featured" || draft.catalogItemIds.length > 0);
-  return (
-    <div className="rounded-xl border-2 border-emerald-600/40 bg-emerald-50/30 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <input value={draft.name} onChange={event => set("name", event.target.value)} maxLength={80} placeholder="Nome da campanha (ex.: Semana do Whey)"
-          className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800" />
-        <button type="button" aria-label="Fechar" onClick={() => props.setDraft(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>
-      </div>
-      <div className="mt-3 grid gap-3 lg:grid-cols-4">
-        <Step number={1} title="Onde">
-          <Check checked={draft.postStatus} onChange={() => set("postStatus", !draft.postStatus)} label="Meu status" hint="Foto e legenda curta, ou uma sequência de 3 status" />
-          {draft.postStatus ? (
-            <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-              <label className="block text-xs font-medium text-slate-600">Quem vê o status
-                <select value={draft.statusAudience} onChange={event => set("statusAudience", event.target.value as CampaignDraft["statusAudience"])} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800">
-                  {statusAudiences.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                </select>
-              </label>
-              <div className="flex gap-1">
-                {([["single", "Post único"], ["story", "Sequência (3 status)"]] as const).map(([id, label]) => (
-                  <button key={id} type="button" onClick={() => set("statusStyle", id)} className={cn("flex-1 rounded-lg border px-2 py-1 text-xs", draft.statusStyle === id ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600")}>{label}</button>
-                ))}
-              </div>
-              {draft.statusStyle === "story" ? <p className="text-[11px] text-slate-500">Foto do produto, depois um benefício e a oferta em texto colorido, com 2 minutos entre eles.</p> : null}
-              <div>
-                <p className="text-xs font-medium text-slate-600">Cor dos status em texto</p>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {statusColors.map(([id, label, hex]) => (
-                    <button key={id} type="button" title={label} aria-label={label} aria-pressed={draft.statusColor === id} onClick={() => set("statusColor", id)}
-                      className={cn("h-6 w-6 rounded-full border-2", draft.statusColor === id ? "border-slate-900" : "border-white shadow")} style={{ background: hex }} />
-                  ))}
-                </div>
-              </div>
-              {draft.statusAudience !== "all" ? <p className="text-[11px] text-slate-500">Só recebe quem salvou o seu número. Quem pediu para não receber mensagens nunca entra.</p> : null}
-            </div>
-          ) : null}
-          <TargetList title="Grupos" icon={<Users className="h-3.5 w-3.5" />} items={props.groups} selected={draft.targetIds} onToggle={id => toggle("targetIds", id)} />
-          <TargetList title="Canais" icon={<Megaphone className="h-3.5 w-3.5" />} items={props.channels} selected={draft.targetIds} onToggle={id => toggle("targetIds", id)} />
-          <button type="button" disabled={props.discovering} onClick={props.onDiscover} className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50">
-            {props.discovering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}Buscar meus grupos e canais
-          </button>
-        </Step>
-        <Step number={2} title="O quê">
-          {productModes.map(([id, label, hint]) => <Check key={id} radio checked={draft.productMode === id} onChange={() => props.setDraft({ ...draft, productMode: id, catalogItemIds: id === "single" ? draft.catalogItemIds.slice(0, 1) : draft.catalogItemIds })} label={label} hint={hint} />)}
-          {draft.productMode === "single" ? (
-            <select value={draft.catalogItemIds[0] ?? ""} onChange={event => set("catalogItemIds", event.target.value ? [event.target.value] : [])} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm">
-              <option value="">Escolha o produto</option>
-              {activeProducts.map(product => <option key={product.id} value={product.id}>{product.title}</option>)}
-            </select>
-          ) : draft.productMode === "selected" ? (
-            <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
-              {activeProducts.slice(0, 40).map(product => (
-                <button key={product.id} type="button" onClick={() => toggle("catalogItemIds", product.id)}
-                  className={cn("rounded-full border px-2.5 py-1 text-xs", draft.catalogItemIds.includes(product.id) ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600")}>{product.title}</button>
-              ))}
-            </div>
-          ) : null}
-          <label className="block text-xs font-medium text-slate-600">Ideia ou oferta (opcional)
-            <textarea value={draft.idea} onChange={event => set("idea", event.target.value)} rows={2} maxLength={600} placeholder="Ex.: frete grátis até domingo"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800" />
-          </label>
-        </Step>
-        <Step number={3} title="Como">
-          {postFormats.map(([id, label, hint]) => <Check key={id} radio checked={draft.postFormat === id} onChange={() => set("postFormat", id)} label={label} hint={hint} />)}
-        </Step>
-        <Step number={4} title="Quando">
-          {scheduleModes.map(([id, label, hint]) => <Check key={id} radio checked={draft.scheduleMode === id} onChange={() => set("scheduleMode", id)} label={label} hint={hint} />)}
-          {draft.scheduleMode === "once" ? (
-            <label className="block text-xs font-medium text-slate-600">Seu texto (opcional)
-              <textarea value={draft.manualText} onChange={event => set("manualText", event.target.value)} rows={3} maxLength={1500} placeholder="Deixe vazio para a IA escrever"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800" />
-            </label>
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-1">
-                {intensities.map(([id, label, hint]) => (
-                  <button key={id} type="button" onClick={() => set("intensity", id)} className={cn("rounded-full border px-2.5 py-1 text-xs", draft.intensity === id ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600")}>{label} · {hint}</button>
-                ))}
-              </div>
-              <label className="flex items-center justify-between gap-2 text-xs font-medium text-slate-600">Começar às
-                <select value={draft.startHour} onChange={event => set("startHour", Number(event.target.value))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800">
-                  {Array.from({ length: 15 }, (_, index) => index + 6).map(hour => <option key={hour} value={hour}>{hour}h</option>)}
-                </select>
-              </label>
-            </>
-          )}
-        </Step>
-      </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <button type="button" onClick={() => props.setDraft(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700">Cancelar</button>
-        <button type="button" disabled={!ready || props.busy} onClick={props.onSave} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          {props.busy ? "Salvando…" : draft.id ? "Salvar campanha" : draft.scheduleMode === "once" ? "Postar" : "Ligar campanha"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function NumberSettings(props: { saved: TrafficNumberSettings; groups: Target[]; holders: Record<string, GroupHolder>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
+function NumberSettings(props: { saved: TrafficNumberSettings; groups: TrafficTarget[]; holders: Record<string, GroupHolder>; disabled: boolean; busy: string | null; onSave: (settings: TrafficNumberSettings, key: string) => Promise<unknown> }) {
   const [draft, setDraft] = useState(props.saved);
   const set = <K extends keyof TrafficNumberSettings>(key: K, value: TrafficNumberSettings[K]) => setDraft(current => ({ ...current, [key]: value }));
   const comparable = (value: TrafficNumberSettings) => JSON.stringify({ ...value, roomPlannedUntil: null, lastError: null, leadStatusView: false, leadStatusReact: false, leadStatusComment: false });
@@ -394,37 +282,11 @@ function IconButton(props: { label: string; onClick: () => void; disabled?: bool
   );
 }
 
-function Step(props: { number: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="grid content-start gap-2 rounded-lg border border-slate-200 bg-white p-3">
-      <p className="flex items-center gap-2 text-sm font-semibold text-slate-800"><span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-700 text-[11px] text-white">{props.number}</span>{props.title}</p>
-      {props.children}
-    </div>
-  );
-}
-
 function Check(props: { checked: boolean; onChange: () => void; label: string; hint?: string; radio?: boolean; disabled?: boolean }) {
   return (
     <label className={cn("flex items-start gap-2 rounded-lg border px-2.5 py-2 text-sm", props.disabled ? "cursor-not-allowed" : "cursor-pointer", props.checked ? "border-emerald-600 bg-emerald-50" : "border-slate-200")}>
       <input type={props.radio ? "radio" : "checkbox"} checked={props.checked} disabled={props.disabled} onChange={props.onChange} className="mt-0.5 accent-emerald-700" />
       <span><span className="block font-medium text-slate-800">{props.label}</span>{props.hint ? <span className="block text-xs text-slate-500">{props.hint}</span> : null}</span>
     </label>
-  );
-}
-
-function TargetList(props: { title: string; icon: React.ReactNode; items: Target[]; selected: string[]; onToggle: (id: string) => void }) {
-  if (!props.items.length) return <p className="flex items-center gap-1.5 text-xs text-slate-500">{props.icon}{props.title}: nenhum encontrado</p>;
-  return (
-    <div>
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">{props.icon}{props.title}</p>
-      <div className="mt-1 grid max-h-40 gap-1 overflow-y-auto">
-        {props.items.map(item => (
-          <label key={item.id} className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
-            <span className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={props.selected.includes(item.id)} onChange={() => props.onToggle(item.id)} className="accent-emerald-700" /><span className="truncate text-slate-800">{item.name}</span></span>
-            <span className="shrink-0 text-xs text-slate-500">{item.isAnnouncement && item.isAdmin === false ? "só admins postam" : item.participantCount ? `${item.participantCount}` : ""}</span>
-          </label>
-        ))}
-      </div>
-    </div>
   );
 }
