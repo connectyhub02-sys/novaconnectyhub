@@ -1,5 +1,6 @@
 "use client";
 
+import { WhatsappDailyTimes, dailyTimesError } from "./whatsapp-daily-times";
 import { useState } from "react";
 import { RefreshCcw, X } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
@@ -156,21 +157,22 @@ export function CampaignEditor(props: {
               {draft.postFormat !== "poll" && <label className="text-xs font-medium text-slate-700">Legenda pronta (opcional)<textarea className={field} rows={3} value={draft.manualText} maxLength={1500} onChange={e => set("manualText", e.target.value)} placeholder="Deixe vazio para a IA escrever" /></label>}
             </> : <>
               <p className="text-xs text-slate-500">Publica diariamente durante o período escolhido. Não é uma publicação semanal ou mensal.</p>
-              <label className="text-xs font-medium text-slate-700">Quantidade por dia
+              <WhatsappDailyTimes value={draft.dailyTimes} onChange={times => set("dailyTimes", times)} />
+            {!draft.dailyTimes && <label className="text-xs font-medium text-slate-700">Quantidade por dia
                 <select className={field} value={draft.intensity} onChange={e => set("intensity", e.target.value as CampaignDraft["intensity"])}>{([['light', 1], ['normal', 2], ['intense', 3]] as const).map(([id, count]) => <option key={id} value={id}>{count} {isStatus && draft.statusStyle === "story" ? "sequência(s) de 3 Status" : "publicação(ões) por destino"}</option>)}</select>
-              </label>
+              </label>}
               <label className="text-xs font-medium text-slate-700">Data de início<input type="date" className={field} min={trafficToday()} value={draft.startDate ?? (draft.startsAt && draft.startsAt.slice(0, 10) >= trafficToday() ? draft.startsAt.slice(0, 10) : trafficToday())} onChange={e => set("startDate", e.target.value)} /></label>
-              <label className="text-xs font-medium text-slate-700">Começar às (Brasília)
+              {!draft.dailyTimes && <><label className="text-xs font-medium text-slate-700">Começar às (Brasília)
                 <select className={field} value={draft.startHour} onChange={e => props.setDraft({ ...draft, startHour: Number(e.target.value), startDate: draft.startDate ?? (draft.startsAt && draft.startsAt.slice(0, 10) >= trafficToday() ? draft.startsAt.slice(0, 10) : trafficToday()) })}>{Array.from({ length: 15 }, (_, i) => i + 6).map(h => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}</select>
               </label>
-              <p className="text-xs text-slate-500">As publicações são distribuídas nas 10 horas seguintes ao início. Se o horário de hoje já passou, o sistema usa o próximo horário disponível.</p>
+              <p className="text-xs text-slate-500">As publicações são distribuídas nas 10 horas seguintes ao início. Se o horário de hoje já passou, o sistema usa o próximo horário disponível.</p></>}
             </>}
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === formatValue)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p><p className="mt-1">{carousel ? `${carouselSize} produtos por carrossel · ` : ""}{draft.includeAudio || draft.postFormat === "product_audio" ? "Com áudio do agente" : "Sem áudio adicional"}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === formatValue)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p>{draft.scheduleMode !== "once" && draft.dailyTimes && <p className="mt-1">Às {draft.dailyTimes.join(", ")} (Brasília), por destino.{isStatus && draft.statusStyle === "story" ? " Cada horário inicia uma sequência de 3 Status, com 2 minutos entre eles." : ""}</p>}<p className="mt-1">{carousel ? `${carouselSize} produtos por carrossel · ` : ""}{draft.includeAudio || draft.postFormat === "product_audio" ? "Com áudio do agente" : "Sem áudio adicional"}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
             {draft.id && <p className="text-xs text-slate-500">Salvar substitui as publicações ainda agendadas desta rotina. Envios já realizados ficam no histórico.</p>}
           </Panel>
         </fieldset>
       </fieldset>
-      <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" disabled={props.busy} onClick={() => props.setDraft(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancelar</button><button type="button" disabled={!ready || props.busy} onClick={props.onSave} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{props.busy ? "Salvando…" : draft.id ? "Salvar rotina" : draft.scheduleMode === "once" ? "Confirmar publicação" : "Ativar rotina"}</button></div>
+      <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" disabled={props.busy} onClick={() => props.setDraft(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">Cancelar</button><button type="button" disabled={!ready || props.busy || (draft.scheduleMode !== "once" && Boolean(dailyTimesError(draft.dailyTimes)))} onClick={props.onSave} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{props.busy ? "Salvando…" : draft.id ? "Salvar rotina" : draft.scheduleMode === "once" ? "Confirmar publicação" : "Ativar rotina"}</button></div>
     </div>
   );
 }

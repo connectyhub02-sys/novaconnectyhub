@@ -19,9 +19,19 @@ it("edits carousel routines and replaces only their scheduled posts atomically",
         ('other-org','another','scheduled',array['traffic_campaign:routine'],now());`);
     await db.exec(readFileSync("supabase/migrations/0205_traffic_explicit_carousel.sql", "utf8"));
     await db.exec(readFileSync("supabase/migrations/0206_traffic_carousel_size_audio.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/0207_traffic_fixed_daily_times.sql", "utf8"));
+    expect((await db.query("select daily_times from whatsapp_traffic_campaigns")).rows).toEqual([{ daily_times: null }]);
     expect((await db.query("select carousel_size,include_audio from whatsapp_traffic_campaigns")).rows).toEqual([{carousel_size:null,include_audio:false}]);
     await db.exec("update whatsapp_traffic_campaigns set last_run_at=now()");
     expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
+    for (const value of ["array[]::text[]", "array['09:00','09:00']", "array['24:00']", "array[null]::text[]", "array['01:00','02:00','03:00','04:00','05:00','06:00']"]) {
+      await expect(db.exec(`update whatsapp_traffic_campaigns set daily_times=${value}`)).rejects.toThrow();
+    }
+    await db.exec("begin; update whatsapp_traffic_campaigns set daily_times=array['09:00','14:00','18:00']; rollback;");
+    expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
+    await db.exec("update whatsapp_traffic_campaigns set daily_times=array['09:00','14:00','18:00']");
+    expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"archived"}]);
+    await db.exec("update content_pipeline_items set status='scheduled' where id='pending'");
     await db.exec("begin; update whatsapp_traffic_campaigns set carousel_size=3,include_audio=true; rollback;");
     expect((await db.query("select status from content_pipeline_items where id='pending'")).rows).toEqual([{status:"scheduled"}]);
     await expect(db.exec("update whatsapp_traffic_campaigns set carousel_size=1")).rejects.toThrow();

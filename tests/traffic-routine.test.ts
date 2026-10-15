@@ -56,6 +56,7 @@ function setup(options: { connected?: boolean; responder?: { groupName: string; 
     updateWhatsappChannelTargetSettings: vi.fn(async () => ({})),
     generateWhatsappGrowthCampaignPlan: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => {
       plans.push(input);
+      if (input.scheduledSlots) return { modelId: "gemini", systemInstruction: "s", prompt: "p", responseData: {}, items: (input.scheduledSlots as string[]).map(scheduledFor => ({ text: "post", productIds: ["p1"], scheduledFor })) };
       return { modelId: "gemini", systemInstruction: "s", prompt: "p", responseData: {}, items: [{ text: "post", productIds: ["p1", "p2"] }, { text: "post 2" }] };
     },
     queueWhatsappGrowthCampaignPlan: async (_c: unknown, _ctx: unknown, input: Record<string, unknown>) => {
@@ -96,6 +97,26 @@ describe("planning dates", () => {
 });
 
 describe("campaigns", () => {
+  it("persists and plans explicit times separately for each campaign", async () => {
+    const { db, traffic, plans, queuedPlans } = setup();
+    const config = { daily_times: ["09:00", "14:00", "18:00"], post_status: false, post_format: "text" };
+    await traffic.runTrafficCampaign(db.client as never, campaignRow(config) as never, new Date("2026-09-27T15:00:00Z"));
+    expect(plans[0]).toMatchObject({ postsPerDay: 2, scheduledSlots: ["2026-09-27T17:00:00.000Z", "2026-09-27T21:00:00.000Z"] });
+    expect((queuedPlans[0].planItems as Array<{ scheduledFor: string }>).map(item => item.scheduledFor)).toEqual(plans[0].scheduledSlots);
+    expect(db.tables.whatsapp_traffic_campaigns[0].planned_until).toBe("2026-09-28T03:00:00.000Z");
+    const scope = { organizationId: "org", agentId: "agent", userId: "u" };
+    const save = (daily_times: string[]) => traffic.saveTrafficCampaign(db.client as never, { ...scope, changes: { target_ids: ["g1"], daily_times } });
+    await expect(save(["09:00", "09:00"])).rejects.toThrow("diferentes");
+    expect(await save(["18:00", "09:00"])).toMatchObject({ daily_times: ["09:00", "18:00"] });
+    expect(await save(["14:00"])).toMatchObject({ daily_times: ["14:00"] });
+  });
+  it("does not schedule fixed times beyond the campaign end", async () => {
+    const { db, traffic, plans } = setup();
+    await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, daily_times: ["09:00", "18:00"], ends_at: "2026-09-27T16:00:00Z" }) as never, new Date("2026-09-27T10:00:00Z"));
+    expect(plans[0].scheduledSlots).toEqual(["2026-09-27T12:00:00.000Z"]);
+    db.tables.whatsapp_traffic_campaigns[0].last_run_at = null;
+    expect(await traffic.runTrafficCampaign(db.client as never, campaignRow({ post_status: false, daily_times: ["09:00"], ends_at: "2026-09-27T16:00:00Z" }) as never, new Date("2026-09-27T17:00:00Z"))).toMatchObject({ ended: true });
+  });
   it("honors an explicit size and audio setting for generated and manual carousels", async () => {
     const { db, traffic, queuedPlans, direct } = setup();
     const config = { post_status: false, post_format: "carousel", carousel_size: 2, include_audio: true, product_mode: "selected", catalog_item_ids: ["p1", "p2"] };

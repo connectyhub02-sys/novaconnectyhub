@@ -1,4 +1,6 @@
 "use client";
+
+import { WhatsappDailyTimes, dailyTimesError } from "./whatsapp-daily-times";
 import { DialogFrame } from "@/components/ui/dialog-frame";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -339,6 +341,7 @@ export function ClientWhatsappAutomationStudio({
   const [growthFormatPreference, setGrowthFormatPreference] = useState<GrowthFormatPreference>("text");
   const [growthDurationDays, setGrowthDurationDays] = useState(7);
   const [growthPostsPerDay, setGrowthPostsPerDay] = useState(3);
+  const [growthDailyTimes, setGrowthDailyTimes] = useState<string[] | null>(["09:00"]);
   const [growthStartFrom, setGrowthStartFrom] = useState(() => buildLocalDateTime(90));
   const [growthPlan, setGrowthPlan] = useState<GrowthPlan | null>(null);
 
@@ -636,8 +639,9 @@ export function ClientWhatsappAutomationStudio({
       objective: growthObjective,
       brief: campaignBrief,
       durationDays: growthDurationDays,
-      postsPerDay: growthPostsPerDay,
-      startFrom: localDatetimeToIso(growthStartFrom),
+      postsPerDay: growthDailyTimes?.length ?? growthPostsPerDay,
+      dailyTimes: growthDailyTimes,
+      startFrom: growthDailyTimes ? `${growthStartFrom.slice(0, 10)}T00:00:00-03:00` : localDatetimeToIso(growthStartFrom),
       mentionAll: campaignMentionAll,
       preferredFormats: preferredGrowthFormats,
     });
@@ -1087,12 +1091,13 @@ export function ClientWhatsappAutomationStudio({
                   {effectiveGrowthFormatPreference === "carousel" && <div className="grid gap-2"><SelectField label="Produtos por carrossel" value={String(carouselSize)} onChange={value => { setCarouselSize(Number(value)); setGrowthPlan(null); }} options={[["2", "2 produtos"], ["3", "3 produtos"], ["4", "4 produtos"]]} /><p className="text-xs text-slate-600">Cada publicação terá {carouselSize} cartões com botões. {selectedCampaignProductIds.length ? `Marque exatamente ${carouselSize} produtos ativos com mídia; ${selectedCampaignProducts.length} selecionados.` : `Seleção automática de ${carouselSize} produtos ativos com mídia.`}</p></div>}
                   {campaignDestinationMode !== "status" && (growthIncludeAudio || ["audio", "text_audio"].includes(effectiveGrowthFormatPreference)) && <p className="text-xs text-slate-600">O áudio usa a voz do agente e consome créditos. Nas combinações, é enviado após a publicação: no carrossel, apresenta os mesmos produtos; na enquete, a pergunta e as opções; no texto, a mensagem.</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <DateInput label="Inicio" value={growthStartFrom} onChange={(value) => { setGrowthStartFrom(value); setGrowthPlan(null); }} />
+                    {growthDailyTimes ? <label className="grid gap-1 text-xs text-slate-700">Data de início (Brasília)<input type="date" className="h-10 w-full rounded-lg border px-3 text-sm" value={growthStartFrom.slice(0, 10)} onChange={event => { setGrowthStartFrom(`${event.target.value}T00:00`); setGrowthPlan(null); }} /></label> : <DateInput label="Inicio" value={growthStartFrom} onChange={(value) => { setGrowthStartFrom(value); setGrowthPlan(null); }} />}
                     <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={(value) => { setGrowthDurationDays(value); setGrowthPlan(null); }} />
-                    <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={(value) => { setGrowthPostsPerDay(value); setGrowthPlan(null); }} />
+                    {!growthDailyTimes && <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={(value) => { setGrowthPostsPerDay(value); setGrowthPlan(null); }} />}
                   </div>
+                  <WhatsappDailyTimes value={growthDailyTimes} onChange={times => { setGrowthDailyTimes(times); setGrowthPlan(null); }} />
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
+                    <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady || Boolean(dailyTimesError(growthDailyTimes))} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
                     <ActionButton icon={CalendarClock} label="Agendar rotina" disabled={!scheduleGrowthPlanReady} loading={runningAction === "schedule_growth_plan"} onClick={scheduleGrowthPlan} />
                   </div>
                 </div>

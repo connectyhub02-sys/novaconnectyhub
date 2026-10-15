@@ -1,3 +1,4 @@
+import { normalizeDailyTimes } from "@/lib/whatsapp/fixed-schedule";
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -75,6 +76,7 @@ type ChannelActionBody = {
   currentText?: unknown;
   deliveryMode?: unknown;
   includeAudio?: unknown;
+  dailyTimes?: unknown;
   carouselSize?: unknown;
   mediaUrl?: unknown;
   mediaKind?: unknown;
@@ -195,6 +197,7 @@ function toClientCampaign(campaign: TrafficCampaign, counts: { sent: number; sch
   return {
     id: campaign.id, name: campaign.name, status: campaign.status, postStatus: campaign.post_status, targetIds: campaign.target_ids,
     productMode: campaign.product_mode, catalogItemIds: campaign.catalog_item_ids, idea: campaign.idea ?? "", manualText: campaign.manual_text ?? "",
+    dailyTimes: campaign.daily_times ?? null,
     carouselSize: campaign.carousel_size ?? null, includeAudio: campaign.include_audio ?? false,
     postFormat: campaign.post_format, intensity: campaign.intensity, startHour: campaign.start_hour, scheduleMode: campaign.schedule_mode,
     startsAt: campaign.starts_at, endsAt: campaign.ends_at, plannedUntil: campaign.planned_until, lastError: campaign.last_error, sent: counts.sent, scheduled: counts.scheduled,
@@ -222,6 +225,7 @@ function readRoutineChanges(value: unknown): TrafficRoutineInput {
 function readCampaignChanges(value: unknown): TrafficCampaignInput {
   const record = readRecordValue(value);
   const changes: TrafficCampaignInput = {};
+  if ("dailyTimes" in record) changes.daily_times = normalizeDailyTimes(record.dailyTimes);
   if ("carouselSize" in record && record.carouselSize != null) {
     if (typeof record.carouselSize !== "number" || !Number.isInteger(record.carouselSize) || record.carouselSize < 2 || record.carouselSize > 4) throw new Error("Escolha 2, 3 ou 4 produtos por carrossel.");
     changes.carousel_size = record.carouselSize;
@@ -238,7 +242,7 @@ function readCampaignChanges(value: unknown): TrafficCampaignInput {
   if (record.intensity === "light" || record.intensity === "normal" || record.intensity === "intense") changes.intensity = record.intensity;
   if (typeof record.startHour === "number" && Number.isInteger(record.startHour) && record.startHour >= 6 && record.startHour <= 20) changes.start_hour = record.startHour;
   if (typeof record.startDate === "string" && record.startDate) {
-    const value = `${record.startDate}T${String(changes.start_hour ?? 9).padStart(2, "0")}:00:00-03:00`;
+    const value = `${record.startDate}T${changes.daily_times ? "00" : String(changes.start_hour ?? 9).padStart(2, "0")}:00:00-03:00`;
     const parsed = new Date(value);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(record.startDate) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== record.startDate) throw new Error("Escolha uma data de início válida.");
     changes.starts_at = parsed.toISOString();
@@ -399,6 +403,7 @@ export async function POST(request: NextRequest) {
         durationDays: asNumber(body?.durationDays) ?? null,
         postsPerDay: asNumber(body?.postsPerDay) ?? null,
         startFrom: asString(body?.startFrom),
+        dailyTimes: normalizeDailyTimes(body?.dailyTimes),
         mentionAll: asBoolean(body?.mentionAll),
         preferredFormats: readStringList(body?.preferredFormats),
       });

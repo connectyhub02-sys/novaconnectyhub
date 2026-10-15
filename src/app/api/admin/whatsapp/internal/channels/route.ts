@@ -1,3 +1,4 @@
+import { normalizeDailyTimes } from "@/lib/whatsapp/fixed-schedule";
 import { NextResponse, type NextRequest } from "next/server";
 import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-console";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -56,6 +57,7 @@ type ChannelActionBody = {
   currentText?: unknown;
   deliveryMode?: unknown;
   includeAudio?: unknown;
+  dailyTimes?: unknown;
   carouselSize?: unknown;
   mediaUrl?: unknown;
   mediaKind?: unknown;
@@ -236,6 +238,7 @@ export async function POST(request: NextRequest) {
         durationDays: asNumber(body?.durationDays) ?? null,
         postsPerDay: asNumber(body?.postsPerDay) ?? null,
         startFrom: asString(body?.startFrom),
+        dailyTimes: normalizeDailyTimes(body?.dailyTimes),
         mentionAll: asBoolean(body?.mentionAll),
         preferredFormats: readStringList(body?.preferredFormats),
       });

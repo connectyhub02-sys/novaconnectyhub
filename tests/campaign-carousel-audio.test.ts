@@ -17,6 +17,7 @@ function fixture(scope = "organization") {
   const voice = vi.fn(async () => ({audioUrl:"https://media.test/audio.ogg",mediaId:"audio",text:"fala",chargeCredits:2}));
   const fetch = vi.fn<(url: unknown, init: RequestInit) => Promise<Response>>(async () => Response.json({messageid:"sent"}));
   const channel = serverModuleHarness<Channel & Helpers>("src/lib/whatsapp/channel-operations.ts", {
+    "@/lib/gemini/credentials": { loadGeminiCredentials: async () => ({ model: "gemini-2.5-flash", apiKey: "fake" }) },
     "@/lib/voice/tts": { generateConnectyVoiceAudio: voice },
     "@/lib/client-os/sales-catalog": { mapSalesCatalogItem: (row: unknown) => row },
     "@/lib/sales-catalog/public-urls": { buildSalesCatalogProductUrl: (id: string) => `https://shop.test/${id}` },
@@ -33,6 +34,19 @@ function fixture(scope = "organization") {
 const carousel = { type:"carousel", text:"Confira", include_audio:true,audio_text:"Pessoal, confiram os produtos.",carousel:[{text:"Produto A",image:"https://media.test/a.jpg",buttons:[{type:"URL",text:"Ver produto",id:"https://shop.test/a"}]}] };
 
 describe("carousel and poll audio", () => {
+  it.each([{ items: [] }, { items: [{ type: "text", text: "Oferta", day: 9, slot: 5, scheduledFor: "2000-01-01T00:00:00Z" }] }])("keeps fixed schedule through AI normalization and the queue", async ({ items: rawItems }) => {
+    const f = fixture();
+    f.fetch.mockResolvedValueOnce(Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ items: rawItems }) }] } }] }));
+    const scheduledSlots = ["2026-11-01T12:00:00.000Z", "2026-11-01T17:15:00.000Z", "2026-11-01T21:00:00.000Z"];
+    const plan = await f.channel.generateWhatsappGrowthCampaignPlan(f.db.client as never, f.context as never, {
+      targetIds: ["g"], catalogItemIds: ["a"], durationDays: 1, postsPerDay: 3, startFrom: scheduledSlots[0], scheduledSlots, preferredFormats: ["text"],
+    });
+    expect(plan.items.map(item => item.scheduledFor)).toEqual(scheduledSlots);
+    expect(plan.items.map(item => [item.day, item.slot])).toEqual([[1,1],[1,2],[1,3]]);
+    await f.channel.queueWhatsappGrowthCampaignPlan(f.db.client as never, f.context as never, { planItems: plan.items, targetIds: ["g"], catalogItemIds: ["a"], buttonEnabled: false });
+    expect(f.db.tables.content_pipeline_items.slice(1).map(item => item.scheduled_for)).toEqual(scheduledSlots);
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+  });
   it("queues exactly the selected cards in order and derives the narration from those cards", async () => {
     const f=fixture();
     await f.channel.queueWhatsappTargetCarouselCampaign(f.db.client as never,f.context as never,{title:"Oferta",targetIds:["g"],catalogItemIds:["c","a"],carouselSize:2,includeAudio:true});

@@ -2,6 +2,7 @@ import { geminiLowThinkingConfig } from "@/lib/gemini/models";
 import { groupHolderConflictMessage, holderConflicts, type GroupHolder, type RoomSchedule } from "@/lib/whatsapp/group-schedule";
 import { fetchWhatsappOutbound } from "@/lib/whatsapp/outbound-delivery";
 import "server-only";
+import { brasiliaMidnight, fixedPlanSlots, normalizeDailyTimes } from "@/lib/whatsapp/fixed-schedule";
 import { assertContractAccess } from "@/lib/billing/contract-access";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1282,6 +1283,8 @@ export async function generateWhatsappGrowthCampaignPlan(
     startFrom?: string | null;
     mentionAll?: boolean;
     preferredFormats?: string[] | null;
+    dailyTimes?: string[] | null;
+    scheduledSlots?: string[];
   },
 ): Promise<WhatsappGrowthCampaignPlan> {
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts && !context.behavior.statusBroadcasts) {
@@ -1289,8 +1292,11 @@ export async function generateWhatsappGrowthCampaignPlan(
   }
 
   const durationDays = clamp(Math.round(input.durationDays ?? 7), 1, 14);
-  const postsPerDay = clamp(Math.round(input.postsPerDay ?? 3), 1, 5);
-  const startFrom = normalizeScheduledFor(input.startFrom);
+  const dailyTimes = normalizeDailyTimes(input.dailyTimes);
+  const postsPerDay = dailyTimes?.length ?? clamp(Math.round(input.postsPerDay ?? 3), 1, 5);
+  const startFrom = dailyTimes ? normalizeRequiredScheduledFor(input.startFrom, "Escolha uma data de início válida.").toISOString() : normalizeScheduledFor(input.startFrom);
+  const scheduledSlots = input.scheduledSlots ?? (dailyTimes ? fixedPlanSlots(startFrom, durationDays, dailyTimes) : null);
+  if (scheduledSlots && (!scheduledSlots.length || scheduledSlots.length > durationDays * postsPerDay || scheduledSlots.some(slot => !Number.isFinite(Date.parse(slot))))) throw new Error("Horários de publicação inválidos.");
   const objective = (input.objective?.trim() || "Vender mais pelo WhatsApp com conteudo recorrente").slice(0, 220);
   const brief = input.brief?.trim().slice(0, 1600) ?? "";
   const targets = input.targetIds.length > 0
@@ -1332,7 +1338,7 @@ export async function generateWhatsappGrowthCampaignPlan(
     `Objetivo: ${objective}`,
     `Duracao: ${durationDays} dia(s). Posts por dia: ${postsPerDay}.`,
     `Data inicial ISO: ${startFrom}. Fuso operacional: America/Sao_Paulo.`,
-    `Horario de cada post (Brasilia): ${Array.from({ length: durationDays }, (_, day) => `dia ${day + 1}: ${Array.from({ length: postsPerDay }, (_, slot) => `slot ${slot + 1} as ${formatSaoPauloTime(buildGrowthPlanScheduledFor(startFrom, day * postsPerDay + slot, postsPerDay))}`).join(", ")}`).join("; ")}.`,
+    scheduledSlots ? `Crie exatamente ${scheduledSlots.length} posts, nesta ordem, nos horários fixos de Brasília: ${scheduledSlots.map((slot, index) => `${index + 1}: ${new Date(slot).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} às ${formatSaoPauloTime(slot)}`).join("; ")}.` : `Horario de cada post (Brasilia): ${Array.from({ length: durationDays }, (_, day) => `dia ${day + 1}: ${Array.from({ length: postsPerDay }, (_, slot) => `slot ${slot + 1} as ${formatSaoPauloTime(buildGrowthPlanScheduledFor(startFrom, day * postsPerDay + slot, postsPerDay))}`).join(", ")}`).join("; ")}.`,
     `Formatos permitidos: ${allowedFormats.join(", ")}.`,
     input.preferredFormats?.length ? `Formato principal escolhido pelo usuario: ${input.preferredFormats.join(", ")}.` : "Formato principal escolhido pelo usuario: IA pode alternar.",
     `Mencao geral em grupos: ${input.mentionAll ? "permitida quando fizer sentido" : "nao usar por padrao"}.`,
@@ -1354,7 +1360,7 @@ export async function generateWhatsappGrowthCampaignPlan(
   });
   const rawText = extractGeminiText(responseData);
   const parsed = parseGeminiGrowthPlan(rawText);
-  const items = normalizeGrowthPlanItems({
+  const normalizedItems = normalizeGrowthPlanItems({
     rawItems: parsed.items,
     allowedFormats,
     catalogItems,
@@ -1363,6 +1369,12 @@ export async function generateWhatsappGrowthCampaignPlan(
     postsPerDay,
     startFrom,
   });
+  // The scheduler, never the model, determines delivery times.
+  const items = scheduledSlots ? scheduledSlots.map((scheduledFor, index) => ({
+    ...normalizedItems[index], scheduledFor,
+    day: Math.floor((brasiliaMidnight(Date.parse(scheduledFor)) - brasiliaMidnight(Date.parse(startFrom))) / 86_400_000) + 1,
+    slot: scheduledSlots.slice(0, index + 1).filter(slot => brasiliaMidnight(Date.parse(slot)) === brasiliaMidnight(Date.parse(scheduledFor))).length,
+  })) : normalizedItems;
 
   return {
     title: (parsed.title || `Rotina WhatsApp IA - ${new Date().toLocaleDateString("pt-BR")}`).slice(0, 90),

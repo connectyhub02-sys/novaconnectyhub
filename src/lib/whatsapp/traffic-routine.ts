@@ -1,4 +1,5 @@
 import "server-only";
+import { nextFixedRoutineDay, normalizeDailyTimes } from "@/lib/whatsapp/fixed-schedule";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
@@ -42,11 +43,11 @@ export type TrafficCampaign = {
   schedule_mode: TrafficScheduleMode; starts_at: string; ends_at: string | null; planned_until: string | null;
   last_run_at: string | null; last_error: string | null; created_at: string;
   status_audience: TrafficStatusAudience; status_style: "single" | "story"; status_color: number | null;
-  carousel_size?: number | null; include_audio?: boolean;
+  carousel_size?: number | null; include_audio?: boolean; daily_times?: string[] | null;
 };
 export type TrafficStatusAudience = "all" | "interested" | "customers" | "hot";
 export type TrafficCampaignInput = Partial<Pick<TrafficCampaign, "name" | "post_status" | "target_ids" | "product_mode" | "catalog_item_ids"
-  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "starts_at" | "status_audience" | "status_style" | "status_color" | "carousel_size" | "include_audio">>;
+  | "idea" | "manual_text" | "post_format" | "intensity" | "start_hour" | "schedule_mode" | "starts_at" | "status_audience" | "status_style" | "status_color" | "carousel_size" | "include_audio" | "daily_times">>;
 
 const brtOffsetMs = 3 * 3600_000;
 const dayMs = 24 * 3600_000;
@@ -194,6 +195,7 @@ export async function listTrafficCampaigns(client: SupabaseClient, organizationI
 /** Creates or edits a campaign. A new period starts now; turning it into "once" plans a single post. */
 export async function saveTrafficCampaign(client: SupabaseClient, input: { organizationId: string; agentId: string; userId: string; campaignId?: string | null; changes: TrafficCampaignInput }) {
   const changes = input.changes;
+  if ("daily_times" in changes) changes.daily_times = normalizeDailyTimes(changes.daily_times);
   const current = input.campaignId
     ? ((await client.from("whatsapp_traffic_campaigns").select("*").eq("id", input.campaignId).eq("organization_id", input.organizationId).eq("agent_id", input.agentId).maybeSingle()).data as TrafficCampaign | null)
     : null;
@@ -353,18 +355,20 @@ export async function runTrafficCampaign(client: SupabaseClient, campaign: Traff
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", planned_until: now.toISOString(), last_error: null }).eq("id", campaign.id);
       return { scheduled };
     }
-    const dayStart = nextRoutineDayStart(new Date(Math.max(now.getTime(), new Date(campaign.starts_at).getTime())), campaign.start_hour, campaign.planned_until);
+    const fixed = campaign.daily_times ? nextFixedRoutineDay(now, campaign.starts_at, campaign.planned_until, campaign.daily_times) : null;
+    const slots = fixed?.slots.filter(slot => !campaign.ends_at || Date.parse(slot) < Date.parse(campaign.ends_at));
+    const dayStart = fixed ? new Date(fixed.slots[0]) : nextRoutineDayStart(new Date(Math.max(now.getTime(), new Date(campaign.starts_at).getTime())), campaign.start_hour, campaign.planned_until);
     if (campaign.ends_at && dayStart.getTime() >= new Date(campaign.ends_at).getTime()) {
       await client.from("whatsapp_traffic_campaigns").update({ status: "ended", last_error: null }).eq("id", campaign.id);
       return { ended: true };
     }
     // Permissions still being switched on elsewhere: switch them on again and try once more.
-    const { scheduled, warning } = await planDay(client, context, campaign, dayStart).catch(async (error: unknown) => {
+    const { scheduled, warning } = await planDay(client, context, campaign, dayStart, undefined, slots).catch(async (error: unknown) => {
       if (!/no comportamento do agente/.test(String((error as { message?: unknown } | null)?.message ?? error))) throw error;
       await prepareCampaignCapabilities(client, campaign, null);
-      return planDay(client, await resolveClientWhatsappOperationalContext(client, campaign.organization_id, campaign.agent_id), campaign, dayStart);
+      return planDay(client, await resolveClientWhatsappOperationalContext(client, campaign.organization_id, campaign.agent_id), campaign, dayStart, undefined, slots);
     });
-    const plannedUntil = new Date(dayStart.getTime() + postingWindowHours * hourMs).toISOString();
+    const plannedUntil = fixed?.plannedUntil ?? new Date(dayStart.getTime() + postingWindowHours * hourMs).toISOString();
     await client.from("whatsapp_traffic_campaigns").update({ planned_until: plannedUntil, last_error: warning }).eq("id", campaign.id);
     return { scheduled, plannedUntil, ...(warning ? { warning } : {}) };
   } catch (error) {
@@ -391,10 +395,10 @@ async function countGroupTargets(client: SupabaseClient, campaign: TrafficCampai
   return ((data ?? []) as Array<{ target_type: string }>).filter(row => row.target_type === "group").length;
 }
 
-async function planDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsOverride?: number) {
+async function planDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsOverride?: number, scheduledSlots?: string[]) {
   const pool = campaign.post_format === "carousel" ? await carouselProductsFor(client, context, campaign) : await productsFor(client, campaign);
   const { format, list } = destinationsFor(campaign, await countGroupTargets(client, campaign));
-  const postsPerDay = postsOverride ?? trafficPostsPerDay[campaign.intensity] ?? 2;
+  const postsPerDay = scheduledSlots?.length ?? postsOverride ?? trafficPostsPerDay[campaign.intensity] ?? 2;
   const oneProductPerPost = format === "product_audio" || format === "product_button";
   const catalogItemIds = pickRoutineProducts(pool, dayStart, format === "carousel" ? campaign.carousel_size ?? 4 : oneProductPerPost ? Math.max(postsPerDay, 1) : 4);
   if (format === "carousel" && (!catalogItemIds.length || !context.behavior.interactiveMessages)) throw new Error("Carrossel precisa de produtos ativos com mídia e mensagens interativas habilitadas.");
@@ -406,7 +410,7 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
   for (const destination of list) {
     if (!destination.targetIds.length) {
       // A failure in the status never takes the groups and channels down with it.
-      const status = await planStatusDay(client, context, campaign, dayStart, postsPerDay, catalogItemIds)
+      const status = await planStatusDay(client, context, campaign, dayStart, postsPerDay, catalogItemIds, scheduledSlots)
         .catch((error: unknown) => ({ scheduled: 0, warning: `Status: ${error instanceof Error ? error.message.slice(0, 200) : "não foi possível planejar"}. Os grupos e canais seguem normalmente.` }));
       scheduled += status.scheduled;
       warning = status.warning;
@@ -414,7 +418,7 @@ async function planDay(client: SupabaseClient, context: Context, campaign: Traff
     }
     const available = destination.formats.filter(item => context.behavior.interactiveMessages || (item !== "carousel" && item !== "poll"));
     const plan = await generateWhatsappGrowthCampaignPlan(client, context, {
-      targetIds: destination.targetIds, catalogItemIds, brief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: available.length ? available : ["text"],
+      targetIds: destination.targetIds, catalogItemIds, brief, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), scheduledSlots, preferredFormats: available.length ? available : ["text"],
     });
     await meterGeminiGenerationUsage({
       client, organizationId: campaign.organization_id, featureCode: "content_generation", modelId: plan.modelId, agentScope: "customer",
@@ -522,13 +526,13 @@ export function parseStatusStories(text: string, count: number): StatusStory[] {
  * The campaign's status for one day: a single post per slot, or a story of three statuses a couple of
  * minutes apart (product photo, benefit in colored text, offer in colored text), sent to the chosen audience.
  */
-async function planStatusDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsPerDay: number, catalogItemIds: string[]) {
+async function planStatusDay(client: SupabaseClient, context: Context, campaign: TrafficCampaign, dayStart: Date, postsPerDay: number, catalogItemIds: string[], scheduledSlots?: string[]) {
   const recipients = await resolveStatusRecipients(client, campaign, catalogItemIds);
   if (recipients && !recipients.length) {
     return { scheduled: 0, warning: `Status: ainda não há ${statusAudienceLabels[campaign.status_audience]} para receber. Os grupos e canais seguem normalmente.` };
   }
   const color = campaign.status_color ?? 13;
-  const slotTime = (index: number) => new Date(dayStart.getTime() + index * Math.floor((postingWindowHours * 60) / Math.max(1, postsPerDay)) * 60_000);
+  const slotTime = (index: number) => scheduledSlots ? new Date(scheduledSlots[index]) : new Date(dayStart.getTime() + index * Math.floor((postingWindowHours * 60) / Math.max(1, postsPerDay)) * 60_000);
   const ids: string[] = [];
   const statusBase = { ...(recipients ? { recipients } : {}), backgroundColor: color };
   if (campaign.status_style === "story") {
@@ -567,7 +571,7 @@ async function planStatusDay(client: SupabaseClient, context: Context, campaign:
     }
   } else {
     const plan = await generateWhatsappGrowthCampaignPlan(client, context, {
-      targetIds: [], catalogItemIds, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), preferredFormats: ["status"],
+      targetIds: [], catalogItemIds, durationDays: 1, postsPerDay, startFrom: dayStart.toISOString(), scheduledSlots, preferredFormats: ["status"],
       brief: [campaign.idea, campaign.product_mode === "single" ? "A campanha inteira é sobre este único produto: varie o ângulo a cada post." : "",
         "Post de status do WhatsApp: legenda curta com o produto e o valor. Status não tem botão: convide a responder este status ou chamar no privado. Nunca fale em botão ou link."].filter(Boolean).join("\n"),
     });
@@ -756,6 +760,7 @@ export async function copyTrafficRoutine(client: SupabaseClient, input: { organi
       target_ids: targetIds, product_mode: campaign.product_mode, catalog_item_ids: campaign.catalog_item_ids, idea: campaign.idea,
       post_format: campaign.post_format, intensity: campaign.intensity, start_hour: campaign.start_hour, schedule_mode: campaign.schedule_mode,
       carousel_size: campaign.carousel_size ?? null, include_audio: campaign.include_audio ?? false,
+      daily_times: campaign.daily_times ?? null,
       status_audience: campaign.status_audience, status_style: campaign.status_style, status_color: campaign.status_color,
       ends_at: campaign.ends_at, updated_by: input.userId,
     });
