@@ -39,4 +39,16 @@ Navegador local com dados fictícios: cliente/admin, payload de três horários,
 validação de duplicados, resumo e layout desktop/mobile. Sem envio externo,
 geração real de IA ou áudio e sem alterar rotinas reais de clientes nos testes.
 
-Publicação e migration em produção ainda pendentes.
+Migration `0207` aplicada em 15/10 às 15h47 BRT. Backup do esquema e função
+anterior: `/var/backups/connectyhub/manual/pre-0207-20261015T184716Z`.
+SHA256 do SQL: `81be653c37510a2121f8b59cc5a3c520bf5a141c28432c4cc029636a46fd6ce9`.
+Uma rotina e sete itens pendentes antes/depois, nenhuma rotina convertida para
+horários fixos, trigger ativo. Consulta REST da nova coluna retornou 200.
+
+Publicada `2e3f3ef8` no slot a/3130, fallback `9db04b5f` no b/3131.
+TypeScript, ESLint e 55 testes focados passaram (incluindo reexecução dos testes
+de normalização/fila após ajuste de tipagem). Build das 120 páginas concluído.
+Candidato e HTTPS público passaram nas checagens de saúde, páginas, proteção de
+rotas cliente/admin, Inngest e métricas. O bundle público de Automações contém
+os controles novos. Builder parado após publicação.
+Pendente: confirmação do titular na sessão dele e entrega real em grupo autorizado.

@@ -1,5 +1,27 @@
 # Estado operacional da ConnectyHub
 
+## Horários fixos por rotina WhatsApp — 15/10/2026
+
+Publicado `2e3f3ef8` no slot a/3130; fallback `9db04b5f` no b/3131.
+Clientes podem definir 1 a 5 horários diários com minutos, em Brasília, por
+rotina/agente. Admin recebe os mesmos controles em seu plano finito. Rotinas
+existentes continuam no modo automático até edição. Novas sugerem 09:00.
+A IA recebe os horários, mas o servidor determina os instantes da fila.
+Planejamento ignora horários já passados; próxima data mantém os horários.
+Entrega segue a fila existente, sujeita a atraso de processamento/conexão.
+
+Migration `0207` aplicada às 15h47 BRT: backup de esquema/função em
+`/var/backups/connectyhub/manual/pre-0207-20261015T184716Z`. Uma rotina e sete
+posts pendentes preservados, zero conversões automáticas. Coluna validada via
+REST (200). Edição cancela somente posts pendentes da própria rotina na mesma
+transação e libera replanejamento imediato.
+
+55 testes focados, TypeScript, ESLint, navegador cliente/admin desktop/mobile
+e build passaram. Saúde, rotas sem sessão, Inngest e bundle público conferidos.
+Builder parado. Sem envio real/IA paga nos testes; confirmação pelo titular e
+entrega em grupo autorizado pendentes.
+[Escopo e evidências](rotinas-horarios-fixos-2026-10-15.md).
+
 ## Combinações com áudio explícitas na lista — 15/10/2026
 
 Correção `9db04b5f` publicada no slot b/3131, fallback `c0e443bf` no a/3130.
