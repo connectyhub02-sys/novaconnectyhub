@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AudioLines, BookOpen, Bot, Code2, History, KeyRound, Library, Music, Plus, Sparkles, Upload, Wand2 } from "lucide-react";
+import { AudioLines, BookOpen, Bot, Code2, History, KeyRound, Library, LoaderCircle, Music, Plus, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { CreditExplainer } from "./credit-explainer";
 import { VoiceUsageCharts } from "./voice-usage-charts";
 import { StudioTools } from "./studio-tools";
@@ -42,7 +42,7 @@ const statusLabels: Record<string, string> = { completed: "Concluído", failed: 
 const operationLabels: Record<string, string> = { text_to_speech: "Texto para fala", voice_clone: "Clonagem de voz", voice_clone_preview: "Prévia de voz", studio: "Ferramenta do Estúdio" };
 const number = (value: unknown, digits = 2) => Number(value ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: digits });
 const field = "min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 focus:outline-2 focus:outline-slate-900";
-const primary = "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-40";
+const primary = "ch-action inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-blue-700 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-40";
 const secondary = "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40";
 const card = "min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 
@@ -130,7 +130,7 @@ export function VoiceStudioShell() {
             {section === "sfx" && <StudioTools key={`${project}-sfx`} project={project} voices={ready.voices} only="sound_effects" onChanged={reloadCatalog} />}
             {section === "music" && <StudioTools key={`${project}-music`} project={project} voices={ready.voices} only="music" onChanged={reloadCatalog} />}
             {section === "tools" && <StudioTools key={`${project}-tools`} project={project} voices={ready.voices} exclude={["sound_effects", "music"]} onChanged={reloadCatalog} />}
-            {section === "voices" && <VoicesPage project={project} voices={ready.voices} cloning={ready.cloning} onUse={id => { setVoiceId(id); go("tts"); }} onChanged={reloadCatalog} />}
+            {section === "voices" && <VoicesPage key={project} project={project} voices={ready.voices} cloning={ready.cloning} onUse={id => { setVoiceId(id); go("tts"); }} onChanged={reloadCatalog} />}
             {section === "agents" && <VoiceAgentsPanel voices={ready.voices} />}
             {section === "history" && <HistoryPage data={data} days={days} onDays={value => { setData(null); setDays(value); }} />}
             {section === "api" && <ApiPage projects={data.projects} onChanged={refresh} />}
@@ -142,6 +142,22 @@ export function VoiceStudioShell() {
   );
 }
 
+function SelectedRecording({ file, disabled, onRemove }: { file: File; disabled: boolean; onRemove: () => void }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const next = URL.createObjectURL(file);
+    if (audio.current) audio.current.src = next;
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return <li className="min-w-0 rounded-xl border border-slate-200 p-3">
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1"><p className="break-all text-sm font-medium">{file.name}</p><p className="text-xs text-slate-500">{number(file.size / 1024, 1)} KB · Selecionado neste dispositivo</p></div>
+      <button type="button" className={secondary} disabled={disabled} aria-label={`Remover ${file.name}`} onClick={onRemove}><X size={14} /></button>
+    </div>
+    <audio ref={audio} aria-label={`Ouvir ${file.name}`} className="mt-2 h-10 w-full min-w-0" controls preload="metadata" />
+  </li>;
+}
+
 function VoicesPage({ project, voices, cloning, onUse, onChanged }: {
   project: string; voices: StudioVoice[]; cloning: { available: boolean; credits?: number }; onUse: (voiceId: string) => void; onChanged: () => Promise<void>;
 }) {
@@ -149,27 +165,46 @@ function VoicesPage({ project, voices, cloning, onUse, onChanged }: {
   const [files, setFiles] = useState<File[]>([]);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cloningNow, setCloningNow] = useState(false);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<{ id: string; url: string } | null>(null);
   const idempotency = useRef<string | null>(null);
+  const inFlight = useRef(false);
   const endpoint = (path: string) => `/api/dashboard/voice/${path}?project=${encodeURIComponent(project)}`;
   const mine = voices.filter(voice => voice.kind === "private" || voice.kind === "designed");
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const fileError = files.length > 5 ? "Escolha no máximo 5 gravações. Remova os arquivos excedentes."
+    : totalBytes > 3 * 1024 * 1024 ? "As gravações ultrapassam 3 MB. Remova ou reduza os arquivos."
+    : files.some(file => !file.size || (!file.type.startsWith("audio/") && file.type !== "video/mp4")) ? "Use gravações de áudio ou MP4, sem arquivos vazios." : "";
+  const pending = !cloning.available ? "Clonagem indisponível no momento."
+    : name.trim().length < 2 ? "Dê um nome à voz (pelo menos 2 caracteres)."
+    : !files.length ? "Escolha pelo menos uma gravação."
+    : fileError || (!consent ? "Confirme o direito e o consentimento para habilitar a clonagem." : "");
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
 
   async function act(action: () => Promise<void>) {
     setBusy(true); setMessage("");
     try { await action(); } catch (error) { setMessage((error as Error).message); } finally { setBusy(false); }
   }
-  const clone = () => act(async () => {
-    idempotency.current ??= crypto.randomUUID();
-    const form = new FormData();
-    form.set("name", name); form.set("consent_accepted", "true");
-    files.forEach(file => form.append("files", file));
-    const result = await fetch(endpoint("voices"), { method: "POST", headers: { "Idempotency-Key": idempotency.current }, body: form }).then(read);
-    setMessage(`Voz ${result.clone?.status === "ready" ? "pronta" : "em preparo"}.${result.generation ? ` Débito: ${number(result.generation.usage.credits)} créditos.` : ""}`);
-    setName(""); setFiles([]); setConsent(false); idempotency.current = null;
-    await onChanged();
-  });
+  const clone = () => {
+    if (inFlight.current || busy || pending) return;
+    inFlight.current = true;
+    setCloningNow(true);
+    return act(async () => {
+      idempotency.current ??= crypto.randomUUID();
+      const form = new FormData();
+      form.set("name", name); form.set("consent_accepted", "true");
+      files.forEach(file => form.append("files", file));
+      const result = await fetch(endpoint("voices"), { method: "POST", headers: { "Idempotency-Key": idempotency.current }, body: form }).then(read);
+      const outcome = result.clone?.status === "ready"
+        ? `Voz “${name.trim()}” clonada. Ela está em Minhas vozes: ouça a prévia incluída ou clique em Usar.`
+        : result.clone?.status === "verification_required" ? "Voz criada, mas o provedor exige verificação antes do uso."
+        : "Solicitação recebida. A voz ainda não está pronta; confira o histórico antes de tentar novamente.";
+      setMessage(`${outcome}${result.generation?.usage ? ` Débito: ${number(result.generation.usage.credits)} créditos.` : ""}`);
+      setName(""); setFiles([]); setConsent(false); idempotency.current = null;
+      try { await onChanged(); } catch { setMessage("Clonagem recebida, mas não foi possível atualizar a biblioteca. Atualize a página para conferir a voz."); }
+    }).finally(() => { inFlight.current = false; setCloningNow(false); });
+  };
   const listen = (voice: StudioVoice) => act(async () => {
     const receipt = await fetch(endpoint(`voices/${voice.voice_id}/preview`), { method: "POST" }).then(read);
     if (receipt.status !== "completed") { setMessage("Prévia em preparo. Tente novamente em instantes."); return; }
@@ -189,16 +224,21 @@ function VoicesPage({ project, voices, cloning, onUse, onChanged }: {
         <section className={card}>
           <div className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-full bg-violet-100 text-violet-700"><Plus size={18} /></span><h2 className="text-base font-bold">Clonar uma voz</h2></div>
           <p className="mt-2 text-sm text-slate-500">Envie de 1 a 5 gravações limpas (até 3 MB no total). {cloning.available ? `Custo: ${number(cloning.credits)} créditos, com uma prévia incluída.` : "Clonagem indisponível no momento."}</p>
-          <label className="mt-4 block text-sm">Nome da voz<input className={`${field} mt-1`} value={name} maxLength={80} onChange={event => { setName(event.target.value); idempotency.current = null; }} placeholder="Ex.: Minha voz" /></label>
-          <label className="mt-3 flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-600 hover:bg-slate-50">
-            <Upload size={18} />{files.length ? `${files.length} arquivo(s) selecionado(s)` : "Escolher gravações"}
-            <input type="file" accept="audio/*,video/mp4" multiple className="hidden" onChange={event => { setFiles(Array.from(event.target.files ?? [])); idempotency.current = null; }} />
+          <label className="mt-4 block text-sm">Nome da voz<input disabled={busy} className={`${field} mt-1`} value={name} maxLength={80} onChange={event => { setName(event.target.value); idempotency.current = null; }} placeholder="Ex.: Minha voz" /></label>
+          <label className="relative mt-3 flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-600 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-blue-600">
+            <Upload size={18} />{files.length ? "Trocar gravações" : "Escolher gravações"}
+            <input aria-label="Escolher gravações" disabled={busy} type="file" accept="audio/*,video/mp4" multiple className="absolute inset-0 h-full w-full cursor-pointer opacity-0" onChange={event => { const next = Array.from(event.target.files ?? []); if (next.length) { setFiles(next); setMessage(""); idempotency.current = null; } event.target.value = ""; }} />
           </label>
-          <label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} />Tenho direito e consentimento para clonar esta voz.</label>
-          <button type="button" className={`${primary} mt-4 w-full`} disabled={busy || !cloning.available || !consent || !files.length || name.trim().length < 2} onClick={() => void clone()}>{busy ? "Enviando…" : "Clonar voz"}</button>
+          {!!files.length && <>
+            <p className="mt-3 text-xs text-slate-600">{files.length} de 5 gravações · {number(totalBytes / (1024 * 1024))} de 3 MB. O envio começa ao clicar em Clonar voz.</p>
+            <ul className="mt-2 space-y-2">{files.map((file, index) => <SelectedRecording key={`${index}-${file.name}-${file.lastModified}`} file={file} disabled={busy} onRemove={() => { setFiles(current => current.filter((_, i) => i !== index)); idempotency.current = null; }} />)}</ul>
+          </>}
+          {fileError && <p role="alert" className="mt-2 text-sm text-rose-700">{fileError}</p>}
+          <label className="mt-3 flex gap-2 text-sm"><input type="checkbox" disabled={busy} checked={consent} onChange={event => setConsent(event.target.checked)} />Tenho direito e consentimento para clonar esta voz.</label>
+          <button type="button" className={`${primary} mt-4 w-full`} disabled={busy || !!pending} aria-describedby="voice-clone-status" aria-busy={cloningNow} onClick={() => void clone()}>{cloningNow ? <><LoaderCircle size={18} className="animate-spin" />Clonando voz…</> : <><Plus size={18} />Clonar voz</>}</button>
+          <p id="voice-clone-status" role="status" className="mt-2 text-sm text-slate-600">{cloningNow ? "Enviando as gravações e preparando a voz. Aguarde; isso pode levar até 90 segundos." : message || pending || "Tudo pronto. Clique em Clonar voz para enviar as gravações."}</p>
         </section>
       </div>
-      {message && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
       <section className={card}>
         <h2 className="text-base font-bold">Minhas vozes</h2>
         {!mine.length && <p className="mt-2 text-sm text-slate-500">Nenhuma voz clonada ou criada ainda.</p>}
