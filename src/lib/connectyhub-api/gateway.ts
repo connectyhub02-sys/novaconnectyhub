@@ -2,6 +2,7 @@ import { fetchWhatsappOutbound, type WhatsappOutboundScope } from "@/lib/whatsap
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { saveGatewayHealthMetadata } from "@/lib/connectyhub-api/health-metadata";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import {
   assertOrganizationFeatureAccess,
@@ -4573,15 +4574,7 @@ async function saveGatewayApiClientHealth(
   apiClient: ApiClientRow,
   health: GatewayHealthSummary,
 ) {
-  await client
-    .from("connectyhub_api_clients")
-    .update({
-      metadata: {
-        ...(apiClient.metadata ?? {}),
-        gateway_health: health,
-      },
-    })
-    .eq("id", apiClient.id);
+  await saveGatewayHealthMetadata(client, "connectyhub_api_clients", apiClient, { gateway_health: health });
 }
 
 async function saveGatewayInstanceHealth(
@@ -4589,15 +4582,7 @@ async function saveGatewayInstanceHealth(
   instance: GatewayInstanceRow,
   health: GatewayHealthSignal,
 ) {
-  await client
-    .from("whatsapp_instances")
-    .update({
-      metadata: {
-        ...(instance.metadata ?? {}),
-        gateway_health_instance: health,
-      },
-    })
-    .eq("id", instance.id);
+  await saveGatewayHealthMetadata(client, "whatsapp_instances", instance, { gateway_health_instance: health });
 }
 
 async function saveGatewayWebhookHealth(
@@ -4605,15 +4590,7 @@ async function saveGatewayWebhookHealth(
   endpoint: WebhookEndpointRow,
   health: GatewayHealthSignal,
 ) {
-  await client
-    .from("connectyhub_webhook_endpoints")
-    .update({
-      metadata: {
-        ...(endpoint.metadata ?? {}),
-        gateway_health_webhook: health,
-      },
-    })
-    .eq("id", endpoint.id);
+  await saveGatewayHealthMetadata(client, "connectyhub_webhook_endpoints", endpoint, { gateway_health_webhook: health });
 }
 
 function readGatewayHealthSummary(metadata: JsonRecord | null | undefined): GatewayHealthSummary | null {
