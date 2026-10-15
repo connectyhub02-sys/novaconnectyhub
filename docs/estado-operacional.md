@@ -1,5 +1,15 @@
 # Estado operacional da ConnectyHub
 
+## Clonagem de voz: botão e gravações visíveis — 15/10/2026
+
+Publicado `40182900` no slot b/3131; rollback `2e3f3ef8` no a/3130.
+Botão azul com contraste, gravações com nome/tamanho/player/remoção, validação
+de quantidade e tamanho antes do envio, progresso e resultado junto à ação.
+Repetição após erro mantém a chave de idempotência. Build/TypeScript, ESLint,
+5 testes de voz, navegador desktop/mobile e smoke candidato/HTTPS aprovados.
+Sem clonagem real ou envio de áudio do cliente durante a validação.
+[Relatório e limites](voice-clone-upload-2026-10-15.md).
+
 ## Horários fixos por rotina WhatsApp — 15/10/2026
 
 Publicado `2e3f3ef8` no slot a/3130; fallback `9db04b5f` no b/3131.
