@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Loader2, Megaphone, MessagesSquare, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
-import { CampaignEditor, campaignDestination, destinationLabels, postFormats, trafficToday } from "./whatsapp-traffic-campaign-editor";
+import { CampaignEditor, campaignDestination, campaignFormatValue, destinationLabels, postFormats, trafficToday } from "./whatsapp-traffic-campaign-editor";
 import { cn } from "@/lib/utils";
 import { describeHolder, holderConflicts, type GroupHolder } from "@/lib/whatsapp/group-schedule";
 
@@ -149,7 +149,7 @@ export function WhatsappTrafficRoutineCard(props: {
                     <p className="mt-0.5 truncate text-xs text-slate-600">{where.join(" · ")}</p>
                     {campaign.postFormat === "carousel" && <p className="text-xs font-medium text-emerald-800">{campaign.carouselSize ? `${campaign.carouselSize} produtos por carrossel` : "Até 4 produtos (rotina antiga; edite para definir a quantidade)"}</p>}
                     {campaign.includeAudio && <p className="text-xs text-emerald-800">Com áudio do agente após a publicação</p>}
-                    <p className="text-xs text-slate-500">{what} · {campaign.postStatus && !campaign.targetIds.length ? campaign.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : formatLabel[campaign.postFormat]} · {scheduleLabel[campaign.scheduleMode]}{campaign.scheduleMode !== "once" ? ` · ${intensities.find(item => item[0] === campaign.intensity)?.[2]}` : ""}{campaign.endsAt ? ` · até ${new Date(campaign.endsAt).toLocaleDateString("pt-BR")}` : ""}</p>
+                    <p className="text-xs text-slate-500">{what} · {campaign.postStatus && !campaign.targetIds.length ? campaign.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : formatLabel[campaignFormatValue(campaign)]} · {scheduleLabel[campaign.scheduleMode]}{campaign.scheduleMode !== "once" ? ` · ${intensities.find(item => item[0] === campaign.intensity)?.[2]}` : ""}{campaign.endsAt ? ` · até ${new Date(campaign.endsAt).toLocaleDateString("pt-BR")}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="mr-2 text-xs text-slate-500">{campaign.sent} enviados · {campaign.scheduled} agendados</span>

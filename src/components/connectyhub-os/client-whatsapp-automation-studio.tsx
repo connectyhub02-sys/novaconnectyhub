@@ -586,7 +586,9 @@ export function ClientWhatsappAutomationStudio({
   }
 
   function updateGrowthFormatPreference(value: string) {
-    setGrowthFormatPreference(value as GrowthFormatPreference);
+    const audioFormat = value === "carousel_audio" ? "carousel" : value === "poll_audio" ? "poll" : null;
+    setGrowthFormatPreference(audioFormat ?? value as GrowthFormatPreference);
+    setGrowthIncludeAudio(audioFormat !== null);
     setGrowthPlan(null);
   }
 
@@ -1063,7 +1065,7 @@ export function ClientWhatsappAutomationStudio({
                     <SelectField
                       disabled={campaignDestinationMode === "status"}
                       label="Formato principal"
-                      value={effectiveGrowthFormatPreference}
+                      value={growthIncludeAudio && ["carousel", "poll", "text"].includes(effectiveGrowthFormatPreference) ? `${effectiveGrowthFormatPreference}_audio` : effectiveGrowthFormatPreference}
                       onChange={updateGrowthFormatPreference}
                       options={getGrowthFormatOptions(campaignDestinationMode)}
                     />
@@ -1083,7 +1085,7 @@ export function ClientWhatsappAutomationStudio({
                     ) : null}
                   </div>
                   {effectiveGrowthFormatPreference === "carousel" && <div className="grid gap-2"><SelectField label="Produtos por carrossel" value={String(carouselSize)} onChange={value => { setCarouselSize(Number(value)); setGrowthPlan(null); }} options={[["2", "2 produtos"], ["3", "3 produtos"], ["4", "4 produtos"]]} /><p className="text-xs text-slate-600">Cada publicação terá {carouselSize} cartões com botões. {selectedCampaignProductIds.length ? `Marque exatamente ${carouselSize} produtos ativos com mídia; ${selectedCampaignProducts.length} selecionados.` : `Seleção automática de ${carouselSize} produtos ativos com mídia.`}</p></div>}
-                  {campaignDestinationMode !== "status" && ["carousel", "poll", "text"].includes(effectiveGrowthFormatPreference) && <div className="grid gap-1"><MiniToggle checked={growthIncludeAudio} label="Adicionar áudio do agente" onClick={() => setGrowthIncludeAudio(value => !value)} /><p className="text-xs text-slate-600">Um áudio após cada publicação, com a voz do agente e consumo de créditos. No carrossel, apresenta os mesmos produtos; na enquete, a pergunta e as opções.</p></div>}
+                  {campaignDestinationMode !== "status" && (growthIncludeAudio || ["audio", "text_audio"].includes(effectiveGrowthFormatPreference)) && <p className="text-xs text-slate-600">O áudio usa a voz do agente e consome créditos. Nas combinações, é enviado após a publicação: no carrossel, apresenta os mesmos produtos; na enquete, a pergunta e as opções; no texto, a mensagem.</p>}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <DateInput label="Inicio" value={growthStartFrom} onChange={(value) => { setGrowthStartFrom(value); setGrowthPlan(null); }} />
                     <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={(value) => { setGrowthDurationDays(value); setGrowthPlan(null); }} />
@@ -1211,7 +1213,7 @@ export function ClientWhatsappAutomationStudio({
 
                     <SubSection title="Enquete manual">
                       <div className="grid gap-3">
-                        <MiniToggle checked={pollIncludeAudio} label="Enquete com áudio do agente" onClick={() => setPollIncludeAudio(value => !value)} />
+                        <SelectField label="Formato da enquete" value={pollIncludeAudio ? "poll_audio" : "poll"} onChange={value => setPollIncludeAudio(value === "poll_audio")} options={[["poll", "Enquete"], ["poll_audio", "Enquete + áudio"]]} />
                         <p className="text-xs text-slate-600">Com áudio: apresenta a pergunta e as opções após a enquete, usando a voz do agente e créditos de áudio.</p>
                         <Textarea label="Pergunta" value={pollQuestion} onChange={setPollQuestion} rows={2} />
                         <Textarea label="Opcoes" value={pollChoices} onChange={setPollChoices} rows={4} />
@@ -2071,14 +2073,15 @@ function getGrowthFormatOptions(mode: CampaignDestinationMode): Array<[string, s
 
   const options: Array<[string, string]> = [
     ["text", "Texto"],
-    ["audio", "Audio"],
-    ["text_audio", "Texto + audio"],
-    ["carousel", "Carrossel"],
+    ["audio", "Áudio"],
+    ["text_audio", "Texto + áudio"],
+    ["carousel", "Carrossel com botões"],
+    ["carousel_audio", "Carrossel com botões + áudio"],
     ["mixed", "Misto revisavel"],
   ];
 
   if (mode === "groups") {
-    options.push(["poll", "Enquete"]);
+    options.push(["poll", "Enquete"], ["poll_audio", "Enquete + áudio"]);
   }
 
   return options;

@@ -8,12 +8,25 @@ import type { CampaignDraft, TrafficTarget } from "./whatsapp-traffic-routine-ca
 
 export const postFormats = [
   ["auto", "Automático", "A IA escolhe o formato de cada publicação."],
-  ["carousel", "Carrossel de produtos", "Cartões com mídia e botão. Todas as publicações desta rotina serão carrosséis."],
+  ["carousel", "Carrossel com botões", "Cartões com mídia e botão, sem áudio adicional."],
+  ["carousel_audio", "Carrossel com botões + áudio", "Após o carrossel, o agente envia um áudio apresentando os mesmos produtos dos cartões."],
   ["product_audio", "Produto com botão + áudio", "Foto e botão do produto, acompanhados de um áudio explicativo."],
   ["product_button", "Produto com botão", "Foto, legenda e botão para abrir o produto, sem áudio."],
   ["text", "Só texto", "Mensagem curta para iniciar uma conversa."],
+  ["text_audio", "Texto + áudio", "Após o texto, o agente envia a mensagem também em áudio."],
   ["poll", "Enquete", "Pergunta com opções de resposta. Disponível nos grupos."],
+  ["poll_audio", "Enquete + áudio", "Após a enquete, o agente envia um áudio apresentando a pergunta e as opções e convidando a votar."],
 ] as const;
+
+const audioFormats = { carousel_audio: "carousel", text_audio: "text", poll_audio: "poll" } as const;
+export function campaignFormatValue(campaign: Pick<CampaignDraft, "postFormat" | "includeAudio">) {
+  return campaign.includeAudio && ["carousel", "text", "poll"].includes(campaign.postFormat)
+    ? `${campaign.postFormat}_audio` : campaign.postFormat;
+}
+function parseFormat(value: string): Pick<CampaignDraft, "postFormat" | "includeAudio"> {
+  if (value in audioFormats) return { postFormat: audioFormats[value as keyof typeof audioFormats], includeAudio: true };
+  return { postFormat: value as CampaignDraft["postFormat"], includeAudio: false };
+}
 
 export const destinationLabels = { status: "Status", groups: "Grupos", channels: "Canais", mixed: "Vários destinos (rotina existente)" };
 export function campaignDestination(campaign: { postStatus: boolean; targetIds: string[] }, targets: TrafficTarget[]): keyof typeof destinationLabels {
@@ -46,7 +59,7 @@ export function CampaignEditor(props: {
   const carousel = !isStatus && draft.postFormat === "carousel";
   const carouselSize = draft.carouselSize ?? 4;
   const manualProducts = draft.productMode === "selected" || (carousel && draft.productMode === "single");
-  const audioOption = !isStatus && ["carousel", "poll", "text"].includes(draft.postFormat);
+  const formatValue = campaignFormatValue(draft);
   const productLimit = carousel ? carouselSize : 12;
   const destinationReady = draft.postStatus || draft.targetIds.length > 0;
   const productReady = draft.productMode === "featured" ? !carousel || activeProducts.filter(hasMedia).length >= carouselSize
@@ -54,7 +67,10 @@ export function CampaignEditor(props: {
   const ready = destinationReady && productReady && draft.catalogItemIds.length <= 12 && draft.targetIds.length <= 50;
   const set = <K extends keyof CampaignDraft>(key: K, value: CampaignDraft[K]) => props.setDraft({ ...draft, [key]: value });
   const toggle = (key: "targetIds" | "catalogItemIds", id: string) => set(key, draft[key].includes(id) ? draft[key].filter(v => v !== id) : [...draft[key], id]);
-  const formats = postFormats.filter(([id]) => id === "carousel" ? destination === "groups" : id !== "poll" || destination === "groups" || isMixed);
+  const formats = postFormats.filter(([id]) => {
+    const { postFormat } = parseFormat(id);
+    return postFormat === "carousel" ? destination === "groups" : postFormat !== "poll" || destination === "groups" || isMixed;
+  });
   return (
     <div className="rounded-xl border-2 border-emerald-600/40 bg-emerald-50/30 p-4" data-testid="traffic-editor">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -101,10 +117,13 @@ export function CampaignEditor(props: {
           <fieldset disabled={!destinationReady} className={cn("min-w-0", !destinationReady && "opacity-50")}>
             <Panel title={`2. O que publicar ${isStatus ? "no Status" : destination === "channels" ? "nos canais" : "nos grupos"}`}>
               {!isStatus && <label className="text-xs font-medium text-slate-700">Formato da publicação
-                <select className={field} value={draft.postFormat} onChange={e => props.setDraft({ ...draft, postFormat: e.target.value as CampaignDraft["postFormat"], includeAudio: false, ...(e.target.value === "carousel" && draft.productMode === "single" ? { productMode: "selected" } : {}) })}>{formats.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
-                <span className="mt-1 block font-normal text-slate-500">{postFormats.find(([id]) => id === draft.postFormat)?.[2]}</span>
+                <select className={field} value={formatValue} onChange={e => {
+                  const format = parseFormat(e.target.value);
+                  props.setDraft({ ...draft, ...format, ...(format.postFormat === "carousel" && draft.productMode === "single" ? { productMode: "selected" as const } : {}) });
+                }}>{formats.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
+                <span className="mt-1 block font-normal text-slate-500">{postFormats.find(([id]) => id === formatValue)?.[2]}</span>
               </label>}
-              {audioOption && <label className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><span className="flex gap-2"><input type="checkbox" checked={draft.includeAudio ?? false} onChange={e => set("includeAudio", e.target.checked)} />Adicionar áudio do agente</span><span className="mt-1 block text-xs text-slate-600">{draft.postFormat === "carousel" ? "Após o carrossel com botões, um áudio apresenta os mesmos produtos." : draft.postFormat === "poll" ? "Após a enquete, um áudio apresenta a pergunta e as opções, convidando a votar." : "Após o texto, o agente envia a mensagem também em áudio."} Usa a voz configurada e consome créditos de geração de áudio. Desmarcado: envia somente a publicação.</span></label>}
+              {!isStatus && (draft.includeAudio || draft.postFormat === "product_audio") && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-slate-600">O áudio usa a voz configurada do agente e consome créditos de geração de áudio.</p>}
               {carousel && <label className="text-xs font-medium text-slate-700">Produtos por carrossel<select aria-label="Produtos por carrossel" className={field} value={carouselSize} onChange={e => set("carouselSize", Number(e.target.value))}>{[2, 3, 4].map(n => <option key={n} value={n}>{n} produtos · {n} cartões</option>)}</select><span className="mt-1 block font-normal text-slate-500">Nesta rotina, você pode usar de 2 a 4 produtos por publicação. Um cartão para cada produto.</span></label>}
               <label className="text-xs font-medium text-slate-700">Produtos desta rotina
                 <select className={field} value={carousel && draft.productMode === "single" ? "selected" : draft.productMode} onChange={e => props.setDraft({ ...draft, productMode: e.target.value as CampaignDraft["productMode"], catalogItemIds: e.target.value === "single" ? draft.catalogItemIds.slice(0, 1) : draft.catalogItemIds })}><option value="featured">{carousel ? `Seleção automática de ${carouselSize} produtos ativos com mídia` : "IA escolhe entre os produtos ativos"}</option>{!carousel && <option value="single">Um produto específico</option>}<option value="selected">{carousel ? `Escolher os ${carouselSize} produtos` : "Selecionar alguns produtos"}</option></select>
@@ -146,7 +165,7 @@ export function CampaignEditor(props: {
               </label>
               <p className="text-xs text-slate-500">As publicações são distribuídas nas 10 horas seguintes ao início. Se o horário de hoje já passou, o sistema usa o próximo horário disponível.</p>
             </>}
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === draft.postFormat)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p><p className="mt-1">{carousel ? `${carouselSize} produtos por carrossel · ` : ""}{draft.includeAudio || draft.postFormat === "product_audio" ? "Com áudio do agente" : "Sem áudio adicional"}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950"><p className="font-semibold">Resumo antes de ativar</p><p className="mt-1">{isStatus ? "Meu Status" : `${draft.targetIds.length} destino(s) selecionado(s)`} · {isStatus ? draft.statusStyle === "story" ? "Sequência de 3 Status" : "Status único" : postFormats.find(([id]) => id === formatValue)?.[1]}</p><p className="mt-1">{schedules.find(([id]) => id === draft.scheduleMode)?.[1]}</p><p className="mt-1">{carousel ? `${carouselSize} produtos por carrossel · ` : ""}{draft.includeAudio || draft.postFormat === "product_audio" ? "Com áudio do agente" : "Sem áudio adicional"}</p><p className="mt-2">A geração pela IA utiliza os créditos da sua conta.</p></div>
             {draft.id && <p className="text-xs text-slate-500">Salvar substitui as publicações ainda agendadas desta rotina. Envios já realizados ficam no histórico.</p>}
           </Panel>
         </fieldset>
