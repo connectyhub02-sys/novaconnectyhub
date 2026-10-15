@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Rotinas WhatsApp independentes e carrossel explícito — 15/10/2026
+
+Publicada a versão `c8b44d98` no slot b/3131, fallback `174e10c1` no a/3130.
+Automações agora cria rotinas separadas de Status, Grupos e Canais, com conteúdo,
+produtos, programação e pausa próprios. Campos progressivos e programação por
+listas (duração diária, quantidade, data e horário). Rotinas antigas combinadas
+permanecem identificadas como compartilhadas, sem divisão/ativação automática.
+
+Grupos têm formato Carrossel explícito, incluindo legenda manual no envio único.
+Planejamento mantém esse formato e usa o transporte existente com mídia e botões.
+Organização/instância dos destinos conferidas; não depende de a IA escolher
+carrossel. Data inicial respeitada e novos períodos calculados em 7/30 dias.
+Migration `0205` permite o formato e cancela posts pendentes daquela rotina,
+na mesma transação, quando seu conteúdo/destinos/programação mudam.
+
+Backup prévio em `/var/backups/connectyhub/manual/pre-0205-20261015T161945Z`.
+Aplicação da migration preservou uma rotina e 14 posts pendentes. 48 testes,
+TypeScript, ESLint, prévia desktop/mobile e build de 120 páginas passaram.
+Candidato e HTTPS público passaram em saúde/versão, páginas, Inngest, métricas
+e negação de GET/POST sem sessão nas rotas de canais. Builder parado.
+
+Não houve envio de mensagens, criação/ativação de campanha ou gasto de IA em
+produção para testar. Envio real e confirmação visual pelo titular pendentes.
+Carrossel privado é suportado pelo provedor, mas o seletor no follow-up automático
+ainda não foi implementado. [Escopo e evidências](rotinas-whatsapp-destinos-carrossel-2026-10-15.md).
+
 ## API WhatsApp da Vision após liberação de contrato — 15/10/2026
 
 Contrato da Vision permitido até 11/11 às 22h21 BRT, mas cliente API seguia
