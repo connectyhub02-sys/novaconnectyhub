@@ -1,5 +1,20 @@
 # Estado operacional da ConnectyHub
 
+## Combinações com áudio explícitas na lista — 15/10/2026
+
+Correção `9db04b5f` publicada no slot b/3131, fallback `c0e443bf` no a/3130.
+O áudio antes aparecia em uma caixa após selecionar o formato. Agora a lista
+mostra diretamente Carrossel com botões + áudio, Enquete + áudio e Texto + áudio,
+além das respectivas opções sem áudio. Editor cliente e estúdio admin ajustados;
+formato base e include_audio preservados, sem migration ou alteração automática
+das rotinas salvas. Carrossel mantém escolha explícita de 2, 3 ou 4 produtos.
+
+TypeScript, ESLint e navegador local desktop/mobile passaram; payloads conferidos
+com e sem áudio, incluindo troca de opção. Build, candidato e HTTPS público
+validados. Bundle público de Automações contém os rótulos novos. Builder parado.
+Sem envio externo ou geração de áudio real. Confirmação na sessão do titular
+pendente. [Detalhes](carrossel-quantidade-audio-2026-10-15.md).
+
 ## Carrossel com quantidade explícita e áudio opcional — 15/10/2026
 
 Publicado `c0e443bf` no slot a/3130, fallback `c8b44d98` no b/3131.

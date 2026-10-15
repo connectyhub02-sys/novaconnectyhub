@@ -63,3 +63,27 @@ consulta REST das novas colunas retornou 200. Builder parado após publicação.
 Pendente: confirmação pelo titular da tela publicada e envio real em grupo
 autorizado, incluindo reprodução do áudio. Carrossel no follow-up privado continua
 fora desta entrega. Não há promessa de entrega baseada apenas nos testes simulados.
+
+## Correção da descoberta dos formatos na lista — 15/10/2026
+
+O titular não encontrou as combinações porque a primeira versão mostrava áudio
+em uma caixa separada, somente após escolher carrossel, enquete ou texto.
+A correção `9db04b5f` apresenta diretamente na lista Carrossel com botões,
+Carrossel com botões + áudio, Só texto, Texto + áudio, Enquete e Enquete + áudio.
+Produto com botão, Produto com botão + áudio e Automático permanecem disponíveis.
+
+As escolhas da interface preservam o formato base e o campo `include_audio`
+existentes; não há migration ou mudança de rotinas salvas. Ao editar uma rotina
+com áudio, a combinação correspondente já aparece selecionada. O resumo também
+identifica a combinação. O estúdio administrativo recebeu as mesmas combinações
+explícitas em seu seletor principal e no seletor de enquete manual.
+
+TypeScript e ESLint passaram. Navegador local conferiu formatos com e sem áudio,
+troca de combinação para opção sem áudio e payload correspondente, carrossel
+com três produtos, restrições por destino e layout desktop/mobile de cliente
+e admin, sem erros JavaScript. Não houve envio externo ou geração real de áudio.
+Publicada `9db04b5f` no slot b/3131, fallback `c0e443bf` no a/3130.
+Build de 120 páginas, checagens do candidato e HTTPS público passaram. O arquivo
+JavaScript público de Automações contém as opções explícitas e seus rótulos.
+Rotas de campanha cliente/admin rejeitam GET/POST sem sessão com 401.
+Builder parado após publicação. Confirmação do titular na sessão dele pendente.
