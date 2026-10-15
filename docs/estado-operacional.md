@@ -1,5 +1,31 @@
 # Estado operacional da ConnectyHub
 
+## Carrossel com quantidade explícita e áudio opcional — 15/10/2026
+
+Publicado `c0e443bf` no slot a/3130, fallback `c8b44d98` no b/3131.
+Rotinas oferecem carrosséis de 2, 3 ou 4 produtos, seleção manual exata ou
+automática com quantidade visível. Produtos ativos/mídia/organização conferidos
+no servidor; não reduz a quantidade silenciosamente quando falta produto válido.
+Carrossel, enquete e texto têm áudio opcional. A fala usa os cartões/pergunta
+reais, voz configurada e medição existente. Áudio gerado uma vez por publicação,
+persistido e reutilizado nos destinos; envio após o conteúdo, com IDs estáveis.
+Falha parcial ou geração incerta fica para revisão. Admin recebe os controles
+no estúdio avançado e usa a organização da instância com escopo de consumo platform.
+
+Migration `0206` aplicada às 13h56 BRT com backup em
+`/var/backups/connectyhub/manual/pre-0206-20261015T165645Z`.
+Preservadas uma rotina e 14 publicações pendentes. Registros antigos mantêm
+quantidade nula (até quatro) e áudio desmarcado até edição pelo titular.
+Novos campos participam do cancelamento transacional dos posts ao editar.
+
+Testes de campanhas, SQL, isolamento, voz e transporte passaram (última bateria:
+70 testes). TypeScript, ESLint, prévias cliente/admin desktop/mobile e build
+de produção passaram. Candidato e HTTPS público validados, incluindo proteção
+das rotas administrativas/de clientes sem sessão; builder parado.
+Nenhuma mensagem ou geração de áudio/IA real foi executada nos testes.
+Confirmação visual pelo titular e envio real em grupo autorizado pendentes.
+[Escopo, evidências e limites](carrossel-quantidade-audio-2026-10-15.md).
+
 ## Rotinas WhatsApp independentes e carrossel explícito — 15/10/2026
 
 Publicada a versão `c8b44d98` no slot b/3131, fallback `174e10c1` no a/3130.
