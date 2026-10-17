@@ -59,9 +59,22 @@ conflito entre abas, gravação com microfone sintético, upload, transformaçã
 consulta sem repetir geração e histórico de referências. Layout sem overflow
 em 1920/1366/390 px; evidências locais em `.codex-screens`.
 
-Migration `0209_voice_reference_history.sql` amplia apenas a view privada do
-histórico, preservando grants e `security_invoker`. Aplicação/ativação pendentes
-da verificação final da candidata.
+Migration `0209_voice_reference_history.sql` aplicada às 11h01 BRT, registrada
+no controle de migrations. Amplia apenas a view privada do histórico, preservando
+grants e `security_invoker`. Backup em
+`/var/backups/connectyhub/manual/pre-0209-20261017T140155Z`. 159 recibos e 72
+operações preservados antes/depois; a view passou a 84 registros. Leituras REST
+do serviço 200; acesso anônimo a histórico/rascunho negado (401).
+
+Publicado às 11h12 BRT: `7abaae00ab72fa8196ca88b34d0598b3f19bf054`, slot b/3131;
+anterior `ed4d0640` preservado no a/3130. Build/TypeScript e 120 páginas aprovados.
+Candidata e HTTPS público: saúde/SHA, home/login, 19 assets, bundle das abas e
+novos controles, redirecionamento do painel sem sessão e bloqueio anônimo das
+APIs de efeitos, histórico, rascunho, áudio e operações. Inngest assinado 200,
+autenticado, com 58 funções; sem assinatura 401. Fixture de UI ausente (404).
+Builder e servidor local de prévia parados após validação. A última conferência
+no navegador incluiu prévia automática de texto longo usando a mesma qualidade
+MP3 64 kbps do resultado completo.
 
 Nenhuma síntese, conversão real ou débito de teste. Qualidade, emoção e semelhança
 dependem da voz e da referência; a escuta com o titular foi adiada por solicitação.

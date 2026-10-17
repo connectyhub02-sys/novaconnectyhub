@@ -1,5 +1,29 @@
 # Estado operacional da ConnectyHub
 
+## Voz: efeitos e interpretação por áudio — 17/10/2026
+
+Etapas 5 e 6 (parte técnica) publicadas às 11h12 BRT: `7abaae00`, slot b/3131;
+anterior `ed4d0640` no a/3130. Efeitos de fala pelo catálogo real, qualidade MP3
+32/64/128, preservação em prévia/rascunho/reuso e nova tela Usar minha interpretação
+com gravação/upload, voz de destino, cotação e histórico paginado. Prévia automática
+de texto longo usa 64 kbps como o resultado final. Cobrança existente preservada.
+
+Migration `0209` aplicada às 11h01 BRT, somente ampliação da view privada do
+histórico. Backup `/var/backups/connectyhub/manual/pre-0209-20261017T140155Z`.
+159 recibos/72 operações preservados; 84 registros na view. Serviço lê (200),
+anônimo negado (401). Catálogo ElevenLabs e modelo de conversão conferidos por
+GET autenticado (200); nenhum áudio enviado. Upload/operações e tarifa confirmada
+de transformação disponíveis na configuração da produção.
+
+80 testes, TypeScript, ESLint, navegador com APIs simuladas e microfone sintético
+(1920/1366/390 px), build de 120 páginas e smoke candidata/HTTPS aprovados.
+19 assets, bundle dos controles, proteção das APIs e Inngest assinado (58 funções)
+conferidos. Builder parado. Sem geração paga: a escuta com o clone do André foi
+adiada pelo titular para testar o conjunto depois. Reverberação pode prolongar
+transições de partes longas. Antes de rollback, concluir jobs novos ou manter
+worker que interprete efeitos/formato; não restaurar banco.
+[Implementação, publicação e limites](voz-efeitos-referencia-2026-10-17.md).
+
 ## Voz: interpretação, prévia e roteiros recuperáveis — 17/10/2026
 
 Primeira entrega publicada às 10h41 BRT: `ed4d0640`, slot a/3130; versão anterior
