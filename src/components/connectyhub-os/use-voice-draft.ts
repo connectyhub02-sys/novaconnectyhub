@@ -2,6 +2,9 @@
 import {useEffect,useRef,useState} from 'react';
 import type {SpeechScript} from '../../lib/voice-api/performance';
 
+// JSONB does not preserve key order; opening a saved draft must not count as an edit.
+const snapshotOf=(script:SpeechScript)=>JSON.stringify(script,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))):value);
+
 export function useVoiceDraft(project:string,script:SpeechScript,restore:(script:SpeechScript)=>void){
   const [ready,setReady]=useState(false),[status,setStatus]=useState('Recuperando rascunho…');
   const [savedSnapshot,setSavedSnapshot]=useState('');
@@ -14,15 +17,15 @@ export function useVoiceDraft(project:string,script:SpeechScript,restore:(script
     fetch(`/api/dashboard/voice/draft?project=${encodeURIComponent(project)}`,{cache:'no-store'}).then(async r=>{if(!r.ok)throw new Error();return r.json();}).then(data=>{
       if(!active)return;
       version.current=data.draft?.version??0;
-      if(data.draft?.script){saved.current=JSON.stringify(data.draft.script);restoreRef.current(data.draft.script);}
-      else saved.current=JSON.stringify(scriptRef.current);
+      if(data.draft?.script){saved.current=snapshotOf(data.draft.script);restoreRef.current(data.draft.script);}
+      else saved.current=snapshotOf(scriptRef.current);
       setSavedSnapshot(saved.current);
       hydrated.current=true;
       setStatus(data.draft?'Rascunho recuperado':'Rascunho vazio');setReady(true);
     }).catch(()=>{if(active){failed.current=true;setStatus('Não foi possível recuperar o rascunho. Recarregue antes de editar para evitar sobrescrever.');}});
     return()=>{active=false;};
   },[project]);
-  const serialized=JSON.stringify(script);
+  const serialized=snapshotOf(script);
   useEffect(()=>{
     if(!ready||failed.current||serialized===saved.current)return;
     let active=true;
@@ -48,7 +51,7 @@ export function useVoiceDraft(project:string,script:SpeechScript,restore:(script
   // Project/navigation changes can unmount before the debounce expires.
   useEffect(()=>()=>{
     if(!hydrated.current||failed.current)return;
-    const snapshot=JSON.stringify(scriptRef.current);
+    const snapshot=snapshotOf(scriptRef.current);
     queue.current=queue.current.then(async()=>{
       if(snapshot===saved.current||failed.current)return;
       try{

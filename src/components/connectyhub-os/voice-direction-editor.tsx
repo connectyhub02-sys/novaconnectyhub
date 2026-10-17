@@ -45,4 +45,3 @@ export function VoiceDirectionEditor({text,onChange,model,area,disabled,onPrevie
     </details>}
   </>;
 }
-

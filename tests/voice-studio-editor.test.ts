@@ -49,4 +49,3 @@ it('conflicting draft writes do not overwrite a newer version',async()=>{
   await expect(editorModule.studioDraft(f.auth,request)).rejects.toMatchObject({status:409,code:'draft_conflict'});
   expect(f.calls).toContainEqual(['eq','version',1]);
 });
-
