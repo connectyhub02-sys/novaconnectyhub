@@ -40,5 +40,15 @@ No celular, ajustes precedem o histórico e não há overflow horizontal da pág
 
 ## Publicação
 
-Pendente de build e validação da candidata na VPS. Sem teste de geração real;
-confirmar a experiência final na sessão do titular após a publicação.
+Publicado `ad9f466259f34d3009b69c1e48c1921f2bba41f7` em 17/10/2026, às 09h25 BRT,
+no slot a/3130. Rollback preservado no b/3131 (`40182900`). Build, TypeScript e
+120 páginas aprovados. Candidata e HTTPS público passaram em saúde/SHA, home,
+login, 19 assets e bundle do Estúdio contendo o histórico persistente. Voz
+redireciona visitantes para login; listagem/download e API pública recusam acesso
+sem autenticação (401). Rota temporária de prévia ausente (404). Inngest assinado
+retorna 200, autenticação confirmada e 58 funções. Builder parado ao concluir.
+
+Não houve geração paga nem mudança de dados/tarifas. A leitura dos MP3 reais foi
+administrativa; os testes de reload/nova aba/troca de projeto usaram respostas
+simuladas no navegador. Confirmação visual na sessão autenticada do titular
+continua pendente. Este registro posterior não exige novo deploy.

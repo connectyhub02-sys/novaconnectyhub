@@ -2,15 +2,19 @@
 
 ## Estúdio de Voz: histórico recuperado e tela mais ampla — 17/10/2026
 
-Correção implementada: falas curtas e audiolivros recuperados dos recibos do
-projeto ao abrir a página; player/download autenticados, atualização de andamento
-e aviso de falha na consulta. Largura do Estúdio ampliada, editor independente da
-altura dos ajustes e botão Gerar fala azul/visível.
+Publicado `ad9f4662` às 09h25 BRT no slot a/3130; rollback `40182900` no b/3131.
+Falas curtas e audiolivros recuperados dos recibos do projeto ao abrir a página;
+player/download autenticados, atualização de andamento e aviso de falha na
+consulta. Largura ampliada, editor independente da altura dos ajustes e botão
+Gerar fala azul/visível.
 
 Os três MP3 mais recentes da Vision foram lidos do Storage (HTTP 200, tamanhos e
-assinatura conferidos). Nenhum áudio novo ou débito de teste. 20 testes,
-ESLint, TypeScript e navegador desktop/mobile aprovados. Build/publicação ainda
-pendentes; reuso do texto antigo não é possível porque os recibos não o guardam.
+assinatura conferidos). Nenhum áudio novo ou débito de teste. 20 testes, ESLint,
+TypeScript, navegador desktop/mobile e build de 120 páginas aprovados. Candidata
+e HTTPS público conferidos: saúde/SHA, 19 assets, bundle do histórico, negação de
+acesso anônimo e Inngest assinado (58 funções). Builder parado. Sem migration.
+Confirmação visual pelo titular pendente; reuso do texto antigo não é possível
+porque os recibos não o guardam.
 [Correção, evidências e limites](voz-historico-layout-2026-10-17.md).
 
 ## Clonagem de voz: botão e gravações visíveis — 15/10/2026
