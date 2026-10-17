@@ -31,5 +31,13 @@ Evidências locais em `.codex-screens/voice-tabs-*-20261017.png`.
 
 ## Publicação
 
-Pendente de build e validação da candidata na VPS. Confirmação visual pelo titular
-após a publicação ainda pendente.
+Publicado `d63e71aee064db16bd6ec207a559c26e622524d1` às 09h44 BRT no slot b/3131.
+Rollback preservado no slot a/3130 (`ad9f4662`). Build, TypeScript e 120 páginas
+aprovados. Candidata e HTTPS público passaram em saúde/SHA, home/login, 19 assets,
+bundle com abas/filtros, redirecionamento do Estúdio sem sessão e APIs/listagem/
+download negando acesso anônimo (401). Inngest assinado: 200, autenticação
+confirmada e 58 funções; prévia temporária ausente (404). Builder parado.
+
+Sem novas operações pagas ou migrações. Testes de interação foram com respostas
+simuladas; confirmação visual final na sessão do titular permanece pendente.
+Registro posterior ao deploy; não exige outra publicação de aplicação.

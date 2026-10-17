@@ -7,9 +7,12 @@ referência enviada. Implementadas abas Configurações/Histórico, acesso por C
 busca/filtros e lista de até 50 registros com rolagem interna. Abaixo do editor
 fica somente o áudio gerado ou selecionado. Uso e créditos preserva os gráficos.
 
-ESLint, TypeScript, 20 testes e navegador desktop/mobile com 50 registros
-simulados aprovados. Sem geração paga, migration ou mudança de cobrança.
-Build/publicação e confirmação pelo titular pendentes.
+Publicado `d63e71ae` às 09h44 BRT no slot b/3131, rollback `ad9f4662` no a/3130.
+ESLint, TypeScript, 20 testes, navegador desktop/mobile com 50 registros simulados
+e build de 120 páginas aprovados. Candidata e domínio público: saúde/SHA, 19 assets,
+bundle das abas, acesso anônimo negado e Inngest assinado (58 funções) conferidos.
+Builder parado. Sem geração paga, migration ou mudança de cobrança. Confirmação
+visual final pelo titular pendente.
 [Detalhes e evidências](voz-historico-abas-2026-10-17.md).
 
 ## Estúdio de Voz: histórico recuperado e tela mais ampla — 17/10/2026
